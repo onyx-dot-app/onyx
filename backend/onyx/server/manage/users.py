@@ -6,7 +6,6 @@ from datetime import timedelta
 from datetime import timezone
 from typing import cast
 
-import jwt
 from email_validator import EmailNotValidError
 from email_validator import EmailUndeliverableError
 from email_validator import validate_email
@@ -62,6 +61,7 @@ from onyx.db.user_preferences import update_user_pinned_assistants
 from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
 from onyx.db.user_preferences import update_user_temperature_override_enabled
+from onyx.db.user_preferences import update_user_theme_preference
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users
@@ -77,6 +77,7 @@ from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
+from onyx.server.manage.models import ThemePreferenceRequest
 from onyx.server.manage.models import UserByEmail
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
@@ -550,35 +551,6 @@ async def get_user_role(user: User = Depends(current_user)) -> UserRoleResponse:
     return UserRoleResponse(role=user.role)
 
 
-def get_current_auth_token_expiration_jwt(
-    user: User | None, request: Request
-) -> datetime | None:
-    if user is None:
-        return None
-
-    try:
-        # Get the JWT from the cookie
-        jwt_token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
-        if not jwt_token:
-            logger.error("No JWT token found in cookies")
-            return None
-
-        # Decode the JWT
-        decoded_token = jwt.decode(jwt_token, options={"verify_signature": False})
-
-        # Get the 'exp' (expiration) claim from the token
-        exp = decoded_token.get("exp")
-        if exp:
-            return datetime.fromtimestamp(exp)
-        else:
-            logger.error("No 'exp' claim found in JWT")
-            return None
-
-    except Exception as e:
-        logger.error(f"Error decoding JWT: {e}")
-        return None
-
-
 def get_current_auth_token_creation_redis(
     user: User | None, request: Request
 ) -> datetime | None:
@@ -775,6 +747,25 @@ def update_user_auto_scroll_api(
             raise RuntimeError("This should never happen")
 
     update_user_auto_scroll(user.id, request.auto_scroll, db_session)
+
+
+@router.patch("/user/theme-preference")
+def update_user_theme_preference_api(
+    request: ThemePreferenceRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            no_auth_user.preferences.theme_preference = request.theme_preference
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    update_user_theme_preference(user.id, request.theme_preference, db_session)
 
 
 @router.patch("/user/default-model")
@@ -997,6 +988,7 @@ def get_recent_files(
         db_session.query(UserFile)
         .filter(UserFile.user_id == user_id)
         .filter(UserFile.status != UserFileStatus.FAILED)
+        .filter(UserFile.status != UserFileStatus.DELETING)
         .order_by(UserFile.last_accessed_at.desc())
         .all()
     )

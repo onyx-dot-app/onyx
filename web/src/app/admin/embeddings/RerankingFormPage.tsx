@@ -21,7 +21,7 @@ import {
   MixedBreadIcon,
 } from "@/components/icons/icons";
 import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { TextFormField } from "@/components/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
@@ -335,7 +335,6 @@ const RerankingDetailsForm = forwardRef<
                       <div className="flex justify-end">
                         <Button
                           onClick={() => setShowGpuWarningModalModel(null)}
-                          variant="submit"
                         >
                           Understood
                         </Button>
@@ -415,7 +414,6 @@ const RerankingDetailsForm = forwardRef<
                           onClick={() => {
                             setShowLiteLLMConfigurationModal(false);
                           }}
-                          variant="submit"
                         >
                           Update
                         </Button>
@@ -469,10 +467,7 @@ const RerankingDetailsForm = forwardRef<
                         name="rerank_api_key"
                       />
                       <div className="flex w-full justify-end mt-4">
-                        <Button
-                          onClick={() => setIsApiKeyModalOpen(false)}
-                          variant="submit"
-                        >
+                        <Button onClick={() => setIsApiKeyModalOpen(false)}>
                           Update
                         </Button>
                       </div>

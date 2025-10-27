@@ -3,7 +3,7 @@
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { StandardAnswerCategory, StandardAnswer } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import { useRouter } from "next/navigation";
 import * as Yup from "yup";
@@ -204,7 +204,6 @@ export const StandardAnswerCreationForm = ({
               <div className="py-4 flex">
                 <Button
                   type="submit"
-                  variant="submit"
                   disabled={isSubmitting}
                   className="mx-auto w-64"
                 >

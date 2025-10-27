@@ -10,7 +10,7 @@ import Cookies from "js-cookie";
 import { TextFormField, SectionHeader } from "@/components/Field";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import {
   Credential,
   GoogleDriveCredentialJson,
@@ -340,7 +340,7 @@ export const DriveJsonUploadSection = ({
           {isAdmin && !existingAuthCredential && (
             <div className="mt-2">
               <Button
-                variant="destructive"
+                danger
                 type="button"
                 onClick={async () => {
                   const endpoint =
@@ -507,7 +507,7 @@ export const DriveAuthSection = ({
             </div>
           </div>
           <Button
-            variant="destructive"
+            danger
             type="button"
             onClick={async () => {
               handleRevokeAccess(

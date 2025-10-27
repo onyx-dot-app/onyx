@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { KeyIcon } from "@/components/icons/icons";
 import { getSourceMetadata, isValidSource } from "@/lib/sources";
 import { ConfluenceAccessibleResource, ValidSources } from "@/lib/types";
@@ -260,12 +260,7 @@ export default function OAuthFinalizePage() {
                 )}
                 <br />
                 {!redirectUrl && (
-                  <Button
-                    type="submit"
-                    size="sm"
-                    variant="submit"
-                    disabled={!isValid || isSubmitting}
-                  >
+                  <Button type="submit" disabled={!isValid || isSubmitting}>
                     {isSubmitting ? "Submitting..." : "Submit"}
                   </Button>
                 )}

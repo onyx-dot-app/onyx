@@ -25,9 +25,9 @@ from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from onyx.tools.tool_implementations_v2.web import _web_fetch_core
+from onyx.tools.tool_implementations_v2.web import _open_url_core
 from onyx.tools.tool_implementations_v2.web import _web_search_core
-from onyx.tools.tool_implementations_v2.web import WebFetchResponse
+from onyx.tools.tool_implementations_v2.web import OpenUrlResponse
 from onyx.tools.tool_implementations_v2.web import WebSearchResponse
 
 
@@ -250,10 +250,10 @@ def test_web_fetch_core_basic_functionality() -> None:
     test_provider = MockWebSearchProvider(content_results=test_content_results)
 
     # Act
-    result = _web_fetch_core(test_run_context, urls, test_provider)
+    result = _open_url_core(test_run_context, urls, test_provider)
 
     # Assert
-    assert isinstance(result, WebFetchResponse)
+    assert isinstance(result, OpenUrlResponse)
     assert len(result.results) == 2
 
     # Check first result
@@ -261,7 +261,8 @@ def test_web_fetch_core_basic_functionality() -> None:
     assert result.results[0].title == "Test Content 1"
     assert result.results[0].link == "https://example.com/1"
     assert (
-        result.results[0].full_content == "This is the full content of the first page"
+        result.results[0].truncated_content
+        == "This is the full content of the first page"
     )
     assert result.results[0].published_date == "2024-01-01T12:00:00"
 
@@ -270,7 +271,8 @@ def test_web_fetch_core_basic_functionality() -> None:
     assert result.results[1].title == "Test Content 2"
     assert result.results[1].link == "https://example.com/2"
     assert (
-        result.results[1].full_content == "This is the full content of the second page"
+        result.results[1].truncated_content
+        == "This is the full content of the second page"
     )
     assert result.results[1].published_date is None
 
@@ -478,7 +480,7 @@ def test_web_fetch_core_exception_handling() -> None:
 
     # Act & Assert
     with pytest.raises(Exception, match="Test exception from search provider"):
-        _web_fetch_core(test_run_context, urls, test_provider)
+        _open_url_core(test_run_context, urls, test_provider)
 
     # Verify that even though an exception was raised, we still emitted the initial events
     # and the SectionEnd packet was emitted by the decorator

@@ -32,7 +32,7 @@ export default function LoginPage({
         authTypeMetadata.authType !== "cloud" &&
         // basic auth is handled below w/ the EmailPasswordForm
         authTypeMetadata.authType !== "basic" && (
-          <div className="flex flex-col w-full gap-spacing-paragraph">
+          <div className="flex flex-col w-full gap-4">
             <LoginText />
             <SignInButton
               authorizeUrl={authUrl}
@@ -42,7 +42,7 @@ export default function LoginPage({
         )}
 
       {authTypeMetadata?.authType === "cloud" && (
-        <div className="w-full justify-center flex flex-col gap-padding-content">
+        <div className="w-full justify-center flex flex-col gap-6">
           <LoginText />
           <EmailPasswordForm shouldVerify={true} nextUrl={nextUrl} />
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
@@ -52,7 +52,7 @@ export default function LoginPage({
           )}
           {authUrl && authTypeMetadata && (
             <>
-              <div className="flex flex-row items-center w-full gap-spacing-interline">
+              <div className="flex flex-row items-center w-full gap-2">
                 <div className="flex-1 border-t border-text-04" />
                 <Text>or</Text>
                 <div className="flex-1 border-t border-text-04" />

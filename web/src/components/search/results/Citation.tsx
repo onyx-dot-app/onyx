@@ -96,8 +96,8 @@ export function Citation({
             className="inline-flex items-center cursor-pointer transition-all duration-200 ease-in-out ml-1"
           >
             <span
-              className="flex items-center justify-center p-spacing-inline h-4
-                         bg-background-tint-03 rounded-full
+              className="flex items-center justify-center p-1 h-4
+                         bg-background-tint-03 rounded-04
                          hover:bg-background-tint-04 shadow-sm"
               style={{ transform: "translateY(-10%)", lineHeight: "1" }}
             >
@@ -106,9 +106,10 @@ export function Citation({
           </span>
         </TooltipTrigger>
         <TooltipContent
-          className="border border-neutral-300 hover:text-neutral-900 
-                     bg-neutral-100 dark:!bg-[#000] dark:border-neutral-700"
+          className="!p-2 border-border-01 border rounded-12 bg-background-neutral-00 shadow-02"
           width="mb-2 max-w-lg"
+          side="bottom"
+          align="start"
         >
           {document_info?.document ? (
             <CompactDocumentCard

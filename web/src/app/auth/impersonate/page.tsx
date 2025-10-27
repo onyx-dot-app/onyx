@@ -85,7 +85,7 @@ export default function ImpersonatePage() {
           onSubmit={(values, helpers) => handleImpersonate(values, helpers)}
         >
           {({ isSubmitting }) => (
-            <Form className="flex flex-col gap-spacing-paragraph">
+            <Form className="flex flex-col gap-4">
               <TextFormField
                 name="email"
                 type="email"

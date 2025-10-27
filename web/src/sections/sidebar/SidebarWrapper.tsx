@@ -1,13 +1,59 @@
-import React, { Dispatch, SetStateAction } from "react";
+import React, { Dispatch, SetStateAction, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSidebar from "@/icons/sidebar";
+import Logo from "@/refresh-components/Logo";
 
-interface SidebarWrapperProps {
+interface LogoSectionProps {
   folded?: boolean;
   setFolded?: Dispatch<SetStateAction<boolean>>;
-  children: React.ReactNode;
+}
+
+function LogoSection({ folded, setFolded }: LogoSectionProps) {
+  const logo = useCallback(
+    (className?: string) => <Logo folded={folded} className={className} />,
+    [folded]
+  );
+
+  return (
+    <div
+      className={cn(
+        "flex flex-row items-center px-4 py-1 flex-shrink-0 gap-4",
+        folded ? "justify-center" : "justify-between"
+      )}
+    >
+      {folded === undefined ? (
+        logo()
+      ) : folded ? (
+        <div className="h-[2rem] flex flex-col justify-center items-center">
+          {logo("visible group-hover/SidebarWrapper:hidden")}
+          <IconButton
+            icon={SvgSidebar}
+            tertiary
+            tooltip="Close Sidebar"
+            onClick={() => setFolded?.(false)}
+            className="hidden group-hover/SidebarWrapper:flex"
+          />
+        </div>
+      ) : (
+        <>
+          {logo()}
+          <IconButton
+            icon={SvgSidebar}
+            tertiary
+            tooltip="Close Sidebar"
+            onClick={() => setFolded?.(true)}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+export interface SidebarWrapperProps {
+  folded?: boolean;
+  setFolded?: Dispatch<SetStateAction<boolean>>;
+  children?: React.ReactNode;
 }
 
 export default function SidebarWrapper({
@@ -21,46 +67,11 @@ export default function SidebarWrapper({
     <div>
       <div
         className={cn(
-          "h-screen flex flex-col bg-background-tint-02 py-spacing-interline justify-between gap-padding-content group/SidebarWrapper",
-          folded ? "w-[4rem]" : "w-[15rem]"
+          "h-screen flex flex-col bg-background-tint-02 py-2 gap-4 group/SidebarWrapper",
+          folded ? "w-[3.5rem]" : "w-[15rem]"
         )}
       >
-        <div
-          className={cn(
-            "flex flex-row items-center px-spacing-paragraph py-spacing-inline flex-shrink-0",
-            folded ? "justify-center" : "justify-between"
-          )}
-        >
-          {folded ? (
-            <div className="h-[2rem] flex flex-col justify-center items-center">
-              <>
-                <IconButton
-                  icon={SvgSidebar}
-                  tertiary
-                  onClick={() => setFolded?.(false)}
-                  className="hidden group-hover/SidebarWrapper:flex"
-                  tooltip="Close Sidebar"
-                />
-                <OnyxIcon
-                  size={24}
-                  className="visible group-hover/SidebarWrapper:hidden"
-                />
-              </>
-            </div>
-          ) : (
-            <>
-              <OnyxLogoTypeIcon size={88} />
-              <IconButton
-                icon={SvgSidebar}
-                tertiary
-                onClick={() => setFolded?.(true)}
-                className={cn(folded === undefined && "invisible")}
-                tooltip="Close Sidebar"
-              />
-            </>
-          )}
-        </div>
-
+        <LogoSection folded={folded} setFolded={setFolded} />
         {children}
       </div>
     </div>

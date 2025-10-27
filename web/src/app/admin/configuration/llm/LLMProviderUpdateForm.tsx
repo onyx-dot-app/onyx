@@ -132,12 +132,14 @@ export function LLMProviderUpdateForm({
       llmProviderDescriptor.default_api_base ??
       "",
     api_version: existingLlmProvider?.api_version ?? "",
-    // For Azure OpenAI, combine api_base and api_version into target_uri
+    // For Azure OpenAI, combine api_base, deployment_name, and api_version into target_uri
     target_uri:
       llmProviderDescriptor.name === "azure" &&
       existingLlmProvider?.api_base &&
       existingLlmProvider?.api_version
-        ? `${existingLlmProvider.api_base}/openai/deployments/your-deployment?api-version=${existingLlmProvider.api_version}`
+        ? `${existingLlmProvider.api_base}/openai/deployments/${
+            existingLlmProvider.deployment_name || "your-deployment"
+          }/chat/completions?api-version=${existingLlmProvider.api_version}`
         : "",
     default_model_name:
       existingLlmProvider?.default_model_name ??
@@ -201,20 +203,22 @@ export function LLMProviderUpdateForm({
             .required("Target URI is required")
             .test(
               "valid-target-uri",
-              "Target URI must be a valid URL with exactly one query parameter (api-version)",
+              "Target URI must be a valid URL with api-version query parameter and the deployment name in the path",
               (value) => {
                 if (!value) return false;
                 try {
                   const url = new URL(value);
-                  const params = new URLSearchParams(url.search);
-                  const paramKeys = Array.from(params.keys());
+                  const hasApiVersion = !!url.searchParams
+                    .get("api-version")
+                    ?.trim();
 
-                  // Check if there's exactly one parameter and it's api-version
-                  return (
-                    paramKeys.length === 1 &&
-                    paramKeys[0] === "api-version" &&
-                    !!params.get("api-version")
+                  // Check if the path contains a deployment name
+                  const pathMatch = url.pathname.match(
+                    /\/openai\/deployments\/([^\/]+)/
                   );
+                  const hasDeploymentName = pathMatch && pathMatch[1];
+
+                  return hasApiVersion && !!hasDeploymentName;
                 } catch {
                   return false;
                 }
@@ -240,9 +244,11 @@ export function LLMProviderUpdateForm({
           ),
         }
       : {}),
-    deployment_name: llmProviderDescriptor.deployment_name_required
-      ? Yup.string().required("Deployment Name is required")
-      : Yup.string().nullable(),
+    deployment_name:
+      llmProviderDescriptor.deployment_name_required &&
+      llmProviderDescriptor.name !== "azure"
+        ? Yup.string().required("Deployment Name is required")
+        : Yup.string().nullable(),
     default_model_name: Yup.string().required("Model name is required"),
     fast_default_model_name: Yup.string().nullable(),
     // EE Only
@@ -276,15 +282,24 @@ export function LLMProviderUpdateForm({
           ...rest
         } = values;
 
-        // For Azure OpenAI, parse target_uri to extract api_base and api_version
+        // For Azure OpenAI, parse target_uri to extract api_base, api_version, and deployment_name
         let finalApiBase = rest.api_base;
         let finalApiVersion = rest.api_version;
+        let finalDeploymentName = rest.deployment_name;
 
         if (llmProviderDescriptor.name === "azure" && target_uri) {
           try {
             const url = new URL(target_uri);
             finalApiBase = url.origin; // Only use origin (protocol + hostname + port)
             finalApiVersion = url.searchParams.get("api-version") || "";
+
+            // Extract deployment name from path: /openai/deployments/{deployment-name}/...
+            const pathMatch = url.pathname.match(
+              /\/openai\/deployments\/([^\/]+)/
+            );
+            if (pathMatch && pathMatch[1]) {
+              finalDeploymentName = pathMatch[1];
+            }
           } catch (error) {
             // This should not happen due to validation, but handle gracefully
             console.error("Failed to parse target_uri:", error);
@@ -296,6 +311,7 @@ export function LLMProviderUpdateForm({
           ...rest,
           api_base: finalApiBase,
           api_version: finalApiVersion,
+          deployment_name: finalDeploymentName,
           api_key_changed: values.api_key !== initialValues.api_key,
           model_configurations: getCurrentModelConfigurations(values).map(
             (modelConfiguration): ModelConfiguration => ({
@@ -451,7 +467,7 @@ export function LLMProviderUpdateForm({
                 name="target_uri"
                 label="Target URI"
                 placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
-                subtext="The complete Azure OpenAI endpoint URL including the API version as a query parameter"
+                subtext="The complete target URI for your deployment from the Azure AI portal."
               />
             ) : (
               <>
@@ -504,9 +520,40 @@ export function LLMProviderUpdateForm({
                       subtext={customConfigKey.description || undefined}
                     />
                   );
+                } else if (customConfigKey.key_type === "select") {
+                  const options =
+                    customConfigKey.options?.map((option) => ({
+                      name: option.label,
+                      value: option.value,
+                      description: option.description ?? undefined,
+                    })) ?? [];
+
+                  return (
+                    <div key={customConfigKey.name}>
+                      <SelectorFormField
+                        small={firstTimeConfiguration}
+                        name={`custom_config.${customConfigKey.name}`}
+                        label={customConfigKey.display_name}
+                        subtext={
+                          customConfigKey.description ? (
+                            <ReactMarkdown
+                              components={{ a: customLinkRenderer }}
+                            >
+                              {customConfigKey.description}
+                            </ReactMarkdown>
+                          ) : undefined
+                        }
+                        options={options}
+                        includeReset={!customConfigKey.is_required}
+                        defaultValue={
+                          customConfigKey.default_value || undefined
+                        }
+                      />
+                    </div>
+                  );
                 } else {
                   throw new Error(
-                    "Unreachable; there should only exist 2 options"
+                    `Unhandled custom config key type: ${customConfigKey.key_type}`
                   );
                 }
               }
@@ -581,13 +628,14 @@ export function LLMProviderUpdateForm({
                   />
                 )}
 
-                {llmProviderDescriptor.deployment_name_required && (
-                  <TextFormField
-                    name="deployment_name"
-                    label="Deployment Name"
-                    placeholder="Deployment Name"
-                  />
-                )}
+                {llmProviderDescriptor.deployment_name_required &&
+                  llmProviderDescriptor.name !== "azure" && (
+                    <TextFormField
+                      name="deployment_name"
+                      label="Deployment Name"
+                      placeholder="Deployment Name"
+                    />
+                  )}
 
                 {!llmProviderDescriptor.single_model_supported &&
                   (currentModelConfigurations.length > 0 ? (
@@ -664,7 +712,7 @@ export function LLMProviderUpdateForm({
             {/* NOTE: this is above the test button to make sure it's visible */}
             {testError && <Text className="text-error mt-2">{testError}</Text>}
 
-            <div className="flex w-full mt-4 gap-spacing-interline">
+            <div className="flex w-full mt-4 gap-2">
               <Button disabled={isTesting}>
                 {isTesting ? (
                   <Text inverted>
@@ -695,22 +743,24 @@ export function LLMProviderUpdateForm({
                     }
 
                     // If the deleted provider was the default, set the first remaining provider as default
-                    const remainingProvidersResponse = await fetch(
-                      LLM_PROVIDERS_ADMIN_URL
-                    );
-                    if (remainingProvidersResponse.ok) {
-                      const remainingProviders =
-                        await remainingProvidersResponse.json();
+                    if (existingLlmProvider.is_default_provider) {
+                      const remainingProvidersResponse = await fetch(
+                        LLM_PROVIDERS_ADMIN_URL
+                      );
+                      if (remainingProvidersResponse.ok) {
+                        const remainingProviders =
+                          await remainingProvidersResponse.json();
 
-                      if (remainingProviders.length > 0) {
-                        const setDefaultResponse = await fetch(
-                          `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
-                          {
-                            method: "POST",
+                        if (remainingProviders.length > 0) {
+                          const setDefaultResponse = await fetch(
+                            `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
+                            {
+                              method: "POST",
+                            }
+                          );
+                          if (!setDefaultResponse.ok) {
+                            console.error("Failed to set new default provider");
                           }
-                        );
-                        if (!setDefaultResponse.ok) {
-                          console.error("Failed to set new default provider");
                         }
                       }
                     }

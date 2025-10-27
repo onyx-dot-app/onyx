@@ -84,7 +84,7 @@ import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
 
 import { SwitchField } from "@/components/ui/switch";
-import { generateIdenticon } from "@/components/assistants/AssistantIcon";
+import { generateIdenticon } from "@/refresh-components/AgentIcon";
 import { BackButton } from "@/components/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
@@ -95,18 +95,8 @@ import {
 } from "@/components/Dropdown";
 import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
 import { FileCard } from "@/app/chat/components/projects/ProjectContextPanel";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import FilesList from "@/app/chat/components/files/FilesList";
-import {
-  MultipleFilesIcon,
-  OpenFolderIcon,
-} from "@/components/icons/CustomIcons";
+import CoreModal from "@/refresh-components/modals/CoreModal";
+import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
 import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
@@ -124,11 +114,13 @@ import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
 import { FormErrorFocus } from "@/components/FormErrorHelpers";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import FilePicker from "@/app/chat/components/files/FilePicker";
+import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import SvgTrash from "@/icons/trash";
 import SvgEditBig from "@/icons/edit-big";
+import SvgFiles from "@/icons/files";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Text from "@/refresh-components/texts/Text";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -345,12 +337,14 @@ export function AssistantEditor({
     enabledToolsMap[tool.id] = personaCurrentToolIds.includes(tool.id);
   });
 
-  const { recentFiles, uploadFiles: uploadProjectFiles } = useProjectsContext();
+  const { allRecentFiles, beginUpload } = useProjectsContext();
 
   const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
 
+  const connectorsExist = ccPairs.length > 0;
+
   const canShowKnowledgeSource =
-    ccPairs.length > 0 &&
+    connectorsExist &&
     searchTool &&
     !(user?.role === UserRole.BASIC && documentSets.length === 0);
 
@@ -545,6 +539,8 @@ export function AssistantEditor({
       }
     }
   };
+
+  // Removed invalid helper; replacement happens inline in the upload handler using the beginUpload onSuccess callback
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -880,6 +876,7 @@ export function AssistantEditor({
                     <div className="flex flex-col gap-2">
                       <Button
                         secondary
+                        type="button"
                         onClick={() => {
                           const fileInput = document.createElement("input");
                           fileInput.type = "file";
@@ -903,6 +900,7 @@ export function AssistantEditor({
                       {values.uploaded_image && (
                         <Button
                           secondary
+                          type="button"
                           onClick={() => {
                             setUploadedImagePreview(null);
                             setFieldValue("uploaded_image", null);
@@ -923,6 +921,7 @@ export function AssistantEditor({
                           removePersonaImage) && (
                           <Button
                             secondary
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               const newShape = generateRandomIconShape();
@@ -946,6 +945,7 @@ export function AssistantEditor({
                         !values.uploaded_image && (
                           <Button
                             secondary
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               setRemovePersonaImage(false);
@@ -963,6 +963,7 @@ export function AssistantEditor({
                         !values.uploaded_image && (
                           <Button
                             secondary
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               setRemovePersonaImage(true);
@@ -986,70 +987,78 @@ export function AssistantEditor({
 
                 <div className="w-full max-w-4xl">
                   <div className="flex flex-col">
-                    {searchTool && (
-                      <>
-                        <Separator />
-                        <div className="flex gap-x-2 py-2 flex justify-start">
-                          <div>
-                            <div className="flex items-start gap-x-2">
-                              <p className="block font-medium text-sm">
-                                Knowledge
-                              </p>
-                              <div className="flex items-center">
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div
-                                        className={`${
-                                          ccPairs.length === 0
-                                            ? "opacity-70 cursor-not-allowed"
-                                            : ""
+                    <>
+                      <Separator />
+                      <div className="flex gap-x-2 py-2 flex justify-start">
+                        <div>
+                          <div className="flex items-start gap-x-2">
+                            <p className="block font-medium text-sm">
+                              Knowledge
+                            </p>
+                            <div className="flex items-center">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className={`${
+                                        !connectorsExist || !searchTool
+                                          ? "opacity-70 cursor-not-allowed"
+                                          : ""
+                                      }`}
+                                    >
+                                      <FastField
+                                        name={`enabled_tools_map.${
+                                          // -1 is a placeholder -- this section
+                                          // should be disabled anyways if no search tool
+                                          searchTool?.id || -1
                                         }`}
                                       >
-                                        <FastField
-                                          name={`enabled_tools_map.${searchTool.id}`}
-                                        >
-                                          {({ form }: any) => (
-                                            <SwitchField
-                                              size="sm"
-                                              onCheckedChange={(
-                                                checked: boolean
-                                              ) => {
-                                                form.setFieldValue(
-                                                  "num_chunks",
-                                                  null
-                                                );
-                                                toggleToolInValues(
-                                                  searchTool.id
-                                                );
-                                              }}
-                                              name={`enabled_tools_map.${searchTool.id}`}
-                                              disabled={ccPairs.length === 0}
-                                            />
-                                          )}
-                                        </FastField>
-                                      </div>
-                                    </TooltipTrigger>
+                                        {({ form }: any) => (
+                                          <SwitchField
+                                            size="sm"
+                                            onCheckedChange={(
+                                              checked: boolean
+                                            ) => {
+                                              form.setFieldValue(
+                                                "num_chunks",
+                                                null
+                                              );
+                                              toggleToolInValues(
+                                                searchTool?.id || -1
+                                              );
+                                            }}
+                                            name={`enabled_tools_map.${
+                                              searchTool?.id || -1
+                                            }`}
+                                            disabled={
+                                              !connectorsExist || !searchTool
+                                            }
+                                          />
+                                        )}
+                                      </FastField>
+                                    </div>
+                                  </TooltipTrigger>
 
-                                    {ccPairs.length === 0 && (
-                                      <TooltipContent side="top" align="center">
-                                        <Text inverted>
-                                          To use the Knowledge Action, you need
-                                          to have at least one Connector
-                                          configured.
-                                        </Text>
-                                      </TooltipContent>
-                                    )}
-                                  </Tooltip>
-                                </TooltipProvider>
-                              </div>
+                                  {!connectorsExist && (
+                                    <TooltipContent side="top" align="center">
+                                      <Text inverted>
+                                        To use Knowledge, you need to have at
+                                        least one Connector configured. You can
+                                        still upload user files to the agent
+                                        below.
+                                      </Text>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
                             </div>
                           </div>
                         </div>
-                      </>
-                    )}
+                      </div>
+                    </>
 
-                    {searchTool && values.enabled_tools_map[searchTool.id] && (
+                    {((searchTool && values.enabled_tools_map[searchTool.id]) ||
+                      !connectorsExist) && (
                       <div>
                         {canShowKnowledgeSource && (
                           <>
@@ -1108,22 +1117,24 @@ export function AssistantEditor({
                             <div className="text-sm flex flex-col items-start">
                               <SubLabel>Click below to add files</SubLabel>
                               {values.user_file_ids.length > 0 && (
-                                <div className="flex gap-3 mb-2">
+                                <div className="flex gap-1">
                                   {values.user_file_ids
-                                    .slice(0, 3)
+                                    .slice(0, 4)
                                     .map((userFileId: string) => {
-                                      const rf = recentFiles.find(
+                                      const rf = allRecentFiles.find(
                                         (f) => f.id === userFileId
                                       );
+
                                       const fileData = rf || {
                                         id: userFileId,
                                         name: `File ${userFileId.slice(0, 8)}`,
                                         status: "completed" as const,
                                       };
                                       return (
-                                        <div key={userFileId} className="w-52">
+                                        <div key={userFileId} className="w-40">
                                           <FileCard
                                             file={fileData as ProjectFile}
+                                            hideProcessingState
                                             removeFile={() => {
                                               setFieldValue(
                                                 "user_file_ids",
@@ -1137,31 +1148,33 @@ export function AssistantEditor({
                                         </div>
                                       );
                                     })}
-                                  {values.user_file_ids.length > 3 && (
+                                  {values.user_file_ids.length > 4 && (
                                     <button
                                       type="button"
-                                      className="rounded-xl px-3 py-1 text-left bg-transparent hover:bg-accent-background-hovered hover:dark:bg-neutral-800/75 transition-colors"
+                                      className="rounded-xl px-3 py-1 text-left transition-colors hover:bg-background-tint-02"
                                       onClick={() => setShowAllUserFiles(true)}
                                     >
                                       <div className="flex flex-col overflow-hidden h-12 p-1">
                                         <div className="flex items-center justify-between gap-2 w-full">
-                                          <span className="text-onyx-medium text-sm truncate flex-1">
+                                          <Text text04 secondaryAction>
                                             View All
-                                          </span>
-                                          <MultipleFilesIcon className="h-5 w-5 text-onyx-medium" />
+                                          </Text>
+                                          <SvgFiles className="h-5 w-5 stroke-text-02" />
                                         </div>
-                                        <span className="text-onyx-muted text-sm">
+                                        <Text text03 secondaryBody>
                                           {values.user_file_ids.length} files
-                                        </span>
+                                        </Text>
                                       </div>
                                     </button>
                                   )}
                                 </div>
                               )}
-                              <FilePicker
-                                showTriggerLabel
-                                triggerLabel="Add User  Files"
-                                recentFiles={recentFiles}
+                              <FilePickerPopover
+                                trigger={(open) => (
+                                  <CreateButton active={open}>
+                                    Add User Files
+                                  </CreateButton>
+                                )}
                                 onFileClick={(file: ProjectFile) => {
                                   setPresentingDocument({
                                     document_id: `project_file__${file.file_id}`,
@@ -1176,36 +1189,95 @@ export function AssistantEditor({
                                     ]);
                                   }
                                 }}
+                                onUnpickRecent={(file: ProjectFile) => {
+                                  if (values.user_file_ids.includes(file.id)) {
+                                    setFieldValue(
+                                      "user_file_ids",
+                                      values.user_file_ids.filter(
+                                        (id: string) => id !== file.id
+                                      )
+                                    );
+                                  }
+                                }}
                                 handleUploadChange={async (
                                   e: React.ChangeEvent<HTMLInputElement>
                                 ) => {
                                   const files = e.target.files;
                                   if (!files || files.length === 0) return;
-
                                   try {
-                                    const uploaded = await uploadProjectFiles(
-                                      Array.from(files)
+                                    // Use a local tracker to avoid stale closures inside onSuccess
+                                    let selectedIds = [
+                                      ...(values.user_file_ids || []),
+                                    ];
+                                    const optimistic = await beginUpload(
+                                      Array.from(files),
+                                      null,
+                                      setPopup,
+                                      (result) => {
+                                        const uploadedFiles =
+                                          result.user_files || [];
+                                        if (uploadedFiles.length === 0) return;
+                                        const tempToFinal = new Map(
+                                          uploadedFiles
+                                            .filter((f) => f.temp_id)
+                                            .map((f) => [
+                                              f.temp_id as string,
+                                              f.id,
+                                            ])
+                                        );
+                                        const replaced = (
+                                          selectedIds || []
+                                        ).map(
+                                          (id: string) =>
+                                            tempToFinal.get(id) ?? id
+                                        );
+                                        const deduped = Array.from(
+                                          new Set(replaced)
+                                        );
+                                        setFieldValue("user_file_ids", deduped);
+                                        selectedIds = deduped;
+                                      },
+                                      (failedTempIds) => {
+                                        if (
+                                          !failedTempIds ||
+                                          failedTempIds.length === 0
+                                        )
+                                          return;
+                                        const filtered = (
+                                          selectedIds || []
+                                        ).filter(
+                                          (id: string) =>
+                                            !failedTempIds.includes(id)
+                                        );
+                                        setFieldValue(
+                                          "user_file_ids",
+                                          filtered
+                                        );
+                                        selectedIds = filtered;
+                                      }
                                     );
-                                    const newIds = uploaded.user_files.map(
+                                    const optimisticIds = optimistic.map(
                                       (f) => f.id
                                     );
                                     const merged = Array.from(
                                       new Set([
-                                        ...(values.user_file_ids || []),
-                                        ...newIds,
+                                        ...(selectedIds || []),
+                                        ...optimisticIds,
                                       ])
                                     );
                                     setFieldValue("user_file_ids", merged);
+                                    selectedIds = merged;
                                   } finally {
                                     e.target.value = "";
                                   }
                                 }}
+                                selectedFileIds={values.user_file_ids}
                               />
                             </div>
                           )}
 
                         {values.knowledge_source === "team_knowledge" &&
-                          ccPairs.length > 0 && (
+                          connectorsExist && (
                             <>
                               {canShowKnowledgeSource && (
                                 <div className="mt-4">
@@ -1830,7 +1902,14 @@ export function AssistantEditor({
                   </div>
                   <div className="flex gap-x-2 items-center">
                     <Button
-                      disabled={isSubmitting || isRequestSuccessful}
+                      disabled={
+                        isSubmitting ||
+                        isRequestSuccessful ||
+                        (values.user_file_ids || []).some(
+                          (id: string) =>
+                            id.startsWith("temp_") || id.includes("temp_")
+                        )
+                      }
                       type="submit"
                     >
                       {isUpdate ? "Update" : "Create"}
@@ -1841,22 +1920,20 @@ export function AssistantEditor({
                   </div>
                 </div>
               </Form>
-              <Dialog
-                open={showAllUserFiles}
-                onOpenChange={setShowAllUserFiles}
-              >
-                <DialogContent className="w-full max-w-lg">
-                  <DialogHeader>
-                    <OpenFolderIcon size={32} />
-                    <DialogTitle>User Files</DialogTitle>
-                    <DialogDescription>
-                      All files selected for this agent
-                    </DialogDescription>
-                  </DialogHeader>
-                  <FilesList
+              {showAllUserFiles && (
+                <CoreModal
+                  className="w-full max-w-lg"
+                  onClickOutside={() => setShowAllUserFiles(false)}
+                >
+                  <UserFilesModalContent
+                    title="User Files"
+                    description="All files selected for this assistant"
+                    icon={SvgFiles}
                     recentFiles={values.user_file_ids.map(
                       (userFileId: string) => {
-                        const rf = recentFiles.find((f) => f.id === userFileId);
+                        const rf = allRecentFiles.find(
+                          (f) => f.id === userFileId
+                        );
                         return (
                           rf || {
                             id: userFileId,
@@ -1866,8 +1943,7 @@ export function AssistantEditor({
                         );
                       }
                     )}
-                    showRemove
-                    onRemove={(file) => {
+                    onDelete={(file) => {
                       setFieldValue(
                         "user_file_ids",
                         values.user_file_ids.filter(
@@ -1875,9 +1951,10 @@ export function AssistantEditor({
                         )
                       );
                     }}
+                    onClose={() => setShowAllUserFiles(false)}
                   />
-                </DialogContent>
-              </Dialog>
+                </CoreModal>
+              )}
             </>
           );
         }}

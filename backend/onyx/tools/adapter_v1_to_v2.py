@@ -96,7 +96,7 @@ async def _tool_run_wrapper(
     return results
 
 
-def tool_to_function_tool(tool: Tool) -> FunctionTool:
+def custom_or_mcp_tool_to_function_tool(tool: Tool) -> FunctionTool:
     return FunctionTool(
         name=tool.name,
         description=tool.description,
@@ -117,7 +117,9 @@ def tools_to_function_tools(tools: list[Tool]) -> list[FunctionTool]:
         onyx_tool for sublist in onyx_tools for onyx_tool in sublist
     ]
     custom_and_mcp_tools: list[FunctionTool] = [
-        tool_to_function_tool(tool) for tool in tools if is_custom_or_mcp_tool(tool)
+        custom_or_mcp_tool_to_function_tool(tool)
+        for tool in tools
+        if is_custom_or_mcp_tool(tool)
     ]
 
     return flattened_builtin_tools + custom_and_mcp_tools

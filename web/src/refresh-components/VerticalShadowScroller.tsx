@@ -1,69 +1,40 @@
 "use client";
 
+import React from "react";
 import { cn } from "@/lib/utils";
-import React, { useEffect, useRef, useState } from "react";
 
 export interface VerticalShadowScrollerProps {
   className?: string;
   children?: React.ReactNode;
+  disable?: boolean;
+  backgroundColor?: string;
+  height?: string;
 }
 
 export default function VerticalShadowScroller({
   className,
   children,
+  disable,
+  backgroundColor = "var(--background-tint-02)",
+  height: minHeight = "1rem",
 }: VerticalShadowScrollerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [showBottomShadow, setShowBottomShadow] = useState(false);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const checkScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const hasOverflow = scrollHeight > clientHeight;
-      const isScrolledToBottom = scrollTop + clientHeight >= scrollHeight - 1;
-
-      // Show bottom shadow if there's content below the visible area
-      setShowBottomShadow(hasOverflow && !isScrolledToBottom);
-    };
-
-    // Check on mount and when content changes
-    checkScroll();
-
-    // Listen for scroll events
-    container.addEventListener("scroll", checkScroll);
-
-    // Use ResizeObserver to detect content size changes
-    const resizeObserver = new ResizeObserver(checkScroll);
-    resizeObserver.observe(container);
-
-    return () => {
-      container.removeEventListener("scroll", checkScroll);
-      resizeObserver.disconnect();
-    };
-  }, [children]);
-
   return (
-    <div className="relative flex-1 flex flex-col overflow-y-scroll pt-[0rem]">
-      <div
-        ref={containerRef}
-        className={cn(
-          "flex flex-col flex-1 overflow-y-auto overflow-x-hidden",
-          className
-        )}
-      >
+    <div className="flex flex-col flex-1 overflow-y-hidden relative">
+      <div className={cn("flex flex-col flex-1 overflow-y-scroll", className)}>
         {children}
+        {/* We add some spacing after the masked scroller to make it clear that this is the *end* of the scroller. */}
+        <div style={{ minHeight }} />
       </div>
 
-      {showBottomShadow && (
-        <div
-          className="absolute bottom-0 left-0 right-0 h-[2rem] pointer-events-none z-[100] dbg-rd"
-          style={{
-            background: "linear-gradient(to top, var(--mask-01), transparent)",
-          }}
-        />
-      )}
+      {/* Mask Layer */}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-[3rem] z-[20] pointer-events-none"
+        style={{
+          background: disable
+            ? undefined
+            : `linear-gradient(to bottom, transparent, ${backgroundColor})`,
+        }}
+      />
     </div>
   );
 }

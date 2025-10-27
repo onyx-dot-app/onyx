@@ -59,6 +59,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         bucket_name: str,
         prefix: str = "",
         batch_size: int = INDEX_BATCH_SIZE,
+        european_residency: bool = False,
     ) -> None:
         self.bucket_type: BlobType = BlobType(bucket_type)
         self.bucket_name = bucket_name.strip()
@@ -67,7 +68,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.s3_client: Optional[S3Client] = None
         self._allow_images: bool | None = None
         self.size_threshold: int | None = BLOB_STORAGE_SIZE_THRESHOLD
-        self._bucket_region: Optional[str] = None
+        self.bucket_region: Optional[str] = None
+        self.european_residency: bool = european_residency
 
     def set_allow_images(self, allow_images: bool) -> None:
         """Set whether to process images in this connector."""
@@ -85,12 +87,12 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         try:
             response = self.s3_client.head_bucket(Bucket=self.bucket_name)
             # The region is in the response headers as 'x-amz-bucket-region'
-            self._bucket_region = response.get("BucketRegion") or response.get(
+            self.bucket_region = response.get("BucketRegion") or response.get(
                 "ResponseMetadata", {}
             ).get("HTTPHeaders", {}).get("x-amz-bucket-region")
 
-            if self._bucket_region:
-                logger.debug(f"Detected bucket region: {self._bucket_region}")
+            if self.bucket_region:
+                logger.debug(f"Detected bucket region: {self.bucket_region}")
             else:
                 logger.warning("Bucket region not found in head_bucket response")
         except Exception as e:
@@ -123,9 +125,14 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 for key in ["r2_access_key_id", "r2_secret_access_key", "account_id"]
             ):
                 raise ConnectorMissingCredentialError("Cloudflare R2")
+
+            # Use EU endpoint if european_residency is enabled
+            subdomain = "eu." if self.european_residency else ""
+            endpoint_url = f"https://{credentials['account_id']}.{subdomain}r2.cloudflarestorage.com"
+
             self.s3_client = boto3.client(
                 "s3",
-                endpoint_url=f"https://{credentials['account_id']}.r2.cloudflarestorage.com",
+                endpoint_url=endpoint_url,
                 aws_access_key_id=credentials["r2_access_key_id"],
                 aws_secret_access_key=credentials["r2_secret_access_key"],
                 region_name="auto",
@@ -282,6 +289,10 @@ class BlobStorageConnector(LoadConnector, PollConnector):
     #     return url
 
     def _get_blob_link(self, key: str) -> str:
+        # NOTE: We store the object dashboard URL instead of the actual object URL
+        # This is because the actual object URL requires S3 client authentication
+        # Accessing through the browser will always return an unauthorized error
+
         if self.s3_client is None:
             raise ConnectorMissingCredentialError("Blob storage")
 
@@ -291,14 +302,16 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
         if self.bucket_type == BlobType.R2:
             account_id = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
-            return f"https://{account_id}.r2.cloudflarestorage.com/{self.bucket_name}/{encoded_key}"
+            subdomain = "eu/" if self.european_residency else "default/"
+
+            return f"https://dash.cloudflare.com/{account_id}/r2/{subdomain}buckets/{self.bucket_name}/objects/{encoded_key}/details"
 
         elif self.bucket_type == BlobType.S3:
-            region = self._bucket_region or self.s3_client.meta.region_name
-            return f"https://{self.bucket_name}.s3.{region}.amazonaws.com/{encoded_key}"
+            region = self.bucket_region or self.s3_client.meta.region_name
+            return f"https://s3.console.aws.amazon.com/s3/object/{self.bucket_name}?region={region}&prefix={encoded_key}"
 
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
-            return f"https://storage.cloud.google.com/{self.bucket_name}/{encoded_key}"
+            return f"https://console.cloud.google.com/storage/browser/_details/{self.bucket_name}/{encoded_key}"
 
         elif self.bucket_type == BlobType.OCI_STORAGE:
             namespace = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
@@ -306,6 +319,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             return f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{self.bucket_name}/o/{encoded_key}"
 
         else:
+            # This should never happen!
             raise ValueError(f"Unsupported bucket type: {self.bucket_type}")
 
     @staticmethod

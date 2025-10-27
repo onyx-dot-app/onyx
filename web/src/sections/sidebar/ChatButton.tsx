@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, memo, useMemo, useEffect } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import SvgBubbleText from "@/icons/bubble-text";
@@ -15,13 +16,13 @@ import { cn, noProp } from "@/lib/utils";
 import {
   Popover,
   PopoverContent,
+  PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import {
   Project,
-  moveChatSession,
   removeChatSessionFromProject,
 } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -36,11 +37,20 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import MenuButton from "@/refresh-components/buttons/MenuButton";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import ButtonRenaming from "./ButtonRenaming";
+import { usePopup } from "@/components/admin/connectors/Popup";
+import {
+  DRAG_TYPES,
+  DEFAULT_PERSONA_ID,
+  LOCAL_STORAGE_KEYS,
+} from "@/sections/sidebar/constants";
+import {
+  shouldShowMoveModal,
+  showErrorNotification,
+  handleMoveOperation,
+} from "@/sections/sidebar/sidebarUtils";
+import ButtonRenaming from "@/sections/sidebar/ButtonRenaming";
 
-// Constants
-const DEFAULT_PERSONA_ID = 0;
-const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
+// (no local constants; use shared constants/imports)
 
 export interface PopoverSearchInputProps {
   setShowMoveOptions: (show: boolean) => void;
@@ -94,12 +104,20 @@ export function PopoverSearchInput({
 interface ChatButtonProps {
   chatSession: ChatSession;
   project?: Project;
+  draggable?: boolean;
 }
 
-function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
+function ChatButtonInner({
+  chatSession,
+  project,
+  draggable = false,
+}: ChatButtonProps) {
   const route = useAppRouter();
   const params = useAppParams();
-  const [name, setName] = useState(chatSession.name || UNNAMED_CHAT);
+  const [mounted, setMounted] = useState(false);
+  const [displayName, setDisplayName] = useState(
+    chatSession.name || UNNAMED_CHAT
+  );
   const [renaming, setRenaming] = useState(false);
   const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
     useState(false);
@@ -114,14 +132,56 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
     fetchProjects,
     currentProjectId,
   } = useProjectsContext();
+  const { popup, setPopup } = usePopup();
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
-  const isChatUsingDefaultAssistant =
-    chatSession.persona_id === DEFAULT_PERSONA_ID;
+
+  // Drag and drop setup for chat sessions
+  const dragId = `${DRAG_TYPES.CHAT}-${chatSession.id}`;
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: dragId,
+      data: {
+        type: DRAG_TYPES.CHAT,
+        chatSession,
+        projectId: project?.id,
+      },
+      disabled: !draggable || renaming,
+    });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Sync local name state when chatSession.name changes (e.g., after auto-naming)
+  useEffect(() => {
+    const newName = chatSession.name || UNNAMED_CHAT;
+    const oldName = displayName;
+
+    // Only animate if transitioning from UNNAMED_CHAT to a real name
+    if (oldName === UNNAMED_CHAT && newName !== UNNAMED_CHAT && mounted) {
+      // Type out the name character by character
+      let currentIndex = 0;
+      const typingInterval = setInterval(() => {
+        currentIndex++;
+        setDisplayName(newName.slice(0, currentIndex));
+
+        if (currentIndex >= newName.length) {
+          clearInterval(typingInterval);
+        }
+      }, 30); // 30ms per character
+
+      return () => clearInterval(typingInterval);
+    } else {
+      // No animation for other changes (manual rename, initial load, etc.)
+      setDisplayName(newName);
+    }
+  }, [chatSession.name, mounted]);
+
   const filteredProjects = useMemo(() => {
     if (!searchTerm) return projects;
     const term = searchTerm.toLowerCase();
@@ -129,6 +189,7 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
       project.name.toLowerCase().includes(term)
     );
   }, [projects, searchTerm]);
+
   useEffect(() => {
     if (!showMoveOptions) {
       const popoverItems = [
@@ -206,7 +267,7 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
   ]);
 
   async function handleRename(newName: string) {
-    setName(newName);
+    setDisplayName(newName);
     await renameChatSession(chatSession.id, newName);
     await refreshChatSessions();
   }
@@ -227,35 +288,40 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
       await refreshChatSessions();
     } catch (error) {
       console.error("Failed to delete chat:", error);
+      showErrorNotification(
+        setPopup,
+        "Failed to delete chat. Please try again."
+      );
     }
   }
 
   async function performMove(targetProjectId: number) {
     try {
-      await moveChatSession(targetProjectId, chatSession.id);
-      const projectRefreshPromise = currentProjectId
-        ? refreshCurrentProjectDetails()
-        : fetchProjects();
-      await Promise.all([refreshChatSessions(), projectRefreshPromise]);
+      await handleMoveOperation(
+        {
+          chatSession,
+          targetProjectId,
+          refreshChatSessions,
+          refreshCurrentProjectDetails,
+          fetchProjects,
+          currentProjectId,
+        },
+        setPopup
+      );
       setShowMoveOptions(false);
       setSearchTerm("");
     } catch (error) {
+      // handleMoveOperation already handles error notification
       console.error("Failed to move chat:", error);
     }
   }
 
   async function handleChatMove(targetProject: Project) {
-    const hideModal =
-      typeof window !== "undefined" &&
-      window.localStorage.getItem(LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY) ===
-        "true";
-
-    if (!isChatUsingDefaultAssistant && !hideModal) {
+    if (shouldShowMoveModal(chatSession)) {
       setPendingMoveProjectId(targetProject.id);
       setShowMoveCustomAgentModal(true);
       return;
     }
-
     await performMove(targetProject.id);
   }
 
@@ -273,8 +339,60 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
     }
   }
 
+  const rightMenu = (
+    <>
+      <PopoverTrigger asChild onClick={noProp()}>
+        <div>
+          <IconButton
+            icon={SvgMoreHorizontal}
+            className={cn(
+              !popoverOpen && "hidden",
+              !renaming && "group-hover/SidebarTab:flex"
+            )}
+            active={popoverOpen}
+            internal
+          />
+        </div>
+      </PopoverTrigger>
+      <PopoverContent side="right" align="end">
+        <PopoverMenu>{popoverItems}</PopoverMenu>
+      </PopoverContent>
+    </>
+  );
+
+  const popover = (
+    <Popover
+      onOpenChange={(state) => {
+        setPopoverOpen(state);
+        if (!state) setShowMoveOptions(false);
+      }}
+    >
+      <PopoverAnchor>
+        <SidebarTab
+          leftIcon={project ? () => <></> : SvgBubbleText}
+          onClick={() => route({ chatSessionId: chatSession.id })}
+          active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
+          rightChildren={rightMenu}
+          focused={renaming}
+        >
+          {renaming ? (
+            <ButtonRenaming
+              initialName={chatSession.name}
+              onRename={handleRename}
+              onClose={() => setRenaming(false)}
+            />
+          ) : (
+            displayName
+          )}
+        </SidebarTab>
+      </PopoverAnchor>
+    </Popover>
+  );
+
   return (
     <>
+      {popup}
+
       {deleteConfirmationModalOpen && (
         <ConfirmationModal
           title="Delete Chat"
@@ -306,7 +424,7 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
           onConfirm={async (doNotShowAgain: boolean) => {
             if (doNotShowAgain && typeof window !== "undefined") {
               window.localStorage.setItem(
-                LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY,
+                LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL,
                 "true"
               );
             }
@@ -327,51 +445,23 @@ function ChatButtonInner({ chatSession, project }: ChatButtonProps) {
         />
       )}
 
-      <Popover
-        onOpenChange={(state) => {
-          setPopoverOpen(state);
-          if (!state) setShowMoveOptions(false);
-        }}
-      >
-        <PopoverAnchor>
-          <SidebarTab
-            leftIcon={project ? () => <></> : SvgBubbleText}
-            onClick={() => route({ chatSessionId: chatSession.id })}
-            active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
-            rightChildren={
-              <>
-                <PopoverTrigger asChild onClick={noProp()}>
-                  <div>
-                    <IconButton
-                      icon={SvgMoreHorizontal}
-                      className={cn(
-                        !popoverOpen && "hidden",
-                        !renaming && "group-hover/SidebarTab:flex"
-                      )}
-                      active={popoverOpen}
-                      internal
-                    />
-                  </div>
-                </PopoverTrigger>
-
-                <PopoverContent side="right" align="end">
-                  {popoverItems}
-                </PopoverContent>
-              </>
-            }
-          >
-            {renaming ? (
-              <ButtonRenaming
-                initialName={chatSession.name}
-                onRename={handleRename}
-                onClose={() => setRenaming(false)}
-              />
-            ) : (
-              name
-            )}
-          </SidebarTab>
-        </PopoverAnchor>
-      </Popover>
+      {draggable ? (
+        <div
+          ref={setNodeRef}
+          style={{
+            transform: transform
+              ? `translate3d(0px, ${transform.y}px, 0)`
+              : undefined,
+            opacity: isDragging ? 0.5 : 1,
+          }}
+          {...(mounted ? attributes : {})}
+          {...(mounted ? listeners : {})}
+        >
+          {popover}
+        </div>
+      ) : (
+        popover
+      )}
     </>
   );
 }

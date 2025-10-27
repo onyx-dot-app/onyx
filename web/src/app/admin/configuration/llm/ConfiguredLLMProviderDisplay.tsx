@@ -9,7 +9,7 @@ import { mutate } from "swr";
 import { Badge } from "@/components/ui/badge";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import { isSubset } from "@/lib/utils";
+import { cn, isSubset } from "@/lib/utils";
 
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
@@ -70,6 +70,29 @@ function LLMProviderDisplay({
   const [formIsVisible, setFormIsVisible] = useState(false);
   const { popup, setPopup } = usePopup();
 
+  async function handleSetAsDefault(): Promise<void> {
+    const response = await fetch(
+      `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}/default`,
+      {
+        method: "POST",
+      }
+    );
+    if (!response.ok) {
+      const errorMsg = (await response.json()).detail;
+      setPopup({
+        type: "error",
+        message: `Failed to set provider as default: ${errorMsg}`,
+      });
+      return;
+    }
+
+    await mutate(LLM_PROVIDERS_ADMIN_URL);
+    setPopup({
+      type: "success",
+      message: "Provider set as default successfully!",
+    });
+  }
+
   const providerName =
     existingLlmProvider?.name ||
     llmProviderDescriptor?.display_name ||
@@ -87,29 +110,8 @@ function LLMProviderDisplay({
           </Text>
           {!existingLlmProvider.is_default_provider && (
             <Text
-              className="text-action-link-05"
-              onClick={async () => {
-                const response = await fetch(
-                  `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}/default`,
-                  {
-                    method: "POST",
-                  }
-                );
-                if (!response.ok) {
-                  const errorMsg = (await response.json()).detail;
-                  setPopup({
-                    type: "error",
-                    message: `Failed to set provider as default: ${errorMsg}`,
-                  });
-                  return;
-                }
-
-                mutate(LLM_PROVIDERS_ADMIN_URL);
-                setPopup({
-                  type: "success",
-                  message: "Provider set as default successfully!",
-                });
-              }}
+              className={cn("text-action-link-05", "cursor-pointer")}
+              onClick={handleSetAsDefault}
             >
               Set as default
             </Text>

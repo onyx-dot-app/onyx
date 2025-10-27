@@ -172,3 +172,10 @@ class UserFileStatus(str, PyEnum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELED = "CANCELED"
+    DELETING = "DELETING"
+
+
+class ThemePreference(str, PyEnum):
+    LIGHT = "light"
+    DARK = "dark"
+    SYSTEM = "system"
