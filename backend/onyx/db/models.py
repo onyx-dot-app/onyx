@@ -2326,7 +2326,7 @@ class ChatMessageFeedback(Base):
         ForeignKey("chat_message.id", ondelete="SET NULL"), nullable=True
     )
 
-    # New enum column - use this going forward
+    # Enum-based feedback (now the only feedback field)
     feedback: Mapped[ChatMessageFeedbackEnum | None] = mapped_column(
         Enum(
             ChatMessageFeedbackEnum,
@@ -2334,9 +2334,6 @@ class ChatMessageFeedback(Base):
         ),
         nullable=True,
     )
-
-    # Deprecated: kept for rollback safety, will be removed in Stage 3
-    is_positive: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     required_followup: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     feedback_text: Mapped[str | None] = mapped_column(Text, nullable=True)
