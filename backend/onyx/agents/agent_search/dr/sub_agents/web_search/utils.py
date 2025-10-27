@@ -82,6 +82,9 @@ def dummy_inference_section_from_internet_search_result(
 def llm_doc_from_web_content(web_content: WebContent) -> LlmDoc:
     """Create an LlmDoc from WebContent with the INTERNET_SEARCH_DOC_ prefix"""
     return LlmDoc(
+        # TODO: Is this what we want to do for document_id? We're kind of overloading it since it
+        # should ideally correspond to a document in the database. But I guess if you're calling this
+        # function you know it won't be in the database.
         document_id="INTERNET_SEARCH_DOC_" + web_content.link,
         content=truncate_search_result_content(web_content.full_content),
         blurb=web_content.link,

@@ -91,7 +91,7 @@ def _web_search_core(
 
     # Convert hits to WebSearchResult objects
     results = []
-    for _, r in enumerate(all_hits):
+    for r in all_hits:
         results.append(
             WebSearchResult(
                 title=r.title,
