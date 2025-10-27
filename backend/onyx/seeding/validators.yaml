@@ -9,8 +9,8 @@ validators:
         label: "Типы персональных данных для маскирования"
         values:
           - "RUS_PHONE_NUMBER"
+          - "RUS_BANK_CARD"
           - "EMAIL_ADDRESS"
-          - "CREDIT_CARD"
           - "IP_ADDRESS"
           - "URL"
           - "DOMAIN_NAME"
