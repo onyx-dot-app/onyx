@@ -126,17 +126,12 @@ function ActionItem({
         data-testid={`tool-option-${toolName}`}
         onClick={() => {
           // If no connectors, don't allow forcing the tool
-          if (isSearchToolWithNoConnectors) {
-            return;
-          }
-
+          if (isSearchToolWithNoConnectors) return;
           // If disabled, un-disable the tool
-          if (onToggle && disabled) {
-            onToggle();
-          }
-
+          if (onToggle && disabled) onToggle();
           onForceToggle();
         }}
+        forced={isForced}
         strikethrough={disabled}
         icon={Icon}
         rightChildren={
@@ -167,7 +162,11 @@ function ActionItem({
                 icon={SvgSlash}
                 onClick={noProp(onToggle)}
                 internal
-                className={cn("invisible group-hover/LineItem:visible")}
+                className={cn(
+                  !disabled && "invisible group-hover/LineItem:visible"
+                )}
+                active={disabled}
+                tooltip={disabled ? "Enable" : "Disable"}
               />
             )}
 
@@ -186,32 +185,8 @@ function ActionItem({
                   isSearchToolWithNoConnectors &&
                     "invisible grouop-hover/LineItem:visible"
                 )}
+                tooltip={isSearchToolWithNoConnectors ? "Settings" : "More"}
               />
-              // <div
-              //   className={cn(
-              //     "flex items-center gap-2 transition-opacity duration-200",
-              //     isSearchToolWithNoConnectors
-              //       ? "opacity-0 group-hover:opacity-100"
-              //       : ""
-              //   )}
-              //   onClick={(e) => {
-              //     e.stopPropagation();
-              //   }}
-              // >
-              //   {isSearchToolWithNoConnectors ? (
-              //     <SvgSettings
-              //       width={16}
-              //       height={16}
-              //       className="transition-colors cursor-pointer stroke-text-02 hover:text-text-05"
-              //     />
-              //   ) : (
-              //     <SvgChevronRight
-              //       width={16}
-              //       height={16}
-              //       className="transition-colors cursor-pointer stroke-text-02 hover:text-text-05"
-              //     />
-              //   )}
-              // </div>
             )}
           </div>
         }
