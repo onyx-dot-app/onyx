@@ -3,15 +3,21 @@ import SvgSearchMenu from "@/icons/search-menu";
 import SvgGlobe from "@/icons/globe";
 import SvgImage from "@/icons/image";
 import SvgUsers from "@/icons/users";
-import SvgStep1 from "@/icons/step1";
+import SvgStep2 from "@/icons/step2";
+import SvgStep3 from "@/icons/step3";
 import { FinalStepItemProps } from "./types";
 import { SvgProps } from "@/icons";
-
+import { AzureIcon, GeminiIcon } from "@/components/icons/icons";
+import SvgClaude from "@/icons/claude";
+import SvgAws from "@/icons/aws";
+import SvgOllama from "@/icons/ollama";
+import SvgOpenai from "@/icons/openai";
+import SvgOpenrouter from "@/icons/openrouter";
 type StepConfig = {
   index: number;
   title: string;
   buttonText: string;
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<SvgProps> | undefined;
 };
 
 export const STEP_CONFIG: Record<OnboardingStep, StepConfig> = {
@@ -19,20 +25,20 @@ export const STEP_CONFIG: Record<OnboardingStep, StepConfig> = {
     index: 1,
     title: "Let's take a moment to get you set up.",
     buttonText: "Next",
-    icon: SvgStep1,
+    icon: SvgStep2,
   },
   [OnboardingStep.LlmSetup]: {
     index: 2,
     title: "Almost there! Connect your models to start chatting.",
     buttonText: "Finish Setup",
-    icon: SvgStep1,
+    icon: SvgStep3,
   },
   [OnboardingStep.Complete]: {
     index: 3,
     title:
       "You're all set! It might be helpful to review the following settings.",
     buttonText: "",
-    icon: SvgStep1,
+    icon: undefined,
   },
 } as const;
 
@@ -78,3 +84,16 @@ export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
     buttonText: "Manage Users",
   },
 ];
+
+export const PROVIDER_ICON_MAP: Record<
+  string,
+  React.FunctionComponent<SvgProps>
+> = {
+  anthropic: SvgClaude,
+  bedrock: SvgAws,
+  azure: AzureIcon,
+  vertex_ai: GeminiIcon,
+  openai: SvgOpenai,
+  ollama: SvgOllama,
+  openrouter: SvgOpenrouter,
+};

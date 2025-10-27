@@ -7,8 +7,11 @@ import { useOnboardingState } from "./useOnboardingState";
 import { OnboardingStep } from "./types";
 
 const OnboardingFlowInner = () => {
-  const { state: onboardingState, actions: onboardingActions } =
-    useOnboardingState();
+  const {
+    state: onboardingState,
+    actions: onboardingActions,
+    llmDescriptors,
+  } = useOnboardingState();
 
   return (
     <div className="flex flex-col items-center justify-center w-full max-w-[800px] gap-spacing-interline mb-spacing-paragraph">
@@ -25,7 +28,11 @@ const OnboardingFlowInner = () => {
           <div className="w-1/2 shrink-0 pr-spacing-interline">
             <div className="flex flex-col gap-spacing-interline">
               <NameStep state={onboardingState} actions={onboardingActions} />
-              <LLMStep />
+              <LLMStep
+                state={onboardingState}
+                actions={onboardingActions}
+                llmDescriptors={llmDescriptors}
+              />
             </div>
           </div>
           <div className="w-1/2 shrink-0 pl-spacing-interline">

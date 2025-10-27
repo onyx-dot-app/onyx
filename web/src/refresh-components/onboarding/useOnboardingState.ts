@@ -1,9 +1,39 @@
-import { useReducer, useCallback } from "react";
+import { useReducer, useCallback, useState, useEffect } from "react";
 import { onboardingReducer, initialState } from "./reducer";
-import { OnboardingActionType, OnboardingData } from "./types";
+import {
+  OnboardingActions,
+  OnboardingActionType,
+  OnboardingData,
+  OnboardingState,
+} from "./types";
+import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 
-export function useOnboardingState() {
+export function useOnboardingState(): {
+  state: OnboardingState;
+  llmDescriptors: WellKnownLLMProviderDescriptor[];
+  actions: OnboardingActions;
+} {
   const [state, dispatch] = useReducer(onboardingReducer, initialState);
+  const [llmDescriptors, setLlmDescriptors] = useState<
+    WellKnownLLMProviderDescriptor[]
+  >([]);
+
+  useEffect(() => {
+    const fetchLlmDescriptors = async () => {
+      try {
+        const response = await fetch("/api/admin/llm/built-in/options");
+        if (!response.ok) {
+          setLlmDescriptors([]);
+          return;
+        }
+        const data = await response.json();
+        setLlmDescriptors(Array.isArray(data) ? data : []);
+      } catch (_e) {
+        setLlmDescriptors([]);
+      }
+    };
+    fetchLlmDescriptors();
+  }, []);
 
   const nextStep = useCallback(() => {
     dispatch({ type: OnboardingActionType.NEXT_STEP });
@@ -38,6 +68,7 @@ export function useOnboardingState() {
 
   return {
     state,
+    llmDescriptors,
     actions: {
       nextStep,
       prevStep,

@@ -5,8 +5,21 @@ import Button from "@/refresh-components/buttons/Button";
 import SvgExternalLink from "@/icons/external-link";
 import { Separator } from "@/components/ui/separator";
 import LLMProvider from "../components/LLMProvider";
+import { OnboardingActions, OnboardingState } from "../types";
+import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { PROVIDER_ICON_MAP } from "../constants";
 
-const LLMStepInner = () => {
+type LLMStepProps = {
+  state: OnboardingState;
+  actions: OnboardingActions;
+  llmDescriptors: WellKnownLLMProviderDescriptor[];
+};
+
+const LLMStepInner = ({
+  state: onboardingState,
+  actions: onboardingActions,
+  llmDescriptors,
+}: LLMStepProps) => {
   return (
     <div className="flex flex-col items-center justify-between w-full max-w-[800px] p-spacing-inline rounded-16 border border-border-01 bg-background-tint-00">
       <div className="flex gap-spacing-interline justify-between h-full w-full">
@@ -34,29 +47,20 @@ const LLMStepInner = () => {
         <Separator className="my-spacing-interline" />
       </div>
       <div className="flex flex-wrap gap-spacing-inline [&>*:last-child:nth-child(odd)]:basis-full">
-        <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
-          <LLMProvider title="chatGPT" description="OpenAI" icon={SvgCpu} />
-        </div>
-        <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
-          <LLMProvider title="chatGPT" description="OpenAI" icon={SvgCpu} />
-        </div>
-        <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
-          <LLMProvider title="chatGPT" description="OpenAI" icon={SvgCpu} />
-        </div>
-        <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
-          <LLMProvider title="chatGPT" description="OpenAI" icon={SvgCpu} />
-        </div>
-        <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
-          <LLMProvider title="chatGPT" description="OpenAI" icon={SvgCpu} />
-        </div>
-        <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
-          <LLMProvider title="chatGPT" description="OpenAI" icon={SvgCpu} />
-        </div>
+        {llmDescriptors.map((llmDescriptor) => (
+          <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
+            <LLMProvider
+              title={llmDescriptor.title}
+              description={llmDescriptor.display_name}
+              icon={PROVIDER_ICON_MAP[llmDescriptor.name]}
+            />
+          </div>
+        ))}
+
         <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
           <LLMProvider
-            title="chatGPT"
+            title="Custom Models"
             description="Connect models from other providers or your self-hosted models."
-            icon={SvgCpu}
           />
         </div>
       </div>
