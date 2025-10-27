@@ -66,9 +66,6 @@ RUN guardrails configure \
         --token $GUARDRAILS_TOKEN
 
 # Install Guardrails validators from guardrails-hub
-RUN guardrails hub install hub://guardrails/detect_pii
-RUN guardrails hub install hub://guardrails/sensitive_topics
-
 
 # Cleanup for CVEs and size reduction
 # https://github.com/tornadoweb/tornado/issues/3107
