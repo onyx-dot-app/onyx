@@ -81,14 +81,24 @@ def upgrade() -> None:
                 END IF;
 
                 -- Count likes and dislikes for this session
+                -- Only count the LATEST feedback per message (users can change feedback)
                 SELECT
-                    COUNT(*) FILTER (WHERE cmf.feedback = 'like'),
-                    COUNT(*) FILTER (WHERE cmf.feedback = 'dislike')
+                    COUNT(*) FILTER (WHERE feedback = 'like'),
+                    COUNT(*) FILTER (WHERE feedback = 'dislike')
                 INTO like_count, dislike_count
-                FROM "{tenant_id}".chat_message cm
-                JOIN "{tenant_id}".chat_feedback cmf ON cmf.chat_message_id = cm.id
-                WHERE cm.chat_session_id = session_id
-                  AND cmf.feedback IS NOT NULL;
+                FROM (
+                    SELECT DISTINCT ON (chat_message_id)
+                        chat_message_id,
+                        feedback
+                    FROM "{tenant_id}".chat_feedback
+                    WHERE chat_message_id IN (
+                        SELECT id
+                        FROM "{tenant_id}".chat_message
+                        WHERE chat_session_id = session_id
+                    )
+                    AND feedback IS NOT NULL
+                    ORDER BY chat_message_id, id DESC
+                ) latest_feedback;
 
                 -- Determine new feedback value
                 IF like_count > 0 AND dislike_count > 0 THEN
