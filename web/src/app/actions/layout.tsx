@@ -25,4 +25,3 @@ import {
     });
     return layout;
   }
-  
