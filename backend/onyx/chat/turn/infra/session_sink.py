@@ -35,8 +35,8 @@ def save_iteration(
     research_type: ResearchType,
     ctx: ChatTurnContext,
     final_answer: str,
-    raw_fetched_documents: list[InferenceSection],
-    postprocessed_fetched_documents: list[LlmDoc],
+    unordered_fetched_inference_sections: list[InferenceSection],
+    ordered_fetched_documents: list[LlmDoc],
 ) -> None:
     # first, insert the search_docs
     search_docs = [
@@ -46,7 +46,7 @@ def save_iteration(
             db_session=db_session,
             commit=False,
         )
-        for doc in raw_fetched_documents
+        for doc in unordered_fetched_inference_sections
     ]
 
     # then, map_search_docs to message
@@ -60,7 +60,7 @@ def save_iteration(
         # Create mapping: citation_number -> document_id
         citation_to_doc_id = {
             doc.document_citation_number: doc.document_id
-            for doc in postprocessed_fetched_documents
+            for doc in ordered_fetched_documents
             if doc.document_citation_number is not None
         }
 

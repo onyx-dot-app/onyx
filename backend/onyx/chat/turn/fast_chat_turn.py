@@ -173,8 +173,8 @@ def _fast_chat_turn_core(
         research_type=research_type,
         ctx=ctx,
         final_answer=final_answer,
-        raw_fetched_documents=ctx.unordered_fetched_inference_sections,
-        postprocessed_fetched_documents=ctx.ordered_fetched_documents,
+        unordered_fetched_inference_sections=ctx.unordered_fetched_inference_sections,
+        ordered_fetched_documents=ctx.ordered_fetched_documents,
     )
     dependencies.emitter.emit(
         Packet(ind=ctx.current_run_step, obj=OverallStop(type="stop"))
