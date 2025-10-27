@@ -12,7 +12,6 @@ from agents.tracing import trace
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
-from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.models import PromptConfig
 from onyx.chat.stop_signal_checker import is_connected
@@ -29,7 +28,6 @@ from onyx.chat.turn.infra.session_sink import save_iteration
 from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
-from onyx.context.search.models import InferenceSection
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
@@ -122,9 +120,8 @@ def _fast_chat_turn_core(
     message_id: int,
     research_type: ResearchType,
     prompt_config: PromptConfig,
-    # Dependency injectable arguments for testing
-    starter_global_iteration_responses: list[IterationAnswer] | None = None,
-    starter_cited_documents: list[InferenceSection] | None = None,
+    # Dependency injectable argument for testing
+    starter_context: ChatTurnContext | None = None,
 ) -> None:
     """Core fast chat turn logic that allows overriding global_iteration_responses for testing.
 
@@ -141,13 +138,13 @@ def _fast_chat_turn_core(
         chat_session_id,
         dependencies.redis_client,
     )
-    ctx = ChatTurnContext(
+    ctx = starter_context or ChatTurnContext(
         run_dependencies=dependencies,
         aggregated_context=AggregatedDRContext(
             context="context",
-            cited_documents=starter_cited_documents or [],
+            cited_documents=[],
             is_internet_marker_dict={},
-            global_iteration_responses=starter_global_iteration_responses or [],
+            global_iteration_responses=[],
         ),
         iteration_instructions=[],
         chat_session_id=chat_session_id,
@@ -201,7 +198,6 @@ def fast_chat_turn(
         message_id,
         research_type,
         prompt_config,
-        starter_global_iteration_responses=None,
     )
 
 

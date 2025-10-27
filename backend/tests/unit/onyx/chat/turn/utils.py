@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 from typing import List
 from unittest.mock import Mock
+from uuid import UUID
 
 import pytest
 from agents import AgentOutputSchemaBase
@@ -30,7 +31,9 @@ from openai.types.responses.response_usage import InputTokensDetails
 from openai.types.responses.response_usage import OutputTokensDetails
 from openai.types.responses.response_usage import ResponseUsage
 
+from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.turn.infra.emitter import get_default_emitter
+from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -314,6 +317,166 @@ class FakeModel(StreamableFakeModel):
 
 
 # =============================================================================
+# Helper Functions for Creating Custom Models
+# =============================================================================
+
+
+def get_model_with_response(
+    response_text: str, stream_word_by_word: bool = True
+) -> Model:
+    """Create a fake model that returns a specific response text.
+
+    This is useful for testing scenarios where you need a model to return
+    specific content (e.g., responses with citations).
+
+    Args:
+        response_text: The text that the model should return in its response
+        stream_word_by_word: If True, stream the response word by word with spaces.
+            If False, use the default streaming behavior (single delta).
+
+    Returns:
+        A Model instance that returns the specified response text
+    """
+
+    class CustomResponseModel(StreamableFakeModel):
+        """Fake model that returns a custom response text."""
+
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(**kwargs)
+            self._response_text = response_text
+            self._stream_word_by_word = stream_word_by_word
+
+        async def get_response(
+            self,
+            system_instructions: str | None,
+            input: str | list,
+            model_settings: ModelSettings,
+            tools: List[Tool],
+            output_schema: AgentOutputSchemaBase | None,
+            handoffs: List[Handoff],
+            tracing: ModelTracing,
+            *,
+            previous_response_id: str | None = None,
+            conversation_id: str | None = None,
+            prompt: Any = None,
+        ) -> ModelResponse:
+            """Override to create a response with custom text."""
+            # If there's an output schema, return JSON that matches it
+            if output_schema is not None:
+                message = create_fake_message(text='{"ready_to_answer": true}')
+            else:
+                # Create a message with the custom response text
+                message = create_fake_message(text=self._response_text)
+            usage = create_fake_usage()
+            return ModelResponse(
+                output=[message], usage=usage, response_id="fake-response-id"
+            )
+
+        def stream_response(  # type: ignore[override]
+            self,
+            system_instructions: str | None,
+            input: str | list,
+            model_settings: ModelSettings,
+            tools: List[Tool],
+            output_schema: AgentOutputSchemaBase | None,
+            handoffs: List[Handoff],
+            tracing: ModelTracing,
+            *,
+            previous_response_id: str | None = None,
+            conversation_id: str | None = None,
+            prompt: Any = None,
+        ) -> AsyncIterator[object]:
+            """Override streaming to use custom text."""
+            # If there's an output schema, use default streaming
+            if output_schema is not None:
+                return self._create_stream_events()
+            else:
+                # For non-structured output, use the custom text
+                return self._create_custom_stream_events()
+
+        def _create_custom_stream_events(self) -> AsyncIterator[object]:
+            """Create stream events with custom response text."""
+            from openai.types.responses.response_stream_event import (
+                ResponseContentPartAddedEvent,
+            )
+            from openai.types.responses.response_stream_event import (
+                ResponseContentPartDoneEvent,
+            )
+
+            async def _gen() -> AsyncIterator[object]:  # type: ignore[misc]
+                msg = create_fake_message(text=self._response_text)
+                final_response = create_fake_response(
+                    response_id="fake-response-id", message=msg
+                )
+
+                # 1) created
+                yield ResponseCreatedEvent(
+                    response=final_response, sequence_number=1, type="response.created"
+                )
+
+                # 2) content_part.added - this triggers MessageStart
+                yield ResponseContentPartAddedEvent(
+                    content_index=0,
+                    item_id="fake-item-id",
+                    output_index=0,
+                    part=ResponseOutputText(
+                        text="", type="output_text", annotations=[]
+                    ),
+                    sequence_number=2,
+                    type="response.content_part.added",
+                )
+
+                # 3) stream the text
+                if self._stream_word_by_word:
+                    # Stream word by word with spaces
+                    words = self._response_text.split()
+                    for word in words:
+                        yield ResponseTextDeltaEvent(
+                            content_index=0,
+                            delta=word + " ",
+                            item_id="fake-item-id",
+                            logprobs=[],
+                            output_index=0,
+                            sequence_number=3,
+                            type="response.output_text.delta",
+                        )
+                else:
+                    # Stream the entire text at once
+                    yield ResponseTextDeltaEvent(
+                        content_index=0,
+                        delta=self._response_text,
+                        item_id="fake-item-id",
+                        logprobs=[],
+                        output_index=0,
+                        sequence_number=3,
+                        type="response.output_text.delta",
+                    )
+
+                # 4) content_part.done - this triggers SectionEnd for the message
+                yield ResponseContentPartDoneEvent(
+                    content_index=0,
+                    item_id="fake-item-id",
+                    output_index=0,
+                    part=ResponseOutputText(
+                        text=self._response_text, type="output_text", annotations=[]
+                    ),
+                    sequence_number=4,
+                    type="response.content_part.done",
+                )
+
+                # 5) completed
+                yield ResponseCompletedEvent(
+                    response=final_response,
+                    sequence_number=5,
+                    type="response.completed",
+                )
+
+            return _gen()
+
+    return CustomResponseModel()
+
+
+# =============================================================================
 # Fake Database Session
 # =============================================================================
 
@@ -468,4 +631,154 @@ def chat_turn_dependencies(
         search_pipeline=Mock(SearchTool),
         image_generation_tool=Mock(ImageGenerationTool),
         okta_profile_tool=Mock(OktaProfileTool),
+    )
+
+
+# =============================================================================
+# Citation Test Helpers
+# =============================================================================
+
+
+def create_test_inference_chunk(
+    chunk_id: int = 1,
+    document_id: str = "test-doc-1",
+    semantic_identifier: str = "Test Document",
+    title: str = "Test Document Title",
+    content: str = "This is test content for citation processing.",
+    link: str = "https://example.com/test-doc",
+) -> Any:
+    """Create a fake InferenceChunk for testing citations."""
+    from datetime import datetime
+
+    from onyx.context.search.models import DocumentSource
+    from onyx.context.search.models import InferenceChunk
+
+    return InferenceChunk(
+        chunk_id=chunk_id,
+        document_id=document_id,
+        source_type=DocumentSource.WEB,
+        semantic_identifier=semantic_identifier,
+        title=title,
+        content=content,
+        blurb="Test blurb",
+        source_links={0: link},
+        match_highlights=[],
+        updated_at=datetime.now(),
+        metadata={},
+        boost=1,
+        recency_bias=0.0,
+        score=0.9,
+        hidden=False,
+        doc_summary="Test document summary",
+        chunk_context="Test context",
+        section_continuation=False,
+        image_file_id=None,
+    )
+
+
+def create_test_inference_section(
+    chunk_id: int = 1,
+    document_id: str = "test-doc-1",
+    content: str = "This is test content for citation processing.",
+    link: str = "https://example.com/test-doc",
+) -> Any:
+    """Create a fake InferenceSection for testing citations."""
+    from onyx.context.search.models import InferenceSection
+
+    fake_chunk = create_test_inference_chunk(
+        chunk_id=chunk_id,
+        document_id=document_id,
+        content=content,
+        link=link,
+    )
+
+    return InferenceSection(
+        center_chunk=fake_chunk,
+        chunks=[fake_chunk],
+        combined_content=content,
+    )
+
+
+def create_test_iteration_answer(
+    citation_num: int = 1,
+    document_id: str = "test-doc-1",
+    content: str = "This is test content for citation processing.",
+    link: str = "https://example.com/test-doc",
+    answer: str = "The test content is about citation processing [[1]].",
+) -> Any:
+    """Create a fake IterationAnswer with citations for testing."""
+    from onyx.agents.agent_search.dr.models import IterationAnswer
+
+    fake_section = create_test_inference_section(
+        chunk_id=citation_num,
+        document_id=document_id,
+        content=content,
+        link=link,
+    )
+
+    return IterationAnswer(
+        tool="internal_search",
+        tool_id=1,
+        iteration_nr=1,
+        parallelization_nr=1,
+        question="What is test content?",
+        reasoning="Need to search for test content",
+        answer=answer,
+        cited_documents={citation_num: fake_section},
+    )
+
+
+def create_test_llm_doc(
+    document_id: str = "test-doc-1",
+    content: str = "This is test content for citation processing.",
+    semantic_identifier: str = "Test Document",
+    link: str = "https://example.com/test-doc",
+    document_citation_number: int = 1,
+) -> Any:
+    """Create a fake LlmDoc for testing citations."""
+    from datetime import datetime
+
+    from onyx.chat.models import LlmDoc
+    from onyx.context.search.models import DocumentSource
+
+    return LlmDoc(
+        document_id=document_id,
+        content=content,
+        blurb="Test blurb",
+        semantic_identifier=semantic_identifier,
+        source_type=DocumentSource.WEB,
+        metadata={},
+        updated_at=datetime.now(),
+        link=link,
+        source_links={0: link},
+        match_highlights=[],
+        document_citation_number=document_citation_number,
+    )
+
+
+@pytest.fixture
+def chat_turn_context(
+    chat_turn_dependencies: ChatTurnDependencies,
+    chat_session_id: UUID,
+    message_id: int,
+    research_type: ResearchType,
+) -> ChatTurnContext:
+    """Fixture providing a ChatTurnContext with filler arguments for testing."""
+    from onyx.agents.agent_search.dr.models import AggregatedDRContext
+    from onyx.chat.turn.models import ChatTurnContext
+
+    aggregated_context = AggregatedDRContext(
+        context="",
+        cited_documents=[],
+        is_internet_marker_dict={},
+        global_iteration_responses=[],
+    )
+
+    return ChatTurnContext(
+        chat_session_id=chat_session_id,
+        message_id=message_id,
+        research_type=research_type,
+        run_dependencies=chat_turn_dependencies,
+        aggregated_context=aggregated_context,
+        iteration_instructions=[],
     )
