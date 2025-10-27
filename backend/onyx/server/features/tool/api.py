@@ -7,8 +7,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
+from onyx.auth.users import verify_actions_creation_enabled
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Tool
 from onyx.db.models import User
@@ -79,11 +79,12 @@ def _get_editable_custom_tool(
 
 
 @admin_router.post("/custom")
-def create_custom_tool(
+async def create_custom_tool(
     tool_data: CustomToolCreate,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User | None = Depends(current_user),
 ) -> ToolSnapshot:
+    user = await verify_actions_creation_enabled(user=user)
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
     tool = create_tool__no_commit(
@@ -96,18 +97,20 @@ def create_custom_tool(
         passthrough_auth=tool_data.passthrough_auth,
         oauth_config_id=tool_data.oauth_config_id,
         enabled=True,
+        is_public=tool_data.is_public if tool_data.is_public is not None else False,
     )
     db_session.commit()
     return ToolSnapshot.from_model(tool)
 
 
 @admin_router.put("/custom/{tool_id}")
-def update_custom_tool(
+async def update_custom_tool(
     tool_id: int,
     tool_data: CustomToolUpdate,
-    db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),    
+    user: User | None = Depends(current_user),
 ) -> ToolSnapshot:
+    user = await verify_actions_creation_enabled(user=user)
     existing_tool = _get_editable_custom_tool(tool_id, db_session, user)
     if tool_data.definition:
         _validate_tool_definition(tool_data.definition)
@@ -121,17 +124,19 @@ def update_custom_tool(
         user_id=existing_tool.user_id,
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
-        oauth_config_id=tool_data.oauth_config_id,
+        oauth_config_id=tool_data.oauth_config_id,        
+        is_public=tool_data.is_public,
     )
     return ToolSnapshot.from_model(updated_tool)
 
 
 @admin_router.delete("/custom/{tool_id}")
-def delete_custom_tool(
+async def delete_custom_tool(
     tool_id: int,
-    db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),    
+    user: User | None = Depends(current_user),
 ) -> None:
+    user = await verify_actions_creation_enabled(user=user)
     _ = _get_editable_custom_tool(tool_id, db_session, user)
     try:
         delete_tool__no_commit(tool_id, db_session)
@@ -152,10 +157,11 @@ class ValidateToolResponse(BaseModel):
 
 
 @admin_router.post("/custom/validate")
-def validate_tool(
+async def validate_tool(
     tool_data: ValidateToolRequest,
-    _: User | None = Depends(current_curator_or_admin_user),
+    user: User | None = Depends(current_user),
 ) -> ValidateToolResponse:
+    await verify_actions_creation_enabled(user=user)
     _validate_tool_definition(tool_data.definition)
     method_specs = openapi_to_method_specs(tool_data.definition)
     return ValidateToolResponse(methods=method_specs)
