@@ -67,6 +67,9 @@ class Settings(BaseModel):
     # Connector settings
     show_extra_connectors: bool | None = True
 
+    # Wether all users can create actions
+    all_users_actions_creation_enabled: bool | None = True
+
 
 class UserSettings(Settings):
     notifications: list[Notification]
