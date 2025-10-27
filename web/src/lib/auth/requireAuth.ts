@@ -72,6 +72,13 @@ export async function requireAuth(): Promise<AuthCheckResult> {
   };
 }
 
+// Allowlist of roles that can access admin pages (all roles except BASIC)
+const ADMIN_ALLOWED_ROLES = [
+  UserRole.ADMIN,
+  UserRole.CURATOR,
+  UserRole.GLOBAL_CURATOR,
+];
+
 /**
  * Requires that the user is authenticated AND has admin role.
  * If not authenticated, redirects to login.
@@ -101,19 +108,8 @@ export async function requireAdminAuth(): Promise<AuthCheckResult> {
   const { user, authTypeMetadata } = authResult;
   const authDisabled = authTypeMetadata?.authType === "disabled";
 
-  // Allowlist of roles that can access admin pages (all roles except BASIC)
-  const ADMIN_ALLOWED_ROLES = [
-    UserRole.ADMIN,
-    UserRole.CURATOR,
-    UserRole.GLOBAL_CURATOR,
-  ];
-
   // Check if user has an allowed role (only if auth is not disabled)
-  if (
-    !authDisabled &&
-    user &&
-    !ADMIN_ALLOWED_ROLES.includes(user.role as UserRole)
-  ) {
+  if (!authDisabled && user && !ADMIN_ALLOWED_ROLES.includes(user.role)) {
     return {
       user,
       authTypeMetadata,
