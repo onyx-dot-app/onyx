@@ -15,7 +15,7 @@ export default function VerticalShadowScroller({
   className,
   children,
   disable,
-  backgroundColor = "background-tint-02",
+  backgroundColor = "var(--background-tint-02)",
   height: minHeight = "1rem",
 }: VerticalShadowScrollerProps) {
   return (
