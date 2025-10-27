@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.auth.users import get_display_email
 from onyx.background.task_utils import extract_task_id_from_query_history_report_name
+from onyx.configs.constants import ChatMessageFeedback as ChatMessageFeedbackEnum
 from onyx.configs.constants import ChatSessionFeedback
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SessionType
@@ -105,15 +106,21 @@ class ChatSessionMinimal(BaseModel):
         )
 
         list_of_message_feedbacks = [
-            feedback.is_positive
+            feedback.feedback
             for message in chat_session.messages
             for feedback in message.chat_message_feedbacks
+            if feedback.feedback is not None
         ]
         session_feedback_type = None
         if list_of_message_feedbacks:
-            if all(list_of_message_feedbacks):
+            if all(
+                fb == ChatMessageFeedbackEnum.LIKE for fb in list_of_message_feedbacks
+            ):
                 session_feedback_type = ChatSessionFeedback.LIKE
-            elif not any(list_of_message_feedbacks):
+            elif all(
+                fb == ChatMessageFeedbackEnum.DISLIKE
+                for fb in list_of_message_feedbacks
+            ):
                 session_feedback_type = ChatSessionFeedback.DISLIKE
             else:
                 session_feedback_type = ChatSessionFeedback.MIXED
