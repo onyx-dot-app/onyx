@@ -14,6 +14,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_AUTH
+from onyx.configs.constants import ChatMessageFeedback as ChatMessageFeedbackEnum
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.db.chat import get_chat_message
@@ -228,7 +229,7 @@ def delete_document_feedback_for_documents__no_commit(
 
 
 def create_chat_message_feedback(
-    is_positive: bool | None,
+    feedback: ChatMessageFeedbackEnum | None,
     feedback_text: str | None,
     chat_message_id: int,
     user_id: UUID | None,
@@ -238,7 +239,7 @@ def create_chat_message_feedback(
     predefined_feedback: str | None = None,  # Added predefined_feedback parameter
 ) -> None:
     if (
-        is_positive is None
+        feedback is None
         and feedback_text is None
         and required_followup is None
         and predefined_feedback is None
@@ -254,7 +255,7 @@ def create_chat_message_feedback(
 
     message_feedback = ChatMessageFeedback(
         chat_message_id=chat_message_id,
-        is_positive=is_positive,
+        feedback=feedback,
         feedback_text=feedback_text,
         required_followup=required_followup,
         predefined_feedback=predefined_feedback,

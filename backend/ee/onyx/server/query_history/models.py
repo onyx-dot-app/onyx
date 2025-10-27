@@ -40,15 +40,15 @@ class MessageSnapshot(BaseModel):
             if len(message.chat_message_feedbacks) > 0
             else None
         )
+
+        # Convert ChatMessageFeedback enum to ChatSessionFeedback
+        # (ChatSessionFeedback includes LIKE/DISLIKE from ChatMessageFeedback plus MIXED)
         feedback_type = (
-            (
-                ChatSessionFeedback.LIKE
-                if latest_messages_feedback_obj.is_positive
-                else ChatSessionFeedback.DISLIKE
-            )
-            if latest_messages_feedback_obj
+            ChatSessionFeedback(latest_messages_feedback_obj.feedback.value)
+            if latest_messages_feedback_obj and latest_messages_feedback_obj.feedback
             else None
         )
+
         feedback_text = (
             latest_messages_feedback_obj.feedback_text
             if latest_messages_feedback_obj

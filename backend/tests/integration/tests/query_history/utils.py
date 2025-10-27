@@ -1,6 +1,7 @@
 from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 
+from onyx.configs.constants import ChatMessageFeedback as ChatMessageFeedbackEnum
 from onyx.configs.constants import ChatSessionFeedback
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -49,7 +50,7 @@ def _create_chat_session_with_feedback(
     ):
         ChatSessionManager.create_chat_message_feedback(
             message_id=messages[-1].id,
-            is_positive=False,
+            feedback=ChatMessageFeedbackEnum.DISLIKE,
             user_performing_action=admin_user,
         )
 
@@ -72,7 +73,7 @@ def _create_chat_session_with_feedback(
     ):
         ChatSessionManager.create_chat_message_feedback(
             message_id=messages[-1].id,
-            is_positive=True,
+            feedback=ChatMessageFeedbackEnum.LIKE,
             user_performing_action=admin_user,
         )
 

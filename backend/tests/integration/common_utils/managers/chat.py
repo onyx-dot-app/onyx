@@ -6,6 +6,7 @@ from uuid import UUID
 import requests
 from requests.models import Response
 
+from onyx.configs.constants import ChatMessageFeedback as ChatMessageFeedbackEnum
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
 from onyx.file_store.models import FileDescriptor
@@ -207,7 +208,7 @@ class ChatSessionManager:
     @staticmethod
     def create_chat_message_feedback(
         message_id: int,
-        is_positive: bool,
+        feedback: ChatMessageFeedbackEnum,
         user_performing_action: DATestUser | None = None,
         feedback_text: str | None = None,
         predefined_feedback: str | None = None,
@@ -216,7 +217,7 @@ class ChatSessionManager:
             url=f"{API_SERVER_URL}/chat/create-chat-message-feedback",
             json={
                 "chat_message_id": message_id,
-                "is_positive": is_positive,
+                "feedback": feedback.value,
                 "feedback_text": feedback_text,
                 "predefined_feedback": predefined_feedback,
             },

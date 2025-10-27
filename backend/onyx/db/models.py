@@ -52,6 +52,7 @@ from onyx.configs.constants import (
     FederatedConnectorSource,
     MilestoneRecordType,
 )
+from onyx.configs.constants import ChatMessageFeedback as ChatMessageFeedbackEnum
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
@@ -2324,7 +2325,15 @@ class ChatMessageFeedback(Base):
     chat_message_id: Mapped[int | None] = mapped_column(
         ForeignKey("chat_message.id", ondelete="SET NULL"), nullable=True
     )
+
+    # New enum column - use this going forward
+    feedback: Mapped[ChatMessageFeedbackEnum | None] = mapped_column(
+        Enum(ChatMessageFeedbackEnum), nullable=True
+    )
+
+    # Deprecated: kept for rollback safety, will be removed in Stage 3
     is_positive: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
     required_followup: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     feedback_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     predefined_feedback: Mapped[str | None] = mapped_column(String, nullable=True)

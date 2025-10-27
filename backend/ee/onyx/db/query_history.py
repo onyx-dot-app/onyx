@@ -16,6 +16,7 @@ from sqlalchemy.sql.expression import literal
 from sqlalchemy.sql.expression import UnaryExpression
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
+from onyx.configs.constants import ChatMessageFeedback as ChatMessageFeedbackEnum
 from onyx.configs.constants import ChatSessionFeedback
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessageFeedback
@@ -48,33 +49,33 @@ def _build_filter_conditions(
         feedback_subq = (
             select(ChatMessage.chat_session_id)
             .join(ChatMessageFeedback)
+            .where(ChatMessageFeedback.feedback.isnot(None))
             .group_by(ChatMessage.chat_session_id)
             .having(
                 case(
                     (
-                        case(
-                            {
-                                literal(
-                                    feedback_filter == ChatSessionFeedback.LIKE
-                                ): True
-                            },
-                            else_=False,
+                        literal(feedback_filter == ChatSessionFeedback.LIKE),
+                        func.bool_and(
+                            ChatMessageFeedback.feedback == ChatMessageFeedbackEnum.LIKE
                         ),
-                        func.bool_and(ChatMessageFeedback.is_positive),
                     ),
                     (
-                        case(
-                            {
-                                literal(
-                                    feedback_filter == ChatSessionFeedback.DISLIKE
-                                ): True
-                            },
-                            else_=False,
+                        literal(feedback_filter == ChatSessionFeedback.DISLIKE),
+                        func.bool_and(
+                            ChatMessageFeedback.feedback
+                            == ChatMessageFeedbackEnum.DISLIKE
                         ),
-                        func.bool_and(func.not_(ChatMessageFeedback.is_positive)),
                     ),
-                    else_=func.bool_or(ChatMessageFeedback.is_positive)
-                    & func.bool_or(func.not_(ChatMessageFeedback.is_positive)),
+                    else_=(
+                        # MIXED: at least one LIKE and one DISLIKE
+                        func.bool_or(
+                            ChatMessageFeedback.feedback == ChatMessageFeedbackEnum.LIKE
+                        )
+                        & func.bool_or(
+                            ChatMessageFeedback.feedback
+                            == ChatMessageFeedbackEnum.DISLIKE
+                        )
+                    ),
                 )
             )
         )

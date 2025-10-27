@@ -11,6 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import ChatMessageFeedback as ChatMessageFeedbackEnum
 from onyx.configs.constants import MessageType
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessageFeedback
@@ -28,10 +29,21 @@ def fetch_query_analytics(
     stmt = (
         select(
             func.count(ChatMessage.id),
-            func.sum(case((ChatMessageFeedback.is_positive, 1), else_=0)),
+            # Count likes using enum
             func.sum(
                 case(
-                    (ChatMessageFeedback.is_positive == False, 1), else_=0  # noqa: E712
+                    (ChatMessageFeedback.feedback == ChatMessageFeedbackEnum.LIKE, 1),
+                    else_=0,
+                )
+            ),
+            # Count dislikes using enum
+            func.sum(
+                case(
+                    (
+                        ChatMessageFeedback.feedback == ChatMessageFeedbackEnum.DISLIKE,
+                        1,
+                    ),
+                    else_=0,
                 )
             ),
             cast(ChatMessage.time_sent, Date),
@@ -63,10 +75,21 @@ def fetch_per_user_query_analytics(
     stmt = (
         select(
             func.count(ChatMessage.id),
-            func.sum(case((ChatMessageFeedback.is_positive, 1), else_=0)),
+            # Count likes using enum
             func.sum(
                 case(
-                    (ChatMessageFeedback.is_positive == False, 1), else_=0  # noqa: E712
+                    (ChatMessageFeedback.feedback == ChatMessageFeedbackEnum.LIKE, 1),
+                    else_=0,
+                )
+            ),
+            # Count dislikes using enum
+            func.sum(
+                case(
+                    (
+                        ChatMessageFeedback.feedback == ChatMessageFeedbackEnum.DISLIKE,
+                        1,
+                    ),
+                    else_=0,
                 )
             ),
             cast(ChatMessage.time_sent, Date),
@@ -139,13 +162,14 @@ def fetch_onyxbot_analytics(
     results = (
         db_session.query(
             func.count(ChatSession.id).label("total_sessions"),
-            # Need to explicitly specify this as False to handle the NULL case so the cases without
+            # Need to explicitly check for DISLIKE enum to handle the NULL case so the cases without
             # feedback aren't counted against Onyxbot
             func.sum(
                 case(
                     (
                         or_(
-                            ChatMessageFeedback.is_positive.is_(False),
+                            ChatMessageFeedback.feedback
+                            == ChatMessageFeedbackEnum.DISLIKE,
                             ChatMessageFeedback.required_followup.is_(True),
                         ),
                         1,

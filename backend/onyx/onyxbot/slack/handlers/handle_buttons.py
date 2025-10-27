@@ -10,6 +10,7 @@ from slack_sdk.webhook import WebhookClient
 
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.process_message import remove_answer_citations
+from onyx.configs.constants import ChatMessageFeedback as ChatMessageFeedbackEnum
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import ONYX_BOT_FOLLOWUP_EMOJI
@@ -380,7 +381,11 @@ def handle_slack_feedback(
         onyx_user = get_user_by_email(email, db_session) if email else None
         if feedback_type in [LIKE_BLOCK_ACTION_ID, DISLIKE_BLOCK_ACTION_ID]:
             create_chat_message_feedback(
-                is_positive=feedback_type == LIKE_BLOCK_ACTION_ID,
+                feedback=(
+                    ChatMessageFeedbackEnum.LIKE
+                    if feedback_type == LIKE_BLOCK_ACTION_ID
+                    else ChatMessageFeedbackEnum.DISLIKE
+                ),
                 feedback_text="",
                 chat_message_id=message_id,
                 user_id=onyx_user.id if onyx_user else None,
@@ -502,7 +507,7 @@ def handle_followup_button(
         message_id, _, _ = decompose_action_id(action_id)
 
         create_chat_message_feedback(
-            is_positive=None,
+            feedback=None,
             feedback_text="",
             chat_message_id=message_id,
             user_id=None,  # no "user" for Slack bot for now
