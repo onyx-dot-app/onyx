@@ -324,11 +324,10 @@ export default function FilePickerPopover({
                 onUnpickRecent && onUnpickRecent(file);
               }}
               handleUploadChange={handleUploadChange}
-              onFileClick={onFileClick}
+              onView={onFileClick}
               onClose={() => setShowRecentFiles(false)}
               selectedFileIds={selectedFileIds}
-              showRemove
-              onRemove={handleDeleteFile}
+              onDelete={handleDeleteFile}
             />
           </CoreModal>
         )}

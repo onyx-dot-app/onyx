@@ -126,12 +126,10 @@ export default function ProjectContextPanel({
   const { popup, setPopup } = usePopup();
   const { isOpen, toggleModal } = useChatModal();
   const open = isOpen(ModalIds.ProjectFilesModal);
-
   const onClose = () => toggleModal(ModalIds.ProjectFilesModal, false);
   useEscape(onClose, open);
-
   // Convert ProjectFile to MinimalOnyxDocument format for viewing
-  const handleFileClick = useCallback(
+  const handleOnView = useCallback(
     (file: ProjectFile) => {
       if (!setPresentingDocument) return;
 
@@ -153,7 +151,6 @@ export default function ProjectContextPanel({
     beginUpload,
     projects,
   } = useProjectsContext();
-
   const handleUploadFiles = useCallback(
     async (files: File[]) => {
       if (!files || files.length === 0) return;
@@ -237,11 +234,13 @@ export default function ProjectContextPanel({
           </div>
           <FilePickerPopover
             trigger={(open) => (
+              // The `secondary={undefined}` is required here because `CreateButton` sets it to true.
+              // Therefore, we need to first remove the truthiness before passing in the other `tertiary` flag.
               <CreateButton secondary={undefined} tertiary active={open}>
                 Add Files
               </CreateButton>
             )}
-            onFileClick={handleFileClick}
+            onFileClick={handleOnView}
             onPickRecent={async (file) => {
               if (!currentProjectId) return;
               if (!linkFileToProject) return;
@@ -291,7 +290,7 @@ export default function ProjectContextPanel({
                         if (!currentProjectId) return;
                         await unlinkFileFromProject(currentProjectId, fileId);
                       }}
-                      onFileClick={handleFileClick}
+                      onFileClick={handleOnView}
                     />
                   </div>
                 ));
@@ -359,10 +358,9 @@ export default function ProjectContextPanel({
             description="Sessions in this project can access the files here."
             icon={SvgFiles}
             recentFiles={[...allCurrentProjectFiles]}
-            onFileClick={handleFileClick}
+            onView={handleOnView}
             handleUploadChange={handleUploadChange}
-            showRemove
-            onRemove={async (file: ProjectFile) => {
+            onDelete={async (file: ProjectFile) => {
               if (!currentProjectId) return;
               await unlinkFileFromProject(currentProjectId, file.id);
             }}

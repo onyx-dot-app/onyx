@@ -3,45 +3,98 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { noProp } from "@/lib/utils";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";
 import SvgX from "@/icons/x";
 import { SvgProps } from "@/icons";
-import SvgExternalLink from "@/icons/external-link";
 import SvgFileText from "@/icons/file-text";
 import SvgImage from "@/icons/image";
-import SvgTrash from "@/icons/trash";
-import SvgCheck from "@/icons/check";
-import { isImageExtension } from "@/app/chat/components/files/files_utils";
+import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/app/chat/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import LineItem from "@/refresh-components/buttons/LineItem";
+import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 
-const getFileExtension = (fileName: string): string => {
-  const idx = fileName.lastIndexOf(".");
-  if (idx === -1) return "";
-  const ext = fileName.slice(idx + 1).toLowerCase();
-  if (ext === "txt") return "PLAINTEXT";
-  return ext.toUpperCase();
-};
+function getIcon(
+  file: ProjectFile,
+  isProcessing: boolean,
+  isSelected: boolean
+): React.FunctionComponent<SvgProps> {
+  if (isProcessing) return SimpleLoader;
+  const ext = getFileExtension(file.name).toLowerCase();
+  if (isImageExtension(ext)) return SvgImage;
+  return SvgFileText;
+}
+
+function getDescription(file: ProjectFile): string {
+  const s = String(file.status || "");
+  const typeLabel = getFileExtension(file.name);
+  if (s === UserFileStatus.PROCESSING) return "Processing...";
+  if (s === UserFileStatus.UPLOADING) return "Uploading...";
+  if (s === UserFileStatus.DELETING) return "Deleting...";
+  if (s === UserFileStatus.COMPLETED) return typeLabel;
+  return file.status ?? typeLabel;
+}
+
+interface FileAttachmentProps {
+  file: ProjectFile;
+  isSelected: boolean;
+  onClick?: () => void;
+  onView?: () => void;
+  onDelete?: () => void;
+}
+
+function FileAttachment({
+  file,
+  isSelected,
+  onClick,
+  onView,
+  onDelete,
+}: FileAttachmentProps) {
+  const isProcessing =
+    String(file.status) === UserFileStatus.PROCESSING ||
+    String(file.status) === UserFileStatus.UPLOADING ||
+    String(file.status) === UserFileStatus.DELETING;
+
+  const LeftIcon = getIcon(file, isProcessing, isSelected);
+  const description = getDescription(file);
+  const rightText = file.last_accessed_at
+    ? formatRelativeTime(file.last_accessed_at)
+    : "";
+
+  return (
+    <AttachmentButton
+      onClick={onClick}
+      leftIcon={LeftIcon}
+      description={description}
+      rightText={rightText}
+      selected={isSelected}
+      processing={isProcessing}
+      onView={onView}
+      onDelete={onDelete}
+    >
+      {file.name}
+    </AttachmentButton>
+  );
+}
 
 export interface UserFilesModalProps {
+  // Modal related
   title: string;
   description: string;
   icon: React.FunctionComponent<SvgProps>;
   recentFiles: ProjectFile[];
-  onPickRecent?: (file: ProjectFile) => void;
-  onUnpickRecent?: (file: ProjectFile) => void;
   handleUploadChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  showRemove?: boolean;
-  onRemove?: (file: ProjectFile) => void;
-  onFileClick?: (file: ProjectFile) => void;
   onClose?: () => void;
   selectedFileIds?: string[];
+
+  // FileAttachment related
+  onView?: (file: ProjectFile) => void;
+  onDelete?: (file: ProjectFile) => void;
+  onPickRecent?: (file: ProjectFile) => void;
+  onUnpickRecent?: (file: ProjectFile) => void;
 }
 
 export default function UserFilesModalContent({
@@ -49,14 +102,14 @@ export default function UserFilesModalContent({
   description,
   icon: Icon,
   recentFiles,
-  onPickRecent,
-  onUnpickRecent,
   handleUploadChange,
-  showRemove,
-  onRemove,
-  onFileClick,
   onClose,
   selectedFileIds,
+
+  onView,
+  onDelete,
+  onPickRecent,
+  onUnpickRecent,
 }: UserFilesModalProps) {
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
@@ -105,148 +158,70 @@ export default function UserFilesModalContent({
       </div>
 
       {/* Search bar section */}
-      <div
-        tabIndex={-1}
-        onMouseDown={(e) => {
-          e.stopPropagation();
-        }}
-      >
-        <div className="flex items-center gap-spacing-interline p-padding-button">
-          <InputTypeIn
-            placeholder="Search files..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            leftSearchIcon
-            autoComplete="off"
-            tabIndex={0}
-            onFocus={(e) => {
-              e.target.select();
-            }}
-          />
-          {handleUploadChange && (
-            <CreateButton
-              onClick={triggerUploadPicker}
-              secondary={false}
-              internal
-            >
-              Add Files
-            </CreateButton>
-          )}
-        </div>
+      <div className="flex items-center gap-spacing-interline p-padding-button">
+        <InputTypeIn
+          placeholder="Search files..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          leftSearchIcon
+          autoComplete="off"
+          tabIndex={0}
+          onFocus={(e) => {
+            e.target.select();
+          }}
+        />
+        {handleUploadChange && (
+          <CreateButton
+            onClick={triggerUploadPicker}
+            secondary={false}
+            internal
+          >
+            Add Files
+          </CreateButton>
+        )}
       </div>
 
       {/* File display section */}
-      <div className="bg-background-tint-01 overflow-hidden">
+      <div className="bg-background-tint-01 overflow-y-scroll">
         {filtered.length === 0 ? (
           <div className="p-spacing-paragraph flex w-full h-full items-center justify-center">
             <Text text03>No files found</Text>
           </div>
         ) : (
-          <VerticalShadowScroller className="px-spacing-aragraph max-h-[30rem]">
-            {filtered.map((f) => (
-              <LineItem
-                key={f.id}
-                onClick={() => {
-                  if (!onPickRecent) return;
-                  const isSelected = selectedIds.has(f.id);
-                  if (isSelected) {
-                    onUnpickRecent?.(f);
-                    setSelectedIds((prev) => {
-                      const next = new Set(prev);
-                      next.delete(f.id);
-                      return next;
-                    });
-                  } else {
-                    onPickRecent(f);
-                    setSelectedIds((prev) => {
-                      const next = new Set(prev);
-                      next.add(f.id);
-                      return next;
-                    });
+          <VerticalShadowScroller className="p-spacing-interline flex flex-col gap-spacing-interline overflow-scroll max-h-[20rem]">
+            {filtered.map((projectFle) => {
+              const isSelected = selectedIds.has(projectFle.id);
+              return (
+                <FileAttachment
+                  key={projectFle.id}
+                  file={projectFle}
+                  isSelected={isSelected}
+                  onClick={
+                    onPickRecent
+                      ? () => {
+                          if (isSelected) {
+                            onUnpickRecent?.(projectFle);
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              next.delete(projectFle.id);
+                              return next;
+                            });
+                          } else {
+                            onPickRecent(projectFle);
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              next.add(projectFle.id);
+                              return next;
+                            });
+                          }
+                        }
+                      : undefined
                   }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    e.currentTarget.click();
-                  }
-                }}
-                icon={({ className }) =>
-                  String((f as ProjectFile).status) ===
-                    UserFileStatus.PROCESSING ||
-                  String((f as ProjectFile).status) ===
-                    UserFileStatus.UPLOADING ||
-                  String((f as ProjectFile).status) ===
-                    UserFileStatus.DELETING ? (
-                    <SimpleLoader className={className} />
-                  ) : (
-                    <>
-                      {onPickRecent && selectedIds.has(f.id) ? (
-                        <SvgCheck className={className} />
-                      ) : (
-                        (() => {
-                          const ext = getFileExtension(f.name).toLowerCase();
-                          const isImage = isImageExtension(ext);
-                          return isImage ? (
-                            <SvgImage className={className} />
-                          ) : (
-                            <SvgFileText className={className} />
-                          );
-                        })()
-                      )}
-                    </>
-                  )
-                }
-                description={(() => {
-                  const s = String(f.status || "");
-                  const typeLabel = getFileExtension(f.name);
-                  if (s === UserFileStatus.PROCESSING) return "Processing...";
-                  if (s === UserFileStatus.UPLOADING) return "Uploading...";
-                  if (s === UserFileStatus.DELETING) return "Deleting...";
-                  if (s === UserFileStatus.COMPLETED) return typeLabel;
-                  return f.status ? f.status : typeLabel;
-                })()}
-                rightChildren={
-                  <div className="flex flex-col justify-center">
-                    <div className="group-hover/LineItem:hidden">
-                      {f.last_accessed_at && (
-                        <Text text03 secondaryBody nowrap>
-                          {formatRelativeTime(f.last_accessed_at)}
-                        </Text>
-                      )}
-                    </div>
-                    <div className="hidden group-hover/LineItem:flex flex-row">
-                      {onFileClick &&
-                        String(f.status) !== UserFileStatus.PROCESSING &&
-                        String(f.status) !== UserFileStatus.UPLOADING &&
-                        String(f.status) !== UserFileStatus.DELETING && (
-                          <IconButton
-                            internal
-                            icon={SvgExternalLink}
-                            tooltip="View file"
-                            onClick={noProp((event) => {
-                              event.preventDefault();
-                              onFileClick(f);
-                            })}
-                          />
-                        )}
-                      {showRemove &&
-                        String(f.status) !== UserFileStatus.UPLOADING &&
-                        String(f.status) !== UserFileStatus.DELETING && (
-                          <IconButton
-                            internal
-                            icon={SvgTrash}
-                            tooltip="Remove from project"
-                            onClick={noProp(() => onRemove?.(f))}
-                          />
-                        )}
-                    </div>
-                  </div>
-                }
-              >
-                {f.name}
-              </LineItem>
-            ))}
+                  onView={onView ? () => onView(projectFle) : undefined}
+                  onDelete={onDelete ? () => onDelete(projectFle) : undefined}
+                />
+              );
+            })}
           </VerticalShadowScroller>
         )}
       </div>

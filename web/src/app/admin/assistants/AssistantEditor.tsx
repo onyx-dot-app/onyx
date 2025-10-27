@@ -1943,8 +1943,7 @@ export function AssistantEditor({
                         );
                       }
                     )}
-                    showRemove
-                    onRemove={(file) => {
+                    onDelete={(file) => {
                       setFieldValue(
                         "user_file_ids",
                         values.user_file_ids.filter(
