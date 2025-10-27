@@ -2328,7 +2328,11 @@ class ChatMessageFeedback(Base):
 
     # New enum column - use this going forward
     feedback: Mapped[ChatMessageFeedbackEnum | None] = mapped_column(
-        Enum(ChatMessageFeedbackEnum), nullable=True
+        Enum(
+            ChatMessageFeedbackEnum,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
     )
 
     # Deprecated: kept for rollback safety, will be removed in Stage 3
