@@ -28,7 +28,9 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import persona_has_search_tool
 from onyx.db.users import get_user_by_email
+from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.models import PreviousMessage
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.handlers.utils import send_team_member_message
 from onyx.onyxbot.slack.handlers.utils import slackify_message_thread
@@ -159,10 +161,15 @@ def handle_regular_answer(
     # Convert ThreadMessage objects to PreviousMessage for query rephrasing
     thread_previous_messages: list[PreviousMessage] | None = None
     if history_messages:
+        llm, _ = get_llms_for_persona(persona)
+        llm_tokenizer = get_tokenizer(
+            model_name=llm.config.model_name,
+            provider_type=llm.config.model_provider,
+        )
+
         thread_previous_messages = []
         for thread_msg in history_messages:
-            # Estimate token count (rough approximation: ~2 tokens per word)
-            token_count = len(thread_msg.message.split()) * 2
+            token_count = len(llm_tokenizer.encode(thread_msg.message))
             thread_previous_messages.append(
                 PreviousMessage(
                     message=thread_msg.message,
