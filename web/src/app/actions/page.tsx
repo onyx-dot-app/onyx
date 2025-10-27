@@ -20,7 +20,7 @@ export default async function Page() {
   // Fetch both tools and MCP servers
   const [toolResponse, mcpResponse] = await Promise.all([
     fetchSS("/tool"),
-    fetchSS("/admin/mcp/servers"),
+    fetchSS("/admin/mcp/servers?skip_role_check=true"),
   ]);
 
   if (!toolResponse.ok) {
