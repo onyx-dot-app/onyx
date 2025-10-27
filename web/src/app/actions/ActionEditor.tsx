@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { User, UserRole } from "@/lib/types";
 import { Formik, Form, Field, ErrorMessage, FieldArray } from "formik";
 import * as Yup from "yup";
 import { MethodSpec, ToolSnapshot, OAuthConfig } from "@/lib/tools/interfaces";
@@ -39,6 +40,7 @@ import { OAuthConfigSelector } from "@/components/oauth/OAuthConfigSelector";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { KeyedMutator } from "swr";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { useUser } from "@/components/user/UserProvider";
 
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
@@ -413,6 +415,7 @@ const ToolSchema = Yup.object().shape({
 
 export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
   const router = useRouter();
+  const { user } = useUser();
   const { popup, setPopup } = usePopup();
   const [definitionError, setDefinitionError] = useState<string | null>(null);
   const [methodSpecs, setMethodSpecs] = useState<MethodSpec[] | null>(null);
@@ -478,6 +481,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
             custom_headers: values.customHeaders,
             passthrough_auth: values.passthrough_auth,
             oauth_config_id: values.oauth_config_id,
+            is_public: user?.role === UserRole.ADMIN,
           };
           let response;
           if (tool) {

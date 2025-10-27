@@ -80,7 +80,7 @@ def _get_editable_custom_tool(
 
 
 @admin_router.post("/custom")
-async def create_custom_tool(
+def create_custom_tool(
     tool_data: CustomToolCreate,
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
@@ -98,6 +98,7 @@ async def create_custom_tool(
         passthrough_auth=tool_data.passthrough_auth,
         oauth_config_id=tool_data.oauth_config_id,
         enabled=True,
+        is_public=tool_data.is_public if tool_data.is_public is not None else False,
     )
     db_session.commit()
     return ToolSnapshot.from_model(tool)
@@ -125,6 +126,7 @@ def update_custom_tool(
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
         oauth_config_id=tool_data.oauth_config_id,
+        is_public=tool_data.is_public,
     )
     return ToolSnapshot.from_model(updated_tool)
 

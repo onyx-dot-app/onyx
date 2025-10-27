@@ -40,6 +40,7 @@ export interface ToolSnapshot {
   // If this is an MCP tool, which server it belongs to
   mcp_server_id?: number | null;
   user_id?: string | null;
+  is_public?: boolean | null;
 }
 
 export interface MCPServer {
