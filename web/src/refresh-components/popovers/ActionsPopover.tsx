@@ -10,14 +10,9 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Popover,
   PopoverContent,
+  PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { ToggleList, ToggleListItem } from "@/components/ui/togglelist";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
@@ -42,16 +37,18 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import Button from "@/refresh-components/buttons/Button";
 import SvgSliders from "@/icons/sliders";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { cn } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
 import SvgSettings from "@/icons/settings";
 import {
   ToolAuthStatus,
   useToolOAuthStatus,
 } from "@/lib/hooks/useToolOAuthStatus";
+import LineItem from "../buttons/LineItem";
+import SimpleTooltip from "../SimpleTooltip";
+import SvgSlash from "@/icons/slash";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -124,147 +121,216 @@ function ActionItem({
     tool?.in_code_tool_id === SEARCH_TOOL_ID && hasNoConnectors;
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            data-testid={`tool-option-${toolName}`}
-            className={cn(
-              "group flex items-center justify-between px-2 cursor-pointer hover:bg-background-neutral-01 rounded-lg py-2 mx-1",
-              isForced ? "bg-accent-100 hover:bg-accent-200" : ""
-            )}
-            onClick={() => {
-              // If no connectors, don't allow forcing the tool
-              if (isSearchToolWithNoConnectors) {
-                return;
-              }
+    <SimpleTooltip tooltip={tool?.description} className="max-w-[30rem]">
+      <LineItem
+        data-testid={`tool-option-${toolName}`}
+        onClick={() => {
+          // If no connectors, don't allow forcing the tool
+          if (isSearchToolWithNoConnectors) {
+            return;
+          }
 
-              // If disabled, un-disable the tool
-              if (onToggle && disabled) {
-                onToggle();
-              }
+          // If disabled, un-disable the tool
+          if (onToggle && disabled) {
+            onToggle();
+          }
 
-              onForceToggle();
-            }}
-          >
-            <div
-              className={cn(
-                "flex items-center gap-2 flex-1",
-                isSearchToolWithNoConnectors || disabled ? "opacity-50" : "",
-                isForced ? "text-action-link-05" : ""
-              )}
-            >
-              <Icon
-                className={cn(
-                  "h-[1rem] w-[1rem] stroke-text-04",
-                  isForced ? "text-action-link-05" : "text-text-03"
-                )}
-              />
-              <Text
-                className={cn(
-                  "text-sm font-medium select-none",
-                  isSearchToolWithNoConnectors || disabled ? "line-through" : ""
-                )}
-              >
-                {label}
-              </Text>
-            </div>
-            <div className="flex items-center gap-2">
-              {/* OAuth Authentication Indicator */}
-              {tool?.oauth_config_id && toolAuthStatus && (
-                <div
-                  className="flex items-center gap-2 transition-opacity duration-200 opacity-0 group-hover:opacity-100"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (
-                      !toolAuthStatus.hasToken ||
-                      toolAuthStatus.isTokenExpired
-                    ) {
-                      onOAuthAuthenticate?.();
-                    }
-                  }}
-                >
-                  {!toolAuthStatus.hasToken || toolAuthStatus.isTokenExpired ? (
-                    <SvgKey
-                      className={cn(
-                        "h-[1rem] w-[1rem]",
-                        "transition-colors",
-                        "cursor-pointer",
-                        "stroke-yellow-500",
-                        "hover:stroke-yellow-600"
-                      )}
-                    />
-                  ) : (
-                    <SvgCheck className="stroke-status-text-success-05 h-[1rem] w-[1rem]" />
-                  )}
-                </div>
-              )}
-              {!isSearchToolWithNoConnectors && (
-                <div
-                  className={cn(
-                    "flex items-center gap-2 transition-opacity duration-200",
-                    disabled
-                      ? "opacity-100"
-                      : "opacity-0 group-hover:opacity-100"
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggle();
-                  }}
-                >
-                  <DisableIcon
+          onForceToggle();
+        }}
+        strikethrough={disabled}
+        icon={Icon}
+        rightChildren={
+          <div className="flex flex-row items-center gap-1">
+            {tool?.oauth_config_id && toolAuthStatus && (
+              <IconButton
+                icon={({ className }) => (
+                  <SvgKey
                     className={cn(
-                      "transition-colors cursor-pointer",
-                      disabled
-                        ? "text-text-05 hover:text-text-03"
-                        : "text-text-03 hover:text-text-05"
+                      className,
+                      "stroke-yellow-500 hover:stroke-yellow-600"
                     )}
                   />
-                </div>
-              )}
-              {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
-                <div
+                )}
+                onClick={noProp(() => {
+                  if (
+                    !toolAuthStatus.hasToken ||
+                    toolAuthStatus.isTokenExpired
+                  ) {
+                    onOAuthAuthenticate?.();
+                  }
+                })}
+              />
+            )}
+
+            {!isSearchToolWithNoConnectors && (
+              <IconButton
+                icon={SvgSlash}
+                onClick={noProp(onToggle)}
+                internal
+                className={cn("invisible group-hover/LineItem:visible")}
+              />
+            )}
+
+            {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
+              <IconButton
+                icon={
+                  isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
+                }
+                onClick={noProp(() => {
+                  if (isSearchToolWithNoConnectors)
+                    window.location.href = "/admin/add-connector";
+                  else onSourceManagementOpen?.();
+                })}
+                internal
+                className={cn(
+                  isSearchToolWithNoConnectors &&
+                    "invisible grouop-hover/LineItem:visible"
+                )}
+              />
+              // <div
+              //   className={cn(
+              //     "flex items-center gap-2 transition-opacity duration-200",
+              //     isSearchToolWithNoConnectors
+              //       ? "opacity-0 group-hover:opacity-100"
+              //       : ""
+              //   )}
+              //   onClick={(e) => {
+              //     e.stopPropagation();
+              //   }}
+              // >
+              //   {isSearchToolWithNoConnectors ? (
+              //     <SvgSettings
+              //       width={16}
+              //       height={16}
+              //       className="transition-colors cursor-pointer stroke-text-02 hover:text-text-05"
+              //     />
+              //   ) : (
+              //     <SvgChevronRight
+              //       width={16}
+              //       height={16}
+              //       className="transition-colors cursor-pointer stroke-text-02 hover:text-text-05"
+              //     />
+              //   )}
+              // </div>
+            )}
+          </div>
+        }
+      >
+        {label}
+      </LineItem>
+      {/*<div
+        className={cn(
+          "group flex items-center justify-between px-2 cursor-pointer hover:bg-background-neutral-01 rounded-lg py-2 mx-1",
+          isForced ? "bg-accent-100 hover:bg-accent-200" : ""
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center gap-2 flex-1",
+            isSearchToolWithNoConnectors || disabled ? "opacity-50" : "",
+            isForced ? "text-action-link-05" : ""
+          )}
+        >
+          <Icon
+            className={cn(
+              "h-[1rem] w-[1rem] stroke-text-04",
+              isForced ? "text-action-link-05" : "text-text-03"
+            )}
+          />
+          <Text
+            className={cn(
+              "text-sm font-medium select-none",
+              isSearchToolWithNoConnectors || disabled ? "line-through" : ""
+            )}
+          >
+            {label}
+          </Text>
+        </div>
+        <div className="flex items-center gap-2">
+          {tool?.oauth_config_id && toolAuthStatus && (
+            <div
+              className="flex items-center gap-2 transition-opacity duration-200 opacity-0 group-hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!toolAuthStatus.hasToken || toolAuthStatus.isTokenExpired) {
+                  onOAuthAuthenticate?.();
+                }
+              }}
+            >
+              {!toolAuthStatus.hasToken || toolAuthStatus.isTokenExpired ? (
+                <SvgKey
                   className={cn(
-                    "flex items-center gap-2 transition-opacity duration-200",
-                    isSearchToolWithNoConnectors
-                      ? "opacity-0 group-hover:opacity-100"
-                      : ""
+                    "h-[1rem] w-[1rem]",
+                    "transition-colors",
+                    "cursor-pointer",
+                    "stroke-yellow-500",
+                    "hover:stroke-yellow-600"
                   )}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (isSearchToolWithNoConnectors) {
-                      // Navigate to add connector page
-                      window.location.href = "/admin/add-connector";
-                    } else {
-                      onSourceManagementOpen?.();
-                    }
-                  }}
-                >
-                  {isSearchToolWithNoConnectors ? (
-                    <SvgSettings
-                      width={16}
-                      height={16}
-                      className="transition-colors cursor-pointer stroke-text-02 hover:text-text-05"
-                    />
-                  ) : (
-                    <SvgChevronRight
-                      width={16}
-                      height={16}
-                      className="transition-colors cursor-pointer stroke-text-02 hover:text-text-05"
-                    />
-                  )}
-                </div>
+                />
+              ) : (
+                <SvgCheck className="stroke-status-text-success-05 h-[1rem] w-[1rem]" />
               )}
             </div>
-          </div>
-        </TooltipTrigger>
-        {tool?.description && (
-          <TooltipContent side={tooltipSide} width="max-w-xs">
-            <Text inverted>{tool.description}</Text>
-          </TooltipContent>
-        )}
-      </Tooltip>
-    </TooltipProvider>
+          )}
+
+          {!isSearchToolWithNoConnectors && (
+            <div
+              className={cn(
+                "flex items-center gap-2 transition-opacity duration-200",
+                disabled ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle();
+              }}
+            >
+              <DisableIcon
+                className={cn(
+                  "transition-colors cursor-pointer",
+                  disabled
+                    ? "text-text-05 hover:text-text-03"
+                    : "text-text-03 hover:text-text-05"
+                )}
+              />
+            </div>
+          )}
+
+          {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
+            <div
+              className={cn(
+                "flex items-center gap-2 transition-opacity duration-200",
+                isSearchToolWithNoConnectors
+                  ? "opacity-0 group-hover:opacity-100"
+                  : ""
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isSearchToolWithNoConnectors) {
+                  // Navigate to add connector page
+                  window.location.href = "/admin/add-connector";
+                } else {
+                  onSourceManagementOpen?.();
+                }
+              }}
+            >
+              {isSearchToolWithNoConnectors ? (
+                <SvgSettings
+                  width={16}
+                  height={16}
+                  className="transition-colors cursor-pointer stroke-text-02 hover:text-text-05"
+                />
+              ) : (
+                <SvgChevronRight
+                  width={16}
+                  height={16}
+                  className="transition-colors cursor-pointer stroke-text-02 hover:text-text-05"
+                />
+              )}
+            </div>
+          )}
+        </div>
+      </div>*/}
+    </SimpleTooltip>
   );
 }
 
@@ -902,41 +968,87 @@ export default function ActionsPopover({
             />
           </div>
         </PopoverTrigger>
-        <PopoverContent
-          data-testid="tool-options"
-          side="top"
-          align="start"
-          className="
-            w-[15.5rem]
-            max-h-[300px]
-            text-text-03
-            text-sm
-            p-0
-            overflow-hidden
-            flex
-            flex-col
-            border border-border
-            shadow-lg
-          "
-          style={{
-            borderRadius: "var(--Radius-12, 12px)",
-          }}
-        >
-          {/* Search Input */}
-          {!secondaryView && (
-            <div className="pt-1 mx-2">
-              <InputTypeIn
-                placeholder="Search Menu"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                autoFocus
-                internal
-              />
-            </div>
-          )}
+        <PopoverContent data-testid="tool-options" side="bottom" align="start">
+          <PopoverMenu medium>
+            {[
+              !secondaryView && (
+                <InputTypeIn
+                  placeholder="Search Actions"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  autoFocus
+                  internal
+                />
+              ),
+
+              // Actions
+              ...filteredTools.map((tool) => (
+                <ActionItem
+                  key={tool.id}
+                  tool={tool}
+                  disabled={disabledToolIds.includes(tool.id)}
+                  isForced={forcedToolIds.includes(tool.id)}
+                  onToggle={() => toggleToolForCurrentAssistant(tool.id)}
+                  onForceToggle={() => {
+                    toggleForcedTool(tool.id);
+                    setOpen(false);
+                  }}
+                  onSourceManagementOpen={() =>
+                    setSecondaryView({ type: "sources" })
+                  }
+                  hasNoConnectors={hasNoConnectors}
+                  toolAuthStatus={getToolAuthStatus(tool)}
+                  onOAuthAuthenticate={() => authenticateTool(tool)}
+                />
+              )),
+
+              // MCP Servers
+              ...filteredMCPServers.map((server) => {
+                const serverData = mcpServerData[server.id] || {
+                  isAuthenticated:
+                    !!server.user_authenticated || !!server.is_authenticated,
+                  isLoading: false,
+                };
+
+                // Tools for this server come from assistant.tools
+                const serverTools = selectedAssistant.tools.filter(
+                  (t) => t.mcp_server_id === Number(server.id)
+                );
+                const enabledTools = serverTools.filter(
+                  (t) => !disabledToolIds.includes(t.id)
+                );
+
+                return (
+                  <MCPServerItem
+                    key={server.id}
+                    server={server}
+                    isActive={selectedMcpServerId === server.id}
+                    tools={serverTools}
+                    enabledTools={enabledTools}
+                    isAuthenticated={serverData.isAuthenticated}
+                    isLoading={serverData.isLoading}
+                    onSelect={() =>
+                      setSecondaryView({
+                        type: "mcp",
+                        serverId: server.id,
+                      })
+                    }
+                    onAuthenticate={() => handleServerAuthentication(server)}
+                  />
+                );
+              }),
+
+              null,
+              (isAdmin || isCurator) && (
+                <LineItem href="/admin/actions" icon={MoreActionsIcon}>
+                  More Actions
+                </LineItem>
+              ),
+            ]}
+          </PopoverMenu>
 
           {/* Options */}
-          <div className="flex flex-col overflow-hidden">
+          {/*<div className="flex flex-col overflow-hidden">
             {secondaryView?.type === "sources" ? (
               <ToggleList
                 items={sourceToggleItems}
@@ -978,84 +1090,9 @@ export default function ActionsPopover({
                 No matching actions found
               </div>
             ) : (
-              <>
-                {/* Regular Tools */}
-                {filteredTools.map((tool) => (
-                  <ActionItem
-                    key={tool.id}
-                    tool={tool}
-                    disabled={disabledToolIds.includes(tool.id)}
-                    isForced={forcedToolIds.includes(tool.id)}
-                    onToggle={() => toggleToolForCurrentAssistant(tool.id)}
-                    onForceToggle={() => {
-                      toggleForcedTool(tool.id);
-                      setOpen(false);
-                    }}
-                    onSourceManagementOpen={() =>
-                      setSecondaryView({ type: "sources" })
-                    }
-                    hasNoConnectors={hasNoConnectors}
-                    toolAuthStatus={getToolAuthStatus(tool)}
-                    onOAuthAuthenticate={() => authenticateTool(tool)}
-                  />
-                ))}
-
-                {/* MCP Servers */}
-                {filteredMCPServers.map((server) => {
-                  const serverData = mcpServerData[server.id] || {
-                    isAuthenticated:
-                      !!server.user_authenticated || !!server.is_authenticated,
-                    isLoading: false,
-                  };
-
-                  // Tools for this server come from assistant.tools
-                  const serverTools = selectedAssistant.tools.filter(
-                    (t) => t.mcp_server_id === Number(server.id)
-                  );
-                  const enabledTools = serverTools.filter(
-                    (t) => !disabledToolIds.includes(t.id)
-                  );
-
-                  return (
-                    <MCPServerItem
-                      key={server.id}
-                      server={server}
-                      isActive={selectedMcpServerId === server.id}
-                      tools={serverTools}
-                      enabledTools={enabledTools}
-                      isAuthenticated={serverData.isAuthenticated}
-                      isLoading={serverData.isLoading}
-                      onSelect={() =>
-                        setSecondaryView({
-                          type: "mcp",
-                          serverId: server.id,
-                        })
-                      }
-                      onAuthenticate={() => handleServerAuthentication(server)}
-                    />
-                  );
-                })}
-                {/* More Connectors & Actions. Only show if user is admin or curator, since
-                they are the only ones who can manage actions. */}
-                {(isAdmin || isCurator) && (
-                  <>
-                    <div className="border-b border-border mx-3.5 mt-2" />
-                    <div className="mx-2 mt-2.5 mb-2">
-                      <Button
-                        defaulted
-                        tertiary
-                        href="/admin/actions"
-                        leftIcon={MoreActionsIcon}
-                        className="w-full justify-start"
-                      >
-                        More Actions
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </>
+              <></>
             )}
-          </div>
+          </div>*/}
         </PopoverContent>
       </Popover>
 
