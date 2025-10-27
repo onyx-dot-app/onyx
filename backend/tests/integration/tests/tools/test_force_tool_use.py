@@ -27,11 +27,11 @@ def test_force_tool_use(
     This test uses the actual API without any mocking.
     """
     with get_session_with_current_tenant() as db_session:
-        web_search_tool = db_session.execute(
-            select(Tool).where(Tool.in_code_tool_id == "WebSearchTool")
+        internal_search_tool = db_session.execute(
+            select(Tool).where(Tool.in_code_tool_id == "SearchTool")
         ).scalar_one_or_none()
-        assert web_search_tool is not None, "WebSearchTool must exist"
-        web_search_tool_id = web_search_tool.id
+        assert internal_search_tool is not None, "SearchTool must exist"
+        internal_search_tool_id = internal_search_tool.id
 
     # Create a chat session
     chat_session = ChatSessionManager.create(user_performing_action=basic_user)
@@ -45,14 +45,14 @@ def test_force_tool_use(
         chat_session_id=chat_session.id,
         message=message,
         user_performing_action=basic_user,
-        forced_tool_ids=[web_search_tool_id],
+        forced_tool_ids=[internal_search_tool_id],
     )
 
-    internet_search_used = any(
-        tool.tool_name == ToolName.INTERNET_SEARCH
+    internal_search_used = any(
+        tool.tool_name == ToolName.INTERNAL_SEARCH
         for tool in analyzed_response.used_tools
     )
-    assert internet_search_used, "Web search tool should have been forced to run"
+    assert internal_search_used, "Search tool should have been forced to run"
 
 
 if __name__ == "__main__":
