@@ -63,3 +63,44 @@ export function noProp(
     f?.(event);
   };
 }
+
+/**
+ * Extracts the file extension from a filename and returns it in uppercase.
+ * Returns an empty string if no valid extension is found.
+ */
+export function getFileExtension(fileName: string): string {
+  const idx = fileName.lastIndexOf(".");
+  if (idx === -1) return "";
+  const ext = fileName.slice(idx + 1).toLowerCase();
+  if (ext === "txt") return "PLAINTEXT";
+  return ext.toUpperCase();
+}
+
+/**
+ * Centralized list of image file extensions (lowercase, no leading dots)
+ */
+export const IMAGE_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "svg",
+  "bmp",
+] as const;
+
+export type ImageExtension = (typeof IMAGE_EXTENSIONS)[number];
+
+/**
+ * Checks whether a provided extension string corresponds to an image extension.
+ * Accepts values with any casing and without a leading dot.
+ */
+export function isImageExtension(
+  extension: string | null | undefined
+): boolean {
+  if (!extension) {
+    return false;
+  }
+  const normalized = extension.toLowerCase();
+  return (IMAGE_EXTENSIONS as readonly string[]).includes(normalized);
+}
