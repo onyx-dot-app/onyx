@@ -8,7 +8,6 @@ tests, following dependency injection patterns.
 from collections.abc import AsyncIterator
 from typing import Any
 from typing import List
-from unittest.mock import Mock
 from uuid import UUID
 
 import pytest
@@ -37,13 +36,6 @@ from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
-from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
-    OktaProfileTool,
-)
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
 # =============================================================================
@@ -628,9 +620,6 @@ def chat_turn_dependencies(
         tools=fake_tools,
         redis_client=fake_redis_client,  # type: ignore[arg-type]
         emitter=emitter,
-        search_pipeline=Mock(SearchTool),
-        image_generation_tool=Mock(ImageGenerationTool),
-        okta_profile_tool=Mock(OktaProfileTool),
     )
 
 
