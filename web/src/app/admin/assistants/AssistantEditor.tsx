@@ -1399,7 +1399,7 @@ export function AssistantEditor({
 
                       {/* Regular Custom Tools */}
                       {customTools.length > 0 && (
-                        <MemoizedToolList tools={customTools} />
+                        <MemoizedToolList tools={customTools} user={user} />
                       )}
 
                       {/* MCP Server Tools - Hierarchical Structure */}
