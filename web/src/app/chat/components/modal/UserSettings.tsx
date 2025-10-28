@@ -369,7 +369,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
               <li key={id}>
                 <Button
                   tertiary
-                  active={activeSection === id}
+                  selected={activeSection === id}
                   onClick={() => setActiveSection(id)}
                 >
                   {label}

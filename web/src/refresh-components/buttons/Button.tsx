@@ -278,7 +278,7 @@ export interface ButtonProps
 
   // Button states:
   disabled?: boolean;
-  active?: boolean;
+  selected?: boolean;
 
   // Icons:
   leftIcon?: React.FunctionComponent<SvgProps>;
@@ -301,7 +301,7 @@ export default function Button({
   internal,
 
   disabled,
-  active,
+  selected,
 
   leftIcon: LeftIcon,
   rightIcon: RightIcon,
@@ -345,7 +345,7 @@ export default function Button({
     <button
       className={cn(
         "p-2 h-fit rounded-12 group/Button w-fit flex flex-row items-center justify-center gap-1",
-        variantClasses(active)[variant][subvariant][abled],
+        variantClasses(selected)[variant][subvariant][abled],
         className
       )}
       disabled={disabled}
@@ -356,7 +356,7 @@ export default function Button({
           <LeftIcon
             className={cn(
               "w-[1rem] h-[1rem]",
-              iconClasses(active)[variant][subvariant][abled]
+              iconClasses(selected)[variant][subvariant][abled]
             )}
           />
         </div>
@@ -367,7 +367,7 @@ export default function Button({
         <Text
           className={cn(
             "whitespace-nowrap",
-            textClasses(active)[variant][subvariant][abled]
+            textClasses(selected)[variant][subvariant][abled]
           )}
         >
           {children}
@@ -380,7 +380,7 @@ export default function Button({
           <RightIcon
             className={cn(
               "w-[1rem] h-[1rem]",
-              iconClasses(active)[variant][subvariant][abled]
+              iconClasses(selected)[variant][subvariant][abled]
             )}
           />
         </div>

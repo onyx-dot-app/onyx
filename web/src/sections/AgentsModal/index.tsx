@@ -61,7 +61,7 @@ function AgentBadgeSelector({
   toggleFilter,
 }: AgentBadgeSelectorProps) {
   return (
-    <Button secondary active={selected} onClick={toggleFilter}>
+    <Button secondary selected={selected} onClick={toggleFilter}>
       {text}
     </Button>
   );
