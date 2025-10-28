@@ -8,7 +8,6 @@ from sqlalchemy import select
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Tool
-from onyx.tools.tool_constructor import construct_tools
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
@@ -27,7 +26,6 @@ def test_force_tool_use(
     This test uses the actual API without any mocking.
     """
     with get_session_with_current_tenant() as db_session:
-        construct_tools(db_session)
         image_generation_tool = db_session.execute(
             select(Tool).where(Tool.in_code_tool_id == "ImageGenerationTool")
         ).scalar_one_or_none()
