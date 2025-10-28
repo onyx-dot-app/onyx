@@ -1,7 +1,7 @@
 import Modal from "@/refresh-components/modals/ConfirmationModal";
 import Button from "@/refresh-components/buttons/Button";
 import SvgAlertCircle from "@/icons/alert-circle";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 export interface ConfirmEntityModalProps {
   danger?: boolean;
@@ -54,7 +54,7 @@ export function ConfirmEntityModal({
         </Button>
       }
     >
-      <div className="flex flex-col gap-spacing-paragraph">
+      <div className="flex flex-col gap-4">
         {!removeConfirmationText && (
           <Text>
             Are you sure you want to {actionText} <b>{entityName}</b>?

@@ -1,5 +1,5 @@
 import Button from "@/refresh-components/buttons/Button";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { AuthType } from "@/lib/constants";
 import Link from "next/link";
 import { FaGoogle } from "react-icons/fa";
@@ -17,7 +17,7 @@ export default function SignInButton({
 
   if (authType === "google_oauth" || authType === "cloud") {
     button = (
-      <div className="flex flex-row items-center justify-center w-full gap-spacing-interline">
+      <div className="flex flex-row items-center justify-center w-full gap-2">
         <FaGoogle className="text-text-inverted-04" />
         <Text inverted>Continue with Google</Text>
       </div>

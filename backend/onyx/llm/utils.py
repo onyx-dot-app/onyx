@@ -385,7 +385,26 @@ def test_llm(llm: LLM) -> str | None:
 def get_model_map() -> dict:
     import litellm
 
-    starting_map = copy.deepcopy(cast(dict, litellm.model_cost))
+    DIVIDER = "/"
+
+    original_map = cast(dict[str, dict], litellm.model_cost)
+    starting_map = copy.deepcopy(original_map)
+    for key in original_map:
+        if DIVIDER in key:
+            truncated_key = key.split(DIVIDER)[-1]
+            # make sure not to overwrite an original key
+            if truncated_key in original_map:
+                continue
+
+            # if there are multiple possible matches, choose the most "detailed"
+            # one as a heuristic. "detailed" = the description of the model
+            # has the most filled out fields.
+            existing_truncated_value = starting_map.get(truncated_key)
+            potential_truncated_value = original_map[key]
+            if not existing_truncated_value or len(potential_truncated_value) > len(
+                existing_truncated_value
+            ):
+                starting_map[truncated_key] = potential_truncated_value
 
     # NOTE: we could add additional models here in the future,
     # but for now there is no point. Ollama allows the user to
@@ -644,41 +663,37 @@ def get_max_input_tokens_from_llm_provider(
 
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
-    # TODO: Add support to check model config for any provider
-    # TODO: Circular import means OLLAMA_PROVIDER_NAME is not available here
 
-    if model_provider == "ollama":
-        try:
-            with get_session_with_current_tenant() as db_session:
-                model_config = db_session.scalar(
-                    select(ModelConfiguration)
-                    .join(
-                        LLMProvider,
-                        ModelConfiguration.llm_provider_id == LLMProvider.id,
-                    )
-                    .where(
-                        ModelConfiguration.name == model_name,
-                        LLMProvider.provider == model_provider,
-                    )
-                )
-                if model_config and model_config.supports_image_input is not None:
-                    return model_config.supports_image_input
-        except Exception as e:
-            logger.warning(
-                f"Failed to query database for {model_provider} model {model_name} image support: {e}"
-            )
-
-    model_map = get_model_map()
+    # First, try to read an explicit configuration from the model_configuration table
     try:
-        model_obj = find_model_obj(
-            model_map,
-            model_provider,
-            model_name,
-        )
-        if not model_obj:
-            raise RuntimeError(
-                f"No litellm entry found for {model_provider}/{model_name}"
+        with get_session_with_current_tenant() as db_session:
+            model_config = db_session.scalar(
+                select(ModelConfiguration)
+                .join(
+                    LLMProvider,
+                    ModelConfiguration.llm_provider_id == LLMProvider.id,
+                )
+                .where(
+                    ModelConfiguration.name == model_name,
+                    LLMProvider.provider == model_provider,
+                )
             )
+            if model_config and model_config.supports_image_input is not None:
+                return model_config.supports_image_input
+    except Exception as e:
+        logger.warning(
+            f"Failed to query database for {model_provider} model {model_name} image support: {e}"
+        )
+
+    # Fallback to looking up the model in the litellm model_cost dict
+    try:
+        model_obj = find_model_obj(get_model_map(), model_provider, model_name)
+        if not model_obj:
+            logger.warning(
+                f"No litellm entry found for {model_provider}/{model_name}, "
+                "this model may or may not support image input."
+            )
+            return False
         return model_obj.get("supports_vision", False)
     except Exception:
         logger.exception(

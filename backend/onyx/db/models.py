@@ -65,6 +65,7 @@ from onyx.db.enums import (
     UserFileStatus,
     MCPAuthenticationPerformer,
     MCPTransport,
+    ThemePreference,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -183,6 +184,15 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
     auto_scroll: Mapped[bool | None] = mapped_column(Boolean, default=None)
     shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    theme_preference: Mapped[ThemePreference | None] = mapped_column(
+        Enum(ThemePreference, native_enum=False),
+        nullable=True,
+        default=None,
+    )
+    # personalization fields are exposed via the chat user settings "Personalization" tab
+    personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    use_memories: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
@@ -238,6 +248,17 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     accessible_mcp_servers: Mapped[list["MCPServer"]] = relationship(
         "MCPServer", secondary="mcp_server__user", back_populates="users"
     )
+    memories: Mapped[list["Memory"]] = relationship(
+        "Memory",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    oauth_user_tokens: Mapped[list["OAuthUserToken"]] = relationship(
+        "OAuthUserToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
@@ -253,6 +274,31 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
     pass
+
+
+class Memory(Base):
+    __tablename__ = "memory"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    memory_text: Mapped[str] = mapped_column(Text, nullable=False)
+    conversation_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="memories")
 
 
 class ApiKey(Base):
@@ -2474,9 +2520,16 @@ class Tool(Base):
     mcp_server_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("mcp_server.id", ondelete="CASCADE"), nullable=True
     )
+    # OAuth configuration for this tool (null for tools without OAuth)
+    oauth_config_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("oauth_config.id", ondelete="SET NULL"), nullable=True
+    )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
+    oauth_config: Mapped["OAuthConfig | None"] = relationship(
+        "OAuthConfig", back_populates="tools"
+    )
     # Relationship to Persona through the association table
     personas: Mapped[list["Persona"]] = relationship(
         "Persona",
@@ -2486,6 +2539,92 @@ class Tool(Base):
     # MCP server relationship
     mcp_server: Mapped["MCPServer | None"] = relationship(
         "MCPServer", back_populates="current_actions"
+    )
+
+
+class OAuthConfig(Base):
+    """OAuth provider configuration that can be shared across multiple tools"""
+
+    __tablename__ = "oauth_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+
+    # OAuth provider endpoints
+    authorization_url: Mapped[str] = mapped_column(Text, nullable=False)
+    token_url: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Client credentials (encrypted)
+    client_id: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
+    client_secret: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
+
+    # Optional configurations
+    scopes: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
+    additional_params: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
+    # Metadata
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    tools: Mapped[list["Tool"]] = relationship("Tool", back_populates="oauth_config")
+    user_tokens: Mapped[list["OAuthUserToken"]] = relationship(
+        "OAuthUserToken", back_populates="oauth_config", cascade="all, delete-orphan"
+    )
+
+
+class OAuthUserToken(Base):
+    """Per-user OAuth tokens for a specific OAuth configuration"""
+
+    __tablename__ = "oauth_user_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    oauth_config_id: Mapped[int] = mapped_column(
+        ForeignKey("oauth_config.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # Token data (encrypted)
+    # Structure: {
+    #   "access_token": "...",
+    #   "refresh_token": "...",  # Optional
+    #   "token_type": "Bearer",
+    #   "expires_at": 1234567890,  # Unix timestamp, optional
+    #   "scope": "repo user"  # Optional
+    # }
+    token_data: Mapped[dict[str, Any]] = mapped_column(EncryptedJson(), nullable=False)
+
+    # Metadata
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    oauth_config: Mapped["OAuthConfig"] = relationship(
+        "OAuthConfig", back_populates="user_tokens"
+    )
+    user: Mapped["User"] = relationship("User")
+
+    # Unique constraint: One token per user per OAuth config
+    __table_args__ = (
+        UniqueConstraint("oauth_config_id", "user_id", name="uq_oauth_user_token"),
     )
 
 
@@ -3437,6 +3576,8 @@ class ResearchAgentIterationSubStep(Base):
     # for search-based step-types
     cited_doc_results: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
     claims: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
+    is_web_fetch: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    queries: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
 
     # for image generation step-types
     generated_images: Mapped[GeneratedImageFullResult | None] = mapped_column(

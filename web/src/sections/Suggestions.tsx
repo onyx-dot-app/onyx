@@ -28,9 +28,7 @@ export function Suggestions({ onSubmit }: SuggestionsProps) {
   };
 
   return (
-    <div
-      className={cn("flex flex-col w-full p-spacing-inline gap-spacing-inline")}
-    >
+    <div className={cn("flex flex-col w-full p-1 gap-1")}>
       {currentAgent.starter_messages.map(({ message }, index) => (
         <LineItem key={index} onClick={() => handleSuggestionClick(message)}>
           {message}

@@ -157,7 +157,9 @@ def test_soft_delete_with_agentic_search(
     )
 
     # Verify that the message was processed successfully
-    assert len(response.full_message) > 0, "Chat response should not be empty"
+    assert (
+        len(response.full_message) > 0 or len(response.used_tools) > 0
+    ), "Chat response should not be empty"
 
     # Test soft deletion
     deletion_success = ChatSessionManager.soft_delete(

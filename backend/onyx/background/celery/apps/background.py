@@ -12,6 +12,10 @@ from celery.signals import worker_ready
 from celery.signals import worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base
+from onyx.background.celery.celery_utils import httpx_init_vespa_pool
+from onyx.configs.app_configs import MANAGED_VESPA
+from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
+from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_BACKGROUND_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.utils.logger import setup_logger
@@ -58,11 +62,23 @@ def on_celeryd_init(sender: str, conf: Any = None, **kwargs: Any) -> None:
 
 @worker_init.connect
 def on_worker_init(sender: Worker, **kwargs: Any) -> None:
+    EXTRA_CONCURRENCY = 8  # small extra fudge factor for connection limits
+
     logger.info("worker_init signal received for consolidated background worker.")
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_BACKGROUND_APP_NAME)
     pool_size = cast(int, sender.concurrency)  # type: ignore
-    SqlEngine.init_engine(pool_size=pool_size, max_overflow=8)
+    SqlEngine.init_engine(pool_size=pool_size, max_overflow=EXTRA_CONCURRENCY)
+
+    # Initialize Vespa httpx pool (needed for light worker tasks)
+    if MANAGED_VESPA:
+        httpx_init_vespa_pool(
+            sender.concurrency + EXTRA_CONCURRENCY,  # type: ignore
+            ssl_cert=VESPA_CLOUD_CERT_PATH,
+            ssl_key=VESPA_CLOUD_KEY_PATH,
+        )
+    else:
+        httpx_init_vespa_pool(sender.concurrency + EXTRA_CONCURRENCY)  # type: ignore
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
@@ -103,9 +119,19 @@ for bootstep in base_bootsteps:
 
 celery_app.autodiscover_tasks(
     [
+        # Original background worker tasks
         "onyx.background.celery.tasks.pruning",
         "onyx.background.celery.tasks.kg_processing",
         "onyx.background.celery.tasks.monitoring",
         "onyx.background.celery.tasks.user_file_processing",
+        # Light worker tasks
+        "onyx.background.celery.tasks.shared",
+        "onyx.background.celery.tasks.vespa",
+        "onyx.background.celery.tasks.connector_deletion",
+        "onyx.background.celery.tasks.doc_permission_syncing",
+        # Docprocessing worker tasks
+        "onyx.background.celery.tasks.docprocessing",
+        # Docfetching worker tasks
+        "onyx.background.celery.tasks.docfetching",
     ]
 )

@@ -41,6 +41,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.chat_utils import build_citation_map_from_numbers
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
+from onyx.chat.memories import make_memories_callback
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.citations_prompt import build_citations_system_message
 from onyx.chat.prompt_builder.citations_prompt import build_citations_user_message
@@ -75,6 +76,7 @@ from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
 from onyx.prompts.prompt_template import PromptTemplate
 from onyx.prompts.prompt_utils import handle_company_awareness
+from onyx.prompts.prompt_utils import handle_memories
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import SectionEnd
@@ -94,14 +96,6 @@ from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-def _format_tool_name(tool_name: str) -> str:
-    """Convert tool name to LLM-friendly format."""
-    name = tool_name.replace(" ", "_")
-    # take care of camel case like GetAPIKey -> GET_API_KEY for LLM readability
-    name = re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", "_", name)
-    return name.upper()
 
 
 def _get_available_tools(
@@ -491,7 +485,16 @@ def clarifier(
             + PROJECT_INSTRUCTIONS_SEPARATOR
             + graph_config.inputs.project_instructions
         )
+    user = (
+        graph_config.tooling.search_tool.user
+        if graph_config.tooling.search_tool
+        else None
+    )
+    memories_callback = make_memories_callback(user, db_session)
     assistant_system_prompt = handle_company_awareness(assistant_system_prompt)
+    assistant_system_prompt = handle_memories(
+        assistant_system_prompt, memories_callback
+    )
 
     chat_history_string = (
         get_chat_history_string(
@@ -551,7 +554,7 @@ def clarifier(
                 # if there is only one tool (Closer), we don't need to decide. It's an LLM answer
                 llm_decision = DecisionResponse(decision="LLM", reasoning="")
 
-            if llm_decision.decision == "LLM":
+            if llm_decision.decision == "LLM" and research_type != ResearchType.DEEP:
 
                 write_custom_event(
                     current_step_nr,
@@ -691,55 +694,58 @@ def clarifier(
                     should_stream_answer=True,
                     writer=writer,
                     ind=0,
-                    final_search_results=context_llm_docs,
-                    displayed_search_results=context_llm_docs,
+                    search_results=context_llm_docs,
                     generate_final_answer=True,
                     chat_message_id=str(graph_config.persistence.chat_session_id),
                 )
 
-            full_response = stream_and_process()
-            if len(full_response.ai_message_chunk.tool_calls) == 0:
+            # Deep research always continues to clarification or search
+            if research_type != ResearchType.DEEP:
+                full_response = stream_and_process()
+                if len(full_response.ai_message_chunk.tool_calls) == 0:
 
-                if isinstance(full_response.full_answer, str):
-                    full_answer = (
-                        normalize_square_bracket_citations_to_double_with_links(
-                            full_response.full_answer
+                    if isinstance(full_response.full_answer, str):
+                        full_answer = (
+                            normalize_square_bracket_citations_to_double_with_links(
+                                full_response.full_answer
+                            )
+                        )
+                    else:
+                        full_answer = None
+
+                    # Persist final documents and derive citations when using in-context docs
+                    final_documents_db, citations_map = (
+                        _persist_final_docs_and_citations(
+                            db_session=db_session,
+                            context_llm_docs=context_llm_docs,
+                            full_answer=full_answer,
                         )
                     )
-                else:
-                    full_answer = None
 
-                # Persist final documents and derive citations when using in-context docs
-                final_documents_db, citations_map = _persist_final_docs_and_citations(
-                    db_session=db_session,
-                    context_llm_docs=context_llm_docs,
-                    full_answer=full_answer,
-                )
+                    update_db_session_with_messages(
+                        db_session=db_session,
+                        chat_message_id=message_id,
+                        chat_session_id=graph_config.persistence.chat_session_id,
+                        is_agentic=graph_config.behavior.use_agentic_search,
+                        message=full_answer,
+                        token_count=len(llm_tokenizer.encode(full_answer or "")),
+                        citations=citations_map,
+                        final_documents=final_documents_db or None,
+                        update_parent_message=True,
+                        research_answer_purpose=ResearchAnswerPurpose.ANSWER,
+                    )
 
-                update_db_session_with_messages(
-                    db_session=db_session,
-                    chat_message_id=message_id,
-                    chat_session_id=graph_config.persistence.chat_session_id,
-                    is_agentic=graph_config.behavior.use_agentic_search,
-                    message=full_answer,
-                    token_count=len(llm_tokenizer.encode(full_answer or "")),
-                    citations=citations_map,
-                    final_documents=final_documents_db or None,
-                    update_parent_message=True,
-                    research_answer_purpose=ResearchAnswerPurpose.ANSWER,
-                )
+                    db_session.commit()
 
-                db_session.commit()
-
-                return OrchestrationSetup(
-                    original_question=original_question,
-                    chat_history_string="",
-                    tools_used=[DRPath.END.value],
-                    query_list=[],
-                    available_tools=available_tools,
-                    assistant_system_prompt=assistant_system_prompt,
-                    assistant_task_prompt=assistant_task_prompt,
-                )
+                    return OrchestrationSetup(
+                        original_question=original_question,
+                        chat_history_string="",
+                        tools_used=[DRPath.END.value],
+                        query_list=[],
+                        available_tools=available_tools,
+                        assistant_system_prompt=assistant_system_prompt,
+                        assistant_task_prompt=assistant_task_prompt,
+                    )
 
         # Continue, as external knowledge is required.
 

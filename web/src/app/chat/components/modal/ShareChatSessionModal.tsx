@@ -172,7 +172,7 @@ export default function ShareChatSessionModal({
             </Button>
           </div>
         ) : (
-          <div className="flex flex-col gap-spacing-interline">
+          <div className="flex flex-col gap-2">
             <Callout type="warning" title="Warning">
               Please make sure that all content in this chat is safe to share
               with the whole team.
@@ -213,7 +213,7 @@ export default function ShareChatSessionModal({
         />
 
         {showAdvancedOptions && (
-          <div className="flex flex-col gap-spacing-interline">
+          <div className="flex flex-col gap-2">
             <Callout type="notice" title="Seed New Chat">
               Generate a link to a new chat session with the same settings as
               this chat (including the assistant and model).

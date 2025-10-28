@@ -3,6 +3,7 @@ from datetime import datetime
 from logging import Logger
 from typing import Any
 from typing import cast
+from typing import NamedTuple
 
 import redis
 from pydantic import BaseModel
@@ -14,6 +15,18 @@ from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.utils.variable_functionality import fetch_versioned_implementation
+
+
+class PermissionSyncResult(NamedTuple):
+    """Result of a permission sync operation.
+
+    Attributes:
+        num_updated: Number of documents successfully updated
+        num_errors: Number of documents that failed to update
+    """
+
+    num_updated: int
+    num_errors: int
 
 
 class RedisConnectorPermissionSyncPayload(BaseModel):
@@ -159,7 +172,12 @@ class RedisConnectorPermissionSync:
         connector_id: int,
         credential_id: int,
         task_logger: Logger | None = None,
-    ) -> int | None:
+    ) -> PermissionSyncResult:
+        """Update permissions for documents.
+
+        Returns:
+            PermissionSyncResult containing counts of successful updates and errors
+        """
         last_lock_time = time.monotonic()
 
         document_update_permissions_fn = fetch_versioned_implementation(
@@ -168,6 +186,7 @@ class RedisConnectorPermissionSync:
         )
 
         num_permissions = 0
+        num_errors = 0
         # Create a task for each document permission sync
         for permissions in new_permissions:
             current_time = time.monotonic()
@@ -201,14 +220,25 @@ class RedisConnectorPermissionSync:
             # a rare enough case to be acceptable.
 
             # This can internally exception due to db issues but still continue
-            # we may want to change this
-            document_update_permissions_fn(
-                self.tenant_id, permissions, source_string, connector_id, credential_id
-            )
+            # Catch exceptions per-document to avoid breaking the entire sync
+            try:
+                document_update_permissions_fn(
+                    self.tenant_id,
+                    permissions,
+                    source_string,
+                    connector_id,
+                    credential_id,
+                )
+                num_permissions += 1
+            except Exception:
+                num_errors += 1
+                if task_logger:
+                    task_logger.exception(
+                        f"Failed to update permissions for document {permissions.doc_id}"
+                    )
+                # Continue processing other documents
 
-            num_permissions += 1
-
-        return num_permissions
+        return PermissionSyncResult(num_updated=num_permissions, num_errors=num_errors)
 
     def reset(self) -> None:
         self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)

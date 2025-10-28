@@ -1,9 +1,11 @@
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { CheckmarkIcon, EditIcon, XIcon } from "@/components/icons/icons";
-import { Button } from "@/components/ui/button";
+import { EditIcon } from "@/components/icons/icons";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgCheck from "@/icons/check";
+import SvgX from "@/icons/x";
 
 interface EditableStringFieldDisplayProps {
   value: string;
@@ -105,22 +107,18 @@ export function EditableStringFieldDisplay({
       {isEditing && isEditable ? (
         <>
           <div className={cn("flex", "flex-row")}>
-            <Button
+            <IconButton
               onClick={handleUpdate}
-              variant="ghost"
-              size="sm"
-              className="p-0 hover:bg-transparent ml-2"
-            >
-              <CheckmarkIcon className={`text-600`} size={12 * scale} />
-            </Button>
-            <Button
+              internal
+              className="ml-2"
+              icon={SvgCheck}
+            />
+            <IconButton
               onClick={resetEditing}
-              variant="ghost"
-              size="sm"
-              className="p-0 hover:bg-transparent ml-2"
-            >
-              <XIcon className={`text-600`} size={12 * scale} />
-            </Button>
+              internal
+              className="ml-2"
+              icon={SvgX}
+            />
           </div>
         </>
       ) : (

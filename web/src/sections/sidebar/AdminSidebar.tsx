@@ -7,10 +7,9 @@ import {
   useSettingsContext,
 } from "@/components/settings/SettingsProvider";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
-import Text from "@/refresh-components/Text";
-import { SidebarSection } from "@/sections/sidebar/components";
+import Text from "@/refresh-components/texts/Text";
+import { SidebarSection } from "@/sections/sidebar/SidebarSection";
 import Settings from "@/sections/sidebar/Settings";
-import NavigationTab from "@/refresh-components/buttons/NavigationTab";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
@@ -38,10 +37,12 @@ import {
   SearchIcon,
   DocumentIcon2,
   BrainIcon,
-  OnyxSparkleIcon,
 } from "@/components/icons/icons";
+import OnyxLogo from "@/icons/onyx-logo";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
+import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { SidebarBody } from "@/sections/sidebar/utils";
 
 const connectors_items = () => [
   {
@@ -99,6 +100,12 @@ const custom_assistants_items = (
         link: "/admin/actions",
       }
     );
+  } else {
+    items.push({
+      name: "Actions",
+      icon: ToolIconSkeleton,
+      link: "/admin/actions",
+    });
   }
 
   if (enableEnterprise) {
@@ -153,7 +160,7 @@ const collections = (
           items: [
             {
               name: "Default Assistant",
-              icon: OnyxSparkleIcon,
+              icon: OnyxLogo,
               link: "/admin/configuration/default-assistant",
             },
             {
@@ -161,12 +168,16 @@ const collections = (
               icon: CpuIconSkeleton,
               link: "/admin/configuration/llm",
             },
-            {
-              error: settings?.settings.needs_reindexing,
-              name: "Search Settings",
-              icon: SearchIcon,
-              link: "/admin/configuration/search",
-            },
+            ...(!enableCloud
+              ? [
+                  {
+                    error: settings?.settings.needs_reindexing,
+                    name: "Search Settings",
+                    icon: SearchIcon,
+                    link: "/admin/configuration/search",
+                  },
+                ]
+              : []),
             {
               name: "Document Processing",
               icon: DocumentIcon2,
@@ -317,43 +328,47 @@ export default function AdminSidebar({
 
   return (
     <SidebarWrapper>
-      <NavigationTab
-        icon={({ className }) => (
-          <CgArrowsExpandUpLeft className={className} size={16} />
-        )}
-        href="/chat"
+      <SidebarBody
+        actionButton={
+          <SidebarTab
+            leftIcon={({ className }) => (
+              <CgArrowsExpandUpLeft className={className} size={16} />
+            )}
+            href="/chat"
+          >
+            Exit Admin
+          </SidebarTab>
+        }
+        footer={
+          <div className="flex flex-col px-2 gap-2">
+            {combinedSettings.webVersion && (
+              <Text text02 secondaryBody className="px-2 pt-1">
+                {`Onyx version: ${combinedSettings.webVersion}`}
+              </Text>
+            )}
+            <Settings />
+          </div>
+        }
       >
-        Exit Admin
-      </NavigationTab>
-
-      <div className="flex flex-col flex-1 overflow-y-auto gap-padding-content">
         {items.map((collection, index) => (
           <SidebarSection key={index} title={collection.name}>
             <div className="flex flex-col w-full">
               {collection.items.map(({ link, icon: Icon, name }, index) => (
-                <NavigationTab
+                <SidebarTab
                   key={index}
                   href={link}
                   active={pathname.startsWith(link)}
-                  icon={({ className }) => (
+                  leftIcon={({ className }) => (
                     <Icon className={className} size={16} />
                   )}
                 >
                   {name}
-                </NavigationTab>
+                </SidebarTab>
               ))}
             </div>
           </SidebarSection>
         ))}
-      </div>
-      <div className="flex flex-col gap-spacing-interline">
-        {combinedSettings.webVersion && (
-          <Text text02 secondaryBody className="px-spacing-interline">
-            Onyx version: {combinedSettings.webVersion}
-          </Text>
-        )}
-        <Settings removeAdminPanelLink />
-      </div>
+      </SidebarBody>
     </SidebarWrapper>
   );
 }

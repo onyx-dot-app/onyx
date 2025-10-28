@@ -10,7 +10,7 @@ export default function CardSection({ children, className }: CardSectionProps) {
   return (
     <div
       className={cn(
-        "p-padding-content bg-background-neutral-00 rounded-16 border",
+        "p-6 bg-background-neutral-00 rounded-16 border",
         className
       )}
     >

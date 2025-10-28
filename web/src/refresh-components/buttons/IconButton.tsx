@@ -9,7 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 const buttonClasses = (active: boolean | undefined) =>
   ({
@@ -28,12 +28,22 @@ const buttonClasses = (active: boolean | undefined) =>
       ],
       disabled: ["bg-background-neutral-03"],
     },
+    // NOTE: active here does not mean "activated/visted" state
+    // @duo will specify visited colors, and then TODO can be addressed
+    // TODO: bg-background-tint-02 should be changed backed to tint-00
     tertiary: {
       main: [
-        active ? "bg-background-tint-00" : "bg-transparent",
+        active ? "bg-background-tint-02" : "bg-transparent",
         "hover:bg-background-tint-02",
       ],
       disabled: ["bg-background-neutral-02"],
+    },
+    danger: {
+      main: [
+        active ? "bg-action-danger-06" : "bg-action-danger-05",
+        "hover:bg-action-danger-04",
+      ],
+      disabled: ["bg-action-danger-02"],
     },
     internal: {
       main: [
@@ -64,6 +74,10 @@ const iconClasses = (active: boolean | undefined) =>
       ],
       disabled: ["stroke-text-01"],
     },
+    danger: {
+      main: ["stroke-text-light-05"],
+      disabled: ["stroke-text-light-05"],
+    },
     internal: {
       main: [
         active ? "!stroke-text-05" : "stroke-text-02",
@@ -84,8 +98,10 @@ export interface IconButtonProps
   secondary?: boolean;
   tertiary?: boolean;
   internal?: boolean;
+  danger?: boolean;
 
   // Button properties:
+  onHover?: (isHovering: boolean) => void;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
   icon: React.FunctionComponent<SvgProps>;
   tooltip?: string;
@@ -99,7 +115,9 @@ export default function IconButton({
   secondary,
   tertiary,
   internal,
+  danger,
 
+  onHover,
   onClick,
   icon: Icon,
   className,
@@ -115,20 +133,30 @@ export default function IconButton({
         ? "tertiary"
         : internal
           ? "internal"
-          : "primary";
+          : danger
+            ? "danger"
+            : "primary";
   const state = disabled ? "disabled" : "main";
 
   const buttonElement = (
     <button
       className={cn(
         "flex items-center justify-center h-fit w-fit group/IconButton",
-        internal ? "p-spacing-inline" : "p-spacing-interline",
+        internal ? "p-1" : "p-2",
         disabled && "cursor-not-allowed",
         internal ? "rounded-08" : "rounded-12",
         buttonClasses(active)[variant][state],
         className
       )}
       onClick={disabled ? undefined : onClick}
+      onMouseEnter={(e) => {
+        props.onMouseEnter?.(e);
+        if (!disabled) onHover?.(true);
+      }}
+      onMouseLeave={(e) => {
+        props.onMouseLeave?.(e);
+        if (!disabled) onHover?.(false);
+      }}
       disabled={disabled}
       {...props}
     >

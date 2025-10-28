@@ -200,7 +200,7 @@ class CloudEmbedding:
             response = await client.embeddings.create(
                 input=text_batch,
                 model=model,
-                dimensions=reduced_dimension or openai.NOT_GIVEN,
+                dimensions=reduced_dimension or openai.omit,
             )
             final_embeddings.extend(
                 [embedding.embedding for embedding in response.data]
@@ -290,7 +290,10 @@ class CloudEmbedding:
 
         # Dispatch all embedding calls asynchronously at once
         tasks = [
-            client.get_embeddings_async(batch, auto_truncate=True) for batch in batches
+            client.get_embeddings_async(
+                cast(list[str | TextEmbeddingInput], batch), auto_truncate=True
+            )
+            for batch in batches
         ]
 
         # Wait for all tasks to complete in parallel

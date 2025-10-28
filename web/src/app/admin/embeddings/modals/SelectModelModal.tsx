@@ -1,6 +1,6 @@
 import React from "react";
 import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import Text from "@/components/ui/text";
 import { CloudEmbeddingModel } from "../../../../components/embedding/interfaces";
 
@@ -27,7 +27,7 @@ export function SelectModelModal({
         </Text>
         <div className="flex mt-8 justify-end gap-x-2">
           <Button onClick={onConfirm}>Confirm</Button>
-          <Button variant="outline" onClick={onCancel}>
+          <Button secondary onClick={onCancel}>
             Cancel
           </Button>
         </div>

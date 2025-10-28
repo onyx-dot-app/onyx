@@ -6,13 +6,7 @@ import {
 } from "@/lib/search/interfaces";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { ChatState, FeedbackType } from "@/app/chat/interfaces";
-import {
-  MutableRefObject,
-  RefObject,
-  useCallback,
-  useEffect,
-  useRef,
-} from "react";
+import { MutableRefObject, RefObject, useEffect, useRef } from "react";
 import {
   BackendMessage,
   ChatSession,
@@ -21,6 +15,7 @@ import {
   FileChatDisplay,
   Message,
   MessageResponseIDInfo,
+  ResearchType,
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
@@ -317,6 +312,19 @@ export async function handleChatFeedback(
   return response;
 }
 
+export async function removeChatFeedback(messageId: number) {
+  const response = await fetch(
+    `/api/chat/remove-chat-message-feedback?chat_message_id=${messageId}`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+  return response;
+}
+
 export async function renameChatSession(
   chatSessionId: string,
   newName: string
@@ -491,7 +499,7 @@ export function processRawChatHistory(
 
   let assistantMessageInd = 0;
 
-  rawMessages.forEach((messageInfo, ind) => {
+  rawMessages.forEach((messageInfo, _ind) => {
     const packetsForMessage = packets[assistantMessageInd];
     if (messageInfo.message_type === "assistant") {
       assistantMessageInd++;
@@ -527,6 +535,7 @@ export function processRawChatHistory(
       ...(messageInfo.message_type === "assistant"
         ? {
             retrievalType: retrievalType,
+            researchType: messageInfo.research_type as ResearchType | undefined,
             query: messageInfo.rephrased_query,
             documents: messageInfo?.context_docs?.top_documents || [],
             citations: messageInfo?.citations || {},
@@ -538,6 +547,7 @@ export function processRawChatHistory(
       latestChildNodeId: messageInfo.latest_child_message,
       overridden_model: messageInfo.overridden_model,
       packets: packetsForMessage || [],
+      currentFeedback: messageInfo.current_feedback as FeedbackType | null,
     };
 
     messages.set(messageInfo.message_id, message);

@@ -129,6 +129,26 @@ OAUTH_CLIENT_SECRET = (
 # OpenID Connect configuration URL for Okta Profile Tool and other OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 
+# Applicable for OIDC Auth, allows you to override the scopes that
+# are requested from the OIDC provider. Currently used when passing
+# over access tokens to tool calls and the tool needs more scopes
+OIDC_SCOPE_OVERRIDE: list[str] | None = None
+_OIDC_SCOPE_OVERRIDE = os.environ.get("OIDC_SCOPE_OVERRIDE")
+
+if _OIDC_SCOPE_OVERRIDE:
+    try:
+        OIDC_SCOPE_OVERRIDE = [
+            scope.strip() for scope in _OIDC_SCOPE_OVERRIDE.split(",")
+        ]
+    except Exception:
+        pass
+
+# Applicable for SAML Auth
+SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
+
+# JWT Public Key URL for JWT token verification
+JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
+
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
@@ -357,9 +377,11 @@ CELERY_WORKER_PRIMARY_POOL_OVERFLOW = int(
     os.environ.get("CELERY_WORKER_PRIMARY_POOL_OVERFLOW") or 4
 )
 
-# Consolidated background worker (merges heavy, kg_processing, monitoring, user_file_processing)
+# Consolidated background worker (light, docprocessing, docfetching, heavy, kg_processing, monitoring, user_file_processing)
+# separate workers' defaults: light=24, docprocessing=6, docfetching=1, heavy=4, kg=2, monitoring=1, user_file=2
+# Total would be 40, but we use a more conservative default of 20 for the consolidated worker
 CELERY_WORKER_BACKGROUND_CONCURRENCY = int(
-    os.environ.get("CELERY_WORKER_BACKGROUND_CONCURRENCY") or 6
+    os.environ.get("CELERY_WORKER_BACKGROUND_CONCURRENCY") or 20
 )
 
 # Individual worker concurrency settings (used when USE_LIGHTWEIGHT_BACKGROUND_WORKER is False or on Kuberenetes deployments)
@@ -708,13 +730,21 @@ DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
 #####
 # Braintrust Configuration
 #####
-# Enable Braintrust tracing for LangGraph/LangChain applications
-BRAINTRUST_ENABLED = os.environ.get("BRAINTRUST_ENABLED", "").lower() == "true"
 # Braintrust project name
 BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
+# Braintrust API key - if provided, Braintrust tracing will be enabled
 BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
 # Maximum concurrency for Braintrust evaluations
 BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or 5)
+
+#####
+# Langfuse Configuration
+#####
+# Langfuse API credentials - if provided, Langfuse tracing will be enabled
+LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
+LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
+# Langfuse host URL (defaults to cloud instance)
+LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or "https://cloud.langfuse.com"
 
 TOKEN_BUDGET_GLOBALLY_ENABLED = (
     os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"
@@ -887,6 +917,11 @@ S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 # S3/MinIO Access Keys
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
+
+# Should we force S3 local checksumming
+S3_GENERATE_LOCAL_CHECKSUM = (
+    os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
+)
 
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html

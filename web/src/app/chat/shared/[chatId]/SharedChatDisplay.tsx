@@ -1,7 +1,5 @@
 "use client";
 
-import Prism from "prismjs";
-
 import { humanReadableFormat } from "@/lib/time";
 import { BackendChatSession } from "../../interfaces";
 import { processRawChatHistory } from "../../services/lib";
@@ -17,8 +15,8 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat/TextView";
 import { DocumentResults } from "../../components/documentSidebar/DocumentResults";
 import { Modal } from "@/components/Modal";
-import FixedLogo from "@/components/logo/FixedLogo";
 import Link from "next/link";
+import { UNNAMED_CHAT } from "@/lib/constants";
 
 function BackToOnyxButton({
   documentSidebarVisible,
@@ -37,10 +35,10 @@ function BackToOnyxButton({
       <div
         style={{ transition: "width 0.30s ease-out" }}
         className={`
-            flex-none 
-            overflow-y-hidden 
-            transition-all 
-            duration-300 
+            flex-none
+            overflow-y-hidden
+            transition-all
+            duration-300
             ease-in-out
             ${documentSidebarVisible ? "w-[400px]" : "w-[0px]"}
         `}
@@ -63,7 +61,6 @@ export function SharedChatDisplay({
     useState<MinimalOnyxDocument | null>(null);
 
   useEffect(() => {
-    Prism.highlightAll();
     setIsReady(true);
   }, []);
   if (!chatSession) {
@@ -118,8 +115,6 @@ export function SharedChatDisplay({
               clearSelectedDocuments={() => {}}
               selectedDocumentTokens={0}
               maxTokens={0}
-              initialWidth={400}
-              isOpen={true}
               setPresentingDocument={setPresentingDocument}
               modal={true}
               closeSidebar={() => {
@@ -137,7 +132,7 @@ export function SharedChatDisplay({
               <div
                 style={{ transition: "width 0.30s ease-out" }}
                 className={`
-                  flex-none 
+                  flex-none
                   fixed
                   right-0
                   z-[1000]
@@ -165,8 +160,6 @@ export function SharedChatDisplay({
                   clearSelectedDocuments={() => {}}
                   selectedDocumentTokens={0}
                   maxTokens={0}
-                  initialWidth={400}
-                  isOpen={true}
                   setPresentingDocument={setPresentingDocument}
                   closeSidebar={() => {
                     setDocumentSidebarVisible(false);
@@ -181,7 +174,7 @@ export function SharedChatDisplay({
                 <div className="fixed z-10 w-full ">
                   <div className="bg-background relative px-5 pt-4 w-full">
                     <h1 className="text-3xl text-strong font-bold">
-                      {chatSession.description || `Unnamed Chat`}
+                      {chatSession.description || UNNAMED_CHAT}
                     </h1>
                     <p className=" text-text-darker">
                       {humanReadableFormat(chatSession.time_created)}
@@ -218,7 +211,7 @@ export function SharedChatDisplay({
                             key={message.messageId}
                             rawPackets={message.packets}
                             chatState={{
-                              handleFeedback: () => {}, // No feedback in shared chat
+                              handleFeedbackChange: async () => {}, // No feedback in shared chat
                               assistant: persona,
                               docs: message.documents,
                               userFiles: [],
@@ -262,10 +255,10 @@ export function SharedChatDisplay({
                 <div
                   style={{ transition: "width 0.30s ease-out" }}
                   className={`
-                          flex-none 
-                          overflow-y-hidden 
-                          transition-all 
-                          duration-300 
+                          flex-none
+                          overflow-y-hidden
+                          transition-all
+                          duration-300
                           ease-in-out
                           ${documentSidebarVisible ? "w-[400px]" : "w-[0px]"}
                       `}
@@ -274,7 +267,6 @@ export function SharedChatDisplay({
             </div>
           </div>
 
-          <FixedLogo backgroundToggled={false} />
           <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
         </div>
       </div>

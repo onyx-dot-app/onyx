@@ -5,7 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useState } from "react";
 import useSWR from "swr";
 import { Callout } from "@/components/ui/callout";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -106,20 +106,25 @@ function AddCustomLLMProvider({
   existingLlmProviders: LLMProviderView[];
 }) {
   const [formIsVisible, setFormIsVisible] = useState(false);
+  const { popup, setPopup } = usePopup();
 
   if (formIsVisible) {
     return (
-      <Modal
-        title={`Setup Custom LLM Provider`}
-        onOutsideClick={() => setFormIsVisible(false)}
-      >
-        <div className="max-h-[70vh] overflow-y-auto px-4">
-          <CustomLLMProviderUpdateForm
-            onClose={() => setFormIsVisible(false)}
-            shouldMarkAsDefault={existingLlmProviders.length === 0}
-          />
-        </div>
-      </Modal>
+      <>
+        {popup}
+        <Modal
+          title={`Setup Custom LLM Provider`}
+          onOutsideClick={() => setFormIsVisible(false)}
+        >
+          <div className="max-h-[70vh] overflow-y-auto px-4">
+            <CustomLLMProviderUpdateForm
+              onClose={() => setFormIsVisible(false)}
+              shouldMarkAsDefault={existingLlmProviders.length === 0}
+              setPopup={setPopup}
+            />
+          </div>
+        </Modal>
+      </>
     );
   }
 

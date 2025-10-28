@@ -3,7 +3,7 @@ import { PageSelector } from "@/components/PageSelector";
 import { IndexAttemptStatus } from "@/components/Status";
 import { deleteCCPair } from "@/lib/documentDeletion";
 import { FailedConnectorIndexingStatus } from "@/lib/types";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import {
   Table,
   TableBody,
@@ -18,6 +18,7 @@ import { useState } from "react";
 import { FiLink, FiMaximize2, FiTrash } from "react-icons/fi";
 import { mutate } from "swr";
 import { PopupSpec } from "../admin/connectors/Popup";
+import SvgTrash from "@/icons/trash";
 
 export function FailedReIndexAttempts({
   failedIndexingStatuses,
@@ -97,8 +98,7 @@ export function FailedReIndexAttempts({
                     </TableCell>
                     <TableCell>
                       <Button
-                        size="sm"
-                        variant="destructive"
+                        danger
                         onClick={() =>
                           deleteCCPair(
                             reindexingProgress.connector_id,
@@ -112,7 +112,7 @@ export function FailedReIndexAttempts({
                               )
                           )
                         }
-                        icon={FiTrash}
+                        leftIcon={SvgTrash}
                         disabled={reindexingProgress.is_deletable}
                       >
                         Delete

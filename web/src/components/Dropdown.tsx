@@ -10,12 +10,7 @@ import {
 import { ChevronDownIcon, PlusIcon } from "./icons/icons";
 import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";
 import { Popover } from "./popover/Popover";
-import {
-  Tooltip,
-  TooltipProvider,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 export interface Option<T> {
   name: string;
@@ -349,22 +344,11 @@ export function DefaultDropdownElement({
           {icon && icon({ size: 16, className: "mr-2 h-4 w-4 my-auto" })}
           {name}
           {disabled && disabledReason && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="ml-2 my-auto p-1 rounded hover:bg-background-100 text-warning transition-colors cursor-default">
-                    <FiInfo size={14} className="text-warning" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="max-w-64 text-white dark:text-black"
-                  backgroundColor="bg-black dark:bg-white"
-                >
-                  {disabledReason}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <SimpleTooltip tooltip={disabledReason}>
+              <span className="ml-2 my-auto p-1 rounded hover:bg-background-100 text-warning transition-colors cursor-default">
+                <FiInfo size={14} className="text-warning" />
+              </span>
+            </SimpleTooltip>
           )}
         </div>
         {description && <div className="text-xs">{description}</div>}

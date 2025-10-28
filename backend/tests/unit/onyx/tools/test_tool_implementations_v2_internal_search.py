@@ -1,4 +1,3 @@
-from queue import Queue
 from typing import Any
 from uuid import UUID
 from uuid import uuid4
@@ -6,16 +5,12 @@ from uuid import uuid4
 import pytest
 from agents import RunContextWrapper
 
-from onyx.agents.agent_search.dr.models import AggregatedDRContext
+from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
-from onyx.chat.turn.infra.emitter import Emitter
+from onyx.chat.models import LlmDoc
 from onyx.chat.turn.models import ChatTurnContext
-from onyx.chat.turn.models import ChatTurnDependencies
-from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
-from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SavedSearchDoc
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
@@ -24,48 +19,37 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from tests.unit.onyx.chat.turn.utils import create_test_inference_chunk
+from tests.unit.onyx.chat.turn.utils import create_test_inference_section
+from tests.unit.onyx.chat.turn.utils import FakeQuery
+from tests.unit.onyx.chat.turn.utils import FakeRedis
+from tests.unit.onyx.chat.turn.utils import FakeResult
 
 
-# =============================================================================
-# Helper Functions and Base Classes for DRY Principles
-# =============================================================================
+def create_fake_database_session() -> Any:
+    """Create a fake SQLAlchemy Session for testing"""
+    from unittest.mock import Mock
+    from sqlalchemy.orm import Session
 
+    # Create a mock that behaves like a real Session
+    fake_session = Mock(spec=Session)
+    fake_session.committed = False
+    fake_session.rolled_back = False
 
-def create_fake_aggregated_context() -> AggregatedDRContext:
-    """Create a fake aggregated context for testing"""
-    return AggregatedDRContext(
-        context="",
-        global_iteration_responses=[],
-        cited_documents=[],
-        is_internet_marker_dict={},
-    )
+    def mock_commit() -> None:
+        fake_session.committed = True
 
+    def mock_rollback() -> None:
+        fake_session.rolled_back = True
 
-def create_fake_run_dependencies(redis_client: Any = None) -> ChatTurnDependencies:
-    """Create fake run dependencies for testing"""
-    from unittest.mock import MagicMock
+    fake_session.commit = mock_commit
+    fake_session.rollback = mock_rollback
+    fake_session.add = Mock()
+    fake_session.flush = Mock()
+    fake_session.query = Mock(return_value=FakeQuery())
+    fake_session.execute = Mock(return_value=FakeResult())
 
-    bus: Queue[Packet] = Queue()
-    emitter = Emitter(bus)
-
-    # Set up mock database session
-    db_session = MagicMock()
-    # Configure the scalar method to return our mock tool
-    mock_tool = FakeTool()
-    db_session.scalar.return_value = mock_tool
-
-    # Create minimal ChatTurnDependencies
-    return ChatTurnDependencies(
-        llm_model=MagicMock(),  # Mock Model
-        llm=MagicMock(),  # Mock LLM
-        db_session=db_session,
-        tools=[],  # Empty tools list for testing
-        redis_client=redis_client or MagicMock(),
-        emitter=emitter,
-        search_pipeline=None,
-        image_generation_tool=None,
-        okta_profile_tool=None,
-    )
+    return fake_session
 
 
 class FakeTool:
@@ -95,60 +79,6 @@ class FakeSearchPipeline:
         return self.responses
 
 
-def create_fake_inference_chunk(
-    document_id: str = "doc1",
-    semantic_identifier: str = "test_doc",
-    blurb: str = "Test content",
-    chunk_id: int = 0,
-) -> InferenceChunk:
-    """Create a fake InferenceChunk for testing"""
-    return InferenceChunk(
-        document_id=document_id,
-        chunk_id=chunk_id,
-        source_type=DocumentSource.WEB,
-        semantic_identifier=semantic_identifier,
-        title=semantic_identifier,
-        boost=1,
-        recency_bias=1.0,
-        score=0.95,
-        hidden=False,
-        is_relevant=True,
-        relevance_explanation="Relevant to query",
-        metadata={},
-        match_highlights=[],
-        doc_summary=blurb,
-        chunk_context=blurb,
-        blurb=blurb,
-        content=blurb,  # Required by BaseChunk
-        source_links=None,  # Required by BaseChunk
-        image_file_id=None,  # Required by BaseChunk
-        section_continuation=False,  # Required by BaseChunk
-        updated_at=None,
-        primary_owners=[],
-        secondary_owners=[],
-        large_chunk_reference_ids=[],
-        is_federated=False,
-    )
-
-
-def create_fake_inference_section(
-    document_id: str = "doc1",
-    semantic_identifier: str = "test_doc",
-    blurb: str = "Test content",
-) -> InferenceSection:
-    """Create a fake InferenceSection for testing"""
-    center_chunk = create_fake_inference_chunk(
-        document_id=document_id,
-        semantic_identifier=semantic_identifier,
-        blurb=blurb,
-    )
-    return InferenceSection(
-        center_chunk=center_chunk,
-        chunks=[center_chunk],
-        combined_content=blurb,
-    )
-
-
 class FakeSearchResponse:
     """Fake search response for testing"""
 
@@ -164,55 +94,6 @@ class FakeSearchResponseSummary:
         self.top_sections = top_sections
 
 
-def create_fake_database_session() -> Any:
-    """Create a fake SQLAlchemy Session for testing"""
-    from unittest.mock import Mock
-    from sqlalchemy.orm import Session
-
-    # Create a mock that behaves like a real Session
-    fake_session = Mock(spec=Session)
-    fake_session.committed = False
-    fake_session.rolled_back = False
-
-    def mock_commit() -> None:
-        fake_session.committed = True
-
-    def mock_rollback() -> None:
-        fake_session.rolled_back = True
-
-    fake_session.commit = mock_commit
-    fake_session.rollback = mock_rollback
-    fake_session.add = Mock()
-    fake_session.flush = Mock()
-    fake_session.query = Mock(return_value=FakeQuery())
-    fake_session.execute = Mock(return_value=FakeResult())
-
-    return fake_session
-
-
-class FakeQuery:
-    """Fake SQLAlchemy Query for testing"""
-
-    def filter(self, *args: Any, **kwargs: Any) -> "FakeQuery":
-        return self
-
-    def first(self) -> Any:
-        return None
-
-    def all(self) -> list:
-        return []
-
-
-class FakeResult:
-    """Fake SQLAlchemy Result for testing"""
-
-    def scalar(self) -> Any:
-        return None
-
-    def fetchall(self) -> list:
-        return []
-
-
 class FakeSessionContextManager:
     """Fake session context manager for testing"""
 
@@ -226,59 +107,26 @@ class FakeSessionContextManager:
         pass
 
 
-class FakeRedis:
-    """Fake Redis client for testing"""
-
-    def __init__(self) -> None:
-        self.data: dict = {}
-
-    def get(self, key: str) -> Any:
-        return self.data.get(key)
-
-    def set(self, key: str, value: Any, ex: Any = None) -> None:
-        self.data[key] = value
-
-    def delete(self, key: str) -> int:
-        return self.data.pop(key, 0)
-
-    def exists(self, key: str) -> int:
-        return 1 if key in self.data else 0
-
-
 # =============================================================================
 # Test Helper Functions
 # =============================================================================
 
 
-def create_fake_run_context(
-    current_run_step: int = 0,
-    chat_session_id: Any = None,
-    message_id: int | None = None,
-    research_type: Any = None,
-    redis_client: FakeRedis | None = None,
-) -> RunContextWrapper[ChatTurnContext]:
-    """Create a real RunContextWrapper with fake dependencies"""
-
-    # Create fake dependencies
-    aggregated_context = create_fake_aggregated_context()
-
-    run_dependencies = create_fake_run_dependencies(redis_client=redis_client)
-
-    # Create the actual context object
-    context = ChatTurnContext(
-        current_run_step=current_run_step,
-        iteration_instructions=[],
-        aggregated_context=aggregated_context,
-        run_dependencies=run_dependencies,
-        chat_session_id=chat_session_id or uuid4(),
-        message_id=message_id or 123,
-        research_type=research_type,
+def create_search_section_with_semantic_id(
+    document_id: str, semantic_identifier: str, content: str, link: str
+) -> InferenceSection:
+    """Create a test inference section with custom semantic_identifier"""
+    chunk = create_test_inference_chunk(
+        document_id=document_id,
+        semantic_identifier=semantic_identifier,
+        content=content,
+        link=link,
     )
-
-    # Create the run context wrapper
-    run_context = RunContextWrapper(context=context)
-
-    return run_context
+    return InferenceSection(
+        center_chunk=chunk,
+        chunks=[chunk],
+        combined_content=content,
+    )
 
 
 def create_fake_search_pipeline_with_results(
@@ -287,15 +135,17 @@ def create_fake_search_pipeline_with_results(
     """Create a fake search pipeline with test results"""
     if sections is None:
         sections = [
-            create_fake_inference_section(
+            create_search_section_with_semantic_id(
                 document_id="doc1",
                 semantic_identifier="test_doc_1",
-                blurb="First test document content",
+                content="First test document content",
+                link="https://example.com/doc1",
             ),
-            create_fake_inference_section(
+            create_search_section_with_semantic_id(
                 document_id="doc2",
                 semantic_identifier="test_doc_2",
-                blurb="Second test document content",
+                content="Second test document content",
+                link="https://example.com/doc2",
             ),
         ]
 
@@ -318,7 +168,7 @@ def create_fake_search_pipeline_empty() -> FakeSearchPipeline:
 
 def create_fake_search_pipeline_multiple_responses() -> FakeSearchPipeline:
     """Create a fake search pipeline with multiple responses"""
-    test_sections = [create_fake_inference_section()]
+    test_sections = [create_test_inference_section()]
     responses = [
         FakeSearchResponse(response_id="other_response_id", top_sections=[]),
         FakeSearchResponse(
@@ -336,7 +186,7 @@ def run_internal_search_core_with_dependencies(
     search_pipeline: FakeSearchPipeline,
     session_context_manager: FakeSessionContextManager | None = None,
     redis_client: FakeRedis | None = None,
-) -> list[InferenceSection]:
+) -> list[LlmDoc]:
     """Helper function to run the real _internal_search_core with injected dependencies"""
     from unittest.mock import patch
     from onyx.tools.tool_implementations_v2.internal_search import _internal_search_core
@@ -387,55 +237,29 @@ class FakeSearchToolOverrideKwargs:
 
 
 @pytest.fixture
-def fake_aggregated_context() -> AggregatedDRContext:
-    """Fixture providing a fake aggregated context implementation."""
-    return create_fake_aggregated_context()
-
-
-@pytest.fixture
-def fake_run_dependencies() -> ChatTurnDependencies:
-    """Fixture providing a fake run dependencies implementation."""
-    return create_fake_run_dependencies()
-
-
-@pytest.fixture
-def fake_redis_client() -> FakeRedis:
-    """Fixture providing a fake Redis client."""
-    return FakeRedis()
-
-
-@pytest.fixture
-def fake_chat_session_id() -> UUID:
+def chat_session_id() -> UUID:
     """Fixture providing fake chat session ID."""
     return uuid4()
 
 
 @pytest.fixture
-def fake_message_id() -> int:
+def message_id() -> int:
     """Fixture providing fake message ID."""
     return 123
 
 
 @pytest.fixture
-def fake_research_type() -> None:
+def research_type() -> ResearchType:
     """Fixture providing fake research type."""
-    return None  # Not needed for this test
+    return ResearchType.FAST
 
 
 @pytest.fixture
 def fake_run_context(
-    fake_chat_session_id: UUID,
-    fake_message_id: int,
-    fake_research_type: None,
-    fake_redis_client: FakeRedis,
+    chat_turn_context: ChatTurnContext,
 ) -> RunContextWrapper[ChatTurnContext]:
     """Fixture providing a complete RunContextWrapper with fake implementations."""
-    return create_fake_run_context(
-        chat_session_id=fake_chat_session_id,
-        message_id=fake_message_id,
-        research_type=fake_research_type,
-        redis_client=fake_redis_client,
-    )
+    return RunContextWrapper(context=chat_turn_context)
 
 
 @pytest.fixture
@@ -473,6 +297,14 @@ def test_internal_search_core_basic_functionality(
     # Assert
     assert isinstance(result, list)
     assert len(result) == 2
+    # Verify result contains LlmDoc objects
+    assert all(isinstance(doc, LlmDoc) for doc in result)
+    assert result[0].document_id == "doc1"
+    assert result[0].semantic_identifier == "test_doc_1"
+    assert result[0].content == "First test document content"
+    assert result[1].document_id == "doc2"
+    assert result[1].semantic_identifier == "test_doc_2"
+    assert result[1].content == "Second test document content"
 
     # Verify context was updated (decorator increments current_run_step)
     assert fake_run_context.context.current_run_step == 2
@@ -480,16 +312,16 @@ def test_internal_search_core_basic_functionality(
     assert (
         len(fake_run_context.context.aggregated_context.global_iteration_responses) == 1
     )
-    # Verify cited_documents were added to aggregated_context
-    assert len(fake_run_context.context.aggregated_context.cited_documents) == 2
+    # Verify inference sections were added to context
+    assert len(fake_run_context.context.unordered_fetched_inference_sections) == 2
     assert (
-        fake_run_context.context.aggregated_context.cited_documents[
+        fake_run_context.context.unordered_fetched_inference_sections[
             0
         ].center_chunk.document_id
         == "doc1"
     )
     assert (
-        fake_run_context.context.aggregated_context.cited_documents[
+        fake_run_context.context.unordered_fetched_inference_sections[
             1
         ].center_chunk.document_id
         == "doc2"
@@ -545,9 +377,6 @@ def test_internal_search_core_basic_functionality(
     assert isinstance(first_doc, SavedSearchDoc)
     assert first_doc.document_id == "doc1"
     assert first_doc.semantic_identifier == "test_doc_1"
-    assert first_doc.blurb == "First test document content"
-    assert first_doc.source_type == DocumentSource.WEB
-    assert first_doc.is_internet is False
 
     # Verify the pipeline was called with correct parameters
     assert test_pipeline.run_called
@@ -567,10 +396,10 @@ def test_internal_search_core_with_multiple_queries(
 
     # Create test sections for the search results
     test_sections = [
-        create_fake_inference_section(
+        create_test_inference_section(
             document_id=f"doc{i}",
-            semantic_identifier=f"test_doc_{i}",
-            blurb=f"Content for doc {i}",
+            content=f"Content for doc {i}",
+            link=f"https://example.com/doc{i}",
         )
         for i in range(1, 4)
     ]
@@ -600,6 +429,8 @@ def test_internal_search_core_with_multiple_queries(
     assert isinstance(result, list)
     # Should have results from all queries
     assert len(result) > 0
+    # Verify result contains LlmDoc objects
+    assert all(isinstance(doc, LlmDoc) for doc in result)
 
     # Verify all queries were executed
     assert len(call_queries) == len(queries)

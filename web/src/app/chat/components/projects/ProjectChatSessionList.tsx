@@ -2,19 +2,16 @@
 
 import React, { useMemo } from "react";
 import Link from "next/link";
-import { ChatBubbleIcon } from "@/components/icons/CustomIcons";
 import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
-import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import AgentIcon from "@/refresh-components/AgentIcon";
+import SvgBubbleText from "@/icons/bubble-text";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { formatRelativeTime } from "./project_utils";
+import Text from "@/refresh-components/texts/Text";
+import { cn } from "@/lib/utils";
+import { UNNAMED_CHAT } from "@/lib/constants";
 
 export default function ProjectChatSessionList() {
   const {
@@ -39,15 +36,19 @@ export default function ProjectChatSessionList() {
   if (!currentProjectId) return null;
 
   return (
-    <div className="flex flex-col gap-2 p-4 w-full max-w-[800px] mx-auto mt-4">
-      <div className="flex items-center gap-2">
-        <h2 className="text-base text-onyx-muted">Recent Chats</h2>
+    <div className="flex flex-col gap-2 px-2 w-full max-w-[800px] mx-auto mt-6">
+      <div className="flex items-center pl-2">
+        <Text text02 secondaryBody>
+          Recent Chats
+        </Text>
       </div>
 
       {projectChats.length === 0 ? (
-        <p className="text-sm text-onyx-muted">No chats yet.</p>
+        <Text text02 secondaryBody className="p-2">
+          No chats yet.
+        </Text>
       ) : (
-        <div className="flex flex-col gap-2 max-h-[46vh] overflow-y-auto overscroll-y-none pr-1">
+        <div className="flex flex-col gap-2 max-h-[46vh] overflow-y-auto overscroll-y-none">
           {projectChats.map((chat) => (
             <Link
               key={chat.id}
@@ -57,11 +58,10 @@ export default function ProjectChatSessionList() {
               onMouseLeave={() => setHoveredChatId(null)}
             >
               <div
-                className={`w-full rounded-xl bg-background-background px-1 py-2 transition-colors ${
-                  hoveredChatId === chat.id
-                    ? "bg-accent-background-hovered"
-                    : ""
-                }`}
+                className={cn(
+                  "w-full rounded-08 py-2 transition-colors p-1.5",
+                  hoveredChatId === chat.id && "bg-background-tint-02"
+                )}
               >
                 <div className="flex gap-3 min-w-0 w-full">
                   <div className="flex h-full w-fit pt-1 pl-1">
@@ -76,29 +76,28 @@ export default function ProjectChatSessionList() {
                         if (assistant) {
                           return (
                             <div className="h-full pt-1">
-                              <AssistantIcon
-                                assistant={assistant}
-                                size={18}
-                                disableToolip
-                              />
+                              <AgentIcon agent={assistant} size={18} />
                             </div>
                           );
                         }
                       }
                       return (
-                        <ChatBubbleIcon className="h-5 w-5 text-onyx-medium" />
+                        <SvgBubbleText className="h-4 w-4 stroke-text-02" />
                       );
                     })()}
                   </div>
                   <div className="flex flex-col w-full">
                     <div className="flex items-center gap-1 w-full justify-between">
                       <div className="flex items-center gap-1">
-                        <span
-                          className="text-lg text-onyx-emphasis truncate"
+                        <Text
+                          text03
+                          mainUiBody
+                          nowrap
+                          className="truncate"
                           title={chat.name}
                         >
-                          {chat.name || "Unnamed Chat"}
-                        </span>
+                          {chat.name || UNNAMED_CHAT}
+                        </Text>
                       </div>
                       <div className="flex items-center">
                         <ChatSessionMorePopup
@@ -123,9 +122,9 @@ export default function ProjectChatSessionList() {
                         />
                       </div>
                     </div>
-                    <span className="text-base text-onyx-muted truncate">
+                    <Text text03 secondaryBody nowrap className="truncate">
                       Last message {formatRelativeTime(chat.time_updated)}
-                    </span>
+                    </Text>
                   </div>
                 </div>
               </div>

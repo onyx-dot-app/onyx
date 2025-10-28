@@ -8,8 +8,8 @@ const version = env_version || package_version;
 const { withSentryConfig } = require("@sentry/nextjs");
 
 const cspHeader = `
-    style-src 'self' 'unsafe-inline';
-    font-src 'self';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
     object-src 'none';
     base-uri 'self';
     form-action 'self';

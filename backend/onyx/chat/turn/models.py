@@ -1,37 +1,54 @@
 import dataclasses
+from collections.abc import Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
+from agents import CodeInterpreterTool
+from agents import ComputerTool
+from agents import FileSearchTool
 from agents import FunctionTool
+from agents import HostedMCPTool
+from agents import ImageGenerationTool as AgentsImageGenerationTool
+from agents import LocalShellTool
 from agents import Model
+from agents import ModelSettings
+from agents import WebSearchTool
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationInstructions
+from onyx.chat.models import LlmDoc
 from onyx.chat.turn.infra.emitter import Emitter
+from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
+from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.tools.tool import Tool
+
+# Type alias for all tool types accepted by the Agent
+AgentToolType = (
+    FunctionTool
+    | FileSearchTool
+    | WebSearchTool
+    | ComputerTool
+    | HostedMCPTool
+    | LocalShellTool
+    | AgentsImageGenerationTool
+    | CodeInterpreterTool
 )
-from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
-    OktaProfileTool,
-)
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
 @dataclass
 class ChatTurnDependencies:
     llm_model: Model
+    model_settings: ModelSettings
+    # TODO we can delete this field (combine them)
     llm: LLM
     db_session: Session
-    tools: list[FunctionTool]
+    tools: Sequence[Tool]
     redis_client: Redis
     emitter: Emitter
-    search_pipeline: SearchTool | None = None
-    image_generation_tool: ImageGenerationTool | None = None
-    okta_profile_tool: OktaProfileTool | None = None
 
 
 @dataclass
@@ -48,3 +65,11 @@ class ChatTurnContext:
         default_factory=list
     )
     web_fetch_results: list[dict] = dataclasses.field(default_factory=list)
+    should_cite_documents: bool = False
+    documents_cited_count: int = 0
+    tool_calls_cited_count: int = 0
+    unordered_fetched_inference_sections: list[InferenceSection] = dataclasses.field(
+        default_factory=list
+    )
+    ordered_fetched_documents: list[LlmDoc] = dataclasses.field(default_factory=list)
+    collected_citations: list[CitationInfo] = dataclasses.field(default_factory=list)

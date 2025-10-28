@@ -2,8 +2,8 @@
 import { Logo } from "@/components/logo/Logo";
 import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import { cn } from "@/lib/utils";
-import { AgentIcon } from "@/refresh-components/AgentIcon";
-import Text from "@/refresh-components/Text";
+import AgentIcon from "@/refresh-components/AgentIcon";
+import Text from "@/refresh-components/texts/Text";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useMemo } from "react";
 
@@ -31,7 +31,7 @@ export default function WelcomeMessage() {
         {isDefaultAgent ? (
           <div
             data-testid="onyx-logo"
-            className="flex flex-row items-center gap-spacing-paragraph"
+            className="flex flex-row items-center gap-4"
           >
             <Logo size="default" />
             <Text headingH2>{greeting}</Text>
@@ -39,7 +39,7 @@ export default function WelcomeMessage() {
         ) : (
           <div
             data-testid="assistant-name-display"
-            className="flex flex-row items-center justify-center gap-padding-button"
+            className="flex flex-row items-center justify-center gap-3"
           >
             <AgentIcon agent={currentAgent} />
             <Text headingH2>{currentAgent.name}</Text>

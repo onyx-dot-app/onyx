@@ -15,7 +15,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import BulkAdd from "@/components/admin/users/BulkAdd";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/texts/Text";
 import { InvitedUserSnapshot } from "@/lib/types";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -25,6 +25,31 @@ import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
 import SvgDownloadCloud from "@/icons/download-cloud";
+
+interface CountDisplayProps {
+  label: string;
+  value: number | null;
+  isLoading: boolean;
+}
+
+function CountDisplay({ label, value, isLoading }: CountDisplayProps) {
+  const displayValue = isLoading
+    ? "..."
+    : value === null
+      ? "-"
+      : value.toLocaleString();
+
+  return (
+    <div className="flex items-center gap-1 px-1 py-0.5 rounded-06">
+      <Text mainUiMuted text03>
+        {label}
+      </Text>
+      <Text headingH3 text05>
+        {displayValue}
+      </Text>
+    </div>
+  );
+}
 
 const UsersTables = ({
   q,
@@ -37,6 +62,11 @@ const UsersTables = ({
   isDownloadingUsers: boolean;
   setIsDownloadingUsers: (loading: boolean) => void;
 }) => {
+  const [currentUsersCount, setCurrentUsersCount] = useState<number | null>(
+    null
+  );
+  const [currentUsersLoading, setCurrentUsersLoading] = useState<boolean>(true);
+
   const downloadAllUsers = async () => {
     setIsDownloadingUsers(true);
     const startTime = Date.now();
@@ -97,6 +127,11 @@ const UsersTables = ({
     NEXT_PUBLIC_CLOUD_ENABLED ? "/api/tenants/users/pending" : null,
     errorHandlingFetcher
   );
+
+  const invitedUsersCount =
+    invitedUsers === undefined ? null : invitedUsers.length;
+  const pendingUsersCount =
+    pendingUsers === undefined ? null : pendingUsers.length;
   // Show loading animation only during the initial data fetch
   if (!validDomains) {
     return <ThreeDotsLoader />;
@@ -124,7 +159,7 @@ const UsersTables = ({
       <TabsContent value="current">
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center gap-1">
               <CardTitle>Current Users</CardTitle>
               <Button
                 leftIcon={SvgDownloadCloud}
@@ -141,6 +176,20 @@ const UsersTables = ({
               setPopup={setPopup}
               q={q}
               invitedUsersMutate={invitedUsersMutate}
+              countDisplay={
+                <CountDisplay
+                  label="Total users"
+                  value={currentUsersCount}
+                  isLoading={currentUsersLoading}
+                />
+              }
+              onTotalItemsChange={(count) => setCurrentUsersCount(count)}
+              onLoadingChange={(loading) => {
+                setCurrentUsersLoading(loading);
+                if (loading) {
+                  setCurrentUsersCount(null);
+                }
+              }}
             />
           </CardContent>
         </Card>
@@ -148,7 +197,14 @@ const UsersTables = ({
       <TabsContent value="invited">
         <Card>
           <CardHeader>
-            <CardTitle>Invited Users</CardTitle>
+            <div className="flex justify-between items-center gap-1">
+              <CardTitle>Invited Users</CardTitle>
+              <CountDisplay
+                label="Total invited"
+                value={invitedUsersCount}
+                isLoading={invitedUsersLoading}
+              />
+            </div>
           </CardHeader>
           <CardContent>
             <InvitedUserTable
@@ -166,7 +222,14 @@ const UsersTables = ({
         <TabsContent value="pending">
           <Card>
             <CardHeader>
-              <CardTitle>Pending Users</CardTitle>
+              <div className="flex justify-between items-center gap-1">
+                <CardTitle>Pending Users</CardTitle>
+                <CountDisplay
+                  label="Total pending"
+                  value={pendingUsersCount}
+                  isLoading={pendingUsersLoading}
+                />
+              </div>
             </CardHeader>
             <CardContent>
               <PendingUsersTable
@@ -195,7 +258,7 @@ const SearchableTables = () => {
       {isDownloadingUsers && <Spinner />}
       {popup}
       <div className="flex flex-col gap-y-4">
-        <div className="flex flex-row items-center gap-spacing-interline">
+        <div className="flex flex-row items-center gap-2">
           <InputTypeIn
             placeholder="Search"
             value={query}
@@ -286,7 +349,7 @@ const AddUserButton = ({
           title="Bulk Add Users"
           onOutsideClick={() => setBulkAddUsersModal(false)}
         >
-          <div className="flex flex-col gap-spacing-interline">
+          <div className="flex flex-col gap-2">
             <Text>
               Add the email addresses to import, separated by whitespaces.
               Invited users will be able to login to this domain with their

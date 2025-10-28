@@ -786,29 +786,6 @@ class OnyxConfluence:
                     type=user["accountType"],
                 )
         else:
-            # https://developer.atlassian.com/server/confluence/rest/v900/api-group-user/#api-rest-api-user-list-get
-            # ^ is only available on data center deployments
-            # Example response:
-            # [
-            #     {
-            #         'type': 'known',
-            #         'username': 'admin',
-            #         'userKey': '40281082950c5fe901950c61c55d0000',
-            #         'profilePicture': {
-            #             'path': '/images/icons/profilepics/default.svg',
-            #             'width': 48,
-            #             'height': 48,
-            #             'isDefault': True
-            #         },
-            #         'displayName': 'Admin Test',
-            #         '_links': {
-            #             'self': 'http://localhost:8090/rest/api/user?key=40281082950c5fe901950c61c55d0000'
-            #         },
-            #         '_expandable': {
-            #             'status': ''
-            #         }
-            #     }
-            # ]
             for user in self._paginate_url("rest/api/user/list", limit):
                 yield ConfluenceUser(
                     user_id=user["userKey"],
