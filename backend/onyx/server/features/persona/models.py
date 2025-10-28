@@ -231,7 +231,10 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 for validator in persona.validators
             ],
             search_start_date=persona.search_start_date,
+            pipeline_id=persona.pipeline_id,
             prompts=[PromptSnapshot.from_model(prompt) for prompt in persona.prompts],
+            llm_model_provider_override=persona.llm_model_provider_override,
+            llm_model_version_override=persona.llm_model_version_override,
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
         )
