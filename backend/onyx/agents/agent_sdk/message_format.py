@@ -58,8 +58,10 @@ def _base_message_to_agent_sdk_msg(msg: BaseMessage) -> AgentSDKMessage:
     elif isinstance(content, list):
         # For lists, we need to process based on the role
         if role == "assistant":
-            # Assistant messages use InputTextContent
-            assistant_content: list[InputTextContent] = []
+            # Assistant messages use InputTextContent | OutputTextContent
+            from onyx.agents.agent_sdk.message_types import OutputTextContent
+
+            assistant_content: list[InputTextContent | OutputTextContent] = []
             for item in content:
                 if isinstance(item, str):
                     assistant_content.append(

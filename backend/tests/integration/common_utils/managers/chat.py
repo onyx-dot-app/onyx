@@ -230,7 +230,7 @@ class ChatSessionManager:
             assistant_message_id=assistant_message_id,
             top_documents=top_documents,
             used_tools=list(ind_to_tool_use.values()),
-            heartbeat_packets=heartbeat_packets,
+            heartbeat_packets=[dict(packet) for packet in heartbeat_packets],
             error=error,
         )
 
