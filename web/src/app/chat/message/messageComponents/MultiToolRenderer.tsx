@@ -25,6 +25,7 @@ function ExpandedToolItem({
   onToggleClick,
   defaultIconColor = "text-text-300",
   expandedText,
+  stepNumber,
 }: {
   icon: ((props: { size: number }) => JSX.Element) | null;
   content: JSX.Element | string;
@@ -34,6 +35,7 @@ function ExpandedToolItem({
   onToggleClick?: () => void;
   defaultIconColor?: string;
   expandedText?: JSX.Element | string;
+  stepNumber: number;
 }) {
   const finalIcon = icon ? (
     icon({ size: 14 })
@@ -72,20 +74,20 @@ function ExpandedToolItem({
 
         {/* Content with padding */}
         <div className={cn("flex-1", !isLastItem && "pb-4")}>
-          {status && !expandedText && (
-            <div className="flex">
-              <div
-                className={cn(
-                  "text-sm flex items-center gap-1",
-                  showClickableToggle &&
-                    "cursor-pointer hover:text-text-900 transition-colors"
-                )}
-                onClick={showClickableToggle ? onToggleClick : undefined}
-              >
-                {status}
-              </div>
-            </div>
-          )}
+          <div className="flex mb-1">
+            <Text
+              text02
+              className={cn(
+                "text-sm flex items-center gap-1",
+                showClickableToggle &&
+                  "cursor-pointer hover:text-text-900 transition-colors"
+              )}
+              onClick={showClickableToggle ? onToggleClick : undefined}
+            >
+              <Text text02>{stepNumber}.</Text>
+              {status}
+            </Text>
+          </div>
 
           <div
             className={cn(
@@ -124,7 +126,7 @@ export default function MultiToolRenderer({
 
   const toolGroups = useMemo(() => {
     return packetGroups.filter(
-      (group) => group.packets[0] && isToolPacket(group.packets[0])
+      (group) => group.packets[0] && isToolPacket(group.packets[0], false)
     );
   }, [packetGroups]);
 
@@ -209,6 +211,7 @@ export default function MultiToolRenderer({
                               setIsStreamingExpanded(!isStreamingExpanded)
                             }
                             expandedText={expandedText}
+                            stepNumber={index + 1}
                           />
                         );
                       }
@@ -337,6 +340,7 @@ export default function MultiToolRenderer({
                       isLastItem={isLastItem}
                       defaultIconColor="text-text-03"
                       expandedText={expandedText}
+                      stepNumber={index + 1}
                     />
                   )}
                 </RendererComponent>
