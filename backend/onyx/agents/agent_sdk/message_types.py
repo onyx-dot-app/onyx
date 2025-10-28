@@ -51,7 +51,9 @@ class UserMessage(TypedDict):
 
 class AssistantMessageWithContent(TypedDict):
     role: Literal["assistant"]
-    content: list[InputTextContent]  # Assistant messages use input text
+    content: list[
+        InputTextContent | OutputTextContent
+    ]  # Assistant messages can receive output_text from agents SDK, but we convert to input_text
 
 
 class AssistantMessageWithToolCalls(TypedDict):
@@ -63,8 +65,8 @@ class AssistantMessageDuringAgentRun(TypedDict):
     role: Literal["assistant"]
     id: str
     content: (
-        list[InputTextContent] | list[ToolCall]
-    )  # Assistant runtime messages use input text
+        list[InputTextContent | OutputTextContent] | list[ToolCall]
+    )  # Assistant runtime messages can receive output_text from agents SDK, but we convert to input_text
     status: Literal["completed", "failed", "in_progress"]
     type: Literal["message"]
 
