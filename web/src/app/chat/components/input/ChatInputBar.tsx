@@ -528,7 +528,7 @@ function ChatInputBarInner({
                   icon={SvgPlusCircle}
                   tooltip="Attach Files"
                   tertiary
-                  active={open}
+                  selected={open}
                 />
               )}
               selectedFileIds={currentMessageFiles.map((f) => f.id)}
