@@ -1,4 +1,5 @@
 import json
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
@@ -55,7 +56,7 @@ class SerperClient(WebSearchProvider):
             for result in organic_results
         ]
 
-    def contents(self, urls: list[str]) -> list[WebContent]:
+    def contents(self, urls: Sequence[str]) -> list[WebContent]:
         if not urls:
             return []
 

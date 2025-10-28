@@ -292,7 +292,7 @@ def downgrade() -> None:
     logger.error("CRITICAL: Downgrading data cleanup cannot restore deleted data!")
     logger.error("Data restoration requires backup files or database backup.")
 
-    raise NotImplementedError(
-        "Downgrade of legacy data cleanup is not supported. "
-        "Deleted data must be restored from backups."
-    )
+    # raise NotImplementedError(
+    #     "Downgrade of legacy data cleanup is not supported. "
+    #     "Deleted data must be restored from backups."
+    # )

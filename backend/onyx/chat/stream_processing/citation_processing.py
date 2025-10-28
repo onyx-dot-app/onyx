@@ -50,13 +50,11 @@ class CitationProcessor:
     def __init__(
         self,
         context_docs: list[LlmDoc],
-        final_doc_id_to_rank_map: DocumentIdOrderMapping,
-        display_doc_id_to_rank_map: DocumentIdOrderMapping,
+        doc_id_to_rank_map: DocumentIdOrderMapping,
         stop_stream: str | None = STOP_STREAM_PAT,
     ):
         self.context_docs = context_docs  # list of docs in the order the LLM sees
-        self.final_order_mapping = final_doc_id_to_rank_map.order_mapping
-        self.display_order_mapping = display_doc_id_to_rank_map.order_mapping
+        self.order_mapping = doc_id_to_rank_map.order_mapping
         self.max_citation_num = len(context_docs)
         self.stop_stream = stop_stream
 
@@ -169,13 +167,13 @@ class CitationProcessor:
             # should always be in the display_doc_order_dict. But check anyways
             context_llm_doc = self.context_docs[num - 1]
             llm_docid = context_llm_doc.document_id
-            if llm_docid not in self.display_order_mapping:
+            if llm_docid not in self.order_mapping:
                 logger.warning(
-                    f"Doc {llm_docid} not in display_doc_order_dict. "
+                    f"Doc {llm_docid} not in doc_order_dict. "
                     "Used LLM citation number instead."
                 )
-            displayed_citation_num = self.display_order_mapping.get(
-                llm_docid, self.final_order_mapping[llm_docid]
+            displayed_citation_num = self.order_mapping.get(
+                llm_docid, self.order_mapping[llm_docid]
             )
 
             # skip citations of the same work if cited recently

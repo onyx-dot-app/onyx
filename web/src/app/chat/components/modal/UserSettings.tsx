@@ -382,7 +382,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
 
       {popup}
 
-      <div className="w-full overflow-y-scroll">
+      <div className="w-full overflow-y-auto px-1">
         {activeSection === "settings" && (
           <div className="space-y-6">
             <div>
@@ -530,28 +530,26 @@ export function UserSettings({ onClose }: UserSettingsProps) {
         )}
         {activeSection === "personalization" && (
           <div className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">
-                Name
-              </label>
+            <div>
+              <h3 className="text-lg font-medium">Name</h3>
               <Input
                 value={personalizationValues.name}
                 onChange={(event) =>
                   updatePersonalizationField("name", event.target.value)
                 }
                 placeholder="Set how Onyx should refer to you"
+                className="mt-2"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">
-                Role
-              </label>
+            <div>
+              <h3 className="text-lg font-medium">Role</h3>
               <Input
                 value={personalizationValues.role}
                 onChange={(event) =>
                   updatePersonalizationField("role", event.target.value)
                 }
                 placeholder="Share your role to tailor responses"
+                className="mt-2"
               />
             </div>
             <div className="flex items-center justify-between">
@@ -612,7 +610,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
         {activeSection === "password" && (
           <div className="space-y-6">
             <div className="space-y-2">
-              <h3 className="text-xl font-medium">Change Password</h3>
+              <h3 className="text-lg font-medium">Change Password</h3>
               <SubLabel>
                 Enter your current password and new password to change your
                 password.
@@ -620,7 +618,10 @@ export function UserSettings({ onClose }: UserSettingsProps) {
             </div>
             <form onSubmit={handleChangePassword} className="w-full">
               <div className="w-full">
-                <label htmlFor="currentPassword" className="block mb-1">
+                <label
+                  htmlFor="currentPassword"
+                  className="text-sm font-medium"
+                >
                   Current Password
                 </label>
                 <Input
@@ -629,11 +630,11 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   required
-                  className="w-full"
+                  className="mt-2"
                 />
               </div>
               <div className="w-full">
-                <label htmlFor="newPassword" className="block mb-1">
+                <label htmlFor="newPassword" className="text-sm font-medium">
                   New Password
                 </label>
                 <Input
@@ -642,11 +643,14 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
-                  className="w-full"
+                  className="mt-2"
                 />
               </div>
               <div className="w-full">
-                <label htmlFor="confirmPassword" className="block mb-1">
+                <label
+                  htmlFor="confirmPassword"
+                  className="text-sm font-medium"
+                >
                   Confirm New Password
                 </label>
                 <Input
@@ -655,12 +659,14 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  className="w-full"
+                  className="mt-2"
                 />
               </div>
-              <Button disabled={isLoading}>
-                {isLoading ? "Changing..." : "Change Password"}
-              </Button>
+              <div className="flex justify-end w-full">
+                <Button disabled={isLoading}>
+                  {isLoading ? "Changing..." : "Change Password"}
+                </Button>
+              </div>
             </form>
           </div>
         )}

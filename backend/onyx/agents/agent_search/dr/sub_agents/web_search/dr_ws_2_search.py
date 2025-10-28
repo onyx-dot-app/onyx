@@ -78,7 +78,7 @@ def web_search(
     def _search(search_query: str) -> list[WebSearchResult]:
         search_results: list[WebSearchResult] = []
         try:
-            search_results = provider.search(search_query)
+            search_results = list(provider.search(search_query))
         except Exception as e:
             logger.error(f"Error performing search: {e}")
         return search_results

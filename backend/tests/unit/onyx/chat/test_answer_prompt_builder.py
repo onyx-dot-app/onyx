@@ -19,7 +19,7 @@ from onyx.tools.tool_implementations_v2.web import OPEN_URL_LONG_DESCRIPTION
 from onyx.tools.tool_implementations_v2.web import WEB_SEARCH_LONG_DESCRIPTION
 from tests.unit.onyx.chat.tools.utils import SimpleTestTool
 
-SECTION_RE = r"(?ms)^\s*#\s*{title}\s*\n(?P<body>.*?)(?:^\s*#\s|\Z)"
+SECTION_RE = r"(?ms)^\s*(#+)\s*{title}\s*\n(?P<body>.*?)(?:^\s*\1\s|\Z)"
 
 
 def _section(content: str, title: str) -> str | None:

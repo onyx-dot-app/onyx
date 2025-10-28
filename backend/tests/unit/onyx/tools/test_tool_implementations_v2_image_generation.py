@@ -84,7 +84,6 @@ def create_test_run_context(
 
     # Create test dependencies
     emitter = MockEmitter()
-    aggregated_context = MockAggregatedContext()
 
     run_dependencies = MockRunDependencies(redis_client=redis_client)
     run_dependencies.emitter = emitter
@@ -92,8 +91,6 @@ def create_test_run_context(
     # Create the actual context object
     context = ChatTurnContext(
         current_run_step=current_run_step,
-        iteration_instructions=[],
-        aggregated_context=aggregated_context,  # type: ignore[arg-type]
         run_dependencies=run_dependencies,  # type: ignore[arg-type]
         chat_session_id=uuid4(),
         message_id=1,
@@ -168,12 +165,10 @@ def test_image_generation_core_basic_functionality(
 
     # Verify context was updated
     assert test_run_context.context.current_run_step == 2
-    assert (
-        len(test_run_context.context.aggregated_context.global_iteration_responses) == 1
-    )
+    assert len(test_run_context.context.global_iteration_responses) == 1
 
     # Check iteration answer
-    answer = test_run_context.context.aggregated_context.global_iteration_responses[0]
+    answer = test_run_context.context.global_iteration_responses[0]
     assert isinstance(answer, IterationAnswer)
     assert answer.tool == "image_generation_tool"
     assert answer.tool_id == 2
@@ -281,13 +276,8 @@ def test_image_generation_core_different_shapes(
         assert instructions.purpose == "Generating images"
 
         # Check iteration answer was created
-        assert (
-            len(test_run_context.context.aggregated_context.global_iteration_responses)
-            == 1
-        )
-        answer = test_run_context.context.aggregated_context.global_iteration_responses[
-            0
-        ]
+        assert len(test_run_context.context.global_iteration_responses) == 1
+        answer = test_run_context.context.global_iteration_responses[0]
         assert isinstance(answer, IterationAnswer)
         assert answer.tool == "image_generation_tool"
 
