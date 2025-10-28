@@ -842,7 +842,7 @@ def remove_files_from_connector(
 @router.post("/admin/connector/{connector_id}/files/update")
 def update_connector_files(
     connector_id: int,
-    files: list[UploadFile] = File([]),
+    files: list[UploadFile] | None = File(None),
     file_ids_to_remove: str = Form("[]"),
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
@@ -851,6 +851,7 @@ def update_connector_files(
     Update files in a connector by adding new files and/or removing existing ones.
     This is an atomic operation that validates, updates the connector config, and triggers indexing.
     """
+    files = files or []
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector not found")
