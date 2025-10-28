@@ -270,7 +270,7 @@ class OnyxConfluence:
         self,
         space_keys: list[str] | None = None,
         limit: int = 50,
-    ) -> Iterator[dict[str, Any]]:
+    ) -> Iterator[dict[str, str]]:
         """
         Retrieve spaces from Confluence using v2 API (Cloud) or v1 API (Server/fallback).
 
@@ -343,24 +343,23 @@ class OnyxConfluence:
                         raise e
                 return
 
-            # Initialize connection with probe timeout settings
-            self._confluence = self._initialize_connection_helper(
-                credentials, **merged_kwargs
+        # Initialize connection with probe timeout settings
+        self._confluence = self._initialize_connection_helper(
+            credentials, **merged_kwargs
+        )
+
+        # Retrieve first space to validate connection
+        spaces_iter = self.retrieve_confluence_spaces(limit=1)
+        first_space = next(spaces_iter, None)
+
+        if not first_space:
+            raise RuntimeError(
+                f"No spaces found at {self._url}! "
+                "Check your credentials and wiki_base and make sure "
+                "is_cloud is set correctly."
             )
-            self._kwargs = merged_kwargs
 
-            # Retrieve first space to validate connection
-            spaces_iter = self.retrieve_confluence_spaces(limit=1)
-            first_space = next(spaces_iter, None)
-
-            if not first_space:
-                raise RuntimeError(
-                    f"No spaces found at {self._url}! "
-                    "Check your credentials and wiki_base and make sure "
-                    "is_cloud is set correctly."
-                )
-
-            logger.info("Confluence probe succeeded.")
+        logger.info("Confluence probe succeeded.")
 
     def _initialize_connection(
         self,

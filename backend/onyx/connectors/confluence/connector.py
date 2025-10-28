@@ -199,7 +199,6 @@ class ConfluenceConnector(
             is_cloud=self.is_cloud,
             url=self.wiki_base,
             credentials_provider=credentials_provider,
-            timeout=100,
             scoped_token=self.scoped_token,
         )
         confluence_client._probe_connection(**self.probe_kwargs)
@@ -745,10 +744,7 @@ class ConfluenceConnector(
 
     def validate_connector_settings(self) -> None:
         try:
-            spaces_iter = self.low_timeout_confluence_client.retrieve_confluence_spaces(
-                limit=1,
-            )
-            first_space = next(spaces_iter, None)
+            spaces = self.low_timeout_confluence_client.get_all_spaces(limit=1)
         except HTTPError as e:
             status_code = e.response.status_code if e.response else None
             if status_code == 401:
@@ -767,12 +763,6 @@ class ConfluenceConnector(
                 f"Unexpected error while validating Confluence settings: {e}"
             )
 
-        if not first_space:
-            raise ConnectorValidationError(
-                "No Confluence spaces found. Either your credentials lack permissions, or "
-                "there truly are no spaces in this Confluence instance."
-            )
-
         if self.space:
             try:
                 self.low_timeout_confluence_client.get_space(self.space)
@@ -780,6 +770,12 @@ class ConfluenceConnector(
                 raise ConnectorValidationError(
                     "Invalid Confluence space key provided"
                 ) from e
+
+        if not spaces or not spaces.get("results"):
+            raise ConnectorValidationError(
+                "No Confluence spaces found. Either your credentials lack permissions, or "
+                "there truly are no spaces in this Confluence instance."
+            )
 
 
 if __name__ == "__main__":

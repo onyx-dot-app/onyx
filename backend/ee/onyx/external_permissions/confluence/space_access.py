@@ -140,10 +140,11 @@ def get_all_space_permissions(
     logger.debug("Getting space permissions")
     # Gets all the spaces in the Confluence instance
     all_space_keys = [
-        space.get("key")
+        key
         for space in confluence_client.retrieve_confluence_spaces(
             limit=REQUEST_PAGINATION_LIMIT,
         )
+        if (key := space.get("key"))
     ]
 
     # Gets the permissions for each space
