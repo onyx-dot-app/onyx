@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Popover,
   PopoverContent,
+  PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { getDisplayNameForModel, LlmDescriptor, LlmManager } from "@/lib/hooks";
@@ -15,7 +16,7 @@ import SelectButton from "@/refresh-components/buttons/SelectButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 
-interface LLMPopoverProps {
+export interface LLMPopoverProps {
   llmManager: LlmManager;
   requiresImageGeneration?: boolean;
   folded?: boolean;
@@ -115,12 +116,29 @@ export default function LLMPopover({
       <PopoverTrigger asChild>
         <div data-testid="llm-popover-trigger">{triggerContent}</div>
       </PopoverTrigger>
-      <PopoverContent
-        side="top"
-        align="start"
-        className="max-h-[20rem] w-[15rem] p-1 border rounded-08 shadow-lg flex flex-col"
-      >
-        <div className="overflow-y-scroll">
+      <PopoverContent side="bottom" align="start">
+        <PopoverMenu
+          medium
+          footer={
+            user?.preferences?.temperature_override_enabled ? (
+              <div className="flex flex-col w-full py-3 px-2 gap-2">
+                <Slider
+                  value={[localTemperature]}
+                  max={llmManager.maxTemperature}
+                  min={0}
+                  step={0.01}
+                  onValueChange={handleTemperatureChange}
+                  onValueCommit={handleTemperatureChangeComplete}
+                  className="w-full"
+                />
+                <div className="flex flex-row items-center justify-between">
+                  <Text secondaryBody>Temperature (creativity)</Text>
+                  <Text secondaryBody>{localTemperature.toFixed(1)}</Text>
+                </div>
+              </div>
+            ) : undefined
+          }
+        >
           {llmOptionsToChooseFrom.map(
             ({ modelName, provider, name, icon }, index) => {
               if (
@@ -147,24 +165,7 @@ export default function LLMPopover({
               );
             }
           )}
-        </div>
-        {user?.preferences?.temperature_override_enabled && (
-          <div className="flex flex-col w-full py-3 px-2 gap-2">
-            <Slider
-              value={[localTemperature]}
-              max={llmManager.maxTemperature}
-              min={0}
-              step={0.01}
-              onValueChange={handleTemperatureChange}
-              onValueCommit={handleTemperatureChangeComplete}
-              className="w-full"
-            />
-            <div className="flex flex-row items-center justify-between">
-              <Text secondaryBody>Temperature (creativity)</Text>
-              <Text secondaryBody>{localTemperature.toFixed(1)}</Text>
-            </div>
-          </div>
-        )}
+        </PopoverMenu>
       </PopoverContent>
     </Popover>
   );

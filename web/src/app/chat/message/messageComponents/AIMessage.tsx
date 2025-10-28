@@ -39,7 +39,7 @@ import {
   ModalIds,
   useChatModal,
 } from "@/refresh-components/contexts/ChatModalContext";
-import LLMPopover from "@/refresh-components/LLMPopover";
+import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { parseLlmDescriptor } from "@/lib/llm/utils";
 import { LlmManager } from "@/lib/hooks";
 
