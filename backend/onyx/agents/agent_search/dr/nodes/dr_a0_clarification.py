@@ -554,7 +554,7 @@ def clarifier(
                 # if there is only one tool (Closer), we don't need to decide. It's an LLM answer
                 llm_decision = DecisionResponse(decision="LLM", reasoning="")
 
-            if llm_decision.decision == "LLM":
+            if llm_decision.decision == "LLM" and research_type != ResearchType.DEEP:
 
                 write_custom_event(
                     current_step_nr,
@@ -699,49 +699,53 @@ def clarifier(
                     chat_message_id=str(graph_config.persistence.chat_session_id),
                 )
 
-            full_response = stream_and_process()
-            if len(full_response.ai_message_chunk.tool_calls) == 0:
+            # Deep research always continues to clarification or search
+            if research_type != ResearchType.DEEP:
+                full_response = stream_and_process()
+                if len(full_response.ai_message_chunk.tool_calls) == 0:
 
-                if isinstance(full_response.full_answer, str):
-                    full_answer = (
-                        normalize_square_bracket_citations_to_double_with_links(
-                            full_response.full_answer
+                    if isinstance(full_response.full_answer, str):
+                        full_answer = (
+                            normalize_square_bracket_citations_to_double_with_links(
+                                full_response.full_answer
+                            )
+                        )
+                    else:
+                        full_answer = None
+
+                    # Persist final documents and derive citations when using in-context docs
+                    final_documents_db, citations_map = (
+                        _persist_final_docs_and_citations(
+                            db_session=db_session,
+                            context_llm_docs=context_llm_docs,
+                            full_answer=full_answer,
                         )
                     )
-                else:
-                    full_answer = None
 
-                # Persist final documents and derive citations when using in-context docs
-                final_documents_db, citations_map = _persist_final_docs_and_citations(
-                    db_session=db_session,
-                    context_llm_docs=context_llm_docs,
-                    full_answer=full_answer,
-                )
+                    update_db_session_with_messages(
+                        db_session=db_session,
+                        chat_message_id=message_id,
+                        chat_session_id=graph_config.persistence.chat_session_id,
+                        is_agentic=graph_config.behavior.use_agentic_search,
+                        message=full_answer,
+                        token_count=len(llm_tokenizer.encode(full_answer or "")),
+                        citations=citations_map,
+                        final_documents=final_documents_db or None,
+                        update_parent_message=True,
+                        research_answer_purpose=ResearchAnswerPurpose.ANSWER,
+                    )
 
-                update_db_session_with_messages(
-                    db_session=db_session,
-                    chat_message_id=message_id,
-                    chat_session_id=graph_config.persistence.chat_session_id,
-                    is_agentic=graph_config.behavior.use_agentic_search,
-                    message=full_answer,
-                    token_count=len(llm_tokenizer.encode(full_answer or "")),
-                    citations=citations_map,
-                    final_documents=final_documents_db or None,
-                    update_parent_message=True,
-                    research_answer_purpose=ResearchAnswerPurpose.ANSWER,
-                )
+                    db_session.commit()
 
-                db_session.commit()
-
-                return OrchestrationSetup(
-                    original_question=original_question,
-                    chat_history_string="",
-                    tools_used=[DRPath.END.value],
-                    query_list=[],
-                    available_tools=available_tools,
-                    assistant_system_prompt=assistant_system_prompt,
-                    assistant_task_prompt=assistant_task_prompt,
-                )
+                    return OrchestrationSetup(
+                        original_question=original_question,
+                        chat_history_string="",
+                        tools_used=[DRPath.END.value],
+                        query_list=[],
+                        available_tools=available_tools,
+                        assistant_system_prompt=assistant_system_prompt,
+                        assistant_task_prompt=assistant_task_prompt,
+                    )
 
         # Continue, as external knowledge is required.
 
