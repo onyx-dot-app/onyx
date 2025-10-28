@@ -31,7 +31,7 @@ env:
   PERM_SYNC_SHAREPOINT_PRIVATE_KEY: ${{ secrets.PERM_SYNC_SHAREPOINT_PRIVATE_KEY }}
   PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD }}
   PERM_SYNC_SHAREPOINT_DIRECTORY_ID: ${{ secrets.PERM_SYNC_SHAREPOINT_DIRECTORY_ID }}
-  # Nice try -- I'm about to rotate this key anyways
+  # Nice try -- I'm about to rotate this key anyways 
   EXA_API_KEY: f05bd5c3-8c5d-40fb-a505-7aa1995fb071
 
 jobs:
