@@ -152,6 +152,7 @@ class DATestChatMessage(BaseModel):
     message: str
     research_answer_purpose: ResearchAnswerPurpose | None = None
     message_type: MessageType | None = None
+    files: list | None = None
 
 
 class DATestChatSession(BaseModel):

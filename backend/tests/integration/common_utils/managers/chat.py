@@ -225,6 +225,7 @@ class ChatSessionManager:
                 message=msg["message"],
                 research_answer_purpose=msg.get("research_answer_purpose"),
                 message_type=msg.get("message_type"),
+                files=msg.get("files"),
             )
             for msg in response.json()["messages"]
         ]
