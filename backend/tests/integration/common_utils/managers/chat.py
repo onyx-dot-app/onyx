@@ -1,6 +1,7 @@
 import json
 from typing import Any
 from typing import cast
+from typing import TypedDict
 from uuid import UUID
 
 import requests
@@ -22,6 +23,28 @@ from tests.integration.common_utils.test_models import ErrorResponse
 from tests.integration.common_utils.test_models import StreamedResponse
 from tests.integration.common_utils.test_models import ToolName
 from tests.integration.common_utils.test_models import ToolResult
+
+
+class StreamPacketObj(TypedDict, total=False):
+    """Base structure for streaming packet objects."""
+
+    type: str
+    content: str
+    final_documents: list[dict[str, Any]]
+    is_internet_search: bool
+    images: list[dict[str, Any]]
+    queries: list[str]
+    documents: list[dict[str, Any]]
+
+
+class StreamPacketData(TypedDict, total=False):
+    """Structure for streaming response packets."""
+
+    reserved_assistant_message_id: int
+    error: str
+    stack_trace: str
+    obj: StreamPacketObj
+    ind: int
 
 
 class ChatSessionManager:
@@ -126,7 +149,7 @@ class ChatSessionManager:
     @staticmethod
     def analyze_response(response: Response) -> StreamedResponse:
         response_data = cast(
-            list[dict[str, Any]],
+            list[StreamPacketData],
             [
                 json.loads(line.decode("utf-8"))
                 for line in response.iter_lines()
@@ -135,17 +158,17 @@ class ChatSessionManager:
         )
         ind_to_tool_use: dict[int, ToolResult] = {}
         top_documents: list[SavedSearchDoc] = []
-        heartbeat_packets: list[dict[str, Any]] = []
+        heartbeat_packets: list[StreamPacketData] = []
         full_message = ""
         assistant_message_id: int | None = None
         error = None
         for data in response_data:
-            if data.get("reserved_assistant_message_id"):
-                assistant_message_id = data.get("reserved_assistant_message_id")
+            if reserved_id := data.get("reserved_assistant_message_id"):
+                assistant_message_id = reserved_id
             elif data.get("error"):
                 error = ErrorResponse(
-                    error=str(data.get("error")),
-                    stack_trace=str(data.get("stack_trace")),
+                    error=str(data["error"]),
+                    stack_trace=str(data["stack_trace"]),
                 )
             elif (
                 (data_obj := data.get("obj"))
