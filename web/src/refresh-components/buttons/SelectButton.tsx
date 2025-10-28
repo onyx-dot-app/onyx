@@ -4,8 +4,6 @@ import React, { useRef, useEffect, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "./IconButton";
-import SvgX from "@/icons/x";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
 
 const MARGIN = 5;
