@@ -144,8 +144,8 @@ class ChatSessionManager:
                 assistant_message_id = data.get("reserved_assistant_message_id")
             elif data.get("error"):
                 error = ErrorResponse(
-                    error=data.get("error"),
-                    stack_trace=data.get("stack_trace"),
+                    error=str(data.get("error")),
+                    stack_trace=str(data.get("stack_trace")),
                 )
             elif (
                 (data_obj := data.get("obj"))
