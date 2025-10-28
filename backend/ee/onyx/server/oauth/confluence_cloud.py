@@ -76,6 +76,7 @@ class ConfluenceCloudOAuth:
         "read:confluence-content.permission%20"
         "read:confluence-user%20"
         "read:confluence-groups%20"
+        "read:space:confluence%20"
         "readonly:content.attachment:confluence%20"
         "search:confluence%20"
         # granular scope
