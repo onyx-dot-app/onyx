@@ -51,75 +51,76 @@ export default function ActionLineItem({
 
   return (
     <SimpleTooltip tooltip={tool?.description} className="max-w-[30rem]">
-      <LineItem
-        data-testid={`tool-option-${toolName}`}
-        onClick={() => {
-          if (isSearchToolWithNoConnectors) return;
-          if (onToggle && disabled) onToggle();
-          onForceToggle();
-        }}
-        forced={isForced}
-        strikethrough={disabled}
-        icon={Icon}
-        rightChildren={
-          <div className="flex flex-row items-center gap-1">
-            {tool?.oauth_config_id && toolAuthStatus && (
-              <IconButton
-                icon={({ className }) => (
-                  <SvgKey
-                    className={cn(
-                      className,
-                      "stroke-yellow-500 hover:stroke-yellow-600"
-                    )}
-                  />
-                )}
-                onClick={noProp(() => {
-                  if (
-                    !toolAuthStatus.hasToken ||
-                    toolAuthStatus.isTokenExpired
-                  ) {
-                    onOAuthAuthenticate?.();
+      <div data-testid={`tool-option-${toolName}`}>
+        <LineItem
+          onClick={() => {
+            if (isSearchToolWithNoConnectors) return;
+            if (onToggle && disabled) onToggle();
+            onForceToggle();
+          }}
+          forced={isForced}
+          strikethrough={disabled}
+          icon={Icon}
+          rightChildren={
+            <div className="flex flex-row items-center gap-1">
+              {tool?.oauth_config_id && toolAuthStatus && (
+                <IconButton
+                  icon={({ className }) => (
+                    <SvgKey
+                      className={cn(
+                        className,
+                        "stroke-yellow-500 hover:stroke-yellow-600"
+                      )}
+                    />
+                  )}
+                  onClick={noProp(() => {
+                    if (
+                      !toolAuthStatus.hasToken ||
+                      toolAuthStatus.isTokenExpired
+                    ) {
+                      onOAuthAuthenticate?.();
+                    }
+                  })}
+                />
+              )}
+
+              {!isSearchToolWithNoConnectors && (
+                <IconButton
+                  icon={SvgSlash}
+                  onClick={noProp(onToggle)}
+                  internal
+                  className={cn(
+                    !disabled && "invisible group-hover/LineItem:visible"
+                  )}
+                  active={disabled}
+                  tooltip={disabled ? "Enable" : "Disable"}
+                />
+              )}
+
+              {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
+                <IconButton
+                  icon={
+                    isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
                   }
-                })}
-              />
-            )}
-
-            {!isSearchToolWithNoConnectors && (
-              <IconButton
-                icon={SvgSlash}
-                onClick={noProp(onToggle)}
-                internal
-                className={cn(
-                  !disabled && "invisible group-hover/LineItem:visible"
-                )}
-                active={disabled}
-                tooltip={disabled ? "Enable" : "Disable"}
-              />
-            )}
-
-            {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
-              <IconButton
-                icon={
-                  isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
-                }
-                onClick={noProp(() => {
-                  if (isSearchToolWithNoConnectors)
-                    window.location.href = "/admin/add-connector";
-                  else onSourceManagementOpen?.();
-                })}
-                internal
-                className={cn(
-                  isSearchToolWithNoConnectors &&
-                    "invisible grouop-hover/LineItem:visible"
-                )}
-                tooltip={isSearchToolWithNoConnectors ? "Settings" : "More"}
-              />
-            )}
-          </div>
-        }
-      >
-        {label}
-      </LineItem>
+                  onClick={noProp(() => {
+                    if (isSearchToolWithNoConnectors)
+                      window.location.href = "/admin/add-connector";
+                    else onSourceManagementOpen?.();
+                  })}
+                  internal
+                  className={cn(
+                    isSearchToolWithNoConnectors &&
+                      "invisible grouop-hover/LineItem:visible"
+                  )}
+                  tooltip={isSearchToolWithNoConnectors ? "Settings" : "More"}
+                />
+              )}
+            </div>
+          }
+        >
+          {label}
+        </LineItem>
+      </div>
     </SimpleTooltip>
   );
 }

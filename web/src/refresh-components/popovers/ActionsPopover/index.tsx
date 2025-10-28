@@ -587,20 +587,23 @@ export default function ActionsPopover({
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <IconButton
-            icon={SvgSliders}
-            active={open}
-            tertiary
-            data-testid="action-management-toggle"
-            tooltip="Manage Actions"
-          />
+          <div data-testid="action-management-toggle">
+            <IconButton
+              icon={SvgSliders}
+              active={open}
+              tertiary
+              tooltip="Manage Actions"
+            />
+          </div>
         </PopoverTrigger>
-        <PopoverContent data-testid="tool-options" side="bottom" align="start">
-          {secondaryView
-            ? secondaryView.type === "mcp"
-              ? mcpView
-              : toolsView
-            : primaryView}
+        <PopoverContent side="bottom" align="start">
+          <div data-testid="tool-options">
+            {secondaryView
+              ? secondaryView.type === "mcp"
+                ? mcpView
+                : toolsView
+              : primaryView}
+          </div>
         </PopoverContent>
       </Popover>
 
