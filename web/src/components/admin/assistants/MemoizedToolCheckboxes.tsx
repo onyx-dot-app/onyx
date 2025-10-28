@@ -13,29 +13,18 @@ const MemoizedToolCheckbox = memo(function MemoizedToolCheckbox({
   toolId,
   displayName,
   description,
-  isOwner,
-  isAdmin,
 }: {
   toolId: number;
   displayName: string;
   description: string;
-  isOwner: boolean;
-  isAdmin: boolean;
 }) {
-  const isDisabled = !isOwner && !isAdmin;
-
   return (
     <FastField name={`enabled_tools_map.${toolId}`}>
-      {({ field, form }: any) => (
+      {() => (
         <BooleanFormField
           name={`enabled_tools_map.${toolId}`}
           label={displayName}
-          subtext={
-            isDisabled
-              ? `${description} (You cannot use this tool)`
-              : description
-          }
-          disabled={isDisabled}
+          subtext={description}
         />
       )}
     </FastField>
@@ -70,8 +59,6 @@ export const MemoizedToolList = memo(function MemoizedToolList({
                 ? tool.description.slice(0, MAX_DESCRIPTION_LENGTH) + "…"
                 : tool.description
             }
-            isOwner={tool.user_id === user?.id}
-            isAdmin={user?.role === UserRole.ADMIN}
           />
         ))}
     </>
@@ -90,16 +77,21 @@ export const MemoizedMCPServerTools = memo(function MemoizedMCPServerTools({
 }) {
   return (
     <div className="ml-7 space-y-2">
-      {serverTools.map((tool) => (
-        <MemoizedToolCheckbox
-          key={tool.id}
-          toolId={tool.id}
-          displayName={tool.display_name}
-          description={tool.description}
-          isOwner={tool.user_id === user?.id}
-          isAdmin={user?.role === UserRole.ADMIN}
-        />
-      ))}
+      {serverTools
+        .filter(
+          (tool) =>
+            tool.is_public === true ||
+            user?.role === UserRole.ADMIN ||
+            tool.user_id === user?.id
+        )
+        .map((tool) => (
+          <MemoizedToolCheckbox
+            key={tool.id}
+            toolId={tool.id}
+            displayName={tool.display_name}
+            description={tool.description}
+          />
+        ))}
     </div>
   );
 });

@@ -100,15 +100,14 @@ function SettingsPopover({
           //     {item.title}
           //   </NavigationTab>
           // )),
-          (isAdmin ||
-            settings?.settings.all_users_actions_creation_enabled !==
-              false) && (
-            <div key="actions" data-testid="Settings/actions">
-              <MenuButton icon={ToolIconSkeleton} onClick={onActionsClick}>
-                Actions
-              </MenuButton>
-            </div>
-          ),
+          !isAdmin &&
+            settings?.settings.all_users_actions_creation_enabled !== false && (
+              <div key="actions" data-testid="Settings/actions">
+                <MenuButton icon={ToolIconSkeleton} onClick={onActionsClick}>
+                  Actions
+                </MenuButton>
+              </div>
+            ),
           <div key="user-settings" data-testid="Settings/user-settings">
             <MenuButton icon={SvgUser} onClick={onUserSettingsClick}>
               User Settings
