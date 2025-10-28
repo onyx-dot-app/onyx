@@ -237,6 +237,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             llm_model_version_override=persona.llm_model_version_override,
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
+            num_chunks=persona.num_chunks,
         )
 
 
