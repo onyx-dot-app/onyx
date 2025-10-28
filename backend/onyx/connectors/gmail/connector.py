@@ -58,6 +58,8 @@ EMAIL_FIELDS = [
     "to",
 ]
 
+MAX_MESSAGE_BODY_BYTES = 10 * 1024 * 1024  # 10MB cap to keep large threads safe
+
 add_retries = retry_builder(tries=50, max_delay=30)
 
 
@@ -120,16 +122,52 @@ def _get_owners_from_emails(emails: dict[str, str | None]) -> list[BasicExpertIn
 
 
 def _get_message_body(payload: dict[str, Any]) -> str:
-    parts = payload.get("parts", [])
-    message_body = ""
-    for part in parts:
+    """
+    Gmail threads can contain large inline parts (including attachments
+    transmitted as base64). Only decode text/plain parts and skip anything
+    that breaches the safety threshold to protect against OOMs.
+    """
+
+    message_body_chunks: list[str] = []
+    stack = [payload]
+
+    while stack:
+        part = stack.pop()
+        if not part:
+            continue
+
+        children = part.get("parts", [])
+        stack.extend(reversed(children))
+
         mime_type = part.get("mimeType")
-        body = part.get("body")
-        if mime_type == "text/plain" and body:
-            data = body.get("data", "")
+        if mime_type != "text/plain":
+            continue
+
+        body = part.get("body", {})
+        data = body.get("data", "")
+
+        if not data:
+            continue
+
+        # base64 inflates storage by ~4/3; work with decoded size estimate
+        approx_decoded_size = (len(data) * 3) // 4
+        if approx_decoded_size > MAX_MESSAGE_BODY_BYTES:
+            logger.warning(
+                "Skipping oversized Gmail message part (%s bytes > %s limit)",
+                approx_decoded_size,
+                MAX_MESSAGE_BODY_BYTES,
+            )
+            continue
+
+        try:
             text = urlsafe_b64decode(data).decode()
-            message_body += text
-    return message_body
+        except (ValueError, UnicodeDecodeError) as error:
+            logger.warning("Failed to decode Gmail message part: %s", error)
+            continue
+
+        message_body_chunks.append(text)
+
+    return "".join(message_body_chunks)
 
 
 def message_to_section(message: Dict[str, Any]) -> tuple[TextSection, dict[str, str]]:

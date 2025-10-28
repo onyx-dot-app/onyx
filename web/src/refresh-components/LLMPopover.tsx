@@ -118,7 +118,7 @@ export default function LLMPopover({
       <PopoverContent
         side="top"
         align="start"
-        className="max-h-[20rem] w-[15rem] p-spacing-inline border rounded-08 shadow-lg flex flex-col"
+        className="max-h-[20rem] w-[15rem] p-1 border rounded-08 shadow-lg flex flex-col"
       >
         <div className="overflow-y-scroll">
           {llmOptionsToChooseFrom.map(
@@ -149,7 +149,7 @@ export default function LLMPopover({
           )}
         </div>
         {user?.preferences?.temperature_override_enabled && (
-          <div className="flex flex-col w-full py-padding-button px-spacing-interline gap-spacing-interline">
+          <div className="flex flex-col w-full py-3 px-2 gap-2">
             <Slider
               value={[localTemperature]}
               max={llmManager.maxTemperature}

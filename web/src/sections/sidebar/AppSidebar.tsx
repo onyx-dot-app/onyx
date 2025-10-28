@@ -57,11 +57,13 @@ import {
   DRAG_TYPES,
   DEFAULT_PERSONA_ID,
   LOCAL_STORAGE_KEYS,
-} from "./constants";
+} from "@/sections/sidebar/constants";
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
 import { ChatSession } from "@/app/chat/interfaces";
+import { SidebarBody } from "@/sections/sidebar/utils";
+import { useUser } from "@/components/user/UserProvider";
+import SvgSettings from "@/icons/settings";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -69,15 +71,20 @@ function buildVisibleAgents(
   pinnedAgents: MinimalPersonaSnapshot[],
   currentAgent: MinimalPersonaSnapshot | null
 ): [MinimalPersonaSnapshot[], boolean] {
-  if (!currentAgent) return [pinnedAgents, false];
+  /* NOTE: The unified agent (id = 0) is not visible in the sidebar, 
+  so we filter it out. */
+  if (!currentAgent)
+    return [pinnedAgents.filter((agent) => agent.id !== 0), false];
   const currentAgentIsPinned = pinnedAgents.some(
     (pinnedAgent) => pinnedAgent.id === currentAgent.id
   );
-  const visibleAgents = currentAgentIsPinned
-    ? pinnedAgents
-    : [...pinnedAgents, currentAgent];
+  const visibleAgents = (
+    currentAgentIsPinned ? pinnedAgents : [...pinnedAgents, currentAgent]
+  ).filter((agent) => agent.id !== 0);
+
   return [visibleAgents, currentAgentIsPinned];
 }
+
 interface RecentsSectionProps {
   isHistoryEmpty: boolean;
   chatSessions: ChatSession[];
@@ -101,7 +108,7 @@ function RecentsSection({ isHistoryEmpty, chatSessions }: RecentsSectionProps) {
     >
       <SidebarSection title="Recents">
         {isHistoryEmpty ? (
-          <Text text01 className="px-padding-button">
+          <Text text01 className="px-3">
             Try sending a message! Your chat history will appear here.
           </Text>
         ) : (
@@ -305,6 +312,42 @@ function AppSidebarInner() {
     [chatSessions]
   );
 
+  const newSessionButton = useMemo(
+    () => (
+      <div data-testid="AppSidebar/new-session">
+        <SidebarTab
+          leftIcon={SvgEditBig}
+          folded={folded}
+          onClick={() => route({})}
+          active={Array.from(searchParams).length === 0}
+        >
+          New Session
+        </SidebarTab>
+      </div>
+    ),
+    [folded, route, searchParams]
+  );
+
+  const { isAdmin, isCurator } = useUser();
+
+  const settingsButton = useMemo(
+    () => (
+      <div className="px-2">
+        {(isAdmin || isCurator) && (
+          <SidebarTab
+            href="/admin/indexing/status"
+            leftIcon={SvgSettings}
+            folded={folded}
+          >
+            {isAdmin ? "Admin Panel" : "Curator Panel"}
+          </SidebarTab>
+        )}
+        <Settings folded={folded} />
+      </div>
+    ),
+    [folded, isAdmin, isCurator]
+  );
+
   if (!combinedSettings) {
     return null;
   }
@@ -349,28 +392,10 @@ function AppSidebarInner() {
       )}
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
-        <div
-          className={cn(
-            "flex flex-col",
-            "px-spacing-interline",
-            "gap-spacing-interline",
-            "pt-spacing-paragraph",
-            "pb-spacing-paragraph"
-          )}
-        >
-          <div data-testid="AppSidebar/new-session">
-            <SidebarTab
-              leftIcon={SvgEditBig}
-              folded={folded}
-              onClick={() => route({})}
-              active={Array.from(searchParams).length === 0}
-            >
-              New Session
-            </SidebarTab>
-          </div>
-
-          {folded && (
-            <>
+        {folded ? (
+          <div className="flex flex-col h-full justify-between">
+            <div className="px-2">
+              {newSessionButton}
               <SidebarTab
                 leftIcon={SvgOnyxOctagon}
                 onClick={() => toggleModal(ModalIds.AgentsModal, true)}
@@ -387,92 +412,94 @@ function AppSidebarInner() {
               >
                 New Project
               </SidebarTab>
-            </>
-          )}
-        </div>
-
-        {/* This is the main scrollable body. It should have top + bottom shadows on overflow */}
-        <VerticalShadowScroller className="gap-padding-content px-spacing-interline">
-          {!folded && (
-            <>
-              {/* Agents */}
-              <SidebarSection title="Agents">
+            </div>
+            {settingsButton}
+          </div>
+        ) : (
+          <>
+            <SidebarBody
+              actionButton={newSessionButton}
+              footer={settingsButton}
+            >
+              <>
+                {/* Agents */}
                 <DndContext
                   sensors={sensors}
                   collisionDetection={closestCenter}
                   onDragEnd={handleAgentDragEnd}
                 >
-                  <SortableContext
-                    items={visibleAgentIds}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {visibleAgents.map((visibleAgent) => (
-                      <AgentButton key={visibleAgent.id} agent={visibleAgent} />
-                    ))}
-                  </SortableContext>
+                  <SidebarSection title="Agents">
+                    <SortableContext
+                      items={visibleAgentIds}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {visibleAgents.map((visibleAgent) => (
+                        <AgentButton
+                          key={visibleAgent.id}
+                          agent={visibleAgent}
+                        />
+                      ))}
+                    </SortableContext>
+                    <div data-testid="AppSidebar/more-agents">
+                      <SidebarTab
+                        leftIcon={SvgMoreHorizontal}
+                        onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                        lowlight
+                      >
+                        More Agents
+                      </SidebarTab>
+                    </div>
+                  </SidebarSection>
                 </DndContext>
-                <div data-testid="AppSidebar/more-agents">
-                  <SidebarTab
-                    leftIcon={SvgMoreHorizontal}
-                    onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-                    lowlight
-                  >
-                    More Agents
-                  </SidebarTab>
-                </div>
-              </SidebarSection>
 
-              {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
-              <DndContext
-                sensors={sensors}
-                collisionDetection={pointerWithin}
-                modifiers={[
-                  restrictToFirstScrollableAncestor,
-                  restrictToVerticalAxis,
-                ]}
-                onDragEnd={handleChatProjectDragEnd}
-              >
-                <SidebarSection
-                  title="Projects"
-                  action={
-                    <IconButton
-                      icon={SvgFolderPlus}
-                      internal
-                      tooltip="New Project"
+                {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={pointerWithin}
+                  modifiers={[
+                    restrictToFirstScrollableAncestor,
+                    restrictToVerticalAxis,
+                  ]}
+                  onDragEnd={handleChatProjectDragEnd}
+                >
+                  <SidebarSection
+                    title="Projects"
+                    action={
+                      <IconButton
+                        icon={SvgFolderPlus}
+                        internal
+                        tooltip="New Project"
+                        onClick={() =>
+                          toggleModal(ModalIds.CreateProjectModal, true)
+                        }
+                      />
+                    }
+                  >
+                    {projects.map((project) => (
+                      <ProjectFolderButton key={project.id} project={project} />
+                    ))}
+
+                    <SidebarTab
+                      leftIcon={SvgFolderPlus}
                       onClick={() =>
                         toggleModal(ModalIds.CreateProjectModal, true)
                       }
-                    />
-                  }
-                >
-                  {projects.map((project) => (
-                    <ProjectFolderButton key={project.id} project={project} />
-                  ))}
+                      lowlight
+                    >
+                      New Project
+                    </SidebarTab>
+                  </SidebarSection>
 
-                  <SidebarTab
-                    leftIcon={SvgFolderPlus}
-                    onClick={() =>
-                      toggleModal(ModalIds.CreateProjectModal, true)
-                    }
-                    lowlight
-                  >
-                    New Project
-                  </SidebarTab>
-                </SidebarSection>
-
-                {/* Recents */}
-                <RecentsSection
-                  isHistoryEmpty={isHistoryEmpty}
-                  chatSessions={chatSessions}
-                />
-              </DndContext>
-            </>
-          )}
-        </VerticalShadowScroller>
-
-        <div className="px-spacing-interline pt-spacing-interline-mini">
-          <Settings folded={folded} />
-        </div>
+                  {/* Recents */}
+                  <RecentsSection
+                    isHistoryEmpty={isHistoryEmpty}
+                    chatSessions={chatSessions}
+                  />
+                </DndContext>
+              </>
+            </SidebarBody>
+          </>
+        )}
       </SidebarWrapper>
     </>
   );

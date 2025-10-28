@@ -1,0 +1,50 @@
+name: "Prepare Build (OpenAPI generation)"
+description: "Sets up Python with uv, installs deps, generates OpenAPI schema and Python client, uploads artifact"
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install Python dependencies with uv
+      shell: bash
+      run: |
+        uv pip install --system \
+          -r backend/requirements/default.txt \
+          -r backend/requirements/dev.txt
+
+    - name: Generate OpenAPI schema
+      shell: bash
+      working-directory: backend
+      env:
+        PYTHONPATH: "."
+      run: |
+        python scripts/onyx_openapi_schema.py --filename generated/openapi.json
+
+    - name: Generate OpenAPI Python client
+      shell: bash
+      run: |
+        docker run --rm \
+          -v "${{ github.workspace }}/backend/generated:/local" \
+          openapitools/openapi-generator-cli generate \
+          -i /local/openapi.json \
+          -g python \
+          -o /local/onyx_openapi_client \
+          --package-name onyx_openapi_client \
+          --skip-validate-spec \
+          --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
+
+    - name: Upload OpenAPI artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: openapi-artifacts
+        path: backend/generated/
+

@@ -170,77 +170,79 @@ function DefaultAssistantConfig() {
   return (
     <div>
       {popup}
-      <div className="max-w-4xl w-full">
-        <div className="space-y-6">
-          <div className="mt-4">
-            <Text className="text-text-dark">
-              Configure which capabilities are enabled for the default assistant
-              in chat. These settings apply to all users who haven&apos;t
-              customized their assistant preferences.
+      <div className="space-y-6">
+        <div className="mt-4">
+          <Text className="text-text-dark">
+            Configure which capabilities are enabled for the default assistant
+            in chat. These settings apply to all users who haven&apos;t
+            customized their assistant preferences.
+          </Text>
+        </div>
+
+        <Separator />
+
+        <div className="max-w-4xl">
+          <div className="flex gap-x-2 items-center">
+            <Text mainUiBody text04 className="font-medium text-sm">
+              Instructions
             </Text>
           </div>
-
-          <Separator />
-
-          <div className="max-w-4xl">
-            <div className="flex gap-x-2 items-center">
-              <div className="block font-medium text-sm">Instructions</div>
-            </div>
-            <SubLabel>
-              Add instructions to tailor the behavior of the assistant.
-            </SubLabel>
-            <div>
-              <textarea
-                className={cn(
-                  "w-full",
-                  "p-3",
-                  "border",
-                  "border-border",
-                  "rounded-lg",
-                  "text-sm",
-                  "[&::placeholder]:text-text-muted/50"
-                )}
-                rows={8}
-                value={systemPrompt}
-                onChange={(e) => handleSystemPromptChange(e.target.value)}
-                placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
-              />
-              <div className="flex justify-between items-center mt-2">
-                <div className="text-sm text-gray-500">
-                  {systemPrompt.length} characters
-                </div>
-                <Button
-                  onClick={handleSaveSystemPrompt}
-                  disabled={savingPrompt || systemPrompt === originalPrompt}
-                >
-                  {savingPrompt ? "Saving..." : "Save Instructions"}
-                </Button>
-              </div>
+          <SubLabel>
+            Add instructions to tailor the behavior of the assistant.
+          </SubLabel>
+          <div>
+            <textarea
+              className={cn(
+                "w-full",
+                "p-3",
+                "border",
+                "border-border",
+                "rounded-lg",
+                "text-sm",
+                "[&::placeholder]:text-text-muted/50"
+              )}
+              rows={8}
+              value={systemPrompt}
+              onChange={(e) => handleSystemPromptChange(e.target.value)}
+              placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
+            />
+            <div className="flex justify-between items-center mt-2">
+              <Text mainUiMuted text03 className="text-sm">
+                {systemPrompt.length} characters
+              </Text>
+              <Button
+                onClick={handleSaveSystemPrompt}
+                disabled={savingPrompt || systemPrompt === originalPrompt}
+              >
+                {savingPrompt ? "Saving..." : "Save Instructions"}
+              </Button>
             </div>
           </div>
+        </div>
 
-          <Separator />
+        <Separator />
 
-          <div>
-            <p className="block font-medium text-sm mb-2">Actions</p>
-            <div className="space-y-3">
-              {(availableTools || [])
-                .slice()
-                .sort((a, b) => {
-                  // Show enabled (available) tools first; not enabled at bottom
-                  if (a.is_available === b.is_available) return 0;
-                  return a.is_available ? -1 : 1;
-                })
-                .map((tool) => (
-                  <ToolToggle
-                    key={tool.id}
-                    tool={tool}
-                    enabled={enabledTools.has(tool.id)}
-                    onToggle={() => handleToggleTool(tool.id)}
-                    disabled={savingTools.has(tool.id)}
-                  />
-                ))}
-            </div>
+        <div>
+          <Text mainUiBody text04 className="font-medium text-sm mb-2">
+            Actions
+          </Text>
+          <div className="space-y-3">
+            {(availableTools || [])
+              .slice()
+              .sort((a, b) => {
+                // Show enabled (available) tools first; not enabled at bottom
+                if (a.is_available === b.is_available) return 0;
+                return a.is_available ? -1 : 1;
+              })
+              .map((tool) => (
+                <ToolToggle
+                  key={tool.id}
+                  tool={tool}
+                  enabled={enabledTools.has(tool.id)}
+                  onToggle={() => handleToggleTool(tool.id)}
+                  disabled={savingTools.has(tool.id)}
+                />
+              ))}
           </div>
         </div>
       </div>
@@ -309,11 +311,11 @@ function ToolToggle({
 
 export default function Page() {
   return (
-    <div className="mx-auto max-w-4xl w-full">
+    <div className="w-full max-w-4xl mr-auto">
       <AdminPageTitle
         title="Default Assistant"
         icon={
-          <OnyxLogo className="my-auto w-[1.5rem] h-[1.5rem] stroke-text-04" />
+          <OnyxLogo width={32} height={32} className="my-auto stroke-text-04" />
         }
       />
       <DefaultAssistantConfig />

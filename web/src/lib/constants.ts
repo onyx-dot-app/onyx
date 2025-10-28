@@ -106,6 +106,7 @@ export const ALLOWED_URL_PROTOCOLS = [
 ];
 
 export const MAX_CHARACTERS_PERSONA_DESCRIPTION = 5000000;
+export const MAX_STARTER_MESSAGES = 4;
 
 //Credential form data key constants
 export const CREDENTIAL_NAME = "name";
@@ -118,9 +119,13 @@ export const CREDENTIAL_JSON = "credential_json";
 export const MODAL_ROOT_ID = "modal-root";
 
 export const ANONYMOUS_USER_NAME = "Anonymous";
-export const UNNAMED_CHAT = "Unnamed Chat";
+export const UNNAMED_CHAT = "New Chat";
 
 export const DEFAULT_ASSISTANT_ID = 0;
 export const GENERAL_ASSISTANT_ID = -1;
 export const IMAGE_ASSISTANT_ID = -2;
 export const ART_ASSISTANT_ID = -3;
+
+// Used in the File Picker to show a max number of files.
+// The rest will be hidden behind an "All Recent Files" button.
+export const MAX_FILES_TO_SHOW = 3;

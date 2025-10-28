@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Dialog } from "@headlessui/react";
-import { Button } from "../ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { Building, ArrowRight, Send, CheckCircle } from "lucide-react";
 import { useUser } from "../user/UserProvider";
@@ -159,7 +159,6 @@ export function NewTeamModal() {
               <p className="text-red-500 dark:text-red-400">{error}</p>
               <div className="flex w-full pt-2">
                 <Button
-                  variant="agent"
                   onClick={handleContinueToNewOrg}
                   className="flex w-full text-center items-center justify-center"
                 >
@@ -177,7 +176,6 @@ export function NewTeamModal() {
               </p>
               <div className="flex w-full pt-2">
                 <Button
-                  variant="agent"
                   onClick={handleContinueToNewOrg}
                   className="flex w-full text-center items-center justify-center"
                 >
@@ -194,7 +192,6 @@ export function NewTeamModal() {
               <div className="mt-4">
                 <Button
                   onClick={handleRequestInvite}
-                  variant="agent"
                   className="flex w-full items-center justify-center"
                   disabled={isSubmitting}
                 >

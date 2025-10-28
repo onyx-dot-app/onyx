@@ -12,6 +12,7 @@ import SvgEdit from "@/icons/edit";
 import {
   Popover,
   PopoverContent,
+  PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import SvgTrash from "@/icons/trash";
@@ -166,7 +167,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
                 </PopoverTrigger>
 
                 <PopoverContent side="right" align="end">
-                  {popoverItems}
+                  <PopoverMenu>{popoverItems}</PopoverMenu>
                 </PopoverContent>
               </>
             }

@@ -378,6 +378,16 @@ def _update_request_url(request: RequestOptions, next_url: str) -> None:
     request.url = next_url
 
 
+def _add_prefer_header(request: RequestOptions) -> None:
+    """Add Prefer header to work around Microsoft Graph API ampersand bug.
+    See: https://developer.microsoft.com/en-us/graph/known-issues/?search=18185
+    """
+    if not hasattr(request, "headers") or request.headers is None:
+        request.headers = {}
+    # Add header to handle properly encoded ampersands in filters
+    request.headers["Prefer"] = "legacySearch=false"
+
+
 def _collect_all_teams(
     graph_client: GraphClient,
     requested: list[str] | None = None,
@@ -385,26 +395,52 @@ def _collect_all_teams(
     teams: list[Team] = []
     next_url: str | None = None
 
+    # Build OData filter for requested teams
+    # Only escape single quotes for OData syntax - the library handles URL encoding
     filter = None
-    if requested:
-        filter = " or ".join(f"displayName eq '{team_name}'" for team_name in requested)
+    use_filter = bool(requested)
+    if use_filter and requested:
+        filter_parts = []
+        for name in requested:
+            # Escape single quotes for OData syntax (replace ' with '')
+            # The office365 library will handle URL encoding of the entire filter
+            escaped_name = name.replace("'", "''")
+            filter_parts.append(f"displayName eq '{escaped_name}'")
+        filter = " or ".join(filter_parts)
 
     while True:
-        if filter:
-            query = graph_client.teams.get().filter(filter)
-        else:
-            query = graph_client.teams.get_all(
-                # explicitly needed because of incorrect type definitions provided by the `office365` library
-                page_loaded=lambda _: None
-            )
+        try:
+            if filter:
+                query = graph_client.teams.get().filter(filter)
+                # Add header to work around Microsoft Graph API ampersand bug
+                query.before_execute(lambda req: _add_prefer_header(request=req))
+            else:
+                query = graph_client.teams.get_all(
+                    # explicitly needed because of incorrect type definitions provided by the `office365` library
+                    page_loaded=lambda _: None
+                )
 
-        if next_url:
-            url = next_url
-            query.before_execute(
-                lambda req: _update_request_url(request=req, next_url=url)
-            )
+            if next_url:
+                url = next_url
+                query.before_execute(
+                    lambda req: _update_request_url(request=req, next_url=url)
+                )
 
-        team_collection = query.execute_query()
+            team_collection = query.execute_query()
+        except (ClientRequestException, ValueError) as e:
+            # If OData filter fails, fallback to client-side filtering
+            if use_filter:
+                logger.warning(
+                    f"OData filter failed with {type(e).__name__}: {e}. "
+                    f"Falling back to client-side filtering."
+                )
+                use_filter = False
+                filter = None
+                teams = []
+                next_url = None
+                continue
+            raise
+
         filtered_teams = (
             team
             for team in team_collection

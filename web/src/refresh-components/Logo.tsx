@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED } from "@/lib/constants";
@@ -14,21 +15,33 @@ export interface LogoProps {
 export default function Logo({ folded, className }: LogoProps) {
   const settings = useSettingsContext();
 
-  const logo = settings.enterpriseSettings?.use_custom_logo ? (
-    <img
-      src="/api/enterprise-settings/logo"
-      alt="Logo"
-      style={{ objectFit: "contain", height: FOLDED_SIZE, width: FOLDED_SIZE }}
-    />
-  ) : (
-    <OnyxIcon size={FOLDED_SIZE} className={cn("flex-shrink-0", className)} />
+  const logo = useMemo(
+    () =>
+      settings.enterpriseSettings?.use_custom_logo ? (
+        <img
+          src="/api/enterprise-settings/logo"
+          alt="Logo"
+          style={{
+            objectFit: "contain",
+            height: FOLDED_SIZE,
+            width: FOLDED_SIZE,
+          }}
+          className={cn("flex-shrink-0", className)}
+        />
+      ) : (
+        <OnyxIcon
+          size={FOLDED_SIZE}
+          className={cn("flex-shrink-0", className)}
+        />
+      ),
+    [className, settings.enterpriseSettings?.use_custom_logo]
   );
 
   if (folded) return logo;
 
   return settings.enterpriseSettings?.application_name ? (
     <div className="flex flex-col">
-      <div className="flex flex-row items-center gap-spacing-interline">
+      <div className="flex flex-row items-center gap-2">
         {logo}
         <Text headingH3 className="break-all line-clamp-2">
           {settings.enterpriseSettings?.application_name}

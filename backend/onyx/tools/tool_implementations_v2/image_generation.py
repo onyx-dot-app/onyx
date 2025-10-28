@@ -6,6 +6,7 @@ from agents import RunContextWrapper
 from onyx.agents.agent_search.dr.models import GeneratedImage
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
+from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import save_files
@@ -55,6 +56,13 @@ def _image_generation_core(
     for tool_response in image_generation_tool_instance.run(
         **tool_args  # type: ignore[arg-type]
     ):
+        # Check if the session has been cancelled
+        if not is_connected(
+            run_context.context.chat_session_id,
+            run_context.context.run_dependencies.redis_client,
+        ):
+            break
+
         # Handle heartbeat responses
         if tool_response.id == "image_generation_heartbeat":
             # Emit heartbeat event for every iteration
@@ -93,9 +101,6 @@ def _image_generation_core(
             ]
             break
 
-    if not generated_images:
-        raise RuntimeError("No images were generated")
-
     run_context.context.iteration_instructions.append(
         IterationInstructions(
             iteration_nr=index,
@@ -104,7 +109,7 @@ def _image_generation_core(
             reasoning="Generating images",
         )
     )
-    run_context.context.aggregated_context.global_iteration_responses.append(
+    run_context.context.global_iteration_responses.append(
         IterationAnswer(
             tool=image_generation_tool_instance.name,
             tool_id=image_generation_tool_instance.id,
@@ -122,7 +127,6 @@ def _image_generation_core(
             cited_documents={},
         )
     )
-    # Emit final result
     emitter.emit(
         Packet(
             ind=index,
@@ -139,7 +143,7 @@ def _image_generation_core(
 # message back to the LLM. This is needed for image_generation since we configure our agent
 # to stop at this tool.
 @function_tool(failure_error_function=None)
-def image_generation_tool(
+def image_generation(
     run_context: RunContextWrapper[ChatTurnContext], prompt: str, shape: str = "square"
 ) -> str:
     """
@@ -149,13 +153,22 @@ def image_generation_tool(
         prompt: The text description of the image to generate
         shape: The desired image shape - 'square', 'portrait', or 'landscape'
     """
-    image_generation_tool_instance = (
-        run_context.context.run_dependencies.image_generation_tool
+    image_generation_tool_instance = next(
+        (
+            tool
+            for tool in run_context.context.run_dependencies.tools
+            if tool.name == ImageGenerationTool._NAME
+        ),
+        None,
     )
-    assert image_generation_tool_instance is not None
+    if image_generation_tool_instance is None:
+        raise ValueError("Image generation tool not found")
 
     generated_images: list[GeneratedImage] = _image_generation_core(
-        run_context, prompt, shape, image_generation_tool_instance
+        run_context,
+        prompt,
+        shape,
+        cast(ImageGenerationTool, image_generation_tool_instance),
     )
 
     # We should stop after this tool is called, so it doesn't matter what it returns

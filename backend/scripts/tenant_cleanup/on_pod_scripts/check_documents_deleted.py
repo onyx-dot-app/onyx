@@ -52,7 +52,8 @@ def check_documents_deleted(tenant_id: str) -> dict:
         doc_count = doc_count or 0
 
         # If any records remain beyond acceptable thresholds, return error status
-        if cc_count > 0 or doc_count > 5:
+        is_deletable = cc_count == 0 or doc_count <= 5
+        if not is_deletable:
             return {
                 "status": "error",
                 "message": (

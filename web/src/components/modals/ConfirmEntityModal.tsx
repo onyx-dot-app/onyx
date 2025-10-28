@@ -54,7 +54,7 @@ export function ConfirmEntityModal({
         </Button>
       }
     >
-      <div className="flex flex-col gap-spacing-paragraph">
+      <div className="flex flex-col gap-4">
         {!removeConfirmationText && (
           <Text>
             Are you sure you want to {actionText} <b>{entityName}</b>?

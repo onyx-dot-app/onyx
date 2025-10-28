@@ -34,13 +34,13 @@ export default function CoreModal({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[2000] flex items-center justify-center bg-mask-03 backdrop-blur-xl"
+      className="fixed inset-0 z-[2000] flex items-center justify-center bg-mask-03 backdrop-blur-03"
       onClick={() => (insideModal.current ? undefined : onClickOutside?.())}
     >
       <div
         ref={modalRef}
         className={cn(
-          "z-10 rounded-16 flex border shadow-2xl flex-col bg-background-tint-00",
+          "z-10 rounded-16 flex border shadow-2xl flex-col bg-background-tint-00 overflow-hidden",
           className
         )}
         onMouseOver={() => (insideModal.current = true)}

@@ -44,14 +44,14 @@ export default function CreateProjectModal() {
       description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
       xs
     >
-      <div className="flex flex-col p-spacing-paragraph bg-background-tint-01">
+      <div className="flex flex-col p-4 bg-background-tint-01">
         <FieldInput
           label="Project Name"
           placeholder="What are you working on?"
           ref={fieldInputRef}
         />
       </div>
-      <div className="flex flex-row justify-end gap-spacing-interline p-spacing-paragraph">
+      <div className="flex flex-row justify-end gap-2 p-4">
         <Button
           secondary
           onClick={() => toggleModal(ModalIds.CreateProjectModal, false)}

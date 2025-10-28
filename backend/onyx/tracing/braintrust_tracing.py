@@ -23,7 +23,32 @@ def _truncate_str(s: str) -> str:
 
 
 def _mask(data: Any) -> Any:
-    """Mask data if it exceeds the maximum length threshold."""
+    """Mask data if it exceeds the maximum length threshold or contains private_key."""
+    # Handle dictionaries recursively
+    if isinstance(data, dict):
+        masked_dict = {}
+        for key, value in data.items():
+            if isinstance(key, str) and "private_key" in key.lower():
+                masked_dict[key] = "***REDACTED***"
+            else:
+                masked_dict[key] = _mask(value)
+        return masked_dict
+
+    # Handle lists recursively
+    if isinstance(data, list):
+        return [_mask(item) for item in data]
+
+    # Handle strings
+    if isinstance(data, str):
+        # Mask the value if the key was "private_key" (handled in dict above)
+        # Also check for private_key patterns in the string content
+        if "private_key" in data.lower():
+            return "***REDACTED***"
+        if len(data) <= MASKING_LENGTH:
+            return data
+        return _truncate_str(data)
+
+    # For other types, check length
     if len(str(data)) <= MASKING_LENGTH:
         return data
     return _truncate_str(str(data))

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from pydantic import Field
 from sqlalchemy.orm import Session
 
+from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import DocumentPruningConfig
@@ -14,10 +15,6 @@ from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import AZURE_DALLE_API_VERSION
 from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
-from onyx.configs.app_configs import OAUTH_CLIENT_ID
-from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
-from onyx.configs.app_configs import OKTA_API_TOKEN
-from onyx.configs.app_configs import OPENID_CONFIG_URL
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.enums import LLMEvaluationType
@@ -34,6 +31,7 @@ from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.mcp import get_user_connection_config
 from onyx.db.models import Persona
 from onyx.db.models import User
+from onyx.db.oauth_config import get_oauth_config
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -52,9 +50,6 @@ from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import
     KnowledgeGraphTool,
 )
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
-from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
-    OktaProfileTool,
-)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
@@ -296,33 +291,6 @@ def construct_tools(
                     raise ValueError(
                         "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
                     )
-            # Handle Okta Profile Tool
-            elif tool_cls.__name__ == OktaProfileTool.__name__:
-                if not user_oauth_token:
-                    raise ValueError(
-                        "Okta Profile Tool requires user OAuth token but none found"
-                    )
-
-                if not all([OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OPENID_CONFIG_URL]):
-                    raise ValueError(
-                        "Okta Profile Tool requires OAuth configuration to be set"
-                    )
-
-                if not OKTA_API_TOKEN:
-                    raise ValueError(
-                        "Okta Profile Tool requires OKTA_API_TOKEN to be set"
-                    )
-
-                tool_dict[db_tool_model.id] = [
-                    OktaProfileTool(
-                        access_token=user_oauth_token,
-                        client_id=OAUTH_CLIENT_ID,
-                        client_secret=OAUTH_CLIENT_SECRET,
-                        openid_config_url=OPENID_CONFIG_URL,
-                        okta_api_token=OKTA_API_TOKEN,
-                        tool_id=db_tool_model.id,
-                    )
-                ]
 
             # Handle KG Tool
             elif tool_cls.__name__ == KnowledgeGraphTool.__name__:
@@ -347,6 +315,27 @@ def construct_tools(
             if not custom_tool_config:
                 custom_tool_config = CustomToolConfig()
 
+            # Determine which OAuth token to use
+            oauth_token_for_tool = None
+
+            # Priority 1: OAuth config (per-tool OAuth)
+            if db_tool_model.oauth_config_id and user:
+                oauth_config = get_oauth_config(
+                    db_tool_model.oauth_config_id, db_session
+                )
+                if oauth_config:
+                    token_manager = OAuthTokenManager(oauth_config, user.id, db_session)
+                    oauth_token_for_tool = token_manager.get_valid_access_token()
+                    if not oauth_token_for_tool:
+                        logger.warning(
+                            f"No valid OAuth token found for tool {db_tool_model.id} "
+                            f"with OAuth config {db_tool_model.oauth_config_id}"
+                        )
+
+            # Priority 2: Passthrough auth (user's login OAuth token)
+            elif db_tool_model.passthrough_auth:
+                oauth_token_for_tool = user_oauth_token
+
             tool_dict[db_tool_model.id] = cast(
                 list[Tool],
                 build_custom_tools_from_openapi_schema_and_headers(
@@ -362,9 +351,7 @@ def construct_tools(
                             custom_tool_config.additional_headers or {}
                         )
                     ),
-                    user_oauth_token=(
-                        user_oauth_token if db_tool_model.passthrough_auth else None
-                    ),
+                    user_oauth_token=oauth_token_for_tool,
                 ),
             )
 

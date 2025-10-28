@@ -4,7 +4,7 @@ cohere==5.6.1
 google-cloud-aiplatform==1.121.0
 fastapi==0.116.1
 numpy==1.26.4
-openai==1.107.1
+openai==2.6.1
 pydantic==2.11.7
 retry==0.9.2
 safetensors==0.5.3

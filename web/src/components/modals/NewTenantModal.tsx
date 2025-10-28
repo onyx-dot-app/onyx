@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Dialog } from "@headlessui/react";
-import { Button } from "../ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { ArrowRight, X } from "lucide-react";
 import { logout } from "@/lib/user";
@@ -184,7 +184,7 @@ export default function NewTenantModal({
               {isInvite && (
                 <Button
                   onClick={handleRejectInvite}
-                  variant="outline"
+                  secondary
                   className="flex items-center flex-1"
                   disabled={isLoading}
                 >
@@ -198,7 +198,6 @@ export default function NewTenantModal({
               )}
 
               <Button
-                variant={isInvite ? "default" : "agent"}
                 onClick={handleJoinTenant}
                 className={`flex items-center justify-center ${
                   isInvite ? "flex-1" : "w-full"

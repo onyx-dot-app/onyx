@@ -140,6 +140,9 @@ export interface Message {
   // cached values for easy access
   documents?: OnyxDocument[] | null;
   citations?: CitationMap;
+
+  // feedback state
+  currentFeedback?: FeedbackType | null;
 }
 
 export interface BackendChatSession {
@@ -175,6 +178,7 @@ export interface BackendMessage {
   citations: CitationMap | null;
   files: FileDescriptor[];
   tool_call: ToolCallFinalResult | null;
+  current_feedback: string | null;
 
   sub_questions: SubQuestionDetail[];
   // Keeping existing properties

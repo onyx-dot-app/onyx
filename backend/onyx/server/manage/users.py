@@ -61,6 +61,7 @@ from onyx.db.user_preferences import update_user_pinned_assistants
 from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
 from onyx.db.user_preferences import update_user_temperature_override_enabled
+from onyx.db.user_preferences import update_user_theme_preference
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users
@@ -76,6 +77,7 @@ from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
+from onyx.server.manage.models import ThemePreferenceRequest
 from onyx.server.manage.models import UserByEmail
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
@@ -745,6 +747,25 @@ def update_user_auto_scroll_api(
             raise RuntimeError("This should never happen")
 
     update_user_auto_scroll(user.id, request.auto_scroll, db_session)
+
+
+@router.patch("/user/theme-preference")
+def update_user_theme_preference_api(
+    request: ThemePreferenceRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            no_auth_user.preferences.theme_preference = request.theme_preference
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    update_user_theme_preference(user.id, request.theme_preference, db_session)
 
 
 @router.patch("/user/default-model")

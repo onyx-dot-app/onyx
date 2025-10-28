@@ -12,7 +12,7 @@ import { DocumentUpdatedAtBadge } from "./DocumentUpdatedAtBadge";
 import { SourceIcon } from "../SourceIcon";
 import { MetadataBadge } from "../MetadataBadge";
 import { BookIcon, LightBulbIcon } from "../icons/icons";
-
+import Text from "@/refresh-components/texts/Text";
 import { FaStar } from "react-icons/fa";
 import { FiTag } from "react-icons/fi";
 import { SettingsContext } from "../settings/SettingsProvider";
@@ -21,6 +21,7 @@ import { WarningCircle } from "@phosphor-icons/react";
 import TextView from "../chat/TextView";
 import { openDocument } from "@/lib/search/utils";
 import { SubQuestionDetail } from "@/app/chat/interfaces";
+import { cn } from "@/lib/utils";
 
 export const buildDocumentSummaryDisplay = (
   matchHighlights: string[],
@@ -448,27 +449,38 @@ export function CompactDocumentCard({
       onClick={() => {
         openDocument(document, updatePresentingDocument);
       }}
-      className="max-w-[250px]  gap-y-1 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0  flex-col  content-start items-start gap-0 "
+      className={cn(
+        "max-w-[250px] gap-y-1 cursor-pointer pb-0 pt-0 mt-0",
+        "flex gap-y-0 flex-col content-start items-start gap-0"
+      )}
     >
-      <div className="text-sm  flex gap-x-2 !pb-0 !mb-0 font-semibold flex  items-center gap-x-1 text-text-900 pt-0 mt-0  w-full">
-        {icon}
-        <p className="gap-0 p-0 m-0 line-clamp-2">
+      <div className={cn("flex !pb-0 !mb-0 pt-0 mt-0 w-full")}>
+        <div className="inline-block align-top">{icon}</div>
+        <Text
+          text04
+          mainUiAction
+          className="gap-0 !p-0 !my-0 line-clamp-2 ml-2"
+        >
           {(document.semantic_identifier || document.document_id).slice(0, 40)}
           {(document.semantic_identifier || document.document_id).length > 40 &&
             "..."}
-        </p>
+        </Text>
       </div>
       {document.blurb && (
-        <div className="text-xs mb-0 text-neutral-600 dark:text-neutral-300 line-clamp-2">
+        <Text
+          text03
+          secondaryBody
+          className="mb-0 mt-1 !py-0 !mb-0 line-clamp-2"
+        >
           {document.blurb}
-        </div>
+        </Text>
       )}
       {document.updated_at && (
-        <div className=" flex mt-0 pt-0 items-center justify-between w-full ">
+        <div className="flex mt-0 pt-0 items-center justify-between w-full ">
           {!isNaN(new Date(document.updated_at).getTime()) && (
-            <span className="text-xs text-text-500">
+            <Text text03 figureSmallLabel className="text-xs text-text-500">
               Updated {new Date(document.updated_at).toLocaleDateString()}
-            </span>
+            </Text>
           )}
         </div>
       )}

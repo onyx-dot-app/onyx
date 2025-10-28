@@ -11,7 +11,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { v4 as uuidv4 } from "uuid";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { SimplifiedChatInputBar } from "../components/input/SimplifiedChatInputBar";
 import { Menu } from "lucide-react";
 import { Shortcut } from "./interfaces";
@@ -329,13 +329,10 @@ export default function NRFPage({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2 justify-center">
-            <Button
-              variant="outline"
-              onClick={() => setShowTurnOffModal(false)}
-            >
+            <Button secondary onClick={() => setShowTurnOffModal(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={confirmTurnOff}>
+            <Button danger onClick={confirmTurnOff}>
               Turn off
             </Button>
           </DialogFooter>
