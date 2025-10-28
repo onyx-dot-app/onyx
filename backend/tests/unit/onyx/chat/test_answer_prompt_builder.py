@@ -1,8 +1,8 @@
+import re
 from collections.abc import Callable
 from typing import cast
 
 import pytest
-from litellm.litellm_core_utils.llm_response_utils.convert_dict_to_response import re
 from pytest_mock import MockerFixture
 
 from onyx.chat.models import PromptConfig
