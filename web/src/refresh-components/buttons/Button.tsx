@@ -190,7 +190,7 @@ const textClasses = (selected?: boolean) =>
     },
   }) as const;
 
-const iconClasses = (active?: boolean) =>
+const iconClasses = (selected?: boolean) =>
   ({
     defaulted: {
       primary: {
@@ -199,22 +199,28 @@ const iconClasses = (active?: boolean) =>
       },
       secondary: {
         enabled: [
-          active ? "stroke-text-05" : "stroke-text-03",
+          "stroke-text-03",
           "group-hover/Button:stroke-text-04",
+          "group-active/Button:stroke-text-05",
+          selected && "stroke-text-04",
         ],
         disabled: ["stroke-text-01"],
       },
       tertiary: {
         enabled: [
-          active ? "stroke-text-05" : "stroke-text-03",
+          "stroke-text-03",
           "group-hover/Button:stroke-text-04",
+          "group-active/Button:stroke-text-05",
+          selected && "stroke-text-04",
         ],
         disabled: ["stroke-text-01"],
       },
       internal: {
         enabled: [
-          active ? "stroke-text-05" : "stroke-text-03",
+          "stroke-text-03",
           "group-hover/Button:stroke-text-04",
+          "group-active/Button:stroke-text-05",
+          selected && "stroke-text-04",
         ],
         disabled: ["stroke-text-01"],
       },
@@ -222,15 +228,15 @@ const iconClasses = (active?: boolean) =>
     action: {
       primary: {
         enabled: ["stroke-text-light-05"],
-        disabled: ["stroke-text-light-05"],
+        disabled: ["stroke-text-01"],
       },
       secondary: {
-        enabled: [],
-        disabled: [],
+        enabled: ["stroke-action-text-link-05"],
+        disabled: ["stroke-action-link-03"],
       },
       tertiary: {
-        enabled: [],
-        disabled: [],
+        enabled: ["stroke-action-text-link-05"],
+        disabled: ["stroke-action-link-03"],
       },
       internal: {
         enabled: [],
@@ -240,15 +246,15 @@ const iconClasses = (active?: boolean) =>
     danger: {
       primary: {
         enabled: ["stroke-text-light-05"],
-        disabled: ["stroke-text-light-05"],
+        disabled: ["stroke-text-01"],
       },
       secondary: {
-        enabled: [],
-        disabled: [],
+        enabled: ["stroke-action-text-danger-05"],
+        disabled: ["stroke-action-danger-03"],
       },
       tertiary: {
-        enabled: [],
-        disabled: [],
+        enabled: ["stroke-action-text-danger-05"],
+        disabled: ["stroke-action-danger-03"],
       },
       internal: {
         enabled: [],
