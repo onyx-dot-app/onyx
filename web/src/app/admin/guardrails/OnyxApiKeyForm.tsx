@@ -78,6 +78,8 @@ export const OnyxApiKeyForm = ({
             template: initialTemplateId,
             validator_type: apiKey?.validator_type,
             llm_provider_id: apiKey?.llm_provider_id || "",
+            // Preserve include_llm from existing config if present for pass-through
+            include_llm: (apiKey?.config as any)?.include_llm,
           }}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
@@ -124,6 +126,8 @@ export const OnyxApiKeyForm = ({
               llm_provider_id: values.llm_provider_id
                 ? Number(values.llm_provider_id)
                 : undefined,
+              // Return include_llm exactly as received (no coercion)
+              include_llm: (values as any).include_llm,
             };
 
             let response;
@@ -184,6 +188,8 @@ export const OnyxApiKeyForm = ({
                   // Initialize dynamic fields from template schema and set validator_type
                   if (tpl && Array.isArray(tpl.config)) {
                     try {
+                      // Keep include_llm in form state for later pass-through to backend
+                      setFieldValue("include_llm", (tpl as any)?.include_llm);
                       tpl.config.forEach((field: any) => {
                         switch (field.type) {
                           case "multiselect":
@@ -243,7 +249,20 @@ export const OnyxApiKeyForm = ({
                   : undefined;
 
                 // Check if the template includes LLM support
-                const includeLlm = selectedTemplate?.include_llm;
+                const includeLlmRaw =
+                  (values as any)?.include_llm ?? selectedTemplate?.include_llm;
+                const includeLlm = (() => {
+                  const v = includeLlmRaw as any;
+                  if (typeof v === "boolean") return v;
+                  if (typeof v === "number") return v === 1;
+                  if (typeof v === "string") {
+                    const s = v.trim().toLowerCase();
+                    return (
+                      s === "true" || s === "1" || s === "yes" || s === "on"
+                    );
+                  }
+                  return false;
+                })();
 
                 if (
                   !includeLlm ||
