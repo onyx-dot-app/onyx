@@ -644,6 +644,7 @@ class JiraConnector(
                             jql=self.jql_query,
                             start=0,
                             max_results=1,
+                            all_issue_ids=[],
                         )
                     ),
                     None,
