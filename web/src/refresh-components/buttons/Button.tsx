@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -326,7 +326,6 @@ export default function Button({
       : danger
         ? "danger"
         : "main";
-
   const subvariant = primary
     ? "primary"
     : secondary
@@ -336,8 +335,16 @@ export default function Button({
         : internal
           ? "internal"
           : "primary";
-
   const abled = disabled ? "disabled" : "enabled";
+
+  const buttonClass = useMemo(
+    () => variantClasses(selected)[variant][subvariant][abled],
+    [selected, variant, subvariant, abled]
+  );
+  const iconClass = useMemo(
+    () => iconClasses(selected)[variant][subvariant][abled],
+    [selected, variant, subvariant, abled]
+  );
 
   const spacer = <div className="w-[0.1rem]" />;
 
@@ -345,7 +352,7 @@ export default function Button({
     <button
       className={cn(
         "p-2 h-fit rounded-12 group/Button w-fit flex flex-row items-center justify-center gap-1",
-        variantClasses(selected)[variant][subvariant][abled],
+        buttonClass,
         className
       )}
       disabled={disabled}
@@ -353,12 +360,7 @@ export default function Button({
     >
       {LeftIcon ? (
         <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
-          <LeftIcon
-            className={cn(
-              "w-[1rem] h-[1rem]",
-              iconClasses(selected)[variant][subvariant][abled]
-            )}
-          />
+          <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
         </div>
       ) : includeLeftSpacer ? (
         spacer
