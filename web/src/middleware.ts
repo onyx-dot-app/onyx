@@ -60,7 +60,7 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = PUBLIC_ROUTES.some((route) =>
     pathname.startsWith(route)
   );
-  const isAuthDisabled = await getAuthDisabledSS();
+  const isAuthDisabled = await getAuthDisabledSS().catch(() => false);
 
   if (isProtectedRoute && !isPublicRoute && !isAuthDisabled) {
     const authCookie = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME);
