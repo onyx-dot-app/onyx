@@ -35,6 +35,8 @@ def test_force_tool_use(
     # Create a chat session
     chat_session = ChatSessionManager.create(user_performing_action=basic_user)
 
+    # TODO: Richard -- if the web search force isn't working, you can
+    # force image generation tool
     # Send a simple message that wouldn't normally trigger web search
     # but force the web search tool to be used
     message = "hi"
