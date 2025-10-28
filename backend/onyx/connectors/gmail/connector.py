@@ -133,21 +133,21 @@ def _get_message_body(payload: dict[str, Any]) -> str:
 
     while stack:
         part = stack.pop()
-        if not isinstance(part, dict):
+        if not part:
             continue
 
-        children = part.get("parts", [])
-        for child in reversed(children):
-            stack.append(child)
+        children = part.get("parts") or []
+        stack.extend(reversed(children))
 
         mime_type = part.get("mimeType")
         if mime_type != "text/plain":
             continue
 
-        body = part.get("body") or {}
-        data = ""
-        if isinstance(body, dict):
+        body = part.get("body")
+        try:
             data = body.get("data") or ""
+        except (AttributeError, TypeError):
+            data = ""
 
         if not data:
             continue
