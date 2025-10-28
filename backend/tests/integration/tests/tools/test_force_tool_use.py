@@ -26,33 +26,31 @@ def test_force_tool_use(
     This test uses the actual API without any mocking.
     """
     with get_session_with_current_tenant() as db_session:
-        image_generation_tool = db_session.execute(
-            select(Tool).where(Tool.in_code_tool_id == "ImageGenerationTool")
+        web_search_tool = db_session.execute(
+            select(Tool).where(Tool.in_code_tool_id == "WebSearchTool")
         ).scalar_one_or_none()
-        assert image_generation_tool is not None, "ImageGenerationTool must exist"
-        image_generation_tool_id = image_generation_tool.id
+        assert web_search_tool is not None, "WebSearchTool must exist"
+        web_search_tool_id = web_search_tool.id
 
     # Create a chat session
     chat_session = ChatSessionManager.create(user_performing_action=basic_user)
 
-    # Send a simple message that wouldn't normally trigger image generation
-    # but force the image generation tool to be used
+    # Send a simple message that wouldn't normally trigger web search
+    # but force the web search tool to be used
     message = "hi"
 
     analyzed_response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
         message=message,
         user_performing_action=basic_user,
-        forced_tool_ids=[image_generation_tool_id],
+        forced_tool_ids=[web_search_tool_id],
     )
 
-    image_generation_tool_used = any(
-        tool.tool_name == ToolName.IMAGE_GENERATION
+    web_search_tool_used = any(
+        tool.tool_name == ToolName.INTERNET_SEARCH
         for tool in analyzed_response.used_tools
     )
-    assert (
-        image_generation_tool_used
-    ), "Image generation tool should have been forced to run"
+    assert web_search_tool_used, "Web search tool should have been forced to run"
 
 
 if __name__ == "__main__":

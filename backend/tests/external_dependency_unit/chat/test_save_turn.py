@@ -234,12 +234,12 @@ def test_save_turn_with_single_citation(
     assert assistant_message.token_count > 0
 
     # 2. Verify only citation [[1]] is in the citations field
-    # Note: citations are stored with string keys in the database
+    # Note: citations are stored with string keys in JSONB (PostgreSQL converts int keys to strings)
     assert assistant_message.citations is not None
     assert len(assistant_message.citations) == 1
-    assert "1" in assistant_message.citations  # Citation number 1 should be present
-    assert "2" not in assistant_message.citations  # Citation 2 should NOT be present
-    assert "3" not in assistant_message.citations  # Citation 3 should NOT be present
+    assert "1" in assistant_message.citations  # type: ignore  # Citation number 1 should be present
+    assert "2" not in assistant_message.citations  # type: ignore  # Citation 2 should NOT be present
+    assert "3" not in assistant_message.citations  # type: ignore  # Citation 3 should NOT be present
 
     # 3. Verify research type and purpose
     assert assistant_message.research_type == ResearchType.FAST

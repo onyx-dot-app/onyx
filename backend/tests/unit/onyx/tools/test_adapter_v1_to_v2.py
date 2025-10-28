@@ -22,9 +22,6 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
-from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
-    OktaProfileTool,
-)
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 
 
@@ -142,19 +139,6 @@ def image_generation_tool() -> ImageGenerationTool:
 def web_search_tool() -> WebSearchTool:
     """Web search tool for testing."""
     return WebSearchTool(tool_id=4)
-
-
-@pytest.fixture
-def okta_profile_tool() -> OktaProfileTool:
-    """Okta profile tool for testing."""
-    return OktaProfileTool(
-        access_token="test-access-token",
-        client_id="test-client-id",
-        client_secret="test-client-secret",
-        openid_config_url="https://test.okta.com/.well-known/openid_configuration",
-        okta_api_token="test-api-token",
-        tool_id=5,
-    )
 
 
 def test_tool_to_function_tool_post_method(
@@ -595,14 +579,13 @@ def test_tools_to_function_tools_comprehensive(
     mcp_tool: MCPTool,
     image_generation_tool: ImageGenerationTool,
     web_search_tool: WebSearchTool,
-    okta_profile_tool: OktaProfileTool,
 ) -> None:
     """
     Test conversion of a mixed list of tools to FunctionTools.
     Verifies that the adapter correctly handles:
     - MCP tools (converted via tool_to_function_tool)
     - Custom tools (converted via tool_to_function_tool)
-    - Built-in tools (ImageGenerationTool, WebSearchTool, OktaProfileTool)
+    - Built-in tools (ImageGenerationTool, WebSearchTool)
       (converted via BUILT_IN_TOOL_MAP_V2)
     """
     # Create custom tools from the OpenAPI schema
@@ -632,7 +615,9 @@ def test_tools_to_function_tools_comprehensive(
         and hasattr(tool, "on_invoke_tool")
         for tool in function_tools
     )
-    assert len(function_tools) == 5  # Trhee built-in tools and two custom tools
+    assert (
+        len(function_tools) == 5
+    )  # Two built-in tools, one MCP tool, and two custom tools
     # Verify that custom and MCP tools are converted via tool_to_function_tool
     # These should have the same names as their original tools
     mcp_function_tools = [tool for tool in function_tools if tool.name == mcp_tool.name]
