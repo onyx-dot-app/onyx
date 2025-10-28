@@ -8,6 +8,7 @@ import LLMProvider from "../components/LLMProvider";
 import { OnboardingActions, OnboardingState } from "../types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { PROVIDER_ICON_MAP } from "../constants";
+import LLMConnectionModal from "@/refresh-components/onboarding/components/LLMConnectionModal";
 
 type LLMStepProps = {
   state: OnboardingState;
@@ -48,11 +49,15 @@ const LLMStepInner = ({
       </div>
       <div className="flex flex-wrap gap-spacing-inline [&>*:last-child:nth-child(odd)]:basis-full">
         {llmDescriptors.map((llmDescriptor) => (
-          <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
+          <div
+            key={llmDescriptor.name}
+            className="basis-[calc(50%-var(--spacing-inline)/2)] grow"
+          >
             <LLMProvider
               title={llmDescriptor.title}
-              description={llmDescriptor.display_name}
+              subtitle={llmDescriptor.display_name}
               icon={PROVIDER_ICON_MAP[llmDescriptor.name]}
+              llmDescriptor={llmDescriptor}
             />
           </div>
         ))}
@@ -60,9 +65,10 @@ const LLMStepInner = ({
         <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
           <LLMProvider
             title="Custom Models"
-            description="Connect models from other providers or your self-hosted models."
+            subtitle="Connect models from other providers or your self-hosted models."
           />
         </div>
+        <LLMConnectionModal />
       </div>
     </div>
   );

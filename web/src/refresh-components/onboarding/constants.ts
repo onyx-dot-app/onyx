@@ -97,3 +97,15 @@ export const PROVIDER_ICON_MAP: Record<
   ollama: SvgOllama,
   openrouter: SvgOpenrouter,
 };
+
+export const MODAL_CONTENT_MAP: Record<string, any> = {
+  openai: {
+    description: "Connect to OpenAI and set up your chatGPT models.",
+    display_name: "OpenAI",
+    field_metadata: {
+      api_key: "https://platform.openai.com/api-keys",
+      default_model_name:
+        "This model will be used by Onyx by default for chatGPT.",
+    },
+  },
+};

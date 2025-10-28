@@ -1,22 +1,47 @@
 import Button from "@/refresh-components/buttons/Button";
-import React, { memo } from "react";
+import React, { memo, useCallback } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { SvgProps } from "@/icons";
 import SvgArrowExchange from "@/icons/arrow-exchange";
-import SvgCpu from "@/icons/cpu";
 import Truncated from "@/refresh-components/texts/Truncated";
 import SvgServer from "@/icons/server";
+import {
+  useChatModal,
+  ModalIds,
+} from "@/refresh-components/contexts/ChatModalContext";
+import LLMConnectionIcons from "@/refresh-components/onboarding/components/LLMConnectionIcons";
+import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 
 type LLMProviderProps = {
   title: string;
-  description: string;
+  subtitle: string;
   icon?: React.FunctionComponent<SvgProps>;
+  llmDescriptor?: WellKnownLLMProviderDescriptor;
 };
 const LLMProviderInner = ({
   title,
-  description,
+  subtitle,
   icon: Icon,
+  llmDescriptor,
 }: LLMProviderProps) => {
+  const { toggleModal } = useChatModal();
+
+  const handleConnectClick = useCallback(() => {
+    if (!llmDescriptor) return;
+
+    const iconNode = Icon ? (
+      <Icon className="w-6 h-6" />
+    ) : (
+      <SvgServer className="w-6 h-6 stroke-text-04" />
+    );
+
+    toggleModal(ModalIds.LLMConnectionModal, true, {
+      icon: <LLMConnectionIcons icon={iconNode} />,
+      title,
+      llmDescriptor,
+    });
+  }, [Icon, llmDescriptor, title, toggleModal]);
+
   return (
     <div className="flex justify-between h-full w-full p-spacing-inline rounded-12 border border-border-01 bg-background-neutral-01">
       <div className="flex gap-spacing-inline p-spacing-inline flex-1 min-w-0">
@@ -32,11 +57,15 @@ const LLMProviderInner = ({
             {title}
           </Text>
           <Truncated text03 secondaryBody>
-            {description}
+            {subtitle}
           </Truncated>
         </div>
       </div>
-      <Button tertiary rightIcon={SvgArrowExchange}>
+      <Button
+        tertiary
+        rightIcon={SvgArrowExchange}
+        onClick={handleConnectClick}
+      >
         Connect
       </Button>
     </div>

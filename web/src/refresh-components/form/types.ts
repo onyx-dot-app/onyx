@@ -1,5 +1,6 @@
 import type React from "react";
-export type FormFieldState = "idle" | "loading" | "success" | "error";
+export type FormFieldState = "idle" | "success" | "error";
+export type APIFormFieldState = FormFieldState | "loading";
 
 export interface FieldContextType {
   baseId: string;
@@ -29,8 +30,16 @@ export type ControlProps = React.PropsWithChildren<{
 
 export type DescriptionProps = React.HTMLAttributes<HTMLParagraphElement>;
 export type MessageByState = Partial<Record<FormFieldState, string>>;
+export type APIMessageByState = Partial<
+  Record<FormFieldState | "loading", string>
+>;
 
 export type MessageProps = React.HTMLAttributes<HTMLDivElement> & {
   messages?: MessageByState;
   render?: (state: FormFieldState) => React.ReactNode;
+};
+
+export type APIMessageProps = React.HTMLAttributes<HTMLDivElement> & {
+  state?: APIFormFieldState;
+  messages?: APIMessageByState;
 };

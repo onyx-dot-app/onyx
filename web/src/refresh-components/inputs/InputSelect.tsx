@@ -32,7 +32,11 @@ export interface InputSelectOption {
   disabled?: boolean;
 }
 
-export interface InputSelectProps {
+export interface InputSelectProps
+  extends Omit<
+    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>,
+    "value" | "onValueChange" | "disabled"
+  > {
   // Input states:
   active?: boolean;
   internal?: boolean;
@@ -68,6 +72,7 @@ function InputSelectInner(
     className,
     name,
     required,
+    ...props
   }: InputSelectProps,
   ref: React.ForwardedRef<HTMLButtonElement>
 ) {
@@ -111,6 +116,7 @@ function InputSelectInner(
           )}
           onFocus={() => setLocalActive(true)}
           onBlur={() => setLocalActive(false)}
+          {...props}
         >
           <SelectPrimitive.Value placeholder={placeholder} />
           <SelectPrimitive.Icon asChild>
@@ -132,6 +138,7 @@ function InputSelectInner(
           )}
           position="popper"
           sideOffset={4}
+          style={{ width: "var(--radix-select-trigger-width)" }}
         >
           <SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1">
             <ChevronDown className="h-4 w-4 rotate-180" />

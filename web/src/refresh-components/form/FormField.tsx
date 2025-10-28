@@ -7,12 +7,44 @@ import {
   FormFieldRootProps,
   LabelProps,
   MessageProps,
+  APIMessageProps,
 } from "./types";
 import React, { useId, useMemo } from "react";
 import { useFieldContext } from "./FieldContext";
 import { Slot } from "@radix-ui/react-slot";
 import Text from "../texts/Text";
 import SvgCheckCircle from "@/icons/check-circle";
+
+import SvgXOctagon from "@/icons/x-octagon";
+import SvgLoader from "@/icons/loader";
+
+const iconMap = {
+  error: <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />,
+  success: <SvgCheckCircle className="h-3 w-3 stroke-status-success-05" />,
+  idle: null,
+  loading: <SvgLoader className="h-3 w-3 stroke-text-02 animate-spin" />,
+};
+
+const FieldMessageContent: React.FC<{
+  baseId: string;
+  state: "idle" | "error" | "success" | "loading";
+  content: React.ReactNode;
+  className?: string;
+}> = ({ baseId, state, content, className }) => {
+  return (
+    <div className="flex flex-row items-center gap-x-spacing-inline-mini">
+      {iconMap[state]}
+      <Text
+        id={`${baseId}-msg`}
+        text03
+        secondaryBody
+        className={cn("ml-spacing-inline-mini", className)}
+      >
+        {content}
+      </Text>
+    </div>
+  );
+};
 
 export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
   id,
@@ -135,24 +167,30 @@ export const FormFieldMessage: React.FC<MessageProps> = ({
 }) => {
   const { baseId, state } = useFieldContext();
   const content = messages?.[state];
-  const iconMap = {
-    error: null,
-    success: <SvgCheckCircle className="h-3 w-3 stroke-status-success-05" />,
-    idle: null,
-    loading: null,
-  };
   return content ? (
-    <div className="flex flex-row items-center gap-x-spacing-inline-mini">
-      {iconMap[state]}
-      <Text
-        id={`${baseId}-msg`}
-        text03
-        secondaryBody
-        className={cn("ml-spacing-inline-mini", className)}
-      >
-        {content}
-      </Text>
-    </div>
+    <FieldMessageContent
+      baseId={baseId}
+      state={state}
+      content={content}
+      className={className}
+    />
+  ) : null;
+};
+
+export const FormAPIFieldMessage: React.FC<APIMessageProps> = ({
+  className,
+  messages,
+  state = "loading",
+}) => {
+  const { baseId } = useFieldContext();
+  const content = messages?.[state];
+  return content ? (
+    <FieldMessageContent
+      baseId={baseId}
+      state={state}
+      content={content}
+      className={className}
+    />
   ) : null;
 };
 
@@ -161,4 +199,5 @@ export const FormField = Object.assign(FormFieldRoot, {
   Control: FormFieldControl,
   Description: FormFieldDescription,
   Message: FormFieldMessage,
+  APIMessage: FormAPIFieldMessage,
 });
