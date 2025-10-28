@@ -155,7 +155,7 @@ const textClasses = (selected?: boolean) =>
     action: {
       primary: {
         enabled: ["text-text-light-05"],
-        disabled: ["text-text-light-05"],
+        disabled: ["text-text-01"],
       },
       secondary: {
         enabled: ["text-action-text-link-05"],
@@ -173,7 +173,7 @@ const textClasses = (selected?: boolean) =>
     danger: {
       primary: {
         enabled: ["text-text-light-05"],
-        disabled: ["text-text-light-05"],
+        disabled: ["text-text-01"],
       },
       secondary: {
         enabled: ["text-action-text-danger-05"],
