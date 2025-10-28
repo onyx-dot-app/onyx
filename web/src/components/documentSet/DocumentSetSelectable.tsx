@@ -36,14 +36,14 @@ export function DocumentSetSelectable({
           <div
             className={`
               w-72
-              px-3 
+              px-3
               py-1
-              rounded-lg 
+              rounded-lg
               border
               border-border
               ${disabled ? "bg-background" : ""}
-              flex 
-              cursor-pointer 
+              flex
+              cursor-pointer
               ${
                 isSelected
                   ? "bg-accent-background-hovered"
@@ -51,6 +51,7 @@ export function DocumentSetSelectable({
               }
             `}
             onClick={disabled ? undefined : onSelect}
+            data-testid={`document-set-card-${documentSet.id}`}
           >
             <div className="flex w-full">
               <div className="flex flex-col h-full">
