@@ -4,7 +4,6 @@ from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
-from typing import cast
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -355,27 +354,27 @@ def test_validate_connector_settings_errors(
     """Test validation with various error scenarios"""
     error = HTTPError(response=MagicMock(status_code=status_code))
 
-    confluence_client = MagicMock()
-    confluence_connector._low_timeout_confluence_client = confluence_client
-    get_all_spaces_mock = cast(MagicMock, confluence_client.get_all_spaces)
-    get_all_spaces_mock.side_effect = error
+    with patch(
+        "onyx.connectors.confluence.onyx_confluence.OnyxConfluence.retrieve_confluence_spaces"
+    ) as mock_retrieve:
+        mock_retrieve.side_effect = error
 
-    with pytest.raises(expected_exception) as excinfo:
-        confluence_connector.validate_connector_settings()
-    assert expected_message in str(excinfo.value)
+        with pytest.raises(expected_exception) as excinfo:
+            confluence_connector.validate_connector_settings()
+        assert expected_message in str(excinfo.value)
 
 
 def test_validate_connector_settings_success(
     confluence_connector: ConfluenceConnector,
 ) -> None:
     """Test successful validation"""
-    confluence_client = MagicMock()
-    confluence_connector._low_timeout_confluence_client = confluence_client
-    get_all_spaces_mock = cast(MagicMock, confluence_client.get_all_spaces)
-    get_all_spaces_mock.return_value = {"results": [{"key": "TEST"}]}
+    with patch(
+        "onyx.connectors.confluence.onyx_confluence.OnyxConfluence.retrieve_confluence_spaces"
+    ) as mock_retrieve:
+        mock_retrieve.return_value = iter([{"key": "TEST"}])
 
-    confluence_connector.validate_connector_settings()
-    get_all_spaces_mock.assert_called_once()
+        confluence_connector.validate_connector_settings()
+        mock_retrieve.assert_called_once()
 
 
 def test_checkpoint_progress(
