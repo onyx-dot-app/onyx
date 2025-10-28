@@ -1,6 +1,7 @@
 import json
 from typing import Any
 from typing import cast
+from typing import Literal
 from typing import TypedDict
 from uuid import UUID
 
@@ -28,7 +29,15 @@ from tests.integration.common_utils.test_models import ToolResult
 class StreamPacketObj(TypedDict, total=False):
     """Base structure for streaming packet objects."""
 
-    type: str
+    type: Literal[
+        "message_start",
+        "message_delta",
+        "internal_search_tool_start",
+        "internal_search_tool_delta",
+        "image_generation_tool_start",
+        "image_generation_tool_heartbeat",
+        "image_generation_tool_delta",
+    ]
     content: str
     final_documents: list[dict[str, Any]]
     is_internet_search: bool
