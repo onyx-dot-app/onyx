@@ -82,7 +82,7 @@ class OnyxConfluence:
 
     CREDENTIAL_PREFIX = "connector:confluence:credential"
     CREDENTIAL_TTL = 300  # 5 min
-    PROBE_TIMEOUT = 50  # 5 seconds
+    PROBE_TIMEOUT = 5  # 5 seconds
 
     def __init__(
         self,

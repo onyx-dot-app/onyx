@@ -18,7 +18,7 @@ class OnyxDBCredentialsProvider(
     Required in cases where credentials can rotate while the connector is running.
     """
 
-    LOCK_TTL = 30  # TTL of the lock
+    LOCK_TTL = 900  # TTL of the lock
 
     def __init__(self, tenant_id: str, connector_name: str, credential_id: int):
         self._tenant_id = tenant_id
