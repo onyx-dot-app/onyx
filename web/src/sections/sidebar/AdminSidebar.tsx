@@ -92,19 +92,19 @@ const custom_assistants_items = (
       {
         name: "Slack Bots",
         icon: SlackIconSkeleton,
-        link: "/admin/bots",
+        link: "/bots",
       },
       {
         name: "Actions",
         icon: ToolIconSkeleton,
-        link: "/admin/actions",
+        link: "/actions",
       }
     );
   } else {
     items.push({
       name: "Actions",
       icon: ToolIconSkeleton,
-      link: "/admin/actions",
+      link: "/actions",
     });
   }
 

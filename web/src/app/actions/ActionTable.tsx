@@ -35,8 +35,15 @@ export function ActionsTable({
 
   const isAdmin = user?.role === UserRole.ADMIN;
 
-  const sortedTools = [...tools];
-  sortedTools.sort((a, b) => a.id - b.id);
+  const sortedTools = [...tools]
+    .filter(
+      (tool) =>
+        tool.in_code_tool_id !== null ||
+        tool.is_public === true ||
+        tool.user_id === user?.id ||
+        isAdmin
+    )
+    .sort((a, b) => a.id - b.id);
 
   const sortedMcpServers = [...mcpServers];
   sortedMcpServers.sort((a, b) => a.id - b.id);
@@ -66,7 +73,7 @@ export function ActionsTable({
                       tertiary
                       onClick={() => {
                         router.push(
-                          `/admin/actions/edit-mcp?server_id=${server.id}`
+                          `/actions/edit-mcp?server_id=${server.id}`
                         );
                       }}
                     />
@@ -139,7 +146,7 @@ export function ActionsTable({
                         tertiary
                         onClick={() => {
                           router.push(
-                            `/admin/actions/edit/${tool.id}?u=${Date.now()}`
+                            `/actions/edit/${tool.id}?u=${Date.now()}`
                           );
                         }}
                       />

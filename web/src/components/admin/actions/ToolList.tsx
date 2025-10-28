@@ -124,7 +124,7 @@ export function ToolList({
       // Ensure URL reflects the created server and listing state to avoid duplicate creation
       // and set listing_tools=true so the tool list is shown
       router.replace(
-        `/admin/actions/edit-mcp?server_id=${newServerId}&listing_tools=true`
+        `/actions/edit-mcp?server_id=${newServerId}&listing_tools=true`
       );
 
       // List available tools from the saved server
@@ -240,7 +240,7 @@ export function ToolList({
         type: "success",
       });
       // Clear query params and navigate to actions page
-      router.push("/admin/actions");
+      router.push("/actions");
     }
 
     setIsSubmitting(false);
@@ -326,7 +326,7 @@ export function ToolList({
       >
         {listingTools ? "Listing Actions..." : "List Actions"}
       </Button>
-      <Button secondary onClick={() => router.push("/admin/actions")}>
+      <Button secondary onClick={() => router.push("/actions")}>
         Cancel
       </Button>
     </div>

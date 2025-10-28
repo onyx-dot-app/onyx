@@ -1042,7 +1042,7 @@ export function ActionToggle({
                       <Button
                         defaulted
                         tertiary
-                        href="/admin/actions"
+                        href="/actions"
                         leftIcon={MoreActionsIcon}
                         className="w-full justify-start"
                       >
