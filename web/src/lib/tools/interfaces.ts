@@ -35,6 +35,9 @@ export interface ToolSnapshot {
 
   // OAuth configuration for this tool
   oauth_config_id?: number | null;
+
+  // only specified for AgentTools. ID of the persona this tool delegates to.
+  target_persona_id?: number | null;
   oauth_config_name?: string | null;
 
   // If this is an MCP tool, which server it belongs to

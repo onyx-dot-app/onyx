@@ -171,7 +171,7 @@ def create_reasoning_packets(reasoning_text: str, step_nr: int) -> list[Packet]:
 
 
 def create_image_generation_packets(
-    images: list[GeneratedImage], step_nr: int
+    images: list[GeneratedImage], step_nr: int, calling_agent_name: str | None = None
 ) -> list[Packet]:
     packets: list[Packet] = []
 
@@ -180,7 +180,9 @@ def create_image_generation_packets(
     packets.append(
         Packet(
             ind=step_nr,
-            obj=ImageGenerationToolDelta(images=images),
+            obj=ImageGenerationToolDelta(
+                images=images, calling_agent_name=calling_agent_name
+            ),
         ),
     )
 
@@ -195,6 +197,7 @@ def create_custom_tool_packets(
     step_nr: int,
     data: dict | list | str | int | float | bool | None = None,
     file_ids: list[str] | None = None,
+    calling_agent_name: str | None = None,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
@@ -208,6 +211,7 @@ def create_custom_tool_packets(
                 response_type=response_type,
                 data=data,
                 file_ids=file_ids,
+                calling_agent_name=calling_agent_name,
             ),
         ),
     )
@@ -233,6 +237,7 @@ def create_search_packets(
     saved_search_docs: list[SavedSearchDoc],
     is_internet_search: bool,
     step_nr: int,
+    calling_agent_name: str | None = None,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
@@ -251,6 +256,7 @@ def create_search_packets(
             obj=SearchToolDelta(
                 queries=search_queries,
                 documents=saved_search_docs,
+                calling_agent_name=calling_agent_name,
             ),
         ),
     )
@@ -332,8 +338,14 @@ def translate_db_message_to_packets_simple(
                 cited_docs: list[SavedSearchDoc] = []
                 fetches: list[list[SavedSearchDoc]] = []
                 is_web_fetch: bool = False
+                calling_agent_name: str | None = None
 
                 for sub_step in sub_steps:
+                    # Track calling_agent_name from first sub_step
+                    if calling_agent_name is None and hasattr(
+                        sub_step, "calling_agent_name"
+                    ):
+                        calling_agent_name = sub_step.calling_agent_name
                     # For v2 tools, use the queries field if available, otherwise fall back to sub_step_instructions
                     if sub_step.queries:
                         tasks.extend(sub_step.queries)
@@ -399,7 +411,9 @@ def translate_db_message_to_packets_simple(
                     if tool_name in [SearchTool.__name__, KnowledgeGraphTool.__name__]:
                         cited_docs = cast(list[SavedSearchDoc], cited_docs)
                         packet_list.extend(
-                            create_search_packets(tasks, cited_docs, False, step_nr)
+                            create_search_packets(
+                                tasks, cited_docs, False, step_nr, calling_agent_name
+                            )
                         )
                         step_nr += 1
 
@@ -409,7 +423,9 @@ def translate_db_message_to_packets_simple(
                             packet_list.extend(create_fetch_packets(fetches, step_nr))
                         else:
                             packet_list.extend(
-                                create_search_packets(tasks, cited_docs, True, step_nr)
+                                create_search_packets(
+                                    tasks, cited_docs, True, step_nr, calling_agent_name
+                                )
                             )
 
                         step_nr += 1
@@ -418,7 +434,9 @@ def translate_db_message_to_packets_simple(
                         if sub_step.generated_images:
                             packet_list.extend(
                                 create_image_generation_packets(
-                                    sub_step.generated_images.images, step_nr
+                                    sub_step.generated_images.images,
+                                    step_nr,
+                                    calling_agent_name,
                                 )
                             )
                         step_nr += 1
@@ -430,6 +448,7 @@ def translate_db_message_to_packets_simple(
                                 response_type="text",
                                 step_nr=step_nr,
                                 data=sub_step.sub_answer,
+                                calling_agent_name=calling_agent_name,
                             )
                         )
                         step_nr += 1
@@ -441,6 +460,7 @@ def translate_db_message_to_packets_simple(
                                 response_type="text",
                                 step_nr=step_nr,
                                 data=sub_step.sub_answer,
+                                calling_agent_name=calling_agent_name,
                             )
                         )
                         step_nr += 1

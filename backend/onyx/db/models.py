@@ -2524,6 +2524,10 @@ class Tool(Base):
     oauth_config_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("oauth_config.id", ondelete="SET NULL"), nullable=True
     )
+    # For AgentTools: the persona that this tool delegates to (null for non-AgentTools)
+    target_persona_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("persona.id", ondelete="CASCADE"), nullable=True
+    )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
@@ -3588,6 +3592,10 @@ class ResearchAgentIterationSubStep(Base):
     additional_data: Mapped[JSON_ro | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+
+    # for agent <> agent communication - tracks which agent called this tool
+    # None means it was called by the primary agent, otherwise contains the subagent name
+    calling_agent_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Relationships
     # Note: ChatMessage is accessible via primary_question_id. It is tied to the

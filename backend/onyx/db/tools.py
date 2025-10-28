@@ -54,6 +54,67 @@ def get_tool_by_name(tool_name: str, db_session: Session) -> Tool:
     return tool
 
 
+def get_or_create_agent_tool__no_commit(
+    target_persona_id: int,
+    db_session: Session,
+) -> Tool:
+    """Get or create an AgentTool for the given target persona. Reuses existing tools."""
+    from onyx.utils.logger import setup_logger
+
+    logger = setup_logger()
+
+    # Check if an AgentTool already exists for this persona
+    existing_tool = db_session.scalar(
+        select(Tool).where(
+            Tool.in_code_tool_id == "AgentTool",
+            Tool.target_persona_id == target_persona_id,
+        )
+    )
+
+    if existing_tool:
+        logger.info(
+            f"Reusing existing AgentTool {existing_tool.id} for target persona {target_persona_id}"
+        )
+        return existing_tool
+
+    # Create a new AgentTool
+    from onyx.db.persona import get_persona_by_id
+
+    target_persona = get_persona_by_id(
+        persona_id=target_persona_id,
+        user=None,
+        db_session=db_session,
+        include_deleted=False,
+        is_for_edit=False,
+    )
+
+    logger.info(
+        f"Creating new AgentTool for target persona {target_persona_id} ({target_persona.name})"
+    )
+
+    new_tool = Tool(
+        name=f"call_{target_persona.name.lower().replace(' ', '_')}",
+        description=f"Delegate tasks to the {target_persona.name} agent. {target_persona.description or ''}",
+        display_name=f"{target_persona.name}",
+        in_code_tool_id="AgentTool",
+        target_persona_id=target_persona_id,
+        openapi_schema=None,
+        custom_headers=[],
+        user_id=None,
+        passthrough_auth=False,
+        mcp_server_id=None,
+        oauth_config_id=None,
+        enabled=True,
+    )
+
+    db_session.add(new_tool)
+    db_session.flush()  # Don't commit yet, let caller decide when to commit
+    logger.info(
+        f"Created new AgentTool {new_tool.id} for target persona {target_persona_id}"
+    )
+    return new_tool
+
+
 def create_tool__no_commit(
     name: str,
     description: str | None,
@@ -66,11 +127,13 @@ def create_tool__no_commit(
     mcp_server_id: int | None = None,
     oauth_config_id: int | None = None,
     enabled: bool = True,
+    target_persona_id: int | None = None,
+    in_code_tool_id: str | None = None,
 ) -> Tool:
     new_tool = Tool(
         name=name,
         description=description,
-        in_code_tool_id=None,
+        in_code_tool_id=in_code_tool_id,
         openapi_schema=openapi_schema,
         custom_headers=(
             [header.model_dump() for header in custom_headers] if custom_headers else []
@@ -78,6 +141,7 @@ def create_tool__no_commit(
         user_id=user_id,
         passthrough_auth=passthrough_auth,
         mcp_server_id=mcp_server_id,
+        target_persona_id=target_persona_id,
         oauth_config_id=oauth_config_id,
         enabled=enabled,
     )

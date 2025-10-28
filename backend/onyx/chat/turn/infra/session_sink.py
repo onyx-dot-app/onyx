@@ -119,6 +119,7 @@ def save_iteration(
             additional_data=iteration_answer.additional_data,
             is_web_fetch=iteration_answer.is_web_fetch,
             queries=iteration_answer.queries,
+            calling_agent_name=iteration_answer.calling_agent_name,  # Track which agent made this tool call
         )
         db_session.add(research_agent_iteration_sub_step)
 

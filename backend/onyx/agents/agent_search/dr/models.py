@@ -108,6 +108,9 @@ class IterationAnswer(BaseModel):
     # for multi-query search tools (v2 web search and internal search)
     # TODO: Clean this up to be more flexible to tools
     queries: list[str] | None = None
+    # for agent <> agent communication - tracks which agent called this tool
+    # None means it was called by the primary agent, otherwise contains the subagent name
+    calling_agent_name: str | None = None
 
 
 class AggregatedDRContext(BaseModel):

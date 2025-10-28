@@ -25,6 +25,7 @@ function constructCustomToolState(packets: CustomToolPacket[]) {
   const responseType = latestDelta?.response_type || null;
   const data = latestDelta?.data;
   const fileIds = latestDelta?.file_ids || null;
+  const callingAgentName = latestDelta?.calling_agent_name || null;
 
   const isRunning = Boolean(toolStart && !toolEnd);
   const isComplete = Boolean(toolStart && toolEnd);
@@ -34,6 +35,7 @@ function constructCustomToolState(packets: CustomToolPacket[]) {
     responseType,
     data,
     fileIds,
+    callingAgentName,
     isRunning,
     isComplete,
   };
@@ -45,8 +47,15 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   renderType,
   children,
 }) => {
-  const { toolName, responseType, data, fileIds, isRunning, isComplete } =
-    constructCustomToolState(packets);
+  const {
+    toolName,
+    responseType,
+    data,
+    fileIds,
+    callingAgentName,
+    isRunning,
+    isComplete,
+  } = constructCustomToolState(packets);
 
   useEffect(() => {
     if (isComplete) {
@@ -55,25 +64,29 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   }, [isComplete, onComplete]);
 
   const status = useMemo(() => {
+    const agentPrefix = callingAgentName ? `[${callingAgentName}] ` : "";
     if (isComplete) {
-      if (responseType === "image") return `${toolName} returned images`;
-      if (responseType === "csv") return `${toolName} returned a file`;
-      return `${toolName} completed`;
+      if (responseType === "image")
+        return `${agentPrefix}${toolName} returned images`;
+      if (responseType === "csv")
+        return `${agentPrefix}${toolName} returned a file`;
+      return `${agentPrefix}${toolName} completed`;
     }
-    if (isRunning) return `${toolName} running...`;
+    if (isRunning) return `${agentPrefix}${toolName} running...`;
     return null;
-  }, [toolName, responseType, isComplete, isRunning]);
+  }, [toolName, responseType, callingAgentName, isComplete, isRunning]);
 
   const icon = FiTool;
 
   if (renderType === RenderType.HIGHLIGHT) {
+    const agentPrefix = callingAgentName ? `[${callingAgentName}] ` : "";
     return children({
       icon,
       status: status,
       content: (
         <div className="text-sm text-muted-foreground">
-          {isRunning && `${toolName} running...`}
-          {isComplete && `${toolName} completed`}
+          {isRunning && `${agentPrefix}${toolName} running...`}
+          {isComplete && `${agentPrefix}${toolName} completed`}
         </div>
       ),
     });

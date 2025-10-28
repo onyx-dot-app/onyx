@@ -16,17 +16,19 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.built_in_tools_v2 import BUILT_IN_TOOL_MAP_V2
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.agent.agent_tool import AgentTool
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+from onyx.tools.tool_implementations_v2.agent_tool import call_agent
 from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
 
 # Type alias for tools that need custom handling
-CustomOrMcpTool = Union[CustomTool, MCPTool]
+CustomOrMcpOrAgentTool = Union[CustomTool, MCPTool, AgentTool]
 
 
-def is_custom_or_mcp_tool(tool: Tool) -> bool:
-    """Check if a tool is a CustomTool or MCPTool."""
-    return isinstance(tool, CustomTool) or isinstance(tool, MCPTool)
+def is_custom_or_mcp_or_agent_tool(tool: Tool) -> bool:
+    """Check if a tool is a CustomTool, MCPTool, or AgentTool."""
+    return isinstance(tool, (CustomTool, MCPTool, AgentTool))
 
 
 @tool_accounting
@@ -109,6 +111,32 @@ def custom_or_mcp_tool_to_function_tool(tool: Tool) -> FunctionTool:
     )
 
 
+def agent_tool_to_function_tool(agent_tool: AgentTool) -> FunctionTool:
+    """Convert an AgentTool to a FunctionTool that calls call_agent."""
+
+    # Create a wrapper that calls call_agent with the bound persona ID
+    async def invoke_agent(
+        context: RunContextWrapper[ChatTurnContext], json_string: str
+    ) -> str:
+        # Parse the query from the JSON string
+        args = json.loads(json_string)
+        query = args.get("query", "")
+
+        # Call the call_agent function with the target persona ID
+        return call_agent(
+            run_context=context,
+            query=query,
+            agent_persona_id=agent_tool.target_persona_id,
+        )
+
+    return FunctionTool(
+        name=agent_tool.name,
+        description=agent_tool.description,
+        params_json_schema=agent_tool.tool_definition()["function"]["parameters"],
+        on_invoke_tool=invoke_agent,
+    )
+
+
 def tools_to_function_tools(tools: Sequence[Tool]) -> Sequence[FunctionTool]:
     onyx_tools: Sequence[Sequence[FunctionTool]] = [
         BUILT_IN_TOOL_MAP_V2[type(tool).__name__]
@@ -121,10 +149,15 @@ def tools_to_function_tools(tools: Sequence[Tool]) -> Sequence[FunctionTool]:
     custom_and_mcp_tools: list[FunctionTool] = [
         custom_or_mcp_tool_to_function_tool(tool)
         for tool in tools
-        if is_custom_or_mcp_tool(tool)
+        if isinstance(tool, (CustomTool, MCPTool))
+    ]
+    agent_tools: list[FunctionTool] = [
+        agent_tool_to_function_tool(tool)  # type: ignore
+        for tool in tools
+        if isinstance(tool, AgentTool)
     ]
 
-    return flattened_builtin_tools + custom_and_mcp_tools
+    return flattened_builtin_tools + custom_and_mcp_tools + agent_tools
 
 
 def force_use_tool_to_function_tool_names(

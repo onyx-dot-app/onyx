@@ -44,6 +44,7 @@ from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.agent.agent_tool import AgentTool
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -343,6 +344,40 @@ def construct_tools(
                 tool_dict[db_tool_model.id] = [
                     KnowledgeGraphTool(tool_id=db_tool_model.id)
                 ]
+
+            # Handle Agent Tool
+            elif tool_cls.__name__ == AgentTool.__name__:
+                # AgentTools delegate to another persona
+                if db_tool_model.target_persona_id is None:
+                    logger.warning(
+                        f"AgentTool {db_tool_model.id} has no target_persona_id, skipping"
+                    )
+                    continue
+
+                # Get the target persona
+                from onyx.db.persona import get_persona_by_id
+
+                try:
+                    target_persona = get_persona_by_id(
+                        persona_id=db_tool_model.target_persona_id,
+                        user=user,
+                        db_session=db_session,
+                        include_deleted=False,
+                        is_for_edit=False,
+                    )
+
+                    tool_dict[db_tool_model.id] = [
+                        AgentTool(
+                            tool_id=db_tool_model.id,
+                            target_persona=target_persona,
+                        )
+                    ]
+                except Exception as e:
+                    logger.error(
+                        f"Failed to load target persona {db_tool_model.target_persona_id} "
+                        f"for AgentTool {db_tool_model.id}: {e}"
+                    )
+                    continue
 
         # Handle custom tools
         elif db_tool_model.openapi_schema:

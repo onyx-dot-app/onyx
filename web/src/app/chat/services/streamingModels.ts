@@ -71,6 +71,7 @@ export interface SearchToolDelta extends BaseObj {
   type: "internal_search_tool_delta";
   queries: string[] | null;
   documents: OnyxDocument[] | null;
+  calling_agent_name?: string | null;
 }
 
 export type ImageShape = "square" | "landscape" | "portrait";
@@ -89,6 +90,7 @@ export interface ImageGenerationToolStart extends BaseObj {
 export interface ImageGenerationToolDelta extends BaseObj {
   type: "image_generation_tool_delta";
   images: GeneratedImage[];
+  calling_agent_name?: string | null;
 }
 
 export interface FetchToolStart extends BaseObj {
@@ -109,6 +111,7 @@ export interface CustomToolDelta extends BaseObj {
   response_type: string;
   data?: any;
   file_ids?: string[] | null;
+  calling_agent_name?: string | null;
 }
 
 // Reasoning Packets

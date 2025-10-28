@@ -27,12 +27,15 @@ function constructCurrentImageState(packets: ImageGenerationToolPacket[]) {
 
   const prompt = ""; // Image generation tools don't have a main description
   const images = imageDeltas.flatMap((delta) => delta?.images || []);
+  const latestDelta = imageDeltas[imageDeltas.length - 1] || null;
+  const callingAgentName = latestDelta?.calling_agent_name || null;
   const isGenerating = imageStart && !imageEnd;
   const isComplete = imageStart && imageEnd;
 
   return {
     prompt,
     images,
+    callingAgentName,
     isGenerating,
     isComplete,
     error: false, // For now, we don't have error state in the packets
@@ -43,7 +46,7 @@ export const ImageToolRenderer: MessageRenderer<
   ImageGenerationToolPacket,
   {}
 > = ({ packets, onComplete, renderType, children }) => {
-  const { prompt, images, isGenerating, isComplete, error } =
+  const { prompt, images, callingAgentName, isGenerating, isComplete, error } =
     constructCurrentImageState(packets);
 
   useEffect(() => {
@@ -52,15 +55,19 @@ export const ImageToolRenderer: MessageRenderer<
     }
   }, [isComplete]);
 
+  const agentPrefix = callingAgentName ? `[${callingAgentName}] ` : "";
+
   const status = useMemo(() => {
     if (isComplete) {
-      return `Generated ${images.length} image${images.length > 1 ? "s" : ""}`;
+      return `${agentPrefix}Generated ${images.length} image${
+        images.length > 1 ? "s" : ""
+      }`;
     }
     if (isGenerating) {
-      return "Generating image...";
+      return `${agentPrefix}Generating image...`;
     }
     return null;
-  }, [isComplete, isGenerating, images.length]);
+  }, [agentPrefix, isComplete, isGenerating, images.length]);
 
   // Render based on renderType
   if (renderType === RenderType.FULL) {
@@ -69,7 +76,7 @@ export const ImageToolRenderer: MessageRenderer<
     if (isGenerating) {
       return children({
         icon: FiImage,
-        status: "Generating images...",
+        status: `${agentPrefix}Generating images...`,
         content: (
           <div className="flex flex-col">
             <div>
@@ -84,7 +91,7 @@ export const ImageToolRenderer: MessageRenderer<
     if (isComplete) {
       return children({
         icon: FiImage,
-        status: `Generated ${images.length} image${
+        status: `${agentPrefix}Generated ${images.length} image${
           images.length !== 1 ? "s" : ""
         }`,
         content: (
@@ -128,7 +135,7 @@ export const ImageToolRenderer: MessageRenderer<
   if (isGenerating) {
     return children({
       icon: FiImage,
-      status: "Generating image...",
+      status: `${agentPrefix}Generating image...`,
       content: (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <div className="flex gap-0.5">
@@ -142,7 +149,7 @@ export const ImageToolRenderer: MessageRenderer<
               style={{ animationDelay: "0.2s" }}
             ></div>
           </div>
-          <span>Generating image...</span>
+          <span>{agentPrefix}Generating image...</span>
         </div>
       ),
     });
@@ -151,10 +158,10 @@ export const ImageToolRenderer: MessageRenderer<
   if (error) {
     return children({
       icon: FiImage,
-      status: "Image generation failed",
+      status: `${agentPrefix}Image generation failed`,
       content: (
         <div className="text-sm text-red-600 dark:text-red-400">
-          Image generation failed
+          {agentPrefix}Image generation failed
         </div>
       ),
     });
@@ -163,10 +170,12 @@ export const ImageToolRenderer: MessageRenderer<
   if (isComplete && images.length > 0) {
     return children({
       icon: FiImage,
-      status: `Generated ${images.length} image${images.length > 1 ? "s" : ""}`,
+      status: `${agentPrefix}Generated ${images.length} image${
+        images.length > 1 ? "s" : ""
+      }`,
       content: (
         <div className="text-sm text-muted-foreground">
-          Generated {images.length} image
+          {agentPrefix}Generated {images.length} image
           {images.length > 1 ? "s" : ""}
         </div>
       ),
@@ -175,9 +184,11 @@ export const ImageToolRenderer: MessageRenderer<
 
   return children({
     icon: FiImage,
-    status: "Image generation",
+    status: `${agentPrefix}Image generation`,
     content: (
-      <div className="text-sm text-muted-foreground">Image generation</div>
+      <div className="text-sm text-muted-foreground">
+        {agentPrefix}Image generation
+      </div>
     ),
   });
 };

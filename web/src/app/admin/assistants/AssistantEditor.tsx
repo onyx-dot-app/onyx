@@ -63,6 +63,7 @@ import * as Yup from "yup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import {
   FullPersona,
+  MinimalPersonaSnapshot,
   PersonaLabel,
   StarterMessage,
 } from "@/app/admin/assistants/interfaces";
@@ -85,6 +86,7 @@ import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
 
 import { SwitchField } from "@/components/ui/switch";
 import { generateIdenticon } from "@/refresh-components/AgentIcon";
+import AgentIcon from "@/refresh-components/AgentIcon";
 import { BackButton } from "@/components/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
@@ -192,6 +194,9 @@ export function AssistantEditor({
     useState<MinimalOnyxDocument | null>(null);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [showAllUserFiles, setShowAllUserFiles] = useState(false);
+  const [availablePersonas, setAvailablePersonas] = useState<
+    MinimalPersonaSnapshot[]
+  >([]);
 
   // both `defautIconColor` and `defaultIconShape` are state so that they
   // persist across formik reformatting
@@ -202,6 +207,24 @@ export function AssistantEditor({
     () => generateRandomIconShape().encodedGrid
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Fetch available personas for subagent selection
+  useEffect(() => {
+    const fetchPersonas = async () => {
+      try {
+        const response = await fetch("/api/persona");
+        if (response.ok) {
+          const personas = await response.json();
+          setAvailablePersonas(personas);
+        } else {
+          console.error("Failed to fetch personas, status:", response.status);
+        }
+      } catch (error) {
+        console.error("Failed to fetch personas:", error);
+      }
+    };
+    fetchPersonas();
+  }, []);
 
   const [removePersonaImage, setRemovePersonaImage] = useState(false);
   const [uploadedImagePreview, setUploadedImagePreview] = useState<
@@ -244,39 +267,46 @@ export function AssistantEditor({
   const webSearchTool = findWebSearchTool(tools);
 
   // Separate MCP tools from regular custom tools - memoize to prevent re-renders
-  const { mcpTools, customTools, mcpToolsByServer } = useMemo(() => {
-    const allCustom = tools.filter(
-      (tool) =>
-        tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
-        tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
-        tool.in_code_tool_id !== webSearchTool?.in_code_tool_id
-    );
+  const { mcpTools, customTools, mcpToolsByServer, agentTools } =
+    useMemo(() => {
+      const allCustom = tools.filter(
+        (tool) =>
+          tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
+          tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
+          tool.in_code_tool_id !== webSearchTool?.in_code_tool_id &&
+          tool.in_code_tool_id !== "AgentTool"
+      );
 
-    const mcp = allCustom.filter((tool) => tool.mcp_server_id);
-    const custom = allCustom.filter((tool) => !tool.mcp_server_id);
+      const agentTools = tools.filter(
+        (tool) => tool.in_code_tool_id === "AgentTool"
+      );
+      const mcp = allCustom.filter((tool) => tool.mcp_server_id);
+      const custom = allCustom.filter((tool) => !tool.mcp_server_id);
 
-    // Group MCP tools by server
-    const groups: { [serverId: number]: ToolSnapshot[] } = {};
-    mcp.forEach((tool) => {
-      if (tool.mcp_server_id) {
-        if (!groups[tool.mcp_server_id]) {
-          groups[tool.mcp_server_id] = [];
+      // Group MCP tools by server
+      const groups: { [serverId: number]: ToolSnapshot[] } = {};
+      mcp.forEach((tool) => {
+        if (tool.mcp_server_id) {
+          if (!groups[tool.mcp_server_id]) {
+            groups[tool.mcp_server_id] = [];
+          }
+          groups[tool.mcp_server_id]!.push(tool);
         }
-        groups[tool.mcp_server_id]!.push(tool);
-      }
-    });
+      });
 
-    return {
-      mcpTools: mcp,
-      customTools: custom,
-      mcpToolsByServer: groups,
-    };
-  }, [
-    tools,
-    searchTool?.in_code_tool_id,
-    imageGenerationTool?.in_code_tool_id,
-    webSearchTool?.in_code_tool_id,
-  ]);
+      return {
+        mcpTools: mcp,
+        customTools: custom,
+        mcpToolsByServer: groups,
+        agentTools: agentTools,
+      };
+    }, [
+      tools,
+      searchTool?.in_code_tool_id,
+      imageGenerationTool?.in_code_tool_id,
+      webSearchTool?.in_code_tool_id,
+      "AgentTool",
+    ]);
 
   // Helper functions for MCP server checkbox state - memoize to prevent re-renders
   const getMCPServerCheckboxState = useCallback(
@@ -331,6 +361,7 @@ export function AssistantEditor({
     ...(searchTool ? [searchTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
     ...(webSearchTool ? [webSearchTool] : []),
+    ...agentTools,
   ];
   const enabledToolsMap: { [key: number]: boolean } = {};
   availableTools.forEach((tool) => {
@@ -395,6 +426,10 @@ export function AssistantEditor({
           ? "user_files"
           : "team_knowledge",
     is_default_persona: existingPersona?.is_default_persona ?? false,
+    subagents:
+      existingPersona?.tools.filter(
+        (tool) => tool.in_code_tool_id === "AgentTool"
+      ) ?? [],
   };
 
   interface AssistantPrompt {
@@ -708,6 +743,10 @@ export function AssistantEditor({
           const groups = values.is_public ? [] : values.selectedGroups;
           const teamKnowledge = values.knowledge_source === "team_knowledge";
 
+          const subagent_persona_ids = values.subagents.map(
+            (p: ToolSnapshot) => p.target_persona_id!
+          );
+
           const submissionData: PersonaUpsertParameters = {
             ...values,
             icon_color: values.icon_color ?? null,
@@ -720,6 +759,7 @@ export function AssistantEditor({
                   ...values.selectedUsers.map((u: MinimalUserSnapshot) => u.id),
                 ],
             tool_ids: enabledTools,
+            subagent_persona_ids: subagent_persona_ids,
             remove_image: removePersonaImage,
             search_start_date: values.search_start_date
               ? new Date(values.search_start_date)
@@ -1450,6 +1490,151 @@ export function AssistantEditor({
                         )}
                     </div>
                   </div>
+                </div>
+                <Separator className="max-w-4xl mt-0" />
+
+                {/* Subagent Selection Section */}
+                <div className="-mt-2">
+                  <div className="flex gap-x-2 mb-2 items-center">
+                    <UserIcon className="w-4 h-4 shrink-0" />
+                    <div className="block font-medium text-sm">Subagents</div>
+                  </div>
+                  <div className="text-sm text-text-500 mb-3">
+                    Select other assistants to make available as tools. Your
+                    assistant can delegate tasks to these subagents.
+                  </div>
+                  {availablePersonas.length === 0 ? (
+                    <div className="text-sm text-text-500">
+                      Loading personas...
+                    </div>
+                  ) : (
+                    <FastField name="subagents">
+                      {({ field, form }: any) => (
+                        <div className="space-y-2">
+                          {/* Display selected subagents */}
+                          {field.value.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {field.value.map((subagent: ToolSnapshot) => {
+                                // Use target_persona_id as the unique identifier for subagents
+                                const personaId = subagent.target_persona_id;
+                                // Look up the full persona for display purposes
+                                const persona = availablePersonas.find(
+                                  (p) => p.id === personaId
+                                );
+                                const displayName =
+                                  subagent.display_name ||
+                                  subagent.name ||
+                                  persona?.display_name ||
+                                  persona?.name;
+
+                                return (
+                                  <div
+                                    key={personaId}
+                                    className="flex items-center gap-x-2 px-3 py-1.5 rounded-lg bg-background-100 border border-border-medium"
+                                  >
+                                    {persona && (
+                                      <AgentIcon agent={persona} size={16} />
+                                    )}
+                                    <span className="text-sm">
+                                      {displayName}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = field.value.filter(
+                                          (s: ToolSnapshot) =>
+                                            s.target_persona_id !== personaId
+                                        );
+                                        form.setFieldValue(
+                                          "subagents",
+                                          updated
+                                        );
+
+                                        // Also remove from enabled_tools_map if it exists
+                                        if (subagent.id) {
+                                          const updatedToolsMap = {
+                                            ...values.enabled_tools_map,
+                                          };
+                                          delete updatedToolsMap[subagent.id];
+                                          form.setFieldValue(
+                                            "enabled_tools_map",
+                                            updatedToolsMap
+                                          );
+                                        }
+                                      }}
+                                      className="hover:text-text-900"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Dropdown to add more subagents */}
+                          <SearchMultiSelectDropdown
+                            options={availablePersonas
+                              .filter(
+                                (p) =>
+                                  p.id !== existingPersona?.id &&
+                                  !field.value.some(
+                                    (s: ToolSnapshot) =>
+                                      s.target_persona_id === p.id
+                                  ) // Don't show already selected
+                              )
+                              .map((persona) => ({
+                                name: persona.display_name || persona.name,
+                                value: persona.id.toString(),
+                              }))}
+                            onSelect={(option) => {
+                              const personaId = parseInt(
+                                option.value as string
+                              );
+                              const persona = availablePersonas.find(
+                                (p) => p.id === personaId
+                              );
+                              if (persona) {
+                                // Find if this subagent already exists as a tool
+                                const existingAgentTool = agentTools.find(
+                                  (tool) =>
+                                    tool.target_persona_id === persona.id
+                                );
+
+                                // Create a new subagent tool object
+                                const newSubagent = {
+                                  id: existingAgentTool?.id, // Use existing tool id if available
+                                  name: persona.name,
+                                  display_name: persona.display_name,
+                                  in_code_tool_id: "AgentTool",
+                                  target_persona_id: persona.id,
+                                };
+
+                                form.setFieldValue("subagents", [
+                                  ...field.value,
+                                  newSubagent,
+                                ]);
+
+                                // Also enable in enabled_tools_map if it has an id
+                                if (existingAgentTool?.id) {
+                                  form.setFieldValue(
+                                    `enabled_tools_map.${existingAgentTool.id}`,
+                                    true
+                                  );
+                                }
+                              }
+                            }}
+                            itemComponent={({ option }) => (
+                              <div className="flex px-4 py-2.5 cursor-pointer hover:bg-accent-background-hovered">
+                                <UserIcon className="w-4 h-4 mr-2 my-auto" />
+                                <span className="text-sm">{option.name}</span>
+                              </div>
+                            )}
+                          />
+                        </div>
+                      )}
+                    </FastField>
+                  )}
                 </div>
                 <Separator className="max-w-4xl mt-0" />
 

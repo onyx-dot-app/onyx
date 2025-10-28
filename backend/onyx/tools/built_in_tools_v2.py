@@ -1,5 +1,6 @@
 from agents import FunctionTool
 
+from onyx.tools.tool_implementations.agent.agent_tool import AgentTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -7,6 +8,7 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
+from onyx.tools.tool_implementations_v2.agent_tool import call_agent
 from onyx.tools.tool_implementations_v2.image_generation import image_generation
 from onyx.tools.tool_implementations_v2.internal_search import internal_search
 from onyx.tools.tool_implementations_v2.web import open_url
@@ -16,4 +18,5 @@ BUILT_IN_TOOL_MAP_V2: dict[str, list[FunctionTool]] = {
     SearchTool.__name__: [internal_search],
     ImageGenerationTool.__name__: [image_generation],
     WebSearchTool.__name__: [web_search, open_url],
+    AgentTool.__name__: [call_agent],
 }

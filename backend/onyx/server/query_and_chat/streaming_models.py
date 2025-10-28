@@ -64,6 +64,8 @@ class SearchToolDelta(BaseObj):
 
     queries: list[str]
     documents: list[SavedSearchDoc]
+    # For agent <> agent communication - tracks which agent called this tool
+    calling_agent_name: str | None = None
 
 
 class FetchToolStart(BaseObj):
@@ -80,6 +82,8 @@ class ImageGenerationToolDelta(BaseObj):
     type: Literal["image_generation_tool_delta"] = "image_generation_tool_delta"
 
     images: list[GeneratedImage]
+    # For agent <> agent communication - tracks which agent called this tool
+    calling_agent_name: str | None = None
 
 
 class ImageGenerationToolHeartbeat(BaseObj):
@@ -101,6 +105,8 @@ class CustomToolDelta(BaseObj):
     data: dict | list | str | int | float | bool | None = None
     # For file-based responses like image/csv
     file_ids: list[str] | None = None
+    # For agent <> agent communication - tracks which agent called this tool
+    calling_agent_name: str | None = None
 
 
 """Reasoning Packets"""

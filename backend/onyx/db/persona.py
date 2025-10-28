@@ -246,6 +246,33 @@ def create_update_persona(
             except Exception:
                 raise ValueError("Invalid user_file_ids; must be UUID strings")
 
+        # Create AgentTools for subagent personas and add them to tool_ids
+        from onyx.db.tools import get_or_create_agent_tool__no_commit
+
+        all_tool_ids = create_persona_request.tool_ids or []
+
+        logger.info(f"Processing persona: {create_persona_request.name}")
+        logger.info(
+            f"Subagent persona IDs requested: {create_persona_request.subagent_persona_ids}"
+        )
+
+        # Now add AgentTools only for the currently selected subagents
+        for subagent_id in create_persona_request.subagent_persona_ids:
+            logger.info(f"Adding subagent {subagent_id} to this persona's tools")
+            # Get the AgentTool for the subagent (create if needed)
+            agent_tool = get_or_create_agent_tool__no_commit(
+                target_persona_id=subagent_id,
+                db_session=db_session,
+            )
+            # Add to this persona's tool_ids
+            if agent_tool.id not in all_tool_ids:
+                all_tool_ids.append(agent_tool.id)
+                logger.info(
+                    f"Added AgentTool {agent_tool.id} (for subagent {subagent_id}) to persona's tools"
+                )
+            else:
+                logger.info(f"AgentTool {agent_tool.id} already in tool_ids")
+
         persona = upsert_persona(
             persona_id=persona_id,
             user=user,
@@ -253,7 +280,7 @@ def create_update_persona(
             description=create_persona_request.description,
             name=create_persona_request.name,
             document_set_ids=create_persona_request.document_set_ids,
-            tool_ids=create_persona_request.tool_ids,
+            tool_ids=all_tool_ids,
             is_public=create_persona_request.is_public,
             recency_bias=create_persona_request.recency_bias,
             llm_model_provider_override=create_persona_request.llm_model_provider_override,

@@ -1,6 +1,7 @@
 from typing import Type
 from typing import Union
 
+from onyx.tools.tool_implementations.agent.agent_tool import AgentTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -20,7 +21,12 @@ logger = setup_logger()
 
 
 BUILT_IN_TOOL_TYPES = Union[
-    SearchTool, ImageGenerationTool, WebSearchTool, KnowledgeGraphTool, OktaProfileTool
+    SearchTool,
+    ImageGenerationTool,
+    WebSearchTool,
+    KnowledgeGraphTool,
+    OktaProfileTool,
+    AgentTool,
 ]
 
 # same as d09fc20a3c66_seed_builtin_tools.py
@@ -30,6 +36,7 @@ BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
     WebSearchTool.__name__: WebSearchTool,
     KnowledgeGraphTool.__name__: KnowledgeGraphTool,
     OktaProfileTool.__name__: OktaProfileTool,
+    AgentTool.__name__: AgentTool,
 }
 
 

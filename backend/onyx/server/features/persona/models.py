@@ -68,6 +68,8 @@ class PersonaUpsertRequest(BaseModel):
     groups: list[int] = Field(default_factory=list)
     # e.g. ID of SearchTool or ImageGenerationTool or <USER_DEFINED_TOOL>
     tool_ids: list[int]
+    # IDs of personas to make available as subagents (AgentTools will be auto-created)
+    subagent_persona_ids: list[int] = Field(default_factory=list)
     icon_color: str | None = None
     icon_shape: int | None = None
     remove_image: bool | None = None

@@ -11,6 +11,7 @@ export interface StarterMessage extends StarterMessageBase {
 export interface MinimalPersonaSnapshot {
   id: number;
   name: string;
+  display_name: string;
   description: string;
   tools: ToolSnapshot[];
   starter_messages: StarterMessage[] | null;

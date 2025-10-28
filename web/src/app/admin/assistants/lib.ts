@@ -19,6 +19,7 @@ interface PersonaUpsertRequest {
   users?: string[];
   groups: number[];
   tool_ids: number[];
+  subagent_persona_ids: number[];
   icon_color: string | null;
   icon_shape: number | null;
   remove_image?: boolean;
@@ -46,6 +47,7 @@ export interface PersonaUpsertParameters {
   users?: string[];
   groups: number[];
   tool_ids: number[];
+  subagent_persona_ids: number[];
   icon_color: string | null;
   icon_shape: number | null;
   remove_image?: boolean;
@@ -111,6 +113,7 @@ function buildPersonaUpsertRequest(
     remove_image,
     search_start_date,
     user_file_ids,
+    subagent_persona_ids,
   } = creationRequest;
 
   return {
@@ -142,6 +145,7 @@ function buildPersonaUpsertRequest(
     display_priority: null,
     label_ids: creationRequest.label_ids ?? null,
     user_file_ids: user_file_ids ?? null,
+    subagent_persona_ids: creationRequest.subagent_persona_ids ?? null,
   };
 }
 

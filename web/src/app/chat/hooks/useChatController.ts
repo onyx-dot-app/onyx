@@ -662,6 +662,9 @@ export function useChatController({
           ? assistantPreferences?.[liveAssistant?.id]?.disabled_tool_ids
           : undefined;
 
+        console.log("liveAssistant?.tools:", liveAssistant?.tools);
+        console.log(disabledToolIds);
+
         const stack = new CurrentMessageFIFO();
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
