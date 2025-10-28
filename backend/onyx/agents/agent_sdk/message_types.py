@@ -51,7 +51,7 @@ class UserMessage(TypedDict):
 
 class AssistantMessageWithContent(TypedDict):
     role: Literal["assistant"]
-    content: list[OutputTextContent]  # Assistant messages use output text
+    content: list[InputTextContent]  # Assistant messages use input text
 
 
 class AssistantMessageWithToolCalls(TypedDict):
@@ -63,8 +63,8 @@ class AssistantMessageDuringAgentRun(TypedDict):
     role: Literal["assistant"]
     id: str
     content: (
-        list[OutputTextContent] | list[ToolCall]
-    )  # Assistant runtime messages use output text
+        list[InputTextContent] | list[ToolCall]
+    )  # Assistant runtime messages use input text
     status: Literal["completed", "failed", "in_progress"]
     type: Literal["message"]
 

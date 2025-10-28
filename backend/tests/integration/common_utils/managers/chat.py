@@ -140,8 +140,6 @@ class ChatSessionManager:
         assistant_message_id: int | None = None
         error = None
         for data in response_data:
-            if data.get("obj"):
-                print("data.get('obj').get('type'):", data.get("obj").get("type"))
             if data.get("reserved_assistant_message_id"):
                 assistant_message_id = data.get("reserved_assistant_message_id")
             elif data.get("error"):
@@ -154,7 +152,6 @@ class ChatSessionManager:
                 and (packet_type := data_obj.get("type"))
                 and (ind := data.get("ind")) is not None
             ):
-                print("packet_type:", packet_type)
                 if packet_type == "message_start":
                     final_docs = data_obj.get("final_documents")
                     if isinstance(final_docs, list):
@@ -162,7 +159,6 @@ class ChatSessionManager:
                     full_message += data_obj.get("content", "")
                 elif packet_type == "message_delta":
                     full_message += data_obj["content"]
-                    print("full_message after delta:", full_message)
                 elif packet_type == "internal_search_tool_start":
                     tool_name = (
                         ToolName.INTERNET_SEARCH
