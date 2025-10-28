@@ -8,7 +8,7 @@ import { SvgProps } from "@/icons";
 
 const variantClasses = (selected?: boolean) =>
   ({
-    defaulted: {
+    main: {
       primary: {
         enabled: [
           "bg-theme-primary-05",
@@ -119,7 +119,7 @@ const variantClasses = (selected?: boolean) =>
 
 const textClasses = (selected?: boolean) =>
   ({
-    defaulted: {
+    main: {
       primary: {
         enabled: ["text-text-inverted-05"],
         disabled: ["text-text-inverted-04"],
@@ -192,7 +192,7 @@ const textClasses = (selected?: boolean) =>
 
 const iconClasses = (selected?: boolean) =>
   ({
-    defaulted: {
+    main: {
       primary: {
         enabled: ["stroke-text-inverted-05"],
         disabled: ["stroke-text-inverted-04"],
@@ -266,7 +266,7 @@ const iconClasses = (selected?: boolean) =>
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   // Button variants:
-  defaulted?: boolean;
+  main?: boolean;
   action?: boolean;
   danger?: boolean;
 
@@ -291,7 +291,7 @@ export interface ButtonProps
 }
 
 export default function Button({
-  defaulted,
+  main,
   action,
   danger,
 
@@ -319,13 +319,13 @@ export default function Button({
       "The left and right icons cannot be both specified at the same time"
     );
 
-  const variant = defaulted
-    ? "defaulted"
+  const variant = main
+    ? "main"
     : action
       ? "action"
       : danger
         ? "danger"
-        : "defaulted";
+        : "main";
 
   const subvariant = primary
     ? "primary"

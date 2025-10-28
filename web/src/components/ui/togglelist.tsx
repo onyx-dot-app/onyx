@@ -106,7 +106,6 @@ export function ToggleList({
         </div>
         <div className="mx-1">
           <Button
-            defaulted
             tertiary
             type="button"
             includeLeftSpacer={false}

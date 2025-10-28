@@ -905,11 +905,11 @@ export function ActionToggle({
           side="top"
           align="start"
           className="
-            w-[15.5rem] 
+            w-[15.5rem]
             max-h-[300px]
             text-text-03
-            text-sm 
-            p-0 
+            text-sm
+            p-0
             overflow-hidden
             flex
             flex-col
@@ -1040,7 +1040,6 @@ export function ActionToggle({
                     <div className="border-b border-border mx-3.5 mt-2" />
                     <div className="mx-2 mt-2.5 mb-2">
                       <Button
-                        defaulted
                         tertiary
                         href="/admin/actions"
                         leftIcon={MoreActionsIcon}
