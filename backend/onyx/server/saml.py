@@ -3,6 +3,7 @@ import secrets
 import string
 import uuid
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -161,11 +162,36 @@ class SAMLAuthorizeResponse(BaseModel):
     authorization_url: str
 
 
+def _sanitize_relay_state(candidate: str | None) -> str | None:
+    """Ensure the relay state is an internal path to avoid open redirects."""
+    if not candidate:
+        return None
+
+    relay_state = candidate.strip()
+    if not relay_state or not relay_state.startswith("/"):
+        return None
+
+    if "\\" in relay_state:
+        return None
+
+    # Reject colon before query/fragment to match frontend validation
+    path_portion = relay_state.split("?", 1)[0].split("#", 1)[0]
+    if ":" in path_portion:
+        return None
+
+    parsed = urlparse(relay_state)
+    if parsed.scheme or parsed.netloc:
+        return None
+
+    return relay_state
+
+
 @router.get("/authorize")
 async def saml_login(request: Request) -> SAMLAuthorizeResponse:
     req = await prepare_from_fastapi_request(request)
     auth = OneLogin_Saml2_Auth(req, custom_base_path=SAML_CONF_DIR)
-    callback_url = auth.login()
+    return_to = _sanitize_relay_state(request.query_params.get("next"))
+    callback_url = auth.login(return_to=return_to)
     return SAMLAuthorizeResponse(authorization_url=callback_url)
 
 
