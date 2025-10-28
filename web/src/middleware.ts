@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED } from "./lib/constants";
+import { getAuthDisabledSS } from "./lib/userSS";
 
 // Authentication cookie name (matches backend: FASTAPI_USERS_AUTH_COOKIE_NAME)
 const FASTAPI_USERS_AUTH_COOKIE_NAME = "fastapiusersauth";
@@ -59,8 +60,9 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = PUBLIC_ROUTES.some((route) =>
     pathname.startsWith(route)
   );
+  const isAuthDisabled = await getAuthDisabledSS();
 
-  if (isProtectedRoute && !isPublicRoute) {
+  if (isProtectedRoute && !isPublicRoute && !isAuthDisabled) {
     const authCookie = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME);
 
     if (!authCookie) {
