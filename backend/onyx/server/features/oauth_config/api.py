@@ -85,7 +85,7 @@ def create_oauth_config_endpoint(
 @admin_router.get("")
 def list_oauth_configs(
     db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_user),
+    _: User | None = Depends(current_curator_or_admin_user),
 ) -> list[OAuthConfigSnapshot]:
     """List all OAuth configurations (admin only)."""
     oauth_configs = get_oauth_configs(db_session)
