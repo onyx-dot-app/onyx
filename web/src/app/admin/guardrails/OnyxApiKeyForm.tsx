@@ -251,21 +251,9 @@ export const OnyxApiKeyForm = ({
                 // Check if the template includes LLM support
                 const includeLlmRaw =
                   (values as any)?.include_llm ?? selectedTemplate?.include_llm;
-                const includeLlm = (() => {
-                  const v = includeLlmRaw as any;
-                  if (typeof v === "boolean") return v;
-                  if (typeof v === "number") return v === 1;
-                  if (typeof v === "string") {
-                    const s = v.trim().toLowerCase();
-                    return (
-                      s === "true" || s === "1" || s === "yes" || s === "on"
-                    );
-                  }
-                  return false;
-                })();
 
                 if (
-                  !includeLlm ||
+                  !includeLlmRaw ||
                   !Array.isArray(llmProviders) ||
                   llmProviders.length === 0
                 ) {
