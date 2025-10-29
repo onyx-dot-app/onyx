@@ -16,6 +16,7 @@ import { APIFormFieldState } from "@/refresh-components/form/types";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Button from "@/refresh-components/buttons/Button";
 import { MODAL_CONTENT_MAP } from "../constants";
+import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
 
 type LLMConnectionModalData = {
   icon: React.ReactNode;
@@ -26,35 +27,62 @@ type LLMConnectionModalData = {
 const LLMConnectionModal = () => {
   const { getModalData, toggleModal } = useChatModal();
   const data = getModalData<LLMConnectionModalData>();
-  if (!data) return null;
-
-  const { icon, title, llmDescriptor } = data;
-  const modalContent = MODAL_CONTENT_MAP[llmDescriptor.name];
+  const icon = data?.icon;
+  const title = data?.title ?? "";
+  const llmDescriptor = data?.llmDescriptor;
+  const modalContent = llmDescriptor
+    ? MODAL_CONTENT_MAP[llmDescriptor.name]
+    : undefined;
   const modelOptions = useMemo(
     () =>
-      llmDescriptor.model_configurations.map((model) => ({
-        label: model.name,
-        value: model.name,
-      })),
-    [llmDescriptor.model_configurations]
+      llmDescriptor
+        ? llmDescriptor.model_configurations.map((model) => ({
+            label: model.name,
+            value: model.name,
+          }))
+        : [],
+    [llmDescriptor]
   );
 
   const initialValues = useMemo(
     () => ({
-      default_model_name: llmDescriptor.default_model,
+      api_base: "",
+      default_model_name: llmDescriptor?.default_model ?? "",
       api_key: "",
+      api_key_changed: true,
+      api_version: "",
+      custom_config: {},
+      deployment_name: "",
+      fast_default_model_name:
+        llmDescriptor?.default_fast_model ?? llmDescriptor?.default_model ?? "",
+      name: "Default",
+      provider: llmDescriptor?.name ?? "",
+      model_configurations:
+        llmDescriptor?.model_configurations.map((model) => ({
+          name: model.name,
+          is_visible: true,
+          max_input_tokens: model.max_input_tokens,
+          supports_image_input: model.supports_image_input,
+        })) ?? [],
+      groups: [],
+      is_public: true,
     }),
     [llmDescriptor]
   );
 
   const [apiStatus, setApiStatus] = useState<APIFormFieldState>("loading");
   const [showApiMessage, setShowApiMessage] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const isApiError = apiStatus === "error";
 
   const testApiKey = async (apiKey: string) => {
     setApiStatus("loading");
     setShowApiMessage(true);
     try {
+      if (!llmDescriptor) {
+        setApiStatus("error");
+        return;
+      }
       const response = await fetch("/api/admin/llm/test", {
         method: "POST",
         headers: {
@@ -74,14 +102,19 @@ const LLMConnectionModal = () => {
         }),
       });
       if (!response.ok) {
+        const errorMsg = (await response.json()).detail;
+        setErrorMessage(errorMsg);
         setApiStatus("error");
         return;
       }
       setApiStatus("success");
     } catch (error) {
       setApiStatus("error");
+      setErrorMessage("An error occurred while testing the API key.");
     }
   };
+
+  if (!data) return null;
 
   return (
     <Modal
@@ -91,10 +124,37 @@ const LLMConnectionModal = () => {
       startAdornment={icon}
       xs
     >
-      <Formik initialValues={initialValues} onSubmit={() => {}}>
+      <Formik
+        initialValues={initialValues}
+        onSubmit={async (values, { setSubmitting }) => {
+          const api_key = values.api_key;
+          const payload = {
+            ...initialValues,
+            ...values,
+          };
+          console.log("payload", payload);
+          const response = await fetch(
+            `${LLM_PROVIDERS_ADMIN_URL}${"?is_creation=true"}`,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                ...payload,
+              }),
+            }
+          );
+          if (!response.ok) {
+            const errorMsg = (await response.json()).detail;
+            console.log("errorMsg", errorMsg);
+            return;
+          }
+        }}
+      >
         <Form className="flex flex-col gap-0">
           <div className="flex flex-col p-4 gap-4 bg-background-tint-01 w-full">
-            {llmDescriptor.api_key_required && (
+            {llmDescriptor?.api_key_required && (
               <FormikField<string>
                 name="api_key"
                 render={(field, helper, meta, state) => (
@@ -138,7 +198,7 @@ const LLMConnectionModal = () => {
                           loading: `Checking API key with ${modalContent?.display_name}...`,
                           success:
                             "API key valid. Your available models updated.",
-                          error: "Invalid API key",
+                          error: errorMessage || "Invalid API key",
                         }}
                       />
                     )}

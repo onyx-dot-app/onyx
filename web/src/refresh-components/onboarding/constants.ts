@@ -108,4 +108,12 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for chatGPT.",
     },
   },
+  anthropic: {
+    description: "Connect to Anthropic and set up your Claude models.",
+    display_name: "Anthropic",
+    field_metadata: {
+      default_model_name:
+        "This model will be used by Onyx by default for Claude.",
+    },
+  },
 };
