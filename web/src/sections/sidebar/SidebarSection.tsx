@@ -25,7 +25,7 @@ export function SidebarSection({
         </Text>
         {action && <div className="flex-shrink-0">{action}</div>}
       </div>
-      <div className="flex flex-col">{children}</div>
+      <div>{children}</div>
     </div>
   );
 }
