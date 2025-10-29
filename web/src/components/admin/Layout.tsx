@@ -22,8 +22,6 @@ export default async function Layout({ children }: LayoutProps) {
     return redirect(authResult.redirect);
   }
 
-  const { user } = authResult;
-
   // Fetch chat data (will verify auth again - defense in depth)
   const data = await fetchChatData({});
   if ("redirect" in data) {
@@ -43,7 +41,6 @@ export default async function Layout({ children }: LayoutProps) {
     inputPrompts,
     proSearchToggled,
     availableTools,
-    projects,
   } = data;
 
   return (
@@ -66,7 +63,6 @@ export default async function Layout({ children }: LayoutProps) {
       <ClientLayout
         enableEnterprise={SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED}
         enableCloud={NEXT_PUBLIC_CLOUD_ENABLED}
-        user={user}
       >
         <AnnouncementBanner />
         {children}
