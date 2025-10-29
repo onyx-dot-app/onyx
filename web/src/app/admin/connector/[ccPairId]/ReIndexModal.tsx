@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { useState } from "react";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { triggerIndexing } from "./lib";
@@ -130,7 +130,6 @@ export default function ReIndexModal({
     <Modal title="Run Indexing" onOutsideClick={hide}>
       <div>
         <Button
-          variant="submit"
           className="ml-auto"
           onClick={() => handleRunIndex(false)}
           disabled={isProcessing}
@@ -146,7 +145,6 @@ export default function ReIndexModal({
         <Separator />
 
         <Button
-          variant="submit"
           className="ml-auto"
           onClick={() => handleRunIndex(true)}
           disabled={isProcessing}

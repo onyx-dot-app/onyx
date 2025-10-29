@@ -37,13 +37,6 @@ const isKnowledgeGraphTool = (tool: ToolSnapshot): boolean => {
   );
 };
 
-const isOktaProfileTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "OktaProfileTool" ||
-    tool.display_name?.toLowerCase().includes("okta profile")
-  );
-};
-
 export function getIconForAction(
   action: ToolSnapshot
 ): (props: SvgProps) => JSX.Element {
@@ -51,7 +44,6 @@ export function getIconForAction(
   if (isWebSearchTool(action)) return SvgGlobe;
   if (isImageGenerationTool(action)) return SvgImage;
   if (isKnowledgeGraphTool(action)) return SvgServer;
-  if (isOktaProfileTool(action)) return SvgUser;
   return SvgCpu;
 }
 

@@ -31,7 +31,7 @@ export default function MessageSwitcher({
 
   return (
     <div
-      className="flex flex-row items-center gap-spacing-inline"
+      className="flex flex-row items-center gap-1"
       data-testid="MessageSwitcher/container"
     >
       <IconButton

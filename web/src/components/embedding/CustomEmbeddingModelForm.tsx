@@ -8,7 +8,7 @@ import * as Yup from "yup";
 import { TextFormField, BooleanFormField } from "@/components/Field";
 import { Dispatch, SetStateAction } from "react";
 import Text from "@/components/ui/text";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { EmbeddingDetails } from "@/app/admin/embeddings/EmbeddingModelSelectionForm";
 
 export function CustomEmbeddingModelForm({

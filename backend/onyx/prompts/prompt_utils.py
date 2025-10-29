@@ -155,14 +155,17 @@ def build_task_prompt_reminders_v2(
     base_task = prompt.task_prompt or ""
     citation_or_nothing = REQUIRE_CITATION_STATEMENT_V2 if should_cite else ""
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
-    return f"""
-    {LONG_CONVERSATION_REMINDER_TAG_OPEN}
-    {base_task}
-    {citation_or_nothing}
-    {language_hint_or_nothing}
-    {LONG_CONVERSATION_REMINDER_TAG_CLOSED}
-    {chat_turn_user_message}
-    """.strip()
+    if len(base_task) + len(citation_or_nothing) + len(language_hint_or_nothing) > 0:
+        return f"""
+        {LONG_CONVERSATION_REMINDER_TAG_OPEN}
+        {base_task}
+        {citation_or_nothing}
+        {language_hint_or_nothing}
+        {LONG_CONVERSATION_REMINDER_TAG_CLOSED}
+        {chat_turn_user_message}
+        """
+    else:
+        return chat_turn_user_message
 
 
 # Maps connector enum string to a more natural language representation for the LLM

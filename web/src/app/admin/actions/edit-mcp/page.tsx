@@ -10,7 +10,7 @@ import { ToolIcon } from "@/components/icons/icons";
 import { FiLink, FiCheck } from "react-icons/fi";
 import CardSection from "@/components/admin/CardSection";
 import { TextFormField } from "@/components/Field";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
@@ -38,6 +38,10 @@ import {
   MCPServerDetail,
 } from "@/components/admin/actions/interfaces";
 import { ToolList } from "@/components/admin/actions/ToolList";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import SvgCheck from "@/icons/check";
+import SvgExternalLink from "@/icons/external-link";
+import SvgLink from "@/icons/link";
 
 const validationSchema = Yup.object().shape({
   name: Yup.string().required("Name is required"),
@@ -477,20 +481,19 @@ export default function NewMCPToolPage() {
                             !values.server_url.trim()
                           }
                           className="flex-1"
+                          leftIcon={
+                            checkingOAuthStatus
+                              ? SimpleLoader
+                              : oauthConnected
+                                ? SvgCheck
+                                : SvgLink
+                          }
                         >
-                          {checkingOAuthStatus ? (
-                            "Connecting..."
-                          ) : oauthConnected ? (
-                            <>
-                              <FiCheck className="mr-2 h-4 w-4" />
-                              OAuth Connected
-                            </>
-                          ) : (
-                            <>
-                              <FiLink className="mr-2 h-4 w-4" />
-                              Connect OAuth
-                            </>
-                          )}
+                          {checkingOAuthStatus
+                            ? "Connecting..."
+                            : oauthConnected
+                              ? "OAuth Connected"
+                              : "Connect OAuth"}
                         </Button>
                       </div>
                     )}

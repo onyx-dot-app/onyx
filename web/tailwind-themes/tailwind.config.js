@@ -210,18 +210,6 @@ module.exports = {
         foreground: "var(--background-tint-inverted-01)",
         border: "var(--border-01)",
         text: "var(--text-04)",
-
-        // (OLD) code styling
-        "code-bg": "#000",
-        "code-text": "var(--code-text)",
-        "token-comment": "var(--token-comment)",
-        "token-punctuation": "var(--token-punctuation)",
-        "token-property": "var(--token-property)",
-        "token-selector": "var(--token-selector)",
-        "token-atrule": "var(--token-atrule)",
-        "token-function": "var(--token-function)",
-        "token-regex": "var(--token-regex)",
-        "token-attr-name": "var(--token-attr-name)",
       },
       boxShadow: {
         "01": "0px 2px 8px 0px var(--shadow-01)",
@@ -264,21 +252,10 @@ module.exports = {
       fontStyle: {
         "token-italic": "italic",
       },
-      spacing: {
-        "spacing-inline-mini": "var(--spacing-inline-mini)",
-        "spacing-inline": "var(--spacing-inline)",
-        "spacing-interline-mini": "var(--spacing-interline-mini)",
-        "spacing-interline": "var(--spacing-interline)",
-        "spacing-paragraph": "var(--spacing-paragraph)",
-        "spacing-headline": "var(--spacing-headline)",
-        "spacing-headline-large": "var(--spacing-headline-large)",
-        "spacing-block": "var(--spacing-block)",
-        "spacing-section": "var(--spacing-section)",
-        "padding-button": "var(--padding-button)",
-        "padding-content": "var(--padding-content)",
-        "padding-block-end": "var(--padding-block-end)",
-        "padding-body-main": "var(--padding-body-main)",
-        "padding-section": "var(--padding-section)",
+      backdropBlur: {
+        "01": "var(--backdrop-blur-01)",
+        "02": "var(--backdrop-blur-02)",
+        "03": "var(--backdrop-blur-03)",
       },
       calendar: {
         // Light mode

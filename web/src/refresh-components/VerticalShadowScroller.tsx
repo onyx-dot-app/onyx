@@ -8,20 +8,22 @@ export interface VerticalShadowScrollerProps {
   children?: React.ReactNode;
   disable?: boolean;
   backgroundColor?: string;
+  height?: string;
 }
 
 export default function VerticalShadowScroller({
   className,
   children,
   disable,
-  backgroundColor = "background-tint-02",
+  backgroundColor = "var(--background-tint-02)",
+  height: minHeight = "1rem",
 }: VerticalShadowScrollerProps) {
   return (
     <div className="flex flex-col flex-1 overflow-y-hidden relative">
       <div className={cn("flex flex-col flex-1 overflow-y-scroll", className)}>
         {children}
         {/* We add some spacing after the masked scroller to make it clear that this is the *end* of the scroller. */}
-        <div className="min-h-[1rem]" />
+        <div style={{ minHeight }} />
       </div>
 
       {/* Mask Layer */}
@@ -30,7 +32,7 @@ export default function VerticalShadowScroller({
         style={{
           background: disable
             ? undefined
-            : `linear-gradient(to bottom, transparent, var(--${backgroundColor}))`,
+            : `linear-gradient(to bottom, transparent, ${backgroundColor})`,
         }}
       />
     </div>

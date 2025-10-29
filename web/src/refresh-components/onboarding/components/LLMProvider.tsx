@@ -17,12 +17,14 @@ type LLMProviderProps = {
   subtitle: string;
   icon?: React.FunctionComponent<SvgProps>;
   llmDescriptor?: WellKnownLLMProviderDescriptor;
+  disabled?: boolean;
 };
 const LLMProviderInner = ({
   title,
   subtitle,
   icon: Icon,
   llmDescriptor,
+  disabled,
 }: LLMProviderProps) => {
   const { toggleModal } = useChatModal();
 
@@ -64,6 +66,7 @@ const LLMProviderInner = ({
       <Button
         tertiary
         rightIcon={SvgArrowExchange}
+        disabled={disabled}
         onClick={handleConnectClick}
       >
         Connect

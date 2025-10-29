@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import { ModelSelector } from "../../../../components/embedding/ModelSelector";
@@ -65,7 +65,7 @@ export default function OpenEmbeddingPage({
         <Button
           onClick={() => setConfigureModel(true)}
           className="mt-4"
-          variant="secondary"
+          secondary
         >
           Configure custom model
         </Button>

@@ -10,6 +10,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import Text from "@/refresh-components/texts/Text";
 import SvgLock from "@/icons/lock";
+import { cn } from "@/lib/utils";
 
 function Main() {
   const {
@@ -55,18 +56,14 @@ function Main() {
     return <ThreeDotsLoader />;
   }
   return (
-    <div className="pb-spacing-section">
+    <div className="pb-36">
       <div className="w-full max-w-2xl">
-        <CardSection className="flex flex-col gap-spacing-interline">
-          <Text
-            headingH3
-            text05
-            className="border-b border-border-01 pb-spacing-interline"
-          >
+        <CardSection className="flex flex-col gap-2">
+          <Text headingH3 text05 className="border-b border-border-01 pb-2">
             Process with Unstructured API
           </Text>
 
-          <div className="flex flex-col gap-spacing-interline">
+          <div className="flex flex-col gap-2">
             <Text mainContentBody text04 className="leading-relaxed">
               Unstructured extracts and transforms complex data from formats
               like .pdf, .docx, .png, .pptx, etc. into clean text for Onyx to
@@ -89,9 +86,21 @@ function Main() {
               </a>
               .
             </Text>
-            <div className="pt-spacing-interline-mini">
+            <div className="pt-1.5">
               {isApiKeySet ? (
-                <div className="flex items-center gap-spacing-inline-mini rounded-08 border border-border-01 bg-background-neutral-01 px-spacing-interline py-spacing-interline-mini">
+                <div
+                  className={cn(
+                    "flex",
+                    "items-center",
+                    "gap-0.5",
+                    "rounded-08",
+                    "border",
+                    "border-border-01",
+                    "bg-background-neutral-01",
+                    "px-2",
+                    "py-1.5"
+                  )}
+                >
                   <Text
                     mainUiMuted
                     text03
@@ -109,7 +118,7 @@ function Main() {
                 />
               )}
             </div>
-            <div className="flex flex-col gap-spacing-interline desktop:flex-row desktop:items-center desktop:gap-spacing-interline">
+            <div className="flex flex-col gap-2 desktop:flex-row desktop:items-center desktop:gap-2">
               {isApiKeySet ? (
                 <>
                   <Button onClick={handleDelete} danger>

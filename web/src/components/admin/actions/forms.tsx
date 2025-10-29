@@ -1,6 +1,6 @@
 import { FiInfo, FiPlus, FiX, FiKey } from "react-icons/fi";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { useEffect } from "react";
 
@@ -130,8 +130,7 @@ export function PerUserAuthTemplateConfig({
             <Label>Authentication Headers</Label>
             <Button
               type="button"
-              variant="outline"
-              size="sm"
+              secondary
               onClick={addHeader}
               className="flex items-center space-x-1"
             >
@@ -157,8 +156,7 @@ export function PerUserAuthTemplateConfig({
                 />
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="sm"
+                  tertiary
                   onClick={() => removeHeader(name)}
                   className="text-red-600 hover:text-red-800"
                 >

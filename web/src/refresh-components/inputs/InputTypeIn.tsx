@@ -110,7 +110,7 @@ function InputTypeInInner(
     <div
       ref={boundingBoxRef}
       className={cn(
-        "flex flex-row items-center justify-between w-full h-fit p-spacing-interline-mini rounded-08 bg-background-neutral-00 relative",
+        "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
         divClasses(localActive, hovered)[state],
         className
       )}
@@ -126,7 +126,7 @@ function InputTypeInInner(
       }}
     >
       {leftSearchIcon && (
-        <div className="pr-spacing-interline">
+        <div className="pr-2">
           <SvgSearch className="w-[1rem] h-[1rem] stroke-text-02" />
         </div>
       )}
@@ -139,7 +139,7 @@ function InputTypeInInner(
         value={value}
         onChange={onChange}
         className={cn(
-          "w-full h-[1.5rem] bg-transparent p-spacing-inline-mini focus:outline-none",
+          "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
           inputClasses(localActive)[state]
         )}
         {...props}

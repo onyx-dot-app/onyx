@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { FiPlus } from "react-icons/fi";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import LLMPopover from "@/refresh-components/LLMPopover";
+import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
@@ -30,8 +30,8 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgHourglass from "@/icons/hourglass";
 import SvgArrowUp from "@/icons/arrow-up";
 import SvgStop from "@/icons/stop";
-import FilePicker from "@/app/chat/components/files/FilePicker";
-import { ActionToggle } from "@/app/chat/components/input/ActionManagement";
+import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
+import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import SvgPlusCircle from "@/icons/plus-circle";
 import {
@@ -131,12 +131,7 @@ function ChatInputBarInner({
   const { user } = useUser();
 
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
-  const {
-    currentMessageFiles,
-    setCurrentMessageFiles,
-    recentFiles,
-    allRecentFiles,
-  } = useProjectsContext();
+  const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
   const currentIndexingFiles = useMemo(() => {
     return currentMessageFiles.filter(
@@ -395,7 +390,7 @@ function ChatInputBarInner({
 
       <div className="w-full h-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
         {currentMessageFiles.length > 0 && (
-          <div className="p-spacing-inline rounded-t-16 flex flex-wrap gap-spacing-interline">
+          <div className="p-1 rounded-t-16 flex flex-wrap gap-2">
             {currentMessageFiles.map((file) => (
               <FileCard
                 key={file.id}
@@ -508,7 +503,7 @@ function ChatInputBarInner({
 
         <div className="flex justify-between items-center w-full p-1">
           <div className="flex flex-row items-center gap-1">
-            <FilePicker
+            <FilePickerPopover
               onFileClick={handleFileClick}
               onPickRecent={(file: ProjectFile) => {
                 // Check if file with same ID already exists
@@ -527,19 +522,19 @@ function ChatInputBarInner({
                   )
                 );
               }}
-              recentFiles={allRecentFiles}
               handleUploadChange={handleUploadChange}
-              trigger={
+              trigger={(open) => (
                 <IconButton
                   icon={SvgPlusCircle}
                   tooltip="Attach Files"
                   tertiary
+                  active={open}
                 />
-              }
+              )}
               selectedFileIds={currentMessageFiles.map((f) => f.id)}
             />
             {selectedAssistant.tools.length > 0 && (
-              <ActionToggle
+              <ActionsPopover
                 selectedAssistant={selectedAssistant}
                 filterManager={filterManager}
                 availableSources={memoizedAvailableSources}
@@ -583,7 +578,7 @@ function ChatInputBarInner({
               })}
           </div>
 
-          <div className="flex flex-row items-center gap-spacing-inline">
+          <div className="flex flex-row items-center gap-1">
             <div data-testid="ChatInputBar/llm-popover-trigger">
               <LLMPopover
                 llmManager={llmManager}

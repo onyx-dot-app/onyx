@@ -9,20 +9,29 @@ import { OnboardingActions, OnboardingState } from "../types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { PROVIDER_ICON_MAP } from "../constants";
 import LLMConnectionModal from "@/refresh-components/onboarding/components/LLMConnectionModal";
+import KeyValueInput from "@/refresh-components/inputs/InputKeyValue";
+import { cn } from "@/lib/utils";
 
 type LLMStepProps = {
   state: OnboardingState;
   actions: OnboardingActions;
   llmDescriptors: WellKnownLLMProviderDescriptor[];
+  disabled?: boolean;
 };
 
 const LLMStepInner = ({
   state: onboardingState,
   actions: onboardingActions,
   llmDescriptors,
+  disabled,
 }: LLMStepProps) => {
   return (
-    <div className="flex flex-col items-center justify-between w-full max-w-[800px] p-spacing-inline rounded-16 border border-border-01 bg-background-tint-00">
+    <div
+      className={cn(
+        "flex flex-col items-center justify-between w-full max-w-[800px] p-spacing-inline rounded-16 border border-border-01 bg-background-tint-00",
+        disabled && "opacity-50 pointer-events-none select-none"
+      )}
+    >
       <div className="flex gap-spacing-interline justify-between h-full w-full">
         <div className="flex mx-spacing-interline mt-spacing-interline gap-spacing-inline">
           <div className="h-full p-spacing-inline-mini">
@@ -38,7 +47,7 @@ const LLMStepInner = ({
           </div>
         </div>
         <div className="p-spacing-inline-mini">
-          <Button tertiary rightIcon={SvgExternalLink}>
+          <Button tertiary rightIcon={SvgExternalLink} disabled={disabled}>
             View in Admin Panel
           </Button>
         </div>
@@ -58,6 +67,7 @@ const LLMStepInner = ({
               subtitle={llmDescriptor.display_name}
               icon={PROVIDER_ICON_MAP[llmDescriptor.name]}
               llmDescriptor={llmDescriptor}
+              disabled={disabled}
             />
           </div>
         ))}
@@ -66,6 +76,7 @@ const LLMStepInner = ({
           <LLMProvider
             title="Custom Models"
             subtitle="Connect models from other providers or your self-hosted models."
+            disabled={disabled}
           />
         </div>
         <LLMConnectionModal />
