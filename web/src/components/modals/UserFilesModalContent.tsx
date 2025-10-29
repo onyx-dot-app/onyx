@@ -19,8 +19,7 @@ import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 
 function getIcon(
   file: ProjectFile,
-  isProcessing: boolean,
-  isSelected: boolean
+  isProcessing: boolean
 ): React.FunctionComponent<SvgProps> {
   if (isProcessing) return SimpleLoader;
   const ext = getFileExtension(file.name).toLowerCase();
@@ -188,7 +187,7 @@ export default function UserFilesModalContent({
             <Text text03>No files found</Text>
           </div>
         ) : (
-          <VerticalShadowScroller className="p-2 flex flex-col gap-2 overflow-scroll max-h-[20rem]">
+          <VerticalShadowScroller className="p-2 flex flex-col gap-2 max-h-[20rem]">
             {filtered.map((projectFle) => {
               const isSelected = selectedIds.has(projectFle.id);
               return (
