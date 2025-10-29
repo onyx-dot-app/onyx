@@ -8,53 +8,48 @@ import SvgChevronDownSmall from "@/icons/chevron-down-small";
 
 const MARGIN = 5;
 
-const baseClassNames = (active?: boolean) =>
+const baseClassNames = (engaged?: boolean, transient?: boolean) =>
   ({
     enabled: [
-      active && "bg-background-neutral-00",
+      "bg-transparent",
       "hover:bg-background-tint-02",
+      transient && "bg-background-tint-02",
+      "active:bg-background-tint-00",
+      engaged && "bg-transparent",
     ],
     disabled: ["bg-background-neutral-02"],
   }) as const;
 
-const iconClassNames = (active?: boolean) =>
+const iconClassNames = (engaged?: boolean, transient?: boolean) =>
   ({
-    defaulted: {
-      enabled: [
-        active ? "stroke-text-05" : "stroke-text-03",
-        "group-hover/SelectButton:stroke-text-04",
-      ],
-      disabled: ["stroke-text-01"],
-    },
-    action: {
-      enabled: [active ? "stroke-action-link-05" : "stroke-text-03"],
-      disabled: ["stroke-text-01"],
-    },
+    enabled: [
+      "stroke-text-03",
+      "group-hover/SelectButton:stroke-text-04",
+      transient && "stroke-text-04",
+      "group-active/SelectButton:stroke-text-05",
+      engaged && "stroke-action-link-05",
+    ],
+    disabled: ["stroke-text-02", engaged && "stroke-action-link-03"],
   }) as const;
 
-const textClassNames = (active?: boolean) =>
+const textClassNames = (engaged?: boolean, transient?: boolean) =>
   ({
-    defaulted: {
-      enabled: [
-        active ? "text-text-05" : "text-text-03",
-        "group-hover/SelectButton:text-text-04",
-      ],
-      disabled: ["text-text-01"],
-    },
-    action: {
-      enabled: [active ? "text-action-link-05" : "text-text-03"],
-      disabled: ["text-text-01"],
-    },
+    enabled: [
+      "text-text-03",
+      "group-hover/SelectButton:text-text-04",
+      transient && "text-text-04",
+      "group-active/SelectButton:text-text-05",
+      engaged && "text-action-link-05",
+    ],
+    disabled: ["text-text-01", engaged && "text-action-link-03"],
   }) as const;
 
 export interface SelectButtonProps {
   // Button states
-  active?: boolean;
+  engaged?: boolean;
+  transient?: boolean;
   disabled?: boolean;
   folded?: boolean;
-
-  // Variants
-  action?: boolean;
 
   // Content
   children: string;
@@ -65,47 +60,55 @@ export interface SelectButtonProps {
 }
 
 export default function SelectButton({
-  active,
+  engaged,
+  transient,
   disabled,
-  action,
   folded,
+
   children,
   leftIcon: LeftIcon,
   rightChevronIcon,
   onClick,
   className,
 }: SelectButtonProps) {
-  const variant = action ? "action" : "defaulted";
   const state = disabled ? "disabled" : "enabled";
 
   // Refs and state for measuring foldedContent width
   const measureRef = useRef<HTMLDivElement>(null);
   const [foldedContentWidth, setFoldedContentWidth] = useState<number>(0);
   const [hovered, setHovered] = useState<boolean>(false);
+
+  // Memoize class name invocations
+  const baseClasses = useMemo(
+    () => baseClassNames(engaged, transient)[state],
+    [engaged, transient, state]
+  );
+  const iconClasses = useMemo(
+    () => iconClassNames(engaged, transient)[state],
+    [engaged, transient, state]
+  );
+  const textClasses = useMemo(
+    () => textClassNames(engaged, transient)[state],
+    [engaged, transient, state]
+  );
+
   const content = useMemo(
     () => (
       <div className="flex flex-row items-center justify-center">
-        <Text
-          className={cn(
-            "whitespace-nowrap",
-            textClassNames(active)[variant][state]
-          )}
-        >
-          {children}
-        </Text>
+        <Text className={cn("whitespace-nowrap", textClasses)}>{children}</Text>
 
         {rightChevronIcon && (
           <SvgChevronDownSmall
             className={cn(
               "w-[1rem] h-[1rem] transition-all duration-300 ease-in-out",
-              iconClassNames(active)[variant][state],
-              active && "-rotate-180"
+              iconClasses,
+              (engaged || transient) && "-rotate-180"
             )}
           />
         )}
       </div>
     ),
-    [active, rightChevronIcon, children, variant, state]
+    [textClasses, iconClasses, rightChevronIcon, children, engaged, transient]
   );
   useEffect(() => {
     if (measureRef.current) {
@@ -126,7 +129,7 @@ export default function SelectButton({
 
       <button
         className={cn(
-          baseClassNames(active)[state],
+          baseClasses,
           "group/SelectButton flex items-center px-2 py-1.5 rounded-12 h-fit w-fit",
           className
         )}
@@ -137,31 +140,26 @@ export default function SelectButton({
         onMouseLeave={() => setHovered(false)}
       >
         {/* Static icon component */}
-        <LeftIcon
-          className={cn(
-            "w-[1rem] h-[1rem]",
-            iconClassNames(active)[variant][state]
-          )}
-        />
+        <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClasses)} />
 
         {/* Animation component */}
         <div
           className={cn(
             "flex items-center transition-all duration-300 ease-in-out overflow-hidden py-0.5",
             folded
-              ? active || hovered
+              ? engaged || transient || hovered
                 ? "opacity-100"
                 : "opacity-0"
               : "opacity-100"
           )}
           style={{
             width: folded
-              ? active || hovered
+              ? engaged || transient || hovered
                 ? `${foldedContentWidth}px`
                 : "0px"
               : `${foldedContentWidth}px`,
             margin: folded
-              ? active || hovered
+              ? engaged || transient || hovered
                 ? `0px 0px 0px ${MARGIN}px`
                 : "0px"
               : `0px 0px 0px ${MARGIN}px`,

@@ -543,10 +543,9 @@ function ChatInputBarInner({
             {showDeepResearch && (
               <SelectButton
                 leftIcon={SvgHourglass}
-                active={deepResearchEnabled}
                 onClick={toggleDeepResearch}
+                engaged={deepResearchEnabled}
                 folded
-                action
               >
                 Deep Research
               </SelectButton>
@@ -569,8 +568,7 @@ function ChatInputBarInner({
                         prev.filter((id) => id !== toolId)
                       );
                     }}
-                    action
-                    active
+                    engaged
                   >
                     {tool.display_name}
                   </SelectButton>
