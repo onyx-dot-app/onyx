@@ -286,7 +286,7 @@ def upsert_llm_provider(
     update_llm_provider_persona_relationships__no_commit(
         db_session=db_session,
         llm_provider_id=existing_llm_provider.id,
-        persona_ids=llm_provider_upsert_request.personas,
+        persona_ids=getattr(llm_provider_upsert_request, "personas", []),
     )
 
     db_session.flush()
