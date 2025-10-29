@@ -10,11 +10,18 @@ validators:
         values:
           - "RUS_PHONE_NUMBER"
           - "RUS_BANK_CARD"
+          - "RUS_INN"
+          - "RUS_OGRNIP"
+          - "RUS_SNILS"
+          - "RUS_OMS_POLICY"
+          - "RUS_PASSPORT"
+          - "RUS_DRIVER_LICENSE"
+          - "LOCATION"
           - "EMAIL_ADDRESS"
           - "IP_ADDRESS"
+          - "DATE_TIME"
           - "URL"
           - "DOMAIN_NAME"
-          - "CRYPTO"
     include_llm: false
   - id: -2
     name: "Валидатор запретных слов"

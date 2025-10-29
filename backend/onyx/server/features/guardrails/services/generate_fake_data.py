@@ -17,12 +17,6 @@ def generate_fake_email_address(original: str, mapping: Dict[str, str]) -> str:
     return fake_email
 
 
-def generate_fake_credit_card(original: str, mapping: Dict[str, str]) -> str:
-    fake_card = faker.credit_card_number()
-    mapping[fake_card] = original
-    return fake_card
-
-
 def generate_fake_ip_address(original: str, mapping: Dict[str, str]) -> str:
     fake_ip = faker.ipv4()
     mapping[fake_ip] = original
@@ -41,14 +35,70 @@ def generate_fake_domain_name(original: str, mapping: Dict[str, str]) -> str:
     return fake_domain
 
 
-def generate_fake_crypto(original: str, mapping: Dict[str, str]) -> str:
-    # Генерируем фейковый crypto wallet address
-    crypto_chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-    fake_crypto = "1" + ''.join(random.choice(crypto_chars) for _ in range(33))
-    mapping[fake_crypto] = original
-    return fake_crypto
-
 def generate_fake_rus_bank_card(original: str, mapping: Dict[str, str]) -> str:
     fake_rus_bank_card = faker.credit_card_number()
     mapping[fake_rus_bank_card] = original
     return fake_rus_bank_card
+
+
+def generate_fake_rus_inn(original: str, mapping: Dict[str, str]) -> str:
+    fake_rus_inn = faker.businesses_inn()
+
+    if len(original) == 12:
+        fake_rus_inn = faker.individuals_inn()
+
+    mapping[fake_rus_inn] = original
+    return fake_rus_inn
+
+
+def generate_fake_rus_passport(original: str, mapping: Dict[str, str]) -> str:
+    fake_rus_passport = faker.passport_number()
+
+    mapping[fake_rus_passport] = original
+    return fake_rus_passport
+
+
+def generate_fake_rus_driver_license(original: str, mapping: Dict[str, str]) -> str:
+    series_part_1 = random.randint(10, 99)
+    series_part_2 = random.randint(10, 99)
+    number_part = random.randint(100000, 999999)
+
+    fake_rus_driver_license = f"{series_part_1} {series_part_2} {number_part}"
+
+    mapping[fake_rus_driver_license] = original
+    return fake_rus_driver_license
+
+
+def generate_fake_date_time(original: str, mapping: Dict[str, str]) -> str:
+    fake_date_time = faker.date()
+
+    mapping[fake_date_time] = original
+    return fake_date_time
+
+
+def generate_fake_rus_snils(original: str, mapping: Dict[str, str]) -> str:
+    fake_rus_snils = faker.snils()
+
+    mapping[fake_rus_snils] = original
+    return fake_rus_snils
+
+
+def generate_fake_rus_ogrnip(original: str, mapping: Dict[str, str]) -> str:
+    fake_rus_ogrnip = faker.individuals_ogrn()
+
+    mapping[fake_rus_ogrnip] = original
+    return fake_rus_ogrnip
+
+
+def generate_fake_rus_oms_policy(original: str, mapping: Dict[str, str]) -> str:
+    fake_rus_oms_policy = str(random.randint(1000000000000000, 9999999999999999))
+
+    mapping[fake_rus_oms_policy] = original
+    return fake_rus_oms_policy
+
+
+def generate_fake_location(original: str, mapping: Dict[str, str]) -> str:
+    fake_location = faker.address()
+
+    mapping[fake_location] = original
+    return fake_location

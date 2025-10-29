@@ -7,12 +7,19 @@ from onyx.server.features.guardrails.services import generate_fake_data
 ENTITY_GENERATORS = {
     "RUS_PHONE_NUMBER": generate_fake_data.generate_fake_rus_phone_number,
     "RUS_BANK_CARD": generate_fake_data.generate_fake_rus_bank_card,
+    "RUS_INN": generate_fake_data.generate_fake_rus_inn,
+    "RUS_OGRNIP": generate_fake_data.generate_fake_rus_ogrnip,
+    "RUS_SNILS": generate_fake_data.generate_fake_rus_snils,
+    "RUS_OMS_POLICY": generate_fake_data.generate_fake_rus_oms_policy,
+    "RUS_PASSPORT": generate_fake_data.generate_fake_rus_passport,
+    "RUS_DRIVER_LICENSE": generate_fake_data.generate_fake_rus_driver_license,
+    "LOCATION": generate_fake_data.generate_fake_location,
     "EMAIL_ADDRESS": generate_fake_data.generate_fake_email_address,
     "CREDIT_CARD": generate_fake_data.generate_fake_credit_card,
     "IP_ADDRESS": generate_fake_data.generate_fake_ip_address,
+    "DATE_TIME": generate_fake_data.generate_fake_date_time,
     "URL": generate_fake_data.generate_fake_url,
     "DOMAIN_NAME": generate_fake_data.generate_fake_domain_name,
-    "CRYPTO": generate_fake_data.generate_fake_crypto,
 }
 
 
