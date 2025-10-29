@@ -27,7 +27,7 @@ import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import SvgTrash from "@/icons/trash";
 import { useAdminPersonas } from "@/app/admin/assistants/hooks";
-import SvgMessageSquare from "@/icons/message-square";
+import SvgUser from "@/icons/user";
 
 function AutoFetchModelsOnEdit({
   llmProviderDescriptor,
@@ -740,7 +740,7 @@ export function LLMProviderUpdateForm({
                                         primary
                                         action={isSelected}
                                         type="button"
-                                        leftIcon={SvgMessageSquare}
+                                        leftIcon={SvgUser}
                                         onClick={() => {
                                           if (isSelected) {
                                             arrayHelpers.remove(ind);
