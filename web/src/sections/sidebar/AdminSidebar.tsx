@@ -1,11 +1,8 @@
 "use client";
 
-import React, { useContext } from "react";
+import React from "react";
 import { usePathname } from "next/navigation";
-import {
-  SettingsContext,
-  useSettingsContext,
-} from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
 import Text from "@/refresh-components/texts/Text";
 import { SidebarSection } from "@/sections/sidebar/SidebarSection";
@@ -304,8 +301,7 @@ export default function AdminSidebar({
   enableEnterpriseSS,
 }: AdminSidebarProps) {
   const { kgExposed } = useIsKGExposed();
-  const combinedSettings = useContext(SettingsContext);
-  const pathname = usePathname() ?? "";
+  const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
   const settings = useSettingsContext();
@@ -337,9 +333,9 @@ export default function AdminSidebar({
         }
         footer={
           <div className="flex flex-col px-2 gap-2">
-            {combinedSettings?.webVersion && (
+            {settings.webVersion && (
               <Text text02 secondaryBody className="px-2 pt-1">
-                {`Onyx version: ${combinedSettings.webVersion}`}
+                {`Onyx version: ${settings.webVersion}`}
               </Text>
             )}
             <Settings />
