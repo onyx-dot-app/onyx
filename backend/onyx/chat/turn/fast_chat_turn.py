@@ -4,9 +4,8 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from agents import Agent
-from agents import RawResponsesStreamEvent
 from agents import RunResultStreaming
-from agents import ToolCallItem
+from agents import StreamEvent
 from agents.tracing import trace
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
@@ -255,7 +254,7 @@ def _process_stream(
         obj = _default_packet_translation(ev, ctx, processor)
         if obj:
             dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))
-        if isinstance(getattr(ev, "item", None), ToolCallItem):
+        if ev.type == "run_item_stream_event" and ev.item.type == "tool_call_item":
             tool_call_events.append(cast(ResponseFunctionToolCall, ev.item.raw_item))
     if agent_stream.streamed is None:
         raise ValueError("agent_stream.streamed is None")
@@ -301,18 +300,18 @@ def _emit_citations_for_final_answer(
 
 
 def _default_packet_translation(
-    ev: object, ctx: ChatTurnContext, processor: CitationProcessor | None
+    ev: StreamEvent, ctx: ChatTurnContext, processor: CitationProcessor | None
 ) -> PacketObj | None:
-    if isinstance(ev, RawResponsesStreamEvent):
+    if ev.type == "run_item_stream_event" and ev.item.type == "message_output_item":
+        retrieved_search_docs = saved_search_docs_from_llm_docs(
+            ctx.ordered_fetched_documents
+        )
+        obj = MessageStart(
+            type="message_start", content="", final_documents=retrieved_search_docs
+        )
+    if ev.type == "raw_response_event":
         obj: PacketObj | None = None
-        if ev.data.type == "response.content_part.added":
-            retrieved_search_docs = saved_search_docs_from_llm_docs(
-                ctx.ordered_fetched_documents
-            )
-            obj = MessageStart(
-                type="message_start", content="", final_documents=retrieved_search_docs
-            )
-        elif ev.data.type == "response.output_text.delta" and len(ev.data.delta) > 0:
+        if ev.data.type == "response.output_text.delta" and len(ev.data.delta) > 0:
             if processor:
                 final_answer_piece = ""
                 for response_part in processor.process_token(ev.data.delta):
