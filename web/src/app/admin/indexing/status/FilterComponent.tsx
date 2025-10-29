@@ -129,7 +129,7 @@ export const FilterComponent = forwardRef<
     <div className="relative">
       <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger asChild>
-          <IconButton icon={SvgFilter} secondary selected={isOpen} />
+          <IconButton icon={SvgFilter} secondary transient={isOpen} />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"

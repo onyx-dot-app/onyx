@@ -590,7 +590,7 @@ export default function ActionsPopover({
           <div data-testid="action-management-toggle">
             <IconButton
               icon={SvgSliders}
-              selected={open}
+              transient={open}
               tertiary
               tooltip="Manage Actions"
             />

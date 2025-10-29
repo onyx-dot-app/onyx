@@ -11,15 +11,15 @@ import {
 } from "@/components/ui/tooltip";
 import Text from "@/refresh-components/texts/Text";
 
-const buttonClasses = (selected: boolean | undefined) =>
+const buttonClasses = (transient: boolean | undefined) =>
   ({
     main: {
       primary: {
         enabled: [
           "bg-theme-primary-05",
           "hover:bg-theme-primary-04",
+          transient && "bg-theme-primary-04",
           "active:bg-theme-primary-06",
-          selected && "bg-theme-primary-04",
         ],
         disabled: ["bg-background-neutral-04"],
       },
@@ -27,8 +27,8 @@ const buttonClasses = (selected: boolean | undefined) =>
         enabled: [
           "bg-background-tint-02",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
         ],
         disabled: ["bg-background-neutral-03"],
       },
@@ -36,8 +36,8 @@ const buttonClasses = (selected: boolean | undefined) =>
         enabled: [
           "bg-transparent",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
         ],
         disabled: ["bg-transparent"],
       },
@@ -45,8 +45,8 @@ const buttonClasses = (selected: boolean | undefined) =>
         enabled: [
           "bg-transparent",
           "hover:bg-background-tint-00",
+          transient && "bg-background-tint-00",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-00",
         ],
         disabled: ["bg-transparent"],
       },
@@ -56,8 +56,8 @@ const buttonClasses = (selected: boolean | undefined) =>
         enabled: [
           "bg-action-link-05",
           "hover:bg-action-link-04",
+          transient && "bg-action-link-04",
           "active:bg-action-link-06",
-          selected && "bg-action-link-04",
         ],
         disabled: ["bg-action-link-02"],
       },
@@ -65,8 +65,8 @@ const buttonClasses = (selected: boolean | undefined) =>
         enabled: [
           "bg-background-tint-02",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
         ],
         disabled: ["bg-background-neutral-02"],
       },
@@ -74,8 +74,8 @@ const buttonClasses = (selected: boolean | undefined) =>
         enabled: [
           "bg-transparent",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
         ],
         disabled: ["bg-background-neutral-02"],
       },
@@ -83,8 +83,8 @@ const buttonClasses = (selected: boolean | undefined) =>
         enabled: [
           "bg-transparent",
           "hover:bg-background-tint-00",
+          transient && "bg-background-tint-00",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-00",
         ],
         disabled: ["bg-transparent"],
       },
@@ -94,8 +94,8 @@ const buttonClasses = (selected: boolean | undefined) =>
         enabled: [
           "bg-action-danger-05",
           "hover:bg-action-danger-04",
+          transient && "bg-action-danger-04",
           "active:bg-action-danger-06",
-          selected && "bg-action-danger-04",
         ],
         disabled: ["bg-action-danger-02"],
       },
@@ -103,8 +103,8 @@ const buttonClasses = (selected: boolean | undefined) =>
         enabled: [
           "bg-background-tint-02",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
         ],
         disabled: ["bg-background-neutral-02"],
       },
@@ -112,8 +112,8 @@ const buttonClasses = (selected: boolean | undefined) =>
         enabled: [
           "bg-transparent",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
         ],
         disabled: ["bg-background-neutral-02"],
       },
@@ -121,15 +121,15 @@ const buttonClasses = (selected: boolean | undefined) =>
         enabled: [
           "bg-transparent",
           "hover:bg-background-tint-00",
+          transient && "bg-background-tint-00",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-00",
         ],
         disabled: ["bg-transparent"],
       },
     },
   }) as const;
 
-const iconClasses = (selected: boolean | undefined) =>
+const iconClasses = (transient: boolean | undefined) =>
   ({
     main: {
       primary: {
@@ -140,8 +140,8 @@ const iconClasses = (selected: boolean | undefined) =>
         enabled: [
           "stroke-text-03",
           "group-hover/IconButton:stroke-text-04",
+          transient && "stroke-text-04",
           "group-active/IconButton:stroke-text-05",
-          selected && "stroke-text-04",
         ],
         disabled: ["stroke-text-01"],
       },
@@ -149,8 +149,8 @@ const iconClasses = (selected: boolean | undefined) =>
         enabled: [
           "stroke-text-03",
           "group-hover/IconButton:stroke-text-04",
+          transient && "stroke-text-04",
           "group-active/IconButton:stroke-text-05",
-          selected && "stroke-text-04",
         ],
         disabled: ["stroke-text-01"],
       },
@@ -158,8 +158,8 @@ const iconClasses = (selected: boolean | undefined) =>
         enabled: [
           "stroke-text-02",
           "group-hover/IconButton:stroke-text-04",
+          transient && "stroke-text-04",
           "group-active/IconButton:stroke-text-05",
-          selected && "stroke-text-04",
         ],
         disabled: ["stroke-text-01"],
       },
@@ -173,8 +173,8 @@ const iconClasses = (selected: boolean | undefined) =>
         enabled: [
           "stroke-action-link-05",
           "group-hover/IconButton:stroke-action-link-05",
+          transient && "stroke-action-link-05",
           "group-active/IconButton:stroke-action-link-06",
-          selected && "stroke-action-link-05",
         ],
         disabled: ["stroke-action-link-02"],
       },
@@ -182,8 +182,8 @@ const iconClasses = (selected: boolean | undefined) =>
         enabled: [
           "stroke-action-link-05",
           "group-hover/IconButton:stroke-action-link-05",
+          transient && "stroke-action-link-05",
           "group-active/IconButton:stroke-action-link-06",
-          selected && "stroke-action-link-05",
         ],
         disabled: ["stroke-action-link-02"],
       },
@@ -191,8 +191,8 @@ const iconClasses = (selected: boolean | undefined) =>
         enabled: [
           "stroke-action-link-05",
           "group-hover/IconButton:stroke-action-link-05",
+          transient && "stroke-action-link-05",
           "group-active/IconButton:stroke-action-link-06",
-          selected && "stroke-action-link-05",
         ],
         disabled: ["stroke-action-link-02"],
       },
@@ -206,8 +206,8 @@ const iconClasses = (selected: boolean | undefined) =>
         enabled: [
           "stroke-action-danger-05",
           "group-hover/IconButton:stroke-action-danger-05",
+          transient && "stroke-action-danger-05",
           "group-active/IconButton:stroke-action-danger-06",
-          selected && "stroke-action-danger-05",
         ],
         disabled: ["stroke-action-danger-02"],
       },
@@ -215,8 +215,8 @@ const iconClasses = (selected: boolean | undefined) =>
         enabled: [
           "stroke-action-danger-05",
           "group-hover/IconButton:stroke-action-danger-05",
+          transient && "stroke-action-danger-05",
           "group-active/IconButton:stroke-action-danger-06",
-          selected && "stroke-action-danger-05",
         ],
         disabled: ["stroke-action-danger-02"],
       },
@@ -224,8 +224,8 @@ const iconClasses = (selected: boolean | undefined) =>
         enabled: [
           "stroke-action-danger-05",
           "group-hover/IconButton:stroke-action-danger-05",
+          transient && "stroke-action-danger-05",
           "group-active/IconButton:stroke-action-danger-06",
-          selected && "stroke-action-danger-05",
         ],
         disabled: ["stroke-action-danger-02"],
       },
@@ -246,7 +246,7 @@ export interface IconButtonProps
   internal?: boolean;
 
   // Button states
-  selected?: boolean;
+  transient?: boolean;
   disabled?: boolean;
 
   // Button properties
@@ -266,7 +266,7 @@ export default function IconButton({
   tertiary,
   internal,
 
-  selected,
+  transient,
   disabled,
 
   onHover,
@@ -296,12 +296,12 @@ export default function IconButton({
   const abled = disabled ? "disabled" : "enabled";
 
   const buttonClass = useMemo(
-    () => buttonClasses(selected)[variant][subvariant][abled],
-    [selected, variant, subvariant, abled]
+    () => buttonClasses(transient)[variant][subvariant][abled],
+    [transient, variant, subvariant, abled]
   );
   const iconClass = useMemo(
-    () => iconClasses(selected)[variant][subvariant][abled],
-    [selected, variant, subvariant, abled]
+    () => iconClasses(transient)[variant][subvariant][abled],
+    [transient, variant, subvariant, abled]
   );
 
   const buttonElement = (

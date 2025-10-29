@@ -34,7 +34,7 @@ export default function DocumentSelector({
       <IconButton
         icon={SvgPlusCircle}
         onClick={onClick}
-        selected={isSelected}
+        transient={isSelected}
         disabled={isDisabled}
         tertiary
       />
