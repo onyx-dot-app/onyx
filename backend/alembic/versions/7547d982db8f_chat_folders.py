@@ -45,8 +45,23 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "chat_session_chat_folder_fk", "chat_session", type_="foreignkey"
-    )
-    op.drop_column("chat_session", "folder_id")
-    op.drop_table("chat_folder")
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    if "chat_session" in inspector.get_table_names():
+        chat_session_fks = {
+            fk.get("name") for fk in inspector.get_foreign_keys("chat_session")
+        }
+        if "chat_session_chat_folder_fk" in chat_session_fks:
+            op.drop_constraint(
+                "chat_session_chat_folder_fk", "chat_session", type_="foreignkey"
+            )
+
+        chat_session_columns = {
+            col["name"] for col in inspector.get_columns("chat_session")
+        }
+        if "folder_id" in chat_session_columns:
+            op.drop_column("chat_session", "folder_id")
+
+    if "chat_folder" in inspector.get_table_names():
+        op.drop_table("chat_folder")

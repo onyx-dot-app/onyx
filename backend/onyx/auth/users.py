@@ -109,13 +109,11 @@ from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import Persona
 from onyx.db.models import User
-from onyx.db.saml import get_saml_account
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
-from onyx.utils.secrets import extract_hashed_cookie
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -1064,17 +1062,7 @@ async def _check_for_saml_and_jwt(
     user: User | None,
     async_db_session: AsyncSession,
 ) -> User | None:
-    # Check if the user has a session cookie from SAML
-    if AUTH_TYPE == AuthType.SAML:
-        saved_cookie = extract_hashed_cookie(request)
-
-        if saved_cookie:
-            saml_account = await get_saml_account(
-                cookie=saved_cookie, async_db_session=async_db_session
-            )
-            user = saml_account.user if saml_account else None
-
-    # If user is still None, check for JWT in Authorization header
+    # If user is None, check for JWT in Authorization header
     if user is None and JWT_PUBLIC_KEY_URL is not None:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):

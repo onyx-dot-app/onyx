@@ -57,6 +57,9 @@ def test_time_str_to_utc() -> None:
         "22 Mar 2020 20:12:18 +0000 (GMT)": datetime.datetime(
             2020, 3, 22, 20, 12, 18, tzinfo=datetime.timezone.utc
         ),
+        "Date: Wed, 27 Aug 2025 11:40:00 +0200": datetime.datetime(
+            2025, 8, 27, 9, 40, 0, tzinfo=datetime.timezone.utc
+        ),
     }
     for strptime, expected_datetime in str_to_dt.items():
         assert time_str_to_utc(strptime) == expected_datetime

@@ -90,11 +90,11 @@ export function ChatDocumentDisplay({
     <button
       onClick={() => openDocument(document, setPresentingDocument)}
       className={cn(
-        "flex w-full flex-col p-padding-button gap-spacing-interline rounded-12 hover:bg-background-tint-00",
+        "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00",
         isSelected && "bg-action-link-02"
       )}
     >
-      <div className="flex items-center gap-spacing-interline">
+      <div className="flex items-center gap-2">
         {document.is_internet || document.source_type === ValidSources.Web ? (
           <WebResultIcon url={document.link} />
         ) : (

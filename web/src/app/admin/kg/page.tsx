@@ -249,7 +249,7 @@ function Main() {
   return (
     <div className="flex flex-col py-4 gap-y-8">
       {popup}
-      <CardSection className="max-w-2xl shadow-01 rounded-08 flex flex-col gap-spacing-interline">
+      <CardSection className="max-w-2xl shadow-01 rounded-08 flex flex-col gap-2">
         <Text headingH2>Knowledge Graph Configuration (Private Beta)</Text>
         <div className="flex flex-col gap-y-6">
           <div>
@@ -259,7 +259,7 @@ function Main() {
               organized as entities and their relationships, enabling powerful
               queries like:
             </Text>
-            <div className="p-spacing-paragraph">
+            <div className="p-4">
               <Text text03>
                 - &quot;Summarize my last 3 calls with account XYZ&quot;
               </Text>

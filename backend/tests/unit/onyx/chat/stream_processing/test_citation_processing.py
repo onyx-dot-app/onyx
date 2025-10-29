@@ -69,11 +69,9 @@ def process_text(
 ) -> tuple[str, list[CitationInfo]]:
     mock_docs, mock_doc_id_to_rank_map = mock_data
     final_mapping = DocumentIdOrderMapping(order_mapping=mock_doc_id_to_rank_map)
-    display_mapping = DocumentIdOrderMapping(order_mapping=mock_doc_id_to_rank_map)
     processor = CitationProcessor(
         context_docs=mock_docs,
-        final_doc_id_to_rank_map=final_mapping,
-        display_doc_id_to_rank_map=display_mapping,
+        doc_id_to_rank_map=final_mapping,
         stop_stream=None,
     )
 

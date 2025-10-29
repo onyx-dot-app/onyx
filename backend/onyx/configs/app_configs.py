@@ -126,7 +126,7 @@ OAUTH_CLIENT_SECRET = (
     os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
     or ""
 )
-# OpenID Connect configuration URL for Okta Profile Tool and other OIDC integrations
+# OpenID Connect configuration URL for OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 
 # Applicable for OIDC Auth, allows you to override the scopes that
@@ -687,11 +687,6 @@ MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 #####
 # Tool Configs
 #####
-OKTA_PROFILE_TOOL_ENABLED = (
-    os.environ.get("OKTA_PROFILE_TOOL_ENABLED", "").lower() == "true"
-)
-# API token for SSWS auth to Okta Admin API. If set, Users API will be used to enrich profile.
-OKTA_API_TOKEN = os.environ.get("OKTA_API_TOKEN") or ""
 
 
 #####

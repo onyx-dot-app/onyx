@@ -32,7 +32,7 @@ export default function LoginPage({
         authTypeMetadata.authType !== "cloud" &&
         // basic auth is handled below w/ the EmailPasswordForm
         authTypeMetadata.authType !== "basic" && (
-          <div className="flex flex-col w-full gap-spacing-paragraph">
+          <div className="flex flex-col w-full gap-4">
             <LoginText />
             <SignInButton
               authorizeUrl={authUrl}
@@ -42,7 +42,7 @@ export default function LoginPage({
         )}
 
       {authTypeMetadata?.authType === "cloud" && (
-        <div className="w-full justify-center flex flex-col gap-padding-content">
+        <div className="w-full justify-center flex flex-col gap-6">
           <LoginText />
           {authUrl && authTypeMetadata && (
             <>

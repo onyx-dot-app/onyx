@@ -2,6 +2,7 @@ import asyncio
 import queue
 import threading
 from collections.abc import Iterator
+from collections.abc import Sequence
 from typing import Generic
 from typing import Optional
 from typing import TypeVar
@@ -11,6 +12,7 @@ from agents import RunResultStreaming
 from agents import TContext
 from agents.run import Runner
 
+from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.utils.threadpool_concurrency import run_in_background
 
 T = TypeVar("T")
@@ -41,7 +43,7 @@ class SyncAgentStream(Generic[T]):
         self,
         *,
         agent: Agent,
-        input: list[dict],
+        input: Sequence[AgentSDKMessage],
         context: TContext | None = None,
         max_turns: int = 100,
         queue_maxsize: int = 0,

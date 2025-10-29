@@ -80,11 +80,11 @@ export default function AgentCard({
         </ConfirmationModal>
       )}
 
-      <div className="w-full h-full p-padding-content bg-background-tint-02 rounded-08">
+      <div className="w-full h-full p-6 bg-background-tint-02 rounded-08">
         {popup}
-        <div className="w-full h-full flex flex-row gap-spacing-paragraph">
+        <div className="w-full h-full flex flex-row gap-4">
           <AgentIcon agent={agent} />
-          <div className="flex-1 flex flex-col gap-padding-button">
+          <div className="flex-1 flex flex-col gap-3">
             <div className="flex flex-row justify-between items-center">
               <Truncated headingH3 text04>
                 {agent.name}
@@ -94,7 +94,7 @@ export default function AgentCard({
                 <Popover open={kebabMenuOpen} onOpenChange={setKebabMenuOpen}>
                   <PopoverTrigger>
                     <div
-                      className="w-[2rem] min-h-[2rem] hover:bg-background-tint-01 rounded-08 p-spacing-inline flex flex-col justify-center items-center"
+                      className="w-[2rem] min-h-[2rem] hover:bg-background-tint-01 rounded-08 p-1 flex flex-col justify-center items-center"
                       data-testid="AgentCard/more"
                     >
                       <SvgMoreHorizontal className="w-[1rem] min-h-[1rem] stroke-text-04" />
@@ -144,7 +144,7 @@ export default function AgentCard({
               {agent.description}
             </Text>
 
-            <div className="flex flex-row items-center gap-spacing-interline">
+            <div className="flex flex-row items-center gap-2">
               <div className="max-w-[33%]">
                 <Truncated secondaryBody text02>
                   By {agent.owner?.email || "Onyx"}
@@ -168,7 +168,7 @@ export default function AgentCard({
               </Text>
             </div>
 
-            <div className="flex gap-spacing-interline">
+            <div className="flex gap-2">
               <Button
                 onClick={() => {
                   route({ agentId: agent.id });

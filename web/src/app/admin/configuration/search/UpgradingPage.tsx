@@ -2,7 +2,6 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { Modal } from "@/components/Modal";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
-  ConnectorIndexingStatus,
   ConnectorIndexingStatusLite,
   ConnectorIndexingStatusLiteResponse,
   FailedConnectorIndexingStatus,
@@ -10,7 +9,7 @@ import {
 } from "@/lib/types";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { ReindexingProgressTable } from "../../../../components/embedding/ReindexingProgressTable";
@@ -124,7 +123,7 @@ export default function UpgradingPage({
             </div>
             <div className="mt-12 gap-x-2 w-full justify-end flex">
               <Button onClick={onCancel}>Confirm</Button>
-              <Button onClick={() => setIsCancelling(false)} variant="outline">
+              <Button onClick={() => setIsCancelling(false)} secondary>
                 Cancel
               </Button>
             </div>
@@ -142,7 +141,7 @@ export default function UpgradingPage({
             </div>
 
             <Button
-              variant="destructive"
+              danger
               className="mt-4"
               onClick={() => setIsCancelling(true)}
             >

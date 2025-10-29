@@ -29,13 +29,13 @@ export default function MoveCustomAgentChatModal({
         </Button>
       }
     >
-      <div className="flex flex-col gap-spacing-paragraph">
+      <div className="flex flex-col gap-4">
         <Text text03>
           This chat uses a <b>custom agent</b> and moving it to a <b>project</b>{" "}
           will not override the agent&apos;s prompt or knowledge configurations.
           This should only be used for organization purposes.
         </Text>
-        <div className="flex items-center gap-spacing-inline">
+        <div className="flex items-center gap-1">
           <Checkbox
             id="move-custom-agent-do-not-show"
             checked={doNotShowAgain}

@@ -11,7 +11,9 @@ from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPServer
 from onyx.tools.adapter_v1_to_v2 import custom_or_mcp_tool_to_function_tool
+from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
+from onyx.tools.force import ForceUseTool
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
@@ -20,9 +22,6 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
-from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
-    OktaProfileTool,
-)
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 
 
@@ -140,19 +139,6 @@ def image_generation_tool() -> ImageGenerationTool:
 def web_search_tool() -> WebSearchTool:
     """Web search tool for testing."""
     return WebSearchTool(tool_id=4)
-
-
-@pytest.fixture
-def okta_profile_tool() -> OktaProfileTool:
-    """Okta profile tool for testing."""
-    return OktaProfileTool(
-        access_token="test-access-token",
-        client_id="test-client-id",
-        client_secret="test-client-secret",
-        openid_config_url="https://test.okta.com/.well-known/openid_configuration",
-        okta_api_token="test-api-token",
-        tool_id=5,
-    )
 
 
 def test_tool_to_function_tool_post_method(
@@ -354,8 +340,7 @@ def test_custom_tool_iteration_instructions_and_answers(
 
     # Initialize empty lists for iteration tracking
     mock_context.context.iteration_instructions = []
-    mock_context.context.aggregated_context = MagicMock()
-    mock_context.context.aggregated_context.global_iteration_responses = []
+    mock_context.context.global_iteration_responses = []
 
     # Mock the HTTP response to return realistic data
     mock_response = MagicMock()
@@ -394,10 +379,8 @@ def test_custom_tool_iteration_instructions_and_answers(
     assert iteration_instruction.reasoning == f"Running {v1_tool.name}"
 
     # Verify IterationAnswer was added with realistic data from the tool response
-    assert len(mock_context.context.aggregated_context.global_iteration_responses) == 1
-    iteration_answer = (
-        mock_context.context.aggregated_context.global_iteration_responses[0]
-    )
+    assert len(mock_context.context.global_iteration_responses) == 1
+    iteration_answer = mock_context.context.global_iteration_responses[0]
     assert isinstance(iteration_answer, IterationAnswer)
     assert iteration_answer.tool == v1_tool.name
     assert iteration_answer.tool_id == v1_tool.id
@@ -451,8 +434,7 @@ def test_custom_tool_csv_response_with_file_ids(
 
     # Initialize empty lists for iteration tracking
     mock_context.context.iteration_instructions = []
-    mock_context.context.aggregated_context = MagicMock()
-    mock_context.context.aggregated_context.global_iteration_responses = []
+    mock_context.context.global_iteration_responses = []
 
     # Mock the HTTP response to return CSV data
     mock_response = MagicMock()
@@ -500,10 +482,8 @@ def test_custom_tool_csv_response_with_file_ids(
     assert iteration_instruction.reasoning == f"Running {v1_tool.name}"
 
     # Verify IterationAnswer was added with CSV file_ids data
-    assert len(mock_context.context.aggregated_context.global_iteration_responses) == 1
-    iteration_answer = (
-        mock_context.context.aggregated_context.global_iteration_responses[0]
-    )
+    assert len(mock_context.context.global_iteration_responses) == 1
+    iteration_answer = mock_context.context.global_iteration_responses[0]
     assert isinstance(iteration_answer, IterationAnswer)
     assert iteration_answer.tool == v1_tool.name
     assert iteration_answer.tool_id == v1_tool.id
@@ -550,8 +530,7 @@ def test_mcp_tool_iteration_instructions_and_answers(
 
     # Initialize empty lists for iteration tracking
     mock_context.context.iteration_instructions = []
-    mock_context.context.aggregated_context = MagicMock()
-    mock_context.context.aggregated_context.global_iteration_responses = []
+    mock_context.context.global_iteration_responses = []
 
     # Test the on_invoke_tool method
     test_args = '{"query": "test mcp search"}'
@@ -576,10 +555,8 @@ def test_mcp_tool_iteration_instructions_and_answers(
     assert iteration_instruction.reasoning == f"Running {mcp_tool.name}"
 
     # Verify IterationAnswer was added
-    assert len(mock_context.context.aggregated_context.global_iteration_responses) == 1
-    iteration_answer = (
-        mock_context.context.aggregated_context.global_iteration_responses[0]
-    )
+    assert len(mock_context.context.global_iteration_responses) == 1
+    iteration_answer = mock_context.context.global_iteration_responses[0]
     assert isinstance(iteration_answer, IterationAnswer)
     assert iteration_answer.tool == mcp_tool.name
     assert iteration_answer.tool_id == mcp_tool.id
@@ -602,14 +579,13 @@ def test_tools_to_function_tools_comprehensive(
     mcp_tool: MCPTool,
     image_generation_tool: ImageGenerationTool,
     web_search_tool: WebSearchTool,
-    okta_profile_tool: OktaProfileTool,
 ) -> None:
     """
     Test conversion of a mixed list of tools to FunctionTools.
     Verifies that the adapter correctly handles:
     - MCP tools (converted via tool_to_function_tool)
     - Custom tools (converted via tool_to_function_tool)
-    - Built-in tools (ImageGenerationTool, WebSearchTool, OktaProfileTool)
+    - Built-in tools (ImageGenerationTool, WebSearchTool)
       (converted via BUILT_IN_TOOL_MAP_V2)
     """
     # Create custom tools from the OpenAPI schema
@@ -625,7 +601,6 @@ def test_tools_to_function_tools_comprehensive(
         custom_tools[0],  # Custom tool (GET method)
         image_generation_tool,  # Built-in image generation tool
         web_search_tool,  # Built-in web search tool
-        okta_profile_tool,  # Built-in okta profile tool
     ]
 
     # Convert the tools
@@ -640,7 +615,9 @@ def test_tools_to_function_tools_comprehensive(
         and hasattr(tool, "on_invoke_tool")
         for tool in function_tools
     )
-    assert len(function_tools) == 6  # Four built-in tools and two custom tools
+    assert (
+        len(function_tools) == 5
+    )  # Two built-in tools, one MCP tool, and two custom tools
     # Verify that custom and MCP tools are converted via tool_to_function_tool
     # These should have the same names as their original tools
     mcp_function_tools = [tool for tool in function_tools if tool.name == mcp_tool.name]
@@ -660,3 +637,53 @@ def test_tools_to_function_tools_comprehensive(
         assert tool.name is not None
         assert tool.description is not None
         assert tool.on_invoke_tool is not None
+
+
+def test_force_use_tool_to_function_tool_names_with_force_use_true(
+    image_generation_tool: ImageGenerationTool,
+    web_search_tool: WebSearchTool,
+) -> None:
+    """
+    Test force_use_tool_to_function_tool_names when force_use is True.
+    Should return the function tool name for the forced tool.
+    """
+    # Create a force use tool for image generation (using the actual tool instance name)
+    force_use_tool = ForceUseTool(
+        force_use=True,
+        tool_name=image_generation_tool.name,  # "run_image_generation"
+        args=None,
+    )
+
+    # Create a list of tools
+    tools = [image_generation_tool, web_search_tool]
+
+    # Convert to function tool names
+    result = force_use_tool_to_function_tool_names(force_use_tool, tools)
+
+    # Should return the function tool name for ImageGenerationTool
+    assert result == "image_generation"
+
+
+def test_force_use_tool_to_function_tool_names_with_force_use_false(
+    image_generation_tool: ImageGenerationTool,
+    web_search_tool: WebSearchTool,
+) -> None:
+    """
+    Test force_use_tool_to_function_tool_names when force_use is False.
+    Should return None.
+    """
+    # Create a force use tool with force_use=False (tool_name doesn't matter when force_use is False)
+    force_use_tool = ForceUseTool(
+        force_use=False,
+        tool_name=image_generation_tool.name,
+        args=None,
+    )
+
+    # Create a list of tools
+    tools = [image_generation_tool, web_search_tool]
+
+    # Convert to function tool names
+    result = force_use_tool_to_function_tool_names(force_use_tool, tools)
+
+    # Should return None
+    assert result is None
