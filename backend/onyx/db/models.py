@@ -2366,6 +2366,12 @@ class LLMProvider(Base):
         secondary="llm_provider__user_group",
         viewonly=True,
     )
+    personas: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary="llm_provider__persona",
+        back_populates="allowed_by_llm_providers",
+        viewonly=True,
+    )
     model_configurations: Mapped[list["ModelConfiguration"]] = relationship(
         "ModelConfiguration",
         back_populates="llm_provider",
@@ -2736,9 +2742,19 @@ class Persona(Base):
     )
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # When True, this persona will not see public LLM providers (only explicitly assigned ones)
+    exclude_public_providers: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup",
         secondary="persona__user_group",
+        viewonly=True,
+    )
+    allowed_by_llm_providers: Mapped[list["LLMProvider"]] = relationship(
+        "LLMProvider",
+        secondary="llm_provider__persona",
+        back_populates="personas",
         viewonly=True,
     )
     # Relationship to UserFile
@@ -3069,6 +3085,22 @@ class LLMProvider__UserGroup(Base):
     )
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id"), primary_key=True
+    )
+
+
+class LLMProvider__Persona(Base):
+    """Association table restricting LLM providers to specific personas.
+
+    If no such rows exist for a given LLM provider, then it is accessible by all personas.
+    """
+
+    __tablename__ = "llm_provider__persona"
+
+    llm_provider_id: Mapped[int] = mapped_column(
+        ForeignKey("llm_provider.id", ondelete="CASCADE"), primary_key=True
+    )
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
     )
 
 
