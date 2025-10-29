@@ -336,6 +336,9 @@ services:
     env_file:
       - path: .env
         required: false
+    # Use tmpfs to prevent creation of anonymous volumes for /data
+    tmpfs:
+      - /data
 
   minio:
     image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1

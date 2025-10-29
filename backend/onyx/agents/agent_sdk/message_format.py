@@ -6,7 +6,6 @@ from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import AssistantMessageWithContent
 from onyx.agents.agent_sdk.message_types import ImageContent
 from onyx.agents.agent_sdk.message_types import InputTextContent
-from onyx.agents.agent_sdk.message_types import OutputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
 
@@ -32,7 +31,7 @@ def _base_message_to_agent_sdk_msg(msg: BaseMessage) -> AgentSDKMessage:
     content = msg.content
 
     if isinstance(content, str):
-        # For system/user messages, use InputTextContent; for assistant, use OutputTextContent
+        # For system/user/assistant messages, use InputTextContent
         if role in ("system", "user"):
             input_text_content: list[InputTextContent | ImageContent] = [
                 InputTextContent(type="input_text", text=content)
@@ -53,22 +52,24 @@ def _base_message_to_agent_sdk_msg(msg: BaseMessage) -> AgentSDKMessage:
         else:  # assistant
             assistant_msg: AssistantMessageWithContent = {
                 "role": "assistant",
-                "content": [OutputTextContent(type="output_text", text=content)],
+                "content": [InputTextContent(type="input_text", text=content)],
             }
             return assistant_msg
     elif isinstance(content, list):
         # For lists, we need to process based on the role
         if role == "assistant":
-            # Assistant messages use OutputTextContent
-            output_content: list[OutputTextContent] = []
+            # Assistant messages use InputTextContent | OutputTextContent
+            from onyx.agents.agent_sdk.message_types import OutputTextContent
+
+            assistant_content: list[InputTextContent | OutputTextContent] = []
             for item in content:
                 if isinstance(item, str):
-                    output_content.append(
-                        OutputTextContent(type="output_text", text=item)
+                    assistant_content.append(
+                        InputTextContent(type="input_text", text=item)
                     )
                 elif isinstance(item, dict) and item.get("type") == "text":
-                    output_content.append(
-                        OutputTextContent(type="output_text", text=item.get("text", ""))
+                    assistant_content.append(
+                        InputTextContent(type="input_text", text=item.get("text", ""))
                     )
                 else:
                     raise ValueError(
@@ -76,7 +77,7 @@ def _base_message_to_agent_sdk_msg(msg: BaseMessage) -> AgentSDKMessage:
                     )
             assistant_msg_list: AssistantMessageWithContent = {
                 "role": "assistant",
-                "content": output_content,
+                "content": assistant_content,
             }
             return assistant_msg_list
         else:  # system or user - use InputTextContent
