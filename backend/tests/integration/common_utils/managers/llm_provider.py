@@ -21,6 +21,7 @@ class LLMProviderManager:
         api_base: str | None = None,
         api_version: str | None = None,
         groups: list[int] | None = None,
+        personas: list[int] | None = None,
         is_public: bool | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> DATestLLMProvider:
@@ -41,6 +42,7 @@ class LLMProviderManager:
             fast_default_model_name=default_model_name or "gpt-4o-mini",
             is_public=is_public or True,
             groups=groups or [],
+            personas=personas or [],
             model_configurations=[],
             api_key_changed=True,
         )
@@ -65,6 +67,7 @@ class LLMProviderManager:
             default_model_name=response_data["default_model_name"],
             is_public=response_data["is_public"],
             groups=response_data["groups"],
+            personas=response_data.get("personas", []),
             api_base=response_data["api_base"],
             api_version=response_data["api_version"],
         )
@@ -127,10 +130,13 @@ class LLMProviderManager:
                     )
                 fetched_llm_groups = set(fetched_llm_provider.groups)
                 llm_provider_groups = set(llm_provider.groups)
+                fetched_llm_personas = set(fetched_llm_provider.personas)
+                llm_provider_personas = set(llm_provider.personas)
 
                 # NOTE: returned api keys are sanitized and should not match
                 if (
                     fetched_llm_groups == llm_provider_groups
+                    and fetched_llm_personas == llm_provider_personas
                     and llm_provider.provider == fetched_llm_provider.provider
                     and llm_provider.default_model_name
                     == fetched_llm_provider.default_model_name

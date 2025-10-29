@@ -88,6 +88,7 @@ class LLMProvider(BaseModel):
     fast_default_model_name: str | None = None
     is_public: bool = True
     groups: list[int] = Field(default_factory=list)
+    personas: list[int] = Field(default_factory=list)
     deployment_name: str | None = None
     default_vision_model: str | None = None
 
@@ -125,6 +126,13 @@ class LLMProviderView(LLMProvider):
             # If groups relationship can't be loaded (detached instance), use empty list
             groups = []
 
+        # Safely get personas - handle detached instance case
+        try:
+            personas = [persona.id for persona in llm_provider_model.personas]
+        except Exception:
+            # If personas relationship can't be loaded (detached instance), use empty list
+            personas = []
+
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
@@ -140,6 +148,7 @@ class LLMProviderView(LLMProvider):
             default_vision_model=llm_provider_model.default_vision_model,
             is_public=llm_provider_model.is_public,
             groups=groups,
+            personas=personas,
             deployment_name=llm_provider_model.deployment_name,
             model_configurations=list(
                 ModelConfigurationView.from_model(

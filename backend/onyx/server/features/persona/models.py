@@ -57,6 +57,7 @@ class PersonaUpsertRequest(BaseModel):
     document_set_ids: list[int]
     num_chunks: float
     is_public: bool
+    exclude_public_providers: bool = False
     recency_bias: RecencyBiasSetting
     llm_filter_extraction: bool
     llm_relevance_filter: bool
@@ -109,6 +110,7 @@ class MinimalPersonaSnapshot(BaseModel):
     icon_color: str | None
 
     is_public: bool
+    exclude_public_providers: bool
     is_visible: bool
     display_priority: int | None
     is_default_persona: bool
@@ -141,6 +143,7 @@ class MinimalPersonaSnapshot(BaseModel):
             icon_shape=persona.icon_shape,
             icon_color=persona.icon_color,
             is_public=persona.is_public,
+            exclude_public_providers=persona.exclude_public_providers,
             is_visible=persona.is_visible,
             display_priority=persona.display_priority,
             is_default_persona=persona.is_default_persona,
@@ -159,6 +162,7 @@ class PersonaSnapshot(BaseModel):
     name: str
     description: str
     is_public: bool
+    exclude_public_providers: bool
     is_visible: bool
     icon_shape: int | None
     icon_color: str | None
@@ -193,6 +197,7 @@ class PersonaSnapshot(BaseModel):
             name=persona.name,
             description=persona.description,
             is_public=persona.is_public,
+            exclude_public_providers=persona.exclude_public_providers,
             is_visible=persona.is_visible,
             icon_shape=persona.icon_shape,
             icon_color=persona.icon_color,
