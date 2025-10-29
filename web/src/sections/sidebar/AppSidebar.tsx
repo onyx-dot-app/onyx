@@ -395,6 +395,14 @@ function AppSidebarInner() {
             <div className="px-2">
               {newSessionButton}
               <SidebarTab
+                leftIcon={SvgOnyxOctagon}
+                // href="/chat/agents"
+                // active={false}
+                folded
+              >
+                Agents
+              </SidebarTab>
+              <SidebarTab
                 leftIcon={SvgFolderPlus}
                 onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
                 active={isOpen(ModalIds.CreateProjectModal)}
@@ -430,6 +438,16 @@ function AppSidebarInner() {
                         />
                       ))}
                     </SortableContext>
+                    <div data-testid="AppSidebar/more-agents">
+                      <SidebarTab
+                        leftIcon={SvgMoreHorizontal}
+                        // href="/chat/agents"
+                        // active={false}
+                        lowlight
+                      >
+                        More Agents
+                      </SidebarTab>
+                    </div>
                   </SidebarSection>
                 </DndContext>
 
