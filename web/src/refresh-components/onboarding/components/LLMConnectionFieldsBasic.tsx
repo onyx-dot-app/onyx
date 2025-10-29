@@ -6,6 +6,7 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import { Separator } from "@/components/ui/separator";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import InputFile from "@/refresh-components/inputs/InputFile";
 
 type Props = {
   llmDescriptor: WellKnownLLMProviderDescriptor;
@@ -156,6 +157,67 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
           )}
         />
       )}
+
+      {llmDescriptor?.custom_config_keys?.map((customConfigKey) => (
+        <FormikField<string>
+          key={customConfigKey.name}
+          name={`custom_config.${customConfigKey.name}`}
+          render={(field, helper, meta, state) => (
+            <FormField
+              name={`custom_config.${customConfigKey.name}`}
+              state={state}
+              className="w-full"
+            >
+              <FormField.Label>
+                {customConfigKey.display_name || customConfigKey.name}
+              </FormField.Label>
+              <FormField.Control>
+                {customConfigKey.key_type === "select" ? (
+                  <InputSelect
+                    value={field.value}
+                    onValueChange={(value) => helper.setValue(value)}
+                    options={
+                      customConfigKey.options?.map((opt) => ({
+                        label: opt.label,
+                        value: opt.value,
+                      })) ?? []
+                    }
+                  />
+                ) : customConfigKey.key_type === "file_input" ? (
+                  <InputFile
+                    placeholder={customConfigKey.default_value || ""}
+                    setValue={(value) => helper.setValue(value)}
+                    onBlur={(e) => {
+                      field.onBlur(e);
+                      if (field.value) {
+                        onApiKeyBlur(field.value);
+                      }
+                    }}
+                    showClearButton={true}
+                  />
+                ) : customConfigKey.is_secret ? (
+                  <PasswordInputTypeIn
+                    {...field}
+                    placeholder={customConfigKey.default_value || ""}
+                    showClearButton={false}
+                  />
+                ) : (
+                  <InputTypeIn
+                    {...field}
+                    placeholder={customConfigKey.default_value || ""}
+                    showClearButton={false}
+                  />
+                )}
+              </FormField.Control>
+              {customConfigKey.description && (
+                <FormField.Description>
+                  {customConfigKey.description}
+                </FormField.Description>
+              )}
+            </FormField>
+          )}
+        />
+      ))}
 
       <Separator className="my-0" />
 
