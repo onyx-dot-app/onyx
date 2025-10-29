@@ -9,11 +9,15 @@ from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.chat_configs import QA_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import fetch_default_vision_provider
+from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_llm_provider_view
+from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Persona
+from onyx.db.models import User
 from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.chat_llm import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.chat_llm import VERTEX_LOCATION_KWARG
@@ -65,6 +69,7 @@ def get_main_llm_from_tuple(
 
 def get_llms_for_persona(
     persona: Persona | PersonaOverrideConfig | None,
+    user: User | None,
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
@@ -86,10 +91,35 @@ def get_llms_for_persona(
         )
 
     with get_session_with_current_tenant() as db_session:
-        llm_provider = fetch_llm_provider_view(db_session, provider_name)
+        provider_model = fetch_existing_llm_provider(provider_name, db_session)
+        if not provider_model:
+            raise ValueError("No LLM provider found")
 
-    if not llm_provider:
-        raise ValueError("No LLM provider found")
+        # Only check access control for database Persona entities, not PersonaOverrideConfig
+        # PersonaOverrideConfig is used for temporary overrides and doesn't have access restrictions
+        persona_model = persona if isinstance(persona, Persona) else None
+
+        # Fetch user group IDs for access control check
+        user_group_ids = fetch_user_group_ids(db_session, user)
+
+        if not can_user_access_llm_provider(
+            provider_model,
+            user_group_ids,
+            persona_model,
+        ):
+            logger.warning(
+                "User %s with persona %s cannot access provider %s. Falling back to default provider.",
+                getattr(user, "id", None),
+                getattr(persona_model, "id", None),
+                provider_model.name,
+            )
+            return get_default_llms(
+                temperature=temperature_override or GEN_AI_TEMPERATURE,
+                additional_headers=additional_headers,
+                long_term_logger=long_term_logger,
+            )
+
+        llm_provider = LLMProviderView.from_model(provider_model)
 
     model = model_version_override or persona.llm_model_version_override
     fast_model = llm_provider.fast_default_model_name or llm_provider.default_model_name
