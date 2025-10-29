@@ -15,7 +15,6 @@ ENTITY_GENERATORS = {
     "RUS_DRIVER_LICENSE": generate_fake_data.generate_fake_rus_driver_license,
     "LOCATION": generate_fake_data.generate_fake_location,
     "EMAIL_ADDRESS": generate_fake_data.generate_fake_email_address,
-    "CREDIT_CARD": generate_fake_data.generate_fake_credit_card,
     "IP_ADDRESS": generate_fake_data.generate_fake_ip_address,
     "DATE_TIME": generate_fake_data.generate_fake_date_time,
     "URL": generate_fake_data.generate_fake_url,
