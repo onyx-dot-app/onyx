@@ -39,7 +39,7 @@ export default function ConfirmationModal({
       className="z-10 w-[27rem] rounded-16 border flex flex-col bg-background-tint-00"
       onClickOutside={clickOutsideToClose ? onClose : undefined}
     >
-      <div className="flex flex-col items-center justify-center p-spacing-paragraph gap-spacing-inline">
+      <div className="flex flex-col items-center justify-center p-4 gap-1">
         <div className="h-[1.5rem] flex flex-row justify-between items-center w-full">
           <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
           <IconButton icon={SvgX} internal onClick={onClose} />
@@ -48,14 +48,14 @@ export default function ConfirmationModal({
           {title}
         </Text>
       </div>
-      <div className="p-spacing-paragraph">
+      <div className="p-4">
         {typeof children === "string" ? (
           <Text text03>{children}</Text>
         ) : (
           children
         )}
       </div>
-      <div className="flex flex-row w-full items-center justify-end p-spacing-paragraph gap-spacing-interline">
+      <div className="flex flex-row w-full items-center justify-end p-4 gap-2">
         {!hideCancel && (
           <Button secondary onClick={onClose}>
             Cancel

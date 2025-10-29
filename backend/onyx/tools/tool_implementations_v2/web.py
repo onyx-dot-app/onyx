@@ -1,5 +1,5 @@
-from typing import List
-from typing import Optional
+import json
+from collections.abc import Sequence
 
 from agents import function_tool
 from agents import RunContextWrapper
@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import WebSearchResult
 from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
     get_default_provider,
 )
@@ -20,8 +21,9 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
     dummy_inference_section_from_internet_search_result,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
-    truncate_search_result_content,
+    llm_doc_from_web_content,
 )
+from onyx.chat.models import LlmDoc
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.db.tools import get_tool_by_name
 from onyx.server.query_and_chat.streaming_models import FetchToolStart
@@ -34,33 +36,8 @@ from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 
 
-class WebSearchResult(BaseModel):
-    tag: str
-    title: str
-    link: str
-    snippet: str
-    author: Optional[str] = None
-    published_date: Optional[str] = None
-
-
 class WebSearchResponse(BaseModel):
-    results: List[WebSearchResult]
-
-
-class OpenUrlResult(BaseModel):
-    tag: str
-    title: str
-    link: str
-    truncated_content: str
-    published_date: Optional[str] = None
-
-
-class OpenUrlResponse(BaseModel):
-    results: List[OpenUrlResult]
-
-
-def short_tag(link: str, i: int) -> str:
-    return f"{i+1}"
+    results: Sequence[WebSearchResult]
 
 
 @tool_accounting
@@ -106,7 +83,7 @@ def _web_search_core(
     search_results_dict = run_functions_in_parallel(function_calls)
 
     # Aggregate all results from all queries
-    all_hits = []
+    all_hits: list[WebSearchResult] = []
     for result_id in search_results_dict:
         hits = search_results_dict[result_id]
         if hits:
@@ -114,17 +91,14 @@ def _web_search_core(
 
     # Convert hits to WebSearchResult objects
     results = []
-    for i, r in enumerate(all_hits):
+    for r in all_hits:
         results.append(
             WebSearchResult(
-                tag=short_tag(r.link, i),
                 title=r.title,
                 link=r.link,
                 snippet=r.snippet or "",
                 author=r.author,
-                published_date=(
-                    r.published_date.isoformat() if r.published_date else None
-                ),
+                published_date=r.published_date,
             )
         )
 
@@ -132,9 +106,8 @@ def _web_search_core(
     inference_sections = [
         dummy_inference_section_from_internet_search_result(r) for r in all_hits
     ]
-    run_context.context.aggregated_context.cited_documents.extend(inference_sections)
 
-    run_context.context.aggregated_context.global_iteration_responses.append(
+    run_context.context.global_iteration_responses.append(
         IterationAnswer(
             tool=WebSearchTool.__name__,
             tool_id=get_tool_by_name(
@@ -195,9 +168,9 @@ WEB_SEARCH_LONG_DESCRIPTION = """
 @tool_accounting
 def _open_url_core(
     run_context: RunContextWrapper[ChatTurnContext],
-    urls: List[str],
+    urls: Sequence[str],
     search_provider: WebSearchProvider,
-) -> OpenUrlResponse:
+) -> list[LlmDoc]:
     # TODO: Find better way to track index that isn't so implicit
     # based on number of tool calls
     index = run_context.context.current_run_step
@@ -213,19 +186,7 @@ def _open_url_core(
     )
 
     docs = search_provider.contents(urls)
-    out = []
-    for i, d in enumerate(docs):
-        out.append(
-            OpenUrlResult(
-                tag=short_tag(d.link, i),
-                title=d.title,
-                link=d.link,
-                truncated_content=truncate_search_result_content(d.full_content),
-                published_date=(
-                    d.published_date.isoformat() if d.published_date else None
-                ),
-            )
-        )
+    llm_docs = [llm_doc_from_web_content(d) for d in docs]
     run_context.context.iteration_instructions.append(
         IterationInstructions(
             iteration_nr=index,
@@ -234,8 +195,10 @@ def _open_url_core(
             reasoning=f"I am now using Web Fetch to gather information on {', '.join(urls)}",
         )
     )
-
-    run_context.context.aggregated_context.global_iteration_responses.append(
+    run_context.context.unordered_fetched_inference_sections.extend(
+        [dummy_inference_section_from_internet_content(d) for d in docs]
+    )
+    run_context.context.global_iteration_responses.append(
         IterationAnswer(
             # TODO: For now, we're using the web_search_tool_name since the web_fetch_tool_name is not a built-in tool
             tool=WebSearchTool.__name__,
@@ -259,19 +222,21 @@ def _open_url_core(
     # Set flag to include citation requirements since we fetched documents
     run_context.context.should_cite_documents = True
 
-    return OpenUrlResponse(results=out)
+    return llm_docs
 
 
 @function_tool
-def open_url(run_context: RunContextWrapper[ChatTurnContext], urls: List[str]) -> str:
+def open_url(
+    run_context: RunContextWrapper[ChatTurnContext], urls: Sequence[str]
+) -> str:
     """
     Tool for fetching and extracting full content from web pages.
     """
     search_provider = get_default_provider()
     if search_provider is None:
         raise ValueError("No search provider found")
-    response = _open_url_core(run_context, urls, search_provider)
-    return response.model_dump_json()
+    retrieved_docs = _open_url_core(run_context, urls, search_provider)
+    return json.dumps([doc.model_dump(mode="json") for doc in retrieved_docs])
 
 
 # TODO: Make a ToolV2 class to encapsulate all of this

@@ -54,7 +54,7 @@ const TooltipContent = React.forwardRef<
       sideOffset={sideOffset}
       side={side}
       className={cn(
-        "z-[100] rounded-08 text-text-inverted-05 text-wrap p-padding-button shadow-lg animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        "z-[100] rounded-08 text-text-inverted-05 text-wrap p-3 shadow-lg animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
         backgroundColor || "bg-background-neutral-inverted-03",
         width,
         className

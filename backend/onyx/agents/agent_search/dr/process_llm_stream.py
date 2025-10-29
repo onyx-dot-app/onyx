@@ -41,18 +41,16 @@ def process_llm_stream(
     should_stream_answer: bool,
     writer: StreamWriter,
     ind: int,
-    final_search_results: list[LlmDoc] | None = None,
-    displayed_search_results: list[LlmDoc] | None = None,
+    search_results: list[LlmDoc] | None = None,
     generate_final_answer: bool = False,
     chat_message_id: str | None = None,
 ) -> BasicSearchProcessedStreamResults:
     tool_call_chunk = AIMessageChunk(content="")
 
-    if final_search_results and displayed_search_results:
+    if search_results:
         answer_handler: AnswerResponseHandler = CitationResponseHandler(
-            context_docs=final_search_results,
-            final_doc_id_to_rank_map=map_document_id_order(final_search_results),
-            display_doc_id_to_rank_map=map_document_id_order(displayed_search_results),
+            context_docs=search_results,
+            doc_id_to_rank_map=map_document_id_order(search_results),
         )
     else:
         answer_handler = PassThroughAnswerResponseHandler()
@@ -78,7 +76,7 @@ def process_llm_stream(
         ):
             tool_call_chunk += message  # type: ignore
         elif should_stream_answer:
-            for response_part in answer_handler.handle_response_part(message, []):
+            for response_part in answer_handler.handle_response_part(message):
 
                 # only stream out answer parts
                 if (
@@ -94,7 +92,7 @@ def process_llm_stream(
                     if not start_final_answer_streaming_set:
                         # Convert LlmDocs to SavedSearchDocs
                         saved_search_docs = saved_search_docs_from_llm_docs(
-                            final_search_results
+                            search_results
                         )
                         write_custom_event(
                             ind,

@@ -959,6 +959,13 @@ def translate_db_message_to_chat_message_detail(
     chat_message: ChatMessage,
     remove_doc_content: bool = False,
 ) -> ChatMessageDetail:
+    # Get current feedback if any
+    current_feedback = None
+    if chat_message.chat_message_feedbacks:
+        latest_feedback = chat_message.chat_message_feedbacks[-1]
+        if latest_feedback.is_positive is not None:
+            current_feedback = "like" if latest_feedback.is_positive else "dislike"
+
     chat_msg_detail = ChatMessageDetail(
         chat_session_id=chat_message.chat_session_id,
         message_id=chat_message.id,
@@ -986,6 +993,7 @@ def translate_db_message_to_chat_message_detail(
         alternate_assistant_id=chat_message.alternate_assistant_id,
         overridden_model=chat_message.overridden_model,
         error=chat_message.error,
+        current_feedback=current_feedback,
     )
 
     return chat_msg_detail

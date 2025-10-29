@@ -62,7 +62,7 @@ export default function Modal({
           : undefined
       }
     >
-      <div className="flex flex-col gap-spacing-interline p-spacing-paragraph">
+      <div className="flex flex-col gap-2 p-4">
         <div className="flex flex-row items-center justify-between">
           <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
           <div data-testid="Modal/close-modal">

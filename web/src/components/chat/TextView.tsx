@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import {
   Table,
   TableBody,
@@ -19,11 +19,17 @@ import {
 import { Download, XIcon, ZoomIn, ZoomOut } from "lucide-react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgX from "@/icons/x";
+import SvgDownloadCloud from "@/icons/download-cloud";
+import SvgZoomIn from "@/icons/zoom-in";
+import SvgZoomOut from "@/icons/zoom-out";
 
-interface TextViewProps {
+export interface TextViewProps {
   presentingDocument: MinimalOnyxDocument;
   onClose: () => void;
 }
+
 export default function TextView({
   presentingDocument,
   onClose,
@@ -160,23 +166,31 @@ export default function TextView({
           </DialogTitle>
 
           <div className="flex items-center space-x-2">
-            <Button variant="ghost" size="icon" onClick={handleZoomOut}>
-              <ZoomOut className="h-4 w-4" />
-              <span className="sr-only">Zoom Out</span>
-            </Button>
+            <IconButton
+              internal
+              onClick={handleZoomOut}
+              icon={SvgZoomOut}
+              tooltip="Zoom Out"
+            ></IconButton>
             <span className="text-sm">{zoom}%</span>
-            <Button variant="ghost" size="icon" onClick={handleZoomIn}>
-              <ZoomIn className="h-4 w-4" />
-              <span className="sr-only">Zoom In</span>
-            </Button>
-            <Button variant="ghost" size="icon" onClick={handleDownload}>
-              <Download className="h-4 w-4" />
-              <span className="sr-only">Download</span>
-            </Button>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <XIcon className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </Button>
+            <IconButton
+              internal
+              onClick={handleZoomIn}
+              icon={SvgZoomIn}
+              tooltip="Zoom In"
+            />
+            <IconButton
+              internal
+              onClick={handleDownload}
+              icon={SvgDownloadCloud}
+              tooltip="Download"
+            />
+            <IconButton
+              internal
+              onClick={onClose}
+              icon={SvgX}
+              tooltip="Close"
+            />
           </div>
         </DialogHeader>
         <div className="mt-0 rounded-b-lg flex-1 overflow-hidden">

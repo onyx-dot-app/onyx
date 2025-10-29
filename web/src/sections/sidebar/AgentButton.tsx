@@ -12,6 +12,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { getAgentIcon } from "@/sections/sidebar/utils";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import SvgX from "@/icons/x";
 
 interface SortableItemProps {
   id: number;
@@ -60,10 +61,11 @@ function AgentButtonInner({ agent }: AgentButtonProps) {
           active={params(SEARCH_PARAM_NAMES.PERSONA_ID) === String(agent.id)}
           rightChildren={
             <IconButton
-              icon={SvgPin}
+              icon={pinned ? SvgX : SvgPin}
               internal
               onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
-              className={cn(!pinned && "hidden group-hover/SidebarTab:flex")}
+              className={cn("hidden group-hover/SidebarTab:flex")}
+              tooltip={pinned ? "Unpin Agent" : "Pin Agent"}
             />
           }
         >

@@ -86,7 +86,7 @@ export default function AccessRestricted() {
 
   return (
     <ErrorPageLayout>
-      <div className="flex items-center gap-spacing-interline">
+      <div className="flex items-center gap-2">
         <Text headingH2>Access Restricted</Text>
         <SvgLock className="stroke-status-error-05 w-[1.5rem] h-[1.5rem]" />
       </div>
@@ -107,7 +107,7 @@ export default function AccessRestricted() {
         administrator to address this matter.
       </Text>
 
-      <div className="flex flex-row gap-spacing-interline">
+      <div className="flex flex-row gap-2">
         <Button onClick={handleResubscribe} disabled={isLoading}>
           {isLoading ? "Loading..." : "Resubscribe"}
         </Button>

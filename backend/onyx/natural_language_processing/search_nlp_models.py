@@ -200,7 +200,7 @@ class CloudEmbedding:
             response = await client.embeddings.create(
                 input=text_batch,
                 model=model,
-                dimensions=reduced_dimension or openai.NOT_GIVEN,
+                dimensions=reduced_dimension or openai.omit,
             )
             final_embeddings.extend(
                 [embedding.embedding for embedding in response.data]

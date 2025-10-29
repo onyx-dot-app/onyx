@@ -45,8 +45,8 @@ interface HeaderProps {
 function Header({ children, onClose }: HeaderProps) {
   return (
     <>
-      <div className="flex flex-row w-full items-center justify-between gap-spacing-interline">
-        <div className="flex items-center gap-spacing-interline w-full px-padding-button">
+      <div className="flex flex-row w-full items-center justify-between gap-2">
+        <div className="flex items-center gap-2 w-full px-3">
           <SvgSearchMenu className="w-[1.3rem] h-[1.3rem] stroke-text-03" />
           <Text headingH3 text03>
             {children}
@@ -59,7 +59,7 @@ function Header({ children, onClose }: HeaderProps) {
           tooltip="Close Sidebar"
         />
       </div>
-      <Separator className="border-b my-padding-button mx-spacing-interline" />
+      <Separator className="border-b my-3 mx-2" />
     </>
   );
 }
@@ -72,7 +72,7 @@ function ChatDocumentDisplayWrapper({
   children,
 }: ChatDocumentDisplayWrapperProps) {
   return (
-    <div className="flex flex-col gap-spacing-inline items-center justify-center">
+    <div className="flex flex-col gap-1 items-center justify-center">
       {children}
     </div>
   );
@@ -157,7 +157,7 @@ function DocumentResultsInner({
       id="onyx-chat-sidebar"
       className="bg-background-tint-01 overflow-y-scroll h-full w-full"
     >
-      <div className="h-full flex flex-col p-padding-button gap-padding-content border-l">
+      <div className="h-full flex flex-col p-3 gap-6 border-l">
         {hasCited && (
           <div>
             <Header onClose={closeSidebar}>Cited Sources</Header>

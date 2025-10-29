@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from exa_py import Exa
 from exa_py.api import HighlightsContentsOptions
 
@@ -47,9 +49,9 @@ class ExaClient(WebSearchProvider):
         ]
 
     @retry_builder(tries=3, delay=1, backoff=2)
-    def contents(self, urls: list[str]) -> list[WebContent]:
+    def contents(self, urls: Sequence[str]) -> list[WebContent]:
         response = self.exa.get_contents(
-            urls=urls,
+            urls=list(urls),
             text=True,
             livecrawl="preferred",
         )

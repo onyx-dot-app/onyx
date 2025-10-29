@@ -16,12 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { SubLabel } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 interface DefaultAssistantConfiguration {
   tool_ids: number[];
@@ -282,16 +277,11 @@ function ToolToggle({
         <div className="text-sm font-medium flex items-center gap-2">
           <span>{tool.display_name}</span>
           {!tool.is_available && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="text-xs text-text-400 border border-border rounded px-1 py-0.5 cursor-help">
-                  Not enabled
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                <Text inverted>{notEnabledReason}</Text>
-              </TooltipContent>
-            </Tooltip>
+            <SimpleTooltip tooltip={notEnabledReason}>
+              <span className="text-xs text-text-400 border border-border rounded px-1 py-0.5 cursor-help">
+                Not enabled
+              </span>
+            </SimpleTooltip>
           )}
         </div>
         <Text className="text-sm text-text-600 mt-1">{tool.description}</Text>

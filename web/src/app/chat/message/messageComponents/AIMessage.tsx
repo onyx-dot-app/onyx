@@ -6,10 +6,11 @@ import {
   StreamingCitation,
 } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
+import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import CitedSourcesToggle from "@/app/chat/message/messageComponents/CitedSourcesToggle";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import {
   useChatSessionStore,
   useDocumentSidebarVisible,
@@ -31,13 +32,14 @@ import { RendererComponent } from "@/app/chat/message/messageComponents/renderMe
 import AgentIcon from "@/refresh-components/AgentIcon";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgCopy from "@/icons/copy";
+import SvgCheck from "@/icons/check";
 import SvgThumbsUp from "@/icons/thumbs-up";
 import SvgThumbsDown from "@/icons/thumbs-down";
 import {
   ModalIds,
   useChatModal,
 } from "@/refresh-components/contexts/ChatModalContext";
-import LLMPopover from "@/refresh-components/LLMPopover";
+import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { parseLlmDescriptor } from "@/lib/llm/utils";
 import { LlmManager } from "@/lib/hooks";
 
@@ -45,6 +47,8 @@ export interface AIMessageProps {
   rawPackets: Packet[];
   chatState: FullChatState;
   nodeId: number;
+  messageId?: number;
+  currentFeedback?: FeedbackType | null;
   llmManager: LlmManager | null;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
@@ -54,13 +58,56 @@ export default function AIMessage({
   rawPackets,
   chatState,
   nodeId,
+  messageId,
+  currentFeedback,
   llmManager,
   otherMessagesCanSwitchTo,
   onMessageSelection,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { toggleModal } = useChatModal();
+  const [copied, setCopied] = useState(false);
+
+  // Handler for feedback button clicks with toggle logic
+  const handleFeedbackClick = useCallback(
+    async (clickedFeedback: "like" | "dislike") => {
+      if (!messageId) {
+        console.error("Cannot provide feedback - message has no messageId");
+        return;
+      }
+
+      // Toggle logic
+      if (currentFeedback === clickedFeedback) {
+        // Clicking same button - remove feedback
+        await chatState.handleFeedbackChange(null);
+      } else if (clickedFeedback === "like") {
+        // Clicking like - check if we need modal for positive feedback
+        const predefinedOptions =
+          process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS;
+        if (predefinedOptions && predefinedOptions.trim()) {
+          // Open modal for positive feedback
+          toggleModal(ModalIds.FeedbackModal, true, {
+            feedbackType: "like",
+            messageId,
+            handleFeedbackChange: chatState.handleFeedbackChange,
+          });
+        } else {
+          // No modal needed - just submit like
+          await chatState.handleFeedbackChange("like");
+        }
+      } else {
+        // Clicking dislike - always open modal
+        toggleModal(ModalIds.FeedbackModal, true, {
+          feedbackType: "dislike",
+          messageId,
+          handleFeedbackChange: chatState.handleFeedbackChange,
+        });
+      }
+    },
+    [messageId, currentFeedback, chatState, toggleModal]
+  );
 
   const [finalAnswerComing, _setFinalAnswerComing] = useState(
     isFinalAnswerComing(rawPackets) || isStreamingComplete(rawPackets)
@@ -111,6 +158,16 @@ export default function AIMessage({
   };
   useEffect(() => {
     resetState();
+  }, [nodeId]);
+
+  // Clean up copy timeout on unmount or when switching messages
+  useEffect(() => {
+    setCopied(false);
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
   }, [nodeId]);
 
   // If the upstream replaces packets with a shorter list (reset), clear state
@@ -363,34 +420,43 @@ export default function AIMessage({
                           )}
 
                           <IconButton
-                            icon={SvgCopy}
-                            onClick={() => copyAll(getTextContent(rawPackets))}
+                            icon={copied ? SvgCheck : SvgCopy}
+                            onClick={() => {
+                              copyAll(getTextContent(rawPackets));
+                              setCopied(true);
+                              if (copyTimeoutRef.current) {
+                                clearTimeout(copyTimeoutRef.current);
+                              }
+                              copyTimeoutRef.current = setTimeout(() => {
+                                setCopied(false);
+                              }, 3000);
+                            }}
                             tertiary
-                            tooltip="Copy"
+                            tooltip={copied ? "Copied!" : "Copy"}
                             data-testid="AIMessage/copy-button"
                           />
                           <IconButton
                             icon={SvgThumbsUp}
-                            onClick={() =>
-                              toggleModal(ModalIds.FeedbackModal, true, {
-                                feedbackType: "like",
-                                messageId: nodeId,
-                              })
-                            }
+                            onClick={() => handleFeedbackClick("like")}
                             tertiary
-                            tooltip="Good Response"
+                            active={currentFeedback === "like"}
+                            tooltip={
+                              currentFeedback === "like"
+                                ? "Remove Like"
+                                : "Good Response"
+                            }
                             data-testid="AIMessage/like-button"
                           />
                           <IconButton
                             icon={SvgThumbsDown}
-                            onClick={() =>
-                              toggleModal(ModalIds.FeedbackModal, true, {
-                                feedbackType: "dislike",
-                                messageId: nodeId,
-                              })
-                            }
+                            onClick={() => handleFeedbackClick("dislike")}
                             tertiary
-                            tooltip="Bad Response"
+                            active={currentFeedback === "dislike"}
+                            tooltip={
+                              currentFeedback === "dislike"
+                                ? "Remove Dislike"
+                                : "Bad Response"
+                            }
                             data-testid="AIMessage/dislike-button"
                           />
 

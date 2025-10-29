@@ -7,7 +7,9 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import Field
 
+from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.models import SavedSearchDoc
@@ -148,6 +150,9 @@ class DATestChatMessage(BaseModel):
     chat_session_id: UUID
     parent_message_id: int | None
     message: str
+    research_answer_purpose: ResearchAnswerPurpose | None = None
+    message_type: MessageType | None = None
+    files: list | None = None
 
 
 class DATestChatSession(BaseModel):
@@ -181,13 +186,20 @@ class ToolResult(BaseModel):
     images: list[GeneratedImage] = Field(default_factory=list)
 
 
+class ErrorResponse(BaseModel):
+    error: str
+    stack_trace: str
+
+
 class StreamedResponse(BaseModel):
-    full_message: str = ""
-    top_documents: list[SavedSearchDoc] | None = None
-    used_tools: list[ToolResult] = Field(default_factory=list)
+    full_message: str
+    assistant_message_id: int
+    top_documents: list[SavedSearchDoc]
+    used_tools: list[ToolResult]
+    error: ErrorResponse | None = None
 
     # Track heartbeat packets for image generation and other tools
-    heartbeat_packets: list[dict[str, Any]] = Field(default_factory=list)
+    heartbeat_packets: list[dict[str, Any]]
 
 
 class DATestGatingType(str, Enum):

@@ -10,7 +10,13 @@ export default defineConfig({
     timeout: 15000, // 15 seconds timeout for all assertions to reduce flakiness
   },
   retries: process.env.CI ? 2 : 0, // Retry failed tests 2 times in CI, 0 locally
+
+  // When debugging, comment out the first `workers` line and uncomment the second one.
+  // The second one runs the tests in serial, which helps when using the playwright-debugger to step through each test-step.
+  // - @raunakab
   workers: process.env.CI ? 2 : undefined, // Limit to 2 parallel workers in CI to reduce flakiness
+  // workers: 1,
+
   reporter: [
     ["list"],
     // Warning: uncommenting the html reporter may cause the chromatic-archives

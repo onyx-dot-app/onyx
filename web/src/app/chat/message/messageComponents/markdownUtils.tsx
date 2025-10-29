@@ -2,9 +2,8 @@ import React, { useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import rehypePrism from "rehype-prism-plus";
+import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
-import "prismjs/themes/prism-tomorrow.css";
 import "katex/dist/katex.min.css";
 import "@/app/chat/message/custom-code-styles.css";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
@@ -76,6 +75,10 @@ export const useMarkdownComponents = (
     () => ({
       a: anchorCallback,
       p: paragraphCallback,
+      pre: ({ node, className, children }: any) => {
+        // Don't render the pre wrapper - CodeBlock handles its own wrapper
+        return <>{children}</>;
+      },
       b: ({ node, className, children }: any) => {
         return <span className={className}>{children}</span>;
       },
@@ -121,7 +124,7 @@ export const renderMarkdown = (
           remarkGfm,
           [remarkMath, { singleDollarTextMath: false }],
         ]}
-        rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
+        rehypePlugins={[rehypeHighlight, rehypeKatex]}
         urlTransform={transformLinkUri}
       >
         {content}

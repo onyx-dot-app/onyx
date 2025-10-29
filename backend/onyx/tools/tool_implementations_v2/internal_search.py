@@ -1,3 +1,4 @@
+import json
 from typing import cast
 
 from agents import function_tool
@@ -21,7 +22,9 @@ from onyx.tools.tool_implementations.search.search_tool import (
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.search.search_utils import section_to_llm_doc
+from onyx.tools.tool_implementations.search.search_utils import (
+    section_to_llm_doc_with_empty_doc_citation_number,
+)
 from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
 from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
@@ -90,9 +93,12 @@ def _internal_search_core(
 
                     # Convert InferenceSections to LlmDocs for return value
                     retrieved_llm_docs_for_query = [
-                        section_to_llm_doc(section) for section in retrieved_sections
+                        section_to_llm_doc_with_empty_doc_citation_number(section)
+                        for section in retrieved_sections
                     ]
-
+                    run_context.context.unordered_fetched_inference_sections.extend(
+                        retrieved_sections
+                    )
                     run_context.context.run_dependencies.emitter.emit(
                         Packet(
                             ind=index,
@@ -105,10 +111,7 @@ def _internal_search_core(
                             ),
                         )
                     )
-                    run_context.context.aggregated_context.cited_documents.extend(
-                        retrieved_sections
-                    )
-                    run_context.context.aggregated_context.global_iteration_responses.append(
+                    run_context.context.global_iteration_responses.append(
                         IterationAnswer(
                             tool=SearchTool.__name__,
                             tool_id=get_tool_by_name(
@@ -162,13 +165,20 @@ def internal_search(
     """
     Tool for searching over the user's internal knowledge base.
     """
-    search_pipeline_instance = run_context.context.run_dependencies.search_pipeline
+    search_pipeline_instance = next(
+        (
+            tool
+            for tool in run_context.context.run_dependencies.tools
+            if tool.name == SearchTool._NAME
+        ),
+        None,
+    )
     if search_pipeline_instance is None:
-        raise RuntimeError("Search tool not available in context")
+        raise ValueError("Search tool not found")
 
     # Call the core function
     retrieved_docs = _internal_search_core(
-        run_context, queries, search_pipeline_instance
+        run_context, queries, cast(SearchTool, search_pipeline_instance)
     )
 
-    return str(retrieved_docs)
+    return json.dumps([doc.model_dump(mode="json") for doc in retrieved_docs])

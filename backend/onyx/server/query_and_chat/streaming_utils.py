@@ -43,9 +43,6 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
-from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
-    OktaProfileTool,
-)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from shared_configs.contextvars import get_current_tenant_id
@@ -263,7 +260,6 @@ def create_search_packets(
 def translate_db_message_to_packets_simple(
     chat_message: ChatMessage,
     db_session: Session,
-    remove_doc_content: bool = False,
     start_step_nr: int = 1,
 ) -> EndStepPacketList:
     """
@@ -423,17 +419,6 @@ def translate_db_message_to_packets_simple(
                             )
                         step_nr += 1
 
-                    elif tool_name == OktaProfileTool.__name__:
-                        packet_list.extend(
-                            create_custom_tool_packets(
-                                tool_name=tool_name,
-                                response_type="text",
-                                step_nr=step_nr,
-                                data=sub_step.sub_answer,
-                            )
-                        )
-                        step_nr += 1
-
                     else:
                         packet_list.extend(
                             create_custom_tool_packets(
@@ -477,13 +462,15 @@ def translate_db_message_to_packets_simple(
 
             step_nr += 1
 
+        packet_list.extend(create_citation_packets(citation_info_list, step_nr))
+        step_nr += 1
+
     return EndStepPacketList(packet_list=packet_list, end_step_nr=step_nr)
 
 
 def translate_db_message_to_packets(
     chat_message: ChatMessage,
     db_session: Session,
-    remove_doc_content: bool = False,
     start_step_nr: int = 1,
 ) -> EndStepPacketList:
     use_simple_translation = False
@@ -501,7 +488,6 @@ def translate_db_message_to_packets(
         return translate_db_message_to_packets_simple(
             chat_message=chat_message,
             db_session=db_session,
-            remove_doc_content=remove_doc_content,
             start_step_nr=start_step_nr,
         )
 
@@ -634,17 +620,6 @@ def translate_db_message_to_packets(
                         packet_list.extend(
                             create_image_generation_packets(
                                 sub_step.generated_images.images, step_nr
-                            )
-                        )
-                        step_nr += 1
-
-                    elif tool_name == OktaProfileTool.__name__:
-                        packet_list.extend(
-                            create_custom_tool_packets(
-                                tool_name=tool_name,
-                                response_type="text",
-                                step_nr=step_nr,
-                                data=sub_step.sub_answer,
                             )
                         )
                         step_nr += 1

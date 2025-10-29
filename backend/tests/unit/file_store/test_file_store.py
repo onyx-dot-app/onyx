@@ -23,11 +23,11 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.file_store import S3BackedFileStore
 
 
-class TestDBBase(DeclarativeBase):
+class DBBaseTest(DeclarativeBase):
     pass
 
 
-class FileRecord(TestDBBase):
+class FileRecord(DBBaseTest):
     __tablename__: str = "file_record"
 
     # Internal file ID, must be unique across all files
@@ -56,7 +56,7 @@ class FileRecord(TestDBBase):
 def db_session() -> Generator[Session, None, None]:
     """Create an in-memory SQLite database for testing"""
     engine = create_engine("sqlite:///:memory:")
-    TestDBBase.metadata.create_all(engine)
+    DBBaseTest.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
     yield session

@@ -41,7 +41,7 @@ export default function Logo({ folded, className }: LogoProps) {
 
   return settings.enterpriseSettings?.application_name ? (
     <div className="flex flex-col">
-      <div className="flex flex-row items-center gap-spacing-interline">
+      <div className="flex flex-row items-center gap-2">
         {logo}
         <Text headingH3 className="break-all line-clamp-2">
           {settings.enterpriseSettings?.application_name}
