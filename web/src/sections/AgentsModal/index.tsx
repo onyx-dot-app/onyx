@@ -24,8 +24,6 @@ interface AgentsSectionProps {
 }
 
 function AgentsSection({ title, agents, pinnedAgents }: AgentsSectionProps) {
-  const { toggleModal } = useChatModal();
-
   if (agents.length === 0) {
     return null;
   }
@@ -41,7 +39,6 @@ function AgentsSection({ title, agents, pinnedAgents }: AgentsSectionProps) {
               key={index}
               pinned={pinnedAgents.map((a) => a.id).includes(agent.id)}
               agent={agent}
-              closeModal={() => toggleModal(ModalIds.AgentsModal, false)}
             />
           ))}
       </div>
@@ -151,12 +148,7 @@ export default function AgentsModal() {
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
             />
-            <Button
-              href="/assistants/new"
-              onClick={() => toggleModal(ModalIds.AgentsModal, false)}
-            >
-              Create
-            </Button>
+            <Button href="/assistants/new">Create</Button>
           </div>
 
           <div className="py-6 flex items-center gap-2 flex-wrap">

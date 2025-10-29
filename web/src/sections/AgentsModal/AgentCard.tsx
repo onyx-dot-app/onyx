@@ -27,14 +27,9 @@ import { useAppRouter } from "@/hooks/appNavigation";
 interface AgentCardProps {
   agent: MinimalPersonaSnapshot;
   pinned: boolean;
-  closeModal: () => void;
 }
 
-export default function AgentCard({
-  agent,
-  pinned,
-  closeModal,
-}: AgentCardProps) {
+export default function AgentCard({ agent, pinned }: AgentCardProps) {
   const route = useAppRouter();
   const { user } = useUser();
   const { togglePinnedAgent, refreshAgents } = useAgentsContext();
@@ -172,7 +167,6 @@ export default function AgentCard({
               <Button
                 onClick={() => {
                   route({ agentId: agent.id });
-                  closeModal();
                 }}
                 secondary
               >

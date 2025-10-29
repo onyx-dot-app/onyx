@@ -746,7 +746,7 @@ export function ChatPage({
         />
       )}
 
-      {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
+      {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit.
       Only used in the EE version of the app. */}
       {popup}
 
@@ -767,7 +767,7 @@ export function ChatPage({
             title="Sources"
           >
             {/* IMPORTANT: this is a memoized component, and it's very important
-            for performance reasons that this stays true. MAKE SURE that all function 
+            for performance reasons that this stays true. MAKE SURE that all function
             props are wrapped in useCallback. */}
             <DocumentResults
               setPresentingDocument={setPresentingDocument}

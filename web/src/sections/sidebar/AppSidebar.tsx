@@ -31,7 +31,6 @@ import SvgEditBig from "@/icons/edit-big";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import Settings from "@/sections/sidebar/Settings";
 import { SidebarSection } from "@/sections/sidebar/SidebarSection";
-import AgentsModal from "@/sections/AgentsModal";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
@@ -71,7 +70,7 @@ function buildVisibleAgents(
   pinnedAgents: MinimalPersonaSnapshot[],
   currentAgent: MinimalPersonaSnapshot | null
 ): [MinimalPersonaSnapshot[], boolean] {
-  /* NOTE: The unified agent (id = 0) is not visible in the sidebar, 
+  /* NOTE: The unified agent (id = 0) is not visible in the sidebar,
   so we filter it out. */
   if (!currentAgent)
     return [pinnedAgents.filter((agent) => agent.id !== 0), false];
@@ -355,7 +354,6 @@ function AppSidebarInner() {
   return (
     <>
       {popup}
-      <AgentsModal />
       <CreateProjectModal />
 
       {showMoveCustomAgentModal && (
@@ -397,14 +395,6 @@ function AppSidebarInner() {
             <div className="px-2">
               {newSessionButton}
               <SidebarTab
-                leftIcon={SvgOnyxOctagon}
-                onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-                active={isOpen(ModalIds.AgentsModal)}
-                folded
-              >
-                Agents
-              </SidebarTab>
-              <SidebarTab
                 leftIcon={SvgFolderPlus}
                 onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
                 active={isOpen(ModalIds.CreateProjectModal)}
@@ -440,15 +430,6 @@ function AppSidebarInner() {
                         />
                       ))}
                     </SortableContext>
-                    <div data-testid="AppSidebar/more-agents">
-                      <SidebarTab
-                        leftIcon={SvgMoreHorizontal}
-                        onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-                        lowlight
-                      >
-                        More Agents
-                      </SidebarTab>
-                    </div>
                   </SidebarSection>
                 </DndContext>
 
