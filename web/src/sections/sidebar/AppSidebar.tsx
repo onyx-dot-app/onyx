@@ -71,7 +71,7 @@ function buildVisibleAgents(
   pinnedAgents: MinimalPersonaSnapshot[],
   currentAgent: MinimalPersonaSnapshot | null
 ): [MinimalPersonaSnapshot[], boolean] {
-  /* NOTE: The unified agent (id = 0) is not visible in the sidebar, 
+  /* NOTE: The unified agent (id = 0) is not visible in the sidebar,
   so we filter it out. */
   if (!currentAgent)
     return [pinnedAgents.filter((agent) => agent.id !== 0), false];
@@ -86,11 +86,10 @@ function buildVisibleAgents(
 }
 
 interface RecentsSectionProps {
-  isHistoryEmpty: boolean;
   chatSessions: ChatSession[];
 }
 
-function RecentsSection({ isHistoryEmpty, chatSessions }: RecentsSectionProps) {
+function RecentsSection({ chatSessions }: RecentsSectionProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: DRAG_TYPES.RECENTS,
     data: {
@@ -107,7 +106,7 @@ function RecentsSection({ isHistoryEmpty, chatSessions }: RecentsSectionProps) {
       )}
     >
       <SidebarSection title="Recents">
-        {isHistoryEmpty ? (
+        {chatSessions.length === 0 ? (
           <Text text01 className="px-3">
             Try sending a message! Your chat history will appear here.
           </Text>
@@ -491,10 +490,7 @@ function AppSidebarInner() {
                   </SidebarSection>
 
                   {/* Recents */}
-                  <RecentsSection
-                    isHistoryEmpty={isHistoryEmpty}
-                    chatSessions={chatSessions}
-                  />
+                  <RecentsSection chatSessions={chatSessions} />
                 </DndContext>
               </>
             </SidebarBody>
