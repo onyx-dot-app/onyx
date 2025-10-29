@@ -255,7 +255,9 @@ def create_update_persona(
             document_set_ids=create_persona_request.document_set_ids,
             tool_ids=create_persona_request.tool_ids,
             is_public=create_persona_request.is_public,
-            exclude_public_providers=create_persona_request.exclude_public_providers,
+            exclude_public_providers=getattr(
+                create_persona_request, "exclude_public_providers", False
+            ),
             recency_bias=create_persona_request.recency_bias,
             llm_model_provider_override=create_persona_request.llm_model_provider_override,
             llm_model_version_override=create_persona_request.llm_model_version_override,
@@ -498,9 +500,9 @@ def upsert_persona(
     task_prompt: str | None,
     datetime_aware: bool | None,
     is_public: bool,
-    exclude_public_providers: bool,
     db_session: Session,
     document_set_ids: list[int] | None = None,
+    exclude_public_providers: bool = False,
     tool_ids: list[int] | None = None,
     persona_id: int | None = None,
     commit: bool = True,
