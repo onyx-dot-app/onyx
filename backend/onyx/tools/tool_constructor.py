@@ -14,6 +14,7 @@ from onyx.configs.app_configs import AZURE_DALLE_API_BASE
 from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import AZURE_DALLE_API_VERSION
 from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
+from onyx.configs.app_configs import AZURE_IMAGE_UNDERLYING_MODEL
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
@@ -273,6 +274,11 @@ def construct_tools(
                         api_version=img_generation_llm_config.api_version,
                         additional_headers=image_generation_tool_config.additional_headers,
                         model=img_generation_llm_config.model_name,
+                        underlying_model=(
+                            IMAGE_MODEL_NAME
+                            if img_generation_llm_config.model_provider == "openai"
+                            else AZURE_IMAGE_UNDERLYING_MODEL
+                        ),
                         tool_id=db_tool_model.id,
                     )
                 ]
