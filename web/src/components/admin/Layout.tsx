@@ -9,7 +9,11 @@ import { AnnouncementBanner } from "../header/AnnouncementBanner";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { ChatProvider } from "../../refresh-components/contexts/ChatContext";
 
-export async function Layout({ children }: { children: React.ReactNode }) {
+export interface LayoutProps {
+  children: React.ReactNode;
+}
+
+export default async function Layout({ children }: LayoutProps) {
   // Check authentication and admin role
   const authResult = await requireAdminAuth();
 
