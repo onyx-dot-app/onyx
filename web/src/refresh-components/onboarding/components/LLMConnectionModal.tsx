@@ -93,7 +93,7 @@ const LLMConnectionModal = () => {
     >
       <Formik initialValues={initialValues} onSubmit={() => {}}>
         <Form className="flex flex-col gap-0">
-          <div className="flex flex-col p-spacing-paragraph gap-spacing-paragraph bg-background-tint-01 w-full">
+          <div className="flex flex-col p-4 gap-4 bg-background-tint-01 w-full">
             {llmDescriptor.api_key_required && (
               <FormikField<string>
                 name="api_key"
@@ -170,7 +170,7 @@ const LLMConnectionModal = () => {
               )}
             />
           </div>
-          <div className="flex justify-end gap-spacing-interline w-full p-spacing-paragraph">
+          <div className="flex justify-end gap-2 w-full p-4">
             <Button
               type="button"
               secondary

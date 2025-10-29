@@ -14,7 +14,7 @@ const OnboardingFlowInner = () => {
   } = useOnboardingState();
 
   return (
-    <div className="flex flex-col items-center justify-center w-full max-w-[800px] gap-spacing-interline mb-spacing-paragraph">
+    <div className="flex flex-col items-center justify-center w-full max-w-[800px] gap-2 mb-4">
       <OnboardingHeader state={onboardingState} actions={onboardingActions} />
       <div className="relative w-full overflow-hidden">
         <div
@@ -25,8 +25,8 @@ const OnboardingFlowInner = () => {
               : "translate-x-0")
           }
         >
-          <div className="w-1/2 shrink-0 pr-spacing-interline">
-            <div className="flex flex-col gap-spacing-interline">
+          <div className="w-1/2 shrink-0 pr-2">
+            <div className="flex flex-col gap-2">
               <NameStep state={onboardingState} actions={onboardingActions} />
               <LLMStep
                 state={onboardingState}
@@ -35,7 +35,7 @@ const OnboardingFlowInner = () => {
               />
             </div>
           </div>
-          <div className="w-1/2 shrink-0 pl-spacing-interline">
+          <div className="w-1/2 shrink-0 pl-2">
             <FinalStep />
           </div>
         </div>

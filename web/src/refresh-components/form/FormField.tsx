@@ -32,13 +32,13 @@ const FieldMessageContent: React.FC<{
   className?: string;
 }> = ({ baseId, state, content, className }) => {
   return (
-    <div className="flex flex-row items-center gap-x-spacing-inline-mini">
+    <div className="flex flex-row items-center gap-x-0.5">
       {iconMap[state]}
       <Text
         id={`${baseId}-msg`}
         text03
         secondaryBody
-        className={cn("ml-spacing-inline-mini", className)}
+        className={cn("ml-0.5", className)}
       >
         {content}
       </Text>
@@ -74,7 +74,7 @@ export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
     <FieldContext.Provider value={contextValue}>
       <div
         id={baseId}
-        className={cn("flex flex-col gap-y-spacing-inline", className)}
+        className={cn("flex flex-col gap-y-1", className)}
         {...props}
       >
         {children}
@@ -97,14 +97,14 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
       id={`${baseId}-label`}
       htmlFor={`${baseId}-control`}
       className={cn(
-        "ml-spacing-inline-mini text-text-04 font-main-ui-action flex flex-row",
+        "ml-0.5 text-text-04 font-main-ui-action flex flex-row",
         className
       )}
       {...props}
     >
       {children}
       {optional ? (
-        <Text text03 mainUiMuted className="mx-spacing-inline-mini">
+        <Text text03 mainUiMuted className="mx-0.5">
           {"(Optional)"}
         </Text>
       ) : null}
@@ -152,7 +152,7 @@ export const FormFieldDescription: React.FC<DescriptionProps> = ({
       id={`${baseId}-desc`}
       text03
       secondaryBody
-      className={cn("ml-spacing-inline-mini", className)}
+      className={cn("ml-0.5", className)}
       {...props}
     >
       {content}

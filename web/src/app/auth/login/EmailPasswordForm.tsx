@@ -142,7 +142,7 @@ export default function EmailPasswordForm({
         }}
       >
         {({ isSubmitting, isValid, dirty }) => (
-          <Form className="gap-y-padding-button">
+          <Form className="gap-y-3">
             <FormikField<string>
               name="email"
               render={(field, helper, meta, state) => (

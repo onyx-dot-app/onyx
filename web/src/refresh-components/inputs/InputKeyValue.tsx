@@ -26,8 +26,8 @@ const KeyValueInputItem = ({
   valuePlaceholder,
 }: KeyValueInputItemProps) => {
   return (
-    <div className="flex gap-spacing-inline items-center w-full">
-      <div className="flex gap-spacing-interline flex-1">
+    <div className="flex gap-1 items-center w-full">
+      <div className="flex gap-2 flex-1">
         <InputTypeIn
           className="flex-1"
           placeholder={keyPlaceholder || "Key"}
@@ -90,12 +90,9 @@ const KeyValueInput = ({
   }
 
   return (
-    <div
-      className={cn("w-full flex flex-col gap-y-spacing-interline", className)}
-      {...rest}
-    >
-      <div className="flex gap-spacing-inline items-center w-full">
-        <div className="flex gap-spacing-interline flex-1">
+    <div className={cn("w-full flex flex-col gap-y-2", className)} {...rest}>
+      <div className="flex gap-1 items-center w-full">
+        <div className="flex gap-2 flex-1">
           <Text text04 mainUiAction className="flex-1">
             {keyTitle}
           </Text>

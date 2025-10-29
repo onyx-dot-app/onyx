@@ -45,9 +45,9 @@ const LLMProviderInner = ({
   }, [Icon, llmDescriptor, title, toggleModal]);
 
   return (
-    <div className="flex justify-between h-full w-full p-spacing-inline rounded-12 border border-border-01 bg-background-neutral-01">
-      <div className="flex gap-spacing-inline p-spacing-inline flex-1 min-w-0">
-        <div className="h-full p-spacing-inline-mini">
+    <div className="flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01">
+      <div className="flex gap-1 p-1 flex-1 min-w-0">
+        <div className="h-full p-0.5">
           {Icon ? (
             <Icon className="w-4 h-4" />
           ) : (

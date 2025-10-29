@@ -103,7 +103,7 @@ function InputSelectInner(
       <div
         ref={boundingBoxRef}
         className={cn(
-          "flex flex-row items-center justify-between w-full h-fit p-spacing-interline-mini rounded-08 bg-background-neutral-00 relative",
+          "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
           triggerClasses(localActive, hovered)[state],
           className
         )}
@@ -111,7 +111,7 @@ function InputSelectInner(
         <SelectPrimitive.Trigger
           ref={ref}
           className={cn(
-            "w-full h-[1.5rem] bg-transparent p-spacing-inline-mini focus:outline-none flex items-center justify-between",
+            "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none flex items-center justify-between",
             valueClasses()[state]
           )}
           onFocus={() => setLocalActive(true)}
@@ -151,7 +151,7 @@ function InputSelectInner(
                 value={option.value}
                 disabled={option.disabled}
                 className={cn(
-                  "relative flex w-full cursor-default select-none items-center rounded-04 py-spacing-interline-mini px-spacing-inline-mini pl-8",
+                  "relative flex w-full cursor-default select-none items-center rounded-04 py-1.5 px-0.5 pl-8",
                   "text-text-04 outline-none",
                   "focus:bg-background-neutral-02 hover:bg-background-neutral-02",
                   "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
