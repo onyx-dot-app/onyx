@@ -1,64 +1,105 @@
-from fuzzysearch import find_near_matches
+import re
 
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
+def levenshtein_distance(s1: str, s2: str) -> int:
+    """Вычисляет расстояние Левенштейна между двумя строками.
+
+    Пример вычисления расстояние Ливенштейна
+
+    Операции для превращения "красиво" в "красивый":
+    - к р а с и в о   (7 символов)
+    - к р а с и в ы й (8 символов)
+
+    Расчет:
+    - Совпадают: к-к, р-р, а-а, с-с, и-и, в-в (6 операций по 0)
+    - Замена: о → ы (1 операция)
+    - Добавление: й (1 операция)
+
+    Итого: 1 замена + 1 добавление = расстояние 2
+    """
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+
+    return previous_row[-1]
+
+
 def mask_banned_words(
-    text: str, banned_words: list[str], max_l_dist: int
+    text: str,
+    banned_words: list[str],
+    max_l_dist: int,
 ) -> str:
     """Маскирует запрещенные слова в тексте, заменяя их на звездочки.
 
-    Функция использует нечеткий поиск (расстояние Левенштейна) для обнаружения
-    запрещенных слов с учетом возможных опечаток, морфологических вариаций
-    и небольших искажений. Расстояние Левенштейна показывает минимальное
-    количество операций (добавление, удаление, замена символов) для превращения
-    одной строки в другую.
-
-    Поиск осуществляется без учета пробелов и регистра, что позволяет находить
-    слова в различных форматах написания. Каждое найденное совпадение заменяется
-    на последовательность звездочек, сохраняя оригинальную длину слова для
-    читаемости структуры текста.
-
-    Параметр max_l_dist определяет максимально допустимое расстояние Левенштейна
-    для нечеткого поиска (по умолчанию 1 операция).
+    Функция ищет целые слова, которые совпадают с запрещенными словами
+    с учетом максимального расстояния Левенштейна. Это позволяет находить
+    слова с опечатками и различными формами, но не маскирует части слов.
     """
-    spaceless_value = text.replace(" ", "").lower()
+    if not text or not banned_words:
+        return text
 
-    spaceless_index_map = []
+    # Приводим запрещенные слова к нижнему регистру для сравнения
+    banned_words_lower = [word.lower() for word in banned_words]
 
-    actual_index = 0
-    for i in range(len(text)):
-        actual_index += 1
-        if text[i] != " ":
-            spaceless_index_map.append((text[i], actual_index))
+    # Регулярное выражение для поиска слов (буквы русского и английского алфавитов)
+    pattern = re.compile(r'[a-zA-Zа-яА-Я]+')
 
-    all_matches = []
-    for banned_word in banned_words:
-        spaceless_banned_word = banned_word.replace(" ", "").lower()
-        if not spaceless_banned_word:
-            continue
-        matches = find_near_matches(spaceless_banned_word, spaceless_value, max_l_dist=max_l_dist)
-        all_matches.extend(matches)
+    # Находим все слова в тексте
+    matches = list(pattern.finditer(text))
 
-    if len(all_matches) > 0:
-        fix_value = text
-        for match in all_matches:
-            actual_start = spaceless_index_map[match.start][1]
-            actual_end = spaceless_index_map[match.end - 1][1]
-            triggering_text = text[actual_start:actual_end]
+    # Собираем замены с конца текста к началу, чтобы не сбивать позиции
+    replacements = []
 
-            replacement = "*" * len(triggering_text)
-            fix_value = fix_value.replace(triggering_text, replacement)
+    for match in matches:
+        original_word = match.group()
+        word_lower = original_word.lower()
 
-        return fix_value
+        # Проверяем на совпадение с каждым запрещенным словом
+        for banned_word in banned_words_lower:
+            # Быстрая проверка на точное совпадение
+            if word_lower == banned_word:
+                start, end = match.span()
+                replacements.append((start, end, '*' * len(original_word)))
+                break
+
+            # Проверяем разницу в длине - если слишком большая, пропускаем
+            if abs(len(word_lower) - len(banned_word)) > max_l_dist:
+                continue
+
+            # Вычисляем расстояние Левенштейна
+            distance = levenshtein_distance(word_lower, banned_word)
+            if distance <= max_l_dist:
+                print(word_lower, banned_word)
+                start, end = match.span()
+                replacements.append((start, end, '*' * len(original_word)))
+                break
+
+    # Применяем замены с конца текста к началу
+    for start, end, replacement in sorted(replacements, reverse=True):
+        text = text[:start] + replacement + text[end:]
 
     return text
 
 
 def validate_banned_words(
-    text: str, config: dict, max_l_dist: int = 1
+    text: str,
+    config: dict,
+    max_l_dist: int = 2
 ) -> str:
     """Проверяет текст на наличие запрещенных слов и маскирует их при обнаружении.
 
@@ -67,7 +108,6 @@ def validate_banned_words(
     Обрабатывает ошибки и возвращает исходный текст в случае проблем с обработкой.
     Используется для фильтрации нежелательного контента в ответах от LLM.
     """
-
     banned_words = config.get("banned_words")
 
     if not banned_words:
@@ -82,6 +122,6 @@ def validate_banned_words(
         return masked_text
     except Exception as e:
         logger.error(
-            "Ошибка при анализе стиля ответа LLM: %s", repr(e)
+            "Ошибка при маскировании запрещенных слов: %s", repr(e)
         )
         return text
