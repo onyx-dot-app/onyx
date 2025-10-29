@@ -358,6 +358,8 @@ export function AssistantEditor({
     system_prompt: existingPersona?.system_prompt ?? "",
     task_prompt: existingPersona?.task_prompt ?? "",
     is_public: existingPersona?.is_public ?? defaultPublic,
+    exclude_public_providers:
+      existingPersona?.exclude_public_providers ?? false,
     document_set_ids:
       existingPersona?.document_sets?.map((documentSet) => documentSet.id) ??
       ([] as number[]),
@@ -613,6 +615,7 @@ export function AssistantEditor({
               "Reminders must be less than 5000000 characters"
             ),
             is_public: Yup.boolean().required(),
+            exclude_public_providers: Yup.boolean().required(),
             document_set_ids: Yup.array().of(Yup.number()),
             num_chunks: Yup.number().nullable(),
             llm_relevance_filter: Yup.boolean().required(),
@@ -1690,6 +1693,29 @@ export function AssistantEditor({
                             </div>
                           </>
                         )}
+                      </div>
+
+                      <div className="mt-4">
+                        <div className="flex items-center mb-2">
+                          <SwitchField
+                            name="exclude_public_providers"
+                            size="md"
+                            onCheckedChange={(checked) => {
+                              setFieldValue(
+                                "exclude_public_providers",
+                                checked
+                              );
+                            }}
+                          />
+                          <span className="text-sm ml-2">
+                            Exclude Public LLM Providers
+                          </span>
+                        </div>
+                        <p className="text-sm text-text-dark">
+                          {values.exclude_public_providers
+                            ? "This agent will only use LLM providers explicitly assigned to it"
+                            : "This agent can use any public LLM provider and those assigned to it"}
+                        </p>
                       </div>
                     </div>
 

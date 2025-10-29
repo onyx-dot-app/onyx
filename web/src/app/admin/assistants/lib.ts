@@ -10,6 +10,7 @@ interface PersonaUpsertRequest {
   document_set_ids: number[];
   num_chunks: number | null;
   is_public: boolean;
+  exclude_public_providers: boolean;
   recency_bias: string;
   llm_filter_extraction: boolean;
   llm_relevance_filter: boolean | null;
@@ -39,6 +40,7 @@ export interface PersonaUpsertParameters {
   document_set_ids: number[];
   num_chunks: number | null;
   is_public: boolean;
+  exclude_public_providers: boolean;
   llm_relevance_filter: boolean | null;
   llm_model_provider_override: string | null;
   llm_model_version_override: string | null;
@@ -102,6 +104,7 @@ function buildPersonaUpsertRequest(
     document_set_ids,
     num_chunks,
     is_public,
+    exclude_public_providers,
     groups,
     datetime_aware,
     users,
@@ -121,6 +124,7 @@ function buildPersonaUpsertRequest(
     document_set_ids,
     num_chunks,
     is_public,
+    exclude_public_providers,
     uploaded_image_id,
     groups,
     users,

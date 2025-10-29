@@ -23,6 +23,7 @@ export interface MinimalPersonaSnapshot {
   icon_color?: string;
 
   is_public: boolean;
+  exclude_public_providers: boolean;
   is_visible: boolean;
   display_priority: number | null;
   is_default_persona: boolean;

@@ -4,8 +4,8 @@ import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Text from "@/refresh-components/texts/Text";
 import { Separator } from "@/components/ui/separator";
 import Button from "@/refresh-components/buttons/Button";
-import { Form, Formik } from "formik";
-import type { FormikProps } from "formik";
+import { Form, Formik, FieldArray } from "formik";
+import type { FormikProps, ArrayHelpers } from "formik";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import {
   SelectorFormField,
@@ -26,6 +26,8 @@ import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import SvgTrash from "@/icons/trash";
+import { useAdminPersonas } from "@/app/admin/assistants/hooks";
+import SvgMessageSquare from "@/icons/message-square";
 
 function AutoFetchModelsOnEdit({
   llmProviderDescriptor,
@@ -107,6 +109,7 @@ export function LLMProviderUpdateForm({
   firstTimeConfiguration?: boolean;
 }) {
   const { mutate } = useSWRConfig();
+  const { personas, isLoading: personasIsLoading } = useAdminPersonas();
 
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState<string>("");
@@ -159,6 +162,7 @@ export function LLMProviderUpdateForm({
       ),
     is_public: existingLlmProvider?.is_public ?? true,
     groups: existingLlmProvider?.groups ?? [],
+    personas: existingLlmProvider?.personas ?? [],
     model_configurations: existingLlmProvider?.model_configurations ?? [],
     deployment_name: existingLlmProvider?.deployment_name,
 
@@ -254,6 +258,7 @@ export function LLMProviderUpdateForm({
     // EE Only
     is_public: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
+    personas: Yup.array().of(Yup.number()),
     selected_model_names: Yup.array().of(Yup.string()),
     fetched_model_configurations: Yup.array(),
   });
@@ -703,6 +708,57 @@ export function LLMProviderUpdateForm({
                         publicToWhom="Users"
                         enforceGroupSelection={true}
                       />
+                      {personas && personas.length > 0 && (
+                        <>
+                          <div className="flex flex-col gap-3 pt-4">
+                            <Text mainUiAction text05>
+                              Restrict to specific Assistants (Optional)
+                            </Text>
+                            <Text mainUiMuted text03>
+                              If assistants are selected, only those assistants
+                              can use this LLM provider. If left empty, all
+                              assistants (subject to group restrictions above)
+                              can use this provider.
+                            </Text>
+                          </div>
+                          <FieldArray
+                            name="personas"
+                            render={(arrayHelpers: ArrayHelpers) => (
+                              <div className="flex flex-wrap gap-2 py-4">
+                                {personasIsLoading ? (
+                                  <div className="animate-pulse bg-background-200 h-8 w-32 rounded" />
+                                ) : (
+                                  personas.map((persona) => {
+                                    const ind =
+                                      formikProps.values.personas.indexOf(
+                                        persona.id
+                                      );
+                                    const isSelected = ind !== -1;
+                                    return (
+                                      <Button
+                                        key={persona.id}
+                                        primary
+                                        action={isSelected}
+                                        type="button"
+                                        leftIcon={SvgMessageSquare}
+                                        onClick={() => {
+                                          if (isSelected) {
+                                            arrayHelpers.remove(ind);
+                                          } else {
+                                            arrayHelpers.push(persona.id);
+                                          }
+                                        }}
+                                      >
+                                        {persona.name}
+                                      </Button>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            )}
+                          />
+                        </>
+                      )}
                     </>
                   )}
                 </>
