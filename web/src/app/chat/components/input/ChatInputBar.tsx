@@ -11,6 +11,7 @@ import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { DocumentIcon2, FileIcon } from "@/components/icons/icons";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/chat/interfaces";
@@ -94,6 +95,7 @@ export interface ChatInputBarProps {
 
   // assistants
   selectedAssistant: MinimalPersonaSnapshot;
+  llmProviders: LLMProviderDescriptor[];
 
   toggleDocumentSidebar: () => void;
   handleFileUpload: (files: File[]) => void;
@@ -120,6 +122,7 @@ function ChatInputBarInner({
   availableContextTokens,
   // assistants
   selectedAssistant,
+  llmProviders,
 
   handleFileUpload,
   textAreaRef,
@@ -129,7 +132,6 @@ function ChatInputBarInner({
   setPresentingDocument,
 }: ChatInputBarProps) {
   const { user } = useUser();
-
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
@@ -528,7 +530,7 @@ function ChatInputBarInner({
                   icon={SvgPlusCircle}
                   tooltip="Attach Files"
                   tertiary
-                  transient={open}
+                  active={open}
                 />
               )}
               selectedFileIds={currentMessageFiles.map((f) => f.id)}
@@ -543,10 +545,10 @@ function ChatInputBarInner({
             {showDeepResearch && (
               <SelectButton
                 leftIcon={SvgHourglass}
+                active={deepResearchEnabled}
                 onClick={toggleDeepResearch}
-                engaged={deepResearchEnabled}
-                action
                 folded
+                action
               >
                 Deep Research
               </SelectButton>
@@ -569,8 +571,8 @@ function ChatInputBarInner({
                         prev.filter((id) => id !== toolId)
                       );
                     }}
-                    engaged
                     action
+                    active
                   >
                     {tool.display_name}
                   </SelectButton>
@@ -583,6 +585,7 @@ function ChatInputBarInner({
               <LLMPopover
                 llmManager={llmManager}
                 requiresImageGeneration={false}
+                llmProviders={llmProviders}
               />
             </div>
             <IconButton

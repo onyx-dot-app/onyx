@@ -6,12 +6,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { getDisplayNameForModel, LlmDescriptor, LlmManager } from "@/lib/hooks";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { modelSupportsImageInput, structureValue } from "@/lib/llm/utils";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/components/user/UserProvider";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import SvgRefreshCw from "@/icons/refresh-cw";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
@@ -22,16 +24,21 @@ export interface LLMPopoverProps {
   folded?: boolean;
   onSelect?: (value: string) => void;
   currentModelName?: string;
+  llmProviders?: LLMProviderDescriptor[];
 }
 
-export default function LLMPopover({
+function LLMPopover({
   llmManager,
   requiresImageGeneration,
   folded,
   onSelect,
   currentModelName,
+  llmProviders: propLlmProviders,
 }: LLMPopoverProps) {
-  const { llmProviders } = useChatContext();
+  const { llmProviders: contextLlmProviders } = useChatContext();
+
+  // Use providers from props if provided, otherwise fall back to context
+  const llmProviders = propLlmProviders ?? contextLlmProviders;
 
   const [open, setOpen] = useState(false);
   const { user } = useUser();
@@ -68,48 +75,52 @@ export default function LLMPopover({
         leftIcon={
           folded
             ? SvgRefreshCw
-            : getProviderIcon(
-                llmManager.currentLlm.provider,
-                llmManager.currentLlm.modelName
-              )
+            : llmManager.isLoadingProviders
+              ? SimpleLoader
+              : getProviderIcon(
+                  llmManager.currentLlm.provider,
+                  llmManager.currentLlm.modelName
+                )
         }
         onClick={() => setOpen(true)}
-        transient={open}
+        active={open}
         folded={folded}
         rightChevronIcon
+        disabled={llmManager.isLoadingProviders}
       >
-        {getDisplayNameForModel(llmManager.currentLlm.modelName)}
+        {getDisplayNameForModel(
+          llmManager.currentLlm.modelName,
+          llmManager.isLoadingProviders
+        )}
       </SelectButton>
     ),
     [
       llmManager.currentLlm.modelName,
       llmManager.currentLlm.provider,
+      llmManager.isLoadingProviders,
       open,
       folded,
     ]
   );
 
-  const llmOptionsToChooseFrom = useMemo(
-    () =>
-      llmProviders.flatMap((llmProvider) =>
-        llmProvider.model_configurations
-          .filter(
-            (modelConfiguration) =>
-              modelConfiguration.is_visible ||
-              modelConfiguration.name === currentModelName
-          )
-          .map((modelConfiguration) => ({
-            name: llmProvider.name,
-            provider: llmProvider.provider,
-            modelName: modelConfiguration.name,
-            icon: getProviderIcon(
-              llmProvider.provider,
-              modelConfiguration.name
-            ),
-          }))
-      ),
-    [llmProviders]
-  );
+  const llmOptionsToChooseFrom = useMemo(() => {
+    const options = llmProviders.flatMap((llmProvider) =>
+      llmProvider.model_configurations
+        .filter(
+          (modelConfiguration) =>
+            modelConfiguration.is_visible ||
+            modelConfiguration.name === currentModelName
+        )
+        .map((modelConfiguration) => ({
+          name: llmProvider.name,
+          provider: llmProvider.provider,
+          modelName: modelConfiguration.name,
+          icon: getProviderIcon(llmProvider.provider, modelConfiguration.name),
+        }))
+    );
+
+    return options;
+  }, [llmProviders, currentModelName]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -141,11 +152,6 @@ export default function LLMPopover({
         >
           {llmOptionsToChooseFrom.map(
             ({ modelName, provider, name, icon }, index) => {
-              if (
-                requiresImageGeneration &&
-                !modelSupportsImageInput(llmProviders, modelName, name)
-              )
-                return null;
               return (
                 <LineItem
                   key={index}
@@ -170,3 +176,6 @@ export default function LLMPopover({
     </Popover>
   );
 }
+
+// Memoize to prevent unnecessary re-renders when props haven't changed
+export default React.memo(LLMPopover);
