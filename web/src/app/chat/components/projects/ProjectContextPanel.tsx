@@ -1,22 +1,16 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { Loader2, X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useProjectsContext } from "../../projects/ProjectsContext";
-import FilePicker from "../files/FilePicker";
-import type {
-  ProjectFile,
-  CategorizedFiles,
-} from "../../projects/projectsService";
+import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
+import type { ProjectFile } from "../../projects/projectsService";
 import { UserFileStatus } from "../../projects/projectsService";
-import { ChatFileType } from "@/app/chat/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlusCircle from "@/icons/plus-circle";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   useChatModal,
   ModalIds,
@@ -31,6 +25,7 @@ import SvgFolderOpen from "@/icons/folder-open";
 import SvgAddLines from "@/icons/add-lines";
 import SvgFiles from "@/icons/files";
 import Truncated from "@/refresh-components/texts/Truncated";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 export function FileCard({
   file,
@@ -68,7 +63,7 @@ export function FileCard({
     <div
       className={`relative group flex items-center gap-3 border border-border-01 rounded-12 ${
         isProcessing ? "bg-background-neutral-02" : "bg-background-tint-00"
-      } p-spacing-inline h-14 w-40 ${
+      } p-1 h-14 w-40 ${
         onFileClick && !isProcessing
           ? "cursor-pointer hover:bg-accent-background"
           : ""
@@ -90,7 +85,7 @@ export function FileCard({
         </button>
       )}
       <div
-        className={`flex h-9 w-9 items-center justify-center rounded-08 p-spacing-interline
+        className={`flex h-9 w-9 items-center justify-center rounded-08 p-2
       ${isProcessing ? "bg-background-neutral-03" : "bg-background-tint-01"}`}
       >
         {isProcessing || file.status === UserFileStatus.UPLOADING ? (
@@ -131,12 +126,10 @@ export default function ProjectContextPanel({
   const { popup, setPopup } = usePopup();
   const { isOpen, toggleModal } = useChatModal();
   const open = isOpen(ModalIds.ProjectFilesModal);
-
   const onClose = () => toggleModal(ModalIds.ProjectFilesModal, false);
   useEscape(onClose, open);
-
   // Convert ProjectFile to MinimalOnyxDocument format for viewing
-  const handleFileClick = useCallback(
+  const handleOnView = useCallback(
     (file: ProjectFile) => {
       if (!setPresentingDocument) return;
 
@@ -154,12 +147,10 @@ export default function ProjectContextPanel({
     currentProjectId,
     unlinkFileFromProject,
     linkFileToProject,
-    allRecentFiles,
     allCurrentProjectFiles,
     beginUpload,
     projects,
   } = useProjectsContext();
-
   const handleUploadFiles = useCallback(
     async (files: File[]) => {
       if (!files || files.length === 0) return;
@@ -221,15 +212,11 @@ export default function ProjectContextPanel({
           )}
         </div>
         <Button
+          leftIcon={SvgAddLines}
           onClick={() => toggleModal(ModalIds.AddInstructionModal, true)}
           tertiary
         >
-          <div className="flex flex-row gap-1 items-center">
-            <SvgAddLines className="h-4 w-4 stroke-text-03" />
-            <Text text03 mainUiAction className="whitespace-nowrap">
-              Set Instructions
-            </Text>
-          </div>
+          Set Instructions
         </Button>
       </div>
       <div
@@ -241,21 +228,19 @@ export default function ProjectContextPanel({
             <Text headingH3 text04>
               Files
             </Text>
-
             <Text text02 secondaryBody>
               Chats in this project can access these files.
             </Text>
           </div>
-          <FilePicker
-            trigger={
-              <LineItem icon={SvgPlusCircle}>
-                <Text text03 mainUiAction>
-                  Add Files
-                </Text>
-              </LineItem>
-            }
-            recentFiles={allRecentFiles}
-            onFileClick={handleFileClick}
+          <FilePickerPopover
+            trigger={(open) => (
+              // The `secondary={undefined}` is required here because `CreateButton` sets it to true.
+              // Therefore, we need to first remove the truthiness before passing in the other `tertiary` flag.
+              <CreateButton secondary={undefined} tertiary active={open}>
+                Add Files
+              </CreateButton>
+            )}
+            onFileClick={handleOnView}
             onPickRecent={async (file) => {
               if (!currentProjectId) return;
               if (!linkFileToProject) return;
@@ -266,7 +251,6 @@ export default function ProjectContextPanel({
               await unlinkFileFromProject(currentProjectId, file.id);
             }}
             handleUploadChange={handleUploadChange}
-            className="mr-1.5"
             selectedFileIds={(allCurrentProjectFiles || []).map((f) => f.id)}
           />
         </div>
@@ -296,7 +280,7 @@ export default function ProjectContextPanel({
             </div>
 
             {/* Desktop / larger screens: show previews with optional View All */}
-            <div className="hidden sm:flex gap-spacing-inline relative">
+            <div className="hidden sm:flex gap-1 relative">
               {(() => {
                 return allCurrentProjectFiles.slice(0, 4).map((f) => (
                   <div key={f.id} className="w-40">
@@ -306,7 +290,7 @@ export default function ProjectContextPanel({
                         if (!currentProjectId) return;
                         await unlinkFileFromProject(currentProjectId, fileId);
                       }}
-                      onFileClick={handleFileClick}
+                      onFileClick={handleOnView}
                     />
                   </div>
                 ));
@@ -347,7 +331,7 @@ export default function ProjectContextPanel({
               isDragActive
                 ? "bg-action-link-01 border-action-link-05"
                 : "border-border-01"
-            } flex items-center pl-spacing-interline`}
+            } flex items-center pl-2`}
           >
             <p
               className={`font-secondary-body ${
@@ -374,10 +358,9 @@ export default function ProjectContextPanel({
             description="Sessions in this project can access the files here."
             icon={SvgFiles}
             recentFiles={[...allCurrentProjectFiles]}
-            onFileClick={handleFileClick}
+            onView={handleOnView}
             handleUploadChange={handleUploadChange}
-            showRemove
-            onRemove={async (file: ProjectFile) => {
+            onDelete={async (file: ProjectFile) => {
               if (!currentProjectId) return;
               await unlinkFileFromProject(currentProjectId, file.id);
             }}

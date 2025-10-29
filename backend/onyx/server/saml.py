@@ -1,7 +1,9 @@
 import contextlib
 import secrets
 import string
+import uuid
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -10,28 +12,23 @@ from fastapi import Request
 from fastapi import Response
 from fastapi import status
 from fastapi_users import exceptions
+from fastapi_users.authentication import Strategy
 from onelogin.saml2.auth import OneLogin_Saml2_Auth  # type: ignore
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
+from onyx.auth.users import auth_backend
+from onyx.auth.users import fastapi_users
 from onyx.auth.users import get_user_manager
+from onyx.auth.users import UserManager
+from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
 from onyx.configs.app_configs import SAML_CONF_DIR
-from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
-from onyx.db.engine.async_sql_engine import get_async_session
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
-from onyx.db.saml import expire_saml_account
-from onyx.db.saml import get_saml_account
-from onyx.db.saml import upsert_saml_account
 from onyx.utils.logger import setup_logger
-from onyx.utils.secrets import encrypt_string
-from onyx.utils.secrets import extract_hashed_cookie
 
 
 logger = setup_logger()
@@ -165,35 +162,63 @@ class SAMLAuthorizeResponse(BaseModel):
     authorization_url: str
 
 
+def _sanitize_relay_state(candidate: str | None) -> str | None:
+    """Ensure the relay state is an internal path to avoid open redirects."""
+    if not candidate:
+        return None
+
+    relay_state = candidate.strip()
+    if not relay_state or not relay_state.startswith("/"):
+        return None
+
+    if "\\" in relay_state:
+        return None
+
+    # Reject colon before query/fragment to match frontend validation
+    path_portion = relay_state.split("?", 1)[0].split("#", 1)[0]
+    if ":" in path_portion:
+        return None
+
+    parsed = urlparse(relay_state)
+    if parsed.scheme or parsed.netloc:
+        return None
+
+    return relay_state
+
+
 @router.get("/authorize")
 async def saml_login(request: Request) -> SAMLAuthorizeResponse:
     req = await prepare_from_fastapi_request(request)
     auth = OneLogin_Saml2_Auth(req, custom_base_path=SAML_CONF_DIR)
-    callback_url = auth.login()
+    return_to = _sanitize_relay_state(request.query_params.get("next"))
+    callback_url = auth.login(return_to=return_to)
     return SAMLAuthorizeResponse(authorization_url=callback_url)
 
 
 @router.get("/callback")
 async def saml_login_callback_get(
     request: Request,
-    db_session: Session = Depends(get_session),
+    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
+    user_manager: UserManager = Depends(get_user_manager),
 ) -> Response:
     """Handle SAML callback via HTTP-Redirect binding (GET request)"""
-    return await _process_saml_callback(request, db_session)
+    return await _process_saml_callback(request, strategy, user_manager)
 
 
 @router.post("/callback")
 async def saml_login_callback(
     request: Request,
-    db_session: Session = Depends(get_session),
+    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
+    user_manager: UserManager = Depends(get_user_manager),
 ) -> Response:
     """Handle SAML callback via HTTP-POST binding (POST request)"""
-    return await _process_saml_callback(request, db_session)
+    return await _process_saml_callback(request, strategy, user_manager)
 
 
 async def _process_saml_callback(
     request: Request,
-    db_session: Session,
+    strategy: Strategy[User, uuid.UUID],
+    user_manager: UserManager,
 ) -> Response:
     req = await prepare_from_fastapi_request(request)
     auth = OneLogin_Saml2_Auth(req, custom_base_path=SAML_CONF_DIR)
@@ -251,40 +276,19 @@ async def _process_saml_callback(
 
     user = await upsert_saml_user(email=user_email)
 
-    # Generate a random session cookie and Sha256 encrypt before saving
-    session_cookie = secrets.token_hex(16)
-    saved_cookie = encrypt_string(session_cookie)
-
-    upsert_saml_account(user_id=user.id, cookie=saved_cookie, db_session=db_session)
-
-    # Redirect to main Onyx search page
-    response = Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    response.set_cookie(
-        key="session",
-        value=session_cookie,
-        httponly=True,
-        secure=True,
-        max_age=SESSION_EXPIRE_TIME_SECONDS,
-    )
-
+    response = await auth_backend.login(strategy, user)
+    await user_manager.on_after_login(user, request, response)
     return response
 
 
 @router.post("/logout")
 async def saml_logout(
-    request: Request,
-    async_db_session: AsyncSession = Depends(get_async_session),
-) -> None:
-    saved_cookie = extract_hashed_cookie(request)
-
-    if saved_cookie:
-        saml_account = await get_saml_account(
-            cookie=saved_cookie, async_db_session=async_db_session
+    user_token: tuple[User, str] = Depends(
+        fastapi_users.authenticator.current_user_token(
+            active=True, verified=REQUIRE_EMAIL_VERIFICATION
         )
-        if saml_account:
-            await expire_saml_account(
-                saml_account=saml_account, async_db_session=async_db_session
-            )
-
-    return
+    ),
+    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
+) -> Response:
+    user, token = user_token
+    return await auth_backend.logout(strategy, user, token)

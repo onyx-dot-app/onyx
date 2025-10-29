@@ -21,11 +21,6 @@ const SvgSlash = (props: SVGProps<SVGSVGElement>) => (
         strokeLinejoin="round"
       />
     </g>
-    <defs>
-      <clipPath id="clip0_16_slash">
-        <rect width={16} height={16} fill="white" />
-      </clipPath>
-    </defs>
   </svg>
 );
 export default SvgSlash;

@@ -1,7 +1,7 @@
 "use client";
 
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import Text from "@/components/ui/text";
 import { Modal } from "@/components/Modal";
 import { Separator } from "@/components/ui/separator";
@@ -51,7 +51,6 @@ export default function ReIndexPopup({
     <Modal title="Run Indexing" onOutsideClick={hide}>
       <div>
         <Button
-          variant="submit"
           className="ml-auto"
           onClick={() => handleRunIndex(false)}
           disabled={isProcessing}
@@ -67,7 +66,6 @@ export default function ReIndexPopup({
         <Separator />
 
         <Button
-          variant="submit"
           className="ml-auto"
           onClick={() => handleRunIndex(true)}
           disabled={isProcessing}

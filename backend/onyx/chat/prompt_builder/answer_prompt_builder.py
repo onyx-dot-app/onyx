@@ -47,8 +47,11 @@ def default_build_system_message_for_default_assistant_v2(
 ) -> SystemMessage:
     # Check if we should include custom instructions (before date processing)
     custom_instructions = prompt_config.system_prompt.strip()
+    clean_custom_instructions = "".join(custom_instructions.split())
+    clean_default_system_prompt = "".join(DEFAULT_SYSTEM_PROMPT.split())
     should_include_custom_instructions = (
-        custom_instructions and custom_instructions != DEFAULT_SYSTEM_PROMPT.strip()
+        clean_custom_instructions
+        and clean_custom_instructions != clean_default_system_prompt
     )
 
     # Start with base prompt
@@ -62,6 +65,11 @@ def default_build_system_message_for_default_assistant_v2(
     ):
         system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
 
+    if should_include_custom_instructions:
+        system_prompt += "\n\n## Custom Instructions\n"
+        system_prompt += CUSTOM_INSTRUCTIONS_PROMPT
+        system_prompt += custom_instructions
+
     tag_handled_prompt = handle_onyx_date_awareness(
         system_prompt,
         prompt_config,
@@ -72,11 +80,6 @@ def default_build_system_message_for_default_assistant_v2(
 
     if memories_callback:
         tag_handled_prompt = handle_memories(tag_handled_prompt, memories_callback)
-
-    if should_include_custom_instructions:
-        tag_handled_prompt += "\n\n# Custom Instructions\n"
-        tag_handled_prompt += CUSTOM_INSTRUCTIONS_PROMPT
-        tag_handled_prompt += custom_instructions
 
     # Add Tools section if tools are provided
     if tools:

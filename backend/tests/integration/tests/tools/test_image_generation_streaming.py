@@ -48,6 +48,8 @@ def test_image_generation_streaming(
     )
     total_time = time.monotonic() - start_time
 
+    assert analyzed_response.error is None, "Chat response should not have an error"
+
     # 1. Check if image generation tool was used
     image_gen_used = any(
         tool.tool_name == ToolName.IMAGE_GENERATION

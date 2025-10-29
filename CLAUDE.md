@@ -206,6 +206,8 @@ alembic -n schema_private revision --autogenerate -m "description"
 
 ## Testing Strategy
 
+First, you must activate the virtual environment with `source .venv/bin/activate`. 
+
 There are 4 main types of tests within Onyx:
 
 ### Unit Tests
@@ -216,7 +218,7 @@ write these for complex, isolated modules e.g. `citation_processing.py`.
 To run them:
 
 ```bash
-python -m dotenv -f .vscode/.env run -- pytest -xv backend/tests/unit
+pytest -xv backend/tests/unit
 ```
 
 ### External Dependency Unit Tests

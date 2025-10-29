@@ -18,7 +18,7 @@ export default function StepSidebar({
 }: StepSidebarProps) {
   return (
     <SidebarWrapper>
-      <div className="px-spacing-interline">
+      <div className="px-2">
         <SidebarTab
           leftIcon={buttonIcon}
           className="bg-background-tint-00"
@@ -28,7 +28,7 @@ export default function StepSidebar({
         </SidebarTab>
       </div>
 
-      <div className="h-full w-full px-spacing-paragraph">{children}</div>
+      <div className="h-full w-full px-4">{children}</div>
     </SidebarWrapper>
   );
 }

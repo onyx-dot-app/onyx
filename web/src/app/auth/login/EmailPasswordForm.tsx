@@ -17,6 +17,7 @@ import { FormField } from "@/refresh-components/form/FormField";
 import { Input } from "@/components/ui/input";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
+import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
 
 interface EmailPasswordFormProps {
   isSignup?: boolean;
@@ -114,8 +115,9 @@ export default function EmailPasswordForm({
               // It replicates the behavior of the case where a user
               // has signed up with email / password as the only user to an instance
               // and has just completed verification
-              window.location.href = nextUrl
-                ? encodeURI(nextUrl)
+              const validatedNextUrl = validateInternalRedirect(nextUrl);
+              window.location.href = validatedNextUrl
+                ? validatedNextUrl
                 : `/chat${isSignup && !isJoin ? "?new_team=true" : ""}`;
             }
           } else {

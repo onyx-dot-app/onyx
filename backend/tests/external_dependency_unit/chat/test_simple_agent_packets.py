@@ -184,7 +184,6 @@ def test_simple_agent_with_search_and_fetch_packets(
         result = translate_db_message_to_packets(
             chat_message=assistant_message,
             db_session=db_session,
-            remove_doc_content=False,
             start_step_nr=1,
         )
 
@@ -326,7 +325,6 @@ def test_deep_research_ignores_simple_agent(
         result = translate_db_message_to_packets(
             chat_message=assistant_message,
             db_session=db_session,
-            remove_doc_content=False,
             start_step_nr=1,
         )
 

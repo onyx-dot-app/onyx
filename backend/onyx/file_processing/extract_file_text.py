@@ -89,6 +89,7 @@ _MARKITDOWN_CONVERTER: Optional["MarkItDown"] = None
 KNOWN_OPENPYXL_BUGS = [
     "Value must be either numerical or a string containing a wildcard",
     "File contains no valid workbook part",
+    "Unable to read workbook: could not read stylesheet from None",
 ]
 
 

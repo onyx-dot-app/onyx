@@ -71,13 +71,17 @@ function buildVisibleAgents(
   pinnedAgents: MinimalPersonaSnapshot[],
   currentAgent: MinimalPersonaSnapshot | null
 ): [MinimalPersonaSnapshot[], boolean] {
-  if (!currentAgent) return [pinnedAgents, false];
+  /* NOTE: The unified agent (id = 0) is not visible in the sidebar, 
+  so we filter it out. */
+  if (!currentAgent)
+    return [pinnedAgents.filter((agent) => agent.id !== 0), false];
   const currentAgentIsPinned = pinnedAgents.some(
     (pinnedAgent) => pinnedAgent.id === currentAgent.id
   );
-  const visibleAgents = currentAgentIsPinned
-    ? pinnedAgents
-    : [...pinnedAgents, currentAgent];
+  const visibleAgents = (
+    currentAgentIsPinned ? pinnedAgents : [...pinnedAgents, currentAgent]
+  ).filter((agent) => agent.id !== 0);
+
   return [visibleAgents, currentAgentIsPinned];
 }
 
@@ -104,7 +108,7 @@ function RecentsSection({ isHistoryEmpty, chatSessions }: RecentsSectionProps) {
     >
       <SidebarSection title="Recents">
         {isHistoryEmpty ? (
-          <Text text01 className="px-padding-button">
+          <Text text01 className="px-3">
             Try sending a message! Your chat history will appear here.
           </Text>
         ) : (
@@ -328,7 +332,7 @@ function AppSidebarInner() {
 
   const settingsButton = useMemo(
     () => (
-      <div className="px-spacing-interline">
+      <div className="px-2">
         {(isAdmin || isCurator) && (
           <SidebarTab
             href="/admin/indexing/status"
@@ -390,7 +394,7 @@ function AppSidebarInner() {
       <SidebarWrapper folded={folded} setFolded={setFolded}>
         {folded ? (
           <div className="flex flex-col h-full justify-between">
-            <div className="px-spacing-interline">
+            <div className="px-2">
               {newSessionButton}
               <SidebarTab
                 leftIcon={SvgOnyxOctagon}

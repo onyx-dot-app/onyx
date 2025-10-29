@@ -4,6 +4,86 @@ from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.conftest import DocumentBuilderType
 
 
+def test_send_two_messages(basic_user: DATestUser) -> None:
+    # Create a chat session
+    test_chat_session = ChatSessionManager.create(
+        persona_id=0,  # Use default persona
+        description="Test chat session for multiple messages",
+        user_performing_action=basic_user,
+    )
+
+    # Send a message to create some data
+    response = ChatSessionManager.send_message(
+        chat_session_id=test_chat_session.id,
+        message="hello",
+        user_performing_action=basic_user,
+    )
+    # Verify that the message was processed successfully
+    assert response.error is None, "Chat response should not have an error"
+    assert len(response.full_message) > 0, "Chat response should not be empty"
+
+    # Verify that the chat session can be retrieved before deletion
+    chat_history = ChatSessionManager.get_chat_history(
+        chat_session=test_chat_session,
+        user_performing_action=basic_user,
+    )
+    assert (
+        len(chat_history) == 3
+    ), "Chat session should have 1 system message, 1 user message, and 1 assistant message"
+
+    response2 = ChatSessionManager.send_message(
+        chat_session_id=test_chat_session.id,
+        message="hello again",
+        user_performing_action=basic_user,
+        parent_message_id=response.assistant_message_id,
+    )
+
+    assert response2.error is None, "Chat response should not have an error"
+    assert len(response2.full_message) > 0, "Chat response should not be empty"
+
+    # Verify that the chat session can be retrieved before deletion
+    chat_history2 = ChatSessionManager.get_chat_history(
+        chat_session=test_chat_session,
+        user_performing_action=basic_user,
+    )
+    assert (
+        len(chat_history2) == 5
+    ), "Chat session should have 1 system message, 2 user messages, and 2 assistant messages"
+
+
+def test_deep_research_runs_tool_for_simple_prompt(
+    reset: None,
+    admin_user: DATestUser,
+) -> None:
+    LLMProviderManager.create(user_performing_action=admin_user)
+
+    test_chat_session = ChatSessionManager.create(user_performing_action=admin_user)
+
+    response = ChatSessionManager.send_message(
+        chat_session_id=test_chat_session.id,
+        message="Hello",
+        user_performing_action=admin_user,
+        use_agentic_search=True,
+        chat_session=test_chat_session,
+    )
+
+    assert response.error is None, "Chat response should not have an error"
+
+    tool_used = any(result.tool_name for result in response.used_tools)
+
+    # We would like to use this, but it's not worth adding a field to get-chat-session responses
+    # just for testing
+    # assert (
+    #     tool_used
+    #     or response.research_answer_purpose
+    #     == ResearchAnswerPurpose.CLARIFICATION_REQUEST
+    # )
+
+    # TODO: the second condition is a hacky way to check whether
+    # we're making a clarification request.
+    assert tool_used or response.full_message.startswith("1. ")
+
+
 def test_send_message_simple_with_history(reset: None, admin_user: DATestUser) -> None:
     LLMProviderManager.create(user_performing_action=admin_user)
 
@@ -15,6 +95,7 @@ def test_send_message_simple_with_history(reset: None, admin_user: DATestUser) -
         user_performing_action=admin_user,
     )
 
+    assert response.error is None, "Chat response should not have an error"
     assert len(response.full_message) > 0
 
 
@@ -35,6 +116,7 @@ def test_send_message__basic_searches(
         message=MESSAGE,
         user_performing_action=admin_user,
     )
+    assert response.error is None, "Chat response should not have an error"
     assert response.top_documents is not None
     assert len(response.top_documents) == 1
     assert response.top_documents[0].document_id == short_doc.id
@@ -49,6 +131,7 @@ def test_send_message__basic_searches(
         message=MESSAGE,
         user_performing_action=admin_user,
     )
+    assert response.error is None, "Chat response should not have an error"
     assert response.top_documents is not None
     assert len(response.top_documents) == 2
     # short doc should be more relevant and thus first

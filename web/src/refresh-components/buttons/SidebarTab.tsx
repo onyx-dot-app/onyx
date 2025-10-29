@@ -83,7 +83,7 @@ export default function SidebarTab({
   const innerContent = (
     <div
       className={cn(
-        "flex flex-row justify-center items-center p-spacing-interline-mini gap-spacing-inline rounded-08 cursor-pointer group/SidebarTab w-full select-none",
+        "flex flex-row justify-center items-center p-1.5 gap-1 rounded-08 cursor-pointer group/SidebarTab w-full select-none",
         backgroundClasses(active)[variant],
         // active ? "bg-background-tint-00" : "bg-transparent",
         className
@@ -92,7 +92,7 @@ export default function SidebarTab({
     >
       <div
         className={cn(
-          "flex-1 h-[1.5rem] flex flex-row items-center px-spacing-inline py-spacing-inline-mini gap-spacing-interline",
+          "flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-2",
           folded ? "justify-center" : "justify-start"
         )}
       >

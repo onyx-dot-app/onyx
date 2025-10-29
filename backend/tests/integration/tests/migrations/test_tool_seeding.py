@@ -84,13 +84,3 @@ def test_tool_seeding_migration() -> None:
         assert (
             kg_tool[5] is None
         ), "KnowledgeGraphTool should not have a user_id (builtin)"
-
-        # Check OktaProfileTool
-        okta_tool = next((t for t in tools if t[1] == "OktaProfileTool"), None)
-        assert okta_tool is not None, "OktaProfileTool should exist"
-        assert (
-            okta_tool[2] == "Okta Profile"
-        ), "OktaProfileTool display name should be 'Okta Profile'"
-        assert (
-            okta_tool[5] is None
-        ), "OktaProfileTool should not have a user_id (builtin)"
