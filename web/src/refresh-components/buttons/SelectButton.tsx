@@ -10,44 +10,83 @@ const MARGIN = 5;
 
 const baseClassNames = (engaged?: boolean, transient?: boolean) =>
   ({
-    enabled: [
-      "bg-transparent",
-      "hover:bg-background-tint-02",
-      transient && "bg-background-tint-02",
-      "active:bg-background-tint-00",
-      engaged && "bg-transparent",
-    ],
-    disabled: ["bg-background-neutral-02"],
+    main: {
+      enabled: [
+        "bg-transparent",
+        "hover:bg-background-tint-02",
+        transient && "bg-background-tint-02",
+        "active:bg-background-tint-00",
+      ],
+      disabled: ["bg-background-neutral-02"],
+    },
+    action: {
+      enabled: [
+        engaged ? "bg-action-link-01" : "bg-transparent",
+        engaged ? "hover:bg-action-link-01" : "hover:bg-background-tint-02",
+        "active:bg-background-tint-00",
+      ],
+      disabled: ["bg-background-neutral-02"],
+    },
   }) as const;
 
 const iconClassNames = (engaged?: boolean, transient?: boolean) =>
   ({
-    enabled: [
-      "stroke-text-03",
-      "group-hover/SelectButton:stroke-text-04",
-      transient && "stroke-text-04",
-      "group-active/SelectButton:stroke-text-05",
-      engaged && "stroke-action-link-05",
-    ],
-    disabled: ["stroke-text-02", engaged && "stroke-action-link-03"],
+    main: {
+      enabled: [
+        "stroke-text-03",
+        "group-hover/SelectButton:stroke-text-04",
+        transient && "stroke-text-04",
+        "group-active/SelectButton:stroke-text-05",
+      ],
+      disabled: ["stroke-text-02"],
+    },
+    action: {
+      enabled: [
+        engaged ? "stroke-action-link-05" : "stroke-text-03",
+        engaged
+          ? "group-hover/SelectButton:stroke-action-link-05"
+          : "group-hover/SelectButton:stroke-text-04",
+        engaged
+          ? "group-active/SelectButton:stroke-action-link-06"
+          : "group-active/SelectButton:stroke-text-05",
+      ],
+      disabled: ["stroke-action-link-03"],
+    },
   }) as const;
 
 const textClassNames = (engaged?: boolean, transient?: boolean) =>
   ({
-    enabled: [
-      "text-text-03",
-      "group-hover/SelectButton:text-text-04",
-      transient && "text-text-04",
-      "group-active/SelectButton:text-text-05",
-      engaged && "text-action-link-05",
-    ],
-    disabled: ["text-text-01", engaged && "text-action-link-03"],
+    main: {
+      enabled: [
+        "text-text-03",
+        "group-hover/SelectButton:text-text-04",
+        transient && "text-text-04",
+        "group-active/SelectButton:text-text-05",
+      ],
+      disabled: ["text-text-01"],
+    },
+    action: {
+      enabled: [
+        engaged ? "text-action-link-05" : "text-text-03",
+        engaged
+          ? "group-hover/SelectButton:text-action-link-05"
+          : "group-hover/SelectButton:text-text-04",
+        engaged
+          ? "group-active/SelectButton:text-action-link-06"
+          : "group-active/SelectButton:text-text-05",
+      ],
+      disabled: ["stroke-action-link-03"],
+    },
   }) as const;
 
 export interface SelectButtonProps {
+  // Button variants
+  main?: boolean;
+  action?: boolean;
+
   // Button states
-  engaged?: boolean;
   transient?: boolean;
+  engaged?: boolean;
   disabled?: boolean;
   folded?: boolean;
 
@@ -60,8 +99,11 @@ export interface SelectButtonProps {
 }
 
 export default function SelectButton({
-  engaged,
+  main,
+  action,
+
   transient,
+  engaged,
   disabled,
   folded,
 
@@ -71,6 +113,7 @@ export default function SelectButton({
   onClick,
   className,
 }: SelectButtonProps) {
+  const variant = main ? "main" : action ? "action" : "main";
   const state = disabled ? "disabled" : "enabled";
 
   // Refs and state for measuring foldedContent width
@@ -80,16 +123,16 @@ export default function SelectButton({
 
   // Memoize class name invocations
   const baseClasses = useMemo(
-    () => baseClassNames(engaged, transient)[state],
-    [engaged, transient, state]
+    () => baseClassNames(engaged, transient)[variant][state],
+    [engaged, transient, variant, state]
   );
   const iconClasses = useMemo(
-    () => iconClassNames(engaged, transient)[state],
-    [engaged, transient, state]
+    () => iconClassNames(engaged, transient)[variant][state],
+    [engaged, transient, variant, state]
   );
   const textClasses = useMemo(
-    () => textClassNames(engaged, transient)[state],
-    [engaged, transient, state]
+    () => textClassNames(engaged, transient)[variant][state],
+    [engaged, transient, variant, state]
   );
 
   const content = useMemo(
@@ -102,13 +145,13 @@ export default function SelectButton({
             className={cn(
               "w-[1rem] h-[1rem] transition-all duration-300 ease-in-out",
               iconClasses,
-              (engaged || transient) && "-rotate-180"
+              transient && "-rotate-180"
             )}
           />
         )}
       </div>
     ),
-    [textClasses, iconClasses, rightChevronIcon, children, engaged, transient]
+    [textClasses, iconClasses, rightChevronIcon, children, transient]
   );
   useEffect(() => {
     if (measureRef.current) {
@@ -130,7 +173,7 @@ export default function SelectButton({
       <button
         className={cn(
           baseClasses,
-          "group/SelectButton flex items-center px-2 py-1.5 rounded-12 h-fit w-fit",
+          "group/SelectButton flex items-center px-2 py-1 rounded-12 h-fit w-fit",
           className
         )}
         onClick={disabled ? undefined : onClick}
