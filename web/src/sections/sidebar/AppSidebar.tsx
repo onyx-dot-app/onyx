@@ -306,11 +306,6 @@ function AppSidebarInner() {
     ]
   );
 
-  const isHistoryEmpty = useMemo(
-    () => !chatSessions || chatSessions.length === 0,
-    [chatSessions]
-  );
-
   const newSessionButton = useMemo(
     () => (
       <div data-testid="AppSidebar/new-session">
@@ -417,71 +412,74 @@ function AppSidebarInner() {
         ) : (
           <SidebarBody actionButton={newSessionButton} footer={settingsButton}>
             {/* Agents */}
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleAgentDragEnd}
-            >
-              <SidebarSection title="Agents">
-                <SortableContext
-                  items={visibleAgentIds}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {visibleAgents.map((visibleAgent) => (
-                    <AgentButton key={visibleAgent.id} agent={visibleAgent} />
-                  ))}
-                </SortableContext>
-                <div data-testid="AppSidebar/more-agents">
-                  <SidebarTab
-                    leftIcon={SvgMoreHorizontal}
-                    onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-                    lowlight
+            <div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleAgentDragEnd}
+              >
+                <SidebarSection title="Agents">
+                  <SortableContext
+                    items={visibleAgentIds}
+                    strategy={verticalListSortingStrategy}
                   >
-                    More Agents
-                  </SidebarTab>
-                </div>
-              </SidebarSection>
-            </DndContext>
+                    {visibleAgents.map((visibleAgent) => (
+                      <AgentButton key={visibleAgent.id} agent={visibleAgent} />
+                    ))}
+                  </SortableContext>
+                  <div data-testid="AppSidebar/more-agents">
+                    <SidebarTab
+                      leftIcon={SvgMoreHorizontal}
+                      onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+                      lowlight
+                    >
+                      More Agents
+                    </SidebarTab>
+                  </div>
+                </SidebarSection>
+              </DndContext>
 
-            {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
-            <DndContext
-              sensors={sensors}
-              collisionDetection={pointerWithin}
-              modifiers={[
-                restrictToFirstScrollableAncestor,
-                restrictToVerticalAxis,
-              ]}
-              onDragEnd={handleChatProjectDragEnd}
-            >
-              <SidebarSection
-                title="Projects"
-                action={
-                  <IconButton
-                    icon={SvgFolderPlus}
-                    internal
-                    tooltip="New Project"
+              <DndContext
+                sensors={sensors}
+                collisionDetection={pointerWithin}
+                modifiers={[
+                  restrictToFirstScrollableAncestor,
+                  restrictToVerticalAxis,
+                ]}
+                onDragEnd={handleChatProjectDragEnd}
+              >
+                <SidebarSection
+                  title="Projects"
+                  action={
+                    <IconButton
+                      icon={SvgFolderPlus}
+                      internal
+                      tooltip="New Project"
+                      onClick={() =>
+                        toggleModal(ModalIds.CreateProjectModal, true)
+                      }
+                    />
+                  }
+                >
+                  {projects.map((project) => (
+                    <ProjectFolderButton key={project.id} project={project} />
+                  ))}
+
+                  <SidebarTab
+                    leftIcon={SvgFolderPlus}
                     onClick={() =>
                       toggleModal(ModalIds.CreateProjectModal, true)
                     }
-                  />
-                }
-              >
-                {projects.map((project) => (
-                  <ProjectFolderButton key={project.id} project={project} />
-                ))}
+                    lowlight
+                  >
+                    New Project
+                  </SidebarTab>
+                </SidebarSection>
+                <RecentsSection chatSessions={chatSessions} />
+              </DndContext>
+            </div>
 
-                <SidebarTab
-                  leftIcon={SvgFolderPlus}
-                  onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
-                  lowlight
-                >
-                  New Project
-                </SidebarTab>
-              </SidebarSection>
-
-              {/* Recents */}
-              <RecentsSection chatSessions={chatSessions} />
-            </DndContext>
+            {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
           </SidebarBody>
         )}
       </SidebarWrapper>
