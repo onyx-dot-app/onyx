@@ -31,7 +31,6 @@ validators:
       - type: "tags"
         name: "banned_words"
         label: "Список запретных слов для маскирования"
-        values:
     include_llm: false
   - id: -3
     name: "Валидатор запретных тем"
@@ -41,28 +40,18 @@ validators:
       - type: "tags"
         name: "sensitive_topics"
         label: "Список запретных тем"
-        values:
       - type: "text"
         name: "rejection_message"
         label: "Сообщение при обнаружении запретной темы в ответе от LLM"
-        values: "К сожалению, я не могу ответить на ваш запрос."
+        value: "К сожалению, я не могу ответить на ваш запрос."
     include_llm: true
   - id: -4
     name: "Валидатор стиля общения"
-    description: "Анализирует и корректирует стиль текста ответа от LLM согласно заданным требованиям"
+    description: >
+      Анализирует и корректирует стиль текста ответа от LLM согласно заданным требованиям
     validator_type: "TEXT_STYLE"
     config:
       - type: "tags"
         name: "text_styles"
         label: "Список стилей общения"
-        values:
-          - "Грубый"
-          - "Детективный"
-          - "Дружеский"
-          - "Маркетинговый"
-          - "Мемный"
-          - "Официальный"
-          - "Продающий"
-          - "Технический"
-          - "Фантастический"
     include_llm: true
