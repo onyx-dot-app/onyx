@@ -283,10 +283,22 @@ def upsert_llm_provider(
         group_ids=llm_provider_upsert_request.groups,
         db_session=db_session,
     )
+    update_llm_provider_persona_relationships__no_commit(
+        db_session=db_session,
+        llm_provider_id=existing_llm_provider.id,
+        persona_ids=llm_provider_upsert_request.personas,
+    )
+
+    db_session.flush()
+    db_session.refresh(existing_llm_provider)
+
+    try:
+        db_session.commit()
+    except Exception as e:
+        db_session.rollback()
+        raise ValueError(f"Failed to save LLM provider: {str(e)}") from e
+
     full_llm_provider = LLMProviderView.from_model(existing_llm_provider)
-
-    db_session.commit()
-
     return full_llm_provider
 
 
@@ -433,7 +445,16 @@ def remove_embedding_provider(
 
 
 def remove_llm_provider(db_session: Session, provider_id: int) -> None:
-    # Remove LLMProvider's dependent relationships
+    provider = db_session.get(LLMProviderModel, provider_id)
+    if not provider:
+        return  # Provider doesn't exist, nothing to do
+
+    # Clear the provider override from any personas using it
+    # This causes them to fall back to the default provider
+    personas_using_provider = get_personas_using_provider(db_session, provider.name)
+    for persona in personas_using_provider:
+        persona.llm_model_provider_override = None
+
     db_session.execute(
         delete(LLMProvider__UserGroup).where(
             LLMProvider__UserGroup.llm_provider_id == provider_id
