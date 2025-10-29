@@ -1,7 +1,7 @@
 validators:
   - id: -1
     name: "Валидатор персональных данных"
-    description: "Обнаружение и маскирование персональных данных (email, тел. номера, кредитные карты..)"
+    description: "Обнаружение и маскирование персональных данных при запросе от пользователя, а также демаскирование данных после ответа от LLM"
     validator_type: "DETECT_PII"
     config:
       - type: "multiselect"
@@ -25,7 +25,7 @@ validators:
     include_llm: false
   - id: -2
     name: "Валидатор запретных слов"
-    description: "Обнаружение и маскирование запретных слов"
+    description: "Обнаружение и маскирование запретных слов в ответе от LLM"
     validator_type: "BAN_LIST"
     config:
       - type: "tags"
@@ -43,12 +43,10 @@ validators:
       - type: "text"
         name: "rejection_message"
         label: "Сообщение при обнаружении запретной темы в ответе от LLM"
-        value: "К сожалению, я не могу ответить на ваш запрос."
     include_llm: true
   - id: -4
     name: "Валидатор стиля общения"
-    description: >
-      Анализирует и корректирует стиль текста ответа от LLM согласно заданным требованиям
+    description: "Анализирует и корректирует стиль текста ответа от LLM согласно заданным требованиям"
     validator_type: "TEXT_STYLE"
     config:
       - type: "tags"
