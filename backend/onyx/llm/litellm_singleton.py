@@ -17,5 +17,14 @@ litellm.drop_params = True
 litellm.telemetry = False
 litellm.modify_params = True
 
+litellm.register_model(
+    model_cost={
+        "ollama_chat/qwen3-vl:235b": {"supports_function_calling": True}
+        # "ollama/qwen3-vl:235b": {
+        #     "supports_function_calling": True
+        # }
+    }
+)
+
 # Export the configured litellm module
 __all__ = ["litellm", "LitellmModel"]
