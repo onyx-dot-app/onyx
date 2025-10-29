@@ -61,10 +61,10 @@ describe("MultiToolRenderer - Complete Mode", () => {
     // Click summary to expand
     await user.click(screen.getByText("3 steps"));
 
-    // Check that tools are displayed
+    // Check that expanded tools are displayed
     await waitFor(() => {
-      const toolContents = screen.getAllByTestId("tool-content");
-      expect(toolContents.length).toBeGreaterThan(0);
+      const expandedContents = screen.getAllByTestId("tool-expanded");
+      expect(expandedContents.length).toBe(3);
     });
   });
 
@@ -96,8 +96,8 @@ describe("MultiToolRenderer - Complete Mode", () => {
     await user.click(screen.getByText("3 steps"));
 
     await waitFor(() => {
-      const toolContents = screen.getAllByTestId("tool-content");
-      expect(toolContents.length).toBeGreaterThan(0);
+      const expandedContents = screen.getAllByTestId("tool-expanded");
+      expect(expandedContents.length).toBe(3);
     });
 
     // Collapse
@@ -376,8 +376,8 @@ describe("MultiToolRenderer - Accessibility", () => {
     await user.click(summary);
 
     await waitFor(() => {
-      const toolContents = screen.getAllByTestId("tool-content");
-      expect(toolContents.length).toBeGreaterThan(0);
+      const expandedContents = screen.getAllByTestId("tool-expanded");
+      expect(expandedContents.length).toBe(3);
     });
   });
 
