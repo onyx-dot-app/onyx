@@ -116,4 +116,67 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for Claude.",
     },
   },
+  ollama: {
+    description: "Connect to your Ollama models.",
+    display_name: "Ollama",
+    field_metadata: {
+      api_base:
+        "Your Ollama server URL (e.g., http://127.0.0.1:11434 for local)",
+      api_key: "https://ollama.com",
+      default_model_name:
+        "This model will be used by Onyx by default for Ollama.",
+    },
+  },
+};
+
+// Tab configuration for providers that need multiple setup modes
+export interface TabFieldConfig {
+  id: string;
+  label: string;
+  fields: string[]; // Field names to show in this tab
+  fieldOverrides?: Record<
+    string,
+    {
+      placeholder?: string;
+      description?: string;
+    }
+  >;
+  hiddenFields?: Record<string, any>; // Fields to set but not show
+}
+
+export interface ProviderTabConfig {
+  tabs: TabFieldConfig[];
+}
+
+export const PROVIDER_TAB_CONFIG: Record<string, ProviderTabConfig> = {
+  ollama: {
+    tabs: [
+      {
+        id: "self-hosted",
+        label: "Self-hosted Ollama",
+        fields: ["api_base", "default_model_name"],
+        fieldOverrides: {
+          api_base: {
+            placeholder: "http://127.0.0.1:11434",
+            description: "Your self-hosted Ollama API URL.",
+          },
+        },
+      },
+      {
+        id: "cloud",
+        label: "Ollama Cloud",
+        fields: ["custom_config.OLLAMA_API_KEY", "default_model_name"],
+        fieldOverrides: {
+          "custom_config.OLLAMA_API_KEY": {
+            placeholder: "",
+            description:
+              "Paste your API key from Ollama Cloud to access your models.",
+          },
+        },
+        hiddenFields: {
+          api_base: "https://ollama.com",
+        },
+      },
+    ],
+  },
 };
