@@ -14,7 +14,6 @@ import { SourceChip2 } from "@/app/chat/components/SourceChip2";
 import { BlinkingDot } from "../../BlinkingDot";
 import Text from "@/refresh-components/texts/Text";
 import { SearchToolRendererV2 } from "./SearchToolRendererV2";
-import { usePostHog } from "posthog-js/react";
 import { ResearchType } from "@/app/chat/interfaces";
 
 const INITIAL_RESULTS_TO_SHOW = 3;
@@ -80,9 +79,6 @@ export const SearchToolRenderer: MessageRenderer<
   stopPacketSeen,
   children,
 }) => {
-  const posthog = usePostHog();
-  const isSimpleAgentFrameworkEnabled =
-    posthog.isFeatureEnabled("simple-agent-framework") ?? false;
   // Check if this message has a research_type, which indicates it's using the simple agent framework
   const isDeepResearch = state.researchType === ResearchType.Deep;
 
@@ -195,7 +191,7 @@ export const SearchToolRenderer: MessageRenderer<
   const icon = isInternetSearch ? FiGlobe : FiSearch;
 
   // If this message has a research type, use the V2 renderer (simple agent framework)
-  if (isSimpleAgentFrameworkEnabled && !isDeepResearch) {
+  if (!isDeepResearch) {
     return (
       <SearchToolRendererV2
         packets={packets}

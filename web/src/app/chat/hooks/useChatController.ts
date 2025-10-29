@@ -329,21 +329,17 @@ export function useChatController({
 
     // Check if the current message uses agent search (any non-null research type)
     const isDeepResearch = lastMessage?.researchType === ResearchType.Deep;
-    const isSimpleAgentFrameworkEnabled =
-      posthog.isFeatureEnabled("simple-agent-framework") ?? false;
 
-    // Always call the backend stop endpoint if feature flag is enabled
-    if (isSimpleAgentFrameworkEnabled) {
-      try {
-        await stopChatSession(currentSession);
-      } catch (error) {
-        console.error("Failed to stop chat session:", error);
-        // Continue with UI cleanup even if backend call fails
-      }
+    // Always call the backend stop endpoint
+    try {
+      await stopChatSession(currentSession);
+    } catch (error) {
+      console.error("Failed to stop chat session:", error);
+      // Continue with UI cleanup even if backend call fails
     }
 
-    // Only do the subsequent cleanup if the message was agent search or feature flag is not enabled
-    if (isDeepResearch || !isSimpleAgentFrameworkEnabled) {
+    // Only do the subsequent cleanup if the message was deep research
+    if (isDeepResearch) {
       abortSession(currentSession);
 
       if (
