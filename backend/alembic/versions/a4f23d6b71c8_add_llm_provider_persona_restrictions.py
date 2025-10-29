@@ -18,6 +18,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Note: CASCADE delete is intentional here. When a provider or persona is deleted,
+    # we want to automatically clean up the association records. This differs from
+    # LLMProvider__UserGroup which manages access grants (where we preserve records),
+    # whereas this table manages restrictions (where cleanup is desired).
     op.create_table(
         "llm_provider__persona",
         sa.Column("llm_provider_id", sa.Integer(), nullable=False),
