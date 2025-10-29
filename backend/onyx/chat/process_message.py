@@ -530,7 +530,7 @@ def stream_chat_message_objects(
                     continue
                 try:
                     user_file_ids.append(UUID(uid))
-                except (TypeError, ValueError):
+                except (TypeError, ValueError, AttributeError):
                     logger.warning(
                         "Skipping invalid user_file_id from current_message_files: %s",
                         uid,
