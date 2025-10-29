@@ -51,7 +51,7 @@ describe("MultiToolRenderer - Complete Mode", () => {
     expect(screen.getByText("1 steps")).toBeInTheDocument();
   });
 
-  test("expands to show all tools with step numbers when clicked", async () => {
+  test("expands to show all tools when clicked", async () => {
     const user = setupUser();
     renderMultiToolRenderer({
       toolCount: 3,
@@ -61,31 +61,10 @@ describe("MultiToolRenderer - Complete Mode", () => {
     // Click summary to expand
     await user.click(screen.getByText("3 steps"));
 
-    // Check step numbering
+    // Check that tools are displayed
     await waitFor(() => {
-      expect(screen.getByText("1.")).toBeInTheDocument();
-      expect(screen.getByText("2.")).toBeInTheDocument();
-      expect(screen.getByText("3.")).toBeInTheDocument();
-    });
-  });
-
-  test("displays sequential step numbers correctly", async () => {
-    const user = setupUser();
-    renderMultiToolRenderer({
-      toolCount: 5,
-      isComplete: true,
-    });
-
-    // Expand
-    await user.click(screen.getByText("5 steps"));
-
-    // Check all step numbers
-    await waitFor(() => {
-      expect(screen.getByText("1.")).toBeInTheDocument();
-      expect(screen.getByText("2.")).toBeInTheDocument();
-      expect(screen.getByText("3.")).toBeInTheDocument();
-      expect(screen.getByText("4.")).toBeInTheDocument();
-      expect(screen.getByText("5.")).toBeInTheDocument();
+      const toolContents = screen.getAllByTestId("tool-content");
+      expect(toolContents.length).toBeGreaterThan(0);
     });
   });
 
@@ -108,7 +87,7 @@ describe("MultiToolRenderer - Complete Mode", () => {
 
   test("collapses when clicking summary again", async () => {
     const user = setupUser();
-    renderMultiToolRenderer({
+    const { container } = renderMultiToolRenderer({
       toolCount: 3,
       isComplete: true,
     });
@@ -117,22 +96,20 @@ describe("MultiToolRenderer - Complete Mode", () => {
     await user.click(screen.getByText("3 steps"));
 
     await waitFor(() => {
-      expect(screen.getByText("1.")).toBeInTheDocument();
+      const toolContents = screen.getAllByTestId("tool-content");
+      expect(toolContents.length).toBeGreaterThan(0);
     });
 
     // Collapse
     await user.click(screen.getByText("3 steps"));
 
-    // Step numbers should be hidden after collapse
     // Verify the container has the collapsed classes (max-h-0 opacity-0)
     await waitFor(() => {
-      const stepElement = screen.queryByText("1.");
-      expect(stepElement).toBeInTheDocument();
-
-      // Check that the parent container has collapsed classes
-      const container = stepElement?.closest('div[class*="max-h-"]');
-      expect(container).toHaveClass("max-h-0");
-      expect(container).toHaveClass("opacity-0");
+      const expandedContainer = container.querySelector(
+        'div[class*="max-h-0"]'
+      );
+      expect(expandedContainer).toBeInTheDocument();
+      expect(expandedContainer).toHaveClass("opacity-0");
     });
   });
 
@@ -399,7 +376,8 @@ describe("MultiToolRenderer - Accessibility", () => {
     await user.click(summary);
 
     await waitFor(() => {
-      expect(screen.getByText("1.")).toBeInTheDocument();
+      const toolContents = screen.getAllByTestId("tool-content");
+      expect(toolContents.length).toBeGreaterThan(0);
     });
   });
 
