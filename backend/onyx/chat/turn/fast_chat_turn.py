@@ -99,8 +99,13 @@ def _run_agent_loop(
         streamed, tool_call_events = _process_stream(
             agent_stream, chat_session_id, dependencies, ctx
         )
+
+        all_messages_after_stream = streamed.to_input_list()
+        # The new messages are everything after chat_history + current_user_message
+        previous_message_count = len(chat_history) + 1
         agent_turn_messages = [
-            cast(AgentSDKMessage, item.to_input_item()) for item in streamed.new_items
+            cast(AgentSDKMessage, msg)
+            for msg in all_messages_after_stream[previous_message_count:]
         ]
 
         agent_turn_messages = list(
