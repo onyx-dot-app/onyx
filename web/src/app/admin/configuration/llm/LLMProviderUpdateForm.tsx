@@ -323,6 +323,8 @@ export function LLMProviderUpdateForm({
           ),
         };
 
+        console.log("finalValues", finalValues);
+
         // test the configuration
         if (!isEqual(finalValues, initialValues)) {
           setIsTesting(true);

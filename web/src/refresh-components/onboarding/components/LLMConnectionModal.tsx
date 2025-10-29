@@ -5,27 +5,20 @@ import {
   useChatModal,
 } from "@/refresh-components/contexts/ChatModalContext";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { Form, Formik } from "formik";
-import { FormField } from "@/refresh-components/form/FormField";
-import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { FormikField } from "@/refresh-components/form/FormikField";
-import { Separator } from "@/components/ui/separator";
+import { Form, Formik, FormikProps } from "formik";
 import { APIFormFieldState } from "@/refresh-components/form/types";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Button from "@/refresh-components/buttons/Button";
 import { MODAL_CONTENT_MAP, PROVIDER_TAB_CONFIG } from "../constants";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
+import { fetchModels } from "@/app/admin/configuration/llm/utils";
 import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/refresh-components/tabs/tabs";
-import { DynamicProviderFields } from "./DynamicProviderFields";
-import {
-  fetchModels,
-  dynamicProviderConfigs,
-} from "@/app/admin/configuration/llm/utils";
+  buildInitialValues,
+  getModelOptions,
+  canProviderFetchModels,
+  testApiKeyHelper,
+} from "./llmConnectionHelpers";
+import { LLMConnectionFieldsWithTabs } from "./LLMConnectionFieldsWithTabs";
+import { LLMConnectionFieldsBasic } from "./LLMConnectionFieldsBasic";
 
 type LLMConnectionModalData = {
   icon: React.ReactNode;
@@ -44,28 +37,7 @@ const LLMConnectionModal = () => {
     : undefined;
 
   const initialValues = useMemo(
-    () => ({
-      api_base: llmDescriptor?.default_api_base ?? "",
-      default_model_name: llmDescriptor?.default_model ?? "",
-      api_key: "",
-      api_key_changed: true,
-      api_version: "",
-      custom_config: {},
-      deployment_name: "",
-      fast_default_model_name:
-        llmDescriptor?.default_fast_model ?? llmDescriptor?.default_model ?? "",
-      name: "Default",
-      provider: llmDescriptor?.name ?? "",
-      model_configurations:
-        llmDescriptor?.model_configurations.map((model) => ({
-          name: model.name,
-          is_visible: true,
-          max_input_tokens: model.max_input_tokens,
-          supports_image_input: model.supports_image_input,
-        })) ?? [],
-      groups: [],
-      is_public: true,
-    }),
+    () => buildInitialValues(llmDescriptor),
     [llmDescriptor]
   );
 
@@ -86,23 +58,30 @@ const LLMConnectionModal = () => {
       if (tabConfig?.tabs[0]) {
         setActiveTab(tabConfig.tabs[0].id);
       }
+      setFetchedModelConfigurations([]);
+      setShowApiMessage(false);
+      setErrorMessage("");
+      setApiStatus("loading");
+      setIsFetchingModels(false);
     }
   }, [llmDescriptor]);
 
+  // Also reset when modal opens with new data
+  useEffect(() => {
+    if (data) {
+      setFetchedModelConfigurations([]);
+      setShowApiMessage(false);
+      setErrorMessage("");
+      setApiStatus("loading");
+      setIsFetchingModels(false);
+    }
+  }, [data]);
+
   // Get model options - use fetched models if available, otherwise use descriptor models
-  const modelOptions = useMemo(() => {
-    if (!llmDescriptor) return [];
-
-    const modelsToUse =
-      fetchedModelConfigurations.length > 0
-        ? fetchedModelConfigurations
-        : llmDescriptor.model_configurations;
-
-    return modelsToUse.map((model) => ({
-      label: model.name,
-      value: model.name,
-    }));
-  }, [llmDescriptor, fetchedModelConfigurations]);
+  const modelOptions = useMemo(
+    () => getModelOptions(llmDescriptor, fetchedModelConfigurations as any[]),
+    [llmDescriptor, fetchedModelConfigurations]
+  );
 
   useEffect(() => {
     if (fetchedModelConfigurations.length > 0 && !isFetchingModels) {
@@ -111,10 +90,10 @@ const LLMConnectionModal = () => {
   }, [fetchedModelConfigurations, isFetchingModels]);
 
   // Check if provider supports dynamic model fetching
-  const canFetchModels = useMemo(() => {
-    if (!llmDescriptor) return false;
-    return !!dynamicProviderConfigs[llmDescriptor.name];
-  }, [llmDescriptor]);
+  const canFetchModels = useMemo(
+    () => canProviderFetchModels(llmDescriptor),
+    [llmDescriptor]
+  );
 
   const setFetchModelsError = (error: string) => {
     setApiStatus("loading");
@@ -125,42 +104,24 @@ const LLMConnectionModal = () => {
     }
   };
 
-  const testApiKey = async (apiKey: string) => {
+  const testApiKey = async (apiKey: string, formikProps: FormikProps<any>) => {
     setApiStatus("loading");
     setShowApiMessage(true);
-    try {
-      if (!llmDescriptor) {
-        setApiStatus("error");
-        return;
-      }
-      const response = await fetch("/api/admin/llm/test", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          api_key: apiKey,
-          provider: llmDescriptor.name,
-          api_key_changed: true,
-          default_model_name: initialValues.default_model_name,
-          model_configurations: [
-            {
-              name: initialValues.default_model_name,
-              is_visible: true,
-            },
-          ],
-        }),
-      });
-      if (!response.ok) {
-        const errorMsg = (await response.json()).detail;
-        setErrorMessage(errorMsg);
-        setApiStatus("error");
-        return;
-      }
-      setApiStatus("success");
-    } catch (error) {
+    if (!llmDescriptor) {
       setApiStatus("error");
-      setErrorMessage("An error occurred while testing the API key.");
+      return;
+    }
+    const result = await testApiKeyHelper(
+      llmDescriptor,
+      initialValues,
+      formikProps.values,
+      apiKey
+    );
+    if (result.ok) {
+      setApiStatus("success");
+    } else {
+      setErrorMessage(result.errorMessage);
+      setApiStatus("error");
     }
   };
 
@@ -174,12 +135,13 @@ const LLMConnectionModal = () => {
     <Modal
       id={ModalIds.LLMConnectionModal}
       title={title}
-      description={modalContent.description}
+      description={modalContent?.description}
       startAdornment={icon}
       xs
     >
       <Formik
         initialValues={initialValues}
+        enableReinitialize
         onSubmit={async (values, { setSubmitting }) => {
           // Apply hidden fields based on active tab
           let finalValues = { ...values };
@@ -257,7 +219,6 @@ const LLMConnectionModal = () => {
                 }
               }
             }
-            // eslint-disable-next-line react-hooks/exhaustive-deps
           }, [activeTab, tabConfig, llmDescriptor]);
 
           const handleFetchModels = async () => {
@@ -289,122 +250,35 @@ const LLMConnectionModal = () => {
             <Form className="flex flex-col gap-0">
               <div className="flex flex-col p-4 gap-4 bg-background-tint-01 w-full">
                 {tabConfig ? (
-                  // Render with tabs for providers that have tab config
-                  <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="w-full">
-                      {tabConfig.tabs.map((tab) => (
-                        <TabsTrigger
-                          key={tab.id}
-                          value={tab.id}
-                          className="flex-1"
-                        >
-                          {tab.label}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                    {tabConfig.tabs.map((tab) => (
-                      <TabsContent key={tab.id} value={tab.id}>
-                        <div className="flex flex-col gap-4">
-                          <DynamicProviderFields
-                            llmDescriptor={llmDescriptor!}
-                            fields={tab.fields}
-                            modelOptions={modelOptions}
-                            fieldOverrides={tab.fieldOverrides}
-                            onApiKeyBlur={testApiKey}
-                            showApiMessage={showApiMessage}
-                            apiStatus={apiStatus}
-                            errorMessage={errorMessage}
-                            onFetchModels={handleFetchModels}
-                            isFetchingModels={isFetchingModels}
-                            canFetchModels={canFetchModels}
-                          />
-                        </div>
-                      </TabsContent>
-                    ))}
-                  </Tabs>
+                  <LLMConnectionFieldsWithTabs
+                    llmDescriptor={llmDescriptor!}
+                    tabConfig={tabConfig}
+                    modelOptions={modelOptions}
+                    onApiKeyBlur={(apiKey) => testApiKey(apiKey, formikProps)}
+                    showApiMessage={showApiMessage}
+                    apiStatus={apiStatus}
+                    errorMessage={errorMessage}
+                    onFetchModels={handleFetchModels}
+                    isFetchingModels={isFetchingModels}
+                    canFetchModels={canFetchModels}
+                    activeTab={activeTab}
+                    setActiveTab={setActiveTab}
+                  />
                 ) : (
-                  // Render without tabs for providers without tab config (backward compatibility)
-                  <>
-                    {llmDescriptor?.api_key_required && (
-                      <FormikField<string>
-                        name="api_key"
-                        render={(field, helper, meta, state) => (
-                          <FormField
-                            name="api_key"
-                            state={state}
-                            className="w-full"
-                          >
-                            <FormField.Label>API Key</FormField.Label>
-                            <FormField.Control>
-                              <PasswordInputTypeIn
-                                {...field}
-                                placeholder=""
-                                onBlur={(e) => {
-                                  field.onBlur(e);
-                                  if (field.value) {
-                                    testApiKey(field.value);
-                                  }
-                                }}
-                                showClearButton={false}
-                              />
-                            </FormField.Control>
-                            {!showApiMessage && (
-                              <FormField.Description>
-                                {"Paste your "}
-                                {modalContent?.field_metadata?.api_key ? (
-                                  <a
-                                    href={modalContent.field_metadata.api_key}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="underline"
-                                  >
-                                    API key
-                                  </a>
-                                ) : (
-                                  "API key"
-                                )}
-                                {` from ${modalContent?.display_name} to access your models.`}
-                              </FormField.Description>
-                            )}
-                            {showApiMessage && (
-                              <FormField.APIMessage
-                                state={apiStatus}
-                                messages={{
-                                  loading: `Checking API key with ${modalContent?.display_name}...`,
-                                  success:
-                                    "API key valid. Your available models updated.",
-                                  error: errorMessage || "Invalid API key",
-                                }}
-                              />
-                            )}
-                          </FormField>
-                        )}
-                      />
-                    )}
-                    <Separator className="my-0" />
-                    <FormikField<string>
-                      name="default_model_name"
-                      render={(field, helper, meta, state) => (
-                        <FormField
-                          name="default_model_name"
-                          state={state}
-                          className="w-full"
-                        >
-                          <FormField.Label>Default Model</FormField.Label>
-                          <FormField.Control>
-                            <InputSelect
-                              value={field.value}
-                              onValueChange={(value) => helper.setValue(value)}
-                              options={modelOptions}
-                            />
-                          </FormField.Control>
-                          <FormField.Description>
-                            {modalContent?.field_metadata?.default_model_name}
-                          </FormField.Description>
-                        </FormField>
-                      )}
-                    />
-                  </>
+                  <LLMConnectionFieldsBasic
+                    llmDescriptor={llmDescriptor!}
+                    modalContent={modalContent}
+                    modelOptions={modelOptions}
+                    showApiMessage={showApiMessage}
+                    apiStatus={apiStatus}
+                    errorMessage={errorMessage}
+                    isFetchingModels={isFetchingModels}
+                    onApiKeyBlur={(apiKey) => testApiKey(apiKey, formikProps)}
+                    formikValues={formikProps.values}
+                    setDefaultModelName={(value) =>
+                      formikProps.setFieldValue("default_model_name", value)
+                    }
+                  />
                 )}
               </div>
               <div className="flex justify-end gap-2 w-full p-4">

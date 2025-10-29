@@ -127,6 +127,16 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for Ollama.",
     },
   },
+  azure: {
+    description:
+      "Connect to Microsoft Azure and set up your Azure OpenAI models.",
+    display_name: "Azure OpenAI",
+    field_metadata: {
+      api_key: "https://oai.azure.com",
+      default_model_name:
+        "This model will be used by Onyx by default for Azure OpenAI.",
+    },
+  },
 };
 
 // Tab configuration for providers that need multiple setup modes

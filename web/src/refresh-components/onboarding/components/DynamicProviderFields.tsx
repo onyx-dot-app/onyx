@@ -230,6 +230,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                   value={field.value}
                   onValueChange={(value) => helper.setValue(value)}
                   options={modelOptions}
+                  disabled={modelOptions.length === 0 || isFetchingModels}
                   rightSection={
                     canFetchModels ? (
                       <IconButton
