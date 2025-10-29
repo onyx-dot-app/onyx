@@ -63,7 +63,7 @@ _USER_EMAIL_CACHE: dict[str, str | None] = {}
 _DEFAULT_PAGINATION_LIMIT = 1000
 
 _CONFLUENCE_SPACES_API_V1 = "rest/api/space"
-_CONFLUENCE_SPACES_API_V2 = "wiki/api/v2/spaces"
+_CONFLUENCE_SPACES_API_V2 = "api/v2/spaces"
 
 
 class ConfluenceRateLimitError(Exception):
