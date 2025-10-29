@@ -191,7 +191,7 @@ class CredentialsProviderInterface(abc.ABC, Generic[T]):
 
     @abc.abstractmethod
     def is_dynamic(self) -> bool:
-        """If dynamic, the credentials may change during usage ... maening the client
+        """If dynamic, the credentials may change during usage ... meaning the client
         needs to use the locking features of the credentials provider to operate
         correctly.
 

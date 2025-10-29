@@ -139,19 +139,13 @@ def get_all_space_permissions(
 ) -> dict[str, ExternalAccess]:
     logger.debug("Getting space permissions")
     # Gets all the spaces in the Confluence instance
-    all_space_keys = []
-    start = 0
-    while True:
-        spaces_batch = confluence_client.get_all_spaces(
-            start=start, limit=REQUEST_PAGINATION_LIMIT
+    all_space_keys = [
+        key
+        for space in confluence_client.retrieve_confluence_spaces(
+            limit=REQUEST_PAGINATION_LIMIT,
         )
-        for space in spaces_batch.get("results", []):
-            all_space_keys.append(space.get("key"))
-
-        if len(spaces_batch.get("results", [])) < REQUEST_PAGINATION_LIMIT:
-            break
-
-        start += len(spaces_batch.get("results", []))
+        if (key := space.get("key"))
+    ]
 
     # Gets the permissions for each space
     logger.debug(f"Got {len(all_space_keys)} spaces from confluence")
