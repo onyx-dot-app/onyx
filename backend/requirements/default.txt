@@ -15,7 +15,7 @@ distributed==2023.8.1
 fastapi==0.116.1
 fastapi-users==14.0.1
 fastapi-users-db-sqlalchemy==5.0.0
-fastmcp==2.11.3
+fastmcp==2.13.0
 filelock==3.15.4
 google-api-python-client==2.86.0
 google-cloud-aiplatform==1.121.0
@@ -44,7 +44,7 @@ litellm==1.79.0
 lxml==5.3.0
 Mako==1.2.4
 markitdown[pdf, docx, pptx, xlsx, xls]==0.1.2
-mcp[cli]==1.12.4
+mcp[cli]==1.19.0
 msal==1.28.0
 nltk==3.9.1
 Office365-REST-Python-Client==2.5.9
