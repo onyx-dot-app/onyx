@@ -6,15 +6,15 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { SvgProps } from "@/icons";
 
-const variantClasses = (selected?: boolean) =>
+const variantClasses = (transient?: boolean) =>
   ({
     main: {
       primary: {
         enabled: [
           "bg-theme-primary-05",
           "hover:bg-theme-primary-04",
+          transient && "bg-theme-primary-04",
           "active:bg-theme-primary-06",
-          selected && "bg-theme-primary-04",
         ],
         disabled: ["bg-background-neutral-04"],
       },
@@ -22,8 +22,8 @@ const variantClasses = (selected?: boolean) =>
         enabled: [
           "bg-background-tint-01",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
           "border",
         ],
         disabled: ["bg-background-neutral-03", "border"],
@@ -32,8 +32,8 @@ const variantClasses = (selected?: boolean) =>
         enabled: [
           "bg-transparent",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
         ],
         disabled: ["bg-transparent"],
       },
@@ -41,8 +41,8 @@ const variantClasses = (selected?: boolean) =>
         enabled: [
           "bg-transparent",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
         ],
         disabled: ["bg-transparent"],
       },
@@ -52,8 +52,8 @@ const variantClasses = (selected?: boolean) =>
         enabled: [
           "bg-action-link-05",
           "hover:bg-action-link-04",
+          transient && "bg-action-link-04",
           "active:bg-action-link-06",
-          selected && "bg-action-link-04",
         ],
         disabled: ["bg-action-link-02"],
       },
@@ -61,8 +61,8 @@ const variantClasses = (selected?: boolean) =>
         enabled: [
           "bg-background-tint-01",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
           "border",
         ],
         disabled: ["bg-background-neutral-02", "border"],
@@ -71,8 +71,8 @@ const variantClasses = (selected?: boolean) =>
         enabled: [
           "bg-transparent",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
         ],
         disabled: ["bg-transparent"],
       },
@@ -86,8 +86,8 @@ const variantClasses = (selected?: boolean) =>
         enabled: [
           "bg-action-danger-05",
           "hover:bg-action-danger-04",
+          transient && "bg-action-danger-04",
           "active:bg-action-danger-06",
-          selected && "bg-action-danger-04",
         ],
         disabled: ["bg-action-danger-02"],
       },
@@ -95,8 +95,8 @@ const variantClasses = (selected?: boolean) =>
         enabled: [
           "bg-background-tint-01",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
           "border",
         ],
         disabled: ["bg-background-neutral-02", "border"],
@@ -105,8 +105,8 @@ const variantClasses = (selected?: boolean) =>
         enabled: [
           "bg-transparent",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
           "active:bg-background-tint-00",
-          selected && "bg-background-tint-02",
         ],
         disabled: ["bg-transparent"],
       },
@@ -117,7 +117,7 @@ const variantClasses = (selected?: boolean) =>
     },
   }) as const;
 
-const textClasses = (selected?: boolean) =>
+const textClasses = (transient?: boolean) =>
   ({
     main: {
       primary: {
@@ -128,8 +128,8 @@ const textClasses = (selected?: boolean) =>
         enabled: [
           "text-text-03",
           "group-hover/Button:text-text-04",
+          transient && "text-text-04",
           "group-active/Button:text-text-05",
-          selected && "text-text-04",
         ],
         disabled: ["text-text-01"],
       },
@@ -137,8 +137,8 @@ const textClasses = (selected?: boolean) =>
         enabled: [
           "text-text-03",
           "group-hover/Button:text-text-04",
+          transient && "text-text-04",
           "group-active/Button:text-text-05",
-          selected && "text-text-04",
         ],
         disabled: ["text-text-01"],
       },
@@ -146,8 +146,8 @@ const textClasses = (selected?: boolean) =>
         enabled: [
           "text-text-03",
           "group-hover/Button:text-text-04",
+          transient && "text-text-04",
           "group-active/Button:text-text-05",
-          selected && "text-text-04",
         ],
         disabled: ["text-text-01"],
       },
@@ -190,7 +190,7 @@ const textClasses = (selected?: boolean) =>
     },
   }) as const;
 
-const iconClasses = (selected?: boolean) =>
+const iconClasses = (transient?: boolean) =>
   ({
     main: {
       primary: {
@@ -201,8 +201,8 @@ const iconClasses = (selected?: boolean) =>
         enabled: [
           "stroke-text-03",
           "group-hover/Button:stroke-text-04",
+          transient && "stroke-text-04",
           "group-active/Button:stroke-text-05",
-          selected && "stroke-text-04",
         ],
         disabled: ["stroke-text-01"],
       },
@@ -210,8 +210,8 @@ const iconClasses = (selected?: boolean) =>
         enabled: [
           "stroke-text-03",
           "group-hover/Button:stroke-text-04",
+          transient && "stroke-text-04",
           "group-active/Button:stroke-text-05",
-          selected && "stroke-text-04",
         ],
         disabled: ["stroke-text-01"],
       },
@@ -219,8 +219,8 @@ const iconClasses = (selected?: boolean) =>
         enabled: [
           "stroke-text-03",
           "group-hover/Button:stroke-text-04",
+          transient && "stroke-text-04",
           "group-active/Button:stroke-text-05",
-          selected && "stroke-text-04",
         ],
         disabled: ["stroke-text-01"],
       },
@@ -278,7 +278,7 @@ export interface ButtonProps
 
   // Button states:
   disabled?: boolean;
-  selected?: boolean;
+  transient?: boolean;
 
   // Icons:
   leftIcon?: React.FunctionComponent<SvgProps>;
@@ -298,7 +298,7 @@ export default function Button({
   internal,
 
   disabled,
-  selected,
+  transient,
 
   leftIcon: LeftIcon,
   rightIcon: RightIcon,
@@ -332,12 +332,12 @@ export default function Button({
   const abled = disabled ? "disabled" : "enabled";
 
   const buttonClass = useMemo(
-    () => variantClasses(selected)[variant][subvariant][abled],
-    [selected, variant, subvariant, abled]
+    () => variantClasses(transient)[variant][subvariant][abled],
+    [transient, variant, subvariant, abled]
   );
   const iconClass = useMemo(
-    () => iconClasses(selected)[variant][subvariant][abled],
-    [selected, variant, subvariant, abled]
+    () => iconClasses(transient)[variant][subvariant][abled],
+    [transient, variant, subvariant, abled]
   );
 
   const spacer = <div className="w-[0.1rem]" />;
@@ -363,7 +363,7 @@ export default function Button({
         <Text
           className={cn(
             "whitespace-nowrap",
-            textClasses(selected)[variant][subvariant][abled]
+            textClasses(transient)[variant][subvariant][abled]
           )}
         >
           {children}
@@ -376,7 +376,7 @@ export default function Button({
           <RightIcon
             className={cn(
               "w-[1rem] h-[1rem]",
-              iconClasses(selected)[variant][subvariant][abled]
+              iconClasses(transient)[variant][subvariant][abled]
             )}
           />
         </div>
