@@ -51,7 +51,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
       <div className="flex flex-col items-center gap-1 p-1">
         <div className="flex flex-row items-center w-full gap-2 p-2.5">
           <AgentIcon agent={agent} size={24} />
-          <Truncated mainContentEmphasis className="flex-1">
+          <Truncated mainContentBody className="flex-1">
             {agent.name}
           </Truncated>
           <div
