@@ -303,6 +303,7 @@ function AppSidebarInner() {
       refreshChatSessions,
       refreshCurrentProjectDetails,
       fetchProjects,
+      setPopup,
     ]
   );
 
@@ -321,7 +322,7 @@ function AppSidebarInner() {
         </SidebarTab>
       </div>
     ),
-    [folded, route, searchParams]
+    [folded, route, activeSidebarTab]
   );
   const moreAgentsButton = useMemo(
     () => (
@@ -337,7 +338,7 @@ function AppSidebarInner() {
         </SidebarTab>
       </div>
     ),
-    [folded]
+    [folded, activeSidebarTab]
   );
   const newProjectButton = useMemo(
     () => (

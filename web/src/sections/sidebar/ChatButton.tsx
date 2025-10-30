@@ -113,7 +113,7 @@ function ChatButtonInner({
   const active = useMemo(
     () =>
       typeof activeSidebarTab === "object" &&
-      activeSidebarTab.type === "agent" &&
+      activeSidebarTab.type === "chat" &&
       activeSidebarTab.id === chatSession.id,
     [activeSidebarTab, chatSession.id]
   );
