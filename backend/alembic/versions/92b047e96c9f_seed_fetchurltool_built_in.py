@@ -37,6 +37,7 @@ def upgrade() -> None:
             "Do NOT call additional search tools. "
         ),
         "in_code_tool_id": "FetchUrlTool",
+        "enabled": True,
     }
 
     conn.execute(sa.text("BEGIN"))
@@ -58,7 +59,8 @@ def upgrade() -> None:
                     UPDATE tool
                     SET name = :name,
                         display_name = :display_name,
-                        description = :description
+                        description = :description,
+                        enabled = :enabled
                     WHERE in_code_tool_id = :in_code_tool_id
                     """
                 ),
@@ -69,8 +71,8 @@ def upgrade() -> None:
             conn.execute(
                 sa.text(
                     """
-                    INSERT INTO tool (name, display_name, description, in_code_tool_id)
-                    VALUES (:name, :display_name, :description, :in_code_tool_id)
+                    INSERT INTO tool (name, display_name, description, in_code_tool_id, enabled)
+                    VALUES (:name, :display_name, :description, :in_code_tool_id, :enabled)
                     """
                 ),
                 TOOL_ROW,
