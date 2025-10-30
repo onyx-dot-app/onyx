@@ -40,6 +40,9 @@ export interface SourceSelectorProps {
   toggleFilters: () => void;
   filtersUntoggled: boolean;
   tagsOnLeft: boolean;
+  availableConnectors?: { id: number; name: string }[];
+  selectedConnectorIds?: number[];
+  setSelectedConnectorIds?: React.Dispatch<React.SetStateAction<number[]>>;
 }
 
 export function SelectedBubble({
@@ -72,6 +75,9 @@ export function HorizontalFilters({
   setSelectedDocumentSets,
   availableDocumentSets,
   existingSources,
+  availableConnectors,
+  selectedConnectorIds,
+  setSelectedConnectorIds,
 }: SourceSelectorProps) {
   const handleSourceSelect = (source: SourceMetadata) => {
     setSelectedSources((prev: SourceMetadata[]) => {
@@ -98,7 +104,13 @@ export function HorizontalFilters({
   const availableSources = allSources.filter((source) =>
     existingSources.includes(source.internalName)
   );
+  const connectorNameById = new Map(
+    (availableConnectors || []).map((c) => [c.id, c.name])
+  );
 
+  console.log("selectedConnectorIds", selectedConnectorIds);
+  console.log("availableConnectors", availableConnectors);
+  console.log("connectorNameById", connectorNameById);
   return (
     <div className="b">
       <div className="flex gap-x-3">
@@ -138,6 +150,32 @@ export function HorizontalFilters({
           }
           defaultDisplay="All Sources"
         />
+        {availableConnectors && availableConnectors.length > 0 && (
+          <FilterDropdown
+            width="w-52"
+            options={availableConnectors.map((c) => ({
+              key: String(c.id),
+              display: <span className="ml-2 text-sm">{c.name}</span>,
+            }))}
+            selected={(selectedConnectorIds || []).map(String)}
+            selectedDisplay={(selectedConnectorIds || []).map(
+              (id) => connectorNameById.get(id) || String(id)
+            )}
+            handleSelect={(option) => {
+              if (!setSelectedConnectorIds) return;
+              const id = Number(option.key);
+              setSelectedConnectorIds((prev: number[]) =>
+                prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+              );
+            }}
+            icon={
+              <div className="my-auto mr-2 w-[16px] h-[16px]">
+                <FiFilter size={16} />
+              </div>
+            }
+            defaultDisplay="All Connectors"
+          />
+        )}
         {availableDocumentSets.length > 0 && (
           <FilterDropdown
             width="w-52"
@@ -199,6 +237,28 @@ export function HorizontalFilters({
                     <FiBookmark />
                   </div>
                   <span className="ml-2 text-sm">{documentSetName}</span>
+                </>
+              </SelectedBubble>
+            ))}
+          {selectedConnectorIds &&
+            selectedConnectorIds.length > 0 &&
+            selectedConnectorIds.map((id) => (
+              <SelectedBubble
+                key={id}
+                onClick={() =>
+                  setSelectedConnectorIds &&
+                  setSelectedConnectorIds((prev: number[]) =>
+                    prev.filter((x) => x !== id)
+                  )
+                }
+              >
+                <>
+                  <div>
+                    <FiFilter />
+                  </div>
+                  <span className="ml-2 text-sm truncate max-w-40">
+                    {connectorNameById.get(id) || `Connector ${id}`}
+                  </span>
                 </>
               </SelectedBubble>
             ))}

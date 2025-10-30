@@ -118,6 +118,7 @@ class BaseFilters(BaseModel):
     kg_terms: list[str] | None = None
     kg_sources: list[str] | None = None
     kg_chunk_id_zero_only: bool | None = False
+    connector_ids: list[int] | None = None
 
 
 class UserFileFilters(BaseModel):

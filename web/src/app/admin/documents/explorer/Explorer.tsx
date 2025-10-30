@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { useFilters } from "@/lib/hooks";
 import { buildFilters } from "@/lib/search/utils";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
-import { DocumentSetSummary } from "@/lib/types";
+import { DocumentSetSummary, ValidSources } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
@@ -124,6 +124,9 @@ export function Explorer({
   const [isLoading, setIsLoading] = useState(false);
 
   const filterManager = useFilters();
+  const [selectedConnectorIds, setSelectedConnectorIds] = useState<number[]>(
+    []
+  );
 
   const onSearch = useCallback(
     async (query: string) => {
@@ -133,7 +136,8 @@ export function Explorer({
           filterManager.selectedSources,
           filterManager.selectedDocumentSets,
           filterManager.timeRange,
-          filterManager.selectedTags
+          filterManager.selectedTags,
+          selectedConnectorIds.length ? selectedConnectorIds : null
         );
         const results = await adminSearch(query, filters);
         if (results.ok) {
@@ -149,6 +153,7 @@ export function Explorer({
       filterManager.selectedSources,
       filterManager.timeRange,
       filterManager.selectedTags,
+      selectedConnectorIds,
     ]
   );
 
@@ -167,6 +172,7 @@ export function Explorer({
     filterManager.selectedDocumentSets,
     filterManager.selectedSources,
     filterManager.timeRange,
+    selectedConnectorIds,
   ]);
 
   return (
@@ -197,6 +203,16 @@ export function Explorer({
           availableDocumentSets={documentSets}
           existingSources={connectors.map((connector) => connector.source)}
           availableTags={[]}
+          availableConnectors={connectors.map((c) => ({
+            id: c.id,
+            name:
+              c.source === (ValidSources as any).File &&
+              (c as any)?.connector_specific_config?.file_names?.[0]
+                ? (c as any).connector_specific_config.file_names[0]
+                : (c as any).displayName ?? c.name,
+          }))}
+          selectedConnectorIds={selectedConnectorIds}
+          setSelectedConnectorIds={setSelectedConnectorIds}
           toggleFilters={() => {}}
           filtersUntoggled={false}
           tagsOnLeft={true}

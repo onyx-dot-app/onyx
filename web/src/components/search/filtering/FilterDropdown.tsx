@@ -10,6 +10,7 @@ interface Option {
 export function FilterDropdown({
   options,
   selected,
+  selectedDisplay,
   handleSelect,
   icon,
   defaultDisplay,
@@ -22,6 +23,7 @@ export function FilterDropdown({
 }: {
   options: Option[];
   selected: string[];
+  selectedDisplay?: string[];
   handleSelect: (option: Option) => void;
   icon: JSX.Element;
   defaultDisplay: string | JSX.Element;
@@ -114,7 +116,12 @@ export function FilterDropdown({
           {selected.length === 0 || resetValues ? (
             defaultDisplay
           ) : (
-            <p className="line-clamp-1">{selected.join(", ")}</p>
+            <p className="line-clamp-1">
+              {(selectedDisplay && selectedDisplay.length > 0
+                ? selectedDisplay
+                : selected
+              ).join(", ")}
+            </p>
           )}
           {resetValues && selected.length !== 0 ? (
             <div

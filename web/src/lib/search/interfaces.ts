@@ -153,6 +153,8 @@ export interface Filters {
   source_type: string[] | null;
   document_set: string[] | null;
   time_cutoff: Date | null;
+  tags?: Tag[];
+  connector_ids?: number[] | null;
 }
 
 export interface SearchRequestArgs {

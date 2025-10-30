@@ -21,6 +21,7 @@ from onyx.db.chat import get_search_docs_for_chat_message
 from onyx.db.chat import get_valid_messages_from_query_sessions
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
+from onyx.db.document import get_document_ids_for_connector_ids
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
@@ -79,6 +80,12 @@ def admin_search(
         )
 
     documents = SearchDoc.from_chunks_or_sections(matching_chunks)
+
+    if getattr(question.filters, "connector_ids", None):
+        allowed_doc_ids = get_document_ids_for_connector_ids(
+            db_session=db_session, connector_ids=question.filters.connector_ids or []
+        )
+        documents = [d for d in documents if d.document_id in allowed_doc_ids]
 
     # Deduplicate documents by id
     deduplicated_documents: list[SearchDoc] = []

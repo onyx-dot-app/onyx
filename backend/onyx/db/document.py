@@ -218,6 +218,17 @@ def get_documents_for_connector_credential_pair(
     return db_session.scalars(stmt).all()
 
 
+def get_document_ids_for_connector_ids(
+    db_session: Session, connector_ids: list[int]
+) -> set[str]:
+    if not connector_ids:
+        return set()
+    stmt = select(DocumentByConnectorCredentialPair.id).where(
+        DocumentByConnectorCredentialPair.connector_id.in_(connector_ids)
+    )
+    return set(db_session.scalars(stmt).all())
+
+
 def get_documents_by_ids(
     db_session: Session,
     document_ids: list[str],
