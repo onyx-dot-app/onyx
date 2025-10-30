@@ -8,10 +8,6 @@ from agents import RawResponsesStreamEvent
 from agents import RunResultStreaming
 from agents import ToolCallItem
 from agents.tracing import trace
-from openai.types.responses import ResponseReasoningSummaryPartAddedEvent
-from openai.types.responses import ResponseReasoningSummaryPartDoneEvent
-from openai.types.responses import ResponseReasoningSummaryTextDeltaEvent
-from openai.types.responses import ResponseReasoningSummaryTextDoneEvent
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
@@ -44,6 +40,8 @@ from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
+from onyx.server.query_and_chat.streaming_models import ReasoningDelta
+from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
@@ -318,15 +316,34 @@ def _emit_citations_for_final_answer(
 def _default_packet_translation(
     ev: object, ctx: ChatTurnContext, processor: CitationProcessor | None
 ) -> PacketObj | None:
+    from openai.types.responses import ResponseReasoningSummaryPartAddedEvent
+    from openai.types.responses import ResponseReasoningSummaryPartDoneEvent
+    from openai.types.responses import ResponseReasoningSummaryTextDeltaEvent
+
     if isinstance(ev, RawResponsesStreamEvent):
+        print("EV", ev.data)
+        if isinstance(ev.data, ResponseReasoningSummaryPartAddedEvent):
+            ctx.in_reasoning_section = True
+            return ReasoningStart()
+        elif isinstance(ev.data, ResponseReasoningSummaryTextDeltaEvent):
+            return ReasoningDelta(reasoning=ev.data.delta)
+        elif isinstance(ev.data, ResponseReasoningSummaryPartDoneEvent):
+            return SectionEnd(type="section_end")
+
+        # Handle regular message events
         obj: PacketObj | None = None
         if ev.data.type == "response.content_part.added":
             retrieved_search_docs = saved_search_docs_from_llm_docs(
                 ctx.ordered_fetched_documents
             )
-            obj = MessageStart(
+            message_start = MessageStart(
                 type="message_start", content="", final_documents=retrieved_search_docs
             )
+            # If we're in a reasoning section, store the message_start to emit later
+            if ctx.in_reasoning_section:
+                ctx.pending_message_start = message_start
+                return None
+            obj = message_start
         elif ev.data.type == "response.output_text.delta" and len(ev.data.delta) > 0:
             if processor:
                 final_answer_piece = ""

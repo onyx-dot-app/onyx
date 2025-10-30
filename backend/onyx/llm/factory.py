@@ -3,7 +3,6 @@ from typing import Any
 
 from agents import ModelSettings
 from agents.models.interface import Model
-from litellm import Reasoning
 
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
@@ -387,6 +386,7 @@ def get_llm_model_and_settings(
     model_kwargs: dict[str, Any] | None = None,
 ) -> tuple[Model, ModelSettings]:
     from onyx.llm.litellm_singleton import LitellmModel
+    from litellm import Reasoning
 
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -434,6 +434,7 @@ def get_llm_model_and_settings(
     model_kwargs["timeout"] = timeout
 
     # Support reasoning streaming
+    # TODO: this doesn't work since openai provider can be used for non-openai models
     if provider == "openai":
         provider = "openai/responses"
     if provider == "azure":
