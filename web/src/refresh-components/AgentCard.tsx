@@ -49,15 +49,15 @@ export default function AgentCard({ agent }: AgentCardProps) {
     <Card className="flex flex-col group/AgentCard">
       {/* Main Body */}
       <div className="flex flex-col items-center gap-1 p-1">
-        <div className="flex flex-row items-center w-full gap-2 p-2.5">
+        <div className="flex flex-row items-center w-full gap-2 px-2.5 min-h-[3rem]">
           <AgentIcon agent={agent} size={24} />
           <Truncated mainContentBody className="flex-1">
             {agent.name}
           </Truncated>
           <div
             className={cn(
-              !pinned && "invisible group-hover/AgentCard:visible",
-              "flex flex-row items-center"
+              "flex-row items-center",
+              !pinned && "hidden group-hover/AgentCard:flex"
             )}
           >
             <IconButton
