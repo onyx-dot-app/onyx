@@ -220,12 +220,6 @@ def create_custom_recognizers() -> list[PatternRecognizer]:
     rus_ogrnip_recognizer = PatternRecognizer(
         supported_entity="RUS_OGRNIP",
         patterns=[
-            # Полный формат с разделителями: 3 16 86 170013322 6
-            Pattern(
-                name="ogrnip_full",
-                regex=r"\b\d[- ]?\d{2}[- ]?\d{2}[- ]?\d{7}[- ]?\d\b",
-                score=0.85
-            ),
             # Компактный формат: 316861700133226
             Pattern(
                 name="ogrnip_compact",
