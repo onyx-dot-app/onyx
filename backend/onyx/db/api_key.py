@@ -10,6 +10,7 @@ from onyx.auth.api_key import ApiKeyDescriptor
 from onyx.auth.api_key import build_displayable_api_key
 from onyx.auth.api_key import generate_api_key
 from onyx.auth.api_key import hash_api_key
+from onyx.auth.schemas import UserType
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
@@ -64,6 +65,18 @@ def get_api_key_fake_email(
     return f"{DANSWER_API_KEY_PREFIX}{name}@{unique_id}{DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN}"
 
 
+def is_api_key_user(user: User) -> bool:
+    """Check if a user is a fake user created specifically for API key purposes.
+
+    API keys can be backed by either:
+    - Fake users (user_type=API_KEY): Created solely to represent the API key with a specific role
+    - Real users (user_type=HUMAN): API key mirrors the real user's permissions
+
+    This function returns True only for fake API key users.
+    """
+    return user.user_type == UserType.API_KEY
+
+
 def insert_api_key(
     db_session: Session, api_key_args: APIKeyArgs, user_id: uuid.UUID | None
 ) -> ApiKeyDescriptor:
@@ -77,7 +90,7 @@ def insert_api_key(
         if api_key_user is None:
             raise ValueError(f"User with id {user_id} does not exist")
     else:
-        api_key_user = _create_fake_user(db_session, api_key_args)
+        api_key_user = create_api_key_user(db_session, api_key_args)
 
     api_key_row = ApiKey(
         name=api_key_args.name,
@@ -99,7 +112,7 @@ def insert_api_key(
     )
 
 
-def _create_fake_user(db_session: Session, api_key_args: APIKeyArgs) -> User:
+def create_api_key_user(db_session: Session, api_key_args: APIKeyArgs) -> User:
     api_key_user_id = uuid.uuid4()
     std_password_helper = PasswordHelper()
     display_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
@@ -112,6 +125,7 @@ def _create_fake_user(db_session: Session, api_key_args: APIKeyArgs) -> User:
         is_superuser=False,
         is_verified=True,
         role=api_key_args.role,
+        user_type=UserType.API_KEY,
     )
     db_session.add(api_key_user)
     return api_key_user
@@ -134,19 +148,18 @@ def update_api_key(
     # Update the API key's name
     existing_api_key.name = api_key_args.name
 
-    real_user = existing_api_key.owner_id == existing_api_key.user_id
-    if real_user:
-        # We should only update the API key's name, not the user's role
-        if api_key_args.role is not None and api_key_args.role != api_key_user.role:
-            raise ValueError(
-                "Cannot update the role of API key based on the owner's role!"
-            )
-    else:
+    if is_api_key_user(api_key_user):
         # Fake user: can update name, email, and role
         email_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
         api_key_user.email = get_api_key_fake_email(email_name, str(api_key_user.id))
         if api_key_args.role is not None:
             api_key_user.role = api_key_args.role
+    else:
+        # Real user: only update the API key's name, not the user's role
+        if api_key_args.role is not None and api_key_args.role != api_key_user.role:
+            raise ValueError(
+                "Cannot update the role of API key based on the owner's role!"
+            )
 
     db_session.commit()
 
@@ -203,8 +216,7 @@ def remove_api_key(db_session: Session, api_key_id: int) -> None:
         )
 
     db_session.delete(existing_api_key)
-    if existing_api_key.user_id != existing_api_key.owner_id:
-        # Only delete fake users created for the use in this API key
-        # Do not delete the real user/owner of the API key!
+    if is_api_key_user(user_associated_with_key):
+        # Only delete fake API key users. Do not delete real human users!
         db_session.delete(user_associated_with_key)
     db_session.commit()
