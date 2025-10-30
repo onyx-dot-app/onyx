@@ -53,6 +53,30 @@ ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
 
 
+def _unwrap_nested_exception(error: Exception) -> Exception:
+    """
+    Traverse common exception wrappers to surface the underlying LiteLLM error.
+    """
+    visited: set[int] = set()
+    current = error
+    for _ in range(100):
+        visited.add(id(current))
+        candidate: Exception | None = None
+        cause = getattr(current, "__cause__", None)
+        if isinstance(cause, Exception):
+            candidate = cause
+        elif (
+            hasattr(current, "args")
+            and len(getattr(current, "args")) == 1
+            and isinstance(current.args[0], Exception)
+        ):
+            candidate = current.args[0]
+        if candidate is None or id(candidate) in visited:
+            break
+        current = candidate
+    return current
+
+
 def litellm_exception_to_error_msg(
     e: Exception,
     llm: LLM,
@@ -74,31 +98,58 @@ def litellm_exception_to_error_msg(
     from litellm.exceptions import ContentPolicyViolationError
     from litellm.exceptions import BudgetExceededError
 
-    error_msg = str(e)
+    core_exception = _unwrap_nested_exception(e)
+    error_msg = str(core_exception)
 
     if custom_error_msg_mappings:
         for error_msg_pattern, custom_error_msg in custom_error_msg_mappings.items():
             if error_msg_pattern in error_msg:
                 return custom_error_msg
 
-    if isinstance(e, BadRequestError):
+    if isinstance(core_exception, BadRequestError):
         error_msg = "Bad request: The server couldn't process your request. Please check your input."
-    elif isinstance(e, AuthenticationError):
+    elif isinstance(core_exception, AuthenticationError):
         error_msg = "Authentication failed: Please check your API key and credentials."
-    elif isinstance(e, PermissionDeniedError):
+    elif isinstance(core_exception, PermissionDeniedError):
         error_msg = (
             "Permission denied: You don't have the necessary permissions for this operation."
             "Ensure you have access to this model."
         )
-    elif isinstance(e, NotFoundError):
+    elif isinstance(core_exception, NotFoundError):
         error_msg = "Resource not found: The requested resource doesn't exist."
-    elif isinstance(e, UnprocessableEntityError):
+    elif isinstance(core_exception, UnprocessableEntityError):
         error_msg = "Unprocessable entity: The server couldn't process your request due to semantic errors."
-    elif isinstance(e, RateLimitError):
-        error_msg = (
-            "Rate limit exceeded: Please slow down your requests and try again later."
+    elif isinstance(core_exception, RateLimitError):
+        provider_name = (
+            llm.config.model_provider
+            if llm is not None and llm.config.model_provider
+            else "The LLM provider"
         )
-    elif isinstance(e, ContextWindowExceededError):
+        upstream_detail: str | None = None
+        message_attr = getattr(core_exception, "message", None)
+        if message_attr:
+            upstream_detail = str(message_attr)
+        elif hasattr(core_exception, "api_error"):
+            api_error = core_exception.api_error  # type: ignore[attr-defined]
+            if isinstance(api_error, dict):
+                upstream_detail = (
+                    api_error.get("message")
+                    or api_error.get("detail")
+                    or api_error.get("error")
+                )
+        if not upstream_detail:
+            upstream_detail = str(core_exception)
+        upstream_detail = str(upstream_detail).strip()
+        if ":" in upstream_detail and upstream_detail.lower().startswith(
+            "ratelimiterror"
+        ):
+            upstream_detail = upstream_detail.split(":", 1)[1].strip()
+        error_msg = (
+            f"{provider_name} rate limit: {upstream_detail}"
+            if upstream_detail
+            else f"{provider_name} rate limit exceeded: Please slow down your requests and try again later."
+        )
+    elif isinstance(core_exception, ContextWindowExceededError):
         error_msg = (
             "Context window exceeded: Your input is too long for the model to process."
         )
@@ -113,18 +164,21 @@ def litellm_exception_to_error_msg(
                 logger.warning(
                     "Unable to get maximum input token for LiteLLM excpetion handling"
                 )
-    elif isinstance(e, ContentPolicyViolationError):
+    elif isinstance(core_exception, ContentPolicyViolationError):
         error_msg = "Content policy violation: Your request violates the content policy. Please revise your input."
-    elif isinstance(e, APIConnectionError):
+    elif isinstance(core_exception, APIConnectionError):
         error_msg = "API connection error: Failed to connect to the API. Please check your internet connection."
-    elif isinstance(e, BudgetExceededError):
+    elif isinstance(core_exception, BudgetExceededError):
         error_msg = (
             "Budget exceeded: You've exceeded your allocated budget for API usage."
         )
-    elif isinstance(e, Timeout):
+    elif isinstance(core_exception, Timeout):
         error_msg = "Request timed out: The operation took too long to complete. Please try again."
-    elif isinstance(e, APIError):
-        error_msg = f"API error: An error occurred while communicating with the API. Details: {str(e)}"
+    elif isinstance(core_exception, APIError):
+        error_msg = (
+            "API error: An error occurred while communicating with the API. "
+            f"Details: {str(core_exception)}"
+        )
     elif not fallback_to_error_msg:
         error_msg = "An unexpected error occurred while processing your request. Please try again later."
     return error_msg
