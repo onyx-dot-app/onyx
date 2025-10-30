@@ -37,8 +37,6 @@ logger = setup_logger()
 def _build_provider_extra_headers(
     provider: str, custom_config: dict[str, str] | None
 ) -> dict[str, str]:
-    # Ollama Cloud: allow passing Bearer token via custom config for cloud instances
-    os.environ["OLLAMA_API_BASE"] = "https://ollama.com"
     if provider == OLLAMA_PROVIDER_NAME and custom_config:
         raw_api_key = custom_config.get(OLLAMA_API_KEY_CONFIG_KEY)
         api_key = raw_api_key.strip() if raw_api_key else None
@@ -425,6 +423,8 @@ def get_llm_model_and_settings(
             elif k == VERTEX_LOCATION_KWARG:
                 model_kwargs[k] = v
                 continue
+    if provider == OLLAMA_PROVIDER_NAME:
+        os.environ["OLLAMA_API_BASE"] = api_base
     if api_version:
         model_kwargs["api_version"] = api_version
     # Add timeout to model_kwargs so it gets passed to litellm

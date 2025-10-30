@@ -30,7 +30,7 @@ def apply_monkey_patches() -> None:
         return
 
     def _patched_transform_request(
-        self,
+        self,  # type: ignore
         model: str,
         messages: List[AllMessageValues],
         optional_params: dict,
