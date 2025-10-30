@@ -9,6 +9,7 @@ validators:
         label: "Типы персональных данных для маскирования"
         values:
           - "RUS_PHONE_NUMBER"
+          - "RUS_PERSON"
           - "RUS_BANK_CARD"
           - "RUS_INN"
           - "RUS_OGRNIP"
@@ -16,7 +17,7 @@ validators:
           - "RUS_OMS_POLICY"
           - "RUS_PASSPORT"
           - "RUS_DRIVER_LICENSE"
-          - "LOCATION"
+          - "RUS_LOCATION"
           - "EMAIL_ADDRESS"
           - "IP_ADDRESS"
           - "DATE_TIME"

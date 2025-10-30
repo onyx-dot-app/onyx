@@ -97,8 +97,15 @@ def generate_fake_rus_oms_policy(original: str, mapping: Dict[str, str]) -> str:
     return fake_rus_oms_policy
 
 
-def generate_fake_location(original: str, mapping: Dict[str, str]) -> str:
+def generate_fake_rus_location(original: str, mapping: Dict[str, str]) -> str:
     fake_location = faker.address()
 
     mapping[fake_location] = original
     return fake_location
+
+
+def generate_fake_rus_person(original: str, mapping: Dict[str, str]) -> str:
+    fake_rus_person = faker.name()
+
+    mapping[fake_rus_person] = original
+    return fake_rus_person

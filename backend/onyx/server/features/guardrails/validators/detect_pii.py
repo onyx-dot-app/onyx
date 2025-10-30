@@ -5,6 +5,7 @@ from onyx.server.features.guardrails.services import generate_fake_data
 
 
 ENTITY_GENERATORS = {
+    "RUS_PERSON": generate_fake_data.generate_fake_rus_person,
     "RUS_PHONE_NUMBER": generate_fake_data.generate_fake_rus_phone_number,
     "RUS_BANK_CARD": generate_fake_data.generate_fake_rus_bank_card,
     "RUS_INN": generate_fake_data.generate_fake_rus_inn,
@@ -13,7 +14,7 @@ ENTITY_GENERATORS = {
     "RUS_OMS_POLICY": generate_fake_data.generate_fake_rus_oms_policy,
     "RUS_PASSPORT": generate_fake_data.generate_fake_rus_passport,
     "RUS_DRIVER_LICENSE": generate_fake_data.generate_fake_rus_driver_license,
-    "LOCATION": generate_fake_data.generate_fake_location,
+    "RUS_LOCATION": generate_fake_data.generate_fake_rus_location,
     "EMAIL_ADDRESS": generate_fake_data.generate_fake_email_address,
     "IP_ADDRESS": generate_fake_data.generate_fake_ip_address,
     "DATE_TIME": generate_fake_data.generate_fake_date_time,
