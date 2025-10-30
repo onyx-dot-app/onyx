@@ -59,7 +59,7 @@ def _unwrap_nested_exception(error: Exception) -> Exception:
     """
     visited: set[int] = set()
     current = error
-    while True:
+    for _ in range(100):
         visited.add(id(current))
         candidate: Exception | None = None
         cause = getattr(current, "__cause__", None)
