@@ -25,7 +25,7 @@ export default function VerticalShadowScroller({
         <div style={{ minHeight }} />
       </div>
       <div
-        className="absolute bottom-[0rem] left-0 right-0 h-[3rem] z-[20] pointer-events-none"
+        className="absolute bottom-0 left-0 right-0 h-[3rem] z-[20] pointer-events-none"
         style={{
           background: disable
             ? undefined
