@@ -1,55 +1,91 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import AgentIcon from "@/refresh-components/AgentIcon";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import SvgBubbleText from "@/icons/bubble-text";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { useAppRouter } from "@/hooks/appNavigation";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgPin from "@/icons/pin";
+import Truncated from "@/refresh-components/texts/Truncated";
+import { SvgProps } from "@/icons";
+import SvgUser from "@/icons/user";
+import SvgActions from "@/icons/actions";
+import { useAgentsContext } from "./contexts/AgentsContext";
+import { cn } from "@/lib/utils";
 
-interface AgentCardProps {
+interface IconLabelProps {
+  icon: React.FunctionComponent<SvgProps>;
+  children: string;
+}
+
+function IconLabel({ icon: Icon, children }: IconLabelProps) {
+  return (
+    <div className="flex flex-row items-center gap-1">
+      <Icon className="stroke-text-03 w-3 h-3" />
+      <Text text03 secondaryBody>
+        {children}
+      </Text>
+    </div>
+  );
+}
+
+export interface AgentCardProps {
   agent: MinimalPersonaSnapshot;
 }
 
 export default function AgentCard({ agent }: AgentCardProps) {
   const route = useAppRouter();
+  const { pinnedAgents, togglePinnedAgent } = useAgentsContext();
+  const pinned = useMemo(
+    () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
+    [agent.id, pinnedAgents]
+  );
 
   return (
-    <Card className="flex flex-col h-full">
-      {/* Header with icon and name */}
-      <CardHeader className="flex flex-row items-center gap-3 pb-2 dbg-red">
-        <AgentIcon agent={agent} size={24} />
-        <Text mainContentEmphasis className="flex-1">
-          {agent.name}
+    <Card className="flex flex-col group/AgentCard">
+      {/* Main Body */}
+      <div className="flex flex-col items-center gap-1 p-1">
+        <div className="flex flex-row items-center w-full gap-2 p-2.5">
+          <AgentIcon agent={agent} size={24} />
+          <Truncated mainContentEmphasis className="flex-1">
+            {agent.name}
+          </Truncated>
+          <div
+            className={cn(
+              !pinned && "invisible group-hover/AgentCard:visible",
+              "flex flex-row items-center"
+            )}
+          >
+            <IconButton
+              icon={SvgPin}
+              tertiary
+              onClick={() => togglePinnedAgent(agent, !pinned)}
+              tooltip={pinned ? "Unpin Agent" : "Pin Agent"}
+              transient={pinned}
+            />
+          </div>
+        </div>
+        <Text text03 className="pb-2.5 px-2.5 w-full">
+          {agent.description}
         </Text>
-      </CardHeader>
-
-      {/* Description section - bg-background-tint-00 */}
-      <CardContent className="flex-1 bg-background-tint-00 px-6 py-4">
-        <Text text03>{agent.description}</Text>
-      </CardContent>
+      </div>
 
       {/* Footer section - bg-background-tint-01 */}
-      <CardFooter className="bg-background-tint-01 px-6 py-4 flex flex-row items-center justify-between">
+      <div className="bg-background-tint-01 p-1 flex flex-row items-center justify-between">
         {/* Left side - creator and actions */}
-        <div className="flex flex-col gap-1">
-          <Text secondaryBody text02>
-            By {agent.owner?.email || "Onyx"}
-          </Text>
-          <Text secondaryBody text02>
+        <div className="flex flex-col gap-1 py-1 px-2">
+          <IconLabel icon={SvgUser}>{agent.owner?.email || "Onyx"}</IconLabel>
+          <IconLabel icon={SvgActions}>
             {agent.tools.length > 0
               ? `${agent.tools.length} Action${
                   agent.tools.length > 1 ? "s" : ""
                 }`
               : "No Actions"}
-          </Text>
+          </IconLabel>
         </div>
 
         {/* Right side - Start Chat button */}
@@ -60,7 +96,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         >
           Start Chat
         </Button>
-      </CardFooter>
+      </div>
     </Card>
   );
 }
