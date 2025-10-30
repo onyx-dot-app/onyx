@@ -62,7 +62,7 @@ def _patch_ollama_transform_request() -> None:
             new_tools: List[OllamaToolCall] = []
             if tool_calls is not None and isinstance(tool_calls, list):
                 for tool in tool_calls:
-                    typed_tool = ChatCompletionAssistantToolCall(**tool)
+                    typed_tool = ChatCompletionAssistantToolCall(**tool)  # type: ignore[typeddict-item]
                     if typed_tool["type"] == "function":
                         arguments = {}
                         if "arguments" in typed_tool["function"]:
@@ -118,7 +118,7 @@ def _patch_ollama_transform_request() -> None:
 
         return data
 
-    OllamaChatConfig.transform_request = _patched_transform_request
+    OllamaChatConfig.transform_request = _patched_transform_request  # type: ignore[method-assign]
 
 
 def _patch_ollama_chunk_parser() -> None:
@@ -250,7 +250,7 @@ def _patch_ollama_chunk_parser() -> None:
         except Exception as e:
             raise e
 
-    OllamaChatCompletionResponseIterator.chunk_parser = _patched_chunk_parser
+    OllamaChatCompletionResponseIterator.chunk_parser = _patched_chunk_parser  # type: ignore[method-assign]
 
 
 def apply_monkey_patches() -> None:

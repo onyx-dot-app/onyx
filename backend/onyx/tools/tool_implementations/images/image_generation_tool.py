@@ -29,7 +29,6 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.prompt import (
     build_image_generation_user_prompt,
 )
-from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -102,7 +101,6 @@ class ImageGenerationTool(Tool[None]):
         tool_id: int,
         model: str = IMAGE_MODEL_NAME,
         num_imgs: int = 1,
-        additional_headers: dict[str, str] | None = None,
         output_format: ImageFormat = _DEFAULT_OUTPUT_FORMAT,
     ) -> None:
 
@@ -118,7 +116,6 @@ class ImageGenerationTool(Tool[None]):
         self.model = model
         self.num_imgs = num_imgs
 
-        self.additional_headers = additional_headers
         self.output_format = output_format
 
         self._id = tool_id
@@ -270,7 +267,6 @@ class ImageGenerationTool(Tool[None]):
                 size=size,
                 n=1,
                 response_format=format,
-                extra_headers=build_llm_extra_headers(self.additional_headers),
             )
 
             if not response.data or len(response.data) == 0:

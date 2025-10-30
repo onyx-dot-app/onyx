@@ -723,9 +723,7 @@ def stream_chat_message_objects(
                 answer_style_config=answer_style_config,
                 document_pruning_config=document_pruning_config,
             ),
-            image_generation_tool_config=ImageGenerationToolConfig(
-                additional_headers=litellm_additional_headers,
-            ),
+            image_generation_tool_config=ImageGenerationToolConfig(),
             custom_tool_config=CustomToolConfig(
                 chat_session_id=chat_session_id,
                 message_id=user_message.id if user_message else None,
