@@ -33,6 +33,11 @@ class UserRole(str, Enum):
         ]
 
 
+class UserType(str, Enum):
+    HUMAN = "human"
+    API_KEY = "api_key"
+
+
 class UserRead(schemas.BaseUser[uuid.UUID]):
     role: UserRole
 

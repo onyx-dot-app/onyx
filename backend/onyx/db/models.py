@@ -46,6 +46,7 @@ from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
     GeneratedImageFullResult,
 )
 from onyx.auth.schemas import UserRole
+from onyx.auth.schemas import UserType
 from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
 from onyx.configs.constants import (
     DEFAULT_BOOST,
@@ -172,6 +173,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, native_enum=False, default=UserRole.BASIC)
+    )
+    user_type: Mapped[UserType] = mapped_column(
+        Enum(UserType, native_enum=False, default=UserType.HUMAN)
     )
 
     """
