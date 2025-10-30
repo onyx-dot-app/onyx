@@ -24,7 +24,7 @@ from onyx.chat.turn.infra.emitter import Emitter
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.tools.tool import Tool
 
 # Type alias for all tool types accepted by the Agent
@@ -79,4 +79,5 @@ class ChatTurnContext:
     # Used to hold packets that are streamed back by Agents SDK, but are not yet
     # ready to be emitted to the frontend (e.g. out of order packets)
     # TODO: remove this once Agents SDK fixes the bug with Anthropic reasoning
-    held_packets: list[Packet] = dataclasses.field(default_factory=list)
+    held_back_message_start: MessageStart | None = None
+    current_output_index: int | None = None
