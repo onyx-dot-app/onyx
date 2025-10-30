@@ -24,6 +24,7 @@ from onyx.chat.turn.infra.emitter import Emitter
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.tool import Tool
 
 # Type alias for all tool types accepted by the Agent
@@ -74,3 +75,8 @@ class ChatTurnContext:
     )
     ordered_fetched_documents: list[LlmDoc] = dataclasses.field(default_factory=list)
     citations: list[CitationInfo] = dataclasses.field(default_factory=list)
+
+    # Used to hold packets that are streamed back by Agents SDK, but are not yet
+    # ready to be emitted to the frontend (e.g. out of order packets)
+    # TODO: remove this once Agents SDK fixes the bug with Anthropic reasoning
+    held_packets: list[Packet] = dataclasses.field(default_factory=list)

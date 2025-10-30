@@ -265,9 +265,9 @@ def _process_stream(
             _emit_clean_up_packets(dependencies, ctx)
             agent_stream.cancel()
             break
-        obj = _default_packet_translation(ev, ctx, processor)
-        if obj:
-            dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))
+        packets = _default_packet_translation(ev, ctx, processor)
+        for packet in packets:
+            dependencies.emitter.emit(packet)
         if isinstance(getattr(ev, "item", None), ToolCallItem):
             tool_call_events.append(cast(ResponseFunctionToolCall, ev.item.raw_item))
     if agent_stream.streamed is None:
@@ -315,7 +315,7 @@ def _emit_citations_for_final_answer(
 
 def _default_packet_translation(
     ev: object, ctx: ChatTurnContext, processor: CitationProcessor | None
-) -> PacketObj | None:
+) -> list[Packet]:
     from openai.types.responses import ResponseReasoningSummaryPartAddedEvent
     from openai.types.responses import ResponseReasoningSummaryPartDoneEvent
     from openai.types.responses import ResponseReasoningSummaryTextDeltaEvent
@@ -357,5 +357,5 @@ def _default_packet_translation(
                 obj = MessageDelta(type="message_delta", content=ev.data.delta)
         elif ev.data.type == "response.content_part.done":
             obj = SectionEnd(type="section_end")
-        return obj
-    return None
+        return [Packet(ind=ctx.current_run_step, obj=obj)]
+    return []
