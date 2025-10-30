@@ -11,6 +11,8 @@ export const HEADER_HEIGHT = "h-16";
 export const SUB_HEADER = "h-12";
 
 export const INTERNAL_URL = process.env.INTERNAL_URL || "http://127.0.0.1:8080";
+export const MCP_INTERNAL_URL =
+  process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090";
 
 // NOTE: this should ONLY be used on the server-side (including middleware).
 // The AUTH_TYPE environment variable is set in the backend and shared with Next.js
