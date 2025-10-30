@@ -4,116 +4,116 @@ from presidio_analyzer import (
     PatternRecognizer,
     RecognizerResult,
 )
-import stanza
+# import stanza
 
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-class BaseStanzaRecognizer(EntityRecognizer):
-    """Базовый класс для Stanza распознавателей"""
-
-    _nlp = None
-
-    @classmethod
-    def initialize_stanza(cls):
-        """Инициализация Stanza"""
-        if cls._nlp is None:
-            try:
-                cls._nlp = stanza.Pipeline(
-                    'ru',
-                    processors='tokenize,ner',
-                    use_gpu=False,
-                    download_method=None
-                )
-                logger.info("Модель Stanza загружена")
-            except Exception as e:
-                logger.error(
-                    "Ошибка при загрузке Stanza: %s", repr(e)
-                )
-                raise
-
-    def __init__(self, supported_entities: list, name: str):
-        self.__class__.initialize_stanza()
-        super().__init__(
-            supported_entities=supported_entities,
-            name=name
-        )
-
-    def _process_text(self, text: str):
-        """Общая обработка текста"""
-
-        try:
-            return self._nlp(text)
-        except Exception as e:
-            logger.error(
-                "Ошибка при обнаружении ФИО или Локации: %s",
-                repr(e),
-            )
-            return None
-
-
-class RusPersonRecognizer(BaseStanzaRecognizer):
-    """Распознаватель ФИО для Presidio"""
-
-    def __init__(self):
-        super().__init__(
-            supported_entities=["RUS_PERSON"],
-            name="RusPersonRecognizer"
-        )
-
-    def analyze(self, text: str, entities: list[str], nlp_artifacts=None):
-        results = []
-        doc = self._process_text(text)
-
-        if doc is None:
-            return results
-
-        for sent in doc.sentences:
-            for ent in sent.ents:
-                if ent.type == "PER":
-                    results.append(
-                        RecognizerResult(
-                            entity_type="RUS_PERSON",
-                            start=ent.start_char,
-                            end=ent.end_char,
-                            score=0.9
-                        )
-                    )
-
-        return results
-
-
-class RusLocationRecognizer(BaseStanzaRecognizer):
-    """Распознаватель локаций для Presidio"""
-
-    def __init__(self):
-        super().__init__(
-            supported_entities=["RUS_LOCATION"],
-            name="RusLocationRecognizer"
-        )
-
-    def analyze(self, text: str, entities: list[str], nlp_artifacts=None):
-        results = []
-        doc = self._process_text(text)
-
-        if doc is None:
-            return results
-
-        for sent in doc.sentences:
-            for ent in sent.ents:
-                if ent.type == "LOC":
-                    results.append(
-                        RecognizerResult(
-                            entity_type="RUS_LOCATION",
-                            start=ent.start_char,
-                            end=ent.end_char,
-                            score=0.8
-                        )
-                    )
-
-        return results
+# class BaseStanzaRecognizer(EntityRecognizer):
+#     """Базовый класс для Stanza распознавателей"""
+#
+#     _nlp = None
+#
+#     @classmethod
+#     def initialize_stanza(cls):
+#         """Инициализация Stanza"""
+#         if cls._nlp is None:
+#             try:
+#                 cls._nlp = stanza.Pipeline(
+#                     'ru',
+#                     processors='tokenize,ner',
+#                     use_gpu=False,
+#                     download_method=None
+#                 )
+#                 logger.info("Модель Stanza загружена")
+#             except Exception as e:
+#                 logger.error(
+#                     "Ошибка при загрузке Stanza: %s", repr(e)
+#                 )
+#                 raise
+#
+#     def __init__(self, supported_entities: list, name: str):
+#         self.__class__.initialize_stanza()
+#         super().__init__(
+#             supported_entities=supported_entities,
+#             name=name
+#         )
+#
+#     def _process_text(self, text: str):
+#         """Общая обработка текста"""
+#
+#         try:
+#             return self._nlp(text)
+#         except Exception as e:
+#             logger.error(
+#                 "Ошибка при обнаружении ФИО или Локации: %s",
+#                 repr(e),
+#             )
+#             return None
+#
+#
+# class RusPersonRecognizer(BaseStanzaRecognizer):
+#     """Распознаватель ФИО для Presidio"""
+#
+#     def __init__(self):
+#         super().__init__(
+#             supported_entities=["RUS_PERSON"],
+#             name="RusPersonRecognizer"
+#         )
+#
+#     def analyze(self, text: str, entities: list[str], nlp_artifacts=None):
+#         results = []
+#         doc = self._process_text(text)
+#
+#         if doc is None:
+#             return results
+#
+#         for sent in doc.sentences:
+#             for ent in sent.ents:
+#                 if ent.type == "PER":
+#                     results.append(
+#                         RecognizerResult(
+#                             entity_type="RUS_PERSON",
+#                             start=ent.start_char,
+#                             end=ent.end_char,
+#                             score=0.9
+#                         )
+#                     )
+#
+#         return results
+#
+#
+# class RusLocationRecognizer(BaseStanzaRecognizer):
+#     """Распознаватель локаций для Presidio"""
+#
+#     def __init__(self):
+#         super().__init__(
+#             supported_entities=["RUS_LOCATION"],
+#             name="RusLocationRecognizer"
+#         )
+#
+#     def analyze(self, text: str, entities: list[str], nlp_artifacts=None):
+#         results = []
+#         doc = self._process_text(text)
+#
+#         if doc is None:
+#             return results
+#
+#         for sent in doc.sentences:
+#             for ent in sent.ents:
+#                 if ent.type == "LOC":
+#                     results.append(
+#                         RecognizerResult(
+#                             entity_type="RUS_LOCATION",
+#                             start=ent.start_char,
+#                             end=ent.end_char,
+#                             score=0.8
+#                         )
+#                     )
+#
+#         return results
 
 
 def create_custom_recognizers() -> list[PatternRecognizer]:
@@ -270,8 +270,8 @@ def create_custom_recognizers() -> list[PatternRecognizer]:
         ],
     )
 
-    rus_person_recognizer = RusPersonRecognizer()
-    rus_location_recognizer = RusLocationRecognizer()
+    # rus_person_recognizer = RusPersonRecognizer()
+    # rus_location_recognizer = RusLocationRecognizer()
 
     return [
         russian_phone_recognizer,
@@ -282,6 +282,4 @@ def create_custom_recognizers() -> list[PatternRecognizer]:
         russian_snils_recognizer,
         rus_ogrnip_recognizer,
         rus_oms_policy_recognizer,
-        rus_person_recognizer,
-        rus_location_recognizer
     ]

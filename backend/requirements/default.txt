@@ -82,7 +82,6 @@ setfit==1.1.1
 simple-salesforce==1.12.6
 slack-sdk==3.20.2
 SQLAlchemy[mypy]==2.0.15
-stanza==1.11.0
 starlette==0.46.1
 supervisor==4.2.5
 tiktoken==0.7.0
