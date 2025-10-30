@@ -104,9 +104,16 @@ class ImageGenerationTool(Tool[None]):
         num_imgs: int = 1,
         additional_headers: dict[str, str] | None = None,
         output_format: ImageFormat = _DEFAULT_OUTPUT_FORMAT,
+        underlying_model: str | None = None,
     ) -> None:
 
-        if model == "gpt-image-1" and output_format == ImageFormat.URL:
+        self.model = model
+        self.underlying_model = underlying_model or model
+        self._is_gpt_image_model = (
+            self.model == "gpt-image-1" or self.underlying_model == "gpt-image-1"
+        )
+
+        if self._is_gpt_image_model and output_format == ImageFormat.URL:
             raise ValueError(
                 "gpt-image-1 does not support URL format. Please use BASE64 format."
             )
@@ -115,7 +122,6 @@ class ImageGenerationTool(Tool[None]):
         self.api_base = api_base
         self.api_version = api_version
 
-        self.model = model
         self.num_imgs = num_imgs
 
         self.additional_headers = additional_headers
@@ -246,12 +252,12 @@ class ImageGenerationTool(Tool[None]):
         from litellm import image_generation  # type: ignore
 
         if shape == ImageShape.LANDSCAPE:
-            if self.model == "gpt-image-1":
+            if self._is_gpt_image_model:
                 size = "1536x1024"
             else:
                 size = "1792x1024"
         elif shape == ImageShape.PORTRAIT:
-            if self.model == "gpt-image-1":
+            if self._is_gpt_image_model:
                 size = "1024x1536"
             else:
                 size = "1024x1792"

@@ -799,6 +799,9 @@ AZURE_DALLE_API_VERSION = os.environ.get("AZURE_DALLE_API_VERSION")
 AZURE_DALLE_API_KEY = os.environ.get("AZURE_DALLE_API_KEY")
 AZURE_DALLE_API_BASE = os.environ.get("AZURE_DALLE_API_BASE")
 AZURE_DALLE_DEPLOYMENT_NAME = os.environ.get("AZURE_DALLE_DEPLOYMENT_NAME")
+AZURE_IMAGE_UNDERLYING_MODEL = os.environ.get(
+    "AZURE_IMAGE_UNDERLYING_MODEL", "dall-e-3"
+)
 
 # configurable image model
 IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
