@@ -56,6 +56,8 @@ RUN uv pip install --system --upgrade \
     pip uninstall -y py && \
     ln -s /usr/local/bin/supervisord /usr/bin/supervisord
 
+# Русская модель для spaCy
+RUN python -m spacy download ru_core_news_sm
 
 RUN guardrails configure \
         --disable-metrics \
