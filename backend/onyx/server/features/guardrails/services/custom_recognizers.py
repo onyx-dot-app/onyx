@@ -243,8 +243,8 @@ def create_custom_recognizers() -> list[PatternRecognizer]:
         ],
     )
 
-    rus_person_recognizer = RusPersonRecognizer()
-    rus_location_recognizer = RusLocationRecognizer()
+    # rus_person_recognizer = RusPersonRecognizer()
+    # rus_location_recognizer = RusLocationRecognizer()
 
     return [
         russian_phone_recognizer,
@@ -255,6 +255,4 @@ def create_custom_recognizers() -> list[PatternRecognizer]:
         russian_snils_recognizer,
         rus_ogrnip_recognizer,
         rus_oms_policy_recognizer,
-        rus_person_recognizer,
-        rus_location_recognizer,
     ]
