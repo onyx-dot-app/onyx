@@ -67,16 +67,43 @@ def get_api_key_fake_email(
 def insert_api_key(
     db_session: Session, api_key_args: APIKeyArgs, user_id: uuid.UUID | None
 ) -> ApiKeyDescriptor:
-    std_password_helper = PasswordHelper()
-
     # Get tenant_id from context var (will be default schema for single tenant)
     tenant_id = get_current_tenant_id()
 
     api_key = generate_api_key(tenant_id)
-    api_key_user_id = uuid.uuid4()
 
+    if api_key_args.role is None:
+        api_key_user = db_session.scalar(select(User).where(User.id == user_id))
+        if api_key_user is None:
+            raise ValueError(f"User with id {user_id} does not exist")
+    else:
+        api_key_user = _create_fake_user(db_session, api_key_args)
+
+    api_key_row = ApiKey(
+        name=api_key_args.name,
+        hashed_api_key=hash_api_key(api_key),
+        api_key_display=build_displayable_api_key(api_key),
+        user_id=api_key_user.id,
+        owner_id=user_id,
+    )
+    db_session.add(api_key_row)
+
+    db_session.commit()
+    return ApiKeyDescriptor(
+        api_key_id=api_key_row.id,
+        api_key_role=api_key_user.role,
+        api_key_display=api_key_row.api_key_display,
+        api_key=api_key,
+        api_key_name=api_key_args.name,
+        user_id=api_key_user.id,
+    )
+
+
+def _create_fake_user(db_session: Session, api_key_args: APIKeyArgs) -> User:
+    api_key_user_id = uuid.uuid4()
+    std_password_helper = PasswordHelper()
     display_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
-    api_key_user_row = User(
+    api_key_user = User(
         id=api_key_user_id,
         email=get_api_key_fake_email(display_name, str(api_key_user_id)),
         # a random password for the "user"
@@ -86,26 +113,8 @@ def insert_api_key(
         is_verified=True,
         role=api_key_args.role,
     )
-    db_session.add(api_key_user_row)
-
-    api_key_row = ApiKey(
-        name=api_key_args.name,
-        hashed_api_key=hash_api_key(api_key),
-        api_key_display=build_displayable_api_key(api_key),
-        user_id=api_key_user_id,
-        owner_id=user_id,
-    )
-    db_session.add(api_key_row)
-
-    db_session.commit()
-    return ApiKeyDescriptor(
-        api_key_id=api_key_row.id,
-        api_key_role=api_key_user_row.role,
-        api_key_display=api_key_row.api_key_display,
-        api_key=api_key,
-        api_key_name=api_key_args.name,
-        user_id=api_key_user_id,
-    )
+    db_session.add(api_key_user)
+    return api_key_user
 
 
 def update_api_key(
@@ -115,16 +124,30 @@ def update_api_key(
     if existing_api_key is None:
         raise ValueError(f"API key with id {api_key_id} does not exist")
 
-    existing_api_key.name = api_key_args.name
     api_key_user = db_session.scalar(
         select(User).where(User.id == existing_api_key.user_id)  # type: ignore
     )
+
     if api_key_user is None:
         raise RuntimeError("API Key does not have associated user.")
 
-    email_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
-    api_key_user.email = get_api_key_fake_email(email_name, str(api_key_user.id))
-    api_key_user.role = api_key_args.role
+    # Update the API key's name
+    existing_api_key.name = api_key_args.name
+
+    real_user = existing_api_key.owner_id == existing_api_key.user_id
+    if real_user:
+        # We should only update the API key's name, not the user's role
+        if api_key_args.role is not None and api_key_args.role != api_key_user.role:
+            raise ValueError(
+                "Cannot update the role of API key based on the owner's role!"
+            )
+    else:
+        # Fake user: can update name, email, and role
+        email_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
+        api_key_user.email = get_api_key_fake_email(email_name, str(api_key_user.id))
+        if api_key_args.role is not None:
+            api_key_user.role = api_key_args.role
+
     db_session.commit()
 
     return ApiKeyDescriptor(
@@ -180,5 +203,8 @@ def remove_api_key(db_session: Session, api_key_id: int) -> None:
         )
 
     db_session.delete(existing_api_key)
-    db_session.delete(user_associated_with_key)
+    if existing_api_key.user_id != existing_api_key.owner_id:
+        # Only delete fake users created for the use in this API key
+        # Do not delete the real user/owner of the API key!
+        db_session.delete(user_associated_with_key)
     db_session.commit()
