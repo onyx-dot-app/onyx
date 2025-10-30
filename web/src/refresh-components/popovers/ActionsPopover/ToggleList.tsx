@@ -105,13 +105,14 @@ export default function ToggleList({
                     isEnabled={item.isEnabled}
                     onClick={item.onToggle}
                     ariaLabel={`Toggle ${item.label}`}
+                    className="border-2 border-transparent"
                     enabledClassName="bg-action-link-05"
                     disabledClassName="bg-background-tint-03"
-                    thumbBaseClassName="top-[2px] left-[2px] h-[12px] w-[12px] rounded-full"
-                    enabledThumbClassName="translate-x-[12px] bg-background-neutral-light-00"
+                    thumbBaseClassName="h-[12px] w-[12px] rounded-full top-1/2 -translate-y-1/2 left-0"
+                    enabledThumbClassName="translate-x-[10px] bg-background-neutral-light-00"
                     disabledThumbClassName="translate-x-0 bg-background-neutral-light-00"
                     style={{
-                      width: "28px",
+                      width: "32px",
                       height: "16px",
                       borderRadius: "var(--Radius-Round, 1000px)",
                     }}

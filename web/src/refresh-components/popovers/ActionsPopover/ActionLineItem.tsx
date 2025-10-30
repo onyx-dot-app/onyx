@@ -108,10 +108,7 @@ export default function ActionLineItem({
                     else onSourceManagementOpen?.();
                   })}
                   internal
-                  className={cn(
-                    isSearchToolWithNoConnectors &&
-                      "invisible grouop-hover/LineItem:visible"
-                  )}
+                  className="invisible group-hover/LineItem:visible"
                   tooltip={isSearchToolWithNoConnectors ? "Settings" : "More"}
                 />
               )}
