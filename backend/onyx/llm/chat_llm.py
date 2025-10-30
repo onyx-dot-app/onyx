@@ -313,6 +313,7 @@ class DefaultMultiLLM(LLM):
                     os.environ[k] = v
                 else:
                     os.environ.pop(k, None)
+        # This is needed for Ollama to do proper function calling
         if model_provider == OLLAMA_PROVIDER_NAME and api_base is not None:
             os.environ["OLLAMA_API_BASE"] = api_base
         if extra_headers:

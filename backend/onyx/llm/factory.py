@@ -423,6 +423,7 @@ def get_llm_model_and_settings(
             elif k == VERTEX_LOCATION_KWARG:
                 model_kwargs[k] = v
                 continue
+    # This is needed for Ollama to do proper function calling
     if provider == OLLAMA_PROVIDER_NAME and api_base is not None:
         os.environ["OLLAMA_API_BASE"] = api_base
     if api_version:
