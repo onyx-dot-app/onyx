@@ -115,7 +115,6 @@ const LLMConnectionModal = () => {
   };
 
   const testApiKey = async (apiKey: string, formikProps: FormikProps<any>) => {
-    console.log("test");
     setApiStatus("loading");
     setShowApiMessage(true);
     if (!llmDescriptor) {
@@ -180,7 +179,6 @@ const LLMConnectionModal = () => {
             ...finalValues,
             model_configurations: modelConfigsToUse,
           };
-          console.log("payload", payload);
           const response = await fetch(
             `${LLM_PROVIDERS_ADMIN_URL}${"?is_creation=true"}`,
             {
@@ -195,8 +193,28 @@ const LLMConnectionModal = () => {
           );
           if (!response.ok) {
             const errorMsg = (await response.json()).detail;
-            console.log("errorMsg", errorMsg);
             return;
+          }
+          // If this is the first LLM provider, set it as the default provider
+          if (onboardingState?.data?.llmProviders == null) {
+            try {
+              const newLlmProvider = await response.json();
+              if (newLlmProvider?.id != null) {
+                const setDefaultResponse = await fetch(
+                  `${LLM_PROVIDERS_ADMIN_URL}/${newLlmProvider.id}/default`,
+                  { method: "POST" }
+                );
+                if (!setDefaultResponse.ok) {
+                  const err = await setDefaultResponse.json().catch(() => ({}));
+                  console.error(
+                    "Failed to set provider as default",
+                    err?.detail
+                  );
+                }
+              }
+            } catch (_e) {
+              console.error("Failed to set new provider as default", _e);
+            }
           }
           onboardingActions?.updateData({
             llmProviders: [

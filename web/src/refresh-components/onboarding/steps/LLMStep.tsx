@@ -26,7 +26,6 @@ const LLMStepInner = ({
   llmDescriptors,
   disabled,
 }: LLMStepProps) => {
-  console.log("onboardingState", onboardingState);
   return (
     <div
       className={cn(

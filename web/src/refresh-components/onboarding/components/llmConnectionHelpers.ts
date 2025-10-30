@@ -87,7 +87,6 @@ export const testApiKeyHelper = async (
         })),
       ],
     };
-    console.log("payload", payload);
 
     const response = await fetch("/api/admin/llm/test", {
       method: "POST",

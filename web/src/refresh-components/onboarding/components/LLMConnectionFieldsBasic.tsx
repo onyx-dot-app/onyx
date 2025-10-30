@@ -41,7 +41,6 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
   canFetchModels,
 }) => {
   const handleApiKeyInteraction = (apiKey: string) => {
-    console.log("handleApiKeyInteraction", apiKey);
     if (!apiKey) return;
     if (llmDescriptor?.name === "openrouter") {
       onFetchModels?.();
