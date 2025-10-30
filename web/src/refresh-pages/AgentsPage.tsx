@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import AgentCard from "@/refresh-components/AgentCard";
 import { useUser } from "@/components/user/UserProvider";
 import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/assistants/checkOwnership";
@@ -91,6 +91,12 @@ export default function AgentsPage() {
   // const { agentFilters, toggleAgentFilter } = useAgentFilters();
   const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    // Focus the search input when the page loads
+    searchInputRef.current?.focus();
+  }, []);
 
   const memoizedCurrentlyVisibleAgents = useMemo(() => {
     return agents.filter((agent) => {
@@ -155,6 +161,7 @@ export default function AgentsPage() {
       >
         <div className="flex flex-row gap-2">
           <InputTypeIn
+            ref={searchInputRef}
             placeholder="Search agents..."
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
@@ -164,11 +171,13 @@ export default function AgentsPage() {
       </PageHeader>
 
       {/* Agents List */}
-
       <div className="p-4 flex flex-col gap-8">
         {agentCount === 0 ? (
-          <Text className="w-full h-full flex flex-col items-center justify-center py-12">
-            No Agents configured yet...
+          <Text
+            className="w-full h-full flex flex-col items-center justify-center py-12"
+            text03
+          >
+            No Agents found
           </Text>
         ) : (
           <>
