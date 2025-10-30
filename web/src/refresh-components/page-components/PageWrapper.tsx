@@ -4,8 +4,8 @@ export default function PageWrapper(
   props: React.HtmlHTMLAttributes<HTMLDivElement>
 ) {
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center overflow-y-scroll">
-      <div className="min-w-[42rem]">
+    <div className="w-full h-full flex flex-col pt-10 items-center overflow-y-auto">
+      <div className="h-full min-w-[42rem]">
         <div {...props} />
       </div>
     </div>
