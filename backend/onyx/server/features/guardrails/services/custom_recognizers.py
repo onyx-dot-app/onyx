@@ -1,9 +1,9 @@
-from natasha import (
-    Doc,
-    NewsEmbedding,
-    NewsNERTagger,
-    Segmenter,
-)
+# from natasha import (
+#     Doc,
+#     NewsEmbedding,
+#     NewsNERTagger,
+#     Segmenter,
+# )
 from presidio_analyzer import (
     EntityRecognizer,
     Pattern,
@@ -12,81 +12,81 @@ from presidio_analyzer import (
 )
 
 
-class BaseNatashaRecognizer(EntityRecognizer):
-    """Базовый класс для всех Natasha распознавателей"""
-
-    _segmenter = Segmenter()
-    _emb = NewsEmbedding()
-    _ner_tagger = NewsNERTagger(_emb)
-
-    def __init__(self, supported_entities: list, name: str):
-        super().__init__(
-            supported_entities=supported_entities,
-            name=name
-        )
-
-    def _process_text(self, text: str):
-        """Общая обработка текста"""
-
-        doc = Doc(text)
-        doc.segment(self._segmenter)
-        doc.tag_ner(self._ner_tagger)
-
-        return doc
-
-
-class RusPersonRecognizer(BaseNatashaRecognizer):
-    """Распознаватель ФИО для Presidio"""
-
-    def __init__(self):
-        super().__init__(
-            supported_entities=["RUS_PERSON"],
-            name="RusPersonRecognizer"
-        )
-
-    def analyze(self, text: str, entities: list[str], nlp_artifacts=None):
-        results = []
-        doc = self._process_text(text)
-
-        for span in doc.spans:
-            if span.type == "PER":
-                results.append(
-                    RecognizerResult(
-                        entity_type="RUS_PERSON",
-                        start=span.start,
-                        end=span.stop,
-                        score=0.9
-                    )
-                )
-
-        return results
-
-
-class RusLocationRecognizer(BaseNatashaRecognizer):
-    """Распознаватель локаций для Presidio"""
-
-    def __init__(self):
-        super().__init__(
-            supported_entities=["RUS_LOCATION"],
-            name="RusLocationRecognizer"
-        )
-
-    def analyze(self, text: str, entities: list[str], nlp_artifacts=None):
-        results = []
-        doc = self._process_text(text)
-
-        for span in doc.spans:
-            if span.type == "LOC":
-                results.append(
-                    RecognizerResult(
-                        entity_type="RUS_LOCATION",
-                        start=span.start,
-                        end=span.stop,
-                        score=0.8
-                    )
-                )
-
-        return results
+# class BaseNatashaRecognizer(EntityRecognizer):
+#     """Базовый класс для всех Natasha распознавателей"""
+#
+#     _segmenter = Segmenter()
+#     _emb = NewsEmbedding()
+#     _ner_tagger = NewsNERTagger(_emb)
+#
+#     def __init__(self, supported_entities: list, name: str):
+#         super().__init__(
+#             supported_entities=supported_entities,
+#             name=name
+#         )
+#
+#     def _process_text(self, text: str):
+#         """Общая обработка текста"""
+#
+#         doc = Doc(text)
+#         doc.segment(self._segmenter)
+#         doc.tag_ner(self._ner_tagger)
+#
+#         return doc
+#
+#
+# class RusPersonRecognizer(BaseNatashaRecognizer):
+#     """Распознаватель ФИО для Presidio"""
+#
+#     def __init__(self):
+#         super().__init__(
+#             supported_entities=["RUS_PERSON"],
+#             name="RusPersonRecognizer"
+#         )
+#
+#     def analyze(self, text: str, entities: list[str], nlp_artifacts=None):
+#         results = []
+#         doc = self._process_text(text)
+#
+#         for span in doc.spans:
+#             if span.type == "PER":
+#                 results.append(
+#                     RecognizerResult(
+#                         entity_type="RUS_PERSON",
+#                         start=span.start,
+#                         end=span.stop,
+#                         score=0.9
+#                     )
+#                 )
+#
+#         return results
+#
+#
+# class RusLocationRecognizer(BaseNatashaRecognizer):
+#     """Распознаватель локаций для Presidio"""
+#
+#     def __init__(self):
+#         super().__init__(
+#             supported_entities=["RUS_LOCATION"],
+#             name="RusLocationRecognizer"
+#         )
+#
+#     def analyze(self, text: str, entities: list[str], nlp_artifacts=None):
+#         results = []
+#         doc = self._process_text(text)
+#
+#         for span in doc.spans:
+#             if span.type == "LOC":
+#                 results.append(
+#                     RecognizerResult(
+#                         entity_type="RUS_LOCATION",
+#                         start=span.start,
+#                         end=span.stop,
+#                         score=0.8
+#                     )
+#                 )
+#
+#         return results
 
 
 def create_custom_recognizers() -> list[PatternRecognizer]:
