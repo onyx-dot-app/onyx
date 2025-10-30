@@ -153,7 +153,6 @@ export const MemoizedLink = memo(
       document && updatePresentingDocument
         ? {
             url: document.link,
-            icon: document.icon as unknown as React.ReactNode,
             document: document as LoadedOnyxDocument,
             updatePresentingDocument: updatePresentingDocument!,
           }
