@@ -12,7 +12,7 @@ services:
   api_server:
     ports:
       - "8080:8080"
-      - "8082:8081"  # MCP Server (internal 8081, external 8082 to avoid conflict with Vespa)
+      - "8090:8090"  # MCP Server
 
   relational_db:
     ports:

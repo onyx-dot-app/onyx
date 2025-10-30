@@ -28,10 +28,10 @@ def create_mcp_fastapi_app() -> FastAPI:
 
         SqlEngine.set_app_name(f"{POSTGRES_WEB_APP_NAME}_mcp_server")
         SqlEngine.init_engine(
-            pool_size=2,  # Phase 1: minimal (only API key validation)
+            pool_size=1,  # Phase 1: minimal (only API key validation)
             max_overflow=3,  # Can grow to 5 connections under load
         )
-        logger.info("Database initialized")
+        logger.info("Database connection pool initialized")
 
         async with mcp_asgi_app.lifespan(app):
             yield

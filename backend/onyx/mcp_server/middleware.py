@@ -11,7 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from onyx.auth.api_key import extract_tenant_from_api_key_header
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.db.api_key import fetch_user_for_api_key
-from onyx.db.engine.sql_engine import get_async_session
+from onyx.db.engine.async_sql_engine import get_async_session
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
