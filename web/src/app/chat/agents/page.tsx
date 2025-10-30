@@ -1,4 +1,4 @@
-import AgentsPage from "@/refreshed-pages/AgentsPage";
+import AgentsPage from "@/refresh-pages/AgentsPage";
 
 export default function Page() {
   return <AgentsPage />;

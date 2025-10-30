@@ -57,7 +57,7 @@ function FileAttachment({
     String(file.status) === UserFileStatus.UPLOADING ||
     String(file.status) === UserFileStatus.DELETING;
 
-  const LeftIcon = getIcon(file, isProcessing, isSelected);
+  const LeftIcon = getIcon(file, isProcessing);
   const description = getDescription(file);
   const rightText = file.last_accessed_at
     ? formatRelativeTime(file.last_accessed_at)
