@@ -54,7 +54,7 @@ class FetchUrlTool(BaseTool):
         "Extract the URL from the user's message and fetch its content. Works with web pages, "
         "Google Drive links, Slack threads, Notion pages, Reddit posts, and any other URL."
     )
-    _DISPLAY_NAME = "Fetch URL"
+    _DISPLAY_NAME = "Fetch Document/URL"
 
     def __init__(self, tool_id: int, db_session: Session, user_id: UUID | None = None):
         self.tool_id = tool_id

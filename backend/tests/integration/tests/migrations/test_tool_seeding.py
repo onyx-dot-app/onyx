@@ -99,8 +99,8 @@ def test_tool_seeding_migration() -> None:
         fetch_url_tool = next((t for t in tools if t[1] == "FetchUrlTool"), None)
         assert fetch_url_tool is not None, "FetchUrlTool should exist"
         assert (
-            fetch_url_tool[2] == "Fetch URL"
-        ), "FetchUrlTool display name should be 'Fetch URL'"
+            fetch_url_tool[2] == "Fetch Document/URL"
+        ), "FetchUrlTool display name should be 'Fetch Document/URL'"
         assert (
             fetch_url_tool[5] is None
         ), "FetchUrlTool should not have a user_id (builtin)"
