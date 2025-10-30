@@ -16,6 +16,7 @@ ENV ONYX_VERSION=${ONYX_VERSION} \
     DANSWER_RUNNING_IN_DOCKER="true" \
     DO_NOT_TRACK="true"
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 # Install system dependencies
@@ -49,11 +50,7 @@ RUN apt-get update && \
 # Remove py which is pulled in by retry, py is not needed and is a CVE
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
-RUN pip install --upgrade \
-        --index-url https://pypi.tuna.tsinghua.edu.cn/simple/ \
-        --trusted-host pypi.tuna.tsinghua.edu.cn \
-        --retries 5 \
-        --timeout 30 \
+RUN uv pip install --system --upgrade \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
     pip uninstall -y py && \
@@ -85,6 +82,7 @@ RUN apt-get update && \
     apt-get install -y libxmlsec1-openssl && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* && \
+    rm -rf ~/.cache/uv /tmp/*.txt && \
     rm -f /usr/local/lib/python3.11/site-packages/tornado/test/test.key
 
 
