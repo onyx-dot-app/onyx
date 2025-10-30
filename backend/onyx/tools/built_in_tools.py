@@ -27,7 +27,6 @@ BUILT_IN_TOOL_TYPES = Union[
     ImageGenerationTool,
     WebSearchTool,
     KnowledgeGraphTool,
-    OktaProfileTool,
     FetchUrlTool,
     FetchSingleFileTool,
 ]
@@ -38,7 +37,6 @@ BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
     ImageGenerationTool.__name__: ImageGenerationTool,
     WebSearchTool.__name__: WebSearchTool,
     KnowledgeGraphTool.__name__: KnowledgeGraphTool,
-    OktaProfileTool.__name__: OktaProfileTool,
     FetchUrlTool.__name__: FetchUrlTool,
     FetchSingleFileTool.__name__: FetchSingleFileTool,
 }
