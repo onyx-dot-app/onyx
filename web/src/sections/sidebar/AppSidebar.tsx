@@ -47,7 +47,6 @@ import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { removeChatSessionFromProject } from "@/app/chat/projects/projectsService";
 import type { Project } from "@/app/chat/projects/projectsService";
 import { useAppRouter } from "@/hooks/appNavigation";
-import { useSearchParams } from "next/navigation";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -126,7 +125,6 @@ function RecentsSection({ chatSessions }: RecentsSectionProps) {
 
 function AppSidebarInner() {
   const route = useAppRouter();
-  const searchParams = useSearchParams();
   const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
   const { folded, setFolded } = useAppSidebarContext();
   const { chatSessions, refreshChatSessions } = useChatContext();
