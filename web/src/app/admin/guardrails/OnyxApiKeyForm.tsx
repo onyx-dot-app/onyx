@@ -40,7 +40,7 @@ export const OnyxApiKeyForm = ({
   );
 
   const { data: llmProviders } = useSWR<LLMProviderView[]>(
-    "/admin/llm/provider",
+    "/api/admin/llm/provider",
     errorHandlingFetcher
   );
 
@@ -161,7 +161,7 @@ export const OnyxApiKeyForm = ({
           }}
         >
           {({ isSubmitting, values, setFieldValue }) => (
-            <Form className="w-full overflow-visible">
+            <Form className="w-full overflow-auto">
               <SelectorFormField
                 name="template"
                 label={t(k.VALIDATOR_TEMPLATE_LABEL)}
