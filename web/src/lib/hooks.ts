@@ -40,12 +40,12 @@ import { useUser } from "@/components/user/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
 import { usePathname, useSearchParams } from "next/navigation";
+import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 
 type ActiveSidebarTab =
   | { type: "agent" | "project" | "chat"; id: string }
   | "new-session"
-  | "more-agents"
-  | "new-project";
+  | "more-agents";
 
 export function useActiveSidebarTab(): ActiveSidebarTab {
   const pathname = usePathname();
@@ -57,21 +57,14 @@ export function useActiveSidebarTab(): ActiveSidebarTab {
   }
 
   // Check search params for chat, agent, or project
-  const chatId = searchParams.get("chatId");
-  const agentId = searchParams.get("assistantId");
-  const projectId = searchParams.get("projectId");
+  const chatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
+  if (chatId) return { type: "chat", id: chatId };
 
-  if (chatId) {
-    return { type: "chat", id: chatId };
-  }
+  const agentId = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+  if (agentId) return { type: "agent", id: agentId };
 
-  if (agentId) {
-    return { type: "agent", id: agentId };
-  }
-
-  if (projectId) {
-    return { type: "project", id: projectId };
-  }
+  const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
+  if (projectId) return { type: "project", id: projectId };
 
   // No search params means we're on a new session
   return "new-session";
