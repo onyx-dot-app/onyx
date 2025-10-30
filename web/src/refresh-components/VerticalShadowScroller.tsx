@@ -16,17 +16,14 @@ export default function VerticalShadowScroller({
   children,
   disable,
   backgroundColor = "var(--background-tint-02)",
-  height: minHeight = "1rem",
+  height: minHeight = "2rem",
 }: VerticalShadowScrollerProps) {
   return (
-    <div className="flex flex-col flex-1 overflow-y-hidden relative">
-      <div className={cn("flex flex-col flex-1 overflow-y-scroll", className)}>
-        {children}
-        {/* We add some spacing after the masked scroller to make it clear that this is the *end* of the scroller. */}
+    <div className="relative flex-1 min-h-0 overflow-y-hidden flex flex-col">
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+        <div className={cn("flex-1 flex flex-col", className)}>{children}</div>
         <div style={{ minHeight }} />
       </div>
-
-      {/* Mask Layer */}
       <div
         className="absolute bottom-0 left-0 right-0 h-[3rem] z-[20] pointer-events-none"
         style={{

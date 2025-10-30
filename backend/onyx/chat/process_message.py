@@ -526,9 +526,15 @@ def stream_chat_message_objects(
         if new_msg_req.current_message_files:
             for fd in new_msg_req.current_message_files:
                 uid = fd.get("user_file_id")
-                if uid is not None:
-                    user_file_id = UUID(uid)
-                    user_file_ids.append(user_file_id)
+                if not uid:
+                    continue
+                try:
+                    user_file_ids.append(UUID(uid))
+                except (TypeError, ValueError, AttributeError):
+                    logger.warning(
+                        "Skipping invalid user_file_id from current_message_files: %s",
+                        uid,
+                    )
 
         # Load in user files into memory and create search tool override kwargs if needed
         # if we have enough tokens, we don't need to use search
