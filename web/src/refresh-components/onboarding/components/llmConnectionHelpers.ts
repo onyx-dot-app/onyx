@@ -1,4 +1,7 @@
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import { dynamicProviderConfigs } from "@/app/admin/configuration/llm/utils";
 
 export const buildInitialValues = (
@@ -69,24 +72,27 @@ export const testApiKeyHelper = async (
       finalDeploymentName = pathMatch?.[1] || "";
     }
 
+    const payload = {
+      api_key: apiKey,
+      api_base: finalApiBase,
+      api_version: finalApiVersion,
+      deployment_name: finalDeploymentName,
+      provider: llmDescriptor.name,
+      api_key_changed: true,
+      default_model_name: initialValues.default_model_name,
+      model_configurations: [
+        ...formValues.model_configurations.map((model: ModelConfiguration) => ({
+          name: model.name,
+          is_visible: true,
+        })),
+      ],
+    };
+    console.log("payload", payload);
+
     const response = await fetch("/api/admin/llm/test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: apiKey,
-        api_base: finalApiBase,
-        api_version: finalApiVersion,
-        deployment_name: finalDeploymentName,
-        provider: llmDescriptor.name,
-        api_key_changed: true,
-        default_model_name: initialValues.default_model_name,
-        model_configurations: [
-          {
-            name: initialValues.default_model_name,
-            is_visible: true,
-          },
-        ],
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {

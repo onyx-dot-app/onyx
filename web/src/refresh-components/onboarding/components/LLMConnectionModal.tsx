@@ -4,7 +4,10 @@ import {
   ModalIds,
   useChatModal,
 } from "@/refresh-components/contexts/ChatModalContext";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import { Form, Formik, FormikProps } from "formik";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import Button from "@/refresh-components/buttons/Button";
@@ -19,6 +22,7 @@ import {
 } from "./llmConnectionHelpers";
 import { LLMConnectionFieldsWithTabs } from "./LLMConnectionFieldsWithTabs";
 import { LLMConnectionFieldsBasic } from "./LLMConnectionFieldsBasic";
+import { getValidationSchema } from "./llmValidationSchema";
 
 type LLMConnectionModalData = {
   icon: React.ReactNode;
@@ -105,6 +109,7 @@ const LLMConnectionModal = () => {
   };
 
   const testApiKey = async (apiKey: string, formikProps: FormikProps<any>) => {
+    console.log("test");
     setApiStatus("loading");
     setShowApiMessage(true);
     if (!llmDescriptor) {
@@ -141,6 +146,7 @@ const LLMConnectionModal = () => {
     >
       <Formik
         initialValues={initialValues}
+        validationSchema={getValidationSchema(llmDescriptor?.name, activeTab)}
         enableReinitialize
         onSubmit={async (values, { setSubmitting }) => {
           // Apply hidden fields based on active tab
@@ -220,6 +226,63 @@ const LLMConnectionModal = () => {
             }
           }, [activeTab, tabConfig, llmDescriptor]);
 
+          // Reset API message state when required fields become empty (provider-specific)
+          useEffect(() => {
+            if (!llmDescriptor) return;
+
+            const values = formikProps.values as any;
+            const isEmpty = (val: any) =>
+              val == null || (typeof val === "string" && val.trim() === "");
+
+            let shouldReset = false;
+            switch (llmDescriptor.name) {
+              case "openai":
+              case "anthropic":
+                if (isEmpty(values.api_key)) shouldReset = true;
+                break;
+              case "ollama":
+                if (activeTab === "self-hosted") {
+                  if (isEmpty(values.api_base)) shouldReset = true;
+                } else if (activeTab === "cloud") {
+                  if (isEmpty(values?.custom_config?.OLLAMA_API_KEY))
+                    shouldReset = true;
+                }
+                break;
+              case "azure":
+                if (isEmpty(values.api_key) || isEmpty(values.target_uri))
+                  shouldReset = true;
+                break;
+              case "openrouter":
+                if (isEmpty(values.api_key) || isEmpty(values.api_base))
+                  shouldReset = true;
+                break;
+              case "vertex_ai":
+                if (isEmpty(values?.custom_config?.vertex_credentials))
+                  shouldReset = true;
+                break;
+              case "bedrock":
+                if (isEmpty(values?.custom_config?.AWS_REGION_NAME))
+                  shouldReset = true;
+                break;
+              default:
+                break;
+            }
+
+            if (shouldReset) {
+              setShowApiMessage(false);
+              setErrorMessage("");
+              setApiStatus("loading");
+              setFetchedModelConfigurations([]);
+            }
+          }, [
+            llmDescriptor,
+            activeTab,
+            (formikProps.values as any).api_key,
+            (formikProps.values as any).api_base,
+            (formikProps.values as any).target_uri,
+            (formikProps.values as any).custom_config,
+          ]);
+
           const handleFetchModels = async () => {
             if (!llmDescriptor) return;
 
@@ -277,6 +340,8 @@ const LLMConnectionModal = () => {
                     setDefaultModelName={(value) =>
                       formikProps.setFieldValue("default_model_name", value)
                     }
+                    onFetchModels={handleFetchModels}
+                    canFetchModels={canFetchModels}
                   />
                 )}
               </div>
