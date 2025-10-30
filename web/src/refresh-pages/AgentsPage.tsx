@@ -10,17 +10,17 @@ import Text from "@/refresh-components/texts/Text";
 import SvgFilter from "@/icons/filter";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import PageHeader from "@/refresh-components/page-components/PageHeader";
+import SvgOnyxOctagon from "@/icons/onyx-octagon";
+import PageWrapper from "@/refresh-components/page-components/PageWrapper";
 
 interface AgentsSectionProps {
   title: string;
   agents: MinimalPersonaSnapshot[];
-  pinnedAgents: MinimalPersonaSnapshot[];
 }
 
-function AgentsSection({ title, agents, pinnedAgents }: AgentsSectionProps) {
-  if (agents.length === 0) {
-    return null;
-  }
+function AgentsSection({ title, agents }: AgentsSectionProps) {
+  if (agents.length === 0) return null;
 
   return (
     <div className="py-6 flex flex-col gap-4">
@@ -29,11 +29,7 @@ function AgentsSection({ title, agents, pinnedAgents }: AgentsSectionProps) {
         {agents
           .sort((a, b) => b.id - a.id)
           .map((agent, index) => (
-            <AgentCard
-              key={index}
-              pinned={pinnedAgents.map((a) => a.id).includes(agent.id)}
-              agent={agent}
-            />
+            <AgentCard key={index} agent={agent} />
           ))}
       </div>
     </div>
@@ -132,79 +128,67 @@ export default function AgentsPage() {
   );
 
   return (
-    <div
-      className="w-full h-full overflow-y-auto"
+    <PageWrapper
       data-testid="AgentsPage/container"
       aria-label="Agents Page"
+      className="w-full"
     >
-      <div className="max-w-5xl mx-auto p-6">
-        {/* Header Section */}
-        <div className="mb-6">
-          <Text headingH1 className="mb-2">
-            Agents
+      <PageHeader
+        icon={SvgOnyxOctagon}
+        title="Agents"
+        description="Browse and manage your AI agents"
+        sticky
+        rightChildren={<Button href="/assistants/new">Create</Button>}
+      >
+        {/* Search Section */}
+        {/*<div className="flex flex-row items-center gap-2">
+          <InputTypeIn
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        </div>*/}
+
+        {/* Filters Section */}
+        {/*<div className="flex items-center gap-2 flex-wrap">
+          <SvgFilter className="w-[1.2rem] h-[1.2rem] stroke-text-05" />
+          <AgentBadgeSelector
+            text="Pinned"
+            selected={agentFilters[AgentFilter.Pinned]}
+            toggleFilter={() => toggleAgentFilter(AgentFilter.Pinned)}
+          />
+
+          <AgentBadgeSelector
+            text="Mine"
+            selected={agentFilters[AgentFilter.Mine]}
+            toggleFilter={() => toggleAgentFilter(AgentFilter.Mine)}
+          />
+          <AgentBadgeSelector
+            text="Private"
+            selected={agentFilters[AgentFilter.Private]}
+            toggleFilter={() => toggleAgentFilter(AgentFilter.Private)}
+          />
+          <AgentBadgeSelector
+            text="Public"
+            selected={agentFilters[AgentFilter.Public]}
+            toggleFilter={() => toggleAgentFilter(AgentFilter.Public)}
+          />
+        </div>*/}
+      </PageHeader>
+
+      {/* Agents List */}
+      {/*<div className="mt-4">
+        {featuredAgents.length === 0 && allAgents.length === 0 ? (
+          <Text className="w-full h-full flex flex-col items-center justify-center py-12">
+            No Agents configured yet...
           </Text>
-        </div>
-
-        {/* Search and Create Section */}
-        <div className="flex flex-col sticky top-0 z-10 bg-background pb-4">
-          <div className="flex flex-row items-center gap-2 mb-6">
-            <InputTypeIn
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-            />
-            <Button href="/assistants/new">Create</Button>
-          </div>
-
-          {/* Filters Section */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <SvgFilter className="w-[1.2rem] h-[1.2rem] stroke-text-05" />
-            <AgentBadgeSelector
-              text="Pinned"
-              selected={agentFilters[AgentFilter.Pinned]}
-              toggleFilter={() => toggleAgentFilter(AgentFilter.Pinned)}
-            />
-
-            <AgentBadgeSelector
-              text="Mine"
-              selected={agentFilters[AgentFilter.Mine]}
-              toggleFilter={() => toggleAgentFilter(AgentFilter.Mine)}
-            />
-            <AgentBadgeSelector
-              text="Private"
-              selected={agentFilters[AgentFilter.Private]}
-              toggleFilter={() => toggleAgentFilter(AgentFilter.Private)}
-            />
-            <AgentBadgeSelector
-              text="Public"
-              selected={agentFilters[AgentFilter.Public]}
-              toggleFilter={() => toggleAgentFilter(AgentFilter.Public)}
-            />
-          </div>
-        </div>
-
-        {/* Agents List */}
-        <div className="mt-4">
-          {featuredAgents.length === 0 && allAgents.length === 0 ? (
-            <Text className="w-full h-full flex flex-col items-center justify-center py-12">
-              No Agents configured yet...
-            </Text>
-          ) : (
-            <>
-              <AgentsSection
-                title="Featured Agents"
-                agents={featuredAgents}
-                pinnedAgents={pinnedAgents}
-              />
-              <AgentsSection
-                title="All Agents"
-                agents={allAgents}
-                pinnedAgents={pinnedAgents}
-              />
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+        ) : (
+          <>
+            <AgentsSection title="Featured Agents" agents={featuredAgents} />
+            <AgentsSection title="All Agents" agents={allAgents} />
+          </>
+        )}
+      </div>*/}
+    </PageWrapper>
   );
 }
