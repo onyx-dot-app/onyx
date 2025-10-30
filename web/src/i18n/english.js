@@ -3365,4 +3365,21 @@ module.exports = {
   // PersonaTable.tsx missing keys
   [k.TYPE]: `Type`,
   [k.VISIBILITY]: `Visibility`,
+
+  // New translations for Russian words found in code
+  [k.RUS_PHONE_NUMBER]: "Phone number (RU)",
+  [k.RUS_PERSON]: "Person (RU)",
+  [k.RUS_BANK_CARD]: "Bank card (RU)",
+  [k.RUS_INN]: "INN (Tax ID, RU)",
+  [k.RUS_OGRNIP]: "OGRNIP (Business ID, RU)",
+  [k.RUS_SNILS]: "SNILS (Pension ID, RU)",
+  [k.RUS_OMS_POLICY]: "OMS policy (Health insurance, RU)",
+  [k.RUS_PASSPORT]: "Passport (RU)",
+  [k.RUS_DRIVER_LICENSE]: "Driver license (RU)",
+  [k.RUS_LOCATION]: "Location",
+  [k.EMAIL_ADDRESS]: "Email address",
+  [k.IP_ADDRESS]: "IP address",
+  [k.DATE_TIME]: "Date time",
+  [k.URL]: "URL",
+  [k.DOMAIN_NAME]: "Domain",
 };

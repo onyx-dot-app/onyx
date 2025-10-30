@@ -3066,4 +3066,21 @@ module.exports = {
   // PersonaTable.tsx missing keys
   [k.TYPE]: `Тип`,
   [k.VISIBILITY]: `Видимость`,
+
+  // PII keys
+  [k.RUS_PHONE_NUMBER]: "Номер телефона (РФ)",
+  [k.RUS_PERSON]: "ФИО (РФ)",
+  [k.RUS_BANK_CARD]: "Банковская карта (РФ)",
+  [k.RUS_INN]: "ИНН",
+  [k.RUS_OGRNIP]: "ОГРНИП",
+  [k.RUS_SNILS]: "СНИЛС",
+  [k.RUS_OMS_POLICY]: "Полис ОМС",
+  [k.RUS_PASSPORT]: "Паспорт (РФ)",
+  [k.RUS_DRIVER_LICENSE]: "Водительское удостоверение (РФ)",
+  [k.RUS_LOCATION]: "Адрес/местоположение",
+  [k.EMAIL_ADDRESS]: "Email адрес",
+  [k.IP_ADDRESS]: "IP-адрес",
+  [k.DATE_TIME]: "Дата и время",
+  [k.URL]: "URL-адрес",
+  [k.DOMAIN_NAME]: "Доменное имя",
 };

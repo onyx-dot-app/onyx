@@ -252,6 +252,8 @@ export const OnyxApiKeyForm = ({
                 const includeLlmRaw =
                   (values as any)?.include_llm ?? selectedTemplate?.include_llm;
 
+                console.log("llmProviders", llmProviders);
+
                 if (
                   !includeLlmRaw ||
                   !Array.isArray(llmProviders) ||
@@ -349,7 +351,10 @@ export const OnyxApiKeyForm = ({
                         }
                         case "multiselect": {
                           const options = (field.values || []).map(
-                            (v: string) => ({ value: v, label: v })
+                            (v: string) => ({
+                              value: v,
+                              label: t(v) || v,
+                            })
                           );
                           return (
                             <MultiSelectField
