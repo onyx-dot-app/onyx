@@ -7,8 +7,6 @@ have a contract or agreement with DanswerAI, you are not permitted to use the En
 Edition features outside of personal development or testing purposes. Please reach out to \
 founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
 
-ARG GUARDRAILS_TOKEN
-
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
@@ -59,12 +57,6 @@ RUN uv pip install --system --upgrade \
 # Русская модель для spaCy
 RUN python -m spacy download ru_core_news_sm
 
-RUN guardrails configure \
-        --disable-metrics \
-        --disable-remote-inferencing \
-        --token $GUARDRAILS_TOKEN
-
-# Install Guardrails validators from guardrails-hub
 
 # Cleanup for CVEs and size reduction
 # https://github.com/tornadoweb/tornado/issues/3107

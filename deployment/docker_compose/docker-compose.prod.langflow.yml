@@ -4,8 +4,6 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-      args:
-        - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     command: >
       /bin/sh -c "
       alembic upgrade head &&
@@ -32,7 +30,6 @@ services:
       - LANGFUSE_HOST=${LANGFUSE_HOST:-http://host.docker.internal:3004}
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-f526c658-9741-48fa-94cf-a5204927476a}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1a62298f-3d5f-4a22-b48d-d8cdd24d3533}
-      - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -51,8 +48,6 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-      args:
-        - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     command: >
       /bin/sh -c "
       if [ -f /etc/ssl/certs/custom-ca.crt ]; then
@@ -79,7 +74,6 @@ services:
       - AWS_REGION_NAME=${AWS_REGION_NAME-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
-      - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -106,8 +100,6 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-      args:
-        - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     command: >
       /bin/sh -c "
       echo \"Starting Telegram Bot\" &&
@@ -128,7 +120,6 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - REDIS_HOST=cache
-      - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
