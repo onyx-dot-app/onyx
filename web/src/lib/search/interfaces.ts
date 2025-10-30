@@ -71,6 +71,7 @@ export interface OnyxDocument extends MinimalOnyxDocument {
   db_doc_id?: number;
   is_internet: boolean;
   validationState?: null | "good" | "bad";
+  access_control_list: string[] | null;
 }
 
 export interface LoadedOnyxDocument extends OnyxDocument {

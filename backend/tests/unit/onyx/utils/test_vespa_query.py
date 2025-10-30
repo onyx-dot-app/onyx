@@ -5,6 +5,7 @@ from uuid import UUID
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
+from onyx.configs.constants import SOURCE_TYPE
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import Tag
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
@@ -15,7 +16,6 @@ from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import METADATA_LIST
-from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import USER_PROJECT
 from shared_configs.configs import MULTI_TENANT

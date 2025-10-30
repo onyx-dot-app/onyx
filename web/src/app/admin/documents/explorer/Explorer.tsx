@@ -30,6 +30,8 @@ const DocumentDisplay = ({
   refresh: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
 }) => {
+  const acl = document.access_control_list;
+  const aclStr = acl && acl.length ? acl.join(", ") : "None";
   return (
     <div
       key={document.document_id}
@@ -91,6 +93,16 @@ const DocumentDisplay = ({
           <div className="ml-1 my-auto">
             <CustomCheckbox checked={!document.hidden} />
           </div>
+        </div>
+
+        <div className="px-1 py-0.5 bg-accent-background-hovered rounded flex items-center gap-1">
+          <span>Permissions:</span>
+          <span
+            className="truncate max-w-[220px] whitespace-nowrap overflow-hidden"
+            title={aclStr}
+          >
+            {aclStr}
+          </span>
         </div>
       </div>
       {document.updated_at && (
