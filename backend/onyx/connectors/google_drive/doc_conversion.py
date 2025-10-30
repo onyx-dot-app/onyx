@@ -74,6 +74,45 @@ GOOGLE_MIME_TYPES = {
     GDriveMimeType.PPT.value: "text/plain",
 }
 
+LARGE_SPREADSHEET_SIZE_THRESHOLD = 500_000  # bytes; chunk spreadsheets above this size
+MAX_SPREADSHEET_SIZE = 2_000_000  # bytes; skip sheets beyond this hard limit
+CSV_CHUNK_SIZE = 100_000  # characters per chunk when splitting large spreadsheets
+
+
+def _process_csv_in_chunks(
+    response: bytes,
+    link: str,
+    chunk_size: int = CSV_CHUNK_SIZE,
+) -> list[TextSection]:
+    """Split a CSV export into several sections to cap per-section memory usage."""
+    sections: list[TextSection] = []
+    try:
+        decoded_text = response.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        logger.warning(f"Failed to decode CSV export: {exc}")
+        return [TextSection(link=link, text="")]
+
+    if not decoded_text:
+        return []
+
+    lines = decoded_text.splitlines()
+    if not lines:
+        return []
+
+    # Keep the header in the first chunk so downstream processing still sees column names.
+    current_chunk = lines[0] + "\n"
+    for line in lines[1:]:
+        # +1 accounts for the newline we add back.
+        if len(current_chunk) + len(line) + 1 > chunk_size and current_chunk:
+            sections.append(TextSection(link=link, text=current_chunk))
+            current_chunk = ""
+        current_chunk += line + "\n"
+
+    if current_chunk:
+        sections.append(TextSection(link=link, text=current_chunk))
+
+    return sections
+
 
 class PermissionSyncContext(BaseModel):
     """
@@ -206,7 +245,37 @@ def _download_and_extract_sections_basic(
             logger.warning(f"Failed to export {file_name} as {export_mime_type}")
             return []
 
-        text = response.decode("utf-8")
+        if mime_type == GDriveMimeType.SPREADSHEET.value:
+            file_size = len(response)
+            if file_size > MAX_SPREADSHEET_SIZE:
+                logger.warning(
+                    f"Skipping extremely large spreadsheet {file_name} ({file_size} bytes)"
+                )
+                return [
+                    TextSection(
+                        link=link,
+                        text=f"[File too large to process: {file_name}]",
+                    )
+                ]
+
+            if file_size > LARGE_SPREADSHEET_SIZE_THRESHOLD:
+                logger.info(
+                    f"Processing large spreadsheet {file_name} in chunks ({file_size} bytes)"
+                )
+                return _process_csv_in_chunks(response, link)
+
+            try:
+                text = response.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                logger.warning(f"Failed to decode CSV {file_name}: {exc}")
+                return [TextSection(link=link, text="")]
+            return [TextSection(link=link, text=text)]
+
+        try:
+            text = response.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            logger.warning(f"Failed to decode export for {file_name}: {exc}")
+            return []
         return [TextSection(link=link, text=text)]
 
     # Process based on mime type
