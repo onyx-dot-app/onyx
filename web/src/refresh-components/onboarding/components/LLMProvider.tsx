@@ -11,6 +11,10 @@ import {
 } from "@/refresh-components/contexts/ChatModalContext";
 import LLMConnectionIcons from "@/refresh-components/onboarding/components/LLMConnectionIcons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import SvgSettings from "@/icons/settings";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgCheckCircle from "@/icons/check-circle";
+import { OnboardingActions, OnboardingState } from "../types";
 
 type LLMProviderProps = {
   title: string;
@@ -18,6 +22,9 @@ type LLMProviderProps = {
   icon?: React.FunctionComponent<SvgProps>;
   llmDescriptor?: WellKnownLLMProviderDescriptor;
   disabled?: boolean;
+  isConnected?: boolean;
+  onboardingState: OnboardingState;
+  onboardingActions: OnboardingActions;
 };
 const LLMProviderInner = ({
   title,
@@ -25,6 +32,9 @@ const LLMProviderInner = ({
   icon: Icon,
   llmDescriptor,
   disabled,
+  isConnected,
+  onboardingState,
+  onboardingActions,
 }: LLMProviderProps) => {
   const { toggleModal } = useChatModal();
 
@@ -41,8 +51,17 @@ const LLMProviderInner = ({
       icon: <LLMConnectionIcons icon={iconNode} />,
       title,
       llmDescriptor,
+      onboardingState,
+      onboardingActions,
     });
-  }, [Icon, llmDescriptor, title, toggleModal]);
+  }, [
+    Icon,
+    llmDescriptor,
+    title,
+    toggleModal,
+    onboardingState,
+    onboardingActions,
+  ]);
 
   return (
     <div className="flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01">
@@ -63,14 +82,23 @@ const LLMProviderInner = ({
           </Truncated>
         </div>
       </div>
-      <Button
-        tertiary
-        rightIcon={SvgArrowExchange}
-        disabled={disabled}
-        onClick={handleConnectClick}
-      >
-        Connect
-      </Button>
+      {isConnected ? (
+        <>
+          <IconButton internal icon={SvgSettings} disabled={disabled} />
+          <div className="h-full p-1">
+            <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+          </div>
+        </>
+      ) : (
+        <Button
+          tertiary
+          rightIcon={SvgArrowExchange}
+          disabled={disabled}
+          onClick={handleConnectClick}
+        >
+          Connect
+        </Button>
+      )}
     </div>
   );
 };

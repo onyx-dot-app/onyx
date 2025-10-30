@@ -23,11 +23,15 @@ import {
 import { LLMConnectionFieldsWithTabs } from "./LLMConnectionFieldsWithTabs";
 import { LLMConnectionFieldsBasic } from "./LLMConnectionFieldsBasic";
 import { getValidationSchema } from "./llmValidationSchema";
+import { useOnboardingState } from "../useOnboardingState";
+import { OnboardingActions, OnboardingState } from "../types";
 
 type LLMConnectionModalData = {
   icon: React.ReactNode;
   title: string;
   llmDescriptor: WellKnownLLMProviderDescriptor;
+  onboardingState: OnboardingState;
+  onboardingActions: OnboardingActions;
 };
 
 const LLMConnectionModal = () => {
@@ -39,6 +43,8 @@ const LLMConnectionModal = () => {
   const modalContent = llmDescriptor
     ? MODAL_CONTENT_MAP[llmDescriptor.name]
     : undefined;
+  const onboardingActions = data?.onboardingActions;
+  const onboardingState = data?.onboardingState;
 
   const initialValues = useMemo(
     () => buildInitialValues(llmDescriptor),
@@ -192,6 +198,13 @@ const LLMConnectionModal = () => {
             console.log("errorMsg", errorMsg);
             return;
           }
+          onboardingActions?.updateData({
+            llmProviders: [
+              ...(onboardingState?.data.llmProviders ?? []),
+              llmDescriptor?.name ?? "",
+            ],
+          });
+          onboardingActions?.setButtonActive(true);
           toggleModal(ModalIds.LLMConnectionModal, false);
         }}
       >

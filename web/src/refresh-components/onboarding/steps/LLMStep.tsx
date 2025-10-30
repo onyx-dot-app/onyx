@@ -11,6 +11,7 @@ import { PROVIDER_ICON_MAP } from "../constants";
 import LLMConnectionModal from "@/refresh-components/onboarding/components/LLMConnectionModal";
 import KeyValueInput from "@/refresh-components/inputs/InputKeyValue";
 import { cn } from "@/lib/utils";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 
 type LLMStepProps = {
   state: OnboardingState;
@@ -25,6 +26,7 @@ const LLMStepInner = ({
   llmDescriptors,
   disabled,
 }: LLMStepProps) => {
+  console.log("onboardingState", onboardingState);
   return (
     <div
       className={cn(
@@ -63,17 +65,24 @@ const LLMStepInner = ({
             className="basis-[calc(50%-theme(spacing.1)/2)] grow"
           >
             <LLMProvider
+              onboardingState={onboardingState}
+              onboardingActions={onboardingActions}
               title={llmDescriptor.title}
               subtitle={llmDescriptor.display_name}
               icon={PROVIDER_ICON_MAP[llmDescriptor.name]}
               llmDescriptor={llmDescriptor}
               disabled={disabled}
+              isConnected={onboardingState.data.llmProviders?.some(
+                (provider) => provider === llmDescriptor.name
+              )}
             />
           </div>
         ))}
 
         <div className="basis-[calc(50%-theme(spacing.1)/2)] grow">
           <LLMProvider
+            onboardingState={onboardingState}
+            onboardingActions={onboardingActions}
             title="Custom Models"
             subtitle="Connect models from other providers or your self-hosted models."
             disabled={disabled}

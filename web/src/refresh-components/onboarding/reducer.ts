@@ -11,7 +11,7 @@ export const initialState: OnboardingState = {
   stepIndex: 1,
   totalSteps: TOTAL_STEPS,
   data: {},
-  isButtonActive: true,
+  isButtonActive: false,
   isLoading: false,
 };
 
@@ -56,6 +56,12 @@ export function onboardingReducer(
       return {
         ...state,
         data: { ...state.data, ...action.payload },
+      };
+
+    case OnboardingActionType.SET_BUTTON_ACTIVE:
+      return {
+        ...state,
+        isButtonActive: action.isButtonActive,
       };
 
     case OnboardingActionType.SET_LOADING:

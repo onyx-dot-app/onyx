@@ -17,7 +17,7 @@ export const buildInitialValues = (
   target_uri: "",
   fast_default_model_name:
     llmDescriptor?.default_fast_model ?? llmDescriptor?.default_model ?? "",
-  name: "Default",
+  name: llmDescriptor?.name ?? "Default",
   provider: llmDescriptor?.name ?? "",
   model_configurations:
     llmDescriptor?.model_configurations.map((model) => ({

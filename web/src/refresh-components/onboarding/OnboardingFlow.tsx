@@ -32,6 +32,9 @@ const OnboardingFlowInner = () => {
                 state={onboardingState}
                 actions={onboardingActions}
                 llmDescriptors={llmDescriptors}
+                disabled={
+                  onboardingState.currentStep !== OnboardingStep.LlmSetup
+                }
               />
             </div>
           </div>
