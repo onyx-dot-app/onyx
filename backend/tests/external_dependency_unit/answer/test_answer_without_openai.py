@@ -38,7 +38,7 @@ def test_answer_with_only_anthropic_provider(
     for provider in fetch_existing_llm_providers(db_session):
         remove_llm_provider(db_session, provider.id)
 
-    anthropic_model = "claude-3-5-sonnet-20240620"
+    anthropic_model = "claude-haiku-4-5-20251001"
     provider_name = f"anthropic-test-{uuid4().hex}"
 
     anthropic_provider = upsert_llm_provider(

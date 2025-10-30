@@ -39,7 +39,7 @@ import {
   ModalIds,
   useChatModal,
 } from "@/refresh-components/contexts/ChatModalContext";
-import LLMPopover from "@/refresh-components/LLMPopover";
+import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { parseLlmDescriptor } from "@/lib/llm/utils";
 import { LlmManager } from "@/lib/hooks";
 
@@ -439,7 +439,7 @@ export default function AIMessage({
                             icon={SvgThumbsUp}
                             onClick={() => handleFeedbackClick("like")}
                             tertiary
-                            active={currentFeedback === "like"}
+                            transient={currentFeedback === "like"}
                             tooltip={
                               currentFeedback === "like"
                                 ? "Remove Like"
@@ -451,7 +451,7 @@ export default function AIMessage({
                             icon={SvgThumbsDown}
                             onClick={() => handleFeedbackClick("dislike")}
                             tertiary
-                            active={currentFeedback === "dislike"}
+                            transient={currentFeedback === "dislike"}
                             tooltip={
                               currentFeedback === "dislike"
                                 ? "Remove Dislike"

@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from typing import cast
 from typing import List
@@ -27,7 +28,6 @@ from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_implementations_v2.web import _open_url_core
 from onyx.tools.tool_implementations_v2.web import _web_search_core
-from onyx.tools.tool_implementations_v2.web import OpenUrlResponse
 from onyx.tools.tool_implementations_v2.web import WebSearchResponse
 
 
@@ -57,7 +57,7 @@ class MockWebSearchProvider(WebSearchProvider):
             raise Exception("Test exception from search provider")
         return self.search_results
 
-    def contents(self, urls: List[str]) -> List[WebContent]:
+    def contents(self, urls: Sequence[str]) -> List[WebContent]:
         if self.should_raise_exception:
             raise Exception("Test exception from search provider")
         return self.content_results
@@ -102,10 +102,6 @@ def create_test_run_context(
 
     # Create test dependencies
     emitter = MockEmitter()
-    aggregated_context = MockAggregatedContext()
-    if global_iteration_responses:
-        aggregated_context.global_iteration_responses = global_iteration_responses
-
     run_dependencies = MockRunDependencies()
     run_dependencies.emitter = emitter
 
@@ -116,7 +112,7 @@ def create_test_run_context(
         research_type=ResearchType.THOUGHTFUL,
         current_run_step=current_run_step,
         iteration_instructions=iteration_instructions or [],
-        aggregated_context=aggregated_context,  # type: ignore[arg-type]
+        global_iteration_responses=global_iteration_responses or [],
         run_dependencies=run_dependencies,  # type: ignore[arg-type]
     )
 
@@ -160,27 +156,21 @@ def test_web_search_core_basic_functionality() -> None:
     assert len(result.results) == 2
 
     # Check first result
-    assert result.results[0].tag == "1"
     assert result.results[0].title == "Test Result 1"
     assert result.results[0].link == "https://example.com/1"
     assert result.results[0].author == "Test Author"
-    assert result.results[0].published_date == "2024-01-01T12:00:00"
     assert result.results[0].snippet == "This is a test snippet 1"
 
     # Check second result
-    assert result.results[1].tag == "2"
     assert result.results[1].title == "Test Result 2"
     assert result.results[1].link == "https://example.com/2"
     assert result.results[1].author is None
-    assert result.results[1].published_date is None
     assert result.results[1].snippet == "This is a test snippet 2"
 
     # Verify context was updated
     assert test_run_context.context.current_run_step == 2
     assert len(test_run_context.context.iteration_instructions) == 1
-    assert (
-        len(test_run_context.context.aggregated_context.global_iteration_responses) == 1
-    )
+    assert len(test_run_context.context.global_iteration_responses) == 1
 
     # Check iteration instruction
     instruction = test_run_context.context.iteration_instructions[0]
@@ -192,28 +182,11 @@ def test_web_search_core_basic_functionality() -> None:
     )
 
     # Check iteration answer
-    answer = test_run_context.context.aggregated_context.global_iteration_responses[0]
+    answer = test_run_context.context.global_iteration_responses[0]
     assert isinstance(answer, IterationAnswer)
     assert answer.tool == WebSearchTool.__name__
     assert answer.iteration_nr == 1
     assert answer.question == queries[0]
-    assert len(answer.cited_documents) == 2
-
-    # Verify cited_documents were added to aggregated_context
-    assert len(test_run_context.context.aggregated_context.cited_documents) == 2
-    # Web documents have "INTERNET_SEARCH_DOC_" prefix added to the URL
-    assert (
-        test_run_context.context.aggregated_context.cited_documents[
-            0
-        ].center_chunk.document_id
-        == "INTERNET_SEARCH_DOC_https://example.com/1"
-    )
-    assert (
-        test_run_context.context.aggregated_context.cited_documents[
-            1
-        ].center_chunk.document_id
-        == "INTERNET_SEARCH_DOC_https://example.com/2"
-    )
 
     # Verify emitter events were captured
     emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
@@ -253,35 +226,20 @@ def test_web_fetch_core_basic_functionality() -> None:
     result = _open_url_core(test_run_context, urls, test_provider)
 
     # Assert
-    assert isinstance(result, OpenUrlResponse)
-    assert len(result.results) == 2
+    assert len(result) == 2
 
     # Check first result
-    assert result.results[0].tag == "1"
-    assert result.results[0].title == "Test Content 1"
-    assert result.results[0].link == "https://example.com/1"
-    assert (
-        result.results[0].truncated_content
-        == "This is the full content of the first page"
-    )
-    assert result.results[0].published_date == "2024-01-01T12:00:00"
+    assert result[0].link == "https://example.com/1"
+    assert result[0].content == "This is the full content of the first page"
 
     # Check second result
-    assert result.results[1].tag == "2"
-    assert result.results[1].title == "Test Content 2"
-    assert result.results[1].link == "https://example.com/2"
-    assert (
-        result.results[1].truncated_content
-        == "This is the full content of the second page"
-    )
-    assert result.results[1].published_date is None
+    assert result[1].link == "https://example.com/2"
+    assert result[1].content == "This is the full content of the second page"
 
     # Verify context was updated
     assert test_run_context.context.current_run_step == 2
     assert len(test_run_context.context.iteration_instructions) == 1
-    assert (
-        len(test_run_context.context.aggregated_context.global_iteration_responses) == 1
-    )
+    assert len(test_run_context.context.global_iteration_responses) == 1
 
     # Check iteration instruction
     instruction = test_run_context.context.iteration_instructions[0]
@@ -294,7 +252,7 @@ def test_web_fetch_core_basic_functionality() -> None:
     )
 
     # Check iteration answer
-    answer = test_run_context.context.aggregated_context.global_iteration_responses[0]
+    answer = test_run_context.context.global_iteration_responses[0]
     assert isinstance(answer, IterationAnswer)
     assert answer.tool == WebSearchTool.__name__
     assert answer.iteration_nr == 1
@@ -303,10 +261,6 @@ def test_web_fetch_core_basic_functionality() -> None:
         == "Fetch content from URLs: https://example.com/1, https://example.com/2"
     )
     assert len(answer.cited_documents) == 2
-
-    # Verify cited_documents were added to the answer but NOT to aggregated_context.cited_documents
-    # (web fetch adds documents to the answer but not to the global cited_documents list)
-    assert len(test_run_context.context.aggregated_context.cited_documents) == 0
 
     # Verify emitter events were captured
     emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
@@ -393,7 +347,7 @@ def test_web_search_core_multiple_queries() -> None:
                 ]
             return []
 
-        def contents(self, urls: List[str]) -> List[WebContent]:
+        def contents(self, urls: Sequence[str]) -> List[WebContent]:
             return []
 
     test_provider = MultiQueryMockProvider()
@@ -415,9 +369,7 @@ def test_web_search_core_multiple_queries() -> None:
     # Verify context was updated
     assert test_run_context.context.current_run_step == 2
     assert len(test_run_context.context.iteration_instructions) == 1
-    assert (
-        len(test_run_context.context.aggregated_context.global_iteration_responses) == 1
-    )
+    assert len(test_run_context.context.global_iteration_responses) == 1
 
     # Check iteration instruction contains both queries
     instruction = test_run_context.context.iteration_instructions[0]
@@ -428,29 +380,12 @@ def test_web_search_core_multiple_queries() -> None:
     assert "second query" in instruction.reasoning
 
     # Check iteration answer
-    answer = test_run_context.context.aggregated_context.global_iteration_responses[0]
+    answer = test_run_context.context.global_iteration_responses[0]
     assert isinstance(answer, IterationAnswer)
     assert answer.tool == WebSearchTool.__name__
     assert answer.iteration_nr == 1
     assert "first query" in answer.question
     assert "second query" in answer.question
-    assert len(answer.cited_documents) == 3
-
-    # Verify cited_documents were added to aggregated_context
-    assert len(test_run_context.context.aggregated_context.cited_documents) == 3
-    # Verify at least one of the cited documents has the correct format
-    document_ids = [
-        doc.center_chunk.document_id
-        for doc in test_run_context.context.aggregated_context.cited_documents
-    ]
-    assert any(
-        "INTERNET_SEARCH_DOC_https://example.com/first" in doc_id
-        for doc_id in document_ids
-    )
-    assert any(
-        "INTERNET_SEARCH_DOC_https://example.com/second" in doc_id
-        for doc_id in document_ids
-    )
 
     # Verify emitter events were captured
     emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)

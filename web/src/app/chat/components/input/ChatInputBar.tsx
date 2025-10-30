@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { FiPlus } from "react-icons/fi";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import LLMPopover from "@/refresh-components/LLMPopover";
+import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
@@ -31,7 +31,7 @@ import SvgHourglass from "@/icons/hourglass";
 import SvgArrowUp from "@/icons/arrow-up";
 import SvgStop from "@/icons/stop";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import { ActionToggle } from "@/app/chat/components/input/ActionManagement";
+import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import SvgPlusCircle from "@/icons/plus-circle";
 import {
@@ -528,13 +528,13 @@ function ChatInputBarInner({
                   icon={SvgPlusCircle}
                   tooltip="Attach Files"
                   tertiary
-                  active={open}
+                  transient={open}
                 />
               )}
               selectedFileIds={currentMessageFiles.map((f) => f.id)}
             />
             {selectedAssistant.tools.length > 0 && (
-              <ActionToggle
+              <ActionsPopover
                 selectedAssistant={selectedAssistant}
                 filterManager={filterManager}
                 availableSources={memoizedAvailableSources}
@@ -543,10 +543,10 @@ function ChatInputBarInner({
             {showDeepResearch && (
               <SelectButton
                 leftIcon={SvgHourglass}
-                active={deepResearchEnabled}
                 onClick={toggleDeepResearch}
-                folded
+                engaged={deepResearchEnabled}
                 action
+                folded
               >
                 Deep Research
               </SelectButton>
@@ -569,8 +569,8 @@ function ChatInputBarInner({
                         prev.filter((id) => id !== toolId)
                       );
                     }}
+                    engaged
                     action
-                    active
                   >
                     {tool.display_name}
                   </SelectButton>

@@ -17,17 +17,14 @@ from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.enums import ResearchType
-from onyx.agents.agent_search.dr.models import AggregatedDRContext
+from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
+from onyx.chat.models import LlmDoc
 from onyx.chat.turn.infra.emitter import Emitter
+from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
-from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
-    OktaProfileTool,
-)
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.tools.tool import Tool
 
 # Type alias for all tool types accepted by the Agent
 AgentToolType = (
@@ -46,14 +43,12 @@ AgentToolType = (
 class ChatTurnDependencies:
     llm_model: Model
     model_settings: ModelSettings
+    # TODO we can delete this field (combine them)
     llm: LLM
     db_session: Session
-    tools: Sequence[FunctionTool]
+    tools: Sequence[Tool]
     redis_client: Redis
     emitter: Emitter
-    search_pipeline: SearchTool | None = None
-    image_generation_tool: ImageGenerationTool | None = None
-    okta_profile_tool: OktaProfileTool | None = None
 
 
 @dataclass
@@ -64,10 +59,18 @@ class ChatTurnContext:
     message_id: int
     research_type: ResearchType
     run_dependencies: ChatTurnDependencies
-    aggregated_context: AggregatedDRContext
     current_run_step: int = 0
     iteration_instructions: list[IterationInstructions] = dataclasses.field(
         default_factory=list
     )
-    web_fetch_results: list[dict] = dataclasses.field(default_factory=list)
+    global_iteration_responses: list[IterationAnswer] = dataclasses.field(
+        default_factory=list
+    )
     should_cite_documents: bool = False
+    documents_processed_by_citation_context_handler: int = 0
+    tool_calls_processed_by_citation_context_handler: int = 0
+    unordered_fetched_inference_sections: list[InferenceSection] = dataclasses.field(
+        default_factory=list
+    )
+    ordered_fetched_documents: list[LlmDoc] = dataclasses.field(default_factory=list)
+    citations: list[CitationInfo] = dataclasses.field(default_factory=list)

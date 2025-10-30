@@ -1,7 +1,10 @@
 from langchain_core.messages import HumanMessage
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage as LangChainSystemMessage
 
 from onyx.agents.agent_sdk.message_format import base_messages_to_agent_sdk_msgs
+from onyx.agents.agent_sdk.message_types import InputTextContent
+from onyx.agents.agent_sdk.message_types import SystemMessage as AgentSDKSystemMessage
+from onyx.agents.agent_sdk.message_types import UserMessage
 
 
 def test_simple_text_human_message() -> None:
@@ -19,17 +22,21 @@ def test_simple_text_human_message() -> None:
 
     # Assert
     assert len(results) == 1
-    assert results[0]["role"] == "user"
-    assert isinstance(results[0]["content"], list)
-    assert len(results[0]["content"]) == 1
-    assert results[0]["content"][0]["type"] == "input_text"
-    assert results[0]["content"][0]["text"] == "What is the capital of France?"
+    assert results[0].get("role") == "user"
+    # Type narrow after checking role
+    user_msg: UserMessage = results[0]  # type: ignore[assignment]
+    assert isinstance(user_msg["content"], list)
+    assert len(user_msg["content"]) == 1
+    first_content = user_msg["content"][0]
+    assert first_content["type"] == "input_text"
+    text_content: InputTextContent = first_content  # type: ignore[assignment]
+    assert text_content["text"] == "What is the capital of France?"
 
 
 def test_base_messages_to_agent_sdk_msgs() -> None:
     """Test conversion of SystemMessage and HumanMessage with multimodal content (text + image)."""
     # Arrange
-    system_message = SystemMessage(
+    system_message = LangChainSystemMessage(
         content="You are a highly capable, thoughtful, and precise assistant..",
         additional_kwargs={},
         response_metadata={},
@@ -50,22 +57,33 @@ def test_base_messages_to_agent_sdk_msgs() -> None:
     # Act
     messages = [system_message, human_message]
     results = base_messages_to_agent_sdk_msgs(messages)
-    # Assert
-    assert results[0]["role"] == "system"
-    assert isinstance(results[0]["content"], list)
-    assert len(results[0]["content"]) == 1
-    assert results[0]["content"][0]["type"] == "input_text"
-    assert "You are a highly capable" in results[0]["content"][0]["text"]
 
-    assert results[1]["role"] == "user"
-    assert isinstance(results[1]["content"], list)
-    assert len(results[1]["content"]) == 2
+    # Assert - System message
+    assert results[0].get("role") == "system"
+    system_msg: AgentSDKSystemMessage = results[0]  # type: ignore[assignment]
+    assert isinstance(system_msg["content"], list)
+    assert len(system_msg["content"]) == 1
+    first_content = system_msg["content"][0]
+    assert first_content["type"] == "input_text"
+    text_content: InputTextContent = first_content  # type: ignore[assignment]
+    assert "You are a highly capable" in text_content["text"]
+
+    # Assert - User message
+    assert results[1].get("role") == "user"
+    user_msg: UserMessage = results[1]  # type: ignore[assignment]
+    assert isinstance(user_msg["content"], list)
+    assert len(user_msg["content"]) == 2
 
     # First item should be text
-    assert results[1]["content"][0]["type"] == "input_text"
-    assert results[1]["content"][0]["text"] == "what's in this screenshot"
+    first_item = user_msg["content"][0]
+    assert first_item["type"] == "input_text"
+    text_item: InputTextContent = first_item  # type: ignore[assignment]
+    assert text_item["text"] == "what's in this screenshot"
 
-    # Second item should be image_url
-    assert results[1]["content"][1]["type"] == "input_image"
-    assert results[1]["content"][1]["image_url"].startswith("data:image/png;base64")
-    assert results[1]["content"][1]["detail"] == "auto"
+    # Second item should be image
+    second_item = user_msg["content"][1]
+    assert second_item["type"] == "input_image"
+    # Since we know it's input_image type, we can access image-specific fields
+    # but need type: ignore since mypy doesn't narrow unions automatically
+    assert second_item["image_url"].startswith("data:image/png;base64")  # type: ignore[typeddict-item]
+    assert second_item["detail"] == "auto"  # type: ignore[typeddict-item]

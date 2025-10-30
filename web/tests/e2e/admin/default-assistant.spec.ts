@@ -571,7 +571,7 @@ test.describe("Default Assistant Admin Page", () => {
         .first();
       if ((await toggle.getAttribute("data-state")) === "checked") {
         await toggle.click();
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(3000);
       }
     }
 
@@ -610,7 +610,7 @@ test.describe("Default Assistant Admin Page", () => {
         .first();
       if ((await toggle.getAttribute("data-state")) === "unchecked") {
         await toggle.click();
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(3000);
       }
     }
 
@@ -619,6 +619,7 @@ test.describe("Default Assistant Admin Page", () => {
     await waitForUnifiedGreeting(page);
     await expect(page.locator(TOOL_IDS.actionToggle)).toBeVisible();
     await openActionManagement(page);
+    await page.pause();
     expect(await page.$(TOOL_IDS.searchOption)).toBeTruthy();
     expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
     expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
@@ -643,7 +644,7 @@ test.describe("Default Assistant Admin Page", () => {
 
       if (currentState !== originalState) {
         await toggle.click();
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(3000);
       }
     }
   });

@@ -53,6 +53,8 @@ def jira_connector_with_jql() -> JiraConnector:
             "jira_api_token": os.environ["JIRA_API_TOKEN"],
         }
     )
+    connector.validate_connector_settings()
+
     return connector
 
 

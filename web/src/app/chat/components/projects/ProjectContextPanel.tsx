@@ -236,7 +236,7 @@ export default function ProjectContextPanel({
             trigger={(open) => (
               // The `secondary={undefined}` is required here because `CreateButton` sets it to true.
               // Therefore, we need to first remove the truthiness before passing in the other `tertiary` flag.
-              <CreateButton secondary={undefined} tertiary active={open}>
+              <CreateButton secondary={undefined} tertiary transient={open}>
                 Add Files
               </CreateButton>
             )}
