@@ -11,11 +11,13 @@ import SvgCheckCircle from "@/icons/check-circle";
 type OnboardingHeaderProps = {
   state: OnboardingState;
   actions: OnboardingActions;
+  onToggleCollapse?: () => void;
 };
 
 const OnboardingHeaderInner = ({
   state: onboardingState,
   actions: onboardingActions,
+  onToggleCollapse,
 }: OnboardingHeaderProps) => {
   const StepIcon = STEP_CONFIG[onboardingState.currentStep].icon;
   const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
@@ -43,7 +45,7 @@ const OnboardingHeaderInner = ({
             >
               {stepButtonText}
             </Button>
-            <IconButton internal icon={SvgFold} />
+            <IconButton internal icon={SvgFold} onClick={onToggleCollapse} />
           </>
         ) : (
           <IconButton internal icon={SvgX} onClick={() => {}} />
