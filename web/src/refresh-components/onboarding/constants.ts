@@ -190,3 +190,7 @@ export const PROVIDER_TAB_CONFIG: Record<string, ProviderTabConfig> = {
     ],
   },
 };
+
+export const PROVIDER_SKIP_FIELDS: Record<string, string[]> = {
+  vertex_ai: ["vertex_location"],
+};

@@ -186,7 +186,6 @@ const LLMConnectionModal = () => {
             console.log("errorMsg", errorMsg);
             return;
           }
-
           toggleModal(ModalIds.LLMConnectionModal, false);
         }}
       >
@@ -291,7 +290,16 @@ const LLMConnectionModal = () => {
                 >
                   Cancel
                 </Button>
-                <Button type="submit">Connect</Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    apiStatus != "success" ||
+                    !formikProps.isValid ||
+                    !formikProps.dirty
+                  }
+                >
+                  Connect
+                </Button>
               </div>
             </Form>
           );
