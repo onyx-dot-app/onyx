@@ -42,7 +42,7 @@ const OnboardingFlowInner = ({
               : "translate-x-0")
           }
         >
-          <div className="w-1/2 shrink-0 pr-2">
+          <div className="w-1/2 shrink-0">
             <div className="flex flex-col gap-2">
               <NameStep state={onboardingState} actions={onboardingActions} />
               <LLMStep
@@ -55,7 +55,7 @@ const OnboardingFlowInner = ({
               />
             </div>
           </div>
-          <div className="w-1/2 shrink-0 pl-2">
+          <div className="w-1/2 shrink-0">
             <FinalStep />
           </div>
         </div>

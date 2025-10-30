@@ -20,12 +20,30 @@ type LLMStepProps = {
   disabled?: boolean;
 };
 
+const LLMProviderSkeleton = () => {
+  return (
+    <div className="flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01 animate-pulse">
+      <div className="flex gap-1 p-1 flex-1 min-w-0">
+        <div className="h-full p-0.5">
+          <div className="w-4 h-4 rounded-full bg-neutral-200 dark:bg-neutral-700" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="h-3 w-1/2 bg-neutral-200 dark:bg-neutral-700 rounded" />
+          <div className="mt-2 h-2 w-3/4 bg-neutral-200 dark:bg-neutral-700 rounded" />
+        </div>
+      </div>
+      <div className="h-6 w-16 bg-neutral-200 dark:bg-neutral-700 rounded" />
+    </div>
+  );
+};
+
 const LLMStepInner = ({
   state: onboardingState,
   actions: onboardingActions,
   llmDescriptors,
   disabled,
 }: LLMStepProps) => {
+  const isLoading = !llmDescriptors || llmDescriptors.length === 0;
   return (
     <div
       className={cn(
@@ -58,35 +76,48 @@ const LLMStepInner = ({
         <Separator className="my-2" />
       </div>
       <div className="flex flex-wrap gap-1 [&>*:last-child:nth-child(odd)]:basis-full">
-        {llmDescriptors.map((llmDescriptor) => (
-          <div
-            key={llmDescriptor.name}
-            className="basis-[calc(50%-theme(spacing.1)/2)] grow"
-          >
-            <LLMProvider
-              onboardingState={onboardingState}
-              onboardingActions={onboardingActions}
-              title={llmDescriptor.title}
-              subtitle={llmDescriptor.display_name}
-              icon={PROVIDER_ICON_MAP[llmDescriptor.name]}
-              llmDescriptor={llmDescriptor}
-              disabled={disabled}
-              isConnected={onboardingState.data.llmProviders?.some(
-                (provider) => provider === llmDescriptor.name
-              )}
-            />
-          </div>
-        ))}
+        {isLoading ? (
+          Array.from({ length: 8 }).map((_, idx) => (
+            <div
+              key={idx}
+              className="basis-[calc(50%-theme(spacing.1)/2)] grow"
+            >
+              <LLMProviderSkeleton />
+            </div>
+          ))
+        ) : (
+          <>
+            {llmDescriptors.map((llmDescriptor) => (
+              <div
+                key={llmDescriptor.name}
+                className="basis-[calc(50%-theme(spacing.1)/2)] grow"
+              >
+                <LLMProvider
+                  onboardingState={onboardingState}
+                  onboardingActions={onboardingActions}
+                  title={llmDescriptor.title}
+                  subtitle={llmDescriptor.display_name}
+                  icon={PROVIDER_ICON_MAP[llmDescriptor.name]}
+                  llmDescriptor={llmDescriptor}
+                  disabled={disabled}
+                  isConnected={onboardingState.data.llmProviders?.some(
+                    (provider) => provider === llmDescriptor.name
+                  )}
+                />
+              </div>
+            ))}
 
-        <div className="basis-[calc(50%-theme(spacing.1)/2)] grow">
-          <LLMProvider
-            onboardingState={onboardingState}
-            onboardingActions={onboardingActions}
-            title="Custom Models"
-            subtitle="Connect models from other providers or your self-hosted models."
-            disabled={disabled}
-          />
-        </div>
+            <div className="basis-[calc(50%-theme(spacing.1)/2)] grow">
+              <LLMProvider
+                onboardingState={onboardingState}
+                onboardingActions={onboardingActions}
+                title="Custom Models"
+                subtitle="Connect models from other providers or your self-hosted models."
+                disabled={disabled}
+              />
+            </div>
+          </>
+        )}
         <LLMConnectionModal />
       </div>
     </div>
