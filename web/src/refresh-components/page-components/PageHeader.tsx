@@ -35,7 +35,9 @@ export default function PageHeader({
         </div>
         <div className="flex flex-col">
           <Text headingH2>{title}</Text>
-          <Text secondaryBody>{description}</Text>
+          <Text secondaryBody text03>
+            {description}
+          </Text>
         </div>
       </div>
       {children}

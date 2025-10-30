@@ -148,7 +148,7 @@ export default function AgentsPage() {
         description="Customize AI behavior and knowledge for you and your team’s use cases."
         sticky
         rightChildren={
-          <CreateButton primary secondary={undefined}>
+          <CreateButton primary secondary={undefined} href="/assistants/new">
             New Agent
           </CreateButton>
         }
