@@ -14,6 +14,7 @@ import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import PageWrapper from "@/refresh-components/page-components/PageWrapper";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface AgentsSectionProps {
   title: string;
@@ -43,31 +44,12 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
   );
 }
 
-interface AgentBadgeSelectorProps {
-  text: string;
-  selected: boolean;
-  toggleFilter: () => void;
-}
-
-function AgentBadgeSelector({
-  text,
-  selected,
-  toggleFilter,
-}: AgentBadgeSelectorProps) {
-  return (
-    <Button secondary transient={selected} onClick={toggleFilter}>
-      {text}
-    </Button>
-  );
-}
-
-export enum AgentFilter {
-  Pinned = "Pinned",
-  Public = "Public",
-  Private = "Private",
-  Mine = "Mine",
-}
-
+// enum AgentFilter {
+//   Pinned = "Pinned",
+//   Public = "Public",
+//   Private = "Private",
+//   Mine = "Mine",
+// }
 // function useAgentFilters() {
 //   const [agentFilters, setAgentFilters] = useState<
 //     Record<AgentFilter, boolean>
@@ -87,10 +69,11 @@ export enum AgentFilter {
 // }
 
 export default function AgentsPage() {
-  const { agents, pinnedAgents } = useAgentsContext();
+  const { agents } = useAgentsContext();
   // const { agentFilters, toggleAgentFilter } = useAgentFilters();
   const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<"all" | "mine">("all");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -106,34 +89,14 @@ export default function AgentsPage() {
       const labelMatches = agent.labels?.some((label) =>
         label.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
-      // const publicFilter = !agentFilters[AgentFilter.Public] || agent.is_public;
-      // const privateFilter =
-      //   !agentFilters[AgentFilter.Private] || !agent.is_public;
-      // const pinnedFilter =
-      //   !agentFilters[AgentFilter.Pinned] ||
-      //   (pinnedAgents.map((a) => a.id).includes(agent.id) ?? false);
 
-      // const mineFilter =
-      //   !agentFilters[AgentFilter.Mine] || checkUserOwnsAgent(user, agent);
-
+      const mineFilter =
+        activeTab === "mine" ? checkUserOwnsAgent(user, agent) : true;
       const isNotUnifiedAgent = agent.id !== 0;
 
-      return (
-        (nameMatches || labelMatches) &&
-        // publicFilter &&
-        // privateFilter &&
-        // pinnedFilter &&
-        // mineFilter &&
-        isNotUnifiedAgent
-      );
+      return (nameMatches || labelMatches) && mineFilter && isNotUnifiedAgent;
     });
-  }, [
-    agents,
-    searchQuery,
-    // agentFilters,
-    pinnedAgents,
-    user,
-  ]);
+  }, [agents, searchQuery, activeTab, user]);
 
   const featuredAgents = [
     ...memoizedCurrentlyVisibleAgents.filter(
@@ -167,6 +130,15 @@ export default function AgentsPage() {
             onChange={(event) => setSearchQuery(event.target.value)}
             leftSearchIcon
           />
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as "all" | "mine")}
+          >
+            <TabsList>
+              <TabsTrigger value="all">All Agents</TabsTrigger>
+              <TabsTrigger value="mine">My Agents</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
       </PageHeader>
 
