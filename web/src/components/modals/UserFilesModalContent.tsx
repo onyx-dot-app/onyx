@@ -13,7 +13,7 @@ import SvgImage from "@/icons/image";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/app/chat/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
+import OverflowDiv from "@/refresh-components/OverflowDiv";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 
@@ -187,7 +187,7 @@ export default function UserFilesModalContent({
             <Text text03>No files found</Text>
           </div>
         ) : (
-          <VerticalShadowScroller className="px-2 pt-2 gap-2">
+          <OverflowDiv className="px-2 pt-2 gap-2">
             {filtered.map((projectFle) => {
               const isSelected = selectedIds.has(projectFle.id);
               return (
@@ -221,7 +221,7 @@ export default function UserFilesModalContent({
                 />
               );
             })}
-          </VerticalShadowScroller>
+          </OverflowDiv>
         )}
       </div>
     </>

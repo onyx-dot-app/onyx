@@ -15,7 +15,7 @@ import SvgImage from "@/icons/image";
 import { generateIdenticon } from "@/refresh-components/AgentIcon";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { cn } from "@/lib/utils";
-import VerticalShadowScroller from "@/refresh-components/VerticalShadowScroller";
+import OverflowDiv from "@/refresh-components/OverflowDiv";
 
 export function getAgentIcon(
   agent: MinimalPersonaSnapshot
@@ -65,9 +65,7 @@ export function SidebarBody({
     <>
       {actionButton && <div className="px-2">{actionButton}</div>}
       <div className="flex flex-col min-h-0 h-full gap-2">
-        <VerticalShadowScroller className="px-2">
-          {children}
-        </VerticalShadowScroller>
+        <OverflowDiv className="px-2">{children}</OverflowDiv>
         {footer}
       </div>
     </>
