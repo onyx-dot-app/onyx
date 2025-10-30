@@ -387,28 +387,25 @@ function AppSidebarInner() {
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
         {folded ? (
-          <div className="flex flex-col h-full justify-between">
-            <div className="px-2">
-              {newSessionButton}
-              <SidebarTab
-                leftIcon={SvgOnyxOctagon}
-                onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-                active={isOpen(ModalIds.AgentsModal)}
-                folded
-              >
-                Agents
-              </SidebarTab>
-              <SidebarTab
-                leftIcon={SvgFolderPlus}
-                onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
-                active={isOpen(ModalIds.CreateProjectModal)}
-                folded
-              >
-                New Project
-              </SidebarTab>
-            </div>
-            {settingsButton}
-          </div>
+          <SidebarBody footer={settingsButton}>
+            {newSessionButton}
+            <SidebarTab
+              leftIcon={SvgOnyxOctagon}
+              onClick={() => toggleModal(ModalIds.AgentsModal, true)}
+              active={isOpen(ModalIds.AgentsModal)}
+              folded
+            >
+              Agents
+            </SidebarTab>
+            <SidebarTab
+              leftIcon={SvgFolderPlus}
+              onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
+              active={isOpen(ModalIds.CreateProjectModal)}
+              folded
+            >
+              New Project
+            </SidebarTab>
+          </SidebarBody>
         ) : (
           <SidebarBody actionButton={newSessionButton} footer={settingsButton}>
             {/* Agents */}
@@ -438,6 +435,7 @@ function AppSidebarInner() {
               </SidebarSection>
             </DndContext>
 
+            {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
             <DndContext
               sensors={sensors}
               collisionDetection={pointerWithin}
@@ -447,6 +445,7 @@ function AppSidebarInner() {
               ]}
               onDragEnd={handleChatProjectDragEnd}
             >
+              {/* Projects */}
               <SidebarSection
                 title="Projects"
                 action={
@@ -472,10 +471,10 @@ function AppSidebarInner() {
                   New Project
                 </SidebarTab>
               </SidebarSection>
+
+              {/* Recents */}
               <RecentsSection chatSessions={chatSessions} />
             </DndContext>
-
-            {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
           </SidebarBody>
         )}
       </SidebarWrapper>
