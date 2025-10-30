@@ -20,13 +20,8 @@ export default function VerticalShadowScroller({
 }: VerticalShadowScrollerProps) {
   return (
     <div className="relative flex-1 min-h-0 overflow-y-hidden flex flex-col">
-      <div
-        className={cn(
-          "flex-1 min-h-0 overflow-y-auto px-2 flex flex-col",
-          className
-        )}
-      >
-        <div className="flex-1 flex flex-col">{children}</div>
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+        <div className={cn("flex-1 flex flex-col", className)}>{children}</div>
         <div style={{ minHeight }} />
       </div>
       <div

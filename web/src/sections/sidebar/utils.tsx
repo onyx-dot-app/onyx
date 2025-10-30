@@ -65,7 +65,9 @@ export function SidebarBody({
     <>
       {actionButton && <div className="px-2">{actionButton}</div>}
       <div className="flex flex-col min-h-0 h-full gap-2">
-        <VerticalShadowScroller>{children}</VerticalShadowScroller>
+        <VerticalShadowScroller className="px-2">
+          {children}
+        </VerticalShadowScroller>
         {footer}
       </div>
     </>
