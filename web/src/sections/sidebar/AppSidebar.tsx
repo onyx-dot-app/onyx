@@ -63,6 +63,7 @@ import { ChatSession } from "@/app/chat/interfaces";
 import { SidebarBody } from "@/sections/sidebar/utils";
 import { useUser } from "@/components/user/UserProvider";
 import SvgSettings from "@/icons/settings";
+import { useActiveSidebarTab } from "@/lib/hooks";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -306,6 +307,7 @@ function AppSidebarInner() {
   );
 
   const { isAdmin, isCurator } = useUser();
+  const activeSidebarTab = useActiveSidebarTab();
   const newSessionButton = useMemo(
     () => (
       <div data-testid="AppSidebar/new-session">
@@ -313,13 +315,29 @@ function AppSidebarInner() {
           leftIcon={SvgEditBig}
           folded={folded}
           onClick={() => route({})}
-          active={Array.from(searchParams).length === 0}
+          active={activeSidebarTab === "new-session"}
         >
           New Session
         </SidebarTab>
       </div>
     ),
     [folded, route, searchParams]
+  );
+  const moreAgentsButton = useMemo(
+    () => (
+      <div data-testid="AppSidebar/more-agents">
+        <SidebarTab
+          leftIcon={folded ? SvgOnyxOctagon : SvgMoreHorizontal}
+          href="/chat/agents"
+          folded={folded}
+          active={activeSidebarTab === "more-agents"}
+          lowlight={!folded}
+        >
+          More Agents
+        </SidebarTab>
+      </div>
+    ),
+    [folded]
   );
   const newProjectButton = useMemo(
     () => (
@@ -334,22 +352,6 @@ function AppSidebarInner() {
       </SidebarTab>
     ),
     [folded, toggleModal, isOpen]
-  );
-  const moreAgentsButton = useMemo(
-    () => (
-      <div data-testid="AppSidebar/more-agents">
-        <SidebarTab
-          leftIcon={folded ? SvgOnyxOctagon : SvgMoreHorizontal}
-          href="/chat/agents"
-          folded={folded}
-          // active={false}
-          lowlight={!folded}
-        >
-          More Agents
-        </SidebarTab>
-      </div>
-    ),
-    [folded]
   );
   const settingsButton = useMemo(
     () => (
