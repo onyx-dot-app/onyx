@@ -21,7 +21,7 @@ upstream web_server {
 }
 
 upstream mcp_server {
-    server ${ONYX_BACKEND_API_HOST}:8081 fail_timeout=0;
+    server ${ONYX_BACKEND_API_HOST}:8090 fail_timeout=0;
 }
 
 server {
@@ -51,7 +51,7 @@ server {
         proxy_read_timeout 300s;
 
         proxy_redirect off;
-        proxy_pass http://mcp_server;
+        proxy_pass http://mcp_server/;
     }
 
     # Match both /api/* and /openapi.json in a single rule
