@@ -3,6 +3,7 @@ import multiprocessing
 import os
 import time
 import traceback
+from functools import lru_cache
 from time import sleep
 
 import sentry_sdk
@@ -39,6 +40,38 @@ from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import SENTRY_DSN
 
 logger = setup_logger()
+
+
+@lru_cache(maxsize=128)
+def _can_reconstruct_exception(exc_type: type) -> bool:
+    """
+    Check if an exception type can be safely reconstructed with a single string argument.
+
+    Some exception types require specific constructor arguments beyond just a message.
+    For example:
+    - ValueError("msg") works ✓
+    - ClientError(error_response, operation_name) requires 2 args ✗
+
+    This function uses introspection to check if type(exc_type)(message) will succeed
+    by examining the constructor signature.
+
+    Args:
+        exc_type: The exception class to check
+
+    Returns:
+        True if the exception can be constructed with just a string message,
+        False if it requires additional arguments
+
+    Note:
+        Uses LRU cache to avoid repeated introspection overhead.
+    """
+    sig = inspect.signature(exc_type.__init__)
+    params = [p for p in sig.parameters.values() if p.name != "self"]
+
+    # Can reconstruct if it has 0-1 params, or multiple params with defaults
+    return len(params) <= 1 or all(
+        p.default != inspect.Parameter.empty for p in params[1:]
+    )
 
 
 def _verify_indexing_attempt(
@@ -239,31 +272,18 @@ def _docfetching_task(
         )
 
         # Truncate long exception messages to prevent them from overwhelming logs/storage.
-        # We need to be careful when reconstructing exceptions because:
-        #
-        # 1. This function runs in a spawned process, and when it raises an exception,
-        #    job_client.py's _initializer() captures the ENTIRE traceback via
-        #    traceback.format_exc() and sends it to the parent process.
-        #
-        # 2. If we blindly try to reconstruct an exception with type(e)(message),
-        #    it will fail for exception types that require specific constructor arguments.
-        #    For example, botocore's ClientError requires (error_response, operation_name).
-        #
-        # 3. When the reconstruction fails, Python includes BOTH exceptions in the
-        #    traceback: the failed TypeError from construction, AND the original exception
-        #    being re-raised. This pollutes logs with confusing intermediate errors.
-        #
-        # Solution: Use introspection to check if the exception type can be safely
-        # constructed with a single string argument. Only attempt sanitization if safe.
+        # CONTEXT: This function runs in a spawned process. When an exception occurs,
+        # job_client.py's _initializer() captures the ENTIRE traceback (including any
+        # intermediate failed attempts) via traceback.format_exc() and sends it to the
+        # parent process for logging.
+
+        # PROBLEM: If we blindly try type(e)(str(e)[:1024]) and it fails (because the
+        # exception requires specific constructor args), Python includes BOTH the failed
+        # TypeError AND the original exception in the traceback, polluting logs.
+
+        # Only attempt reconstruction if it is safe to do so
         try:
-            sig = inspect.signature(type(e).__init__)
-            params = [p for p in sig.parameters.values() if p.name != "self"]
-
-            can_reconstruct = len(params) <= 1 or all(
-                p.default != inspect.Parameter.empty for p in params[1:]
-            )
-
-            if can_reconstruct:
+            if _can_reconstruct_exception(type(e)):
                 # Safe to reconstruct with truncated message
                 sanitized_e = type(e)(str(e)[:1024])
                 sanitized_e.__traceback__ = e.__traceback__
