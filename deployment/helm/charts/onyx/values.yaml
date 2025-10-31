@@ -94,7 +94,7 @@ inferenceCapability:
   resources:
     requests:
       cpu: 2000m
-      memory: 6Gi
+      memory: 3Gi
     limits:
       cpu: 4000m
       memory: 10Gi
@@ -127,11 +127,11 @@ indexCapability:
   limitConcurrency: 10
   resources:
     requests:
-      cpu: 2000m
-      memory: 6Gi
-    limits:
       cpu: 4000m
-      memory: 10Gi
+      memory: 3Gi
+    limits:
+      cpu: 6000m
+      memory: 6Gi
   podSecurityContext: {}
   securityContext:
     privileged: true
@@ -307,11 +307,11 @@ api:
 
   resources:
     requests:
-      cpu: 1000m
+      cpu: 500m
       memory: 1Gi
     limits:
-      cpu: 2000m
-      memory: 2Gi
+      cpu: 1000m
+      memory: 3Gi
 
   autoscaling:
     enabled: false
@@ -396,8 +396,8 @@ celery_beat:
     app: celery-beat
   resources:
     requests:
-      cpu: 1000m
-      memory: 1Gi
+      cpu: 500m
+      memory: 512Mi
     limits:
       cpu: 1000m
       memory: 1Gi
@@ -431,11 +431,11 @@ celery_worker_heavy:
     app: celery-worker-heavy
   resources:
     requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
       cpu: 1000m
       memory: 2Gi
-    limits:
-      cpu: 2500m
-      memory: 5Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
@@ -467,7 +467,7 @@ celery_worker_docprocessing:
   resources:
     requests:
       cpu: 500m
-      memory: 4Gi
+      memory: 2Gi
     limits:
       cpu: 1000m
       memory: 12Gi
@@ -501,8 +501,8 @@ celery_worker_light:
     app: celery-worker-light
   resources:
     requests:
-      cpu: 1000m
-      memory: 1Gi
+      cpu: 250m
+      memory: 512Mi
     limits:
       cpu: 2000m
       memory: 4Gi
@@ -537,9 +537,9 @@ celery_worker_monitoring:
   resources:
     requests:
       cpu: 500m
-      memory: 1Gi
+      memory: 512Mi
     limits:
-      cpu: 2000m
+      cpu: 1000m
       memory: 4Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
@@ -571,11 +571,11 @@ celery_worker_primary:
     app: celery-worker-primary
   resources:
     requests:
-      cpu: 1000m
-      memory: 8Gi
+      cpu: 500m
+      memory: 2Gi
     limits:
-      cpu: 2000m
-      memory: 16Gi
+      cpu: 1000m
+      memory: 4Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
@@ -606,11 +606,11 @@ celery_worker_user_files_indexing:
     app: celery-worker-user-files-indexing
   resources:
     requests:
-      cpu: 2000m
-      memory: 6Gi
+      cpu: 500m
+      memory: 512Mi
     limits:
-      cpu: 4000m
-      memory: 12Gi
+      cpu: 2000m
+      memory: 2Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
@@ -641,11 +641,11 @@ celery_worker_user_file_processing:
     app: celery-worker-user-file-processing
   resources:
     requests:
-      cpu: 2000m
-      memory: 6Gi
+      cpu: 500m
+      memory: 512Mi
     limits:
-      cpu: 4000m
-      memory: 12Gi
+      cpu: 2000m
+      memory: 2Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
@@ -671,7 +671,7 @@ slackbot:
   resources:
     requests:
       cpu: "500m"
-      memory: "500Mi"
+      memory: "512Mi"
     limits:
       cpu: "1000m"
       memory: "2000Mi"
@@ -702,9 +702,9 @@ celery_worker_docfetching:
   resources:
     requests:
       cpu: 500m
-      memory: 8Gi
+      memory: 2Gi
     limits:
-      cpu: 2000m
+      cpu: 1000m
       memory: 16Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
