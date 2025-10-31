@@ -7,6 +7,12 @@ global:
   version: "latest"
   # Global pull policy for all Onyx component images
   pullPolicy: "IfNotPresent"
+  # Global node selector for all components
+  nodeSelector: {}
+  # Global tolerations for all components  
+  tolerations: []
+  # Global affinity for all components
+  affinity: {}
 
 postgresql:
   enabled: true
@@ -103,6 +109,8 @@ inferenceCapability:
     privileged: true
     runAsUser: 0
   nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 indexCapability:
   service:
@@ -137,6 +145,8 @@ indexCapability:
     privileged: true
     runAsUser: 0
   nodeSelector: {}
+  tolerations: []
+  affinity: {}
 config:
   envConfigMapName: env-configmap
 
@@ -349,6 +359,7 @@ api:
 
   nodeSelector: {}
   tolerations: []
+  affinity: {}
 
 
 ######################################################################
@@ -676,6 +687,8 @@ slackbot:
       cpu: "1000m"
       memory: "2000Mi"
   nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 celery_worker_docfetching:
   replicaCount: 1
