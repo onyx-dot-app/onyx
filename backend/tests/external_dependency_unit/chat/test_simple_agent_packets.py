@@ -1,6 +1,4 @@
 from datetime import datetime
-from typing import Any
-from unittest.mock import patch
 
 from sqlalchemy.orm import Session
 
@@ -15,26 +13,10 @@ from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import ResearchAgentIterationSubStep
 from onyx.db.models import Tool
 from onyx.db.models import User
-from onyx.feature_flags.feature_flags_keys import SIMPLE_AGENT_FRAMEWORK
-from onyx.feature_flags.interface import FeatureFlagProvider
 from onyx.server.query_and_chat.streaming_models import FetchToolStart
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_utils import translate_db_message_to_packets
 from tests.external_dependency_unit.conftest import create_test_user
-
-
-class MockFeatureFlagProvider(FeatureFlagProvider):
-    """Mock feature flag provider that returns a configurable value"""
-
-    def __init__(self, enabled: bool = True):
-        self.enabled = enabled
-
-    def feature_enabled(
-        self, flag_key: str, user_id: Any, user_properties: dict[str, Any] | None = None
-    ) -> bool:
-        if flag_key == SIMPLE_AGENT_FRAMEWORK:
-            return self.enabled
-        return False
 
 
 def test_simple_agent_with_search_and_fetch_packets(
@@ -42,7 +24,7 @@ def test_simple_agent_with_search_and_fetch_packets(
     tenant_context: None,
 ) -> None:
     """
-    Test that when feature flag is on and research_type is FAST,
+    Test that when research_type is FAST,
     the translate_db_message_to_packets function returns packets with
     SearchToolStart followed by FetchToolStart for web fetch operations.
     """
@@ -174,18 +156,12 @@ def test_simple_agent_with_search_and_fetch_packets(
     # Refresh to load relationships
     db_session.refresh(assistant_message)
 
-    # Mock the feature flag provider to return True
-    with patch(
-        "onyx.server.query_and_chat.streaming_utils.get_default_feature_flag_provider"
-    ) as mock_get_provider:
-        mock_get_provider.return_value = MockFeatureFlagProvider(enabled=True)
-
-        # Call translate_db_message_to_packets
-        result = translate_db_message_to_packets(
-            chat_message=assistant_message,
-            db_session=db_session,
-            start_step_nr=1,
-        )
+    # Call translate_db_message_to_packets
+    result = translate_db_message_to_packets(
+        chat_message=assistant_message,
+        db_session=db_session,
+        start_step_nr=1,
+    )
 
     # Verify packets were created
     assert len(result.packet_list) > 0
@@ -218,7 +194,7 @@ def test_deep_research_ignores_simple_agent(
     tenant_context: None,
 ) -> None:
     """
-    Test that even with feature flag on, DEEP research type
+    Test that DEEP research type
     uses the old translation logic (no FetchToolStart packets).
     """
     # Create a test user
@@ -315,18 +291,12 @@ def test_deep_research_ignores_simple_agent(
     db_session.add(sub_step)
     db_session.commit()
 
-    # Mock the feature flag provider to return True
-    with patch(
-        "onyx.server.query_and_chat.streaming_utils.get_default_feature_flag_provider"
-    ) as mock_get_provider:
-        mock_get_provider.return_value = MockFeatureFlagProvider(enabled=True)
-
-        # Call translate_db_message_to_packets
-        result = translate_db_message_to_packets(
-            chat_message=assistant_message,
-            db_session=db_session,
-            start_step_nr=1,
-        )
+    # Call translate_db_message_to_packets
+    result = translate_db_message_to_packets(
+        chat_message=assistant_message,
+        db_session=db_session,
+        start_step_nr=1,
+    )
 
     # Verify packets were created
     assert len(result.packet_list) > 0
@@ -337,7 +307,7 @@ def test_deep_research_ignores_simple_agent(
     # Verify we have NO FetchToolStart packets (should use old logic for DEEP)
     assert (
         len(fetch_packets) == 0
-    ), "DEEP research should not produce FetchToolStart packets even with feature flag on"
+    ), "DEEP research should not produce FetchToolStart packets"
 
     # Verify we have SearchToolStart packets instead
     search_packets = [

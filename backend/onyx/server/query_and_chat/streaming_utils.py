@@ -17,8 +17,6 @@ from onyx.db.chat import get_db_search_doc_by_id
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tool_by_id
-from onyx.feature_flags.factory import get_default_feature_flag_provider
-from onyx.feature_flags.feature_flags_keys import SIMPLE_AGENT_FRAMEWORK
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
@@ -45,7 +43,6 @@ from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from shared_configs.contextvars import get_current_tenant_id
 
 
 _CANNOT_SHOW_STEP_RESULTS_STR = "[Cannot display step results]"
@@ -473,16 +470,10 @@ def translate_db_message_to_packets(
     db_session: Session,
     start_step_nr: int = 1,
 ) -> EndStepPacketList:
-    use_simple_translation = False
-    if chat_message.research_type and chat_message.research_type != ResearchType.DEEP:
-        feature_flag_provider = get_default_feature_flag_provider()
-        tenant_id = get_current_tenant_id()
-        user = chat_message.chat_session.user
-        use_simple_translation = feature_flag_provider.feature_enabled_for_user_tenant(
-            flag_key=SIMPLE_AGENT_FRAMEWORK,
-            user=user,
-            tenant_id=tenant_id,
-        )
+    use_simple_translation = (
+        chat_message.research_type is not None
+        and chat_message.research_type != ResearchType.DEEP
+    )
 
     if use_simple_translation:
         return translate_db_message_to_packets_simple(
