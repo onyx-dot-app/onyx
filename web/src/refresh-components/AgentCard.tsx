@@ -59,12 +59,16 @@ export default function AgentCard({ agent }: AgentCardProps) {
     <Card className="flex flex-col group/AgentCard">
       {/* Main Body */}
       <div className="flex flex-col items-center gap-1 p-1">
-        <div className="flex flex-row items-center w-full gap-2 px-2.5 min-h-[3rem]">
-          <AgentIcon agent={agent} size={24} />
-          <Truncated mainContentBody className="flex-1">
-            {agent.name}
-          </Truncated>
-          <div className={cn("flex flex-row gap-1 items-center")}>
+        <div className="flex flex-row items-center w-full gap-1">
+          <div className="flex flex-row items-center w-full p-1.5 gap-1.5">
+            <div className="px-0.5">
+              <AgentIcon agent={agent} size={18} />
+            </div>
+            <Truncated mainContentBody className="flex-1">
+              {agent.name}
+            </Truncated>
+          </div>
+          <div className={cn("flex flex-row p-0.5 items-center")}>
             {isOwnedByUser && isPaidEnterpriseFeaturesEnabled && (
               <IconButton
                 icon={SvgBarChart}
@@ -93,7 +97,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             />
           </div>
         </div>
-        <Text text03 className="pb-2.5 px-2.5 w-full">
+        <Text text03 className="pb-1 px-2 w-full">
           {agent.description}
         </Text>
       </div>
@@ -113,13 +117,15 @@ export default function AgentCard({ agent }: AgentCardProps) {
         </div>
 
         {/* Right side - Start Chat button */}
-        <Button
-          tertiary
-          rightIcon={SvgBubbleText}
-          onClick={() => route({ agentId: agent.id })}
-        >
-          Start Chat
-        </Button>
+        <div className="p-0.5">
+          <Button
+            tertiary
+            rightIcon={SvgBubbleText}
+            onClick={() => route({ agentId: agent.id })}
+          >
+            Start Chat
+          </Button>
+        </div>
       </div>
     </Card>
   );
