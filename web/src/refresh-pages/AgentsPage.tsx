@@ -60,7 +60,7 @@ export default function AgentsPage() {
   const [open, setOpen] = useState(false);
   const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"all" | "mine">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "your">("all");
   const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(
     new Set()
   );
@@ -93,7 +93,7 @@ export default function AgentsPage() {
       );
 
       const mineFilter =
-        activeTab === "mine" ? checkUserOwnsAgent(user, agent) : true;
+        activeTab === "your" ? checkUserOwnsAgent(user, agent) : true;
       const isNotUnifiedAgent = agent.id !== 0;
 
       const creatorFilter =
@@ -157,11 +157,11 @@ export default function AgentsPage() {
             />
             <Tabs
               value={activeTab}
-              onValueChange={(value) => setActiveTab(value as "all" | "mine")}
+              onValueChange={(value) => setActiveTab(value as "all" | "your")}
             >
               <TabsList>
                 <TabsTrigger value="all">All Agents</TabsTrigger>
-                <TabsTrigger value="mine">My Agents</TabsTrigger>
+                <TabsTrigger value="your">Your Agents</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
