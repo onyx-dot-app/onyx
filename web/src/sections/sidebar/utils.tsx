@@ -51,7 +51,7 @@ export function getAgentIcon(
 }
 
 export interface SidebarBodyProps {
-  actionButton: React.ReactNode;
+  actionButton?: React.ReactNode;
   children: React.ReactNode;
   footer: React.ReactNode;
 }
@@ -63,9 +63,9 @@ export function SidebarBody({
 }: SidebarBodyProps) {
   return (
     <>
-      <div className="px-2">{actionButton}</div>
+      {actionButton && <div className="px-2">{actionButton}</div>}
       <div className="flex flex-col min-h-0 h-full gap-2">
-        <VerticalShadowScroller className="px-2 gap-4">
+        <VerticalShadowScroller className="px-2">
           {children}
         </VerticalShadowScroller>
         {footer}

@@ -536,7 +536,7 @@ function ChatInputBarInner({
                   icon={SvgPlusCircle}
                   tooltip="Attach Files"
                   tertiary
-                  active={open}
+                  transient={open}
                 />
               )}
               selectedFileIds={currentMessageFiles.map((f) => f.id)}
@@ -551,10 +551,10 @@ function ChatInputBarInner({
             {showDeepResearch && (
               <SelectButton
                 leftIcon={SvgHourglass}
-                active={deepResearchEnabled}
                 onClick={toggleDeepResearch}
-                folded
+                engaged={deepResearchEnabled}
                 action
+                folded
               >
                 Deep Research
               </SelectButton>
@@ -577,8 +577,8 @@ function ChatInputBarInner({
                         prev.filter((id) => id !== toolId)
                       );
                     }}
+                    engaged
                     action
-                    active
                   >
                     {tool.display_name}
                   </SelectButton>

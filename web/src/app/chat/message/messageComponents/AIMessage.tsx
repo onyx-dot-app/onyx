@@ -439,7 +439,7 @@ export default function AIMessage({
                             icon={SvgThumbsUp}
                             onClick={() => handleFeedbackClick("like")}
                             tertiary
-                            active={currentFeedback === "like"}
+                            transient={currentFeedback === "like"}
                             tooltip={
                               currentFeedback === "like"
                                 ? "Remove Like"
@@ -451,7 +451,7 @@ export default function AIMessage({
                             icon={SvgThumbsDown}
                             onClick={() => handleFeedbackClick("dislike")}
                             tertiary
-                            active={currentFeedback === "dislike"}
+                            transient={currentFeedback === "dislike"}
                             tooltip={
                               currentFeedback === "dislike"
                                 ? "Remove Dislike"
