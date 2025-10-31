@@ -18,10 +18,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add the user_type column with a default value of 'human'
+    # Add the user_type column with a default value of 'HUMAN'
     op.add_column(
         "user",
-        sa.Column("user_type", sa.String(), nullable=False, server_default="human"),
+        sa.Column("user_type", sa.String(), nullable=False, server_default="HUMAN"),
     )
 
     # Backfill existing API key users based on email pattern
@@ -29,7 +29,7 @@ def upgrade() -> None:
     op.execute(
         """
         UPDATE "user"
-        SET user_type = 'api_key'
+        SET user_type = 'API_KEY'
         WHERE email LIKE 'api\\_key\\_\\_%@%onyxapikey.ai' ESCAPE '\\'
     """
     )
