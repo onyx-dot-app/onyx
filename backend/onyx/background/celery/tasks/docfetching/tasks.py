@@ -1,3 +1,4 @@
+import inspect
 import multiprocessing
 import os
 import time
@@ -237,14 +238,42 @@ def _docfetching_task(
             f"search_settings={search_settings_id}"
         )
 
-        # special bulletproofing ... truncate long exception messages
-        # for exception types that require more args, this will fail
-        # thus the try/except
+        # Truncate long exception messages to prevent them from overwhelming logs/storage.
+        # We need to be careful when reconstructing exceptions because:
+        #
+        # 1. This function runs in a spawned process, and when it raises an exception,
+        #    job_client.py's _initializer() captures the ENTIRE traceback via
+        #    traceback.format_exc() and sends it to the parent process.
+        #
+        # 2. If we blindly try to reconstruct an exception with type(e)(message),
+        #    it will fail for exception types that require specific constructor arguments.
+        #    For example, botocore's ClientError requires (error_response, operation_name).
+        #
+        # 3. When the reconstruction fails, Python includes BOTH exceptions in the
+        #    traceback: the failed TypeError from construction, AND the original exception
+        #    being re-raised. This pollutes logs with confusing intermediate errors.
+        #
+        # Solution: Use introspection to check if the exception type can be safely
+        # constructed with a single string argument. Only attempt sanitization if safe.
         try:
-            sanitized_e = type(e)(str(e)[:1024])
-            sanitized_e.__traceback__ = e.__traceback__
-            raise sanitized_e
+            sig = inspect.signature(type(e).__init__)
+            params = [p for p in sig.parameters.values() if p.name != "self"]
+
+            can_reconstruct = len(params) <= 1 or all(
+                p.default != inspect.Parameter.empty for p in params[1:]
+            )
+
+            if can_reconstruct:
+                # Safe to reconstruct with truncated message
+                sanitized_e = type(e)(str(e)[:1024])
+                sanitized_e.__traceback__ = e.__traceback__
+                raise sanitized_e
+            else:
+                # Not safe to reconstruct, raise original exception
+                raise e
         except Exception:
+            # If introspection or reconstruction fails for any reason,
+            # fall back to raising the original exception
             raise e
 
     logger.info(
