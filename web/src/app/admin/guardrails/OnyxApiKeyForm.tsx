@@ -164,7 +164,7 @@ export const OnyxApiKeyForm = ({
           }}
         >
           {({ isSubmitting, values, setFieldValue }) => (
-            <Form className="w-full overflow-auto">
+            <Form className="w-full overflow-auto p-2">
               <SelectorFormField
                 name="template"
                 label={t(k.VALIDATOR_TEMPLATE_LABEL)}
@@ -275,7 +275,7 @@ export const OnyxApiKeyForm = ({
                 );
 
                 return (
-                  <div className="flex flex-col gap-2 p-2">
+                  <div className="flex flex-col gap-2">
                     <label className="text-sm font-medium text-text-700">
                       LLM Provider
                     </label>
