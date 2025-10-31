@@ -16,6 +16,8 @@ import SvgUser from "@/icons/user";
 import SvgActions from "@/icons/actions";
 import { useAgentsContext } from "./contexts/AgentsContext";
 import { cn } from "@/lib/utils";
+import SvgEdit from "@/icons/edit";
+import { useRouter } from "next/navigation";
 
 interface IconLabelProps {
   icon: React.FunctionComponent<SvgProps>;
@@ -39,6 +41,7 @@ export interface AgentCardProps {
 
 export default function AgentCard({ agent }: AgentCardProps) {
   const route = useAppRouter();
+  const router = useRouter();
   const { pinnedAgents, togglePinnedAgent } = useAgentsContext();
   const pinned = useMemo(
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
@@ -54,18 +57,21 @@ export default function AgentCard({ agent }: AgentCardProps) {
           <Truncated mainContentBody className="flex-1">
             {agent.name}
           </Truncated>
-          <div
-            className={cn(
-              "flex-row items-center",
-              !pinned && "hidden group-hover/AgentCard:flex"
-            )}
-          >
+          <div className={cn("flex flex-row gap-1 items-center")}>
+            <IconButton
+              icon={SvgEdit}
+              tertiary
+              onClick={() => router.push(`/assistants/edit/${agent.id}`)}
+              tooltip="Edit Agent"
+              className="hidden group-hover/AgentCard:flex"
+            />
             <IconButton
               icon={SvgPin}
               tertiary
               onClick={() => togglePinnedAgent(agent, !pinned)}
               tooltip={pinned ? "Unpin Agent" : "Pin Agent"}
               transient={pinned}
+              className={cn(!pinned && "hidden group-hover/AgentCard:flex")}
             />
           </div>
         </div>
