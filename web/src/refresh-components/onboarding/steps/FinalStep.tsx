@@ -12,9 +12,9 @@ const FinalStepItemInner = ({
   buttonText,
 }: FinalStepItemProps) => {
   return (
-    <div className="flex justify-between h-full w-full p-spacing-inline rounded-16 border border-border-01 bg-background-tint-01">
-      <div className="flex gap-spacing-inline p-spacing-interline">
-        <div className="h-full p-spacing-inline-mini">
+    <div className="flex justify-between h-full w-full p-1 rounded-16 border border-border-01 bg-background-tint-01">
+      <div className="flex gap-1 p-2">
+        <div className="h-full p-0.5">
           <Icon className="w-4 h-4 stroke-text-03" />
         </div>
         <div>
@@ -37,7 +37,7 @@ const FinalStepItem = memo(FinalStepItemInner);
 
 const FinalStep = () => {
   return (
-    <div className="flex flex-col gap-spacing-interline w-full">
+    <div className="flex flex-col gap-2 w-full">
       {FINAL_SETUP_CONFIG.map((item) => (
         <FinalStepItem key={item.title} {...item} />
       ))}

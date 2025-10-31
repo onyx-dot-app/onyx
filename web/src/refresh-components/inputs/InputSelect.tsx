@@ -32,7 +32,11 @@ export interface InputSelectOption {
   disabled?: boolean;
 }
 
-export interface InputSelectProps {
+export interface InputSelectProps
+  extends Omit<
+    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>,
+    "value" | "onValueChange" | "disabled"
+  > {
   // Input states:
   active?: boolean;
   internal?: boolean;
@@ -68,6 +72,7 @@ function InputSelectInner(
     className,
     name,
     required,
+    ...props
   }: InputSelectProps,
   ref: React.ForwardedRef<HTMLButtonElement>
 ) {
@@ -98,7 +103,7 @@ function InputSelectInner(
       <div
         ref={boundingBoxRef}
         className={cn(
-          "flex flex-row items-center justify-between w-full h-fit p-spacing-interline-mini rounded-08 bg-background-neutral-00 relative",
+          "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
           triggerClasses(localActive, hovered)[state],
           className
         )}
@@ -106,11 +111,12 @@ function InputSelectInner(
         <SelectPrimitive.Trigger
           ref={ref}
           className={cn(
-            "w-full h-[1.5rem] bg-transparent p-spacing-inline-mini focus:outline-none flex items-center justify-between",
+            "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none flex items-center justify-between",
             valueClasses()[state]
           )}
           onFocus={() => setLocalActive(true)}
           onBlur={() => setLocalActive(false)}
+          {...props}
         >
           <SelectPrimitive.Value placeholder={placeholder} />
           <SelectPrimitive.Icon asChild>
@@ -132,6 +138,7 @@ function InputSelectInner(
           )}
           position="popper"
           sideOffset={4}
+          style={{ width: "var(--radix-select-trigger-width)" }}
         >
           <SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1">
             <ChevronDown className="h-4 w-4 rotate-180" />
@@ -144,7 +151,7 @@ function InputSelectInner(
                 value={option.value}
                 disabled={option.disabled}
                 className={cn(
-                  "relative flex w-full cursor-default select-none items-center rounded-04 py-spacing-interline-mini px-spacing-inline-mini pl-8",
+                  "relative flex w-full cursor-default select-none items-center rounded-04 py-1.5 px-0.5 pl-8",
                   "text-text-04 outline-none",
                   "focus:bg-background-neutral-02 hover:bg-background-neutral-02",
                   "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"

@@ -20,8 +20,8 @@ const OnboardingHeaderInner = ({
   const StepIcon = STEP_CONFIG[onboardingState.currentStep].icon;
   const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
   return (
-    <div className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-spacing-inline pl-padding-button pr-spacing-interline bg-background-tint-00 rounded-16 shadow-01">
-      <div className="flex items-center gap-spacing-inline">
+    <div className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01">
+      <div className="flex items-center gap-1">
         {StepIcon ? (
           <StepIcon className="w-4 h-4 stroke-background-neutral-inverted-00" />
         ) : (
@@ -31,7 +31,7 @@ const OnboardingHeaderInner = ({
           {STEP_CONFIG[onboardingState.currentStep].title}
         </Text>
       </div>
-      <div className="flex items-center gap-padding-button">
+      <div className="flex items-center gap-3">
         {stepButtonText ? (
           <>
             <Text text03 mainUiBody>

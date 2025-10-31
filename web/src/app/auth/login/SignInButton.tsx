@@ -17,7 +17,7 @@ export default function SignInButton({
 
   if (authType === "google_oauth" || authType === "cloud") {
     button = (
-      <div className="flex flex-row items-center justify-center w-full gap-spacing-interline">
+      <div className="flex flex-row items-center justify-center w-full gap-2">
         <FcGoogle />
         <Text text03 mainUiAction>
           Continue with Google

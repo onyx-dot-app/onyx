@@ -15,9 +15,9 @@ const NameStepInner = ({
 }: NameStepProps) => {
   const [name, setName] = useState("");
   return (
-    <div className="flex items-center justify-between w-full max-w-[800px] p-padding-button bg-background-tint-00 rounded-16 border border-border-01">
-      <div className="flex items-center gap-spacing-inline h-full">
-        <div className="h-full p-spacing-inline-mini">
+    <div className="flex items-center justify-between w-full max-w-[800px] p-3 bg-background-tint-00 rounded-16 border border-border-01">
+      <div className="flex items-center gap-1 h-full">
+        <div className="h-full p-0.5">
           <SvgUser className="w-4 h-4 stroke-text-03" />
         </div>
         <div>

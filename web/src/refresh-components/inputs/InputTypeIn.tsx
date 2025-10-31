@@ -42,6 +42,9 @@ export interface InputTypeInProps
 
   placeholder: string;
 
+  // Controls whether the clear (X) button is shown when there is a value
+  showClearButton?: boolean;
+
   // Optional callback invoked when the clear icon is clicked for Formik compatibility
   onClear?: () => void;
 }
@@ -58,6 +61,7 @@ function InputTypeInInner(
     className,
     value,
     onChange,
+    showClearButton = true,
     onClear,
     rightSection,
     type,
@@ -149,7 +153,7 @@ function InputTypeInInner(
           props.onBlur?.(e);
         }}
       />
-      {value && (
+      {showClearButton && value && (
         <IconButton
           icon={SvgX}
           disabled={disabled}

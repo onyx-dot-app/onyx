@@ -9,6 +9,7 @@ export enum ModalIds {
   FeedbackModal = "FeedbackModal",
   AddInstructionModal = "AddInstructionModal",
   ProjectFilesModal = "ProjectFilesModal",
+  LLMConnectionModal = "LLMConnectionModal",
 }
 
 interface ModalProviderProps {

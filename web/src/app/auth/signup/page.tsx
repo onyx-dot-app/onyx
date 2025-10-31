@@ -75,7 +75,7 @@ const Page = async (props: {
         <div
           className={cn(
             "flex w-full flex-col justify-start",
-            cloud ? "" : "gap-padding-content"
+            cloud ? "" : "gap-6"
           )}
         >
           <div className="w-full">
@@ -85,11 +85,11 @@ const Page = async (props: {
             <Text text03>Get started with Onyx</Text>
           </div>
           {cloud && authUrl && (
-            <div className="w-full justify-center mt-spacing-headline">
+            <div className="w-full justify-center mt-6">
               <SignInButton authorizeUrl={authUrl} authType="cloud" />
-              <div className="flex items-center w-full my-spacing-paragraph">
+              <div className="flex items-center w-full my-4">
                 <div className="flex-grow border-t border-border-01" />
-                <Text mainUiMuted text03 className="mx-spacing-interline">
+                <Text mainUiMuted text03 className="mx-2">
                   or
                 </Text>
                 <div className="flex-grow border-t border-border-01" />

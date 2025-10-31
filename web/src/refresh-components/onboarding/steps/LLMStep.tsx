@@ -8,6 +8,7 @@ import LLMProvider from "../components/LLMProvider";
 import { OnboardingActions, OnboardingState } from "../types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { PROVIDER_ICON_MAP } from "../constants";
+import LLMConnectionModal from "@/refresh-components/onboarding/components/LLMConnectionModal";
 import KeyValueInput from "@/refresh-components/inputs/InputKeyValue";
 import { cn } from "@/lib/utils";
 
@@ -27,13 +28,13 @@ const LLMStepInner = ({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-between w-full max-w-[800px] p-spacing-inline rounded-16 border border-border-01 bg-background-tint-00",
+        "flex flex-col items-center justify-between w-full max-w-[800px] p-1 rounded-16 border border-border-01 bg-background-tint-00",
         disabled && "opacity-50 pointer-events-none select-none"
       )}
     >
-      <div className="flex gap-spacing-interline justify-between h-full w-full">
-        <div className="flex mx-spacing-interline mt-spacing-interline gap-spacing-inline">
-          <div className="h-full p-spacing-inline-mini">
+      <div className="flex gap-2 justify-between h-full w-full">
+        <div className="flex mx-2 mt-2 gap-1">
+          <div className="h-full p-0.5">
             <SvgCpu className="w-4 h-4 stroke-text-03" />
           </div>
           <div>
@@ -45,35 +46,40 @@ const LLMStepInner = ({
             </Text>
           </div>
         </div>
-        <div className="p-spacing-inline-mini">
+        <div className="p-0.5">
           <Button tertiary rightIcon={SvgExternalLink} disabled={disabled}>
             View in Admin Panel
           </Button>
         </div>
       </div>
 
-      <div className="p-spacing-interline w-full">
-        <Separator className="my-spacing-interline" />
+      <div className="p-2 w-full">
+        <Separator className="my-2" />
       </div>
-      <div className="flex flex-wrap gap-spacing-inline [&>*:last-child:nth-child(odd)]:basis-full">
+      <div className="flex flex-wrap gap-1 [&>*:last-child:nth-child(odd)]:basis-full">
         {llmDescriptors.map((llmDescriptor) => (
-          <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
+          <div
+            key={llmDescriptor.name}
+            className="basis-[calc(50%-theme(spacing.1)/2)] grow"
+          >
             <LLMProvider
               title={llmDescriptor.title}
-              description={llmDescriptor.display_name}
+              subtitle={llmDescriptor.display_name}
               icon={PROVIDER_ICON_MAP[llmDescriptor.name]}
+              llmDescriptor={llmDescriptor}
               disabled={disabled}
             />
           </div>
         ))}
 
-        <div className="basis-[calc(50%-var(--spacing-inline)/2)] grow">
+        <div className="basis-[calc(50%-theme(spacing.1)/2)] grow">
           <LLMProvider
             title="Custom Models"
-            description="Connect models from other providers or your self-hosted models."
+            subtitle="Connect models from other providers or your self-hosted models."
             disabled={disabled}
           />
         </div>
+        <LLMConnectionModal />
       </div>
     </div>
   );
