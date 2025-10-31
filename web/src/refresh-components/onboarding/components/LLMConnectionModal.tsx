@@ -23,7 +23,6 @@ import {
 import { LLMConnectionFieldsWithTabs } from "./LLMConnectionFieldsWithTabs";
 import { LLMConnectionFieldsBasic } from "./LLMConnectionFieldsBasic";
 import { getValidationSchema } from "./llmValidationSchema";
-import { useOnboardingState } from "../useOnboardingState";
 import { OnboardingActions, OnboardingState } from "../types";
 
 type LLMConnectionModalData = {

@@ -213,6 +213,12 @@ export function ChatPage({
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
   const [isOnboardingCollapsed, setIsOnboardingCollapsed] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  // Show onboarding if no LLM providers are configured
+  //No need to automaticallychange when llmProviders changes
+  useEffect(() => {
+    setShowOnboarding(llmProviders.length === 0);
+  }, []);
 
   const llmManager = useLlmManager(
     llmProviders,
@@ -627,6 +633,7 @@ export function ChatPage({
       currentMessageFiles: currentMessageFiles,
       useAgentSearch: deepResearchEnabled,
     });
+    setShowOnboarding(false);
   }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
 
   // Memoized callbacks for DocumentResults
@@ -898,15 +905,19 @@ export function ChatPage({
                           />
                         )}
 
-                        <UnconfiguredLlmProviderText
+                        {/* <UnconfiguredLlmProviderText
                           showConfigureAPIKey={handleShowApiKeyModal}
-                        />
+                        /> */}
 
-                        <OnboardingFlow
-                          isCollapsed={isOnboardingCollapsed}
-                          onCollapsedChange={setIsOnboardingCollapsed}
-                        />
-
+                        {showOnboarding && currentProjectId === null && (
+                          <OnboardingFlow
+                            isCollapsed={isOnboardingCollapsed}
+                            onCollapsedChange={setIsOnboardingCollapsed}
+                            handleHideOnboarding={() =>
+                              setShowOnboarding(false)
+                            }
+                          />
+                        )}
                         <ChatInputBar
                           deepResearchEnabled={deepResearchEnabled}
                           toggleDeepResearch={toggleDeepResearch}
@@ -931,6 +942,7 @@ export function ChatPage({
                           handleFileUpload={handleMessageSpecificFileUpload}
                           textAreaRef={textAreaRef}
                           setPresentingDocument={setPresentingDocument}
+                          disabled={llmProviders.length === 0}
                         />
                       </div>
 

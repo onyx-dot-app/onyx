@@ -14,12 +14,14 @@ type OnboardingHeaderProps = {
   state: OnboardingState;
   actions: OnboardingActions;
   onToggleCollapse?: () => void;
+  handleHideOnboarding: () => void;
 };
 
 const OnboardingHeaderInner = ({
   state: onboardingState,
   actions: onboardingActions,
   onToggleCollapse,
+  handleHideOnboarding,
 }: OnboardingHeaderProps) => {
   const StepIcon = STEP_CONFIG[onboardingState.currentStep].icon;
   const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
@@ -50,7 +52,7 @@ const OnboardingHeaderInner = ({
             <IconButton internal icon={SvgFold} onClick={onToggleCollapse} />
           </>
         ) : (
-          <IconButton internal icon={SvgX} onClick={() => {}} />
+          <IconButton internal icon={SvgX} onClick={handleHideOnboarding} />
         )}
       </div>
     </div>

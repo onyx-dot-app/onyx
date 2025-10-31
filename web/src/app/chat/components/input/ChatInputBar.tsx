@@ -103,6 +103,7 @@ export interface ChatInputBarProps {
   deepResearchEnabled: boolean;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
+  disabled: boolean;
 }
 
 function ChatInputBarInner({
@@ -127,6 +128,7 @@ function ChatInputBarInner({
   deepResearchEnabled,
   toggleDeepResearch,
   setPresentingDocument,
+  disabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
 
@@ -345,7 +347,13 @@ function ChatInputBarInner({
   };
 
   return (
-    <div id="onyx-chat-input" className="max-w-full w-[50rem]">
+    <div
+      id="onyx-chat-input"
+      className={cn(
+        "max-w-full w-[50rem]",
+        disabled && "opacity-50 cursor-not-allowed pointer-events-none"
+      )}
+    >
       {showPrompts && user?.preferences?.shortcut_enabled && (
         <div className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full">
           <div className="rounded-lg overflow-y-auto max-h-[200px] py-1.5 bg-background-neutral-01 border border-border-01 shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
