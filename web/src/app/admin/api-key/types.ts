@@ -11,5 +11,5 @@ export interface APIKey {
 
 export interface APIKeyArgs {
   name?: string;
-  role: UserRole;
+  role: UserRole | null; // null = mirror current user's permissions
 }

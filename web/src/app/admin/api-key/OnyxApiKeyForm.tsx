@@ -9,6 +9,9 @@ import Text from "@/components/ui/text";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { APIKey } from "./types";
 
+// Sentinel value to represent "mirror my permissions" in the form
+const MIRROR_ROLE_VALUE = "mirror" as const;
+
 interface OnyxApiKeyFormProps {
   onClose: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
@@ -36,15 +39,18 @@ export const OnyxApiKeyForm = ({
         <Formik
           initialValues={{
             name: apiKey?.api_key_name || "",
-            role: apiKey?.api_key_role || UserRole.BASIC.toString(),
+            role: apiKey?.api_key_role || MIRROR_ROLE_VALUE,
           }}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
-            // Prepare the payload with the UserRole
+            // Convert mirror sentinel to null for the API
             const payload = {
               ...values,
-              role: values.role as UserRole, // Assign the role directly as a UserRole type
+              role:
+                values.role === MIRROR_ROLE_VALUE
+                  ? null
+                  : (values.role as UserRole),
             };
 
             let response;
@@ -94,11 +100,16 @@ export const OnyxApiKeyForm = ({
                 // defaultValue is managed by Formik
                 label="Role:"
                 subtext="Select the role for this API key.
+                         Mirror My Permissions will inherit all your current permissions.
                          Limited has access to simple public API's.
                          Basic has access to regular user API's.
                          Admin has access to admin level APIs."
                 name="role"
                 options={[
+                  {
+                    name: "Mirror My Permissions",
+                    value: MIRROR_ROLE_VALUE,
+                  },
                   {
                     name: USER_ROLE_LABELS[UserRole.LIMITED],
                     value: UserRole.LIMITED.toString(),
