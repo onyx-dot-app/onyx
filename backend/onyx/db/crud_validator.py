@@ -165,6 +165,7 @@ def update_validator(
     validator.name = validator_update.name
     validator.description = validator_update.description
     validator.config = validator_update.config
+    validator.llm_provider_id = validator_update.llm_provider_id
 
     try:
         db_session.commit()
