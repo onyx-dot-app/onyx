@@ -15,7 +15,6 @@ from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
-from onyx.configs.tool_configs import IMAGE_GENERATION_OUTPUT_FORMAT
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
@@ -67,18 +66,9 @@ Follow Up Input:
 """.strip()
 
 
-class ImageFormat(str, Enum):
-    URL = "url"
-    BASE64 = "b64_json"
-
-
-_DEFAULT_OUTPUT_FORMAT = ImageFormat(IMAGE_GENERATION_OUTPUT_FORMAT)
-
-
 class ImageGenerationResponse(BaseModel):
     revised_prompt: str
-    url: str | None
-    image_data: str | None
+    image_data: str
 
 
 class ImageShape(str, Enum):
@@ -101,22 +91,13 @@ class ImageGenerationTool(Tool[None]):
         tool_id: int,
         model: str = IMAGE_MODEL_NAME,
         num_imgs: int = 1,
-        output_format: ImageFormat = _DEFAULT_OUTPUT_FORMAT,
     ) -> None:
-
-        if model == "gpt-image-1" and output_format == ImageFormat.URL:
-            raise ValueError(
-                "gpt-image-1 does not support URL format. Please use BASE64 format."
-            )
-
         self.api_key = api_key
         self.api_base = api_base
         self.api_version = api_version
 
         self.model = model
         self.num_imgs = num_imgs
-
-        self.output_format = output_format
 
         self._id = tool_id
 
@@ -230,7 +211,6 @@ class ImageGenerationTool(Tool[None]):
                 [
                     {
                         "revised_prompt": image_generation.revised_prompt,
-                        "url": image_generation.url,
                     }
                     for image_generation in image_generations
                 ]
@@ -238,7 +218,7 @@ class ImageGenerationTool(Tool[None]):
         )
 
     def _generate_image(
-        self, prompt: str, shape: ImageShape, format: ImageFormat
+        self, prompt: str, shape: ImageShape
     ) -> ImageGenerationResponse:
         from litellm import image_generation  # type: ignore
 
@@ -254,9 +234,7 @@ class ImageGenerationTool(Tool[None]):
                 size = "1024x1792"
         else:
             size = "1024x1024"
-        logger.debug(
-            f"Generating image with model: {self.model}, size: {size}, format: {format}"
-        )
+        logger.debug(f"Generating image with model: {self.model}, size: {size}")
         try:
             response = image_generation(
                 prompt=prompt,
@@ -266,7 +244,6 @@ class ImageGenerationTool(Tool[None]):
                 api_version=self.api_version or None,
                 size=size,
                 n=1,
-                response_format=format,
             )
 
             if not response.data or len(response.data) == 0:
@@ -274,12 +251,10 @@ class ImageGenerationTool(Tool[None]):
 
             image_item = response.data[0].model_dump()
 
-            if format == ImageFormat.URL:
-                url = image_item.get("url")
-                image_data = None
-            else:
-                url = None
-                image_data = image_item.get("b64_json")
+            # Always assume base64 format
+            image_data = image_item.get("b64_json")
+            if not image_data:
+                raise RuntimeError("No base64 image data returned from the API")
 
             revised_prompt = image_item.get("revised_prompt")
             if revised_prompt is None:
@@ -287,7 +262,6 @@ class ImageGenerationTool(Tool[None]):
 
             return ImageGenerationResponse(
                 revised_prompt=revised_prompt,
-                url=url,
                 image_data=image_data,
             )
 
@@ -322,7 +296,6 @@ class ImageGenerationTool(Tool[None]):
     ) -> Generator[ToolResponse, None, None]:
         prompt = cast(str, kwargs["prompt"])
         shape = ImageShape(kwargs.get("shape", ImageShape.SQUARE))
-        format = self.output_format
 
         # Use threading to generate images in parallel while yielding heartbeats
         results: list[ImageGenerationResponse | None] = [None] * self.num_imgs
@@ -340,7 +313,6 @@ class ImageGenerationTool(Tool[None]):
                                 (
                                     prompt,
                                     shape,
-                                    format,
                                 ),
                             )
                             for _ in range(self.num_imgs)
@@ -426,12 +398,7 @@ class ImageGenerationTool(Tool[None]):
         if img_generation_response is None:
             raise ValueError("No image generation response found")
 
-        img_urls = [img.url for img in img_generation_response if img.url is not None]
-        b64_imgs = [
-            img.image_data
-            for img in img_generation_response
-            if img.image_data is not None
-        ]
+        b64_imgs = [img.image_data for img in img_generation_response]
 
         user_prompt = build_image_generation_user_prompt(
             query=prompt_builder.get_user_message_content(),
@@ -444,7 +411,7 @@ class ImageGenerationTool(Tool[None]):
                 for response in img_generation_response
                 for prompt in response.revised_prompt
             ],
-            img_urls=img_urls,
+            img_urls=[],
             b64_imgs=b64_imgs,
         )
 
