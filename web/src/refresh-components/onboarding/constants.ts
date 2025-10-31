@@ -63,12 +63,14 @@ export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
       "Select embedding models used to search across large bodies of documents.",
     icon: SvgSearchMenu,
     buttonText: "Search Settings",
+    buttonHref: "admin/configuration/search",
   },
   {
     title: "Select web search provider",
     description: "Set up web search and search across the internet.",
     icon: SvgGlobe,
     buttonText: "Web Search",
+    buttonHref: "admin/configuration/default-assistant",
   },
   {
     title: "Enable image generation",
@@ -76,12 +78,14 @@ export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
       "Set up image generation models to create images in your chat.",
     icon: SvgImage,
     buttonText: "Image Generation",
+    buttonHref: "admin/configuration/default-assistant",
   },
   {
     title: "Invite your team",
     description: "Add and manage users and groups in your team.",
     icon: SvgUsers,
     buttonText: "Manage Users",
+    buttonHref: "/admin/users",
   },
 ];
 

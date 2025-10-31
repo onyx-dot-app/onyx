@@ -35,6 +35,9 @@ type Props = {
   modelsErrorMessage: string;
   showModelsApiErrorMessage: boolean;
   testModelChangeWithApiKey: (modelName: string) => Promise<void>;
+  testFileInputChange: (
+    customConfig: Record<string, any>
+  ) => Promise<void> | void;
 };
 
 export const LLMConnectionFieldsBasic: React.FC<Props> = ({
@@ -54,6 +57,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
   modelsErrorMessage,
   showModelsApiErrorMessage,
   testModelChangeWithApiKey,
+  testFileInputChange,
 }) => {
   const handleApiKeyInteraction = (apiKey: string) => {
     if (!apiKey) return;
@@ -162,22 +166,29 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                 />
               </FormField.Control>
               {!showApiMessage && (
-                <FormField.Description>
-                  {"Paste your "}
-                  {modalContent?.field_metadata?.api_key ? (
-                    <a
-                      href={modalContent.field_metadata.api_key}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      API key
-                    </a>
-                  ) : (
-                    "API key"
-                  )}
-                  {` from ${modalContent?.display_name} to access your models.`}
-                </FormField.Description>
+                <FormField.Message
+                  messages={{
+                    idle: (
+                      <>
+                        {"Paste your "}
+                        {modalContent?.field_metadata?.api_key ? (
+                          <a
+                            href={modalContent.field_metadata.api_key}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline"
+                          >
+                            API key
+                          </a>
+                        ) : (
+                          "API key"
+                        )}
+                        {` from ${modalContent?.display_name} to access your models.`}
+                      </>
+                    ),
+                    error: meta.error,
+                  }}
+                />
               )}
               {showApiMessage && (
                 <FormField.APIMessage
@@ -248,11 +259,15 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                       <InputFile
                         placeholder={customConfigKey.default_value || ""}
                         setValue={(value) => helper.setValue(value)}
-                        onValueSet={(value) => handleApiKeyInteraction(value)}
+                        onValueSet={(value) =>
+                          testFileInputChange({ [customConfigKey.name]: value })
+                        }
                         onBlur={(e) => {
                           field.onBlur(e);
                           if (field.value) {
-                            onApiKeyBlur(field.value);
+                            testFileInputChange({
+                              [customConfigKey.name]: field.value,
+                            });
                           }
                         }}
                         showClearButton={true}
@@ -281,9 +296,12 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                       (alwaysShowDesc || (!alwaysShowDesc && !showApiMessage))
                     );
                   })() && (
-                    <FormField.Description>
-                      {customConfigKey.description}
-                    </FormField.Description>
+                    <FormField.Message
+                      messages={{
+                        idle: customConfigKey.description,
+                        error: meta.error,
+                      }}
+                    />
                   )}
                   {llmDescriptor?.name === "bedrock" &&
                     customConfigKey.name === "BEDROCK_AUTH_METHOD" &&
@@ -388,9 +406,12 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
               )}
             </FormField.Control>
             {!showModelsApiErrorMessage && (
-              <FormField.Description>
-                {modalContent?.field_metadata?.default_model_name}
-              </FormField.Description>
+              <FormField.Message
+                messages={{
+                  idle: modalContent?.field_metadata?.default_model_name,
+                  error: meta.error,
+                }}
+              />
             )}
             {showModelsApiErrorMessage && (
               <FormField.APIMessage

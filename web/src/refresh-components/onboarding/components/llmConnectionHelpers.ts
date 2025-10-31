@@ -58,7 +58,8 @@ export const testApiKeyHelper = async (
   initialValues: any,
   formValues: any,
   apiKey?: string,
-  modelName?: string
+  modelName?: string,
+  customConfigOverride?: Record<string, any>
 ): Promise<TestApiKeyResult> => {
   try {
     let finalApiBase = formValues?.api_base;
@@ -80,7 +81,10 @@ export const testApiKeyHelper = async (
       deployment_name: finalDeploymentName,
       provider: llmDescriptor.name,
       api_key_changed: true,
-      custom_config: formValues?.custom_config,
+      custom_config: {
+        ...(formValues?.custom_config ?? {}),
+        ...(customConfigOverride ?? {}),
+      },
       default_model_name:
         modelName ??
         formValues?.default_model_name ??

@@ -48,6 +48,7 @@ export type FinalStepItemProps = {
   description: string;
   icon: React.FunctionComponent<SvgProps>;
   buttonText: string;
+  buttonHref: string;
 };
 
 export type OnboardingActions = {

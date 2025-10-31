@@ -166,6 +166,29 @@ const LLMConnectionModal = () => {
     }
   };
 
+  const testFileInputChange = async (
+    customConfig: Record<string, any>,
+    formikProps: FormikProps<any>
+  ) => {
+    if (!llmDescriptor) return;
+    setApiStatus("loading");
+    setShowApiMessage(true);
+    const result = await testApiKeyHelper(
+      llmDescriptor,
+      initialValues,
+      formikProps.values,
+      undefined,
+      undefined,
+      customConfig
+    );
+    if (result.ok) {
+      setApiStatus("success");
+    } else {
+      setErrorMessage(result.errorMessage);
+      setApiStatus("error");
+    }
+  };
+
   if (!data) return null;
 
   const tabConfig = llmDescriptor
@@ -423,6 +446,9 @@ const LLMConnectionModal = () => {
                     showModelsApiErrorMessage={showModelsApiErrorMessage}
                     testModelChangeWithApiKey={(modelName) =>
                       testModelChangeWithApiKey(modelName, formikProps)
+                    }
+                    testFileInputChange={(customConfig) =>
+                      testFileInputChange(customConfig, formikProps)
                     }
                   />
                 )}

@@ -7,6 +7,8 @@ import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgX from "@/icons/x";
 import SvgCheckCircle from "@/icons/check-circle";
+import { OnboardingStep } from "../types";
+import router from "next/router";
 
 type OnboardingHeaderProps = {
   state: OnboardingState;

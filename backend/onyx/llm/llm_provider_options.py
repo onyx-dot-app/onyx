@@ -321,6 +321,31 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     options=BEDROCK_REGION_OPTIONS,
                 ),
                 CustomConfigKey(
+                    name="BEDROCK_AUTH_METHOD",
+                    display_name="Authentication",
+                    description="Choose how Onyx should authenticate with Bedrock.",
+                    is_required=True,
+                    key_type=CustomConfigKeyType.SELECT,
+                    default_value="access_key",
+                    options=[
+                        CustomConfigOption(
+                            label="Environment IAM Role",
+                            value="iam",
+                            description="Recommended for AWS environments",
+                        ),
+                        CustomConfigOption(
+                            label="Access Key",
+                            value="access_key",
+                            description="For non-AWS environements",
+                        ),
+                        CustomConfigOption(
+                            label="Long-term API Key",
+                            value="long_term_api_key",
+                            description="For non-AWS environements",
+                        ),
+                    ],
+                ),
+                CustomConfigKey(
                     name="AWS_ACCESS_KEY_ID",
                     display_name="AWS Access Key ID",
                     is_required=False,

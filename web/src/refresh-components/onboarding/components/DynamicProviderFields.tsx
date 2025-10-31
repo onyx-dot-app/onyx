@@ -87,25 +87,29 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                 />
               </FormField.Control>
               {!showApiMessage && (
-                <FormField.Description>
-                  {override?.description ||
-                    (modalContent?.field_metadata?.api_key ? (
-                      <>
-                        {"Paste your "}
-                        <a
-                          href={modalContent.field_metadata.api_key}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline"
-                        >
-                          API key
-                        </a>
-                        {` from ${modalContent?.display_name} to access your models.`}
-                      </>
-                    ) : (
-                      `Paste your API key from ${modalContent?.display_name} to access your models.`
-                    ))}
-                </FormField.Description>
+                <FormField.Message
+                  messages={{
+                    idle:
+                      override?.description ||
+                      (modalContent?.field_metadata?.api_key ? (
+                        <>
+                          {"Paste your "}
+                          <a
+                            href={modalContent.field_metadata.api_key}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline"
+                          >
+                            API key
+                          </a>
+                          {` from ${modalContent?.display_name} to access your models.`}
+                        </>
+                      ) : (
+                        `Paste your API key from ${modalContent?.display_name} to access your models.`
+                      )),
+                    error: meta.error,
+                  }}
+                />
               )}
               {showApiMessage && (
                 <FormField.APIMessage
@@ -155,11 +159,15 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                 />
               )}
               {!showApiMessage && (
-                <FormField.Description>
-                  {override?.description ||
-                    modalContent?.field_metadata?.api_base ||
-                    "The base URL for your API endpoint."}
-                </FormField.Description>
+                <FormField.Message
+                  messages={{
+                    idle:
+                      override?.description ||
+                      modalContent?.field_metadata?.api_base ||
+                      "The base URL for your API endpoint.",
+                    error: meta.error,
+                  }}
+                />
               )}
             </FormField>
           )}
@@ -226,9 +234,15 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                 />
               )}
               {!showApiMessage && (
-                <FormField.Description>
-                  {override?.description || customConfigKey.description || ""}
-                </FormField.Description>
+                <FormField.Message
+                  messages={{
+                    idle:
+                      override?.description ||
+                      customConfigKey.description ||
+                      "",
+                    error: meta.error,
+                  }}
+                />
               )}
             </FormField>
           )}
@@ -289,11 +303,15 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                 />
               )}
               {!showModelsApiErrorMessage && (
-                <FormField.Description>
-                  {override?.description ||
-                    modalContent?.field_metadata?.default_model_name ||
-                    "This model will be used by Onyx by default."}
-                </FormField.Description>
+                <FormField.Message
+                  messages={{
+                    idle:
+                      override?.description ||
+                      modalContent?.field_metadata?.default_model_name ||
+                      "This model will be used by Onyx by default.",
+                    error: meta.error,
+                  }}
+                />
               )}
             </FormField>
           )}
