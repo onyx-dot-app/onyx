@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import litellm
@@ -12,6 +13,8 @@ from litellm.types.utils import Function as LiteLLMFunction
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.utils import _build_content
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
 
 
 def _create_delta(
@@ -154,6 +157,47 @@ def test_multiple_tool_calls(default_multi_llm: DefaultMultiLLM) -> None:
             parallel_tool_calls=False,
             mock_response=MOCK_LLM_RESPONSE,
         )
+
+
+def test_build_content_binary_document_falls_back() -> None:
+    chat_file = InMemoryChatFile(
+        file_id="img-as-doc",
+        content=b"\xff\xd8\xff\xe1\x00\x10JFIF\x00\x01\x02",
+        file_type=ChatFileType.DOC,
+        filename="fake.pdf",
+    )
+
+    result = _build_content("message", [chat_file])
+
+    assert "[Binary file content - ChatFileType.DOC format]" in result
+    assert "message" in result
+
+
+def test_build_content_valid_pdf_extracts_text() -> None:
+    pdf_path = (
+        Path(__file__)
+        .resolve()
+        .parents[3]
+        / "integration"
+        / "common_utils"
+        / "test_files"
+        / "Sample.pdf"
+    )
+    if not pdf_path.exists():
+        pytest.skip("Sample PDF not available")
+
+    chat_file = InMemoryChatFile(
+        file_id="sample-pdf",
+        content=pdf_path.read_bytes(),
+        file_type=ChatFileType.DOC,
+        filename="Sample.pdf",
+    )
+
+    result = _build_content("message", [chat_file])
+
+    assert "DOCUMENT: Sample.pdf" in result
+    assert "[Binary file content" not in result
+    assert "message" in result
 
 
 def test_multiple_tool_calls_streaming(default_multi_llm: DefaultMultiLLM) -> None:

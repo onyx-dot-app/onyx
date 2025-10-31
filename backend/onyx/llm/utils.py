@@ -53,6 +53,15 @@ ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
 
 
+def _looks_like_text(content: str) -> bool:
+    """Heuristic to detect binary-like content after decoding."""
+    allowed_controls = {"\n", "\r", "\t"}
+    for char in content:
+        if ord(char) < 32 and char not in allowed_controls:
+            return False
+    return bool(content.strip())
+
+
 def _unwrap_nested_exception(error: Exception) -> Exception:
     """
     Traverse common exception wrappers to surface the underlying LiteLLM error.
@@ -221,7 +230,11 @@ def _build_content(
                     ignore_onyx_metadata=False,
                 )
                 file_content = decoded_text
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to read as text file: %s", e)
+                file_content = ""
+
+            if file_content and not _looks_like_text(file_content):
                 file_content = ""
 
             if not file_content.strip():
@@ -237,13 +250,17 @@ def _build_content(
                         ),
                     )
                     file_content = extraction.text_content
-                except Exception:
+                except Exception as e:
                     logger.warning(
-                        "Failed to extract content from file %s (%s)",
+                        "Failed to extract content from file %s (%s): %s",
                         file.filename or file.file_id,
                         file.file_type,
+                        e,
                     )
                     file_content = ""
+
+            if file_content and not _looks_like_text(file_content):
+                file_content = ""
 
             if not file_content.strip():
                 file_content = f"[Binary file content - {file.file_type} format]"
