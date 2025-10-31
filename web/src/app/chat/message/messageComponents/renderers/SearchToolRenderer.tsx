@@ -81,8 +81,8 @@ export const SearchToolRenderer: MessageRenderer<
   children,
 }) => {
   const posthog = usePostHog();
-  const isSimpleAgentFrameworkEnabled =
-    posthog.isFeatureEnabled("simple-agent-framework") ?? false;
+  const isSimpleAgentFrameworkDisabled =
+    posthog.isFeatureEnabled("disable-simple-agent-framework") ?? false;
   // Check if this message has a research_type, which indicates it's using the simple agent framework
   const isDeepResearch = state.researchType === ResearchType.Deep;
 
@@ -194,8 +194,8 @@ export const SearchToolRenderer: MessageRenderer<
   // Determine the icon based on search type
   const icon = isInternetSearch ? FiGlobe : FiSearch;
 
-  // If this message has a research type, use the V2 renderer (simple agent framework)
-  if (isSimpleAgentFrameworkEnabled && !isDeepResearch) {
+  // Use V2 renderer unless feature flag is enabled to disable it, and not deep research
+  if (!isSimpleAgentFrameworkDisabled && !isDeepResearch) {
     return (
       <SearchToolRendererV2
         packets={packets}
