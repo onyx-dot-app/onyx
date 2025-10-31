@@ -64,6 +64,4 @@ jobs:
     - name: Check code formatting with Black
       run: |
         cd backend
-        black --version
-        python --version
         black --check .
