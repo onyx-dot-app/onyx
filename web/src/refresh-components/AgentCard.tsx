@@ -18,6 +18,10 @@ import { useAgentsContext } from "./contexts/AgentsContext";
 import { cn } from "@/lib/utils";
 import SvgEdit from "@/icons/edit";
 import { useRouter } from "next/navigation";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
+import { useUser } from "@/components/user/UserProvider";
+import SvgBarChart from "@/icons/bar-chart";
 
 interface IconLabelProps {
   icon: React.FunctionComponent<SvgProps>;
@@ -47,6 +51,9 @@ export default function AgentCard({ agent }: AgentCardProps) {
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
     [agent.id, pinnedAgents]
   );
+  const { user } = useUser();
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const isOwnedByUser = checkUserOwnsAssistant(user, agent);
 
   return (
     <Card className="flex flex-col group/AgentCard">
@@ -58,13 +65,24 @@ export default function AgentCard({ agent }: AgentCardProps) {
             {agent.name}
           </Truncated>
           <div className={cn("flex flex-row gap-1 items-center")}>
-            <IconButton
-              icon={SvgEdit}
-              tertiary
-              onClick={() => router.push(`/assistants/edit/${agent.id}`)}
-              tooltip="Edit Agent"
-              className="hidden group-hover/AgentCard:flex"
-            />
+            {isOwnedByUser && isPaidEnterpriseFeaturesEnabled && (
+              <IconButton
+                icon={SvgBarChart}
+                tertiary
+                onClick={() => router.push(`/assistants/stats/${agent.id}`)}
+                tooltip="View Agent Stats"
+                className="hidden group-hover/AgentCard:flex"
+              />
+            )}
+            {isOwnedByUser && (
+              <IconButton
+                icon={SvgEdit}
+                tertiary
+                onClick={() => router.push(`/assistants/edit/${agent.id}`)}
+                tooltip="Edit Agent"
+                className="hidden group-hover/AgentCard:flex"
+              />
+            )}
             <IconButton
               icon={SvgPin}
               tertiary
