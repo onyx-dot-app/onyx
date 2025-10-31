@@ -74,7 +74,7 @@ export default function LLMPopover({
               )
         }
         onClick={() => setOpen(true)}
-        active={open}
+        transient={open}
         folded={folded}
         rightChevronIcon
       >

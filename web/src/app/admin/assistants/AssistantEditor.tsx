@@ -1171,7 +1171,7 @@ export function AssistantEditor({
                               )}
                               <FilePickerPopover
                                 trigger={(open) => (
-                                  <CreateButton active={open}>
+                                  <CreateButton transient={open}>
                                     Add User Files
                                   </CreateButton>
                                 )}
