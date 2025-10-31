@@ -189,7 +189,12 @@ def _build_content(
     files: list[InMemoryChatFile] | None = None,
 ) -> str:
     """Applies all non-image files."""
-    from onyx.file_processing.extract_file_text import read_pdf_file
+    from onyx.file_processing.extract_file_text import (
+        detect_encoding,
+        extract_text_and_images,
+        read_text_file,
+    )
+    from onyx.file_processing.file_validation import TEXT_MIME_TYPE
 
     if not files:
         return message
@@ -204,15 +209,44 @@ def _build_content(
         try:
             file_content = file.content.decode("utf-8")
         except UnicodeDecodeError:
-            # Try to decode as binary
+            file_content = ""
+            file_buffer = io.BytesIO(file.content)
+
             try:
-                file_content, _, _ = read_pdf_file(io.BytesIO(file.content))
-            except Exception:
-                file_content = f"[Binary file content - {file.file_type} format]"
-                logger.exception(
-                    f"Could not decode binary file content for file type: {file.file_type}"
+                encoding = detect_encoding(file_buffer)
+                file_buffer.seek(0)
+                decoded_text, _ = read_text_file(
+                    file_buffer,
+                    encoding=encoding,
+                    ignore_onyx_metadata=False,
                 )
-                # logger.warning(f"Could not decode binary file content for file type: {file.file_type}")
+                file_content = decoded_text
+            except Exception:
+                file_content = ""
+
+            if not file_content.strip():
+                file_buffer.seek(0)
+                try:
+                    extraction = extract_text_and_images(
+                        file_buffer,
+                        file.filename or str(file.file_id),
+                        content_type=(
+                            TEXT_MIME_TYPE
+                            if file.file_type == ChatFileType.PLAIN_TEXT
+                            else None
+                        ),
+                    )
+                    file_content = extraction.text_content
+                except Exception:
+                    logger.warning(
+                        "Failed to extract content from file %s (%s)",
+                        file.filename or file.file_id,
+                        file.file_type,
+                    )
+                    file_content = ""
+
+            if not file_content.strip():
+                file_content = f"[Binary file content - {file.file_type} format]"
         file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""
         final_message_with_files += (
             f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
