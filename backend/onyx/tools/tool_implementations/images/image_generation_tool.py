@@ -242,7 +242,8 @@ class ImageGenerationTool(Tool[None]):
                 api_key=self.api_key,
                 api_base=self.api_base or None,
                 api_version=self.api_version or None,
-                response_format="b64_json",
+                # response_format parameter is not supported for gpt-image-1
+                response_format=None if self.model == "gpt-image-1" else "b64_json",
                 size=size,
                 n=1,
             )
