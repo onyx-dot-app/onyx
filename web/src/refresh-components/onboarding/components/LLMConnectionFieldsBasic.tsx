@@ -6,6 +6,10 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import { Separator } from "@/components/ui/separator";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import InputFile from "@/refresh-components/inputs/InputFile";
+import { PROVIDER_SKIP_FIELDS } from "../constants";
+import SvgRefreshCw from "@/icons/refresh-cw";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 type Props = {
   llmDescriptor: WellKnownLLMProviderDescriptor;
@@ -18,6 +22,8 @@ type Props = {
   onApiKeyBlur: (apiKey: string) => void;
   formikValues: any;
   setDefaultModelName: (value: string) => void;
+  onFetchModels?: () => void;
+  canFetchModels?: boolean;
 };
 
 export const LLMConnectionFieldsBasic: React.FC<Props> = ({
@@ -31,7 +37,17 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
   onApiKeyBlur,
   formikValues,
   setDefaultModelName,
+  onFetchModels,
+  canFetchModels,
 }) => {
+  const handleApiKeyInteraction = (apiKey: string) => {
+    if (!apiKey) return;
+    if (llmDescriptor?.name === "openrouter") {
+      onFetchModels?.();
+    } else {
+      onApiKeyBlur(apiKey);
+    }
+  };
   return (
     <>
       {llmDescriptor?.name === "azure" ? (
@@ -113,9 +129,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                   placeholder=""
                   onBlur={(e) => {
                     field.onBlur(e);
-                    if (field.value) {
-                      onApiKeyBlur(field.value);
-                    }
+                    handleApiKeyInteraction(field.value);
                   }}
                   showClearButton={false}
                   disabled={
@@ -157,6 +171,86 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
         />
       )}
 
+      {llmDescriptor?.custom_config_keys?.map(
+        (customConfigKey) =>
+          !PROVIDER_SKIP_FIELDS[llmDescriptor?.name]?.includes(
+            customConfigKey.name
+          ) && (
+            <>
+              <FormikField<string>
+                key={customConfigKey.name}
+                name={`custom_config.${customConfigKey.name}`}
+                render={(field, helper, meta, state) => (
+                  <FormField
+                    name={`custom_config.${customConfigKey.name}`}
+                    state={state}
+                    className="w-full"
+                  >
+                    <FormField.Label>
+                      {customConfigKey.display_name || customConfigKey.name}
+                    </FormField.Label>
+                    <FormField.Control>
+                      {customConfigKey.key_type === "select" ? (
+                        <InputSelect
+                          value={field.value}
+                          onValueChange={(value) => helper.setValue(value)}
+                          options={
+                            customConfigKey.options?.map((opt) => ({
+                              label: opt.label,
+                              value: opt.value,
+                            })) ?? []
+                          }
+                        />
+                      ) : customConfigKey.key_type === "file_input" ? (
+                        <InputFile
+                          placeholder={customConfigKey.default_value || ""}
+                          setValue={(value) => helper.setValue(value)}
+                          onValueSet={(value) => handleApiKeyInteraction(value)}
+                          onBlur={(e) => {
+                            field.onBlur(e);
+                            if (field.value) {
+                              onApiKeyBlur(field.value);
+                            }
+                          }}
+                          showClearButton={true}
+                        />
+                      ) : customConfigKey.is_secret ? (
+                        <PasswordInputTypeIn
+                          {...field}
+                          placeholder={customConfigKey.default_value || ""}
+                          showClearButton={false}
+                        />
+                      ) : (
+                        <InputTypeIn
+                          {...field}
+                          placeholder={customConfigKey.default_value || ""}
+                          showClearButton={false}
+                        />
+                      )}
+                    </FormField.Control>
+                    {customConfigKey.description && !showApiMessage && (
+                      <FormField.Description>
+                        {customConfigKey.description}
+                      </FormField.Description>
+                    )}
+                    {showApiMessage && (
+                      <FormField.APIMessage
+                        state={apiStatus}
+                        messages={{
+                          loading: `Checking API key with ${modalContent?.display_name}...`,
+                          success:
+                            "API key valid. Your available models updated.",
+                          error: errorMessage || "Invalid API key",
+                        }}
+                      />
+                    )}
+                  </FormField>
+                )}
+              />
+            </>
+          )
+      )}
+
       <Separator className="my-0" />
 
       <FormikField<string>
@@ -174,6 +268,22 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                   }}
                   options={modelOptions}
                   disabled={modelOptions.length === 0 || isFetchingModels}
+                  rightSection={
+                    canFetchModels ? (
+                      <IconButton
+                        internal
+                        icon={SvgRefreshCw}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onFetchModels?.();
+                        }}
+                        tooltip="Fetch available models"
+                        disabled={isFetchingModels}
+                        className={isFetchingModels ? "animate-spin" : ""}
+                      />
+                    ) : undefined
+                  }
                 />
               )}
               {modelOptions.length === 0 && (
@@ -185,6 +295,22 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                   }}
                   placeholder="E.g. gpt-4"
                   showClearButton={false}
+                  rightSection={
+                    canFetchModels ? (
+                      <IconButton
+                        internal
+                        icon={SvgRefreshCw}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onFetchModels?.();
+                        }}
+                        tooltip="Fetch available models"
+                        disabled={isFetchingModels}
+                        className={isFetchingModels ? "animate-spin" : ""}
+                      />
+                    ) : undefined
+                  }
                 />
               )}
             </FormField.Control>

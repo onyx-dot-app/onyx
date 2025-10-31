@@ -212,6 +212,7 @@ export function ChatPage({
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
+  const [isOnboardingCollapsed, setIsOnboardingCollapsed] = useState(false);
 
   const llmManager = useLlmManager(
     llmProviders,
@@ -901,7 +902,10 @@ export function ChatPage({
                           showConfigureAPIKey={handleShowApiKeyModal}
                         />
 
-                        <OnboardingFlow />
+                        <OnboardingFlow
+                          isCollapsed={isOnboardingCollapsed}
+                          onCollapsedChange={setIsOnboardingCollapsed}
+                        />
 
                         <ChatInputBar
                           deepResearchEnabled={deepResearchEnabled}

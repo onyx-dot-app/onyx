@@ -15,6 +15,8 @@ export interface InputFileProps
   > {
   // Receives the extracted file content (text) or pasted value
   setValue: (value: string) => void;
+  // Called when a value is committed via file selection or paste (not on each keystroke)
+  onValueSet?: (value: string, source: "file" | "paste") => void;
   // HTML accept attribute e.g. "application/json" or ".txt,.md"
   accept?: string;
   // Maximum allowed file size in kilobytes. If exceeded, file is rejected.
@@ -25,6 +27,7 @@ export interface InputFileProps
 
 export default function InputFile({
   setValue,
+  onValueSet,
   accept,
   maxSizeKb,
   onFileSizeExceeded,
@@ -66,6 +69,7 @@ export default function InputFile({
       setSelectedFileName(file.name);
       setDisplayValue(file.name);
       setIsFileMode(true);
+      onValueSet?.(textContent, "file");
     };
     reader.onerror = () => {
       // Reset state on error
@@ -102,6 +106,7 @@ export default function InputFile({
     setSelectedFileName(null);
     setDisplayValue(pastedText);
     setValue(pastedText);
+    onValueSet?.(pastedText, "paste");
   }
 
   const rightSection = (

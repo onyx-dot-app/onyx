@@ -348,6 +348,8 @@ export function LLMProviderUpdateForm({
           }
         }
 
+        console.log("finalValues", finalValues);
+
         const response = await fetch(
           `${LLM_PROVIDERS_ADMIN_URL}${
             existingLlmProvider ? "" : "?is_creation=true"

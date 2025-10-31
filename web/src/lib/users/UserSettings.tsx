@@ -18,7 +18,7 @@ export async function setUserDefaultModel(
  * Update the current user's personalization settings.
  */
 export async function updateUserPersonalization(
-  personalization: UserPersonalization
+  personalization: Partial<UserPersonalization>
 ): Promise<Response> {
   return fetch(`/api/user/personalization`, {
     method: "PATCH",

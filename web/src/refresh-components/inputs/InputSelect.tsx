@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useBoundingBox } from "@/hooks/useBoundingBox";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { ChevronDown, Check } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 const triggerClasses = (active?: boolean, hovered?: boolean) =>
   ({
@@ -29,6 +29,7 @@ const valueClasses = () =>
 export interface InputSelectOption {
   value: string;
   label: string;
+  description?: string;
   disabled?: boolean;
 }
 
@@ -129,7 +130,7 @@ function InputSelectInner(
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content
           className={cn(
-            "relative z-[2000] max-h-96 min-w-[8rem] overflow-hidden rounded-08 border border-border-01 bg-background-neutral-00 shadow-lg",
+            "relative z-[2000] max-h-72 min-w-[8rem] overflow-hidden rounded-12 border border-border-01 bg-background-neutral-00 shadow-02",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
@@ -151,20 +152,21 @@ function InputSelectInner(
                 value={option.value}
                 disabled={option.disabled}
                 className={cn(
-                  "relative flex w-full cursor-default select-none items-center rounded-04 py-1.5 px-0.5 pl-8",
+                  "relative flex flex-col w-full cursor-default select-none rounded-08 p-1.5",
                   "text-text-04 outline-none",
-                  "focus:bg-background-neutral-02 hover:bg-background-neutral-02",
+                  "hover:bg-background-tint-02",
+                  "data-[state=checked]:bg-action-link-01 data-[state=checked]:text-action-link-05",
                   "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                 )}
               >
-                <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-                  <SelectPrimitive.ItemIndicator>
-                    <Check className="h-4 w-4" />
-                  </SelectPrimitive.ItemIndicator>
-                </span>
-                <SelectPrimitive.ItemText>
+                <SelectPrimitive.ItemText className="text-text-04 font-main-ui-action">
                   {option.label}
                 </SelectPrimitive.ItemText>
+                {option.description && (
+                  <span className="text-sm text-text-03 font-secondary-body data-[state=checked]:text-text-00 mt-0.5">
+                    {option.description}
+                  </span>
+                )}
               </SelectPrimitive.Item>
             ))}
           </SelectPrimitive.Viewport>

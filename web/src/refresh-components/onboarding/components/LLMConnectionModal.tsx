@@ -4,7 +4,10 @@ import {
   ModalIds,
   useChatModal,
 } from "@/refresh-components/contexts/ChatModalContext";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import { Form, Formik, FormikProps } from "formik";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import Button from "@/refresh-components/buttons/Button";
@@ -19,11 +22,16 @@ import {
 } from "./llmConnectionHelpers";
 import { LLMConnectionFieldsWithTabs } from "./LLMConnectionFieldsWithTabs";
 import { LLMConnectionFieldsBasic } from "./LLMConnectionFieldsBasic";
+import { getValidationSchema } from "./llmValidationSchema";
+import { useOnboardingState } from "../useOnboardingState";
+import { OnboardingActions, OnboardingState } from "../types";
 
 type LLMConnectionModalData = {
   icon: React.ReactNode;
   title: string;
   llmDescriptor: WellKnownLLMProviderDescriptor;
+  onboardingState: OnboardingState;
+  onboardingActions: OnboardingActions;
 };
 
 const LLMConnectionModal = () => {
@@ -35,6 +43,8 @@ const LLMConnectionModal = () => {
   const modalContent = llmDescriptor
     ? MODAL_CONTENT_MAP[llmDescriptor.name]
     : undefined;
+  const onboardingActions = data?.onboardingActions;
+  const onboardingState = data?.onboardingState;
 
   const initialValues = useMemo(
     () => buildInitialValues(llmDescriptor),
@@ -141,6 +151,7 @@ const LLMConnectionModal = () => {
     >
       <Formik
         initialValues={initialValues}
+        validationSchema={getValidationSchema(llmDescriptor?.name, activeTab)}
         enableReinitialize
         onSubmit={async (values, { setSubmitting }) => {
           // Apply hidden fields based on active tab
@@ -168,7 +179,6 @@ const LLMConnectionModal = () => {
             ...finalValues,
             model_configurations: modelConfigsToUse,
           };
-          console.log("payload", payload);
           const response = await fetch(
             `${LLM_PROVIDERS_ADMIN_URL}${"?is_creation=true"}`,
             {
@@ -183,10 +193,36 @@ const LLMConnectionModal = () => {
           );
           if (!response.ok) {
             const errorMsg = (await response.json()).detail;
-            console.log("errorMsg", errorMsg);
             return;
           }
-
+          // If this is the first LLM provider, set it as the default provider
+          if (onboardingState?.data?.llmProviders == null) {
+            try {
+              const newLlmProvider = await response.json();
+              if (newLlmProvider?.id != null) {
+                const setDefaultResponse = await fetch(
+                  `${LLM_PROVIDERS_ADMIN_URL}/${newLlmProvider.id}/default`,
+                  { method: "POST" }
+                );
+                if (!setDefaultResponse.ok) {
+                  const err = await setDefaultResponse.json().catch(() => ({}));
+                  console.error(
+                    "Failed to set provider as default",
+                    err?.detail
+                  );
+                }
+              }
+            } catch (_e) {
+              console.error("Failed to set new provider as default", _e);
+            }
+          }
+          onboardingActions?.updateData({
+            llmProviders: [
+              ...(onboardingState?.data.llmProviders ?? []),
+              llmDescriptor?.name ?? "",
+            ],
+          });
+          onboardingActions?.setButtonActive(true);
           toggleModal(ModalIds.LLMConnectionModal, false);
         }}
       >
@@ -220,6 +256,63 @@ const LLMConnectionModal = () => {
               }
             }
           }, [activeTab, tabConfig, llmDescriptor]);
+
+          // Reset API message state when required fields become empty (provider-specific)
+          useEffect(() => {
+            if (!llmDescriptor) return;
+
+            const values = formikProps.values as any;
+            const isEmpty = (val: any) =>
+              val == null || (typeof val === "string" && val.trim() === "");
+
+            let shouldReset = false;
+            switch (llmDescriptor.name) {
+              case "openai":
+              case "anthropic":
+                if (isEmpty(values.api_key)) shouldReset = true;
+                break;
+              case "ollama":
+                if (activeTab === "self-hosted") {
+                  if (isEmpty(values.api_base)) shouldReset = true;
+                } else if (activeTab === "cloud") {
+                  if (isEmpty(values?.custom_config?.OLLAMA_API_KEY))
+                    shouldReset = true;
+                }
+                break;
+              case "azure":
+                if (isEmpty(values.api_key) || isEmpty(values.target_uri))
+                  shouldReset = true;
+                break;
+              case "openrouter":
+                if (isEmpty(values.api_key) || isEmpty(values.api_base))
+                  shouldReset = true;
+                break;
+              case "vertex_ai":
+                if (isEmpty(values?.custom_config?.vertex_credentials))
+                  shouldReset = true;
+                break;
+              case "bedrock":
+                if (isEmpty(values?.custom_config?.AWS_REGION_NAME))
+                  shouldReset = true;
+                break;
+              default:
+                break;
+            }
+
+            if (shouldReset) {
+              setShowApiMessage(false);
+              setErrorMessage("");
+              setApiStatus("loading");
+              setFetchedModelConfigurations([]);
+            }
+          }, [
+            llmDescriptor,
+            activeTab,
+            (formikProps.values as any).api_key,
+            (formikProps.values as any).api_base,
+            (formikProps.values as any).target_uri,
+            (formikProps.values as any).custom_config,
+          ]);
 
           const handleFetchModels = async () => {
             if (!llmDescriptor) return;
@@ -278,6 +371,8 @@ const LLMConnectionModal = () => {
                     setDefaultModelName={(value) =>
                       formikProps.setFieldValue("default_model_name", value)
                     }
+                    onFetchModels={handleFetchModels}
+                    canFetchModels={canFetchModels}
                   />
                 )}
               </div>
@@ -291,7 +386,16 @@ const LLMConnectionModal = () => {
                 >
                   Cancel
                 </Button>
-                <Button type="submit">Connect</Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    apiStatus != "success" ||
+                    !formikProps.isValid ||
+                    !formikProps.dirty
+                  }
+                >
+                  Connect
+                </Button>
               </div>
             </Form>
           );
