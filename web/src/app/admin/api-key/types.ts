@@ -5,7 +5,7 @@ export interface APIKey {
   api_key_display: string;
   api_key: string | null;
   api_key_name: string | null;
-  api_key_role: UserRole;
+  api_key_role: UserRole | null; // null = Personal Access Token
   user_id: string;
 }
 

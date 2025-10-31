@@ -30,7 +30,7 @@ class ApiKeyDescriptor(BaseModel):
     api_key_display: str
     api_key: str | None = None  # only present on initial creation
     api_key_name: str | None = None
-    api_key_role: UserRole
+    api_key_role: UserRole | None  # none indicates this is a personal access token
 
     user_id: uuid.UUID
 

@@ -33,6 +33,7 @@ import SvgRefreshCw from "@/icons/refresh-cw";
 import SvgEdit from "@/icons/edit";
 
 const API_KEY_TEXT = `API Keys allow you to access Onyx APIs programmatically. Click the button below to generate a new API Key.`;
+const YOU = "YOU";
 
 function NewApiKeyModal({
   apiKey,
@@ -190,7 +191,9 @@ function Main() {
                 {apiKey.api_key_display}
               </TableCell>
               <TableCell className="max-w-64">
-                {apiKey.api_key_role.toUpperCase()}
+                {apiKey.api_key_role === null
+                  ? YOU
+                  : apiKey.api_key_role.toUpperCase()}
               </TableCell>
               <TableCell>
                 <Button

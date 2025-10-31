@@ -16,6 +16,7 @@ from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
 from onyx.db.models import ApiKey
 from onyx.db.models import User
+from onyx.db.models import UserRole
 from onyx.server.api_key.models import APIKeyArgs
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -37,7 +38,7 @@ def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
     return [
         ApiKeyDescriptor(
             api_key_id=api_key.id,
-            api_key_role=api_key.user.role,
+            api_key_role=get_api_key_descriptor_role(api_key.user),
             api_key_display=api_key.api_key_display,
             api_key_name=api_key.name,
             user_id=api_key.user_id,
@@ -77,6 +78,16 @@ def is_api_key_user(user: User) -> bool:
     return user.user_type == UserType.API_KEY
 
 
+def get_api_key_descriptor_role(user: User) -> UserRole | None:
+    """Get the role to display in ApiKeyDescriptor.
+
+    Returns:
+    - user.role for service accounts (fake API key users)
+    - None for personal access tokens (real users)
+    """
+    return user.role if is_api_key_user(user) else None
+
+
 def insert_api_key(
     db_session: Session, api_key_args: APIKeyArgs, user_id: uuid.UUID | None
 ) -> ApiKeyDescriptor:
@@ -104,7 +115,7 @@ def insert_api_key(
     db_session.commit()
     return ApiKeyDescriptor(
         api_key_id=api_key_row.id,
-        api_key_role=api_key_user.role,
+        api_key_role=get_api_key_descriptor_role(api_key_user),
         api_key_display=api_key_row.api_key_display,
         api_key=api_key,
         api_key_name=api_key_args.name,
@@ -167,7 +178,7 @@ def update_api_key(
         api_key_id=existing_api_key.id,
         api_key_display=existing_api_key.api_key_display,
         api_key_name=api_key_args.name,
-        api_key_role=api_key_user.role,
+        api_key_role=get_api_key_descriptor_role(api_key_user),
         user_id=existing_api_key.user_id,
     )
 
@@ -197,7 +208,7 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
         api_key_display=existing_api_key.api_key_display,
         api_key=new_api_key,
         api_key_name=existing_api_key.name,
-        api_key_role=api_key_user.role,
+        api_key_role=get_api_key_descriptor_role(api_key_user),
         user_id=existing_api_key.user_id,
     )
 
