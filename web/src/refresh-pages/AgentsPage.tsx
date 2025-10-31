@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SvgUser from "@/icons/user";
 import SvgCheck from "@/icons/check";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
+import SvgActions from "@/icons/actions";
 import {
   Popover,
   PopoverContent,
@@ -56,14 +57,19 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
 
 export default function AgentsPage() {
   const { agents } = useAgentsContext();
-  // const { agentFilters, toggleAgentFilter } = useAgentFilters();
-  const [open, setOpen] = useState(false);
+  const [creatorFilterOpen, setCreatorFilterOpen] = useState(false);
+  const [actionsFilterOpen, setActionsFilterOpen] = useState(false);
   const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "your">("all");
   const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(
     new Set()
   );
+  const [selectedActionIds, setSelectedActionIds] = useState<Set<number>>(
+    new Set()
+  );
+  const [creatorSearchQuery, setCreatorSearchQuery] = useState("");
+  const [actionsSearchQuery, setActionsSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -83,6 +89,37 @@ export default function AgentsPage() {
     );
   }, [agents]);
 
+  const filteredCreators = useMemo(() => {
+    if (!creatorSearchQuery) return uniqueCreators;
+    return uniqueCreators.filter((creator) =>
+      creator.email.toLowerCase().includes(creatorSearchQuery.toLowerCase())
+    );
+  }, [uniqueCreators, creatorSearchQuery]);
+
+  const uniqueActions = useMemo(() => {
+    const actionsMap = new Map<number, { id: number; display_name: string }>();
+    agents.forEach((agent) => {
+      agent.tools.forEach((tool) => {
+        actionsMap.set(tool.id, {
+          id: tool.id,
+          display_name: tool.display_name,
+        });
+      });
+    });
+    return Array.from(actionsMap.values()).sort((a, b) =>
+      a.display_name.localeCompare(b.display_name)
+    );
+  }, [agents]);
+
+  const filteredActions = useMemo(() => {
+    if (!actionsSearchQuery) return uniqueActions;
+    return uniqueActions.filter((action) =>
+      action.display_name
+        .toLowerCase()
+        .includes(actionsSearchQuery.toLowerCase())
+    );
+  }, [uniqueActions, actionsSearchQuery]);
+
   const memoizedCurrentlyVisibleAgents = useMemo(() => {
     return agents.filter((agent) => {
       const nameMatches = agent.name
@@ -100,14 +137,26 @@ export default function AgentsPage() {
         selectedCreatorIds.size === 0 ||
         (agent.owner && selectedCreatorIds.has(agent.owner.id));
 
+      const actionsFilter =
+        selectedActionIds.size === 0 ||
+        agent.tools.some((tool) => selectedActionIds.has(tool.id));
+
       return (
         (nameMatches || labelMatches) &&
         mineFilter &&
         isNotUnifiedAgent &&
-        creatorFilter
+        creatorFilter &&
+        actionsFilter
       );
     });
-  }, [agents, searchQuery, activeTab, user, selectedCreatorIds]);
+  }, [
+    agents,
+    searchQuery,
+    activeTab,
+    user,
+    selectedCreatorIds,
+    selectedActionIds,
+  ]);
 
   const featuredAgents = [
     ...memoizedCurrentlyVisibleAgents.filter(
@@ -120,7 +169,7 @@ export default function AgentsPage() {
 
   const agentCount = featuredAgents.length + allAgents.length;
 
-  const filterButtonText = useMemo(() => {
+  const creatorFilterButtonText = useMemo(() => {
     if (selectedCreatorIds.size === 0) {
       return "Everyone";
     } else if (selectedCreatorIds.size === 1) {
@@ -131,6 +180,18 @@ export default function AgentsPage() {
       return `${selectedCreatorIds.size} selected`;
     }
   }, [selectedCreatorIds, uniqueCreators]);
+
+  const actionsFilterButtonText = useMemo(() => {
+    if (selectedActionIds.size === 0) {
+      return "All Actions";
+    } else if (selectedActionIds.size === 1) {
+      const selectedId = Array.from(selectedActionIds)[0];
+      const action = uniqueActions.find((a) => a.id === selectedId);
+      return action?.display_name || "All Actions";
+    } else {
+      return `${selectedActionIds.size} selected`;
+    }
+  }, [selectedActionIds, uniqueActions]);
 
   return (
     <PageWrapper data-testid="AgentsPage/container" aria-label="Agents Page">
@@ -166,14 +227,17 @@ export default function AgentsPage() {
             </Tabs>
           </div>
           <div className="flex flex-row gap-2">
-            <Popover open={open} onOpenChange={setOpen}>
+            <Popover
+              open={creatorFilterOpen}
+              onOpenChange={setCreatorFilterOpen}
+            >
               <PopoverTrigger asChild>
                 <FilterButton
                   leftIcon={SvgUser}
                   open={selectedCreatorIds.size > 0}
                   onClear={() => setSelectedCreatorIds(new Set())}
                 >
-                  {filterButtonText}
+                  {creatorFilterButtonText}
                 </FilterButton>
               </PopoverTrigger>
               <PopoverContent align="start">
@@ -184,8 +248,10 @@ export default function AgentsPage() {
                       placeholder="Created by..."
                       internal
                       leftSearchIcon
+                      value={creatorSearchQuery}
+                      onChange={(e) => setCreatorSearchQuery(e.target.value)}
                     />,
-                    ...uniqueCreators.map((creator) => {
+                    ...filteredCreators.map((creator) => {
                       const isSelected = selectedCreatorIds.has(creator.id);
                       return (
                         <LineItem
@@ -205,6 +271,57 @@ export default function AgentsPage() {
                           }}
                         >
                           {creator.email}
+                        </LineItem>
+                      );
+                    }),
+                  ]}
+                </PopoverMenu>
+              </PopoverContent>
+            </Popover>
+            <Popover
+              open={actionsFilterOpen}
+              onOpenChange={setActionsFilterOpen}
+            >
+              <PopoverTrigger asChild>
+                <FilterButton
+                  leftIcon={SvgActions}
+                  open={selectedActionIds.size > 0}
+                  onClear={() => setSelectedActionIds(new Set())}
+                >
+                  {actionsFilterButtonText}
+                </FilterButton>
+              </PopoverTrigger>
+              <PopoverContent align="start">
+                <PopoverMenu medium>
+                  {[
+                    <InputTypeIn
+                      key="actions"
+                      placeholder="Filter actions..."
+                      internal
+                      leftSearchIcon
+                      value={actionsSearchQuery}
+                      onChange={(e) => setActionsSearchQuery(e.target.value)}
+                    />,
+                    ...filteredActions.map((action) => {
+                      const isSelected = selectedActionIds.has(action.id);
+                      return (
+                        <LineItem
+                          key={action.id}
+                          icon={isSelected ? SvgCheck : SvgActions}
+                          forced={isSelected}
+                          onClick={() => {
+                            setSelectedActionIds((prev) => {
+                              const newSet = new Set(prev);
+                              if (newSet.has(action.id)) {
+                                newSet.delete(action.id);
+                              } else {
+                                newSet.add(action.id);
+                              }
+                              return newSet;
+                            });
+                          }}
+                        >
+                          {action.display_name}
                         </LineItem>
                       );
                     }),
