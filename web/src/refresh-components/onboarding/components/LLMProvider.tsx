@@ -11,11 +11,13 @@ type LLMProviderProps = {
   title: string;
   description: string;
   icon?: React.FunctionComponent<SvgProps>;
+  disabled?: boolean;
 };
 const LLMProviderInner = ({
   title,
   description,
   icon: Icon,
+  disabled,
 }: LLMProviderProps) => {
   return (
     <div className="flex justify-between h-full w-full p-spacing-inline rounded-12 border border-border-01 bg-background-neutral-01">
@@ -36,7 +38,7 @@ const LLMProviderInner = ({
           </Truncated>
         </div>
       </div>
-      <Button tertiary rightIcon={SvgArrowExchange}>
+      <Button tertiary rightIcon={SvgArrowExchange} disabled={disabled}>
         Connect
       </Button>
     </div>
