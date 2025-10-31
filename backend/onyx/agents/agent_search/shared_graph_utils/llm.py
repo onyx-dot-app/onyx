@@ -20,6 +20,7 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import StreamingType
+from onyx.tracing.braintrust_tracing import with_tenant_metadata
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
 SchemaType = TypeVar("SchemaType", bound=BaseModel)
@@ -29,6 +30,7 @@ JSON_PATTERN = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
 @traced(name="stream llm", type="llm")
+@with_tenant_metadata
 def stream_llm_answer(
     llm: LLM,
     prompt: LanguageModelInput,
