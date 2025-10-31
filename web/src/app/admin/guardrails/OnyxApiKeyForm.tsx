@@ -77,9 +77,10 @@ export const OnyxApiKeyForm = ({
             ...(apiKey?.config || {}),
             template: initialTemplateId,
             validator_type: apiKey?.validator_type,
-            llm_provider_id: apiKey?.llm_provider_id || "",
-            // Preserve include_llm from existing config if present for pass-through
-            include_llm: (apiKey?.config as any)?.include_llm,
+            llm_provider_id:
+              apiKey?.llm_provider_id ?? apiKey?.llm_provider?.id ?? "",
+            // Preserve include_llm from top-level field if present
+            include_llm: apiKey?.include_llm,
           }}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
@@ -126,8 +127,10 @@ export const OnyxApiKeyForm = ({
               llm_provider_id: values.llm_provider_id
                 ? Number(values.llm_provider_id)
                 : undefined,
-              // Return include_llm exactly as received (no coercion)
-              include_llm: (values as any).include_llm,
+              // Ensure include_llm is explicitly boolean to avoid clearing on update
+              include_llm: Boolean(
+                (values as any).include_llm ?? apiKey?.include_llm ?? false
+              ),
             };
 
             let response;
@@ -272,7 +275,7 @@ export const OnyxApiKeyForm = ({
                 );
 
                 return (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-2 p-2">
                     <label className="text-sm font-medium text-text-700">
                       LLM Provider
                     </label>
