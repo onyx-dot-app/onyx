@@ -133,12 +133,12 @@ export function UserSettings({ onClose }: UserSettingsProps) {
       visibleSections.push({ id: "password", label: "Password" });
     }
 
+    // Always show tokens tab
+    visibleSections.push({ id: "tokens", label: "Access Tokens" });
+
     if (hasConnectors) {
       visibleSections.push({ id: "connectors", label: "Connectors" });
     }
-
-    // Always show tokens tab
-    visibleSections.push({ id: "tokens", label: "Access Tokens" });
 
     return visibleSections;
   }, [showPasswordSection, hasConnectors]);
