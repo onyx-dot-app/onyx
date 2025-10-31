@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 
 import requests
 from pydantic import ValidationError
+from slack_sdk import WebClient
 from typing_extensions import override
 
 from onyx.context.search.federated.slack_search import slack_retrieval
@@ -25,11 +26,16 @@ logger = setup_logger()
 
 
 SCOPES = [
+    "channels:read",
+    "groups:read",
+    "im:read",
+    "mpim:read",
     "search:read",
     "channels:history",
     "groups:history",
     "im:history",
     "mpim:history",
+    "users:read",
     "users.profile:read",
 ]
 
@@ -58,13 +64,10 @@ class SlackFederatedConnector(FederatedConnector):
             return False
 
     @classmethod
-    @override
     def entities_schema(cls) -> dict[str, EntityField]:
-        """Return the specifications of what entities are available for this federated search type.
+        """Return the specifications of what entity configuration fields are available for Slack.
 
-        Returns a specification that tells the caller:
-        - channels is valid and should be a list[str]
-        - include_dm is valid and should be a boolean
+        This is the canonical schema definition for Slack entities.
         """
         return {
             "exclude_channels": EntityField(
@@ -125,6 +128,11 @@ class SlackFederatedConnector(FederatedConnector):
                 example=25,
             ),
         }
+
+    @classmethod
+    def configuration_schema(cls) -> dict[str, EntityField]:
+        """Wrapper for backwards compatibility - delegates to entities_schema()."""
+        return cls.entities_schema()
 
     @classmethod
     @override
@@ -284,12 +292,28 @@ class SlackFederatedConnector(FederatedConnector):
         """
         logger.info(f"Slack federated search called with entities: {entities}")
 
+        # Get team_id from Slack API for caching and filtering
+        team_id = None
+        try:
+            slack_client = WebClient(token=access_token)
+            auth_response = slack_client.auth_test()
+            auth_response.validate()
+
+            # Cast response.data to dict for type checking
+            auth_data: dict[str, Any] = auth_response.data  # type: ignore
+            team_id = auth_data.get("team_id")
+            logger.info(f"Slack team_id: {team_id}")
+        except Exception as e:
+            logger.warning(f"Could not fetch team_id from Slack API: {e}")
+
         with get_session_with_current_tenant() as db_session:
             return slack_retrieval(
                 query,
                 access_token,
                 db_session,
-                limit,
+                limit=limit,
                 slack_event_context=slack_event_context,
                 bot_token=bot_token,
+                entities=entities,
+                team_id=team_id,
             )
