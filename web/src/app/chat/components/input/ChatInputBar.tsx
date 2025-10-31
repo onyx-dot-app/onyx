@@ -502,7 +502,7 @@ function ChatInputBarInner({
         )}
 
         <div className="flex justify-between items-center w-full p-1">
-          <div className="flex flex-row items-center gap-1">
+          <div className="flex flex-row items-center">
             <FilePickerPopover
               onFileClick={handleFileClick}
               onPickRecent={(file: ProjectFile) => {
