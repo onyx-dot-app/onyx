@@ -132,7 +132,7 @@ def _build_bedrock_region_options() -> list[CustomConfigOption]:
 
 BEDROCK_REGION_OPTIONS = _build_bedrock_region_options()
 
-OLLAMA_PROVIDER_NAME = "ollama"
+OLLAMA_PROVIDER_NAME = "ollama_chat"
 OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
 
 # OpenRouter
