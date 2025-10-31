@@ -42,7 +42,7 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
           {description}
         </Text>
       </div>
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
         {agents
           .sort((a, b) => b.id - a.id)
           .map((agent, index) => (
@@ -52,30 +52,6 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
     </div>
   );
 }
-
-// enum AgentFilter {
-//   Pinned = "Pinned",
-//   Public = "Public",
-//   Private = "Private",
-//   Mine = "Mine",
-// }
-// function useAgentFilters() {
-//   const [agentFilters, setAgentFilters] = useState<
-//     Record<AgentFilter, boolean>
-//   >({
-//     [AgentFilter.Pinned]: false,
-//     [AgentFilter.Public]: false,
-//     [AgentFilter.Private]: false,
-//     [AgentFilter.Mine]: false,
-//   });
-//   function toggleAgentFilter(filter: AgentFilter) {
-//     setAgentFilters((prevFilters) => ({
-//       ...prevFilters,
-//       [filter]: !prevFilters[filter],
-//     }));
-//   }
-//   return { agentFilters, toggleAgentFilter };
-// }
 
 export default function AgentsPage() {
   const { agents } = useAgentsContext();
