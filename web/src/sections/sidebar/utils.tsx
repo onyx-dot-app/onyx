@@ -62,12 +62,12 @@ export function SidebarBody({
   footer,
 }: SidebarBodyProps) {
   return (
-    <>
-      {actionButton && <div className="px-2">{actionButton}</div>}
+    <div className="flex flex-col min-h-0 h-full gap-1 px-2">
+      {actionButton}
       <div className="flex flex-col min-h-0 h-full gap-2">
-        <OverflowDiv className="px-2">{children}</OverflowDiv>
+        <OverflowDiv>{children}</OverflowDiv>
         {footer}
       </div>
-    </>
+    </div>
   );
 }

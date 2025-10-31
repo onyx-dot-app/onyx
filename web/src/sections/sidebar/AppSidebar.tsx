@@ -358,7 +358,7 @@ function AppSidebarInner() {
   );
   const settingsButton = useMemo(
     () => (
-      <div className="px-2">
+      <div>
         {(isAdmin || isCurator) && (
           <SidebarTab
             href="/admin/indexing/status"
