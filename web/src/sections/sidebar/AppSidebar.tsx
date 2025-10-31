@@ -326,17 +326,21 @@ function AppSidebarInner() {
     () => (
       <div data-testid="AppSidebar/more-agents">
         <SidebarTab
-          leftIcon={folded ? SvgOnyxOctagon : SvgMoreHorizontal}
+          leftIcon={
+            folded || visibleAgents.length === 0
+              ? SvgOnyxOctagon
+              : SvgMoreHorizontal
+          }
           href="/chat/agents"
           folded={folded}
           active={activeSidebarTab === "more-agents"}
           lowlight={!folded}
         >
-          More Agents
+          {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
         </SidebarTab>
       </div>
     ),
-    [folded, activeSidebarTab]
+    [folded, activeSidebarTab, visibleAgents]
   );
   const newProjectButton = useMemo(
     () => (
