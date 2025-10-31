@@ -535,7 +535,7 @@ class WebConnector(LoadConnector):
                 id=initial_url,
                 sections=[TextSection(link=initial_url, text=page_text)],
                 source=DocumentSource.WEB,
-                semantic_identifier=initial_url.rstrip("/").split("/")[-1] 
+                semantic_identifier=initial_url.rstrip("/").split("/")[-1]
                 or initial_url,
                 metadata=metadata,
                 doc_updated_at=(
