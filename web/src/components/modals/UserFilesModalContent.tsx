@@ -182,13 +182,13 @@ export default function UserFilesModalContent({
       </div>
 
       {/* File display section */}
-      <div className="bg-background-tint-01 overflow-y-scroll">
+      <div className="flex flex-col max-h-[20rem] gap-2 bg-background-tint-01">
         {filtered.length === 0 ? (
           <div className="p-4 flex w-full h-full items-center justify-center">
             <Text text03>No files found</Text>
           </div>
         ) : (
-          <VerticalShadowScroller className="p-2 flex flex-col gap-2 overflow-scroll max-h-[20rem]">
+          <VerticalShadowScroller className="px-2 pt-2 gap-2">
             {filtered.map((projectFle) => {
               const isSelected = selectedIds.has(projectFle.id);
               return (
