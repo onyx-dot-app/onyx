@@ -54,12 +54,14 @@ CHUNKS_PER_DOC_ESTIMATE = 5
 
 
 def _looks_like_text(content: str) -> bool:
-    """Heuristic to detect binary-like content after decoding."""
+    """Heuristic to flag binary-like output."""
+    if not content.strip():
+        return False
     allowed_controls = {"\n", "\r", "\t"}
     for char in content:
         if ord(char) < 32 and char not in allowed_controls:
             return False
-    return bool(content.strip())
+    return True
 
 
 def _unwrap_nested_exception(error: Exception) -> Exception:
@@ -201,6 +203,7 @@ def _build_content(
     from onyx.file_processing.extract_file_text import (
         detect_encoding,
         extract_text_and_images,
+        is_text_file,
         read_text_file,
     )
     from onyx.file_processing.file_validation import TEXT_MIME_TYPE
@@ -218,8 +221,23 @@ def _build_content(
         try:
             file_content = file.content.decode("utf-8")
         except UnicodeDecodeError:
-            file_content = ""
             file_buffer = io.BytesIO(file.content)
+
+            if (
+                file.file_type == ChatFileType.PLAIN_TEXT
+                and not is_text_file(file_buffer)
+            ):
+                file_content = f"[Binary file content - {file.file_type} format]"
+                file_name_section = (
+                    f"DOCUMENT: {file.filename}\n" if file.filename else ""
+                )
+                final_message_with_files += (
+                    f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
+                )
+                continue
+
+            file_content = ""
+            file_buffer.seek(0)
 
             try:
                 encoding = detect_encoding(file_buffer)
@@ -229,12 +247,10 @@ def _build_content(
                     encoding=encoding,
                     ignore_onyx_metadata=False,
                 )
-                file_content = decoded_text
+                if _looks_like_text(decoded_text):
+                    file_content = decoded_text
             except Exception as e:
                 logger.debug("Failed to read as text file: %s", e)
-                file_content = ""
-
-            if file_content and not _looks_like_text(file_content):
                 file_content = ""
 
             if not file_content.strip():
@@ -249,7 +265,9 @@ def _build_content(
                             else None
                         ),
                     )
-                    file_content = extraction.text_content
+                    extracted_text = extraction.text_content
+                    if _looks_like_text(extracted_text):
+                        file_content = extracted_text
                 except Exception as e:
                     logger.warning(
                         "Failed to extract content from file %s (%s): %s",
@@ -258,9 +276,6 @@ def _build_content(
                         e,
                     )
                     file_content = ""
-
-            if file_content and not _looks_like_text(file_content):
-                file_content = ""
 
             if not file_content.strip():
                 file_content = f"[Binary file content - {file.file_type} format]"
