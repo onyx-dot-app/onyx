@@ -12,7 +12,6 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     IMAGE_GENERATION_RESPONSE_ID,
 )
-from onyx.tools.tool_implementations.images.image_generation_tool import ImageFormat
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationResponse,
 )
@@ -33,7 +32,6 @@ def dalle3_tool() -> ImageGenerationTool:
         api_version=None,
         model="dall-e-3",
         num_imgs=1,
-        output_format=ImageFormat.URL,
     )
 
 
@@ -65,8 +63,8 @@ def test_image_generation_with_heartbeats(dalle3_tool: ImageGenerationTool) -> N
 
     image = final_response.response[0]
     assert isinstance(image, ImageGenerationResponse)
-    assert image.url is not None
-    assert image.url.startswith("https://")
+    assert image.image_data is not None
+    assert len(image.image_data) > 100  # Base64 data should be substantial
     assert image.revised_prompt is not None
 
 
@@ -81,7 +79,6 @@ def test_heartbeat_timing_with_mock() -> None:
         api_version=None,
         model="dall-e-3",
         num_imgs=1,
-        output_format=ImageFormat.URL,
     )
 
     # Mock the _generate_image method to simulate slow generation
@@ -89,8 +86,7 @@ def test_heartbeat_timing_with_mock() -> None:
         time.sleep(5)  # Simulate 5 second generation time
         return ImageGenerationResponse(
             revised_prompt="Test prompt",
-            url="https://example.com/image.png",
-            image_data=None,
+            image_data="base64encodedimagedata",
         )
 
     with patch.object(tool, "_generate_image", side_effect=slow_generate):
@@ -111,7 +107,7 @@ def test_heartbeat_timing_with_mock() -> None:
         # Verify we still get the final result
         image_responses = [r for r in responses if r.id == IMAGE_GENERATION_RESPONSE_ID]
         assert len(image_responses) == 1
-        assert image_responses[0].response[0].url == "https://example.com/image.png"
+        assert image_responses[0].response[0].image_data == "base64encodedimagedata"
 
 
 def test_error_handling_with_heartbeats() -> None:
@@ -125,7 +121,6 @@ def test_error_handling_with_heartbeats() -> None:
         api_version=None,
         model="dall-e-3",
         num_imgs=1,
-        output_format=ImageFormat.URL,
     )
 
     # Mock the _generate_image method to raise an error after delay
@@ -150,7 +145,6 @@ def test_tool_message_content_filters_heartbeats() -> None:
         api_version=None,
         model="dall-e-3",
         num_imgs=1,
-        output_format=ImageFormat.URL,
     )
 
     # Create mock responses
@@ -167,8 +161,7 @@ def test_tool_message_content_filters_heartbeats() -> None:
         response=[
             ImageGenerationResponse(
                 revised_prompt="Test",
-                url="https://example.com/image.png",
-                image_data=None,
+                image_data="base64encodedimagedata",
             )
         ],
     )
@@ -178,7 +171,7 @@ def test_tool_message_content_filters_heartbeats() -> None:
 
     # Should return JSON with image info, not heartbeats
     assert isinstance(result, str)
-    assert "https://example.com/image.png" in result
+    assert "Test" in result
     assert "heartbeat" not in result
 
 
@@ -193,7 +186,6 @@ def test_final_result_filters_heartbeats() -> None:
         api_version=None,
         model="dall-e-3",
         num_imgs=1,
-        output_format=ImageFormat.URL,
     )
 
     # Create mock responses
@@ -206,8 +198,7 @@ def test_final_result_filters_heartbeats() -> None:
         response=[
             ImageGenerationResponse(
                 revised_prompt="Test prompt",
-                url="https://example.com/image.png",
-                image_data=None,
+                image_data="base64encodedimagedata",
             )
         ],
     )
@@ -218,7 +209,7 @@ def test_final_result_filters_heartbeats() -> None:
     assert isinstance(result, list)
     assert len(result) == 1
     assert result[0]["revised_prompt"] == "Test prompt"
-    assert result[0]["url"] == "https://example.com/image.png"
+    assert result[0]["image_data"] == "base64encodedimagedata"
 
 
 def test_different_image_shapes(dalle3_tool: ImageGenerationTool) -> None:
@@ -242,12 +233,13 @@ def test_different_image_shapes(dalle3_tool: ImageGenerationTool) -> None:
         assert image_response is not None
         assert len(image_response.response) == 1
         image = image_response.response[0]
-        assert image.url is not None
-        print(f"Generated {shape.value} image: {image.url}")
+        assert image.image_data is not None
+        assert len(image.image_data) > 100  # Base64 data should be substantial
+        print(f"Generated {shape.value} image (base64, {len(image.image_data)} chars)")
 
 
-def test_base64_format() -> None:
-    """Test image generation with base64 output format."""
+def test_image_generation_response_format() -> None:
+    """Test that image generation returns data in at least one format (URL or base64)."""
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         pytest.skip("OPENAI_API_KEY environment variable not set")
@@ -259,7 +251,6 @@ def test_base64_format() -> None:
         api_version=None,
         model="dall-e-3",
         num_imgs=1,
-        output_format=ImageFormat.BASE64,
     )
 
     responses = list(tool.run(prompt="A simple blue circle"))
@@ -274,7 +265,7 @@ def test_base64_format() -> None:
     assert image_response is not None
     assert len(image_response.response) == 1
     image = image_response.response[0]
-    assert image.url is None
+    # Should always have base64 data
     assert image.image_data is not None
     assert len(image.image_data) > 100  # Base64 data should be substantial
 

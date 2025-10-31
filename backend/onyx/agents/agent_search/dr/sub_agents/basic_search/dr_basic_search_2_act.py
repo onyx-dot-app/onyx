@@ -30,6 +30,7 @@ from onyx.db.connector import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.prompts.dr_prompts import BASE_SEARCH_PROCESSING_PROMPT
 from onyx.prompts.dr_prompts import INTERNAL_SEARCH_PROMPTS
+from onyx.secondary_llm_flows.source_filter import strings_to_document_sources
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
@@ -128,10 +129,11 @@ def basic_search(
         if re.match(date_pattern, implied_start_date):
             implied_time_filter = datetime.strptime(implied_start_date, "%Y-%m-%d")
 
-    specified_source_types: list[DocumentSource] | None = [
-        DocumentSource(source_type)
-        for source_type in search_processing.specified_source_types
-    ]
+    specified_source_types: list[DocumentSource] | None = (
+        strings_to_document_sources(search_processing.specified_source_types)
+        if search_processing.specified_source_types
+        else None
+    )
 
     if specified_source_types is not None and len(specified_source_types) == 0:
         specified_source_types = None

@@ -363,4 +363,10 @@ schema {{ schema_name }} {
             expression: bm25(content) + (5 * bm25(title))
         }
     }
+
+    rank-profile random_ inherits default {
+        first-phase {
+            expression: random
+        }
+    }
 }

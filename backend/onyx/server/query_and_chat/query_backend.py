@@ -71,7 +71,12 @@ def admin_search(
             status_code=400,
             detail="Cannot use admin-search when using a non-Vespa document index",
         )
-    matching_chunks = document_index.admin_retrieval(query=query, filters=final_filters)
+    if not query or query.strip() == "":
+        matching_chunks = document_index.random_retrieval(filters=final_filters)
+    else:
+        matching_chunks = document_index.admin_retrieval(
+            query=query, filters=final_filters
+        )
 
     documents = SearchDoc.from_chunks_or_sections(matching_chunks)
 

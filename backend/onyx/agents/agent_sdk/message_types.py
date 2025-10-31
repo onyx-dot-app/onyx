@@ -95,6 +95,21 @@ class FunctionCallOutputMessage(TypedDict):
     output: str
 
 
+class SummaryText(TypedDict):
+    """Summary text item in reasoning messages."""
+
+    text: str
+    type: Literal["summary_text"]
+
+
+class ReasoningMessage(TypedDict):
+    """Agent SDK reasoning message format."""
+
+    id: str
+    type: Literal["reasoning"]
+    summary: list[SummaryText]
+
+
 # Union type for all Agent SDK messages
 AgentSDKMessage = (
     SystemMessage
@@ -105,4 +120,5 @@ AgentSDKMessage = (
     | ToolMessage
     | FunctionCallMessage
     | FunctionCallOutputMessage
+    | ReasoningMessage
 )
