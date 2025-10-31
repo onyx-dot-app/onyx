@@ -11,7 +11,7 @@ export interface SidebarSectionProps {
   className?: string;
 }
 
-export function SidebarSection({
+export default function SidebarSection({
   title,
   children,
   action,
