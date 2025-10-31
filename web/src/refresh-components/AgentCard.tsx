@@ -56,7 +56,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
 
   return (
-    <Card className="flex flex-col group/AgentCard">
+    <Card className="flex flex-col group/AgentCard hover:shadow-01">
       {/* Main Body */}
       <div className="flex flex-col items-center gap-1 p-1">
         <div className="flex flex-row items-center w-full gap-1">
@@ -97,7 +97,11 @@ export default function AgentCard({ agent }: AgentCardProps) {
             />
           </div>
         </div>
-        <Text text03 className="pb-1 px-2 w-full">
+        <Text
+          secondaryBody
+          text03
+          className="pb-1 px-2 w-full line-clamp-2 truncate whitespace-normal h-[2.2rem] break-words"
+        >
           {agent.description}
         </Text>
       </div>
