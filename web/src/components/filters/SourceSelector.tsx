@@ -108,9 +108,6 @@ export function HorizontalFilters({
     (availableConnectors || []).map((c) => [c.id, c.name])
   );
 
-  console.log("selectedConnectorIds", selectedConnectorIds);
-  console.log("availableConnectors", availableConnectors);
-  console.log("connectorNameById", connectorNameById);
   return (
     <div className="b">
       <div className="flex gap-x-3">
