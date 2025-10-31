@@ -51,7 +51,6 @@ interface PAT {
 export function PATManagement() {
   const [pats, setPats] = useState<PAT[]>([]);
   const [isCreating, setIsCreating] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [newTokenName, setNewTokenName] = useState("");
   const [expirationDays, setExpirationDays] = useState<string>("30");
   const [createdToken, setCreatedToken] = useState<string | null>(null);
@@ -70,8 +69,6 @@ export function PATManagement() {
       }
     } catch (error) {
       setPopup({ message: "Network error loading tokens", type: "error" });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -152,29 +149,22 @@ export function PATManagement() {
 
   // Show create form by default if no tokens exist
   useEffect(() => {
-    if (!isLoading && pats.length === 0 && !createdToken) {
+    if (pats.length === 0 && !createdToken) {
       setShowCreateForm(true);
     }
-  }, [isLoading, pats.length, createdToken]);
+  }, [pats.length, createdToken]);
 
   return (
     <div className="space-y-6">
-      {/* Loading State */}
-      {isLoading && (
-        <Text text03 secondaryBody>
-          Loading tokens...
-        </Text>
-      )}
-
       {/* Token Creation Success Modal */}
-      {!isLoading && createdToken && (
+      {createdToken && (
         <div
           role="dialog"
           aria-labelledby="token-modal-title"
           aria-modal="true"
           className="p-4 bg-background-emphasis border border-border-strong rounded-lg"
         >
-          <Text id="token-modal-title" headingH3 text01 className="mb-2">
+          <Text id="token-modal-title" headingH3 className="mb-2">
             Token Created!
           </Text>
           <Text text02 secondaryBody className="mb-3">
@@ -204,10 +194,10 @@ export function PATManagement() {
       )}
 
       {/* Create New Token Form */}
-      {!isLoading && showCreateForm && (
+      {showCreateForm && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <Text headingH3 text01>
+            <Text headingH3>
               {pats.length === 0
                 ? "Create Your First Token"
                 : "Create New Token"}
@@ -260,85 +250,81 @@ export function PATManagement() {
       )}
 
       {/* Token List */}
-      {!isLoading && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Text headingH3 text01>
-              Your Tokens
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Text headingH3>Your Tokens</Text>
+          {pats.length > 0 && !showCreateForm && (
+            <Button
+              onClick={() => setShowCreateForm(true)}
+              primary
+              leftIcon={SvgPlusCircle}
+              aria-label="Create new token"
+            >
+              New Token
+            </Button>
+          )}
+        </div>
+        {pats.length === 0 ? (
+          <div className="text-center py-8 px-4 border-2 border-dashed border-border-01 rounded-lg">
+            <Text text03 secondaryBody className="mb-4">
+              No tokens created yet. Create your first token to get started.
             </Text>
-            {pats.length > 0 && !showCreateForm && (
+            {!showCreateForm && (
               <Button
                 onClick={() => setShowCreateForm(true)}
                 primary
                 leftIcon={SvgPlusCircle}
-                aria-label="Create new token"
+                aria-label="Create your first token"
               >
-                New Token
+                Create Your First Token
               </Button>
             )}
           </div>
-          {pats.length === 0 ? (
-            <div className="text-center py-8 px-4 border-2 border-dashed border-border-01 rounded-lg">
-              <Text text03 secondaryBody className="mb-4">
-                No tokens created yet. Create your first token to get started.
-              </Text>
-              {!showCreateForm && (
-                <Button
-                  onClick={() => setShowCreateForm(true)}
-                  primary
-                  leftIcon={SvgPlusCircle}
-                  aria-label="Create your first token"
-                >
-                  Create Your First Token
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {pats.map((pat) => (
-                <div
-                  key={pat.id}
-                  className="flex items-center justify-between p-3 border border-border-01 rounded-lg bg-background-tint-01"
-                >
-                  <div className="flex-1 min-w-0">
-                    <Text text01 mainUiAction className="truncate">
-                      {pat.name}
-                    </Text>
-                    <Text text03 secondaryMono>
-                      {pat.token_display}
-                    </Text>
-                    <Text text03 secondaryBody className="mt-1">
-                      <span title={formatDateTime(pat.created_at)}>
-                        Created: {formatDate(pat.created_at)}
+        ) : (
+          <div className="space-y-2">
+            {pats.map((pat) => (
+              <div
+                key={pat.id}
+                className="flex items-center justify-between p-3 border border-border-01 rounded-lg bg-background-tint-01"
+              >
+                <div className="flex-1 min-w-0">
+                  <Text text01 mainUiAction className="truncate">
+                    {pat.name}
+                  </Text>
+                  <Text text03 secondaryMono>
+                    {pat.token_display}
+                  </Text>
+                  <Text text03 secondaryBody className="mt-1">
+                    <span title={formatDateTime(pat.created_at)}>
+                      Created: {formatDate(pat.created_at)}
+                    </span>
+                    {pat.expires_at && (
+                      <span title={formatDateTime(pat.expires_at)}>
+                        {" • Expires: "}
+                        {formatDate(pat.expires_at)}
                       </span>
-                      {pat.expires_at && (
-                        <span title={formatDateTime(pat.expires_at)}>
-                          {" • Expires: "}
-                          {formatDate(pat.expires_at)}
-                        </span>
-                      )}
-                      {pat.last_used_at && (
-                        <span title={formatDateTime(pat.last_used_at)}>
-                          {" • Last used: "}
-                          {formatDate(pat.last_used_at)}
-                        </span>
-                      )}
-                    </Text>
-                  </div>
-                  <Button
-                    onClick={() => deletePAT(pat.id, pat.name)}
-                    internal
-                    leftIcon={SvgTrash}
-                    className="ml-2"
-                    data-testid={`delete-pat-${pat.id}`}
-                    aria-label={`Delete token ${pat.name}`}
-                  />
+                    )}
+                    {pat.last_used_at && (
+                      <span title={formatDateTime(pat.last_used_at)}>
+                        {" • Last used: "}
+                        {formatDate(pat.last_used_at)}
+                      </span>
+                    )}
+                  </Text>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+                <Button
+                  onClick={() => deletePAT(pat.id, pat.name)}
+                  internal
+                  leftIcon={SvgTrash}
+                  className="ml-2"
+                  data-testid={`delete-pat-${pat.id}`}
+                  aria-label={`Delete token ${pat.name}`}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
