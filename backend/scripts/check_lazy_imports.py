@@ -36,7 +36,9 @@ _LAZY_IMPORT_MODULES_TO_IGNORE_SETTINGS: Dict[str, LazyImportSettings] = {
     "onyx.llm.litellm_singleton": LazyImportSettings(),
     "litellm": LazyImportSettings(
         ignore_files={
-            "onyx/llm/litellm_singleton.py",
+            "onyx/llm/litellm_singleton/__init__.py",
+            "onyx/llm/litellm_singleton/config.py",
+            "onyx/llm/litellm_singleton/monkey_patches.py",
         }
     ),
     "nltk": LazyImportSettings(),

@@ -348,7 +348,7 @@ function ChatButtonInner({
               !popoverOpen && "hidden",
               !renaming && "group-hover/SidebarTab:flex"
             )}
-            active={popoverOpen}
+            transient={popoverOpen}
             internal
           />
         </div>
