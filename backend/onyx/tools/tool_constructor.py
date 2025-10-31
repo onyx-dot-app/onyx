@@ -92,7 +92,7 @@ class WebSearchToolConfig(BaseModel):
 
 
 class ImageGenerationToolConfig(BaseModel):
-    additional_headers: dict[str, str] | None = None
+    pass
 
 
 class CustomToolConfig(BaseModel):
@@ -271,7 +271,6 @@ def construct_tools(
                         api_key=cast(str, img_generation_llm_config.api_key),
                         api_base=img_generation_llm_config.api_base,
                         api_version=img_generation_llm_config.api_version,
-                        additional_headers=image_generation_tool_config.additional_headers,
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
                     )

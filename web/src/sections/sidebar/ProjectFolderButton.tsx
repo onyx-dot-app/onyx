@@ -160,7 +160,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
                         !popoverOpen && "hidden",
                         !isEditing && "group-hover/SidebarTab:flex"
                       )}
-                      active={popoverOpen}
+                      transient={popoverOpen}
                       internal
                     />
                   </div>
