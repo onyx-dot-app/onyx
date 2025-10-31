@@ -64,10 +64,8 @@ export function SidebarBody({
   return (
     <div className="flex flex-col min-h-0 h-full gap-1 px-2">
       {actionButton}
-      <div className="flex flex-col min-h-0 h-full gap-2">
-        <OverflowDiv>{children}</OverflowDiv>
-        {footer}
-      </div>
+      <OverflowDiv>{children}</OverflowDiv>
+      {footer}
     </div>
   );
 }
