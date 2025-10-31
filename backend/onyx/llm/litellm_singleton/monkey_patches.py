@@ -1,6 +1,7 @@
 import json
 import time
 import uuid
+from typing import Any
 from typing import cast
 from typing import List
 from typing import Optional
@@ -37,7 +38,7 @@ def _patch_ollama_transform_request() -> None:
         return
 
     def _patched_transform_request(
-        self,  # type: ignore
+        self: Any,
         model: str,
         messages: List[AllMessageValues],
         optional_params: dict,
@@ -132,7 +133,7 @@ def _patch_ollama_chunk_parser() -> None:
     ):
         return
 
-    def _patched_chunk_parser(self, chunk: dict) -> ModelResponseStream:  # type: ignore
+    def _patched_chunk_parser(self: Any, chunk: dict) -> ModelResponseStream:
         try:
             """
             Expected chunk format:
