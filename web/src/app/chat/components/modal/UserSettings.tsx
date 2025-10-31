@@ -34,11 +34,14 @@ import { useUserPersonalization } from "@/lib/hooks/useUserPersonalization";
 import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import Text from "@/refresh-components/texts/Text";
 import SvgXOctagon from "@/icons/x-octagon";
+import { PATManagement } from "@/components/user/PATManagement";
+
 type SettingsSection =
   | "settings"
   | "password"
   | "connectors"
-  | "personalization";
+  | "personalization"
+  | "tokens";
 
 interface UserSettingsProps {
   onClose: () => void;
@@ -137,6 +140,9 @@ export function UserSettings({ onClose }: UserSettingsProps) {
 
     // Always show Connectors tab, will be disabled if loading or no connectors
     visibleSections.push({ id: "connectors", label: "Connectors" });
+
+    // Always show tokens tab
+    visibleSections.push({ id: "tokens", label: "Access Tokens" });
 
     return visibleSections;
   }, [showPasswordSection]);
@@ -858,6 +864,16 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                 </div>
               )}
             </div>
+          </div>
+        )}
+        {activeSection === "tokens" && (
+          <div>
+            <h2 className="text-xl font-bold mb-4">Personal Access Tokens</h2>
+            <p className="text-sm text-text-03 mb-4">
+              Create tokens to authenticate API requests. Tokens inherit all
+              your permissions.
+            </p>
+            <PATManagement />
           </div>
         )}
       </div>
