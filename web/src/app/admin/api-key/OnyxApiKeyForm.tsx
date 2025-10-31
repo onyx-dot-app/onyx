@@ -8,9 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import Text from "@/components/ui/text";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { APIKey } from "./types";
-
-// Sentinel value to represent "mirror my permissions" in the form
-const MIRROR_ROLE_VALUE = "mirror" as const;
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState } from "react";
 
 interface OnyxApiKeyFormProps {
   onClose: () => void;
@@ -19,6 +18,63 @@ interface OnyxApiKeyFormProps {
   apiKey?: APIKey;
 }
 
+const ApiKeyNameField = () => (
+  <TextFormField
+    name="name"
+    label="Name (optional):"
+    subtext="Choose a memorable name for your API key. This is optional and can be added or changeed later!"
+    autoCompleteDisabled={true}
+  />
+);
+
+const ApiKeyRoleSelector = () => (
+  <SelectorFormField
+    label="Role:"
+    subtext="Select the role for this service account.
+             Limited has access to simple public API's.
+             Basic has access to regular user API's.
+             Admin has access to admin level APIs."
+    name="role"
+    options={[
+      {
+        name: USER_ROLE_LABELS[UserRole.LIMITED],
+        value: UserRole.LIMITED.toString(),
+      },
+      {
+        name: USER_ROLE_LABELS[UserRole.BASIC],
+        value: UserRole.BASIC.toString(),
+      },
+      {
+        name: USER_ROLE_LABELS[UserRole.ADMIN],
+        value: UserRole.ADMIN.toString(),
+      },
+    ]}
+  />
+);
+
+const PersonalAccessTokenForm = () => (
+  <>
+    <Text className="mb-4 text-lg">
+      API key that mirrors your own permissions and access to resources.
+    </Text>
+
+    <ApiKeyNameField />
+  </>
+);
+
+const ServiceAccountKeyForm = () => (
+  <>
+    <Text className="mb-4 text-lg">
+      API key for a service account with a specific role.
+    </Text>
+
+    <div className="space-y-4">
+      <ApiKeyNameField />
+      <ApiKeyRoleSelector />
+    </div>
+  </>
+);
+
 export const OnyxApiKeyForm = ({
   onClose,
   setPopup,
@@ -26,12 +82,22 @@ export const OnyxApiKeyForm = ({
   apiKey,
 }: OnyxApiKeyFormProps) => {
   const isUpdate = apiKey !== undefined;
+  const isPAT = apiKey?.api_key_role === null;
+
+  // Initialize tab based on key type when editing, default to "personal" when creating
+  const [selectedTab, setSelectedTab] = useState<"personal" | "service">(
+    isUpdate ? (isPAT ? "personal" : "service") : "personal"
+  );
 
   return (
     <Modal onOutsideClick={onClose} width="w-2/6">
       <>
         <h2 className="text-xl font-bold flex">
-          {isUpdate ? "Update API Key" : "Create a new API Key"}
+          {isUpdate
+            ? `Update ${
+                isPAT ? "Personal Access Token" : "Service Account Key"
+              }`
+            : "Create a new API Key"}
         </h2>
 
         <Separator />
@@ -39,16 +105,21 @@ export const OnyxApiKeyForm = ({
         <Formik
           initialValues={{
             name: apiKey?.api_key_name || "",
-            role: apiKey?.api_key_role || MIRROR_ROLE_VALUE,
+            role: apiKey?.api_key_role || UserRole.BASIC,
           }}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
-            // Convert mirror sentinel to null for the API
+            // Determine the role based on mode:
+            // - Edit mode: preserve existing type (isPAT ? null : role)
+            // - Create mode: use selected tab (personal ? null : role)
             const payload = {
               ...values,
-              role:
-                values.role === MIRROR_ROLE_VALUE
+              role: isUpdate
+                ? isPAT
+                  ? null
+                  : (values.role as UserRole)
+                : selectedTab === "personal"
                   ? null
                   : (values.role as UserRole),
             };
@@ -85,47 +156,45 @@ export const OnyxApiKeyForm = ({
         >
           {({ isSubmitting, values, setFieldValue }) => (
             <Form className="w-full overflow-visible">
-              <Text className="mb-4 text-lg">
-                Choose a memorable name for your API key. This is optional and
-                can be added or changed later!
-              </Text>
+              {isUpdate ? (
+                // EDIT MODE: Show only the relevant form without tabs
+                <div>
+                  {isPAT ? (
+                    <PersonalAccessTokenForm />
+                  ) : (
+                    <ServiceAccountKeyForm />
+                  )}
+                </div>
+              ) : (
+                // CREATE MODE: Show tabs with both options
+                <Tabs
+                  defaultValue="personal"
+                  value={selectedTab}
+                  onValueChange={(value) =>
+                    setSelectedTab(value as "personal" | "service")
+                  }
+                  className="w-full"
+                >
+                  <TabsList className="mb-4 w-full">
+                    <TabsTrigger value="personal" className="flex-1">
+                      Personal Access Token
+                    </TabsTrigger>
+                    <TabsTrigger value="service" className="flex-1">
+                      Service Account Key
+                    </TabsTrigger>
+                  </TabsList>
 
-              <TextFormField
-                name="name"
-                label="Name (optional):"
-                autoCompleteDisabled={true}
-              />
+                  <TabsContent value="personal">
+                    <PersonalAccessTokenForm />
+                  </TabsContent>
 
-              <SelectorFormField
-                // defaultValue is managed by Formik
-                label="Role:"
-                subtext="Select the role for this API key.
-                         Mirror My Permissions will inherit all your current permissions.
-                         Limited has access to simple public API's.
-                         Basic has access to regular user API's.
-                         Admin has access to admin level APIs."
-                name="role"
-                options={[
-                  {
-                    name: "Mirror My Permissions",
-                    value: MIRROR_ROLE_VALUE,
-                  },
-                  {
-                    name: USER_ROLE_LABELS[UserRole.LIMITED],
-                    value: UserRole.LIMITED.toString(),
-                  },
-                  {
-                    name: USER_ROLE_LABELS[UserRole.BASIC],
-                    value: UserRole.BASIC.toString(),
-                  },
-                  {
-                    name: USER_ROLE_LABELS[UserRole.ADMIN],
-                    value: UserRole.ADMIN.toString(),
-                  },
-                ]}
-              />
+                  <TabsContent value="service">
+                    <ServiceAccountKeyForm />
+                  </TabsContent>
+                </Tabs>
+              )}
 
-              <Button disabled={isSubmitting}>
+              <Button disabled={isSubmitting} className="mt-4">
                 {isUpdate ? "Update" : "Create"}
               </Button>
             </Form>
