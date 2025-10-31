@@ -39,7 +39,7 @@ import OnyxLogo from "@/icons/onyx-logo";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import { SidebarBody } from "@/sections/sidebar/utils";
+import SidebarBody from "@/sections/sidebar/SidebarBody";
 
 const connectors_items = () => [
   {

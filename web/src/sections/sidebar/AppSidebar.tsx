@@ -59,7 +59,7 @@ import {
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { ChatSession } from "@/app/chat/interfaces";
-import { SidebarBody } from "@/sections/sidebar/utils";
+import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import SvgSettings from "@/icons/settings";
 import { useActiveSidebarTab } from "@/lib/hooks";

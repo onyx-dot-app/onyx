@@ -15,7 +15,6 @@ import SvgImage from "@/icons/image";
 import { generateIdenticon } from "@/refresh-components/AgentIcon";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { cn } from "@/lib/utils";
-import OverflowDiv from "@/refresh-components/OverflowDiv";
 
 export function getAgentIcon(
   agent: MinimalPersonaSnapshot
@@ -48,24 +47,4 @@ export function getAgentIcon(
   );
   GeneratedIcon.displayName = "SidebarGeneratedAgentIcon";
   return GeneratedIcon;
-}
-
-export interface SidebarBodyProps {
-  actionButton?: React.ReactNode;
-  children: React.ReactNode;
-  footer: React.ReactNode;
-}
-
-export function SidebarBody({
-  actionButton,
-  children,
-  footer,
-}: SidebarBodyProps) {
-  return (
-    <div className="flex flex-col min-h-0 h-full gap-1 px-2">
-      {actionButton}
-      <OverflowDiv>{children}</OverflowDiv>
-      {footer}
-    </div>
-  );
 }
