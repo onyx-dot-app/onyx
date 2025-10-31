@@ -242,6 +242,7 @@ class ImageGenerationTool(Tool[None]):
                 api_key=self.api_key,
                 api_base=self.api_base or None,
                 api_version=self.api_version or None,
+                response_format="b64_json",
                 size=size,
                 n=1,
             )
@@ -251,7 +252,6 @@ class ImageGenerationTool(Tool[None]):
 
             image_item = response.data[0].model_dump()
 
-            # Always assume base64 format
             image_data = image_item.get("b64_json")
             if not image_data:
                 raise RuntimeError("No base64 image data returned from the API")
