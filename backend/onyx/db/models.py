@@ -1529,6 +1529,9 @@ class FederatedConnector(Base):
         Enum(FederatedConnectorSource, native_enum=False)
     )
     credentials: Mapped[dict[str, str]] = mapped_column(EncryptedJson(), nullable=False)
+    config: Mapped[dict[str, Any]] = mapped_column(
+        postgresql.JSONB(), default=dict, nullable=False, server_default="{}"
+    )
 
     oauth_tokens: Mapped[list["FederatedConnectorOAuthToken"]] = relationship(
         "FederatedConnectorOAuthToken",

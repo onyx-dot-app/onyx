@@ -67,18 +67,62 @@ class SlackFederatedConnector(FederatedConnector):
         - include_dm is valid and should be a boolean
         """
         return {
+            "exclude_channels": EntityField(
+                type="list[str]",
+                description="Exclude the following channels from search. Glob patterns are supported.",
+                required=False,
+                example=["secure-channel", "private-*", "customer*"],
+            ),
+            "search_all_channels": EntityField(
+                type="bool",
+                description="Search all accessible channels. If not set, must specify channels below.",
+                required=False,
+                default=False,
+                example=False,
+            ),
             "channels": EntityField(
                 type="list[str]",
-                description="List of Slack channel names or IDs to search in",
+                description="Search the only the following channels.",
                 required=False,
-                example=["general", "random", "C1234567890"],
+                example=["general", "eng*", "product-*"],
             ),
             "include_dm": EntityField(
                 type="bool",
-                description="Whether to include direct messages in the search",
+                description="Include user direct messages in search results",
                 required=False,
                 default=False,
-                example=True,
+                example=False,
+            ),
+            "include_group_dm": EntityField(
+                type="bool",
+                description="Include group direct messages (multi-person DMs) in search results",
+                required=False,
+                default=False,
+                example=False,
+            ),
+            "include_private_channels": EntityField(
+                type="bool",
+                description="Include private channels in search results (user must have access)",
+                required=False,
+                default=False,
+                example=False,
+            ),
+            "default_search_days": EntityField(
+                type="int",
+                description="Maximum number of days to search back. Increasing this value degrades answer quality.",
+                required=False,
+                default=30,
+                example=30,
+            ),
+            "max_messages_per_query": EntityField(
+                type="int",
+                description=(
+                    "Maximum number of messages to retrieve per search query. "
+                    "Higher values provide more context but may be slower."
+                ),
+                required=False,
+                default=25,
+                example=25,
             ),
         }
 
