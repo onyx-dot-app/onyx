@@ -28,6 +28,10 @@ interface DynamicProviderFieldsProps {
   onFetchModels?: () => void;
   isFetchingModels?: boolean;
   canFetchModels?: boolean;
+  testModelChangeWithApiKey?: (modelName: string) => Promise<void>;
+  modelsApiStatus?: APIFormFieldState;
+  modelsErrorMessage?: string;
+  showModelsApiErrorMessage?: boolean;
 }
 
 export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
@@ -42,8 +46,20 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
   onFetchModels,
   isFetchingModels = false,
   canFetchModels = false,
+  testModelChangeWithApiKey,
+  modelsApiStatus = "loading",
+  modelsErrorMessage = "",
+  showModelsApiErrorMessage = false,
 }) => {
   const modalContent = MODAL_CONTENT_MAP[llmDescriptor.name];
+  const handleApiKeyInteraction = (apiKey: string) => {
+    if (!apiKey) return;
+    if (llmDescriptor?.name === "ollama") {
+      onFetchModels?.();
+    } else {
+      onApiKeyBlur?.(apiKey);
+    }
+  };
 
   const renderField = (fieldPath: string) => {
     const override = fieldOverrides[fieldPath];
@@ -176,12 +192,20 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                     {...field}
                     placeholder={override?.placeholder || ""}
                     showClearButton={false}
+                    onBlur={(e) => {
+                      field.onBlur(e);
+                      handleApiKeyInteraction(field.value);
+                    }}
                   />
                 ) : (
                   <InputTypeIn
                     {...field}
                     placeholder={override?.placeholder || ""}
                     showClearButton={false}
+                    onBlur={(e) => {
+                      field.onBlur(e);
+                      handleApiKeyInteraction(field.value);
+                    }}
                   />
                 )}
               </FormField.Control>
@@ -228,7 +252,12 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
               <FormField.Control>
                 <InputSelect
                   value={field.value}
-                  onValueChange={(value) => helper.setValue(value)}
+                  onValueChange={(value) => {
+                    helper.setValue(value);
+                    if (testModelChangeWithApiKey && value) {
+                      testModelChangeWithApiKey(value);
+                    }
+                  }}
                   options={modelOptions}
                   disabled={modelOptions.length === 0 || isFetchingModels}
                   rightSection={
@@ -249,11 +278,23 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                   }
                 />
               </FormField.Control>
-              <FormField.Description>
-                {override?.description ||
-                  modalContent?.field_metadata?.default_model_name ||
-                  "This model will be used by Onyx by default."}
-              </FormField.Description>
+              {showModelsApiErrorMessage && (
+                <FormField.APIMessage
+                  state={modelsApiStatus}
+                  messages={{
+                    loading: "Fetching models...",
+                    success: "Models fetched successfully.",
+                    error: modelsErrorMessage || "Failed to fetch models",
+                  }}
+                />
+              )}
+              {!showModelsApiErrorMessage && (
+                <FormField.Description>
+                  {override?.description ||
+                    modalContent?.field_metadata?.default_model_name ||
+                    "This model will be used by Onyx by default."}
+                </FormField.Description>
+              )}
             </FormField>
           )}
         />

@@ -33,7 +33,11 @@ const FieldMessageContent: React.FC<{
 }> = ({ baseId, state, content, className }) => {
   return (
     <div className="flex flex-row items-center gap-x-0.5">
-      <div className="w-4 h-4">{iconMap[state]}</div>
+      {state !== "idle" && (
+        <div className="w-4 h-4 flex items-center justify-center">
+          {iconMap[state]}
+        </div>
+      )}
       <Text
         id={`${baseId}-msg`}
         text03

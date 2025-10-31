@@ -194,3 +194,26 @@ export const PROVIDER_TAB_CONFIG: Record<string, ProviderTabConfig> = {
 export const PROVIDER_SKIP_FIELDS: Record<string, string[]> = {
   vertex_ai: ["vertex_location"],
 };
+
+export const HIDE_API_MESSAGE_FIELDS: Record<string, string[]> = {
+  bedrock: ["BEDROCK_AUTH_METHOD", "AWS_REGION_NAME"],
+};
+
+// Map Bedrock auth selection to which `custom_config` keys to show
+export const BEDROCK_AUTH_FIELDS: Record<
+  "iam" | "access_key" | "long_term_api_key",
+  string[]
+> = {
+  iam: ["BEDROCK_AUTH_METHOD", "AWS_REGION_NAME"],
+  access_key: [
+    "BEDROCK_AUTH_METHOD",
+    "AWS_REGION_NAME",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+  ],
+  long_term_api_key: [
+    "BEDROCK_AUTH_METHOD",
+    "AWS_REGION_NAME",
+    "AWS_BEARER_TOKEN_BEDROCK",
+  ],
+};

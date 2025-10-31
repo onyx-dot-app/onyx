@@ -57,7 +57,8 @@ export const testApiKeyHelper = async (
   llmDescriptor: WellKnownLLMProviderDescriptor,
   initialValues: any,
   formValues: any,
-  apiKey: string
+  apiKey?: string,
+  modelName?: string
 ): Promise<TestApiKeyResult> => {
   try {
     let finalApiBase = formValues?.api_base;
@@ -73,13 +74,17 @@ export const testApiKeyHelper = async (
     }
 
     const payload = {
-      api_key: apiKey,
+      api_key: apiKey ?? formValues?.api_key,
       api_base: finalApiBase,
       api_version: finalApiVersion,
       deployment_name: finalDeploymentName,
       provider: llmDescriptor.name,
       api_key_changed: true,
-      default_model_name: initialValues.default_model_name,
+      custom_config: formValues?.custom_config,
+      default_model_name:
+        modelName ??
+        formValues?.default_model_name ??
+        initialValues.default_model_name,
       model_configurations: [
         ...formValues.model_configurations.map((model: ModelConfiguration) => ({
           name: model.name,

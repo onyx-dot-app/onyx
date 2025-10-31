@@ -54,6 +54,11 @@ const LLMConnectionModal = () => {
   const [apiStatus, setApiStatus] = useState<APIFormFieldState>("loading");
   const [showApiMessage, setShowApiMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [modelsErrorMessage, setModelsErrorMessage] = useState<string>("");
+  const [modelsApiStatus, setModelsApiStatus] =
+    useState<APIFormFieldState>("loading");
+  const [showModelsApiErrorMessage, setShowModelsApiErrorMessage] =
+    useState(false);
   const [activeTab, setActiveTab] = useState<string>("");
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [fetchedModelConfigurations, setFetchedModelConfigurations] = useState<
@@ -71,6 +76,9 @@ const LLMConnectionModal = () => {
       setFetchedModelConfigurations([]);
       setShowApiMessage(false);
       setErrorMessage("");
+      setModelsErrorMessage("");
+      setModelsApiStatus("loading");
+      setShowModelsApiErrorMessage(false);
       setApiStatus("loading");
       setIsFetchingModels(false);
     }
@@ -82,12 +90,14 @@ const LLMConnectionModal = () => {
       setFetchedModelConfigurations([]);
       setShowApiMessage(false);
       setErrorMessage("");
+      setModelsErrorMessage("");
+      setModelsApiStatus("loading");
+      setShowModelsApiErrorMessage(false);
       setApiStatus("loading");
       setIsFetchingModels(false);
     }
   }, [data]);
 
-  // Get model options - use fetched models if available, otherwise use descriptor models
   const modelOptions = useMemo(
     () => getModelOptions(llmDescriptor, fetchedModelConfigurations as any[]),
     [llmDescriptor, fetchedModelConfigurations]
@@ -95,22 +105,21 @@ const LLMConnectionModal = () => {
 
   useEffect(() => {
     if (fetchedModelConfigurations.length > 0 && !isFetchingModels) {
-      setApiStatus("success");
+      setModelsApiStatus("success");
     }
   }, [fetchedModelConfigurations, isFetchingModels]);
 
-  // Check if provider supports dynamic model fetching
   const canFetchModels = useMemo(
     () => canProviderFetchModels(llmDescriptor),
     [llmDescriptor]
   );
 
   const setFetchModelsError = (error: string) => {
-    setApiStatus("loading");
-    setShowApiMessage(true);
-    setErrorMessage(error);
+    setModelsApiStatus("loading");
+    setShowModelsApiErrorMessage(true);
+    setModelsErrorMessage(error);
     if (error) {
-      setApiStatus("error");
+      setModelsApiStatus("error");
     }
   };
 
@@ -126,6 +135,28 @@ const LLMConnectionModal = () => {
       initialValues,
       formikProps.values,
       apiKey
+    );
+    if (result.ok) {
+      setApiStatus("success");
+    } else {
+      setErrorMessage(result.errorMessage);
+      setApiStatus("error");
+    }
+  };
+
+  const testModelChangeWithApiKey = async (
+    modelName: string,
+    formikProps: FormikProps<any>
+  ) => {
+    if (!llmDescriptor) return;
+    setApiStatus("loading");
+    setShowApiMessage(true);
+    const result = await testApiKeyHelper(
+      llmDescriptor,
+      initialValues,
+      formikProps.values,
+      undefined,
+      modelName
     );
     if (result.ok) {
       setApiStatus("success");
@@ -186,9 +217,7 @@ const LLMConnectionModal = () => {
               headers: {
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({
-                ...payload,
-              }),
+              body: JSON.stringify(payload),
             }
           );
           if (!response.ok) {
@@ -234,6 +263,9 @@ const LLMConnectionModal = () => {
               setShowApiMessage(false);
               setErrorMessage("");
               setFetchedModelConfigurations([]);
+              setModelsErrorMessage("");
+              setModelsApiStatus("loading");
+              setShowModelsApiErrorMessage(false);
 
               if (currentTab?.hiddenFields) {
                 // Apply hidden fields for current tab
@@ -302,6 +334,9 @@ const LLMConnectionModal = () => {
             if (shouldReset) {
               setShowApiMessage(false);
               setErrorMessage("");
+              setModelsErrorMessage("");
+              setModelsApiStatus("loading");
+              setShowModelsApiErrorMessage(false);
               setApiStatus("loading");
               setFetchedModelConfigurations([]);
             }
@@ -327,6 +362,10 @@ const LLMConnectionModal = () => {
                   setFetchedModelConfigurations(value);
                 } else if (field === "default_model_name") {
                   formikProps.setFieldValue("default_model_name", value);
+                  // Trigger validation of the newly set default model
+                  if (value) {
+                    testModelChangeWithApiKey(value, formikProps);
+                  }
                 } else if (field === "_modelListUpdated") {
                   // Ignore this field as it's just for forcing re-renders
                   return;
@@ -356,6 +395,12 @@ const LLMConnectionModal = () => {
                     canFetchModels={canFetchModels}
                     activeTab={activeTab}
                     setActiveTab={setActiveTab}
+                    testModelChangeWithApiKey={(modelName) =>
+                      testModelChangeWithApiKey(modelName, formikProps)
+                    }
+                    modelsApiStatus={modelsApiStatus}
+                    modelsErrorMessage={modelsErrorMessage}
+                    showModelsApiErrorMessage={showModelsApiErrorMessage}
                   />
                 ) : (
                   <LLMConnectionFieldsBasic
@@ -373,6 +418,12 @@ const LLMConnectionModal = () => {
                     }
                     onFetchModels={handleFetchModels}
                     canFetchModels={canFetchModels}
+                    modelsApiStatus={modelsApiStatus}
+                    modelsErrorMessage={modelsErrorMessage}
+                    showModelsApiErrorMessage={showModelsApiErrorMessage}
+                    testModelChangeWithApiKey={(modelName) =>
+                      testModelChangeWithApiKey(modelName, formikProps)
+                    }
                   />
                 )}
               </div>
