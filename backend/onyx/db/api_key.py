@@ -10,13 +10,13 @@ from onyx.auth.api_key import ApiKeyDescriptor
 from onyx.auth.api_key import build_displayable_api_key
 from onyx.auth.api_key import generate_api_key
 from onyx.auth.api_key import hash_api_key
+from onyx.auth.schemas import ApiKeyType
 from onyx.auth.schemas import UserType
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
 from onyx.db.models import ApiKey
 from onyx.db.models import User
-from onyx.db.models import UserRole
 from onyx.server.api_key.models import APIKeyArgs
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -38,7 +38,9 @@ def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
     return [
         ApiKeyDescriptor(
             api_key_id=api_key.id,
-            api_key_role=get_api_key_descriptor_role(api_key.user),
+            api_key_role=api_key.user.role,
+            api_key_type=get_api_key_type(api_key.user),
+            user_email=api_key.user.email,
             api_key_display=api_key.api_key_display,
             api_key_name=api_key.name,
             user_id=api_key.user_id,
@@ -78,14 +80,17 @@ def is_api_key_user(user: User) -> bool:
     return user.user_type == UserType.API_KEY
 
 
-def get_api_key_descriptor_role(user: User) -> UserRole | None:
-    """Get the role to display in ApiKeyDescriptor.
+def get_api_key_type(user: User) -> ApiKeyType:
+    """Determine the API key type based on the user.
 
     Returns:
-    - user.role for service accounts (fake API key users)
-    - None for personal access tokens (real users)
+    - ApiKeyType.SERVICE_ACCOUNT for fake API key users
+    - ApiKeyType.PERSONAL_ACCESS_TOKEN for real users
     """
-    return user.role if is_api_key_user(user) else None
+    if is_api_key_user(user):
+        return ApiKeyType.SERVICE_ACCOUNT
+    else:
+        return ApiKeyType.PERSONAL_ACCESS_TOKEN
 
 
 def insert_api_key(
@@ -94,13 +99,21 @@ def insert_api_key(
     # Get tenant_id from context var (will be default schema for single tenant)
     tenant_id = get_current_tenant_id()
 
+    # Type is required when creating a new API key
+    if api_key_args.type is None:
+        raise ValueError("API key type is required when creating a new key")
+
     api_key = generate_api_key(tenant_id)
 
-    if api_key_args.role is None:
+    if api_key_args.type == ApiKeyType.PERSONAL_ACCESS_TOKEN:
+        # Personal Access Token: Link to real user
         api_key_user = db_session.scalar(select(User).where(User.id == user_id))
         if api_key_user is None:
             raise ValueError(f"User with id {user_id} does not exist")
     else:
+        # Service Account: Create fake service account user with specific role
+        if api_key_args.role is None:
+            raise ValueError("Service account keys require a role")
         api_key_user = create_api_key_user(db_session, api_key_args)
 
     api_key_row = ApiKey(
@@ -115,7 +128,9 @@ def insert_api_key(
     db_session.commit()
     return ApiKeyDescriptor(
         api_key_id=api_key_row.id,
-        api_key_role=get_api_key_descriptor_role(api_key_user),
+        api_key_role=api_key_user.role,
+        api_key_type=api_key_args.type,
+        user_email=api_key_user.email,
         api_key_display=api_key_row.api_key_display,
         api_key=api_key,
         api_key_name=api_key_args.name,
@@ -156,17 +171,22 @@ def update_api_key(
     if api_key_user is None:
         raise RuntimeError("API Key does not have associated user.")
 
+    # Determine the API key type
+    api_key_type = get_api_key_type(api_key_user)
+
     # Update the API key's name
     existing_api_key.name = api_key_args.name
 
-    if is_api_key_user(api_key_user):
-        # Fake user: can update name, email, and role
+    if api_key_type == ApiKeyType.SERVICE_ACCOUNT:
+        # Service Account: can update name, email, and role
+        if api_key_args.role is None:
+            raise ValueError("Service account keys require a role")
+
         email_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
         api_key_user.email = get_api_key_fake_email(email_name, str(api_key_user.id))
-        if api_key_args.role is not None:
-            api_key_user.role = api_key_args.role
+        api_key_user.role = api_key_args.role
     else:
-        # Real user: only update the API key's name, not the user's role
+        # Personal Access Token: only update the API key's name, not the user's role
         if api_key_args.role is not None and api_key_args.role != api_key_user.role:
             raise ValueError(
                 "Cannot update the role of API key based on the owner's role!"
@@ -178,7 +198,9 @@ def update_api_key(
         api_key_id=existing_api_key.id,
         api_key_display=existing_api_key.api_key_display,
         api_key_name=api_key_args.name,
-        api_key_role=get_api_key_descriptor_role(api_key_user),
+        api_key_role=api_key_user.role,
+        api_key_type=api_key_type,
+        user_email=api_key_user.email,
         user_id=existing_api_key.user_id,
     )
 
@@ -208,7 +230,9 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
         api_key_display=existing_api_key.api_key_display,
         api_key=new_api_key,
         api_key_name=existing_api_key.name,
-        api_key_role=get_api_key_descriptor_role(api_key_user),
+        api_key_role=api_key_user.role,
+        api_key_type=get_api_key_type(api_key_user),
+        user_email=api_key_user.email,
         user_id=existing_api_key.user_id,
     )
 

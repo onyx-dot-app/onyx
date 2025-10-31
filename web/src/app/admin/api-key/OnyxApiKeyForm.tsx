@@ -7,7 +7,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { Separator } from "@/components/ui/separator";
 import Text from "@/components/ui/text";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
-import { APIKey } from "./types";
+import { APIKey, APIKeyArgs, ApiKeyType } from "./types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState } from "react";
 
@@ -82,11 +82,12 @@ export const OnyxApiKeyForm = ({
   apiKey,
 }: OnyxApiKeyFormProps) => {
   const isUpdate = apiKey !== undefined;
-  const isPAT = apiKey?.api_key_role === null;
+  const isExistingPAT =
+    apiKey?.api_key_type === ApiKeyType.PERSONAL_ACCESS_TOKEN;
 
-  // Initialize tab based on key type when editing, default to "personal" when creating
+  // Tab state - only relevant for create mode (tabs are hidden when updating)
   const [selectedTab, setSelectedTab] = useState<"personal" | "service">(
-    isUpdate ? (isPAT ? "personal" : "service") : "personal"
+    "personal"
   );
 
   return (
@@ -95,7 +96,7 @@ export const OnyxApiKeyForm = ({
         <h2 className="text-xl font-bold flex">
           {isUpdate
             ? `Update ${
-                isPAT ? "Personal Access Token" : "Service Account Key"
+                isExistingPAT ? "Personal Access Token" : "Service Account Key"
               }`
             : "Create a new API Key"}
         </h2>
@@ -110,19 +111,26 @@ export const OnyxApiKeyForm = ({
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
-            // Determine the role based on mode:
-            // - Edit mode: preserve existing type (isPAT ? null : role)
-            // - Create mode: use selected tab (personal ? null : role)
-            const payload = {
-              ...values,
-              role: isUpdate
-                ? isPAT
-                  ? null
-                  : (values.role as UserRole)
-                : selectedTab === "personal"
-                  ? null
-                  : (values.role as UserRole),
+            // Determine the API key type (create: from tab, update: from existing)
+            const apiKeyType = (
+              isUpdate ? isExistingPAT : selectedTab === "personal"
+            )
+              ? ApiKeyType.PERSONAL_ACCESS_TOKEN
+              : ApiKeyType.SERVICE_ACCOUNT;
+
+            const payload: APIKeyArgs = {
+              name: values.name,
             };
+
+            // Only include type when creating (backend recalculates on update)
+            if (!isUpdate) {
+              payload.type = apiKeyType;
+            }
+
+            // Add role for Service Accounts
+            if (apiKeyType === ApiKeyType.SERVICE_ACCOUNT) {
+              payload.role = values.role;
+            }
 
             let response;
             if (isUpdate) {
@@ -159,7 +167,7 @@ export const OnyxApiKeyForm = ({
               {isUpdate ? (
                 // EDIT MODE: Show only the relevant form without tabs
                 <div>
-                  {isPAT ? (
+                  {isExistingPAT ? (
                     <PersonalAccessTokenForm />
                   ) : (
                     <ServiceAccountKeyForm />
