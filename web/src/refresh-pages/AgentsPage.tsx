@@ -11,7 +11,6 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PageHeader from "@/refresh-components/page-components/PageHeader";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import PageWrapper from "@/refresh-components/page-components/PageWrapper";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SvgUser from "@/icons/user";
@@ -24,6 +23,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
+import Button from "@/refresh-components/buttons/Button";
+import SvgPlus from "@/icons/plus";
 
 interface AgentsSectionProps {
   title: string;
@@ -140,9 +141,9 @@ export default function AgentsPage() {
         sticky
         className="bg-background-tint-01"
         rightChildren={
-          <CreateButton primary secondary={undefined} href="/assistants/new">
+          <Button href="/assistants/new" leftIcon={SvgPlus}>
             New Agent
-          </CreateButton>
+          </Button>
         }
       >
         <div className="flex flex-col gap-2">

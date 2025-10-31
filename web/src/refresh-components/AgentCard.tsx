@@ -22,6 +22,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
 import { useUser } from "@/components/user/UserProvider";
 import SvgBarChart from "@/icons/bar-chart";
+import SvgPinned from "@/icons/pinned";
 
 interface IconLabelProps {
   icon: React.FunctionComponent<SvgProps>;
@@ -88,7 +89,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
               />
             )}
             <IconButton
-              icon={SvgPin}
+              icon={pinned ? SvgPinned : SvgPin}
               tertiary
               onClick={() => togglePinnedAgent(agent, !pinned)}
               tooltip={pinned ? "Unpin Agent" : "Pin Agent"}
