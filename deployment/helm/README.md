@@ -68,3 +68,110 @@ If you would like to use KEDA ScaledObjects instead:
 2. Set `autoscaling.engine: keda` in your `values.yaml` and enable autoscaling for the components you want to scale.
 
 When `autoscaling.engine` is set to `keda`, the chart will render the existing ScaledObject templates; otherwise HPAs will be rendered.
+
+## Node Scheduling: tolerations, nodeSelector, and affinity
+
+The chart supports configuring Kubernetes node scheduling constraints at both global and per-component levels.
+
+### Global Configuration
+Set scheduling constraints for all components at once:
+
+```yaml
+global:
+  nodeSelector:
+    node-type: "gpu-node"
+  tolerations:
+    - key: "gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: "gpu"
+                operator: "In"
+                values:
+                  - "true"
+```
+
+### Per-Component Configuration
+Override global settings for specific components (e.g., `api`, `webserver`, `celery_worker_primary`, etc.):
+
+```yaml
+api:
+  nodeSelector:
+    role: "backend"
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "api"
+      effect: "NoSchedule"
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - api-server
+            topologyKey: kubernetes.io/hostname
+
+webserver:
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+```
+
+### Inheritance and Override Behavior
+
+The chart uses a key-based inheritance system:
+
+1. **No component key** → inherits from `global`
+   ```yaml
+   global:
+     nodeSelector:
+       node-type: compute
+   # api has NO nodeSelector key → inherits global.nodeSelector
+   ```
+
+2. **Component key with value** → overrides `global`
+   ```yaml
+   global:
+     nodeSelector:
+       node-type: compute
+   api:
+     nodeSelector:
+       node-type: gpu  # Overrides global
+   ```
+
+3. **Component key with empty value** → explicit reset (no scheduling constraint)
+   ```yaml
+   global:
+     nodeSelector:
+       node-type: compute
+   api:
+     nodeSelector: {}  # Explicitly clears nodeSelector for api pod
+   ```
+
+**Important**: To inherit global settings, **omit the key entirely** from the component configuration. Setting an empty value (`{}` or `[]`) explicitly disables that scheduling constraint for the component.
+
+### Supported Components
+  - `api` - API server
+  - `webserver` - Web server
+  - `celery_beat` - Celery beat scheduler
+  - `celery_worker_primary` - Primary Celery worker
+  - `celery_worker_docfetching` - Document fetching worker
+  - `celery_worker_docprocessing` - Document processing worker
+  - `celery_worker_heavy` - Heavy tasks worker
+  - `celery_worker_light` - Light tasks worker
+  - `celery_worker_monitoring` - Monitoring worker
+  - `celery_worker_user_file_processing` - User file processing worker
+  - `celery_worker_user_files_indexing` - User files indexing worker
+  - `indexCapability` - Indexing model server
+  - `inferenceCapability` - Inference model server
+  - `slackbot` - Slack bot
