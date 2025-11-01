@@ -1,6 +1,8 @@
+import json
 from enum import Enum
 
 from pydantic import BaseModel
+from pydantic import field_validator
 
 from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
@@ -53,6 +55,22 @@ class SearchAnswer(BaseModel):
     reasoning: str
     answer: str
     claims: list[str] | None = None
+
+    @field_validator("claims", mode="before")
+    @classmethod
+    def parse_claims_json(cls, v: list[str] | str | None) -> list[str] | None:
+        """Parse claims if it's a JSON string instead of a list."""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+                return None
+            except (json.JSONDecodeError, ValueError):
+                return None
+        return v
 
 
 class TestInfoCompleteResponse(BaseModel):
@@ -108,6 +126,22 @@ class IterationAnswer(BaseModel):
     # for multi-query search tools (v2 web search and internal search)
     # TODO: Clean this up to be more flexible to tools
     queries: list[str] | None = None
+
+    @field_validator("claims", mode="before")
+    @classmethod
+    def parse_claims_json(cls, v: list[str] | str | None) -> list[str] | None:
+        """Parse claims if it's a JSON string instead of a list."""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+                return None
+            except (json.JSONDecodeError, ValueError):
+                return None
+        return v
 
 
 class AggregatedDRContext(BaseModel):
