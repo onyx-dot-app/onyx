@@ -300,9 +300,16 @@ export default function AgentsPage() {
                       value={creatorSearchQuery}
                       onChange={(e) => setCreatorSearchQuery(e.target.value)}
                     />,
-                    ...filteredCreators.map((creator) => {
+                    ...filteredCreators.flatMap((creator, index) => {
                       const isSelected = selectedCreatorIds.has(creator.id);
                       const isCurrentUser = user && creator.id === user.id;
+
+                      // Check if we need to add a separator after this item
+                      const nextCreator = filteredCreators[index + 1];
+                      const nextIsCurrentUser =
+                        user && nextCreator && nextCreator.id === user.id;
+                      const needsSeparator =
+                        isCurrentUser && nextCreator && !nextIsCurrentUser;
 
                       // Determine icon: Check if selected, User icon if current user, otherwise no icon
                       const icon = isSelected
@@ -311,7 +318,7 @@ export default function AgentsPage() {
                           ? SvgUser
                           : () => null;
 
-                      return (
+                      const lineItem = (
                         <LineItem
                           key={creator.id}
                           icon={icon}
@@ -331,6 +338,9 @@ export default function AgentsPage() {
                           {creator.email}
                         </LineItem>
                       );
+
+                      // Return the line item, and optionally a separator
+                      return needsSeparator ? [lineItem, null] : [lineItem];
                     }),
                   ]}
                 </PopoverMenu>
