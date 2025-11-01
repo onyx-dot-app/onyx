@@ -35,6 +35,7 @@ type Props = {
   modelsApiStatus: "idle" | "loading" | "success" | "error";
   modelsErrorMessage: string;
   showModelsApiErrorMessage: boolean;
+  disabled?: boolean;
 };
 
 export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
@@ -54,6 +55,7 @@ export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
   modelsApiStatus,
   modelsErrorMessage,
   showModelsApiErrorMessage,
+  disabled = false,
 }) => {
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -83,6 +85,7 @@ export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
               modelsApiStatus={modelsApiStatus}
               modelsErrorMessage={modelsErrorMessage}
               showModelsApiErrorMessage={showModelsApiErrorMessage}
+              disabled={disabled}
             />
           </div>
         </TabsContent>

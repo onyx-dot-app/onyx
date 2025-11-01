@@ -17,6 +17,7 @@ import {
   getModelOptions,
   canProviderFetchModels,
   testApiKeyHelper,
+  testCustomProvider,
 } from "./llmConnectionHelpers";
 import { LLMConnectionFieldsWithTabs } from "./LLMConnectionFieldsWithTabs";
 import { LLMConnectionFieldsBasic } from "./LLMConnectionFieldsBasic";
@@ -67,7 +68,7 @@ const LLMConnectionModal = () => {
   const [fetchedModelConfigurations, setFetchedModelConfigurations] = useState<
     any[]
   >([]);
-  const isApiError = apiStatus === "error";
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Set default tab when llmDescriptor changes
   useEffect(() => {
@@ -207,6 +208,7 @@ const LLMConnectionModal = () => {
       )}
       enableReinitialize
       onSubmit={async (values, { setSubmitting }) => {
+        setIsSubmitting(true);
         // Apply hidden fields based on active tab
         let finalValues = { ...values };
         if (tabConfig) {
@@ -251,15 +253,20 @@ const LLMConnectionModal = () => {
           model_configurations: modelConfigsToUse,
         };
 
-        if (apiStatus !== "success" && llmDescriptor) {
+        if (apiStatus !== "success") {
           setApiStatus("loading");
           setShowApiMessage(true);
+          let result;
 
-          const result = await testApiKeyHelper(
-            llmDescriptor,
-            initialValues,
-            payload
-          );
+          if (llmDescriptor) {
+            result = await testApiKeyHelper(
+              llmDescriptor,
+              initialValues,
+              payload
+            );
+          } else {
+            result = await testCustomProvider(payload);
+          }
           if (!result.ok) {
             setErrorMessage(result.errorMessage);
             setApiStatus("error");
@@ -307,6 +314,7 @@ const LLMConnectionModal = () => {
           ],
         });
         onboardingActions?.setButtonActive(true);
+        setIsSubmitting(false);
         toggleModal(ModalIds.LLMConnectionModal, false);
       }}
     >
@@ -446,6 +454,7 @@ const LLMConnectionModal = () => {
                 ? !formikProps.isValid || !formikProps.dirty
                 : !formikProps.isValid || !formikProps.dirty
             }
+            isSubmitting={isSubmitting}
           >
             <Form className="flex flex-col gap-0">
               <div className="flex flex-col p-4 gap-4 bg-background-tint-01 w-full">
@@ -454,6 +463,7 @@ const LLMConnectionModal = () => {
                     showApiMessage={showApiMessage}
                     apiStatus={apiStatus}
                     errorMessage={errorMessage}
+                    disabled={isSubmitting}
                   />
                 ) : tabConfig ? (
                   <LLMConnectionFieldsWithTabs
@@ -475,6 +485,7 @@ const LLMConnectionModal = () => {
                     modelsApiStatus={modelsApiStatus}
                     modelsErrorMessage={modelsErrorMessage}
                     showModelsApiErrorMessage={showModelsApiErrorMessage}
+                    disabled={isSubmitting}
                   />
                 ) : (
                   <LLMConnectionFieldsBasic
@@ -501,6 +512,7 @@ const LLMConnectionModal = () => {
                     testFileInputChange={(customConfig) =>
                       testFileInputChange(customConfig, formikProps)
                     }
+                    disabled={isSubmitting}
                   />
                 )}
               </div>

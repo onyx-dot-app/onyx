@@ -38,6 +38,7 @@ type Props = {
   testFileInputChange: (
     customConfig: Record<string, any>
   ) => Promise<void> | void;
+  disabled?: boolean;
 };
 
 export const LLMConnectionFieldsBasic: React.FC<Props> = ({
@@ -58,6 +59,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
   showModelsApiErrorMessage,
   testModelChangeWithApiKey,
   testFileInputChange,
+  disabled = false,
 }) => {
   const handleApiKeyInteraction = (apiKey: string) => {
     if (!apiKey) return;
@@ -80,6 +82,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                   {...field}
                   placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
                   showClearButton={false}
+                  disabled={disabled}
                 />
               </FormField.Control>
               <FormField.Message
@@ -118,6 +121,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                       {...field}
                       placeholder="API Base"
                       showClearButton={false}
+                      disabled={disabled}
                     />
                   </FormField.Control>
                 </FormField>
@@ -135,6 +139,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                       {...field}
                       placeholder="API Version"
                       showClearButton={false}
+                      disabled={disabled}
                     />
                   </FormField.Control>
                 </FormField>
@@ -160,8 +165,9 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                   }}
                   showClearButton={false}
                   disabled={
-                    llmDescriptor?.name === "azure" &&
-                    !formikValues.target_uri?.trim()
+                    disabled ||
+                    (llmDescriptor?.name === "azure" &&
+                      !formikValues.target_uri?.trim())
                   }
                 />
               </FormField.Control>
@@ -254,6 +260,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                             description: opt?.description ?? undefined,
                           })) ?? []
                         }
+                        disabled={disabled}
                       />
                     ) : customConfigKey.key_type === "file_input" ? (
                       <InputFile
@@ -271,18 +278,21 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                           }
                         }}
                         showClearButton={true}
+                        disabled={disabled}
                       />
                     ) : customConfigKey.is_secret ? (
                       <PasswordInputTypeIn
                         {...field}
                         placeholder={customConfigKey.default_value || ""}
                         showClearButton={false}
+                        disabled={disabled}
                       />
                     ) : (
                       <InputTypeIn
                         {...field}
                         placeholder={customConfigKey.default_value || ""}
                         showClearButton={false}
+                        disabled={disabled}
                       />
                     )}
                   </FormField.Control>
@@ -358,7 +368,9 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                     }
                   }}
                   options={modelOptions}
-                  disabled={modelOptions.length === 0 || isFetchingModels}
+                  disabled={
+                    disabled || modelOptions.length === 0 || isFetchingModels
+                  }
                   rightSection={
                     canFetchModels ? (
                       <IconButton
@@ -370,7 +382,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                           onFetchModels?.();
                         }}
                         tooltip="Fetch available models"
-                        disabled={isFetchingModels}
+                        disabled={disabled || isFetchingModels}
                         className={isFetchingModels ? "animate-spin" : ""}
                       />
                     ) : undefined
@@ -386,6 +398,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                   }}
                   placeholder="E.g. gpt-4"
                   showClearButton={false}
+                  disabled={disabled}
                   rightSection={
                     canFetchModels ? (
                       <IconButton
@@ -397,7 +410,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                           onFetchModels?.();
                         }}
                         tooltip="Fetch available models"
-                        disabled={isFetchingModels}
+                        disabled={disabled || isFetchingModels}
                         className={isFetchingModels ? "animate-spin" : ""}
                       />
                     ) : undefined

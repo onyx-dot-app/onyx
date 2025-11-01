@@ -32,6 +32,7 @@ interface DynamicProviderFieldsProps {
   modelsApiStatus?: APIFormFieldState;
   modelsErrorMessage?: string;
   showModelsApiErrorMessage?: boolean;
+  disabled?: boolean;
 }
 
 export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
@@ -50,6 +51,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
   modelsApiStatus = "loading",
   modelsErrorMessage = "",
   showModelsApiErrorMessage = false,
+  disabled = false,
 }) => {
   const modalContent = MODAL_CONTENT_MAP[llmDescriptor.name];
   const handleApiKeyInteraction = (apiKey: string) => {
@@ -77,6 +79,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                 <PasswordInputTypeIn
                   {...field}
                   placeholder={override?.placeholder || ""}
+                  disabled={disabled}
                   onBlur={(e) => {
                     field.onBlur(e);
                     if (field.value && onApiKeyBlur) {
@@ -144,6 +147,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                     llmDescriptor.default_api_base ||
                     "API Base URL"
                   }
+                  disabled={disabled}
                   showClearButton={false}
                 />
               </FormField.Control>
@@ -199,6 +203,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                   <PasswordInputTypeIn
                     {...field}
                     placeholder={override?.placeholder || ""}
+                    disabled={disabled}
                     showClearButton={false}
                     onBlur={(e) => {
                       field.onBlur(e);
@@ -209,6 +214,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                   <InputTypeIn
                     {...field}
                     placeholder={override?.placeholder || ""}
+                    disabled={disabled}
                     showClearButton={false}
                     onBlur={(e) => {
                       field.onBlur(e);
@@ -264,33 +270,63 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
             >
               <FormField.Label>Default Model</FormField.Label>
               <FormField.Control>
-                <InputSelect
-                  value={field.value}
-                  onValueChange={(value) => {
-                    helper.setValue(value);
-                    if (testModelChangeWithApiKey && value) {
-                      testModelChangeWithApiKey(value);
+                {modelOptions.length > 0 ? (
+                  <InputSelect
+                    value={field.value}
+                    onValueChange={(value) => {
+                      helper.setValue(value);
+                      if (testModelChangeWithApiKey && value) {
+                        testModelChangeWithApiKey(value);
+                      }
+                    }}
+                    options={modelOptions}
+                    disabled={
+                      disabled || modelOptions.length === 0 || isFetchingModels
                     }
-                  }}
-                  options={modelOptions}
-                  disabled={modelOptions.length === 0 || isFetchingModels}
-                  rightSection={
-                    canFetchModels ? (
-                      <IconButton
-                        internal
-                        icon={SvgRefreshCw}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onFetchModels?.();
-                        }}
-                        tooltip="Fetch available models"
-                        disabled={isFetchingModels}
-                        className={isFetchingModels ? "animate-spin" : ""}
-                      />
-                    ) : undefined
-                  }
-                />
+                    rightSection={
+                      canFetchModels ? (
+                        <IconButton
+                          internal
+                          icon={SvgRefreshCw}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onFetchModels?.();
+                          }}
+                          tooltip="Fetch available models"
+                          disabled={disabled || isFetchingModels}
+                          className={isFetchingModels ? "animate-spin" : ""}
+                        />
+                      ) : undefined
+                    }
+                  />
+                ) : (
+                  <InputTypeIn
+                    value={field.value}
+                    onChange={(e) => {
+                      helper.setValue(e.target.value);
+                    }}
+                    placeholder="E.g. gpt-4"
+                    disabled={disabled}
+                    showClearButton={false}
+                    rightSection={
+                      canFetchModels ? (
+                        <IconButton
+                          internal
+                          icon={SvgRefreshCw}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onFetchModels?.();
+                          }}
+                          tooltip="Fetch available models"
+                          disabled={disabled || isFetchingModels}
+                          className={isFetchingModels ? "animate-spin" : ""}
+                        />
+                      ) : undefined
+                    }
+                  />
+                )}
               </FormField.Control>
               {showModelsApiErrorMessage && (
                 <FormField.APIMessage

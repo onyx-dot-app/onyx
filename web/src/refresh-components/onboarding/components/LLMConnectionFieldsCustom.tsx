@@ -19,12 +19,14 @@ type Props = {
   showApiMessage: boolean;
   apiStatus: "idle" | "loading" | "success" | "error";
   errorMessage: string;
+  disabled?: boolean;
 };
 
 export const LLMConnectionFieldsCustom: React.FC<Props> = ({
   showApiMessage,
   apiStatus,
   errorMessage,
+  disabled = false,
 }) => {
   const formikContext = useFormikContext<any>();
   const [modelConfigError, setModelConfigError] = useState<string | null>(null);
@@ -79,6 +81,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
                 {...field}
                 placeholder="E.g. openai, anthropic, etc."
                 showClearButton={false}
+                disabled={disabled}
               />
             </FormField.Control>
             <FormField.Message
@@ -129,8 +132,21 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
                 {...field}
                 placeholder="https://"
                 showClearButton={false}
+                disabled={disabled}
               />
             </FormField.Control>
+            {showApiMessage &&
+              typeof field.value === "string" &&
+              field.value.trim() !== "" && (
+                <FormField.APIMessage
+                  state={apiStatus}
+                  messages={{
+                    loading: "Checking API configuration...",
+                    success: "API key valid. Your available models updated.",
+                    error: errorMessage || "Invalid API key",
+                  }}
+                />
+              )}
           </FormField>
         )}
       />
@@ -157,8 +173,19 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
                 {...field}
                 placeholder=""
                 showClearButton={false}
+                disabled={disabled}
               />
             </FormField.Control>
+            {showApiMessage && (
+              <FormField.APIMessage
+                state={apiStatus}
+                messages={{
+                  loading: "Checking API key...",
+                  success: "API key valid. Your available models updated.",
+                  error: errorMessage || "Invalid API key",
+                }}
+              />
+            )}
           </FormField>
         )}
       />
@@ -187,6 +214,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
               items={customConfigAsKeyValue}
               onChange={handleCustomConfigsChange}
               mode="line"
+              disabled={disabled}
             />
           </FormField.Control>
         </FormField>
@@ -217,6 +245,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
               onChange={handleModelConfigsChange}
               onValidationError={setModelConfigError}
               mode="fixed-line"
+              disabled={disabled}
             />
           </FormField.Control>
         </FormField>
@@ -234,6 +263,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
                 {...field}
                 placeholder="model-name"
                 showClearButton={false}
+                disabled={disabled}
               />
             </FormField.Control>
             <FormField.Message
@@ -260,6 +290,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
                 {...field}
                 placeholder="Use default model"
                 showClearButton={false}
+                disabled={disabled}
               />
             </FormField.Control>
             <FormField.Message
