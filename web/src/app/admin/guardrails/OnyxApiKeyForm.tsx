@@ -240,6 +240,7 @@ export const OnyxApiKeyForm = ({
                 label={t(k.VALIDATOR_DESCRIPTION_LABEL)}
                 placeholder={t(k.VALIDATOR_DESCRIPTION_PLACEHOLDER)}
                 className="[&_input]:placeholder:text-text-muted/50"
+                disabled={true}
               />
 
               {/* LLM Provider Selection */}
@@ -257,20 +258,16 @@ export const OnyxApiKeyForm = ({
 
                 console.log("llmProviders", llmProviders);
 
-                if (
-                  !includeLlmRaw ||
-                  !Array.isArray(llmProviders) ||
-                  llmProviders.length === 0
-                ) {
+                if (!includeLlmRaw) {
                   return null;
                 }
 
-                const llmOptions = llmProviders.map((provider) => ({
+                const llmOptions = llmProviders?.map((provider) => ({
                   value: String(provider.id),
                   name: provider.name,
                 }));
 
-                const selectedProvider = llmProviders.find(
+                const selectedProvider = llmProviders?.find(
                   (p) => String(p.id) === String(values.llm_provider_id)
                 );
 
@@ -282,7 +279,7 @@ export const OnyxApiKeyForm = ({
                     <SelectorFormField
                       name="llm_provider_id"
                       label=""
-                      options={llmOptions}
+                      options={llmOptions || []}
                       defaultValue=""
                       onSelect={(selected) => {
                         setFieldValue("llm_provider_id", selected);
@@ -440,15 +437,16 @@ export const OnyxApiKeyForm = ({
                   </div>
                 );
               })()}
-
-              <Button
-                type="submit"
-                size="sm"
-                variant="submit"
-                disabled={isSubmitting}
-              >
-                {isUpdate ? t(k.UPDATE_BUTTON) : t(k.CREATE_BUTTON)}
-              </Button>
+              <div>
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="submit"
+                  disabled={isSubmitting}
+                >
+                  {isUpdate ? t(k.UPDATE_BUTTON) : t(k.CREATE_BUTTON)}
+                </Button>
+              </div>
             </Form>
           )}
         </Formik>
