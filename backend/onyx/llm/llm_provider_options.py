@@ -244,7 +244,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
         WellKnownLLMProviderDescriptor(
             name=OPENAI_PROVIDER_NAME,
             display_name="OpenAI",
-            title="chatGPT",
+            title="GPT",
             api_key_required=True,
             api_base_required=False,
             api_version_required=False,
@@ -317,6 +317,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 CustomConfigKey(
                     name="AWS_REGION_NAME",
                     display_name="AWS Region Name",
+                    description="Region where your Amazon Bedrock models are hosted.",
                     key_type=CustomConfigKeyType.SELECT,
                     options=BEDROCK_REGION_OPTIONS,
                 ),

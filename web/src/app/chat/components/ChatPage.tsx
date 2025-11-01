@@ -909,15 +909,16 @@ export function ChatPage({
                           showConfigureAPIKey={handleShowApiKeyModal}
                         /> */}
 
-                        {showOnboarding && currentProjectId === null && (
-                          <OnboardingFlow
-                            isCollapsed={isOnboardingCollapsed}
-                            onCollapsedChange={setIsOnboardingCollapsed}
-                            handleHideOnboarding={() =>
-                              setShowOnboarding(false)
-                            }
-                          />
-                        )}
+                        {(showOnboarding || !user?.personalization?.name) &&
+                          currentProjectId === null && (
+                            <OnboardingFlow
+                              isCollapsed={isOnboardingCollapsed}
+                              onCollapsedChange={setIsOnboardingCollapsed}
+                              handleHideOnboarding={() =>
+                                setShowOnboarding(false)
+                              }
+                            />
+                          )}
                         <ChatInputBar
                           deepResearchEnabled={deepResearchEnabled}
                           toggleDeepResearch={toggleDeepResearch}
@@ -942,7 +943,10 @@ export function ChatPage({
                           handleFileUpload={handleMessageSpecificFileUpload}
                           textAreaRef={textAreaRef}
                           setPresentingDocument={setPresentingDocument}
-                          disabled={llmProviders.length === 0}
+                          disabled={
+                            llmProviders.length === 0 ||
+                            !user?.personalization?.name
+                          }
                         />
                       </div>
 

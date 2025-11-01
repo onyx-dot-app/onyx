@@ -10,6 +10,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
 import CoreModal from "@/refresh-components/modals/CoreModal";
+import SvgLoader from "@/icons/loader";
 
 interface ProviderModalProps {
   // Modal sizes
@@ -31,6 +32,7 @@ interface ProviderModalProps {
   // Footer props
   onSubmit?: () => void;
   submitDisabled?: boolean;
+  isSubmitting?: boolean;
   submitLabel?: string;
   cancelLabel?: string;
 }
@@ -49,12 +51,22 @@ export default function ProviderModal({
   children,
   onSubmit,
   submitDisabled = false,
+  isSubmitting = false,
   submitLabel = "Connect",
   cancelLabel = "Cancel",
   className,
 }: ProviderModalProps) {
   const { isOpen, toggleModal } = useChatModal();
   const insideModal = useRef(false);
+
+  const SpinningLoader: React.FunctionComponent<SvgProps> = (props) => (
+    <SvgLoader
+      {...props}
+      className={`${
+        props.className ?? ""
+      } h-3 w-3 stroke-text-inverted-04 animate-spin`}
+    />
+  );
 
   if (!isOpen(id)) return null;
 
@@ -112,7 +124,8 @@ export default function ProviderModal({
               <Button
                 type="button"
                 onClick={onSubmit}
-                disabled={submitDisabled}
+                disabled={submitDisabled || isSubmitting}
+                leftIcon={isSubmitting ? SpinningLoader : undefined}
               >
                 {submitLabel}
               </Button>
