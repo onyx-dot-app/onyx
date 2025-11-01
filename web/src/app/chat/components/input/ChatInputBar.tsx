@@ -41,6 +41,39 @@ import {
 
 const MAX_INPUT_HEIGHT = 200;
 
+// Draft storage helpers - SSR-safe sessionStorage operations
+function getDraft(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return sessionStorage.getItem(key);
+  } catch (e) {
+    console.warn("Failed to load draft from sessionStorage:", e);
+    return null;
+  }
+}
+
+function saveDraft(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (value.trim()) {
+      sessionStorage.setItem(key, value);
+    } else {
+      sessionStorage.removeItem(key);
+    }
+  } catch (e) {
+    console.warn("Failed to save draft to sessionStorage:", e);
+  }
+}
+
+function removeDraft(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(key);
+  } catch (e) {
+    console.warn("Failed to remove draft from sessionStorage:", e);
+  }
+}
+
 export interface SourceChipProps {
   icon?: React.ReactNode;
   title: string;
@@ -131,116 +164,26 @@ function ChatInputBarInner({
   disabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
+  const { forcedToolIds, setForcedToolIds } = useAgentsContext();
+  const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
-  // Draft persistence key - use session ID or "new" for new chats
-  // Memoize to prevent unnecessary effect triggers
+  const isInitialMount = React.useRef(true);
+  const prevChatState = React.useRef(chatState);
+  const currentDraftKey = React.useRef<string>("");
+
   const draftKey = useMemo(
     () => `chat-draft-${chatSessionId || "new"}`,
     [chatSessionId]
   );
 
-  // Load initial message - URL params take priority over saved drafts
+  currentDraftKey.current = draftKey;
+
   const [localMessage, setLocalMessage] = useState(() => {
-    // URL parameters always take precedence (user intent)
     if (initialMessage) {
       return initialMessage;
     }
-
-    // Otherwise, try to load saved draft
-    if (typeof window !== "undefined") {
-      try {
-        const savedDraft = sessionStorage.getItem(draftKey);
-        return savedDraft || "";
-      } catch (e) {
-        console.warn("Failed to load draft from sessionStorage:", e);
-      }
-    }
-    return "";
+    return getDraft(draftKey) || "";
   });
-
-  // Track if component has mounted (to skip effect on initial render)
-  const hasMountedRef = React.useRef(false);
-
-  // Load draft when switching between chats (draftKey changes)
-  useEffect(() => {
-    // Skip initial mount - useState already loaded the draft
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
-      return;
-    }
-
-    // On subsequent runs (chat switches), load the new draft
-    if (typeof window !== "undefined") {
-      try {
-        const savedDraft = sessionStorage.getItem(draftKey);
-        setLocalMessage(savedDraft || "");
-      } catch (e) {
-        console.warn("Failed to load draft from sessionStorage:", e);
-        setLocalMessage("");
-      }
-    }
-
-    // Resize textarea to match the restored content
-    if (textAreaRef.current) {
-      textAreaRef.current.style.height = "0px";
-      textAreaRef.current.style.height = `${Math.min(
-        textAreaRef.current.scrollHeight,
-        MAX_INPUT_HEIGHT
-      )}px`;
-    }
-  }, [draftKey, textAreaRef]);
-
-  // Callback ref to set initial textarea height synchronously on mount
-  const handleTextAreaRef = useCallback(
-    (element: HTMLTextAreaElement | null) => {
-      // Assign to parent ref (now properly typed as MutableRefObject)
-      textAreaRef.current = element;
-      if (element) {
-        element.style.height = "0px";
-        element.style.height = `${Math.min(
-          element.scrollHeight,
-          MAX_INPUT_HEIGHT
-        )}px`;
-      }
-    },
-    [textAreaRef]
-  );
-
-  // Clear input when leaving "input" state (handles input→loading→streaming flow)
-  const previousChatStateRef = React.useRef(chatState);
-  const draftKeyRef = React.useRef(draftKey);
-  draftKeyRef.current = draftKey; // Keep ref updated
-
-  useEffect(() => {
-    if (previousChatStateRef.current === "input" && chatState !== "input") {
-      setLocalMessage("");
-      // Clear draft from sessionStorage using the ref (stable reference)
-      if (typeof window !== "undefined") {
-        try {
-          sessionStorage.removeItem(draftKeyRef.current);
-        } catch (e) {
-          console.warn("Failed to remove draft from sessionStorage:", e);
-        }
-      }
-      // Reset textarea height to natural size for empty content
-      if (textAreaRef.current) {
-        textAreaRef.current.style.height = "0px";
-        // After clearing, resize to fit the empty content (placeholder text)
-        requestAnimationFrame(() => {
-          if (textAreaRef.current) {
-            textAreaRef.current.style.height = `${Math.min(
-              textAreaRef.current.scrollHeight,
-              MAX_INPUT_HEIGHT
-            )}px`;
-          }
-        });
-      }
-    }
-    previousChatStateRef.current = chatState;
-  }, [chatState, textAreaRef]); // Removed draftKey from deps - use ref instead
-
-  const { forcedToolIds, setForcedToolIds } = useAgentsContext();
-  const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
   const currentIndexingFiles = useMemo(() => {
     return currentMessageFiles.filter(
@@ -347,21 +290,8 @@ function ChatInputBarInner({
       setLocalMessage(text);
       handlePromptInput(text);
 
-      // Save draft to sessionStorage
-      if (typeof window !== "undefined") {
-        try {
-          if (text.trim()) {
-            sessionStorage.setItem(draftKey, text);
-          } else {
-            sessionStorage.removeItem(draftKey);
-          }
-        } catch (e) {
-          // Storage full or disabled - silently fail, input still works
-          console.warn("Failed to save draft to sessionStorage:", e);
-        }
-      }
+      saveDraft(draftKey, text);
 
-      // Resize imperatively (no effect needed)
       const textarea = textAreaRef.current;
       if (textarea) {
         textarea.style.height = "0px";
@@ -373,6 +303,56 @@ function ChatInputBarInner({
     },
     [handlePromptInput, textAreaRef, draftKey]
   );
+
+  const handleTextAreaRef = useCallback(
+    (element: HTMLTextAreaElement | null) => {
+      textAreaRef.current = element;
+      if (element) {
+        element.style.height = "0px";
+        element.style.height = `${Math.min(
+          element.scrollHeight,
+          MAX_INPUT_HEIGHT
+        )}px`;
+      }
+    },
+    [textAreaRef]
+  );
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    setLocalMessage(getDraft(draftKey) || "");
+
+    if (textAreaRef.current) {
+      textAreaRef.current.style.height = "0px";
+      textAreaRef.current.style.height = `${Math.min(
+        textAreaRef.current.scrollHeight,
+        MAX_INPUT_HEIGHT
+      )}px`;
+    }
+  }, [draftKey, textAreaRef]);
+
+  useEffect(() => {
+    if (prevChatState.current === "input" && chatState !== "input") {
+      setLocalMessage("");
+      removeDraft(currentDraftKey.current);
+      if (textAreaRef.current) {
+        textAreaRef.current.style.height = "0px";
+        requestAnimationFrame(() => {
+          if (textAreaRef.current) {
+            textAreaRef.current.style.height = `${Math.min(
+              textAreaRef.current.scrollHeight,
+              MAX_INPUT_HEIGHT
+            )}px`;
+          }
+        });
+      }
+    }
+    prevChatState.current = chatState;
+  }, [chatState, textAreaRef]);
 
   const startFilterSlash = useMemo(() => {
     if (localMessage !== undefined) {
