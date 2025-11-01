@@ -43,6 +43,12 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
+from onyx.tools.tool_implementations.fetch_single_file.fetch_single_file_tool import (
+    FetchSingleFileTool,
+)
+from onyx.tools.tool_implementations.fetch_single_file.fetch_url_tool import (
+    FetchUrlTool,
+)
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -290,7 +296,23 @@ def construct_tools(
                     raise ValueError(
                         "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
                     )
+            # Handle Fetch URL Tool (expand to two runtime tools for the LLM)
+            elif tool_cls.__name__ == FetchUrlTool.__name__:
+                user_id_for_tool = cast(UUID | None, user.id) if user else None
 
+                fetch_url_tool = FetchUrlTool(
+                    tool_id=db_tool_model.id,
+                    db_session=db_session,
+                    user_id=user_id_for_tool,
+                )
+
+                fetch_single_file_tool = FetchSingleFileTool(
+                    tool_id=db_tool_model.id,
+                    db_session=db_session,
+                    user_id=user_id_for_tool,
+                )
+
+                tool_dict[db_tool_model.id] = [fetch_url_tool, fetch_single_file_tool]
             # Handle KG Tool
             elif tool_cls.__name__ == KnowledgeGraphTool.__name__:
 
