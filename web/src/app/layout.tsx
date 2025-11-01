@@ -125,11 +125,6 @@ export default async function RootLayout({
       </head>
 
       <body className={`relative ${inter.variable} font-hanken`}>
-        {/* React DevTools - Development only - Note, macOS requires 127.0.0.1 instead of localhost*/}
-        {process.env.NODE_ENV === "development" && (
-          <script src="http://127.0.0.1:8097" />
-        )}
-
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

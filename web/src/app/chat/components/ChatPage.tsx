@@ -266,10 +266,6 @@ export function ChatPage({
     }
   }, [lastFailedFiles, setPopup, clearLastFailedFiles]);
 
-  const [message, setMessage] = useState(
-    searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
-  );
-
   const [projectPanelVisible, setProjectPanelVisible] = useState(true);
 
   const filterManager = useFilters();
@@ -299,7 +295,9 @@ export function ChatPage({
     setAboveHorizon(false);
   }, [existingChatSessionId]);
 
-  function handleInputResize() {
+  const autoScrollEnabled = user?.preferences?.auto_scroll ?? false;
+
+  const handleInputResize = useCallback(() => {
     setTimeout(() => {
       if (
         inputRef.current &&
@@ -333,23 +331,30 @@ export function ChatPage({
         previousHeight.current = newHeight;
       }
     }, 100);
-  }
+  }, [autoScrollEnabled]);
 
   const resetInputBar = useCallback(() => {
-    setMessage("");
     setCurrentMessageFiles([]);
     if (endPaddingRef.current) {
       endPaddingRef.current.style.height = `95px`;
     }
-  }, [setMessage, setCurrentMessageFiles]);
+  }, [setCurrentMessageFiles]);
 
   const debounceNumber = 100; // time for debouncing
 
   // handle re-sizing of the text area
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+
+  // ResizeObserver watches inputRef for height changes
   useEffect(() => {
-    handleInputResize();
-  }, [message]);
+    if (!inputRef.current) return;
+    const resizeObserver = new ResizeObserver(() => {
+      // RAF guard prevents "ResizeObserver loop limit exceeded"
+      requestAnimationFrame(() => handleInputResize());
+    });
+    resizeObserver.observe(inputRef.current);
+    return () => resizeObserver.disconnect();
+  }, [handleInputResize]);
 
   // Add refs needed by useChatSessionController
   const chatSessionIdRef = useRef<string | null>(existingChatSessionId);
@@ -504,8 +509,6 @@ export function ChatPage({
       onSubmit,
     });
 
-  const autoScrollEnabled = user?.preferences?.auto_scroll ?? false;
-
   useScrollonStream({
     chatState: currentChatState,
     scrollableDivRef,
@@ -619,13 +622,16 @@ export function ChatPage({
     setShowApiKeyModal(true);
   }, []);
 
-  const handleChatInputSubmit = useCallback(() => {
-    onSubmit({
-      message: message,
-      currentMessageFiles: currentMessageFiles,
-      useAgentSearch: deepResearchEnabled,
-    });
-  }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
+  const handleChatInputSubmit = useCallback(
+    (message: string) => {
+      onSubmit({
+        message: message,
+        currentMessageFiles: currentMessageFiles,
+        useAgentSearch: deepResearchEnabled,
+      });
+    },
+    [onSubmit, currentMessageFiles, deepResearchEnabled]
+  );
 
   // Memoized callbacks for DocumentResults
   const handleMobileDocumentSidebarClose = useCallback(() => {
@@ -909,8 +915,10 @@ export function ChatPage({
                           removeDocs={() => setSelectedDocuments([])}
                           retrievalEnabled={retrievalEnabled}
                           selectedDocuments={selectedDocuments}
-                          message={message}
-                          setMessage={setMessage}
+                          initialMessage={
+                            searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||
+                            ""
+                          }
                           stopGenerating={stopGenerating}
                           onSubmit={handleChatInputSubmit}
                           chatState={currentChatState}

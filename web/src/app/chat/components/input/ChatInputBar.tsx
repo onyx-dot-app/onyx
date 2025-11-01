@@ -83,10 +83,9 @@ export function SourceChip({
 export interface ChatInputBarProps {
   removeDocs: () => void;
   selectedDocuments: OnyxDocument[];
-  message: string;
-  setMessage: (message: string) => void;
+  initialMessage: string;
   stopGenerating: () => void;
-  onSubmit: () => void;
+  onSubmit: (message: string) => void;
   llmManager: LlmManager;
   chatState: ChatState;
   currentSessionFileTokenCount: number;
@@ -111,8 +110,7 @@ function ChatInputBarInner({
   toggleDocumentSidebar,
   filterManager,
   selectedDocuments,
-  message,
-  setMessage,
+  initialMessage,
   stopGenerating,
   onSubmit,
   chatState,
@@ -129,6 +127,37 @@ function ChatInputBarInner({
   setPresentingDocument,
 }: ChatInputBarProps) {
   const { user } = useUser();
+
+  // Localize message state to prevent parent re-renders
+  const [localMessage, setLocalMessage] = useState(initialMessage);
+
+  // Callback ref to set initial textarea height synchronously on mount
+  const handleTextAreaRef = useCallback(
+    (element: HTMLTextAreaElement | null) => {
+      textAreaRef.current = element;
+      if (element) {
+        element.style.height = "0px";
+        element.style.height = `${Math.min(
+          element.scrollHeight,
+          MAX_INPUT_HEIGHT
+        )}px`;
+      }
+    },
+    [] // Refs are stable, no dependencies needed
+  );
+
+  // Clear input when leaving "input" state (handles input→loading→streaming flow)
+  const previousChatStateRef = React.useRef(chatState);
+  useEffect(() => {
+    if (previousChatStateRef.current === "input" && chatState !== "input") {
+      setLocalMessage("");
+      // Reset textarea height
+      if (textAreaRef.current) {
+        textAreaRef.current.style.height = "0px";
+      }
+    }
+    previousChatStateRef.current = chatState;
+  }, [chatState]); // textAreaRef is stable, not needed in deps
 
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
@@ -165,16 +194,6 @@ function ChatInputBarInner({
   );
 
   const combinedSettings = useContext(SettingsContext);
-  useEffect(() => {
-    const textarea = textAreaRef.current;
-    if (textarea) {
-      textarea.style.height = "0px"; // this is necessary in order to "reset" the scrollHeight
-      textarea.style.height = `${Math.min(
-        textarea.scrollHeight,
-        MAX_INPUT_HEIGHT
-      )}px`;
-    }
-  }, [message, textAreaRef]);
 
   const handlePaste = (event: React.ClipboardEvent) => {
     const items = event.clipboardData?.items;
@@ -223,7 +242,7 @@ function ChatInputBarInner({
 
   const updateInputPrompt = (prompt: InputPrompt) => {
     hidePrompts();
-    setMessage(`${prompt.content}`);
+    setLocalMessage(`${prompt.content}`);
   };
 
   const handlePromptInput = useCallback(
@@ -245,23 +264,33 @@ function ChatInputBarInner({
   const handleInputChange = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       const text = event.target.value;
-      setMessage(text);
+      setLocalMessage(text);
       handlePromptInput(text);
+
+      // Resize imperatively (no effect needed)
+      const textarea = textAreaRef.current;
+      if (textarea) {
+        textarea.style.height = "0px";
+        textarea.style.height = `${Math.min(
+          textarea.scrollHeight,
+          MAX_INPUT_HEIGHT
+        )}px`;
+      }
     },
-    [setMessage, handlePromptInput]
+    [handlePromptInput]
   );
 
   const startFilterSlash = useMemo(() => {
-    if (message !== undefined) {
-      const message_segments = message
-        .slice(message.lastIndexOf("/") + 1)
+    if (localMessage !== undefined) {
+      const message_segments = localMessage
+        .slice(localMessage.lastIndexOf("/") + 1)
         .split(/\s/);
       if (message_segments[0]) {
         return message_segments[0].toLowerCase();
       }
     }
     return "";
-  }, [message]);
+  }, [localMessage]);
 
   const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
@@ -407,7 +436,7 @@ function ChatInputBarInner({
           onPaste={handlePaste}
           onKeyDownCapture={handleKeyDown}
           onChange={handleInputChange}
-          ref={textAreaRef}
+          ref={handleTextAreaRef}
           id="onyx-chat-input-textarea"
           className={cn(
             "w-full",
@@ -435,7 +464,7 @@ function ChatInputBarInner({
                 } help you today`
               : `How can ${selectedAssistant.name} help you today`
           }
-          value={message}
+          value={localMessage}
           onKeyDown={(event) => {
             if (
               event.key === "Enter" &&
@@ -444,8 +473,8 @@ function ChatInputBarInner({
               !(event.nativeEvent as any).isComposing
             ) {
               event.preventDefault();
-              if (message) {
-                onSubmit();
+              if (localMessage) {
+                onSubmit(localMessage);
               }
             }
           }}
@@ -588,12 +617,12 @@ function ChatInputBarInner({
             <IconButton
               id="onyx-chat-input-send-button"
               icon={chatState === "input" ? SvgArrowUp : SvgStop}
-              disabled={chatState === "input" && !message}
+              disabled={chatState === "input" && !localMessage}
               onClick={() => {
                 if (chatState == "streaming") {
                   stopGenerating();
-                } else if (message) {
-                  onSubmit();
+                } else if (localMessage) {
+                  onSubmit(localMessage);
                 }
               }}
             />
