@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.onyx.db.models import LangflowFileNode, UserFile
+from onyx.db.models import LangflowFileNode, UserFile
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.app_configs import LANGFLOW_BASE_URL, LANGFLOW_API_KEY
