@@ -84,13 +84,33 @@ export default function AgentsPage() {
         creatorsMap.set(agent.owner.id, agent.owner);
       }
     });
-    return Array.from(creatorsMap.values()).sort((a, b) =>
+
+    let creators = Array.from(creatorsMap.values()).sort((a, b) =>
       a.email.localeCompare(b.email)
     );
-  }, [agents]);
+
+    // Add current user if not in the list, and put them first
+    if (user) {
+      const hasCurrentUser = creators.some((c) => c.id === user.id);
+
+      if (!hasCurrentUser) {
+        creators = [{ id: user.id, email: user.email }, ...creators];
+      } else {
+        // Sort to put current user first
+        creators = creators.sort((a, b) => {
+          if (a.id === user.id) return -1;
+          if (b.id === user.id) return 1;
+          return 0;
+        });
+      }
+    }
+
+    return creators;
+  }, [agents, user]);
 
   const filteredCreators = useMemo(() => {
     if (!creatorSearchQuery) return uniqueCreators;
+
     return uniqueCreators.filter((creator) =>
       creator.email.toLowerCase().includes(creatorSearchQuery.toLowerCase())
     );
@@ -254,10 +274,19 @@ export default function AgentsPage() {
                     />,
                     ...filteredCreators.map((creator) => {
                       const isSelected = selectedCreatorIds.has(creator.id);
+                      const isCurrentUser = user && creator.id === user.id;
+
+                      // Determine icon: Check if selected, User icon if current user, otherwise no icon
+                      const icon = isSelected
+                        ? SvgCheck
+                        : isCurrentUser
+                          ? SvgUser
+                          : () => null;
+
                       return (
                         <LineItem
                           key={creator.id}
-                          icon={isSelected ? SvgCheck : SvgUser}
+                          icon={icon}
                           heavyForced={isSelected}
                           onClick={() => {
                             setSelectedCreatorIds((prev) => {
