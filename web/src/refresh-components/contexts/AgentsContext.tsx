@@ -149,7 +149,10 @@ interface AgentsContextType {
   // Pinned agents (from user preferences)
   pinnedAgents: MinimalPersonaSnapshot[];
   setPinnedAgents: Dispatch<SetStateAction<MinimalPersonaSnapshot[]>>;
-  togglePinnedAgent: (agent: MinimalPersonaSnapshot, request: boolean) => void;
+  togglePinnedAgent: (
+    agent: MinimalPersonaSnapshot,
+    shouldPin: boolean
+  ) => void;
 
   // Currently live/active agent (from searchParams)
   currentAgent: MinimalPersonaSnapshot | null;

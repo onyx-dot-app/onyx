@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
 import Text from "@/refresh-components/texts/Text";
-import { SidebarSection } from "@/sections/sidebar/SidebarSection";
+import SidebarSection from "@/sections/sidebar/SidebarSection";
 import Settings from "@/sections/sidebar/Settings";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
@@ -39,7 +39,7 @@ import OnyxLogo from "@/icons/onyx-logo";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import { SidebarBody } from "@/sections/sidebar/utils";
+import SidebarBody from "@/sections/sidebar/SidebarBody";
 
 const connectors_items = () => [
   {
@@ -332,9 +332,9 @@ export default function AdminSidebar({
           </SidebarTab>
         }
         footer={
-          <div className="flex flex-col px-2 gap-2">
+          <div className="flex flex-col gap-2">
             {settings.webVersion && (
-              <Text text02 secondaryBody className="px-2 pt-1">
+              <Text text02 secondaryBody className="px-2">
                 {`Onyx version: ${settings.webVersion}`}
               </Text>
             )}

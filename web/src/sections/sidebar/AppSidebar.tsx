@@ -30,8 +30,7 @@ import {
 import SvgEditBig from "@/icons/edit-big";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import Settings from "@/sections/sidebar/Settings";
-import { SidebarSection } from "@/sections/sidebar/SidebarSection";
-import AgentsModal from "@/sections/AgentsModal";
+import SidebarSection from "@/sections/sidebar/SidebarSection";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
@@ -48,7 +47,6 @@ import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { removeChatSessionFromProject } from "@/app/chat/projects/projectsService";
 import type { Project } from "@/app/chat/projects/projectsService";
 import { useAppRouter } from "@/hooks/appNavigation";
-import { useSearchParams } from "next/navigation";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -61,9 +59,10 @@ import {
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { ChatSession } from "@/app/chat/interfaces";
-import { SidebarBody } from "@/sections/sidebar/utils";
+import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import SvgSettings from "@/icons/settings";
+import { useActiveSidebarTab } from "@/lib/hooks";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -126,7 +125,6 @@ function RecentsSection({ chatSessions }: RecentsSectionProps) {
 
 function AppSidebarInner() {
   const route = useAppRouter();
-  const searchParams = useSearchParams();
   const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
   const { folded, setFolded } = useAppSidebarContext();
   const { chatSessions, refreshChatSessions } = useChatContext();
@@ -303,9 +301,12 @@ function AppSidebarInner() {
       refreshChatSessions,
       refreshCurrentProjectDetails,
       fetchProjects,
+      setPopup,
     ]
   );
 
+  const { isAdmin, isCurator } = useUser();
+  const activeSidebarTab = useActiveSidebarTab();
   const newSessionButton = useMemo(
     () => (
       <div data-testid="AppSidebar/new-session">
@@ -313,20 +314,51 @@ function AppSidebarInner() {
           leftIcon={SvgEditBig}
           folded={folded}
           onClick={() => route({})}
-          active={Array.from(searchParams).length === 0}
+          active={activeSidebarTab === "new-session"}
         >
           New Session
         </SidebarTab>
       </div>
     ),
-    [folded, route, searchParams]
+    [folded, route, activeSidebarTab]
   );
-
-  const { isAdmin, isCurator } = useUser();
-
+  const moreAgentsButton = useMemo(
+    () => (
+      <div data-testid="AppSidebar/more-agents">
+        <SidebarTab
+          leftIcon={
+            folded || visibleAgents.length === 0
+              ? SvgOnyxOctagon
+              : SvgMoreHorizontal
+          }
+          href="/chat/agents"
+          folded={folded}
+          active={activeSidebarTab === "more-agents"}
+          lowlight={!folded}
+        >
+          {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
+        </SidebarTab>
+      </div>
+    ),
+    [folded, activeSidebarTab, visibleAgents]
+  );
+  const newProjectButton = useMemo(
+    () => (
+      <SidebarTab
+        leftIcon={SvgFolderPlus}
+        onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
+        active={isOpen(ModalIds.CreateProjectModal)}
+        folded={folded}
+        lowlight={!folded}
+      >
+        New Project
+      </SidebarTab>
+    ),
+    [folded, toggleModal, isOpen]
+  );
   const settingsButton = useMemo(
     () => (
-      <div className="px-2">
+      <div>
         {(isAdmin || isCurator) && (
           <SidebarTab
             href="/admin/indexing/status"
@@ -349,7 +381,6 @@ function AppSidebarInner() {
   return (
     <>
       {popup}
-      <AgentsModal />
       <CreateProjectModal />
 
       {showMoveCustomAgentModal && (
@@ -389,22 +420,8 @@ function AppSidebarInner() {
         {folded ? (
           <SidebarBody footer={settingsButton}>
             {newSessionButton}
-            <SidebarTab
-              leftIcon={SvgOnyxOctagon}
-              onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-              active={isOpen(ModalIds.AgentsModal)}
-              folded
-            >
-              Agents
-            </SidebarTab>
-            <SidebarTab
-              leftIcon={SvgFolderPlus}
-              onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
-              active={isOpen(ModalIds.CreateProjectModal)}
-              folded
-            >
-              New Project
-            </SidebarTab>
+            {moreAgentsButton}
+            {newProjectButton}
           </SidebarBody>
         ) : (
           <SidebarBody actionButton={newSessionButton} footer={settingsButton}>
@@ -423,15 +440,7 @@ function AppSidebarInner() {
                     <AgentButton key={visibleAgent.id} agent={visibleAgent} />
                   ))}
                 </SortableContext>
-                <div data-testid="AppSidebar/more-agents">
-                  <SidebarTab
-                    leftIcon={SvgMoreHorizontal}
-                    onClick={() => toggleModal(ModalIds.AgentsModal, true)}
-                    lowlight
-                  >
-                    More Agents
-                  </SidebarTab>
-                </div>
+                {moreAgentsButton}
               </SidebarSection>
             </DndContext>
 
@@ -462,14 +471,7 @@ function AppSidebarInner() {
                 {projects.map((project) => (
                   <ProjectFolderButton key={project.id} project={project} />
                 ))}
-
-                <SidebarTab
-                  leftIcon={SvgFolderPlus}
-                  onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
-                  lowlight
-                >
-                  New Project
-                </SidebarTab>
+                {newProjectButton}
               </SidebarSection>
 
               {/* Recents */}

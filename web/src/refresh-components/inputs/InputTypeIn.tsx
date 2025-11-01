@@ -106,7 +106,9 @@ function InputTypeInInner(
     >
       {leftSearchIcon && (
         <div className="pr-2">
-          <SvgSearch className="w-[1rem] h-[1rem] stroke-text-02" />
+          <div className="pl-1">
+            <SvgSearch className="w-[1rem] h-[1rem] stroke-text-02" />
+          </div>
         </div>
       )}
 

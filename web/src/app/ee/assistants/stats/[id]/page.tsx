@@ -35,7 +35,6 @@ export default async function GalleryPage(props: {
     defaultAssistantId,
     inputPrompts,
     proSearchToggled,
-    projects,
   } = data;
 
   return (

@@ -340,48 +340,39 @@ export default function Button({
     [transient, variant, subvariant, abled]
   );
 
-  const spacer = <div className="w-[0.1rem]" />;
-
   const content = (
     <button
       className={cn(
-        "p-2 h-fit rounded-12 group/Button w-fit flex flex-row items-center justify-center gap-1",
+        "p-2 h-fit rounded-12 group/Button w-fit flex flex-row items-center justify-center gap-1.5",
         buttonClass,
         className
       )}
       disabled={disabled}
       {...props}
     >
-      {LeftIcon ? (
+      {LeftIcon && (
         <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
           <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
         </div>
-      ) : (
-        spacer
       )}
-      {typeof children === "string" ? (
-        <Text
-          className={cn(
-            "whitespace-nowrap",
-            textClasses(transient)[variant][subvariant][abled]
-          )}
-        >
-          {children}
-        </Text>
-      ) : (
-        children
-      )}
-      {RightIcon ? (
-        <div className="w-[1rem] h-[1rem]">
-          <RightIcon
+      <div className={cn(LeftIcon && "pr-1", RightIcon && "pl-1")}>
+        {typeof children === "string" ? (
+          <Text
             className={cn(
-              "w-[1rem] h-[1rem]",
-              iconClasses(transient)[variant][subvariant][abled]
+              "whitespace-nowrap",
+              textClasses(transient)[variant][subvariant][abled]
             )}
-          />
+          >
+            {children}
+          </Text>
+        ) : (
+          children
+        )}
+      </div>
+      {RightIcon && (
+        <div className="w-[1rem] h-[1rem]">
+          <RightIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
         </div>
-      ) : (
-        spacer
       )}
     </button>
   );
