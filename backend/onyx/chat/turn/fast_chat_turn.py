@@ -313,6 +313,13 @@ def _emit_citations_for_final_answer(
 def _default_packet_translation(
     ev: object, ctx: ChatTurnContext, processor: CitationProcessor | None
 ) -> list[Packet]:
+    """Function is a bit messy atm, since there's a bug in OpenAI Agents SDK that
+    causes Anthropic packets to be out of order.
+
+    TODO (chris): clean this up once OpenAI Agents SDK is fixed.
+    """
+
+    # lazy loading to save memory
     from openai.types.responses import ResponseReasoningSummaryPartAddedEvent
     from openai.types.responses import ResponseReasoningSummaryPartDoneEvent
     from openai.types.responses import ResponseReasoningSummaryTextDeltaEvent
@@ -322,7 +329,9 @@ def _default_packet_translation(
     if isinstance(ev, RawResponsesStreamEvent):
         output_index = getattr(ev.data, "output_index", None)
 
-        logger.info("EV %s", ev.data)
+        # ------------------------------------------------------------
+        # Reasoning packets
+        # ------------------------------------------------------------
         if isinstance(ev.data, ResponseReasoningSummaryPartAddedEvent):
             packets.append(Packet(ind=ctx.current_run_step, obj=ReasoningStart()))
             ctx.current_output_index = output_index
@@ -347,6 +356,9 @@ def _default_packet_translation(
                 )
                 ctx.held_back_message_start = None
 
+        # ------------------------------------------------------------
+        # Message packets
+        # ------------------------------------------------------------
         elif ev.data.type == "response.content_part.added":
             retrieved_search_docs = saved_search_docs_from_llm_docs(
                 ctx.ordered_fetched_documents
