@@ -169,6 +169,23 @@ def to_bytesio(stream: IO[bytes]) -> BytesIO:
     return BytesIO(data)
 
 
+def _has_pdf_header(sample: bytes) -> bool:
+    whitespace = {0x00, 0x09, 0x0A, 0x0C, 0x0D, 0x20}
+    idx = 0
+    sample_len = len(sample)
+    while idx < sample_len and sample[idx] in whitespace:
+        idx += 1
+    return sample[idx : idx + 4] == b"%PDF" if idx < sample_len else False
+
+
+def _safe_get_unstructured_api_key() -> str | None:
+    try:
+        return get_unstructured_api_key()
+    except Exception as exc:
+        logger.debug("Unable to load Unstructured API key: %s", exc)
+        return None
+
+
 def load_files_from_zip(
     zip_file_io: IO,
     ignore_macos_resource_fork_files: bool = True,
@@ -276,6 +293,12 @@ def read_pdf_file(
 
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
+    file.seek(0)
+    header_sample = file.read(16)
+    file.seek(0)
+    if not _has_pdf_header(header_sample):
+        logger.warning("Skipping PDF extraction; missing PDF header.")
+        return "", metadata, extracted_images
     try:
         pdf_reader = PdfReader(file)
 
@@ -564,7 +587,7 @@ def extract_file_text(
     }
 
     try:
-        if get_unstructured_api_key():
+        if _safe_get_unstructured_api_key():
             try:
                 return unstructured_to_text(file, file_name)
             except Exception as unstructured_error:
@@ -647,7 +670,7 @@ def _extract_text_and_images(
 ) -> ExtractionResult:
     file.seek(0)
 
-    if get_unstructured_api_key():
+    if _safe_get_unstructured_api_key():
         try:
             text_content = unstructured_to_text(file, file_name)
             return ExtractionResult(
