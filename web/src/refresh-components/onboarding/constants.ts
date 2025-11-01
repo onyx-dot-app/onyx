@@ -141,6 +141,12 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for Azure OpenAI.",
     },
   },
+  custom: {
+    description:
+      "Connect models from other providers or your self-hosted models.",
+    display_name: "Custom Provider",
+    field_metadata: {},
+  },
 };
 
 // Tab configuration for providers that need multiple setup modes
