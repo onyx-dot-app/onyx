@@ -11,10 +11,8 @@ from email.parser import Parser as EmailParser
 from enum import auto
 from enum import IntFlag
 from io import BytesIO
-from pathlib import Path
 from typing import Any
 from typing import IO
-from typing import NamedTuple
 from typing import Optional
 from typing import TYPE_CHECKING
 from zipfile import BadZipFile
@@ -25,8 +23,12 @@ from PIL import Image
 
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
+from onyx.file_processing.common import ExtractionResult
+from onyx.file_processing.common import get_file_ext
 from onyx.file_processing.file_validation import TEXT_MIME_TYPE
 from onyx.file_processing.html_utils import parse_html_page_basic
+from onyx.file_processing.reductoai import get_reductoai_api_key_and_env
+from onyx.file_processing.reductoai import ReductoAIExtractor
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
 from onyx.utils.file_types import PRESENTATION_MIME_TYPE
@@ -111,11 +113,6 @@ class OnyxExtensionType(IntFlag):
 
 def is_text_file_extension(file_name: str) -> bool:
     return any(file_name.endswith(ext) for ext in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS)
-
-
-def get_file_ext(file_path_or_name: str | Path) -> str:
-    _, extension = os.path.splitext(file_path_or_name)
-    return extension.lower()
 
 
 def is_valid_media_type(media_type: str) -> bool:
@@ -564,6 +561,24 @@ def extract_file_text(
     }
 
     try:
+        if get_reductoai_api_key_and_env():
+            try:
+                return (
+                    ReductoAIExtractor()
+                    .extract_with_reductoai(
+                        file,
+                        file_name,
+                        image_callback=None,
+                        pdf_pass=None,
+                        extract_images=False,
+                    )
+                    .text_content
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to process with ReductoAI: {str(e)}. Falling back to next parser."
+                )
+                file.seek(0)  # Reset file pointer
         if get_unstructured_api_key():
             try:
                 return unstructured_to_text(file, file_name)
@@ -595,14 +610,6 @@ def extract_file_text(
             ) from e
         logger.warning(f"Failed to process file {file_name or 'Unknown'}: {str(e)}")
         return ""
-
-
-class ExtractionResult(NamedTuple):
-    """Structured result from text and image extraction from various file types."""
-
-    text_content: str
-    embedded_images: Sequence[tuple[bytes, str]]
-    metadata: dict[str, Any]
 
 
 def extract_result_from_text_file(file: IO[Any]) -> ExtractionResult:
@@ -646,6 +653,22 @@ def _extract_text_and_images(
     image_callback: Callable[[bytes, str], None] | None = None,
 ) -> ExtractionResult:
     file.seek(0)
+
+    if get_reductoai_api_key_and_env():
+        try:
+            return ReductoAIExtractor().extract_with_reductoai(
+                file,
+                file_name,
+                image_callback=image_callback,
+                pdf_pass=pdf_pass,
+                extract_images=True,
+                content_type=content_type,
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to process with ReductoAI: {str(e)}. Falling back to next parser."
+            )
+            file.seek(0)  # Reset file pointer
 
     if get_unstructured_api_key():
         try:
