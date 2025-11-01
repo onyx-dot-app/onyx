@@ -258,7 +258,7 @@ export default function AgentsPage() {
                         <LineItem
                           key={creator.id}
                           icon={isSelected ? SvgCheck : SvgUser}
-                          forced={isSelected}
+                          heavyForced={isSelected}
                           onClick={() => {
                             setSelectedCreatorIds((prev) => {
                               const newSet = new Set(prev);
@@ -310,7 +310,7 @@ export default function AgentsPage() {
                         <LineItem
                           key={action.id}
                           icon={isSelected ? SvgCheck : SvgActions}
-                          forced={isSelected}
+                          heavyForced={isSelected}
                           onClick={() => {
                             setSelectedActionIds((prev) => {
                               const newSet = new Set(prev);
