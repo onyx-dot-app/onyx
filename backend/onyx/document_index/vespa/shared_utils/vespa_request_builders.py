@@ -3,17 +3,34 @@ from datetime import timedelta
 from datetime import timezone
 
 from onyx.configs.constants import INDEX_SEPARATOR
+from onyx.configs.constants import SOURCE_TYPE
 from onyx.context.search.models import IndexFilters
 from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.document_index.vespa.deletion import CONTENT_SUMMARY
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
+from onyx.document_index.vespa_constants import AGGREGATED_CHUNK_BOOST_FACTOR
+from onyx.document_index.vespa_constants import BLURB
+from onyx.document_index.vespa_constants import BOOST
+from onyx.document_index.vespa_constants import CHUNK_CONTEXT
 from onyx.document_index.vespa_constants import CHUNK_ID
+from onyx.document_index.vespa_constants import CONTENT
+from onyx.document_index.vespa_constants import DOC_SUMMARY
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
 from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import HIDDEN
+from onyx.document_index.vespa_constants import IMAGE_FILE_NAME
+from onyx.document_index.vespa_constants import LARGE_CHUNK_REFERENCE_IDS
+from onyx.document_index.vespa_constants import METADATA
 from onyx.document_index.vespa_constants import METADATA_LIST
-from onyx.document_index.vespa_constants import SOURCE_TYPE
+from onyx.document_index.vespa_constants import METADATA_SUFFIX
+from onyx.document_index.vespa_constants import PRIMARY_OWNERS
+from onyx.document_index.vespa_constants import SECONDARY_OWNERS
+from onyx.document_index.vespa_constants import SECTION_CONTINUATION
+from onyx.document_index.vespa_constants import SEMANTIC_IDENTIFIER
+from onyx.document_index.vespa_constants import SOURCE_LINKS
 from onyx.document_index.vespa_constants import TENANT_ID
+from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
@@ -232,3 +249,36 @@ def build_vespa_id_based_retrieval_yql(
 
     id_based_retrieval_yql_section += ")"
     return id_based_retrieval_yql_section
+
+
+def build_yql_base(index_name: str, include_acl: bool = False) -> str:
+    yql_base = (
+        f"select "
+        f"documentid, "
+        f"{DOCUMENT_ID}, "
+        f"{CHUNK_ID}, "
+        f"{BLURB}, "
+        f"{CONTENT}, "
+        f"{SOURCE_TYPE}, "
+        f"{SOURCE_LINKS}, "
+        f"{SEMANTIC_IDENTIFIER}, "
+        f"{TITLE}, "
+        f"{SECTION_CONTINUATION}, "
+        f"{IMAGE_FILE_NAME}, "
+        f"{BOOST}, "
+        f"{AGGREGATED_CHUNK_BOOST_FACTOR}, "
+        f"{HIDDEN}, "
+        f"{DOC_UPDATED_AT}, "
+        f"{PRIMARY_OWNERS}, "
+        f"{SECONDARY_OWNERS}, "
+        f"{LARGE_CHUNK_REFERENCE_IDS}, "
+        f"{METADATA}, "
+        f"{METADATA_SUFFIX}, "
+        f"{DOC_SUMMARY}, "
+        f"{CHUNK_CONTEXT}, "
+        f"{CONTENT_SUMMARY} "
+    )
+    if include_acl:
+        yql_base += f", {ACCESS_CONTROL_LIST} "
+    yql_base += f"from {index_name} where "
+    return yql_base

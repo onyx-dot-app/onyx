@@ -11,6 +11,7 @@ from http import HTTPStatus
 import httpx
 from retry import retry
 
+from onyx.configs.constants import SOURCE_TYPE
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
@@ -47,7 +48,6 @@ from onyx.document_index.vespa_constants import SECTION_CONTINUATION
 from onyx.document_index.vespa_constants import SEMANTIC_IDENTIFIER
 from onyx.document_index.vespa_constants import SKIP_TITLE_EMBEDDING
 from onyx.document_index.vespa_constants import SOURCE_LINKS
-from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import TITLE_EMBEDDING

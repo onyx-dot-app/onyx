@@ -43,6 +43,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_
 
 from onyx.configs.constants import INDEX_SEPARATOR
+from onyx.configs.constants import SOURCE_TYPE
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchRequest
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -63,7 +64,6 @@ from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import METADATA_LIST
 from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
-from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import VESPA_APP_CONTAINER_URL
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.utils.logger import setup_logger

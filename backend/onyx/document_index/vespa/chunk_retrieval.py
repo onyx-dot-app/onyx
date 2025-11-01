@@ -12,6 +12,7 @@ from retry import retry
 
 from onyx.configs.app_configs import LOG_VESPA_TIMING_INFORMATION
 from onyx.configs.app_configs import VESPA_LANGUAGE_OVERRIDE
+from onyx.configs.constants import SOURCE_TYPE
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.document_index.interfaces import VespaChunkRequest
@@ -22,6 +23,7 @@ from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_id_based_retrieval_yql,
 )
+from onyx.document_index.vespa.shared_utils.vespa_request_builders import build_yql_base
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import BLURB
 from onyx.document_index.vespa_constants import BOOST
@@ -47,10 +49,8 @@ from onyx.document_index.vespa_constants import SECONDARY_OWNERS
 from onyx.document_index.vespa_constants import SECTION_CONTINUATION
 from onyx.document_index.vespa_constants import SEMANTIC_IDENTIFIER
 from onyx.document_index.vespa_constants import SOURCE_LINKS
-from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
-from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from shared_configs.configs import MULTI_TENANT
@@ -128,6 +128,12 @@ def _vespa_hit_to_inference_chunk(
         for k, v in cast(dict[str, str], source_links_dict_unprocessed).items()
     }
 
+    acl_field = fields.get(ACCESS_CONTROL_LIST)
+    if isinstance(acl_field, dict):
+        acl_list = [str(key) for key in acl_field.keys()]
+    else:
+        acl_list = []
+
     return InferenceChunkUncleaned(
         chunk_id=fields[CHUNK_ID],
         blurb=fields.get(BLURB, ""),  # Unused
@@ -154,6 +160,7 @@ def _vespa_hit_to_inference_chunk(
         chunk_context=fields.get(CHUNK_CONTEXT, ""),
         match_highlights=match_highlights,
         updated_at=updated_at,
+        access_control_list=acl_list,
     )
 
 
@@ -415,7 +422,7 @@ def _get_chunks_via_batch_search(
     filters_str = build_vespa_filters(filters=filters, include_hidden=True)
 
     yql = (
-        YQL_BASE.format(index_name=index_name)
+        build_yql_base(index_name=index_name, include_acl=False)
         + filters_str
         + build_vespa_id_based_retrieval_yql(chunk_requests[0])
     )
