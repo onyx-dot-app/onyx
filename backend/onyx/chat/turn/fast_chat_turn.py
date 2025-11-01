@@ -46,13 +46,9 @@ from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 from onyx.tools.force import ForceUseTool
-from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
     from litellm import ResponseFunctionToolCall
-
-
-logger = setup_logger()
 
 
 # TODO -- this can be refactored out and played with in evals + normal demo
