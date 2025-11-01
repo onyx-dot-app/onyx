@@ -8,6 +8,57 @@ import Text from "@/refresh-components/texts/Text";
 import SvgFileText from "@/icons/file-text";
 import Truncated from "@/refresh-components/texts/Truncated";
 
+function ImageFileCard({
+  file,
+  imageUrl,
+  removeFile,
+  onFileClick,
+}: {
+  file: ProjectFile;
+  imageUrl: string;
+  removeFile: (fileId: string) => void;
+  onFileClick?: (file: ProjectFile) => void;
+}) {
+  const handleRemoveFile = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    removeFile(file.id);
+  };
+
+  return (
+    <div
+      className={`relative group h-20 w-20 ${
+        onFileClick ? "cursor-pointer hover:opacity-90" : ""
+      }`}
+      onClick={() => {
+        if (onFileClick) {
+          onFileClick(file);
+        }
+      }}
+    >
+      {String(file.status) !== UserFileStatus.UPLOADING && (
+        <button
+          onClick={handleRemoveFile}
+          title="Delete file"
+          aria-label="Delete file"
+          className="absolute -left-2 -top-2 z-10 h-5 w-5 flex items-center justify-center rounded-[4px] border border-border text-[11px] bg-[#1f1f1f] text-white dark:bg-[#fefcfa] dark:text-black shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto transition-opacity duration-150 hover:opacity-90"
+        >
+          <X className="h-4 w-4 dark:text-dark-tremor-background-muted" />
+        </button>
+      )}
+      <img
+        src={imageUrl}
+        alt={file.name}
+        className="h-full w-full object-cover rounded-12 border border-border-01"
+        onError={(e) => {
+          // Fallback to regular file card if image fails to load
+          const target = e.target as HTMLImageElement;
+          target.style.display = "none";
+        }}
+      />
+    </div>
+  );
+}
+
 export function FileCard({
   file,
   removeFile,
@@ -61,6 +112,19 @@ export function FileCard({
     removeFile(file.id);
   };
 
+  // For images, show a larger preview without metadata
+  if (isImage && imageUrl && !isProcessing) {
+    return (
+      <ImageFileCard
+        file={file}
+        imageUrl={imageUrl}
+        removeFile={removeFile}
+        onFileClick={onFileClick}
+      />
+    );
+  }
+
+  // Regular file card layout for non-images or processing files
   return (
     <div
       className={`relative group flex items-center gap-3 border border-border-01 rounded-12 ${
