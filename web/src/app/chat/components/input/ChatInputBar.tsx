@@ -295,6 +295,23 @@ function ChatInputBarInner({
     availableContextTokens,
   ]);
 
+  // Detect if there are any non-image files to determine if images should be compact
+  const hasNonImageFiles = useMemo(() => {
+    const imageExtensions = [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".bmp",
+      ".webp",
+      ".svg",
+    ];
+    return currentMessageFiles.some((file) => {
+      const fileName = String(file.name || "").toLowerCase();
+      return !imageExtensions.some((ext) => fileName.endsWith(ext));
+    });
+  }, [currentMessageFiles]);
+
   // Check if the assistant has search tools available (internal search or web search)
   // AND if deep research is globally enabled in admin settings
   const showDeepResearch = useMemo(() => {
@@ -398,6 +415,7 @@ function ChatInputBarInner({
                 removeFile={handleRemoveMessageFile}
                 hideProcessingState={hideProcessingState}
                 onFileClick={handleFileClick}
+                compactImages={hasNonImageFiles}
               />
             ))}
           </div>

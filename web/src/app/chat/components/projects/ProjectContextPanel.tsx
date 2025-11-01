@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { Separator } from "@/components/ui/separator";
 import { useProjectsContext } from "../../projects/ProjectsContext";
@@ -94,6 +94,24 @@ export default function ProjectContextPanel({
   });
 
   if (!currentProjectId) return null; // no selection yet
+
+  // Detect if there are any non-image files in the displayed files to determine if images should be compact
+  const hasNonImageFiles = useMemo(() => {
+    const imageExtensions = [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".bmp",
+      ".webp",
+      ".svg",
+    ];
+    const displayedFiles = allCurrentProjectFiles.slice(0, 4);
+    return displayedFiles.some((file) => {
+      const fileName = String(file.name || "").toLowerCase();
+      return !imageExtensions.some((ext) => fileName.endsWith(ext));
+    });
+  }, [allCurrentProjectFiles]);
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
@@ -201,6 +219,7 @@ export default function ProjectContextPanel({
                         await unlinkFileFromProject(currentProjectId, fileId);
                       }}
                       onFileClick={handleOnView}
+                      compactImages={hasNonImageFiles}
                     />
                   </div>
                 ));

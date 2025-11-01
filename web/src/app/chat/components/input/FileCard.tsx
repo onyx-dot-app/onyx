@@ -7,6 +7,7 @@ import { UserFileStatus } from "../../projects/projectsService";
 import Text from "@/refresh-components/texts/Text";
 import SvgFileText from "@/icons/file-text";
 import Truncated from "@/refresh-components/texts/Truncated";
+import { cn } from "@/lib/utils";
 
 function ImageFileCard({
   file,
@@ -14,21 +15,26 @@ function ImageFileCard({
   removeFile,
   onFileClick,
   isProcessing = false,
+  compact = false,
 }: {
   file: ProjectFile;
   imageUrl: string | null;
   removeFile: (fileId: string) => void;
   onFileClick?: (file: ProjectFile) => void;
   isProcessing?: boolean;
+  compact?: boolean;
 }) {
   const handleRemoveFile = async (e: React.MouseEvent) => {
     e.stopPropagation();
     removeFile(file.id);
   };
 
+  const sizeClass = compact ? "h-14 w-14" : "h-20 w-20";
+  const loaderSize = compact ? "h-5 w-5" : "h-8 w-8";
+
   return (
     <div
-      className={`relative group h-20 w-20 rounded-12 border border-border-01 ${
+      className={`relative group ${sizeClass} rounded-12 border border-border-01 ${
         isProcessing ? "bg-background-neutral-02" : ""
       } ${
         onFileClick && !isProcessing ? "cursor-pointer hover:opacity-90" : ""
@@ -44,14 +50,42 @@ function ImageFileCard({
           onClick={handleRemoveFile}
           title="Delete file"
           aria-label="Delete file"
-          className="absolute -left-2 -top-2 z-10 h-5 w-5 flex items-center justify-center rounded-[4px] border border-border text-[11px] bg-[#1f1f1f] text-white dark:bg-[#fefcfa] dark:text-black shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto transition-opacity duration-150 hover:opacity-90"
+          className={cn(
+            "absolute",
+            "-left-2",
+            "-top-2",
+            "z-10",
+            "h-5",
+            "w-5",
+            "flex",
+            "items-center",
+            "justify-center",
+            "rounded-[4px]",
+            "border",
+            "border-border",
+            "text-[11px]",
+            "bg-[#1f1f1f]",
+            "text-white",
+            "dark:bg-[#fefcfa]",
+            "dark:text-black",
+            "shadow-sm",
+            "opacity-0",
+            "group-hover:opacity-100",
+            "focus:opacity-100",
+            "pointer-events-none",
+            "group-hover:pointer-events-auto",
+            "focus:pointer-events-auto",
+            "transition-opacity",
+            "duration-150",
+            "hover:opacity-90"
+          )}
         >
           <X className="h-4 w-4 dark:text-dark-tremor-background-muted" />
         </button>
       )}
       {isProcessing || !imageUrl ? (
         <div className="h-full w-full flex items-center justify-center">
-          <Loader2 className="h-8 w-8 text-text-01 animate-spin" />
+          <Loader2 className={`${loaderSize} text-text-01 animate-spin`} />
         </div>
       ) : (
         <img
@@ -74,11 +108,13 @@ export function FileCard({
   removeFile,
   hideProcessingState = false,
   onFileClick,
+  compactImages = false,
 }: {
   file: ProjectFile;
   removeFile: (fileId: string) => void;
   hideProcessingState?: boolean;
   onFileClick?: (file: ProjectFile) => void;
+  compactImages?: boolean;
 }) {
   const typeLabel = useMemo(() => {
     const name = String(file.name || "");
@@ -131,6 +167,7 @@ export function FileCard({
         removeFile={removeFile}
         onFileClick={onFileClick}
         isProcessing={isProcessing}
+        compact={compactImages}
       />
     );
   }

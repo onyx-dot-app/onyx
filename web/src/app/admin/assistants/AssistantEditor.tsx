@@ -1118,36 +1118,72 @@ export function AssistantEditor({
                               <SubLabel>Click below to add files</SubLabel>
                               {values.user_file_ids.length > 0 && (
                                 <div className="flex gap-1">
-                                  {values.user_file_ids
-                                    .slice(0, 4)
-                                    .map((userFileId: string) => {
-                                      const rf = allRecentFiles.find(
-                                        (f) => f.id === userFileId
+                                  {(() => {
+                                    // Detect if there are any non-image files in the displayed files
+                                    const imageExtensions = [
+                                      ".jpg",
+                                      ".jpeg",
+                                      ".png",
+                                      ".gif",
+                                      ".bmp",
+                                      ".webp",
+                                      ".svg",
+                                    ];
+                                    const displayedFileIds =
+                                      values.user_file_ids.slice(0, 4);
+                                    const hasNonImageFiles =
+                                      displayedFileIds.some(
+                                        (userFileId: string) => {
+                                          const rf = allRecentFiles.find(
+                                            (f) => f.id === userFileId
+                                          );
+                                          const fileName = String(
+                                            rf?.name || ""
+                                          ).toLowerCase();
+                                          return !imageExtensions.some((ext) =>
+                                            fileName.endsWith(ext)
+                                          );
+                                        }
                                       );
 
-                                      const fileData = rf || {
-                                        id: userFileId,
-                                        name: `File ${userFileId.slice(0, 8)}`,
-                                        status: "completed" as const,
-                                      };
-                                      return (
-                                        <div key={userFileId} className="w-40">
-                                          <FileCard
-                                            file={fileData as ProjectFile}
-                                            hideProcessingState
-                                            removeFile={() => {
-                                              setFieldValue(
-                                                "user_file_ids",
-                                                values.user_file_ids.filter(
-                                                  (id: string) =>
-                                                    id !== userFileId
-                                                )
-                                              );
-                                            }}
-                                          />
-                                        </div>
-                                      );
-                                    })}
+                                    return displayedFileIds.map(
+                                      (userFileId: string) => {
+                                        const rf = allRecentFiles.find(
+                                          (f) => f.id === userFileId
+                                        );
+
+                                        const fileData = rf || {
+                                          id: userFileId,
+                                          name: `File ${userFileId.slice(
+                                            0,
+                                            8
+                                          )}`,
+                                          status: "completed" as const,
+                                        };
+                                        return (
+                                          <div
+                                            key={userFileId}
+                                            className="w-40"
+                                          >
+                                            <FileCard
+                                              file={fileData as ProjectFile}
+                                              hideProcessingState
+                                              removeFile={() => {
+                                                setFieldValue(
+                                                  "user_file_ids",
+                                                  values.user_file_ids.filter(
+                                                    (id: string) =>
+                                                      id !== userFileId
+                                                  )
+                                                );
+                                              }}
+                                              compactImages={hasNonImageFiles}
+                                            />
+                                          </div>
+                                        );
+                                      }
+                                    );
+                                  })()}
                                   {values.user_file_ids.length > 4 && (
                                     <button
                                       type="button"
