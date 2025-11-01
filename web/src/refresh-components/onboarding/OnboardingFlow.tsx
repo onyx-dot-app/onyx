@@ -1,10 +1,17 @@
-import React, { memo, useEffect, useState } from "react";
+import React, { memo, useEffect, useRef, useState } from "react";
 import OnboardingHeader from "./components/OnboardingHeader";
 import NameStep from "./steps/NameStep";
 import LLMStep from "./steps/LLMStep";
 import FinalStep from "./steps/FinalStep";
 import { useOnboardingState } from "./useOnboardingState";
 import { OnboardingStep } from "./types";
+import { useUser } from "@/components/user/UserProvider";
+import { UserRole } from "@/lib/types";
+import SvgUser from "@/icons/user";
+import Text from "@/refresh-components/texts/Text";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import Button from "../buttons/Button";
+import NonAdminStep from "./components/NonAdminStep";
 
 type OnboardingFlowProps = {
   isCollapsed: boolean;
@@ -22,8 +29,9 @@ const OnboardingFlowInner = ({
     actions: onboardingActions,
     llmDescriptors,
   } = useOnboardingState();
+  const { user } = useUser();
 
-  return (
+  return user?.role === UserRole.ADMIN ? (
     <div className="flex flex-col items-center justify-center w-full max-w-[800px] gap-2 mb-4">
       <OnboardingHeader
         state={onboardingState}
@@ -60,7 +68,9 @@ const OnboardingFlowInner = ({
         </div>
       </div>
     </div>
-  );
+  ) : !user?.personalization?.name ? (
+    <NonAdminStep />
+  ) : null;
 };
 
 const OnboardingFlow = memo(OnboardingFlowInner);
