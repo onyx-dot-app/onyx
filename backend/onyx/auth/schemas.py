@@ -35,7 +35,7 @@ class UserRole(str, Enum):
 
 class UserType(str, Enum):
     HUMAN = "human"
-    API_KEY = "api_key"
+    SERVICE_ACCOUNT = "service_account"
 
 
 class ApiKeyType(str, Enum):

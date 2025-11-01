@@ -68,26 +68,26 @@ def get_api_key_fake_email(
     return f"{DANSWER_API_KEY_PREFIX}{name}@{unique_id}{DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN}"
 
 
-def is_api_key_user(user: User) -> bool:
-    """Check if a user is a fake user created specifically for API key purposes.
+def is_service_account_user(user: User) -> bool:
+    """Check if a user is a fake user created specifically for service account purposes.
 
     API keys can be backed by either:
-    - Fake users (user_type=API_KEY): Created solely to represent the API key with a specific role
+    - Fake users (user_type=SERVICE_ACCOUNT): Created solely to represent the API key with a specific role
     - Real users (user_type=HUMAN): API key mirrors the real user's permissions
 
-    This function returns True only for fake API key users.
+    This function returns True only for fake service account users.
     """
-    return user.user_type == UserType.API_KEY
+    return user.user_type == UserType.SERVICE_ACCOUNT
 
 
 def get_api_key_type(user: User) -> ApiKeyType:
     """Determine the API key type based on the user.
 
     Returns:
-    - ApiKeyType.SERVICE_ACCOUNT for fake API key users
+    - ApiKeyType.SERVICE_ACCOUNT for fake service account users
     - ApiKeyType.PERSONAL_ACCESS_TOKEN for real users
     """
-    if is_api_key_user(user):
+    if is_service_account_user(user):
         return ApiKeyType.SERVICE_ACCOUNT
     else:
         return ApiKeyType.PERSONAL_ACCESS_TOKEN
@@ -114,7 +114,7 @@ def insert_api_key(
         # Service Account: Create fake service account user with specific role
         if api_key_args.role is None:
             raise ValueError("Service account keys require a role")
-        api_key_user = create_api_key_user(db_session, api_key_args)
+        api_key_user = create_service_account_user(db_session, api_key_args)
 
     api_key_row = ApiKey(
         name=api_key_args.name,
@@ -138,23 +138,23 @@ def insert_api_key(
     )
 
 
-def create_api_key_user(db_session: Session, api_key_args: APIKeyArgs) -> User:
-    api_key_user_id = uuid.uuid4()
+def create_service_account_user(db_session: Session, api_key_args: APIKeyArgs) -> User:
+    service_account_user_id = uuid.uuid4()
     std_password_helper = PasswordHelper()
     display_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
-    api_key_user = User(
-        id=api_key_user_id,
-        email=get_api_key_fake_email(display_name, str(api_key_user_id)),
+    service_account_user = User(
+        id=service_account_user_id,
+        email=get_api_key_fake_email(display_name, str(service_account_user_id)),
         # a random password for the "user"
         hashed_password=std_password_helper.hash(std_password_helper.generate()),
         is_active=True,
         is_superuser=False,
         is_verified=True,
         role=api_key_args.role,
-        user_type=UserType.API_KEY,
+        user_type=UserType.SERVICE_ACCOUNT,
     )
-    db_session.add(api_key_user)
-    return api_key_user
+    db_session.add(service_account_user)
+    return service_account_user
 
 
 def update_api_key(
@@ -251,7 +251,7 @@ def remove_api_key(db_session: Session, api_key_id: int) -> None:
         )
 
     db_session.delete(existing_api_key)
-    if is_api_key_user(user_associated_with_key):
-        # Only delete fake API key users. Do not delete real human users!
+    if is_service_account_user(user_associated_with_key):
+        # Only delete fake service account users. Do not delete real human users!
         db_session.delete(user_associated_with_key)
     db_session.commit()

@@ -24,12 +24,12 @@ def upgrade() -> None:
         sa.Column("user_type", sa.String(), nullable=False, server_default="HUMAN"),
     )
 
-    # Backfill existing API key users based on email pattern
-    # API key users have emails matching the pattern 'api_key__{name}@{uuid}onyxapikey.ai'
+    # Backfill existing service account users based on email pattern
+    # Service account users have emails matching the pattern 'api_key__{name}@{uuid}onyxapikey.ai'
     op.execute(
         """
         UPDATE "user"
-        SET user_type = 'API_KEY'
+        SET user_type = 'SERVICE_ACCOUNT'
         WHERE email LIKE 'api\\_key\\_\\_%@%onyxapikey.ai' ESCAPE '\\'
     """
     )
