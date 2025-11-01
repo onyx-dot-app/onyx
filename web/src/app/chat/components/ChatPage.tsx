@@ -932,6 +932,7 @@ export function ChatPage({
                           stopGenerating={stopGenerating}
                           onSubmit={handleChatInputSubmit}
                           chatState={currentChatState}
+                          chatSessionId={existingChatSessionId}
                           currentSessionFileTokenCount={
                             existingChatSessionId
                               ? currentSessionFileTokenCount
