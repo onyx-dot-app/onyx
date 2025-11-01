@@ -255,6 +255,7 @@ def create_update_persona(
             document_set_ids=create_persona_request.document_set_ids,
             tool_ids=create_persona_request.tool_ids,
             is_public=create_persona_request.is_public,
+            exclude_public_providers=create_persona_request.exclude_public_providers,
             recency_bias=create_persona_request.recency_bias,
             llm_model_provider_override=create_persona_request.llm_model_provider_override,
             llm_model_version_override=create_persona_request.llm_model_version_override,
@@ -497,6 +498,7 @@ def upsert_persona(
     task_prompt: str | None,
     datetime_aware: bool | None,
     is_public: bool,
+    exclude_public_providers: bool,
     db_session: Session,
     document_set_ids: list[int] | None = None,
     tool_ids: list[int] | None = None,
@@ -605,6 +607,7 @@ def upsert_persona(
         existing_persona.starter_messages = starter_messages
         existing_persona.deleted = False  # Un-delete if previously deleted
         existing_persona.is_public = is_public
+        existing_persona.exclude_public_providers = exclude_public_providers
         existing_persona.icon_color = icon_color
         existing_persona.icon_shape = icon_shape
         if remove_image or uploaded_image_id:
@@ -652,6 +655,7 @@ def upsert_persona(
             id=persona_id,
             user_id=user.id if user else None,
             is_public=is_public,
+            exclude_public_providers=exclude_public_providers,
             name=name,
             description=description,
             num_chunks=num_chunks,
@@ -943,3 +947,22 @@ def update_default_assistant_configuration(
 
     db_session.commit()
     return persona
+
+
+def user_can_access_persona(
+    db_session: Session, persona_id: int, user: User | None, get_editable: bool = False
+) -> bool:
+    """Check if a user has access to a specific persona.
+
+    Args:
+        db_session: Database session
+        persona_id: ID of the persona to check
+        user: User to check access for
+        get_editable: If True, check for edit access; if False, check for view access
+
+    Returns:
+        True if user can access the persona, False otherwise
+    """
+    stmt = select(Persona).where(Persona.id == persona_id, Persona.deleted.is_(False))
+    stmt = _add_user_filters(stmt, user, get_editable=get_editable)
+    return db_session.scalar(stmt) is not None

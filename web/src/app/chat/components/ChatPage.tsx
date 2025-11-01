@@ -627,6 +627,15 @@ export function ChatPage({
     });
   }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
 
+  const removeDocs = useCallback(() => {
+    setSelectedDocuments([]);
+  }, []);
+
+  // Memoize the selected assistant to prevent new references
+  const memoizedSelectedAssistant = useMemo(() => {
+    return selectedAssistant || liveAssistant;
+  }, [selectedAssistant?.id, liveAssistant?.id]);
+
   // Memoized callbacks for DocumentResults
   const handleMobileDocumentSidebarClose = useCallback(() => {
     updateCurrentDocumentSidebarVisible(false);
@@ -746,7 +755,7 @@ export function ChatPage({
         />
       )}
 
-      {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
+      {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit.
       Only used in the EE version of the app. */}
       {popup}
 
@@ -767,7 +776,7 @@ export function ChatPage({
             title="Sources"
           >
             {/* IMPORTANT: this is a memoized component, and it's very important
-            for performance reasons that this stays true. MAKE SURE that all function 
+            for performance reasons that this stays true. MAKE SURE that all function
             props are wrapped in useCallback. */}
             <DocumentResults
               setPresentingDocument={setPresentingDocument}
@@ -906,7 +915,7 @@ export function ChatPage({
                           toggleDocumentSidebar={toggleDocumentSidebar}
                           filterManager={filterManager}
                           llmManager={llmManager}
-                          removeDocs={() => setSelectedDocuments([])}
+                          removeDocs={removeDocs}
                           retrievalEnabled={retrievalEnabled}
                           selectedDocuments={selectedDocuments}
                           message={message}
@@ -920,7 +929,8 @@ export function ChatPage({
                               : projectContextTokenCount
                           }
                           availableContextTokens={availableContextTokens}
-                          selectedAssistant={selectedAssistant || liveAssistant}
+                          selectedAssistant={memoizedSelectedAssistant!}
+                          llmProviders={llmManager.llmProviders}
                           handleFileUpload={handleMessageSpecificFileUpload}
                           textAreaRef={textAreaRef}
                           setPresentingDocument={setPresentingDocument}

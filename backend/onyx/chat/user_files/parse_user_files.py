@@ -22,7 +22,6 @@ def parse_user_files(
     persona: Persona,
     actual_user_input: str,
     project_id: int | None,
-    # should only be None if auth is disabled
     user_id: UUID | None,
 ) -> tuple[list[InMemoryChatFile], list[UserFile], SearchToolOverrideKwargs | None]:
     """
@@ -35,7 +34,7 @@ def parse_user_files(
         persona: Persona to calculate available tokens
         actual_user_input: User's input message for token calculation
         project_id: Project ID to validate file ownership
-        user_id: User ID to validate file ownership
+        user_id: User ID for file ownership validation and LLM access
 
     Returns:
         Tuple of (
@@ -98,6 +97,7 @@ def parse_user_files(
     # Calculate available tokens for documents based on prompt, user input, etc.
     available_tokens = compute_max_document_tokens_for_persona(
         persona=persona,
+        user=None,  # We only have user_id, not the full user object
         actual_user_input=actual_user_input,
     )
     uploaded_context_cap = int(available_tokens * 0.5)

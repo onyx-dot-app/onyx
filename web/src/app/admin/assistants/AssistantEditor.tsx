@@ -213,6 +213,17 @@ export function AssistantEditor({
     [llmProviders.length]
   );
   const isUpdate = existingPersona !== undefined && existingPersona !== null;
+
+  // Filter LLM providers based on persona restrictions
+  const getFilteredLlmProviders = (
+    excludePublicProviders: boolean
+  ): LLMProviderView[] => {
+    if (excludePublicProviders) {
+      return llmProviders.filter((provider) => !provider.is_public);
+    }
+    return llmProviders;
+  };
+
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
   );
@@ -358,6 +369,8 @@ export function AssistantEditor({
     system_prompt: existingPersona?.system_prompt ?? "",
     task_prompt: existingPersona?.task_prompt ?? "",
     is_public: existingPersona?.is_public ?? defaultPublic,
+    exclude_public_providers:
+      existingPersona?.exclude_public_providers ?? false,
     document_set_ids:
       existingPersona?.document_sets?.map((documentSet) => documentSet.id) ??
       ([] as number[]),
@@ -613,6 +626,7 @@ export function AssistantEditor({
               "Reminders must be less than 5000000 characters"
             ),
             is_public: Yup.boolean().required(),
+            exclude_public_providers: Yup.boolean().required(),
             document_set_ids: Yup.array().of(Yup.number()),
             num_chunks: Yup.number().nullable(),
             llm_relevance_filter: Yup.boolean().required(),
@@ -1367,7 +1381,7 @@ export function AssistantEditor({
                                 <BooleanFormField
                                   name={`enabled_tools_map.${imageGenerationTool.id}`}
                                   label={imageGenerationTool.display_name}
-                                  subtext="Generate and manipulate images using AI-powered tools"
+                                  subtext="Generate and manipulate images using AI-powered tools."
                                   disabled={!currentLLMSupportsImageOutput}
                                   disabledTooltip={
                                     !currentLLMSupportsImageOutput
@@ -1460,7 +1474,9 @@ export function AssistantEditor({
                     </div>
                   </div>
                   <LLMSelector
-                    llmProviders={llmProviders}
+                    llmProviders={getFilteredLlmProviders(
+                      values.exclude_public_providers
+                    )}
                     currentLlm={
                       values.llm_model_version_override
                         ? structureValue(
@@ -1475,12 +1491,13 @@ export function AssistantEditor({
                         ? values.enabled_tools_map[imageGenerationTool.id]
                         : false
                     }
+                    excludePublicProviders={values.exclude_public_providers}
                     onSelect={(selected) => {
                       if (selected === null) {
                         setFieldValue("llm_model_version_override", null);
                         setFieldValue("llm_model_provider_override", null);
                       } else {
-                        const { modelName, provider, name } =
+                        const { modelName, name } =
                           parseLlmDescriptor(selected);
                         if (modelName && name) {
                           setFieldValue(
@@ -1689,6 +1706,35 @@ export function AssistantEditor({
                               })}
                             </div>
                           </>
+                        )}
+
+                        <div className="flex items-center mb-2 mt-4">
+                          <SwitchField
+                            name="exclude_public_providers"
+                            size="md"
+                            onCheckedChange={(checked) => {
+                              setFieldValue(
+                                "exclude_public_providers",
+                                checked
+                              );
+                            }}
+                          />
+                          <Text className="ml-2">
+                            Restrict to Assigned Providers Only
+                          </Text>
+                        </div>
+
+                        {values.exclude_public_providers ? (
+                          <Text text03>
+                            This agent will only have access to LLM providers
+                            explicitly assigned to it. Public providers will be
+                            hidden.
+                          </Text>
+                        ) : (
+                          <Text text03>
+                            This agent will have access to public providers plus
+                            any providers explicitly assigned to it.
+                          </Text>
                         )}
                       </div>
                     </div>

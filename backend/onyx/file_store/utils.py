@@ -222,13 +222,15 @@ def get_user_files_as_user(
     user_files = get_user_files(user_file_ids, db_session)
     current_user_files = []
     for user_file in user_files:
-        # Note: if user_id is None, then all files should be None as well
-        # (since auth must be disabled in this case)
-        if user_file.user_id != user_id:
+        # In no-auth mode, all files are accessible
+        if user_id is None:
+            current_user_files.append(user_file)
+        elif user_file.user_id != user_id:
             raise ValueError(
                 f"User {user_id} does not have access to file {user_file.id}"
             )
-        current_user_files.append(user_file)
+        else:
+            current_user_files.append(user_file)
 
     return current_user_files
 

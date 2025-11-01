@@ -1,14 +1,11 @@
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import React, { useState, useEffect } from "react";
-import { FormikProps, FieldArray, ArrayHelpers, ErrorMessage } from "formik";
-import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
-import { UserGroup, UserRole } from "@/lib/types";
+import { FormikProps } from "formik";
+import { UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import { BooleanFormField } from "@/components/Field";
 import { useUser } from "./user/UserProvider";
-import SvgUsers from "@/icons/users";
-import { cn } from "@/lib/utils";
+import { GroupsMultiSelect } from "./GroupsMultiSelect";
 
 export type IsPublicGroupSelectorFormType = {
   is_public: boolean;
@@ -23,12 +20,14 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
   publicToWhom = "Users",
   removeIndent = false,
   enforceGroupSelection = true,
+  smallLabels = false,
 }: {
   formikProps: FormikProps<T>;
   objectName: string;
   publicToWhom?: string;
   removeIndent?: boolean;
   enforceGroupSelection?: boolean;
+  smallLabels?: boolean;
 }) => {
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
   const { isAdmin, user, isCurator } = useUser();
@@ -92,6 +91,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
           <BooleanFormField
             name="is_public"
             removeIndent={removeIndent}
+            small={smallLabels}
             label={
               publicToWhom === "Curators"
                 ? `Make this ${objectName} Curator Accessible?`
@@ -110,75 +110,17 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
         </>
       )}
 
-      {(!formikProps.values.is_public || isCurator) &&
-        userGroups &&
-        userGroups?.length > 0 && (
-          <>
-            <div className="flex flex-col gap-3 pt-4">
-              <Text mainUiAction text05>
-                Assign group access for this {objectName}
-              </Text>
-              {userGroupsIsLoading ? (
-                <div className="animate-pulse bg-background-200 h-8 w-32 rounded" />
-              ) : (
-                <Text mainUiMuted text03>
-                  {isAdmin || !enforceGroupSelection ? (
-                    <>
-                      This {objectName} will be visible/accessible by the groups
-                      selected below
-                    </>
-                  ) : (
-                    <>
-                      Curators must select one or more groups to give access to
-                      this {objectName}
-                    </>
-                  )}
-                </Text>
-              )}
-            </div>
-            <FieldArray
-              name="groups"
-              render={(arrayHelpers: ArrayHelpers) => (
-                <div className="flex flex-wrap gap-2 py-4">
-                  {userGroupsIsLoading ? (
-                    <div className="animate-pulse bg-background-200 h-8 w-32 rounded" />
-                  ) : (
-                    userGroups &&
-                    userGroups.map((userGroup: UserGroup) => {
-                      const ind = formikProps.values.groups.indexOf(
-                        userGroup.id
-                      );
-                      const isSelected = ind !== -1;
-                      return (
-                        <Button
-                          key={userGroup.id}
-                          primary
-                          action={isSelected}
-                          type="button"
-                          leftIcon={SvgUsers}
-                          onClick={() => {
-                            if (isSelected) {
-                              arrayHelpers.remove(ind);
-                            } else {
-                              arrayHelpers.push(userGroup.id);
-                            }
-                          }}
-                        >
-                          {userGroup.name}
-                        </Button>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            />
-            <ErrorMessage
-              name="groups"
-              component="div"
-              className="text-error text-sm mt-1"
-            />
-          </>
-        )}
+      <GroupsMultiSelect
+        formikProps={formikProps}
+        label={`Assign group access for this ${objectName}`}
+        subtext={
+          isAdmin || !enforceGroupSelection
+            ? `This ${objectName} will be visible/accessible by the groups selected below`
+            : `Curators must select one or more groups to give access to this ${objectName}`
+        }
+        disabled={formikProps.values.is_public && !isCurator}
+        disabledMessage={`This ${objectName} is public and available to all users.`}
+      />
     </div>
   );
 };

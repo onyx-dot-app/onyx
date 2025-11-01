@@ -153,6 +153,7 @@ export const constructMiniFiedPersona = (
     system_prompt: null,
     task_prompt: null,
     datetime_aware: true,
+    exclude_public_providers: false,
   };
 };
 

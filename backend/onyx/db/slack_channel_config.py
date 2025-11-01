@@ -71,6 +71,7 @@ def create_slack_channel_persona(
         llm_model_version_override=None,
         starter_messages=None,
         is_public=True,
+        exclude_public_providers=False,
         is_default_persona=False,
         db_session=db_session,
         commit=False,

@@ -136,6 +136,7 @@ def create_assistant(
         llm_model_version_override=request.model,
         starter_messages=None,
         is_public=False,
+        exclude_public_providers=False,
         db_session=db_session,
         document_set_ids=[],
         tool_ids=tool_ids,

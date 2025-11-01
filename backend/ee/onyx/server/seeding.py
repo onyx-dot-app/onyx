@@ -148,6 +148,7 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                     llm_model_version_override=persona.llm_model_version_override,
                     starter_messages=persona.starter_messages,
                     is_public=persona.is_public,
+                    exclude_public_providers=persona.exclude_public_providers,
                     db_session=db_session,
                     tool_ids=persona.tool_ids,
                     display_priority=persona.display_priority,
