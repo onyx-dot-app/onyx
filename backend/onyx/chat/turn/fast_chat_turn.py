@@ -190,12 +190,14 @@ def _fast_chat_turn_core(
     final_answer = extract_final_answer_from_packets(
         dependencies.emitter.packet_history
     )
-    # What about image generation?
-    # Maybe this should check that the last packet is a message delta UNLESS the last tool call was an image generation tool call
-    # Doing this right is actually kind of a tricky problem?
-    # Do we have heartbeating or anything? it should be very solvable to avoid most front end hangs
-    # Also should we have tool timeouts?
-    if len(final_answer) == 0:
+    # TODO: Make this error handling more robust and not so specific to the qwen ollama cloud case
+    # where if it happens to any cloud questions, it hangs on read url
+    has_image_generation = any(
+        packet.obj.type == "image_generation_tool_delta"
+        for packet in dependencies.emitter.packet_history
+    )
+    # Allow empty final answer if image generation tool was used (it produces images, not text)
+    if len(final_answer) == 0 and not has_image_generation:
         raise ValueError(
             """Final answer is empty. Inference provider likely failed to provide
             content packets and ended the stream without an error.
