@@ -39,8 +39,6 @@ const LLMProviderInner = ({
   const { toggleModal } = useChatModal();
 
   const handleConnectClick = useCallback(() => {
-    if (!llmDescriptor) return;
-
     const iconNode = Icon ? (
       <Icon className="w-6 h-6" />
     ) : (
@@ -49,8 +47,9 @@ const LLMProviderInner = ({
 
     toggleModal(ModalIds.LLMConnectionModal, true, {
       icon: <LLMConnectionIcons icon={iconNode} />,
-      title,
+      title: "Set up " + title,
       llmDescriptor,
+      isCustomProvider: !llmDescriptor,
       onboardingState,
       onboardingActions,
     });

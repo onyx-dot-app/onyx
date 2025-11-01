@@ -5,30 +5,60 @@ import {
 import { dynamicProviderConfigs } from "@/app/admin/configuration/llm/utils";
 
 export const buildInitialValues = (
-  llmDescriptor?: WellKnownLLMProviderDescriptor
-) => ({
-  api_base: llmDescriptor?.default_api_base ?? "",
-  default_model_name: llmDescriptor?.default_model ?? "",
-  api_key: "",
-  api_key_changed: true,
-  api_version: "",
-  custom_config: {},
-  deployment_name: "",
-  target_uri: "",
-  fast_default_model_name:
-    llmDescriptor?.default_fast_model ?? llmDescriptor?.default_model ?? "",
-  name: llmDescriptor?.name ?? "Default",
-  provider: llmDescriptor?.name ?? "",
-  model_configurations:
-    llmDescriptor?.model_configurations.map((model) => ({
-      name: model.name,
-      is_visible: true,
-      max_input_tokens: model.max_input_tokens,
-      supports_image_input: model.supports_image_input,
-    })) ?? [],
-  groups: [],
-  is_public: true,
-});
+  llmDescriptor?: WellKnownLLMProviderDescriptor,
+  isCustomProvider?: boolean
+) => {
+  // Custom provider has different initial values
+  if (isCustomProvider) {
+    return {
+      name: "",
+      provider: "",
+      api_key: "",
+      api_base: "",
+      api_version: "",
+      default_model_name: "",
+      fast_default_model_name: "",
+      model_configurations: [
+        {
+          name: "",
+          is_visible: true,
+          max_input_tokens: null,
+          supports_image_input: false,
+        },
+      ],
+      custom_config: {},
+      api_key_changed: true,
+      groups: [],
+      is_public: true,
+      deployment_name: "",
+      target_uri: "",
+    };
+  }
+
+  return {
+    api_base: llmDescriptor?.default_api_base ?? "",
+    default_model_name: llmDescriptor?.default_model ?? "",
+    api_key: "",
+    api_key_changed: true,
+    api_version: "",
+    custom_config: {},
+    deployment_name: "",
+    target_uri: "",
+    fast_default_model_name:
+      llmDescriptor?.default_fast_model ?? llmDescriptor?.default_model ?? "",
+    name: llmDescriptor?.name ?? "Default",
+    provider: llmDescriptor?.name ?? "",
+    model_configurations:
+      llmDescriptor?.model_configurations.map((model) => ({
+        name: model.name,
+        is_visible: true,
+        max_input_tokens: model.max_input_tokens,
+        supports_image_input: model.supports_image_input,
+      })) ?? [],
+    groups: [],
+    is_public: true,
+  };
+};
 
 export const getModelOptions = (
   llmDescriptor: WellKnownLLMProviderDescriptor | undefined,
