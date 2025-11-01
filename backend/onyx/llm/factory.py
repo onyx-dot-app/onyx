@@ -464,9 +464,11 @@ def get_llm_model_and_settings(
         extra_headers=extra_headers if extra_headers else None,
         extra_args=model_kwargs,
         reasoning=Reasoning(
-            summary="detailed",
+            summary="auto",
             # TODO: dynamically set this?
-            effort="medium",
+            # It seems like openai sets this as a cap, but anthropic sets this as an
+            # exact value?
+            # effort="medium",
         ),
     )
 
