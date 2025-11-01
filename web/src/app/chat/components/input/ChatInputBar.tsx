@@ -88,6 +88,7 @@ export interface ChatInputBarProps {
   onSubmit: (message: string) => void;
   llmManager: LlmManager;
   chatState: ChatState;
+  chatSessionId: string | null;
   currentSessionFileTokenCount: number;
   availableContextTokens: number;
 
@@ -114,6 +115,7 @@ function ChatInputBarInner({
   stopGenerating,
   onSubmit,
   chatState,
+  chatSessionId,
   currentSessionFileTokenCount,
   availableContextTokens,
   // assistants
@@ -128,8 +130,18 @@ function ChatInputBarInner({
 }: ChatInputBarProps) {
   const { user } = useUser();
 
-  // Localize message state to prevent parent re-renders
-  const [localMessage, setLocalMessage] = useState(initialMessage);
+  // Draft persistence key - use session ID or "new" for new chats
+  const draftKey = `chat-draft-${chatSessionId || "new"}`;
+
+  // Load draft from sessionStorage or use initialMessage
+  const [localMessage, setLocalMessage] = useState(() => {
+    if (typeof window !== "undefined") {
+      const savedDraft = sessionStorage.getItem(draftKey);
+      // Prefer saved draft over initialMessage, unless initialMessage is from URL
+      return savedDraft || initialMessage;
+    }
+    return initialMessage;
+  });
 
   // Callback ref to set initial textarea height synchronously on mount
   const handleTextAreaRef = useCallback(
@@ -152,13 +164,17 @@ function ChatInputBarInner({
   useEffect(() => {
     if (previousChatStateRef.current === "input" && chatState !== "input") {
       setLocalMessage("");
+      // Clear draft from sessionStorage
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(draftKey);
+      }
       // Reset textarea height
       if (textAreaRef.current) {
         textAreaRef.current.style.height = "0px";
       }
     }
     previousChatStateRef.current = chatState;
-  }, [chatState, textAreaRef]); // textAreaRef is stable, but included for clarity
+  }, [chatState, textAreaRef, draftKey]);
 
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
@@ -268,6 +284,15 @@ function ChatInputBarInner({
       setLocalMessage(text);
       handlePromptInput(text);
 
+      // Save draft to sessionStorage
+      if (typeof window !== "undefined") {
+        if (text.trim()) {
+          sessionStorage.setItem(draftKey, text);
+        } else {
+          sessionStorage.removeItem(draftKey);
+        }
+      }
+
       // Resize imperatively (no effect needed)
       const textarea = textAreaRef.current;
       if (textarea) {
@@ -278,7 +303,7 @@ function ChatInputBarInner({
         )}px`;
       }
     },
-    [handlePromptInput, textAreaRef]
+    [handlePromptInput, textAreaRef, draftKey]
   );
 
   const startFilterSlash = useMemo(() => {
