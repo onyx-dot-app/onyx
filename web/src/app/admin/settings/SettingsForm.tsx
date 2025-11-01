@@ -289,6 +289,18 @@ export function SettingsForm() {
         }
       />
 
+      <Checkbox
+        label="Allow Actions Create to All"
+        sublabel="If set, all users will be able to create actions."
+        checked={settings.all_users_actions_creation_enabled ?? true}
+        onChange={(e) =>
+          handleToggleSettingsField(
+            "all_users_actions_creation_enabled",
+            e.target.checked
+          )
+        }
+      />
+
       {NEXT_PUBLIC_CLOUD_ENABLED && settings.anonymous_user_enabled && (
         <AnonymousUserPath setPopup={setPopup} />
       )}

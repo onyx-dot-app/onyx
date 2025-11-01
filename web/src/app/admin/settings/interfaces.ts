@@ -25,6 +25,7 @@ export interface Settings {
   query_history_type: QueryHistoryType;
 
   deep_research_enabled?: boolean;
+  all_users_actions_creation_enabled?: boolean;
 
   // Image processing settings
   image_extraction_and_analysis_enabled?: boolean;
