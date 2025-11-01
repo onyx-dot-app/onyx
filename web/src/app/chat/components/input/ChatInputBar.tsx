@@ -179,7 +179,16 @@ function ChatInputBarInner({
         setLocalMessage("");
       }
     }
-  }, [draftKey]);
+
+    // Resize textarea to match the restored content
+    if (textAreaRef.current) {
+      textAreaRef.current.style.height = "0px";
+      textAreaRef.current.style.height = `${Math.min(
+        textAreaRef.current.scrollHeight,
+        MAX_INPUT_HEIGHT
+      )}px`;
+    }
+  }, [draftKey, textAreaRef]);
 
   // Callback ref to set initial textarea height synchronously on mount
   const handleTextAreaRef = useCallback(
