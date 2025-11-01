@@ -136,7 +136,10 @@ function ChatInputBarInner({
   // Callback ref to set initial textarea height synchronously on mount
   const handleTextAreaRef = useCallback(
     (element: HTMLTextAreaElement | null) => {
-      textAreaRef.current = element;
+      // Assign to parent ref (cast to mutable since RefObject.current is readonly in TS but mutable at runtime)
+      (
+        textAreaRef as React.MutableRefObject<HTMLTextAreaElement | null>
+      ).current = element;
       if (element) {
         element.style.height = "0px";
         element.style.height = `${Math.min(
@@ -145,7 +148,7 @@ function ChatInputBarInner({
         )}px`;
       }
     },
-    [] // Refs are stable, no dependencies needed
+    [textAreaRef]
   );
 
   // Clear input when leaving "input" state (handles input→loading→streaming flow)
