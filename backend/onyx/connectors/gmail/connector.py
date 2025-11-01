@@ -1,3 +1,4 @@
+import copy
 from base64 import urlsafe_b64decode
 from typing import Any
 from typing import cast
@@ -11,8 +12,12 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.gmail.models import GmailCheckpoint
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
+from onyx.connectors.google_utils.google_utils import (
+    execute_paginated_retrieval_with_max_pages,
+)
 from onyx.connectors.google_utils.google_utils import execute_single_retrieval
 from onyx.connectors.google_utils.resources import get_admin_service
 from onyx.connectors.google_utils.resources import get_gmail_service
@@ -23,6 +28,8 @@ from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_S
 from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
 from onyx.connectors.google_utils.shared_constants import SLIM_BATCH_SIZE
 from onyx.connectors.google_utils.shared_constants import USER_FIELDS
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
+from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -270,7 +277,12 @@ def thread_to_document(
     )
 
 
-class GmailConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
+class GmailConnector(
+    LoadConnector,
+    PollConnector,
+    SlimConnectorWithPermSync,
+    CheckpointedConnectorWithPermSync[GmailCheckpoint],
+):
     def __init__(self, batch_size: int = INDEX_BATCH_SIZE) -> None:
         self.batch_size = batch_size
 
@@ -398,6 +410,99 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
         if doc_batch:
             yield doc_batch
 
+    def _fetch_thread_page_ids(
+        self,
+        gmail_service: Any,
+        user_email: str,
+        query: str | None,
+        page_token: str | None,
+    ) -> tuple[list[str], str | None]:
+        retrieval_kwargs: dict[str, Any] = {
+            "userId": user_email,
+            "fields": THREAD_LIST_FIELDS,
+            "q": query,
+        }
+        if page_token:
+            retrieval_kwargs["pageToken"] = page_token
+
+        thread_ids: list[str] = []
+        next_page_token: str | None = None
+        for result in execute_paginated_retrieval_with_max_pages(
+            retrieval_function=gmail_service.users().threads().list,
+            max_num_pages=1,
+            list_key="threads",
+            continue_on_404_or_403=True,
+            **retrieval_kwargs,
+        ):
+            if isinstance(result, str):
+                next_page_token = result or None
+                continue
+
+            thread_id = result.get("id")
+            if thread_id:
+                thread_ids.append(thread_id)
+
+        return thread_ids, next_page_token
+
+    def _retrieve_thread_document(
+        self,
+        gmail_service: Any,
+        user_email: str,
+        thread_id: str,
+    ) -> Document | None:
+        try:
+            thread_iter = execute_single_retrieval(
+                retrieval_function=gmail_service.users().threads().get,
+                list_key=None,
+                userId=user_email,
+                fields=THREAD_FIELDS,
+                id=thread_id,
+                continue_on_404_or_403=True,
+            )
+            full_thread = next(thread_iter, None)
+        except HttpError as e:
+            if _is_mail_service_disabled_error(e):
+                logger.warning(
+                    "Skipping Gmail thread fetch for %s because the mailbox is disabled.",
+                    user_email,
+                )
+                return None
+            raise
+
+        if not full_thread:
+            logger.debug(
+                "Thread %s for %s returned no data; likely deleted or inaccessible.",
+                thread_id,
+                user_email,
+            )
+            return None
+
+        try:
+            return thread_to_document(full_thread, user_email)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to convert Gmail thread %s for %s into document: %s",
+                thread_id,
+                user_email,
+                exc,
+            )
+            return None
+
+    def _reset_checkpoint_for_window(
+        self,
+        checkpoint: GmailCheckpoint,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> None:
+        checkpoint.window_start = start
+        checkpoint.window_end = end
+        checkpoint.user_emails = None
+        checkpoint.remaining_user_emails = []
+        checkpoint.current_user_email = None
+        checkpoint.next_page_token = ""
+        checkpoint.pending_thread_ids = []
+        checkpoint.has_more = True
+
     def _fetch_slim_threads(
         self,
         time_range_start: SecondsSinceUnixEpoch | None = None,
@@ -450,6 +555,183 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
 
         if doc_batch:
             yield doc_batch
+
+    def _load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GmailCheckpoint,
+        include_permissions: bool,
+    ) -> CheckpointOutput[GmailCheckpoint]:
+        if self._creds is None or self._primary_admin_email is None:
+            raise RuntimeError(
+                "Creds missing, should not call this method before calling load_credentials"
+            )
+
+        _ = include_permissions  # Permissions handled during document construction.
+
+        checkpoint_copy = copy.deepcopy(checkpoint)
+        checkpoint_copy.has_more = True
+
+        if checkpoint_copy.window_start != start or checkpoint_copy.window_end != end:
+            self._reset_checkpoint_for_window(checkpoint_copy, start, end)
+
+        query = _build_time_range_query(start, end)
+        gmail_service: Any | None = None
+
+        try:
+            while True:
+                if checkpoint_copy.user_emails is None:
+                    user_emails = self._get_all_user_emails()
+                    checkpoint_copy.user_emails = user_emails
+                    checkpoint_copy.remaining_user_emails = list(reversed(user_emails))
+                    checkpoint_copy.current_user_email = None
+                    checkpoint_copy.next_page_token = ""
+                    checkpoint_copy.pending_thread_ids = []
+
+                    if not checkpoint_copy.remaining_user_emails:
+                        checkpoint_copy.has_more = False
+                        return checkpoint_copy
+
+                if checkpoint_copy.current_user_email is None:
+                    if not checkpoint_copy.remaining_user_emails:
+                        checkpoint_copy.has_more = False
+                        return checkpoint_copy
+
+                    candidate_email = checkpoint_copy.remaining_user_emails.pop()
+                    try:
+                        gmail_service = get_gmail_service(self.creds, candidate_email)
+                    except HttpError as e:
+                        if _is_mail_service_disabled_error(e):
+                            logger.warning(
+                                "Skipping Gmail sync for %s because the mailbox is disabled.",
+                                candidate_email,
+                            )
+                            gmail_service = None
+                            checkpoint_copy.current_user_email = None
+                            checkpoint_copy.next_page_token = ""
+                            continue
+                        raise
+
+                    checkpoint_copy.current_user_email = candidate_email
+                    checkpoint_copy.next_page_token = ""
+                    checkpoint_copy.pending_thread_ids = []
+
+                if gmail_service is None and checkpoint_copy.current_user_email:
+                    try:
+                        gmail_service = get_gmail_service(
+                            self.creds, checkpoint_copy.current_user_email
+                        )
+                    except HttpError as e:
+                        if _is_mail_service_disabled_error(e):
+                            logger.warning(
+                                "Skipping Gmail sync for %s because the mailbox is disabled.",
+                                checkpoint_copy.current_user_email,
+                            )
+                            checkpoint_copy.current_user_email = None
+                            gmail_service = None
+                            checkpoint_copy.next_page_token = ""
+                            continue
+                        raise
+
+                if not checkpoint_copy.pending_thread_ids:
+                    if checkpoint_copy.current_user_email is None:
+                        continue
+
+                    if checkpoint_copy.next_page_token is None:
+                        checkpoint_copy.current_user_email = None
+                        gmail_service = None
+                        checkpoint_copy.next_page_token = ""
+                        continue
+
+                    if gmail_service is None:
+                        continue
+
+                    try:
+                        thread_ids, next_page_token = self._fetch_thread_page_ids(
+                            gmail_service,
+                            checkpoint_copy.current_user_email,
+                            query,
+                            checkpoint_copy.next_page_token,
+                        )
+                    except HttpError as e:
+                        if _is_mail_service_disabled_error(e):
+                            logger.warning(
+                                "Skipping Gmail sync for %s because the mailbox is disabled.",
+                                checkpoint_copy.current_user_email,
+                            )
+                            checkpoint_copy.current_user_email = None
+                            checkpoint_copy.pending_thread_ids = []
+                            checkpoint_copy.next_page_token = ""
+                            gmail_service = None
+                            continue
+                        raise
+
+                    checkpoint_copy.next_page_token = next_page_token
+                    if thread_ids:
+                        checkpoint_copy.pending_thread_ids.extend(reversed(thread_ids))
+
+                    if not checkpoint_copy.pending_thread_ids:
+                        if checkpoint_copy.next_page_token is None:
+                            checkpoint_copy.current_user_email = None
+                            gmail_service = None
+                            checkpoint_copy.next_page_token = ""
+                        continue
+
+                if gmail_service is None or checkpoint_copy.current_user_email is None:
+                    continue
+
+                thread_id = checkpoint_copy.pending_thread_ids.pop()
+                document = self._retrieve_thread_document(
+                    gmail_service,
+                    checkpoint_copy.current_user_email,
+                    thread_id,
+                )
+
+                if document is None:
+                    continue
+
+                yield document
+
+        except Exception as exc:  # noqa: BLE001
+            if MISSING_SCOPES_ERROR_STR in str(exc):
+                raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from exc
+            raise
+
+        checkpoint_copy.has_more = False
+        return checkpoint_copy
+
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GmailCheckpoint,
+    ) -> CheckpointOutput[GmailCheckpoint]:
+        return self._load_from_checkpoint(
+            start=start,
+            end=end,
+            checkpoint=checkpoint,
+            include_permissions=False,
+        )
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GmailCheckpoint,
+    ) -> CheckpointOutput[GmailCheckpoint]:
+        return self._load_from_checkpoint(
+            start=start,
+            end=end,
+            checkpoint=checkpoint,
+            include_permissions=True,
+        )
+
+    def build_dummy_checkpoint(self) -> GmailCheckpoint:
+        return GmailCheckpoint(has_more=True)
+
+    def validate_checkpoint_json(self, checkpoint_json: str) -> GmailCheckpoint:
+        return GmailCheckpoint.model_validate_json(checkpoint_json)
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         try:
