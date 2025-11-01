@@ -11,10 +11,11 @@ from litellm.types.utils import Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.file_store.models import ChatFileType
+from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.chat_llm import DefaultMultiLLM
-from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import _build_content
-from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.llm.utils import get_max_input_tokens
 
 
 def _create_delta(
@@ -175,9 +176,7 @@ def test_build_content_binary_document_falls_back() -> None:
 
 def test_build_content_valid_pdf_extracts_text() -> None:
     pdf_path = (
-        Path(__file__)
-        .resolve()
-        .parents[3]
+        Path(__file__).resolve().parents[3]
         / "integration"
         / "common_utils"
         / "test_files"

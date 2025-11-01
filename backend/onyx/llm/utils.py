@@ -223,17 +223,14 @@ def _build_content(
         except UnicodeDecodeError:
             file_buffer = io.BytesIO(file.content)
 
-            if (
-                file.file_type == ChatFileType.PLAIN_TEXT
-                and not is_text_file(file_buffer)
+            if file.file_type == ChatFileType.PLAIN_TEXT and not is_text_file(
+                file_buffer
             ):
                 file_content = f"[Binary file content - {file.file_type} format]"
                 file_name_section = (
                     f"DOCUMENT: {file.filename}\n" if file.filename else ""
                 )
-                final_message_with_files += (
-                    f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
-                )
+                final_message_with_files += f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
                 continue
 
             file_content = ""
