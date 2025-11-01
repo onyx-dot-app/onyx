@@ -7,17 +7,21 @@ import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgX from "@/icons/x";
 import SvgCheckCircle from "@/icons/check-circle";
+import { OnboardingStep } from "../types";
+import router from "next/router";
 
 type OnboardingHeaderProps = {
   state: OnboardingState;
   actions: OnboardingActions;
   onToggleCollapse?: () => void;
+  handleHideOnboarding: () => void;
 };
 
 const OnboardingHeaderInner = ({
   state: onboardingState,
   actions: onboardingActions,
   onToggleCollapse,
+  handleHideOnboarding,
 }: OnboardingHeaderProps) => {
   const StepIcon = STEP_CONFIG[onboardingState.currentStep].icon;
   const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
@@ -48,7 +52,7 @@ const OnboardingHeaderInner = ({
             <IconButton internal icon={SvgFold} onClick={onToggleCollapse} />
           </>
         ) : (
-          <IconButton internal icon={SvgX} onClick={() => {}} />
+          <IconButton internal icon={SvgX} onClick={handleHideOnboarding} />
         )}
       </div>
     </div>

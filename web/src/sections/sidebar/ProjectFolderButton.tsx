@@ -30,6 +30,7 @@ import { PopoverAnchor } from "@radix-ui/react-popover";
 import ButtonRenaming from "./ButtonRenaming";
 import { OpenFolderIcon } from "@/components/icons/CustomIcons";
 import { SvgProps } from "@/icons";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 
 interface ProjectFolderProps {
   project: Project;
@@ -45,7 +46,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isHoveringIcon, setIsHoveringIcon] = useState(false);
-
+  const { llmProviders } = useChatContext();
   // Make project droppable
   const dropId = `project-${project.id}`;
   const { setNodeRef, isOver } = useDroppable({

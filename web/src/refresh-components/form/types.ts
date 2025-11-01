@@ -29,7 +29,9 @@ export type ControlProps = React.PropsWithChildren<{
 }>;
 
 export type DescriptionProps = React.HTMLAttributes<HTMLParagraphElement>;
-export type MessageByState = Partial<Record<FormFieldState, string>>;
+export type MessageByState = Partial<
+  Record<FormFieldState, string | React.ReactNode>
+>;
 export type APIMessageByState = Partial<
   Record<FormFieldState | "loading", string>
 >;

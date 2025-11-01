@@ -10,6 +10,7 @@ const FinalStepItemInner = ({
   description,
   icon: Icon,
   buttonText,
+  buttonHref,
 }: FinalStepItemProps) => {
   return (
     <div className="flex justify-between h-full w-full p-1 rounded-16 border border-border-01 bg-background-tint-01">
@@ -26,7 +27,7 @@ const FinalStepItemInner = ({
           </Text>
         </div>
       </div>
-      <Button tertiary rightIcon={SvgExternalLink}>
+      <Button tertiary rightIcon={SvgExternalLink} href={buttonHref}>
         {buttonText}
       </Button>
     </div>

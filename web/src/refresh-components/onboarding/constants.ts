@@ -63,12 +63,14 @@ export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
       "Select embedding models used to search across large bodies of documents.",
     icon: SvgSearchMenu,
     buttonText: "Search Settings",
+    buttonHref: "admin/configuration/search",
   },
   {
     title: "Select web search provider",
     description: "Set up web search and search across the internet.",
     icon: SvgGlobe,
     buttonText: "Web Search",
+    buttonHref: "admin/configuration/default-assistant",
   },
   {
     title: "Enable image generation",
@@ -76,12 +78,14 @@ export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
       "Set up image generation models to create images in your chat.",
     icon: SvgImage,
     buttonText: "Image Generation",
+    buttonHref: "admin/configuration/default-assistant",
   },
   {
     title: "Invite your team",
     description: "Add and manage users and groups in your team.",
     icon: SvgUsers,
     buttonText: "Manage Users",
+    buttonHref: "/admin/users",
   },
 ];
 
@@ -94,7 +98,7 @@ export const PROVIDER_ICON_MAP: Record<
   azure: AzureIcon,
   vertex_ai: GeminiIcon,
   openai: SvgOpenai,
-  ollama: SvgOllama,
+  ollama_chat: SvgOllama,
   openrouter: SvgOpenrouter,
 };
 
@@ -116,7 +120,7 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for Claude.",
     },
   },
-  ollama: {
+  ollama_chat: {
     description: "Connect to your Ollama models.",
     display_name: "Ollama",
     field_metadata: {
@@ -159,7 +163,7 @@ export interface ProviderTabConfig {
 }
 
 export const PROVIDER_TAB_CONFIG: Record<string, ProviderTabConfig> = {
-  ollama: {
+  ollama_chat: {
     tabs: [
       {
         id: "self-hosted",
@@ -193,4 +197,27 @@ export const PROVIDER_TAB_CONFIG: Record<string, ProviderTabConfig> = {
 
 export const PROVIDER_SKIP_FIELDS: Record<string, string[]> = {
   vertex_ai: ["vertex_location"],
+};
+
+export const HIDE_API_MESSAGE_FIELDS: Record<string, string[]> = {
+  bedrock: ["BEDROCK_AUTH_METHOD", "AWS_REGION_NAME"],
+};
+
+// Map Bedrock auth selection to which `custom_config` keys to show
+export const BEDROCK_AUTH_FIELDS: Record<
+  "iam" | "access_key" | "long_term_api_key",
+  string[]
+> = {
+  iam: ["BEDROCK_AUTH_METHOD", "AWS_REGION_NAME"],
+  access_key: [
+    "BEDROCK_AUTH_METHOD",
+    "AWS_REGION_NAME",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+  ],
+  long_term_api_key: [
+    "BEDROCK_AUTH_METHOD",
+    "AWS_REGION_NAME",
+    "AWS_BEARER_TOKEN_BEDROCK",
+  ],
 };

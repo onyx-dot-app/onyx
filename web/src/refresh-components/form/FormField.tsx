@@ -33,7 +33,11 @@ const FieldMessageContent: React.FC<{
 }> = ({ baseId, state, content, className }) => {
   return (
     <div className="flex flex-row items-center gap-x-0.5">
-      <div className="w-4 h-4">{iconMap[state]}</div>
+      {state !== "idle" && (
+        <div className="w-4 h-4 flex items-center justify-center">
+          {iconMap[state]}
+        </div>
+      )}
       <Text
         id={`${baseId}-msg`}
         text03
@@ -166,11 +170,17 @@ export const FormFieldMessage: React.FC<MessageProps> = ({
   render,
 }) => {
   const { baseId, state } = useFieldContext();
-  const content = messages?.[state];
+  let tempState = state;
+  let content = messages?.[tempState];
+  // If the state is success and there is no content, set the state to idle and use the idle message
+  if (tempState === "success" && !content) {
+    tempState = "idle";
+    content = messages?.idle;
+  }
   return content ? (
     <FieldMessageContent
       baseId={baseId}
-      state={state}
+      state={tempState}
       content={content}
       className={className}
     />

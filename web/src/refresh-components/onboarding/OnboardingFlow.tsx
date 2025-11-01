@@ -9,11 +9,13 @@ import { OnboardingStep } from "./types";
 type OnboardingFlowProps = {
   isCollapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  handleHideOnboarding: () => void;
 };
 
 const OnboardingFlowInner = ({
   isCollapsed,
   onCollapsedChange,
+  handleHideOnboarding,
 }: OnboardingFlowProps) => {
   const {
     state: onboardingState,
@@ -27,6 +29,7 @@ const OnboardingFlowInner = ({
         state={onboardingState}
         actions={onboardingActions}
         onToggleCollapse={() => onCollapsedChange(!isCollapsed)}
+        handleHideOnboarding={handleHideOnboarding}
       />
       <div
         className={

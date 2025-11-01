@@ -28,6 +28,10 @@ interface DynamicProviderFieldsProps {
   onFetchModels?: () => void;
   isFetchingModels?: boolean;
   canFetchModels?: boolean;
+  testModelChangeWithApiKey?: (modelName: string) => Promise<void>;
+  modelsApiStatus?: APIFormFieldState;
+  modelsErrorMessage?: string;
+  showModelsApiErrorMessage?: boolean;
 }
 
 export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
@@ -42,8 +46,20 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
   onFetchModels,
   isFetchingModels = false,
   canFetchModels = false,
+  testModelChangeWithApiKey,
+  modelsApiStatus = "loading",
+  modelsErrorMessage = "",
+  showModelsApiErrorMessage = false,
 }) => {
   const modalContent = MODAL_CONTENT_MAP[llmDescriptor.name];
+  const handleApiKeyInteraction = (apiKey: string) => {
+    if (!apiKey) return;
+    if (llmDescriptor?.name === "ollama_chat") {
+      onFetchModels?.();
+    } else {
+      onApiKeyBlur?.(apiKey);
+    }
+  };
 
   const renderField = (fieldPath: string) => {
     const override = fieldOverrides[fieldPath];
@@ -71,25 +87,29 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                 />
               </FormField.Control>
               {!showApiMessage && (
-                <FormField.Description>
-                  {override?.description ||
-                    (modalContent?.field_metadata?.api_key ? (
-                      <>
-                        {"Paste your "}
-                        <a
-                          href={modalContent.field_metadata.api_key}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline"
-                        >
-                          API key
-                        </a>
-                        {` from ${modalContent?.display_name} to access your models.`}
-                      </>
-                    ) : (
-                      `Paste your API key from ${modalContent?.display_name} to access your models.`
-                    ))}
-                </FormField.Description>
+                <FormField.Message
+                  messages={{
+                    idle:
+                      override?.description ||
+                      (modalContent?.field_metadata?.api_key ? (
+                        <>
+                          {"Paste your "}
+                          <a
+                            href={modalContent.field_metadata.api_key}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline"
+                          >
+                            API key
+                          </a>
+                          {` from ${modalContent?.display_name} to access your models.`}
+                        </>
+                      ) : (
+                        `Paste your API key from ${modalContent?.display_name} to access your models.`
+                      )),
+                    error: meta.error,
+                  }}
+                />
               )}
               {showApiMessage && (
                 <FormField.APIMessage
@@ -139,11 +159,15 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                 />
               )}
               {!showApiMessage && (
-                <FormField.Description>
-                  {override?.description ||
-                    modalContent?.field_metadata?.api_base ||
-                    "The base URL for your API endpoint."}
-                </FormField.Description>
+                <FormField.Message
+                  messages={{
+                    idle:
+                      override?.description ||
+                      modalContent?.field_metadata?.api_base ||
+                      "The base URL for your API endpoint.",
+                    error: meta.error,
+                  }}
+                />
               )}
             </FormField>
           )}
@@ -176,12 +200,20 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                     {...field}
                     placeholder={override?.placeholder || ""}
                     showClearButton={false}
+                    onBlur={(e) => {
+                      field.onBlur(e);
+                      handleApiKeyInteraction(field.value);
+                    }}
                   />
                 ) : (
                   <InputTypeIn
                     {...field}
                     placeholder={override?.placeholder || ""}
                     showClearButton={false}
+                    onBlur={(e) => {
+                      field.onBlur(e);
+                      handleApiKeyInteraction(field.value);
+                    }}
                   />
                 )}
               </FormField.Control>
@@ -202,9 +234,15 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                 />
               )}
               {!showApiMessage && (
-                <FormField.Description>
-                  {override?.description || customConfigKey.description || ""}
-                </FormField.Description>
+                <FormField.Message
+                  messages={{
+                    idle:
+                      override?.description ||
+                      customConfigKey.description ||
+                      "",
+                    error: meta.error,
+                  }}
+                />
               )}
             </FormField>
           )}
@@ -228,7 +266,12 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
               <FormField.Control>
                 <InputSelect
                   value={field.value}
-                  onValueChange={(value) => helper.setValue(value)}
+                  onValueChange={(value) => {
+                    helper.setValue(value);
+                    if (testModelChangeWithApiKey && value) {
+                      testModelChangeWithApiKey(value);
+                    }
+                  }}
                   options={modelOptions}
                   disabled={modelOptions.length === 0 || isFetchingModels}
                   rightSection={
@@ -249,11 +292,27 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                   }
                 />
               </FormField.Control>
-              <FormField.Description>
-                {override?.description ||
-                  modalContent?.field_metadata?.default_model_name ||
-                  "This model will be used by Onyx by default."}
-              </FormField.Description>
+              {showModelsApiErrorMessage && (
+                <FormField.APIMessage
+                  state={modelsApiStatus}
+                  messages={{
+                    loading: "Fetching models...",
+                    success: "Models fetched successfully.",
+                    error: modelsErrorMessage || "Failed to fetch models",
+                  }}
+                />
+              )}
+              {!showModelsApiErrorMessage && (
+                <FormField.Message
+                  messages={{
+                    idle:
+                      override?.description ||
+                      modalContent?.field_metadata?.default_model_name ||
+                      "This model will be used by Onyx by default.",
+                    error: meta.error,
+                  }}
+                />
+              )}
             </FormField>
           )}
         />

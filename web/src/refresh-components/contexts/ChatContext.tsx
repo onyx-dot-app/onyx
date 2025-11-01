@@ -28,11 +28,13 @@ export function ChatProvider({
   children,
   inputPrompts: initialInputPrompts,
   chatSessions: initialChatSessions,
+  llmProviders: initialLlmProviders,
   ...otherProps
 }: ChatProviderProps) {
   const router = useRouter();
   const [inputPrompts, setInputPrompts] = useState(initialInputPrompts || []);
   const [chatSessions, setChatSessions] = useState(initialChatSessions || []);
+  const [llmProviders, setLlmProviders] = useState(initialLlmProviders || []);
 
   const searchParams = useSearchParams();
   const currentChatId = searchParams?.get(SEARCH_PARAM_NAMES.CHAT_ID);
@@ -66,6 +68,15 @@ export function ChatProvider({
     }
   }
 
+  async function refreshLlmProviders() {
+    console.log("refreshing llm providers");
+    const response = await fetch("/api/admin/llm/provider");
+    if (!response.ok) throw new Error("Failed to fetch llm providers");
+    const llmProviders = await response.json();
+    console.log("llm providers", llmProviders);
+    setLlmProviders(llmProviders);
+  }
+
   async function refreshInputPrompts() {
     const response = await fetch("/api/input_prompt");
     if (!response.ok) throw new Error("Failed to fetch input prompts");
@@ -80,7 +91,8 @@ export function ChatProvider({
         currentChat,
         refreshChatSessions,
         refreshInputPrompts,
-
+        llmProviders,
+        refreshLlmProviders,
         inputPrompts,
         chatSessions,
       }}
@@ -113,6 +125,7 @@ interface ChatContextProps {
   refreshInputPrompts: () => Promise<void>;
   inputPrompts: InputPrompt[];
   proSearchToggled: boolean;
+  refreshLlmProviders: () => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextProps | undefined>(undefined);
