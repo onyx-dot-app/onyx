@@ -13,11 +13,13 @@ function ImageFileCard({
   imageUrl,
   removeFile,
   onFileClick,
+  isProcessing = false,
 }: {
   file: ProjectFile;
-  imageUrl: string;
+  imageUrl: string | null;
   removeFile: (fileId: string) => void;
   onFileClick?: (file: ProjectFile) => void;
+  isProcessing?: boolean;
 }) {
   const handleRemoveFile = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -26,11 +28,13 @@ function ImageFileCard({
 
   return (
     <div
-      className={`relative group h-20 w-20 ${
-        onFileClick ? "cursor-pointer hover:opacity-90" : ""
+      className={`relative group h-20 w-20 rounded-12 border border-border-01 ${
+        isProcessing ? "bg-background-neutral-02" : ""
+      } ${
+        onFileClick && !isProcessing ? "cursor-pointer hover:opacity-90" : ""
       }`}
       onClick={() => {
-        if (onFileClick) {
+        if (onFileClick && !isProcessing) {
           onFileClick(file);
         }
       }}
@@ -45,16 +49,22 @@ function ImageFileCard({
           <X className="h-4 w-4 dark:text-dark-tremor-background-muted" />
         </button>
       )}
-      <img
-        src={imageUrl}
-        alt={file.name}
-        className="h-full w-full object-cover rounded-12 border border-border-01"
-        onError={(e) => {
-          // Fallback to regular file card if image fails to load
-          const target = e.target as HTMLImageElement;
-          target.style.display = "none";
-        }}
-      />
+      {isProcessing || !imageUrl ? (
+        <div className="h-full w-full flex items-center justify-center">
+          <Loader2 className="h-8 w-8 text-text-01 animate-spin" />
+        </div>
+      ) : (
+        <img
+          src={imageUrl}
+          alt={file.name}
+          className="h-full w-full object-cover rounded-12"
+          onError={(e) => {
+            // Fallback to regular file card if image fails to load
+            const target = e.target as HTMLImageElement;
+            target.style.display = "none";
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -112,14 +122,15 @@ export function FileCard({
     removeFile(file.id);
   };
 
-  // For images, show a larger preview without metadata
-  if (isImage && imageUrl && !isProcessing) {
+  // For images, always show the larger preview layout (even while processing)
+  if (isImage) {
     return (
       <ImageFileCard
         file={file}
         imageUrl={imageUrl}
         removeFile={removeFile}
         onFileClick={onFileClick}
+        isProcessing={isProcessing}
       />
     );
   }
