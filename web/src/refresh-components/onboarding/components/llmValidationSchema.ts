@@ -50,7 +50,7 @@ export const getValidationSchema = (
         api_key: Yup.string().required("API Key is required"),
       });
 
-    case "ollama":
+    case "ollama_chat":
       if (activeTab === "self-hosted") {
         return Yup.object().shape({
           ...baseSchema,
