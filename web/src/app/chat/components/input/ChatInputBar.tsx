@@ -158,17 +158,18 @@ function ChatInputBarInner({
     return "";
   });
 
-  // Track previous draftKey to detect chat switches (not initial mount)
-  const prevDraftKeyRef = React.useRef(draftKey);
+  // Track if component has mounted (to skip effect on initial render)
+  const hasMountedRef = React.useRef(false);
 
   // Load draft when switching between chats (draftKey changes)
   useEffect(() => {
     // Skip initial mount - useState already loaded the draft
-    if (prevDraftKeyRef.current === draftKey) {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
       return;
     }
-    prevDraftKeyRef.current = draftKey;
 
+    // On subsequent runs (chat switches), load the new draft
     if (typeof window !== "undefined") {
       try {
         const savedDraft = sessionStorage.getItem(draftKey);
