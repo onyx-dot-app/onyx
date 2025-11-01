@@ -138,15 +138,27 @@ function ChatInputBarInner({
   // Load draft from sessionStorage or use initialMessage
   const [localMessage, setLocalMessage] = useState(() => {
     if (typeof window !== "undefined") {
-      const savedDraft = sessionStorage.getItem(draftKey);
-      // Prefer saved draft over initialMessage, unless initialMessage is from URL
-      return savedDraft || initialMessage;
+      try {
+        const savedDraft = sessionStorage.getItem(draftKey);
+        return savedDraft || initialMessage;
+      } catch (e) {
+        console.warn("Failed to load draft from sessionStorage:", e);
+      }
     }
     return initialMessage;
   });
 
+  // Track previous draftKey to detect chat switches (not initial mount)
+  const prevDraftKeyRef = React.useRef(draftKey);
+
   // Load draft when switching between chats (draftKey changes)
   useEffect(() => {
+    // Skip initial mount - useState already loaded the draft
+    if (prevDraftKeyRef.current === draftKey) {
+      return;
+    }
+    prevDraftKeyRef.current = draftKey;
+
     if (typeof window !== "undefined") {
       try {
         const savedDraft = sessionStorage.getItem(draftKey);
