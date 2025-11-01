@@ -96,7 +96,7 @@ export interface ChatInputBarProps {
 
   toggleDocumentSidebar: () => void;
   handleFileUpload: (files: File[]) => void;
-  textAreaRef: React.RefObject<HTMLTextAreaElement>;
+  textAreaRef: React.MutableRefObject<HTMLTextAreaElement | null>;
   filterManager: FilterManager;
   retrievalEnabled: boolean;
   deepResearchEnabled: boolean;
@@ -136,10 +136,8 @@ function ChatInputBarInner({
   // Callback ref to set initial textarea height synchronously on mount
   const handleTextAreaRef = useCallback(
     (element: HTMLTextAreaElement | null) => {
-      // Assign to parent ref (cast to mutable since RefObject.current is readonly in TS but mutable at runtime)
-      (
-        textAreaRef as React.MutableRefObject<HTMLTextAreaElement | null>
-      ).current = element;
+      // Assign to parent ref (now properly typed as MutableRefObject)
+      textAreaRef.current = element;
       if (element) {
         element.style.height = "0px";
         element.style.height = `${Math.min(
@@ -162,7 +160,7 @@ function ChatInputBarInner({
       }
     }
     previousChatStateRef.current = chatState;
-  }, [chatState]); // textAreaRef is stable, not needed in deps
+  }, [chatState, textAreaRef]); // textAreaRef is stable, but included for clarity
 
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
@@ -282,7 +280,7 @@ function ChatInputBarInner({
         )}px`;
       }
     },
-    [handlePromptInput]
+    [handlePromptInput, textAreaRef]
   );
 
   const startFilterSlash = useMemo(() => {
