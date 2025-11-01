@@ -7,7 +7,12 @@ import Button from "@/refresh-components/buttons/Button";
 import { Separator } from "@/components/ui/separator";
 import Text from "@/components/ui/text";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
-import { APIKey, APIKeyArgs, ApiKeyType } from "./types";
+import {
+  APIKey,
+  CreateAPIKeyArgs,
+  UpdateAPIKeyArgs,
+  ApiKeyType,
+} from "./types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState } from "react";
 
@@ -111,33 +116,32 @@ export const OnyxApiKeyForm = ({
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
-            // Determine the API key type (create: from tab, update: from existing)
-            const apiKeyType = (
-              isUpdate ? isExistingPAT : selectedTab === "personal"
-            )
-              ? ApiKeyType.PERSONAL_ACCESS_TOKEN
-              : ApiKeyType.SERVICE_ACCOUNT;
-
-            const payload: APIKeyArgs = {
-              name: values.name,
-            };
-
-            // Only include type when creating (backend recalculates on update)
-            if (!isUpdate) {
-              payload.type = apiKeyType;
-            }
-
-            // Add role for Service Accounts
-            if (apiKeyType === ApiKeyType.SERVICE_ACCOUNT) {
-              payload.role = values.role;
-            }
-
             let response;
             if (isUpdate) {
-              response = await updateApiKey(apiKey.api_key_id, payload);
+              // UPDATE MODE: Use UpdateAPIKeyArgs
+              const updatePayload: UpdateAPIKeyArgs = {
+                name: values.name,
+                role: isExistingPAT ? undefined : values.role,
+              };
+              response = await updateApiKey(apiKey.api_key_id, updatePayload);
             } else {
-              response = await createApiKey(payload);
+              // CREATE MODE: Use CreateAPIKeyArgs
+              const apiKeyType =
+                selectedTab === "personal"
+                  ? ApiKeyType.PERSONAL_ACCESS_TOKEN
+                  : ApiKeyType.SERVICE_ACCOUNT;
+
+              const createPayload: CreateAPIKeyArgs = {
+                type: apiKeyType,
+                name: values.name,
+                role:
+                  apiKeyType === ApiKeyType.SERVICE_ACCOUNT
+                    ? values.role
+                    : undefined,
+              };
+              response = await createApiKey(createPayload);
             }
+
             formikHelpers.setSubmitting(false);
             if (response.ok) {
               setPopup({

@@ -16,8 +16,13 @@ export interface APIKey {
   user_id: string;
 }
 
-export interface APIKeyArgs {
+export interface CreateAPIKeyArgs {
+  type: ApiKeyType; // Required: PAT or Service Account
   name?: string; // Optional name
-  type?: ApiKeyType; // Required for creating new API keys, optional/ignored when updating
-  role?: UserRole; // Required for Service Accounts, omitted for Personal Access Tokens
+  role?: UserRole; // Required for Service Accounts, omitted for PATs
+}
+
+export interface UpdateAPIKeyArgs {
+  name?: string; // Optional name
+  role?: UserRole; // Optional, only valid for Service Accounts
 }
