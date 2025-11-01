@@ -199,9 +199,18 @@ function ChatInputBarInner({
           console.warn("Failed to remove draft from sessionStorage:", e);
         }
       }
-      // Reset textarea height
+      // Reset textarea height to natural size for empty content
       if (textAreaRef.current) {
         textAreaRef.current.style.height = "0px";
+        // After clearing, resize to fit the empty content (placeholder text)
+        requestAnimationFrame(() => {
+          if (textAreaRef.current) {
+            textAreaRef.current.style.height = `${Math.min(
+              textAreaRef.current.scrollHeight,
+              MAX_INPUT_HEIGHT
+            )}px`;
+          }
+        });
       }
     }
     previousChatStateRef.current = chatState;
