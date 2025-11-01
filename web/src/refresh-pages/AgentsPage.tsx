@@ -234,7 +234,8 @@ export default function AgentsPage() {
               <PopoverTrigger asChild>
                 <FilterButton
                   leftIcon={SvgUser}
-                  open={selectedCreatorIds.size > 0}
+                  active={selectedCreatorIds.size > 0}
+                  transient={creatorFilterOpen}
                   onClear={() => setSelectedCreatorIds(new Set())}
                 >
                   {creatorFilterButtonText}
@@ -285,7 +286,8 @@ export default function AgentsPage() {
               <PopoverTrigger asChild>
                 <FilterButton
                   leftIcon={SvgActions}
-                  open={selectedActionIds.size > 0}
+                  transient={actionsFilterOpen}
+                  active={selectedActionIds.size > 0}
                   onClear={() => setSelectedActionIds(new Set())}
                 >
                   {actionsFilterButtonText}

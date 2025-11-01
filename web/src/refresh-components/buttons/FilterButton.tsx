@@ -8,42 +8,48 @@ import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import IconButton from "./IconButton";
 import SvgX from "@/icons/x";
 
-const buttonClasses = {
-  open: [
-    "bg-background-tint-inverted-03",
-    "hover:bg-background-tint-inverted-04",
-    "active:bg-background-tint-inverted-02",
-  ],
-  closed: [
-    "bg-background-tint-01",
-    "hover:bg-background-tint-02",
-    "active:bg-background-tint-00",
-  ],
-};
+const buttonClasses = (transient?: boolean) =>
+  ({
+    active: [
+      "bg-background-tint-inverted-03",
+      "hover:bg-background-tint-inverted-04",
+      transient && "bg-background-tint-inverted-04",
+      "active:bg-background-tint-inverted-02",
+    ],
+    inactive: [
+      "bg-background-tint-01",
+      "hover:bg-background-tint-02",
+      transient && "bg-background-tint-02",
+      "active:bg-background-tint-00",
+    ],
+  }) as const;
 
-const textClasses = {
-  open: ["text-text-inverted-05"],
-  closed: [
+const textClasses = (transient?: boolean) => ({
+  active: ["text-text-inverted-05"],
+  inactive: [
     "text-text-03",
     "group-hover/FilterButton:text-text-04",
+    transient && "text-text-04",
     "group-active/FilterButton:text-text-05",
   ],
-};
+});
 
-const iconClasses = {
-  open: ["stroke-text-inverted-05"],
-  closed: [
-    "stroke-text-03",
-    "group-hover/FilterButton:stroke-text-04",
-    "group-active/FilterButton:stroke-text-05",
-  ],
-};
+const iconClasses = (transient?: boolean) =>
+  ({
+    active: ["stroke-text-inverted-05"],
+    inactive: [
+      "stroke-text-03",
+      "group-hover/FilterButton:stroke-text-04",
+      transient && "stroke-text-04",
+      "group-active/FilterButton:stroke-text-05",
+    ],
+  }) as const;
 
 export interface FilterButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   // Button states:
-  disabled?: boolean;
-  open?: boolean;
+  active?: boolean;
+  transient?: boolean;
 
   leftIcon: React.FunctionComponent<SvgProps>;
   onClear?: () => void;
@@ -52,7 +58,8 @@ export interface FilterButtonProps
 }
 
 export default function FilterButton({
-  open,
+  active,
+  transient,
 
   leftIcon: LeftIcon,
 
@@ -63,13 +70,13 @@ export default function FilterButton({
   ...props
 }: FilterButtonProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const state = open ? "open" : "closed";
+  const state = active ? "active" : "inactive";
 
   return (
     <button
       className={cn(
         "p-2 h-fit rounded-12 group/FilterButton flex flex-row items-center justify-center gap-1",
-        buttonClasses[state],
+        buttonClasses(transient)[state],
         className
       )}
       onClick={onClick}
@@ -78,14 +85,16 @@ export default function FilterButton({
       {...props}
     >
       <div className="pr-0.5">
-        <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClasses[state])} />
+        <LeftIcon
+          className={cn("w-[1rem] h-[1rem]", iconClasses(transient)[state])}
+        />
       </div>
 
-      <Text nowrap className={cn(textClasses[state])}>
+      <Text nowrap className={cn(textClasses(transient)[state])}>
         {children}
       </Text>
       <div className="pl-0">
-        {open ? (
+        {active ? (
           <IconButton
             icon={SvgX}
             onClick={noProp(onClear)}
@@ -97,8 +106,8 @@ export default function FilterButton({
             <SvgChevronDownSmall
               className={cn(
                 "w-[1rem] h-[1rem] transition-transform duration-200 ease-in-out",
-                iconClasses[state],
-                isHovered && "-rotate-180"
+                iconClasses(transient)[state],
+                (transient || isHovered) && "-rotate-180"
               )}
             />
           </div>
