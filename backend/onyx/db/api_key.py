@@ -104,7 +104,9 @@ def insert_api_key(
 
     if create_args.type == ApiKeyType.PERSONAL_ACCESS_TOKEN:
         # Personal Access Token: Link to real user
-        api_key_user = db_session.scalar(select(User).where(User.id == user_id))
+        api_key_user = db_session.scalar(
+            select(User).where(User.id == user_id)  # type: ignore
+        )
         if api_key_user is None:
             raise ValueError(f"User with id {user_id} does not exist")
     else:
@@ -157,7 +159,9 @@ def create_service_account_user(
 def update_api_key(
     db_session: Session, api_key_id: int, update_args: UpdateAPIKeyArgs
 ) -> ApiKeyDescriptor:
-    existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
+    existing_api_key = db_session.scalar(
+        select(ApiKey).where(ApiKey.id == api_key_id)  # type: ignore
+    )
     if existing_api_key is None:
         raise ValueError(f"API key with id {api_key_id} does not exist")
 
@@ -204,7 +208,9 @@ def update_api_key(
 
 def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor:
     """NOTE: currently, any admin can regenerate any API key."""
-    existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
+    existing_api_key = db_session.scalar(
+        select(ApiKey).where(ApiKey.id == api_key_id)  # type: ignore
+    )
     if existing_api_key is None:
         raise ValueError(f"API key with id {api_key_id} does not exist")
 
@@ -235,7 +241,9 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
 
 
 def remove_api_key(db_session: Session, api_key_id: int) -> None:
-    existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
+    existing_api_key = db_session.scalar(
+        select(ApiKey).where(ApiKey.id == api_key_id)  # type: ignore
+    )
     if existing_api_key is None:
         raise ValueError(f"API key with id {api_key_id} does not exist")
 

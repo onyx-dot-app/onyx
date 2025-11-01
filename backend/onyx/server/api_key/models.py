@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from pydantic import field_validator
+from pydantic import ValidationInfo
 
 from onyx.auth.schemas import ApiKeyType
 from onyx.auth.schemas import UserRole
@@ -18,7 +19,9 @@ class CreateAPIKeyArgs(BaseModel):
 
     @field_validator("role")
     @classmethod
-    def validate_role_requirement(cls, role: UserRole | None, info) -> UserRole | None:
+    def validate_role_requirement(
+        cls, role: UserRole | None, info: ValidationInfo
+    ) -> UserRole | None:
         key_type = info.data.get("type")
         if key_type == ApiKeyType.SERVICE_ACCOUNT and role is None:
             raise ValueError("Service account keys require a role")
