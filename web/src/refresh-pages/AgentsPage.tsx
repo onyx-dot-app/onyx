@@ -26,6 +26,12 @@ import {
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Button from "@/refresh-components/buttons/Button";
 import SvgPlus from "@/icons/plus";
+import {
+  SEARCH_TOOL_ID,
+  IMAGE_GENERATION_TOOL_ID,
+  WEB_SEARCH_TOOL_ID,
+  SYSTEM_TOOL_ICONS,
+} from "@/app/chat/components/tools/constants";
 
 interface AgentsSectionProps {
   title: string;
@@ -117,18 +123,40 @@ export default function AgentsPage() {
   }, [uniqueCreators, creatorSearchQuery]);
 
   const uniqueActions = useMemo(() => {
-    const actionsMap = new Map<number, { id: number; display_name: string }>();
+    const actionsMap = new Map<
+      number,
+      { id: number; name: string; display_name: string }
+    >();
     agents.forEach((agent) => {
       agent.tools.forEach((tool) => {
         actionsMap.set(tool.id, {
           id: tool.id,
+          name: tool.name,
           display_name: tool.display_name,
         });
       });
     });
-    return Array.from(actionsMap.values()).sort((a, b) =>
-      a.display_name.localeCompare(b.display_name)
+
+    const systemToolIds = [
+      SEARCH_TOOL_ID,
+      IMAGE_GENERATION_TOOL_ID,
+      WEB_SEARCH_TOOL_ID,
+    ];
+
+    const allActions = Array.from(actionsMap.values());
+    const systemTools = allActions.filter((action) =>
+      systemToolIds.includes(action.name)
     );
+    const otherTools = allActions.filter(
+      (action) => !systemToolIds.includes(action.name)
+    );
+
+    // Sort each group by display name
+    systemTools.sort((a, b) => a.display_name.localeCompare(b.display_name));
+    otherTools.sort((a, b) => a.display_name.localeCompare(b.display_name));
+
+    // Return system tools first, then other tools
+    return [...systemTools, ...otherTools];
   }, [agents]);
 
   const filteredActions = useMemo(() => {
@@ -333,12 +361,30 @@ export default function AgentsPage() {
                       value={actionsSearchQuery}
                       onChange={(e) => setActionsSearchQuery(e.target.value)}
                     />,
-                    ...filteredActions.map((action) => {
+                    ...filteredActions.flatMap((action, index) => {
                       const isSelected = selectedActionIds.has(action.id);
-                      return (
+                      const systemIcon = SYSTEM_TOOL_ICONS[action.name];
+                      const isSystemTool = !!systemIcon;
+
+                      // Check if we need to add a separator after this item
+                      const nextAction = filteredActions[index + 1];
+                      const nextIsSystemTool = nextAction
+                        ? !!SYSTEM_TOOL_ICONS[nextAction.name]
+                        : false;
+                      const needsSeparator =
+                        isSystemTool && nextAction && !nextIsSystemTool;
+
+                      // Determine icon: Check if selected, system icon if available, otherwise Actions icon
+                      const icon = isSelected
+                        ? SvgCheck
+                        : systemIcon
+                          ? systemIcon
+                          : SvgActions;
+
+                      const lineItem = (
                         <LineItem
                           key={action.id}
-                          icon={isSelected ? SvgCheck : SvgActions}
+                          icon={icon}
                           heavyForced={isSelected}
                           onClick={() => {
                             setSelectedActionIds((prev) => {
@@ -355,6 +401,9 @@ export default function AgentsPage() {
                           {action.display_name}
                         </LineItem>
                       );
+
+                      // Return the line item, and optionally a separator
+                      return needsSeparator ? [lineItem, null] : [lineItem];
                     }),
                   ]}
                 </PopoverMenu>
