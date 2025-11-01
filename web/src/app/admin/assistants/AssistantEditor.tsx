@@ -95,6 +95,7 @@ import {
 } from "@/components/Dropdown";
 import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
 import { FileCard } from "@/app/chat/components/input/FileCard";
+import { hasNonImageFiles } from "@/lib/utils";
 import CoreModal from "@/refresh-components/modals/CoreModal";
 import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
 import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
@@ -112,7 +113,10 @@ import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
 import { FormErrorFocus } from "@/components/FormErrorHelpers";
-import { ProjectFile } from "@/app/chat/projects/projectsService";
+import {
+  ProjectFile,
+  UserFileStatus,
+} from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import SvgTrash from "@/icons/trash";
@@ -1120,69 +1124,50 @@ export function AssistantEditor({
                                 <div className="flex gap-1">
                                   {(() => {
                                     // Detect if there are any non-image files in the displayed files
-                                    const imageExtensions = [
-                                      ".jpg",
-                                      ".jpeg",
-                                      ".png",
-                                      ".gif",
-                                      ".bmp",
-                                      ".webp",
-                                      ".svg",
-                                    ];
                                     const displayedFileIds =
                                       values.user_file_ids.slice(0, 4);
-                                    const hasNonImageFiles =
-                                      displayedFileIds.some(
+                                    const displayedFiles: ProjectFile[] =
+                                      displayedFileIds.map(
                                         (userFileId: string) => {
                                           const rf = allRecentFiles.find(
                                             (f) => f.id === userFileId
                                           );
-                                          const fileName = String(
-                                            rf?.name || ""
-                                          ).toLowerCase();
-                                          return !imageExtensions.some((ext) =>
-                                            fileName.endsWith(ext)
+                                          return (
+                                            rf ||
+                                            ({
+                                              id: userFileId,
+                                              name: `File ${userFileId.slice(
+                                                0,
+                                                8
+                                              )}`,
+                                              status: UserFileStatus.COMPLETED,
+                                            } as ProjectFile)
                                           );
                                         }
                                       );
+                                    const shouldCompactImages =
+                                      hasNonImageFiles(displayedFiles);
 
-                                    return displayedFileIds.map(
-                                      (userFileId: string) => {
-                                        const rf = allRecentFiles.find(
-                                          (f) => f.id === userFileId
-                                        );
-
-                                        const fileData = rf || {
-                                          id: userFileId,
-                                          name: `File ${userFileId.slice(
-                                            0,
-                                            8
-                                          )}`,
-                                          status: "completed" as const,
-                                        };
-                                        return (
-                                          <div
-                                            key={userFileId}
-                                            className="w-40"
-                                          >
-                                            <FileCard
-                                              file={fileData as ProjectFile}
-                                              hideProcessingState
-                                              removeFile={() => {
-                                                setFieldValue(
-                                                  "user_file_ids",
-                                                  values.user_file_ids.filter(
-                                                    (id: string) =>
-                                                      id !== userFileId
-                                                  )
-                                                );
-                                              }}
-                                              compactImages={hasNonImageFiles}
-                                            />
-                                          </div>
-                                        );
-                                      }
-                                    );
+                                    return displayedFiles.map((fileData) => {
+                                      return (
+                                        <div key={fileData.id} className="w-40">
+                                          <FileCard
+                                            file={fileData as ProjectFile}
+                                            hideProcessingState
+                                            removeFile={() => {
+                                              setFieldValue(
+                                                "user_file_ids",
+                                                values.user_file_ids.filter(
+                                                  (id: string) =>
+                                                    id !== fileData.id
+                                                )
+                                              );
+                                            }}
+                                            compactImages={shouldCompactImages}
+                                          />
+                                        </div>
+                                      );
+                                    });
                                   })()}
                                   {values.user_file_ids.length > 4 && (
                                     <button

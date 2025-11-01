@@ -17,7 +17,7 @@ import { ChatState } from "@/app/chat/interfaces";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { CalendarIcon, XIcon } from "lucide-react";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
-import { truncateString, cn } from "@/lib/utils";
+import { truncateString, cn, hasNonImageFiles } from "@/lib/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -296,20 +296,8 @@ function ChatInputBarInner({
   ]);
 
   // Detect if there are any non-image files to determine if images should be compact
-  const hasNonImageFiles = useMemo(() => {
-    const imageExtensions = [
-      ".jpg",
-      ".jpeg",
-      ".png",
-      ".gif",
-      ".bmp",
-      ".webp",
-      ".svg",
-    ];
-    return currentMessageFiles.some((file) => {
-      const fileName = String(file.name || "").toLowerCase();
-      return !imageExtensions.some((ext) => fileName.endsWith(ext));
-    });
+  const shouldCompactImages = useMemo(() => {
+    return hasNonImageFiles(currentMessageFiles);
   }, [currentMessageFiles]);
 
   // Check if the assistant has search tools available (internal search or web search)
@@ -415,7 +403,7 @@ function ChatInputBarInner({
                 removeFile={handleRemoveMessageFile}
                 hideProcessingState={hideProcessingState}
                 onFileClick={handleFileClick}
-                compactImages={hasNonImageFiles}
+                compactImages={shouldCompactImages}
               />
             ))}
           </div>

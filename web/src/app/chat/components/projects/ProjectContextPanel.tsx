@@ -23,6 +23,7 @@ import SvgAddLines from "@/icons/add-lines";
 import SvgFiles from "@/icons/files";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FileCard } from "../input/FileCard";
+import { hasNonImageFiles } from "@/lib/utils";
 
 export default function ProjectContextPanel({
   projectTokenCount = 0,
@@ -96,21 +97,9 @@ export default function ProjectContextPanel({
   if (!currentProjectId) return null; // no selection yet
 
   // Detect if there are any non-image files in the displayed files to determine if images should be compact
-  const hasNonImageFiles = useMemo(() => {
-    const imageExtensions = [
-      ".jpg",
-      ".jpeg",
-      ".png",
-      ".gif",
-      ".bmp",
-      ".webp",
-      ".svg",
-    ];
+  const shouldCompactImages = useMemo(() => {
     const displayedFiles = allCurrentProjectFiles.slice(0, 4);
-    return displayedFiles.some((file) => {
-      const fileName = String(file.name || "").toLowerCase();
-      return !imageExtensions.some((ext) => fileName.endsWith(ext));
-    });
+    return hasNonImageFiles(displayedFiles);
   }, [allCurrentProjectFiles]);
 
   return (
@@ -219,7 +208,7 @@ export default function ProjectContextPanel({
                         await unlinkFileFromProject(currentProjectId, fileId);
                       }}
                       onFileClick={handleOnView}
-                      compactImages={hasNonImageFiles}
+                      compactImages={shouldCompactImages}
                     />
                   </div>
                 ));

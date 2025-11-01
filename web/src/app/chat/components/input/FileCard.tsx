@@ -7,7 +7,7 @@ import { UserFileStatus } from "../../projects/projectsService";
 import Text from "@/refresh-components/texts/Text";
 import SvgFileText from "@/icons/file-text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { cn } from "@/lib/utils";
+import { cn, isImageFile } from "@/lib/utils";
 
 function ImageFileCard({
   file,
@@ -126,17 +126,7 @@ export function FileCard({
   }, [file.name]);
 
   const isImage = useMemo(() => {
-    const imageExtensions = [
-      ".jpg",
-      ".jpeg",
-      ".png",
-      ".gif",
-      ".bmp",
-      ".webp",
-      ".svg",
-    ];
-    const fileName = String(file.name || "").toLowerCase();
-    return imageExtensions.some((ext) => fileName.endsWith(ext));
+    return isImageFile(file.name);
   }, [file.name]);
 
   const imageUrl = useMemo(() => {
