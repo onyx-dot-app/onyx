@@ -38,15 +38,18 @@ from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.force import ForceUseTool
+from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
     from litellm import ResponseFunctionToolCall
+
+
+logger = setup_logger()
 
 
 # TODO -- this can be refactored out and played with in evals + normal demo
@@ -314,41 +317,52 @@ def _default_packet_translation(
     from openai.types.responses import ResponseReasoningSummaryPartDoneEvent
     from openai.types.responses import ResponseReasoningSummaryTextDeltaEvent
 
-    current_run_step = ctx.current_run_step
-    should_emit_held_back_packet = False
+    packets: list[Packet] = []
 
     if isinstance(ev, RawResponsesStreamEvent):
-        obj: PacketObj | None = None
         output_index = getattr(ev.data, "output_index", None)
 
-        print("EV", ev.data)
+        logger.info("EV %s", ev.data)
         if isinstance(ev.data, ResponseReasoningSummaryPartAddedEvent):
-            obj = ReasoningStart()
+            packets.append(Packet(ind=ctx.current_run_step, obj=ReasoningStart()))
             ctx.current_output_index = output_index
         elif isinstance(ev.data, ResponseReasoningSummaryTextDeltaEvent):
-            obj = ReasoningDelta(reasoning=ev.data.delta)
+            packets.append(
+                Packet(
+                    ind=ctx.current_run_step,
+                    obj=ReasoningDelta(reasoning=ev.data.delta),
+                )
+            )
         elif isinstance(ev.data, ResponseReasoningSummaryPartDoneEvent):
-            obj = SectionEnd()
-            should_emit_held_back_packet = True
-            ctx.held_back_message_start = None
-
             # only increment if we haven't already gone past this step
             if ctx.current_output_index == output_index:
                 ctx.current_run_step += 1
                 ctx.current_output_index = None
+            else:
+                packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
+
+            if ctx.held_back_message_start:
+                packets.append(
+                    Packet(ind=ctx.current_run_step, obj=ctx.held_back_message_start)
+                )
+                ctx.held_back_message_start = None
 
         elif ev.data.type == "response.content_part.added":
             retrieved_search_docs = saved_search_docs_from_llm_docs(
                 ctx.ordered_fetched_documents
             )
             obj = MessageStart(content="", final_documents=retrieved_search_docs)
+
+            # if this appears in the middle of the reasoning response, we need to hold it back
+            # to not have multiple packet types ongoing at the same time
             if (
                 output_index
                 and ctx.current_output_index is not None
                 and output_index == ctx.current_output_index + 1
             ):
                 ctx.held_back_message_start = obj
-                obj = None
+            else:
+                packets.append(Packet(ind=ctx.current_run_step, obj=obj))
         elif ev.data.type == "response.output_text.delta" and len(ev.data.delta) > 0:
             if processor:
                 final_answer_piece = ""
@@ -366,27 +380,21 @@ def _default_packet_translation(
             # as soon as we get an actual message delta, we can emit the held back packet
             # (if one exists)
             if ctx.held_back_message_start:
-                should_emit_held_back_packet = True
+                # Force end of the previous packet section
+                packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
+
                 # increment the run step, since this means that we've started
                 # the next step for THIS packet (not the next packet, like we would
                 # for "end" packets)
-                current_run_step += 1
+                ctx.current_run_step += 1
+                packets.append(
+                    Packet(ind=ctx.current_run_step, obj=ctx.held_back_message_start)
+                )
+                ctx.held_back_message_start = None
+
+            packets.append(Packet(ind=ctx.current_run_step, obj=obj))
         elif ev.data.type == "response.content_part.done":
-            obj = SectionEnd()
+            packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
             ctx.current_output_index = None
 
-        held_back_packets_to_return: list[Packet] = []
-        if should_emit_held_back_packet and ctx.held_back_message_start:
-            held_back_packets_to_return = [
-                Packet(ind=current_run_step, obj=ctx.held_back_message_start)
-            ]
-            ctx.held_back_message_start = None
-
-            # also increment the run step, since this means we're starting
-            # the actual "message" part of the response
-            ctx.current_run_step += 1
-
-        current_obj_packets = [Packet(ind=current_run_step, obj=obj)] if obj else []
-        return (held_back_packets_to_return or []) + current_obj_packets
-
-    return []
+    return packets
