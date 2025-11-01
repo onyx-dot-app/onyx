@@ -145,6 +145,19 @@ function ChatInputBarInner({
     return initialMessage;
   });
 
+  // Load draft when switching between chats (draftKey changes)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const savedDraft = sessionStorage.getItem(draftKey);
+        setLocalMessage(savedDraft || "");
+      } catch (e) {
+        console.warn("Failed to load draft from sessionStorage:", e);
+        setLocalMessage("");
+      }
+    }
+  }, [draftKey]);
+
   // Callback ref to set initial textarea height synchronously on mount
   const handleTextAreaRef = useCallback(
     (element: HTMLTextAreaElement | null) => {
@@ -168,7 +181,11 @@ function ChatInputBarInner({
       setLocalMessage("");
       // Clear draft from sessionStorage
       if (typeof window !== "undefined") {
-        sessionStorage.removeItem(draftKey);
+        try {
+          sessionStorage.removeItem(draftKey);
+        } catch (e) {
+          console.warn("Failed to remove draft from sessionStorage:", e);
+        }
       }
       // Reset textarea height
       if (textAreaRef.current) {
@@ -288,10 +305,15 @@ function ChatInputBarInner({
 
       // Save draft to sessionStorage
       if (typeof window !== "undefined") {
-        if (text.trim()) {
-          sessionStorage.setItem(draftKey, text);
-        } else {
-          sessionStorage.removeItem(draftKey);
+        try {
+          if (text.trim()) {
+            sessionStorage.setItem(draftKey, text);
+          } else {
+            sessionStorage.removeItem(draftKey);
+          }
+        } catch (e) {
+          // Storage full or disabled - silently fail, input still works
+          console.warn("Failed to save draft to sessionStorage:", e);
         }
       }
 
