@@ -190,6 +190,12 @@ def _fast_chat_turn_core(
     final_answer = extract_final_answer_from_packets(
         dependencies.emitter.packet_history
     )
+    if len(final_answer) == 0:
+        raise ValueError(
+            """Final answer is empty. Inference provider likely failed to provide
+            content packets and ended the stream without an error.
+            """
+        )
     save_turn(
         db_session=dependencies.db_session,
         message_id=message_id,
