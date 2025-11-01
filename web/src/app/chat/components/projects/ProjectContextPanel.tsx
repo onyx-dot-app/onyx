@@ -2,12 +2,10 @@
 
 import React, { useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
-import { Loader2, X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import type { ProjectFile } from "../../projects/projectsService";
-import { UserFileStatus } from "../../projects/projectsService";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Button from "@/refresh-components/buttons/Button";
@@ -20,99 +18,12 @@ import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
 import { useEscape } from "@/hooks/useKeyPress";
 import CoreModal from "@/refresh-components/modals/CoreModal";
 import Text from "@/refresh-components/texts/Text";
-import SvgFileText from "@/icons/file-text";
 import SvgFolderOpen from "@/icons/folder-open";
 import SvgAddLines from "@/icons/add-lines";
 import SvgFiles from "@/icons/files";
-import Truncated from "@/refresh-components/texts/Truncated";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-
-export function FileCard({
-  file,
-  removeFile,
-  hideProcessingState = false,
-  onFileClick,
-}: {
-  file: ProjectFile;
-  removeFile: (fileId: string) => void;
-  hideProcessingState?: boolean;
-  onFileClick?: (file: ProjectFile) => void;
-}) {
-  const typeLabel = useMemo(() => {
-    const name = String(file.name || "");
-    const lastDotIndex = name.lastIndexOf(".");
-    if (lastDotIndex <= 0 || lastDotIndex === name.length - 1) {
-      return "";
-    }
-    return name.slice(lastDotIndex + 1).toUpperCase();
-  }, [file.name]);
-
-  const isActuallyProcessing =
-    String(file.status) === UserFileStatus.UPLOADING ||
-    String(file.status) === UserFileStatus.PROCESSING;
-
-  // When hideProcessingState is true, we treat processing files as completed for display purposes
-  const isProcessing = hideProcessingState ? false : isActuallyProcessing;
-
-  const handleRemoveFile = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    removeFile(file.id);
-  };
-
-  return (
-    <div
-      className={`relative group flex items-center gap-3 border border-border-01 rounded-12 ${
-        isProcessing ? "bg-background-neutral-02" : "bg-background-tint-00"
-      } p-1 h-14 w-40 ${
-        onFileClick && !isProcessing
-          ? "cursor-pointer hover:bg-accent-background"
-          : ""
-      }`}
-      onClick={() => {
-        if (onFileClick && !isProcessing) {
-          onFileClick(file);
-        }
-      }}
-    >
-      {String(file.status) !== UserFileStatus.UPLOADING && (
-        <button
-          onClick={handleRemoveFile}
-          title="Delete file"
-          aria-label="Delete file"
-          className="absolute -left-2 -top-2 z-10 h-5 w-5 flex items-center justify-center rounded-[4px] border border-border text-[11px] bg-[#1f1f1f] text-white dark:bg-[#fefcfa] dark:text-black shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto transition-opacity duration-150 hover:opacity-90"
-        >
-          <X className="h-4 w-4 dark:text-dark-tremor-background-muted" />
-        </button>
-      )}
-      <div
-        className={`flex h-9 w-9 items-center justify-center rounded-08 p-2
-      ${isProcessing ? "bg-background-neutral-03" : "bg-background-tint-01"}`}
-      >
-        {isProcessing || file.status === UserFileStatus.UPLOADING ? (
-          <Loader2 className="h-5 w-5 text-text-01 animate-spin" />
-        ) : (
-          <SvgFileText className="h-5 w-5 stroke-text-02" />
-        )}
-      </div>
-      <div className="flex flex-col overflow-hidden">
-        <Truncated
-          className={`font-secondary-action truncate
-          ${isProcessing ? "text-text-03" : "text-text-04"}`}
-          title={file.name}
-        >
-          {file.name}
-        </Truncated>
-        <Text text03 secondaryBody nowrap className="truncate">
-          {isProcessing
-            ? file.status === UserFileStatus.UPLOADING
-              ? "Uploading..."
-              : "Processing..."
-            : typeLabel}
-        </Text>
-      </div>
-    </div>
-  );
-}
+import { FileCard } from "../input/FileCard";
+import { hasNonImageFiles } from "@/lib/utils";
 
 export default function ProjectContextPanel({
   projectTokenCount = 0,
@@ -184,6 +95,11 @@ export default function ProjectContextPanel({
   });
 
   if (!currentProjectId) return null; // no selection yet
+
+  // Detect if there are any non-image files in the displayed files
+  // to determine if images should be compact
+  const displayedFiles = allCurrentProjectFiles.slice(0, 4);
+  const shouldCompactImages = hasNonImageFiles(displayedFiles);
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
@@ -291,6 +207,7 @@ export default function ProjectContextPanel({
                         await unlinkFileFromProject(currentProjectId, fileId);
                       }}
                       onFileClick={handleOnView}
+                      compactImages={shouldCompactImages}
                     />
                   </div>
                 ));
