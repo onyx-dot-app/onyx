@@ -4,13 +4,19 @@ import { TextFormField } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { basicLogin, basicSignup } from "@/lib/user";
 import Button from "@/refresh-components/buttons/Button";
-import { Form, Formik } from "formik";
+import { Form, Formik, FieldProps } from "formik";
 import * as Yup from "yup";
 import { requestEmailVerification } from "../lib";
 import { useState } from "react";
 import { Spinner } from "@/components/Spinner";
 import Link from "next/link";
 import { useUser } from "@/components/user/UserProvider";
+import SvgArrowRightCircle from "@/icons/arrow-right-circle";
+import { FormikField } from "@/refresh-components/form/FormikField";
+import { FormField } from "@/refresh-components/form/FormField";
+import { Input } from "@/components/ui/input";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
 
 interface EmailPasswordFormProps {
@@ -44,14 +50,16 @@ export default function EmailPasswordForm({
           email: defaultEmail ? defaultEmail.toLowerCase() : "",
           password: "",
         }}
-        validateOnChange={false}
+        validateOnChange={true}
         validateOnBlur={true}
         validationSchema={Yup.object().shape({
           email: Yup.string()
             .email()
             .required()
             .transform((value) => value.toLowerCase()),
-          password: Yup.string().required(),
+          password: Yup.string()
+            .min(8, "Password must be at least 8 characters")
+            .required(),
         })}
         onSubmit={async (values: { email: string; password: string }) => {
           // Ensure email is lowercase
@@ -133,26 +141,58 @@ export default function EmailPasswordForm({
           }
         }}
       >
-        {({ isSubmitting }) => (
-          <Form>
-            <TextFormField
+        {({ isSubmitting, isValid, dirty }) => (
+          <Form className="gap-y-padding-button">
+            <FormikField<string>
               name="email"
-              label="Email"
-              type="email"
-              placeholder="email@yourcompany.com"
-              data-testid="email"
+              render={(field, helper, meta, state) => (
+                <FormField name="email" state={state} className="w-full">
+                  <FormField.Label>Email Address</FormField.Label>
+                  <FormField.Control>
+                    <InputTypeIn
+                      {...field}
+                      placeholder="email@yourcompany.com"
+                      onClear={() => helper.setValue("")}
+                      data-testid="email"
+                    />
+                  </FormField.Control>
+                </FormField>
+              )}
             />
 
-            <TextFormField
+            <FormikField<string>
               name="password"
-              label="Password"
-              type="password"
-              placeholder="**************"
-              data-testid="password"
+              render={(field, helper, meta, state) => (
+                <FormField name="password" state={state} className="w-full">
+                  <FormField.Label>Password</FormField.Label>
+                  <FormField.Control>
+                    <PasswordInputTypeIn
+                      {...field}
+                      placeholder="**************"
+                      onClear={() => helper.setValue("")}
+                      data-testid="password"
+                    />
+                  </FormField.Control>
+                  {isSignup && (
+                    <FormField.Message
+                      messages={{
+                        idle: "Password must be at least 8 characters",
+                        error: meta.error,
+                        success: "Password must be at least 8 characters",
+                      }}
+                    />
+                  )}
+                </FormField>
+              )}
             />
 
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isJoin ? "Join" : isSignup ? "Sign Up" : "Log In"}
+            <Button
+              type="submit"
+              className="w-full mt-1"
+              disabled={isSubmitting || !isValid || !dirty}
+              rightIcon={SvgArrowRightCircle}
+            >
+              {isJoin ? "Join" : isSignup ? "Create Account" : "Sign In"}
             </Button>
             {user?.is_anonymous_user && (
               <Link
