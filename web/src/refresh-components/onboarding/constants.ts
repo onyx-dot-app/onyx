@@ -98,7 +98,7 @@ export const PROVIDER_ICON_MAP: Record<
   azure: AzureIcon,
   vertex_ai: GeminiIcon,
   openai: SvgOpenai,
-  ollama: SvgOllama,
+  ollama_chat: SvgOllama,
   openrouter: SvgOpenrouter,
 };
 
@@ -120,7 +120,7 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for Claude.",
     },
   },
-  ollama: {
+  ollama_chat: {
     description: "Connect to your Ollama models.",
     display_name: "Ollama",
     field_metadata: {
@@ -163,7 +163,7 @@ export interface ProviderTabConfig {
 }
 
 export const PROVIDER_TAB_CONFIG: Record<string, ProviderTabConfig> = {
-  ollama: {
+  ollama_chat: {
     tabs: [
       {
         id: "self-hosted",
