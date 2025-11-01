@@ -190,6 +190,11 @@ def _fast_chat_turn_core(
     final_answer = extract_final_answer_from_packets(
         dependencies.emitter.packet_history
     )
+    # What about image generation?
+    # Maybe this should check that the last packet is a message delta UNLESS the last tool call was an image generation tool call
+    # Doing this right is actually kind of a tricky problem?
+    # Do we have heartbeating or anything? it should be very solvable to avoid most front end hangs
+    # Also should we have tool timeouts?
     if len(final_answer) == 0:
         raise ValueError(
             """Final answer is empty. Inference provider likely failed to provide
