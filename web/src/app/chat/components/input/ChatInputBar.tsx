@@ -139,17 +139,23 @@ function ChatInputBarInner({
     [chatSessionId]
   );
 
-  // Load draft from sessionStorage or use initialMessage
+  // Load initial message - URL params take priority over saved drafts
   const [localMessage, setLocalMessage] = useState(() => {
+    // URL parameters always take precedence (user intent)
+    if (initialMessage) {
+      return initialMessage;
+    }
+
+    // Otherwise, try to load saved draft
     if (typeof window !== "undefined") {
       try {
         const savedDraft = sessionStorage.getItem(draftKey);
-        return savedDraft || initialMessage;
+        return savedDraft || "";
       } catch (e) {
         console.warn("Failed to load draft from sessionStorage:", e);
       }
     }
-    return initialMessage;
+    return "";
   });
 
   // Track previous draftKey to detect chat switches (not initial mount)
