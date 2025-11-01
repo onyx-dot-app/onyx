@@ -1949,6 +1949,13 @@ class Persona(Base):
         secondary="persona__validator",
         back_populates="personas"
     )
+
+    langflow_file_nodes: Mapped[list["LangflowFileNode"]] = relationship(
+    "LangflowFileNode",
+    back_populates="persona",
+    cascade="all, delete-orphan",
+    )
+
     # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
         Index(
@@ -2625,3 +2632,13 @@ class KnowledgeMapAnswer(Base):
     knowledge_map_id: Mapped[int] = mapped_column(ForeignKey("knowledge_map.id", ondelete="CASCADE"))
     topic: Mapped[str] = mapped_column(String)
     answer: Mapped[str] = mapped_column(String)
+
+
+class LangflowFileNode(Base):
+    __tablename__ = "langflow_file_node"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    file_node_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id", ondelete="CASCADE"))
+    persona: Mapped["Persona"] = relationship(back_populates="langflow_file_nodes")

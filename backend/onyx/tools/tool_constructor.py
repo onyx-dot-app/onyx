@@ -237,9 +237,11 @@ def construct_tools(
                     LangflowTool(
                         db_session=db_session,
                         pipeline_id=persona.pipeline_id,
+                        file_node_ids=persona.langflow_file_nodes,
                         prompt_config=prompt_config,
                         llm_config=llm.config,
                         chat_session_id=custom_tool_config.chat_session_id,
+                        docs=user_file_files,
                     )
                 ]
             elif tool_cls.__name__ == KnowledgeMapTool.__name__:
