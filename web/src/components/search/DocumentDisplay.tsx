@@ -10,6 +10,7 @@ import { useContext, useState } from "react";
 import { PopupSpec } from "../admin/connectors/Popup";
 import { DocumentUpdatedAtBadge } from "./DocumentUpdatedAtBadge";
 import { SourceIcon } from "../SourceIcon";
+import { WebResultIcon } from "../WebResultIcon";
 import { MetadataBadge } from "../MetadataBadge";
 import { BookIcon, LightBulbIcon } from "../icons/icons";
 import Text from "@/refresh-components/texts/Text";
@@ -22,6 +23,7 @@ import TextView from "../chat/TextView";
 import { openDocument } from "@/lib/search/utils";
 import { SubQuestionDetail } from "@/app/chat/interfaces";
 import { cn } from "@/lib/utils";
+import { ValidSources } from "@/lib/types";
 
 export const buildDocumentSummaryDisplay = (
   matchHighlights: string[],
@@ -435,15 +437,16 @@ export const AgenticDocumentDisplay = ({
 
 export function CompactDocumentCard({
   document,
-  icon,
   url,
   updatePresentingDocument,
 }: {
   document: OnyxDocument;
-  icon?: React.ReactNode;
   url?: string;
   updatePresentingDocument: (document: OnyxDocument) => void;
 }) {
+  const isWebSource =
+    document.is_internet || document.source_type === ValidSources.Web;
+
   return (
     <div
       onClick={() => {
@@ -454,17 +457,24 @@ export function CompactDocumentCard({
         "flex gap-y-0 flex-col content-start items-start gap-0"
       )}
     >
-      <div className={cn("flex !pb-0 !mb-0 pt-0 mt-0 w-full")}>
-        <div className="inline-block align-top">{icon}</div>
-        <Text
-          text04
-          mainUiAction
-          className="gap-0 !p-0 !my-0 line-clamp-2 ml-2"
-        >
-          {(document.semantic_identifier || document.document_id).slice(0, 40)}
-          {(document.semantic_identifier || document.document_id).length > 40 &&
-            "..."}
-        </Text>
+      <div className="flex gap-x-2 items-center w-full">
+        <div className="flex-shrink-0 text-black dark:text-white">
+          {isWebSource && document.link ? (
+            <WebResultIcon url={document.link} size={18} />
+          ) : (
+            <SourceIcon sourceType={document.source_type} iconSize={18} />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <Text text04 mainUiAction className="line-clamp-2">
+            {(document.semantic_identifier || document.document_id).slice(
+              0,
+              40
+            )}
+            {(document.semantic_identifier || document.document_id).length >
+              40 && "..."}
+          </Text>
+        </div>
       </div>
       {document.blurb && (
         <Text
