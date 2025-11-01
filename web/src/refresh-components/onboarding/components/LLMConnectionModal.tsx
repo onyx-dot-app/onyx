@@ -250,6 +250,24 @@ const LLMConnectionModal = () => {
           ...finalValues,
           model_configurations: modelConfigsToUse,
         };
+
+        if (apiStatus !== "success" && llmDescriptor) {
+          setApiStatus("loading");
+          setShowApiMessage(true);
+
+          const result = await testApiKeyHelper(
+            llmDescriptor,
+            initialValues,
+            payload
+          );
+          if (!result.ok) {
+            setErrorMessage(result.errorMessage);
+            setApiStatus("error");
+            return;
+          }
+          setApiStatus("success");
+        }
+
         const response = await fetch(
           `${LLM_PROVIDERS_ADMIN_URL}${"?is_creation=true"}`,
           {
@@ -426,9 +444,7 @@ const LLMConnectionModal = () => {
             submitDisabled={
               isCustomProvider
                 ? !formikProps.isValid || !formikProps.dirty
-                : apiStatus != "success" ||
-                  !formikProps.isValid ||
-                  !formikProps.dirty
+                : !formikProps.isValid || !formikProps.dirty
             }
           >
             <Form className="flex flex-col gap-0">
