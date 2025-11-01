@@ -67,9 +67,22 @@
     margin-bottom: 0.5em;
   }
 
+  .prose ol {
+    list-style-type: decimal;
+    padding-left: 1.5rem;
+    margin-left: 0;
+  }
+
+  .prose ul {
+    list-style-type: disc;
+    padding-left: 1.5rem;
+    margin-left: 0;
+  }
+
   .prose li {
     margin-top: 0.25em;
     margin-bottom: 0.25em;
+    display: list-item;
   }
 
   .prose hr {
