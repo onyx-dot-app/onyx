@@ -54,7 +54,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
   const modalContent = MODAL_CONTENT_MAP[llmDescriptor.name];
   const handleApiKeyInteraction = (apiKey: string) => {
     if (!apiKey) return;
-    if (llmDescriptor?.name === "ollama") {
+    if (llmDescriptor?.name === "ollama_chat") {
       onFetchModels?.();
     } else {
       onApiKeyBlur?.(apiKey);
