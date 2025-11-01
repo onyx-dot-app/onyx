@@ -174,24 +174,9 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
               {!showApiMessage && (
                 <FormField.Message
                   messages={{
-                    idle: (
-                      <>
-                        {"Paste your "}
-                        {modalContent?.field_metadata?.api_key ? (
-                          <a
-                            href={modalContent.field_metadata.api_key}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline"
-                          >
-                            API key
-                          </a>
-                        ) : (
-                          "API key"
-                        )}
-                        {` from ${modalContent?.display_name} to access your models.`}
-                      </>
-                    ),
+                    idle:
+                      modalContent?.field_metadata?.api_key ??
+                      "Paste your API key to access your models.",
                     error: meta.error,
                   }}
                 />
@@ -308,7 +293,13 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                   })() && (
                     <FormField.Message
                       messages={{
-                        idle: customConfigKey.description,
+                        idle: (
+                          <>
+                            {modalContent?.field_metadata?.[
+                              customConfigKey.name
+                            ] ?? customConfigKey.description}
+                          </>
+                        ),
                         error: meta.error,
                       }}
                     />

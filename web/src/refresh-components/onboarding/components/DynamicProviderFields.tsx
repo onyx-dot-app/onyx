@@ -244,7 +244,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                   messages={{
                     idle:
                       override?.description ||
-                      customConfigKey.description ||
+                      modalContent?.field_metadata?.[customConfigKey.name] ||
                       "",
                     error: meta.error,
                   }}

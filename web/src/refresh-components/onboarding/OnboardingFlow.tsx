@@ -37,29 +37,25 @@ const OnboardingFlowInner = ({
           (isCollapsed ? "max-h-0 opacity-0" : "max-h-[1000px] opacity-100")
         }
       >
-        <div
-          className={
-            `flex w-[200%] transition-transform duration-300 ease-out ` +
-            (onboardingState.currentStep === OnboardingStep.Complete
-              ? "-translate-x-1/2"
-              : "translate-x-0")
-          }
-        >
-          <div className="w-1/2 shrink-0">
-            <div className="flex flex-col gap-2">
-              <NameStep state={onboardingState} actions={onboardingActions} />
-              <LLMStep
-                state={onboardingState}
-                actions={onboardingActions}
-                llmDescriptors={llmDescriptors}
-                disabled={
-                  onboardingState.currentStep !== OnboardingStep.LlmSetup
-                }
-              />
-            </div>
-          </div>
-          <div className="w-1/2 shrink-0">
-            <FinalStep />
+        <div className="flex flex-col gap-2">
+          <NameStep state={onboardingState} actions={onboardingActions} />
+          <LLMStep
+            state={onboardingState}
+            actions={onboardingActions}
+            llmDescriptors={llmDescriptors}
+            disabled={onboardingState.currentStep !== OnboardingStep.LlmSetup}
+          />
+          <div
+            className={
+              "transition-all duration-500 ease-out " +
+              (onboardingState.currentStep === OnboardingStep.Complete
+                ? "opacity-100 translate-x-0"
+                : "opacity-0 translate-x-full")
+            }
+          >
+            {onboardingState.currentStep === OnboardingStep.Complete && (
+              <FinalStep />
+            )}
           </div>
         </div>
       </div>
