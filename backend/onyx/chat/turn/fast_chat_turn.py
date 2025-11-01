@@ -341,18 +341,21 @@ def _default_packet_translation(
                 )
             )
         elif isinstance(ev.data, ResponseReasoningSummaryPartDoneEvent):
-            # only increment if we haven't already gone past this step
+            # only do anything if we haven't already "gone past" this step
+            # (e.g. if we've already sent the MessageStart / MessageDelta packets, then we
+            # shouldn't do anything)
             if ctx.current_output_index == output_index:
                 ctx.current_run_step += 1
                 ctx.current_output_index = None
-            else:
                 packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
 
-            if ctx.held_back_message_start:
-                packets.append(
-                    Packet(ind=ctx.current_run_step, obj=ctx.held_back_message_start)
-                )
-                ctx.held_back_message_start = None
+                if ctx.held_back_message_start:
+                    packets.append(
+                        Packet(
+                            ind=ctx.current_run_step, obj=ctx.held_back_message_start
+                        )
+                    )
+                    ctx.held_back_message_start = None
 
         # ------------------------------------------------------------
         # Message packets
