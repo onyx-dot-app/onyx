@@ -32,7 +32,9 @@ settings.json
 *.egg-info
 
 # Claude
-plans/*
+AGENTS.md
+CLAUDE.md
+
 
 # Local .terraform directories
 **/.terraform/*

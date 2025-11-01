@@ -78,9 +78,10 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   const {
     connectors: federatedConnectors,
     refetch: refetchFederatedConnectors,
+    loading: isFederatedLoading,
   } = useFederatedOAuthStatus();
 
-  const { ccPairs } = useCCPairs();
+  const { ccPairs, isLoading: isCCPairsLoading } = useCCPairs();
 
   const defaultModel = user?.preferences?.default_model;
 
@@ -97,6 +98,8 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   const hasConnectors =
     (ccPairs && ccPairs.length > 0) ||
     (federatedConnectors && federatedConnectors.length > 0);
+
+  const isLoadingConnectors = isCCPairsLoading || isFederatedLoading;
 
   const showPasswordSection = Boolean(user?.password_configured);
 
@@ -131,12 +134,11 @@ export function UserSettings({ onClose }: UserSettingsProps) {
       visibleSections.push({ id: "password", label: "Password" });
     }
 
-    if (hasConnectors) {
-      visibleSections.push({ id: "connectors", label: "Connectors" });
-    }
+    // Always show Connectors tab, will be disabled if loading or no connectors
+    visibleSections.push({ id: "connectors", label: "Connectors" });
 
     return visibleSections;
-  }, [showPasswordSection, hasConnectors]);
+  }, [showPasswordSection]);
 
   useEffect(() => {
     if (!sections.some((section) => section.id === activeSection)) {
@@ -370,6 +372,10 @@ export function UserSettings({ onClose }: UserSettingsProps) {
                 <Button
                   tertiary
                   transient={activeSection === id}
+                  disabled={
+                    id === "connectors" &&
+                    (isLoadingConnectors || !hasConnectors)
+                  }
                   onClick={() => setActiveSection(id)}
                 >
                   {label}

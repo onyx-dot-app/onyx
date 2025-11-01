@@ -298,10 +298,8 @@ export default function MultiToolRenderer({
       {/* Expanded content */}
       <div
         className={cn(
-          "transition-all duration-300 ease-in-out",
-          isExpanded
-            ? "max-h-[2000px] opacity-100"
-            : "max-h-0 opacity-0 invisible"
+          "transition-all duration-300 ease-in-out overflow-hidden",
+          isExpanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"
         )}
       >
         <div
@@ -371,13 +369,13 @@ export default function MultiToolRenderer({
                     {/* Dot with background to cover the line */}
                     <div
                       className="
-                        flex-shrink-0 
-                        flex 
-                        items-center 
-                        justify-center 
-                        w-5 
-                        h-5 
-                        bg-background 
+                        flex-shrink-0
+                        flex
+                        items-center
+                        justify-center
+                        w-5
+                        h-5
+                        bg-background
                         rounded-full
                       "
                     >

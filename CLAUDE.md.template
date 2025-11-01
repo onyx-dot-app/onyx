@@ -1,6 +1,6 @@
-# AGENTS.md
+# CLAUDE.md
 
-This file provides guidance to Codex when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## KEY NOTES
 
@@ -93,16 +93,19 @@ Onyx supports two deployment modes for background workers, controlled by the `US
 
 **Lightweight Mode** (default, `USE_LIGHTWEIGHT_BACKGROUND_WORKER=true`):
 - Runs a single consolidated `background` worker that handles all background tasks:
+  - Light worker tasks (Vespa operations, permissions sync, deletion)
+  - Document processing (indexing pipeline)
+  - Document fetching (connector data retrieval)
   - Pruning operations (from `heavy` worker)
   - Knowledge graph processing (from `kg_processing` worker)
   - Monitoring tasks (from `monitoring` worker)
   - User file processing (from `user_file_processing` worker)
-- Lower resource footprint (single worker process)
+- Lower resource footprint (fewer worker processes)
 - Suitable for smaller deployments or development environments
-- Default concurrency: 6 threads
+- Default concurrency: 20 threads (increased to handle combined workload)
 
 **Standard Mode** (`USE_LIGHTWEIGHT_BACKGROUND_WORKER=false`):
-- Runs separate specialized workers as documented above (heavy, kg_processing, monitoring, user_file_processing)
+- Runs separate specialized workers as documented above (light, docprocessing, docfetching, heavy, kg_processing, monitoring, user_file_processing)
 - Better isolation and scalability
 - Can scale individual workers independently based on workload
 - Suitable for production deployments with higher load
@@ -115,8 +118,8 @@ The deployment mode affects:
 #### Key Features
 
 - **Thread-based Workers**: All workers use thread pools (not processes) for stability
-- **Tenant Awareness**: Multi-tenant support with per-tenant task isolation. There is a 
-middleware layer that automatically finds the appropriate tenant ID when sending tasks 
+- **Tenant Awareness**: Multi-tenant support with per-tenant task isolation. There is a
+middleware layer that automatically finds the appropriate tenant ID when sending tasks
 via Celery Beat.
 - **Task Prioritization**: High, Medium, Low priority queues
 - **Monitoring**: Built-in heartbeat and liveness checking
@@ -194,14 +197,18 @@ alembic -n schema_private upgrade head
 
 ### Creating Migrations
 ```bash
-# Auto-generate migration
-alembic revision --autogenerate -m "description"
+# Create migration
+alembic revision -m "description"
 
 # Multi-tenant migration
-alembic -n schema_private revision --autogenerate -m "description"
+alembic -n schema_private revision -m "description"
 ```
 
+Write the migration manually and place it in the file that alembic creates when running the above command.
+
 ## Testing Strategy
+
+First, you must activate the virtual environment with `source .venv/bin/activate`. 
 
 There are 4 main types of tests within Onyx:
 
@@ -213,7 +220,7 @@ write these for complex, isolated modules e.g. `citation_processing.py`.
 To run them:
 
 ```bash
-python -m dotenv -f .vscode/.env run -- pytest -xv backend/tests/unit
+pytest -xv backend/tests/unit
 ```
 
 ### External Dependency Unit Tests
