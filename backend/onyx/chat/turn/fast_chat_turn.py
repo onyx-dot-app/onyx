@@ -27,6 +27,7 @@ from onyx.chat.turn.context_handler.citation import (
 )
 from onyx.chat.turn.context_handler.task_prompt import update_task_prompt
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
+from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.chat.turn.save_turn import extract_final_answer_from_packets
@@ -42,6 +43,7 @@ from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
+from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 from onyx.tools.force import ForceUseTool
 from onyx.utils.logger import setup_logger
 
@@ -93,11 +95,9 @@ def _run_agent_loop(
         agent = Agent(
             name="Assistant",
             model=dependencies.llm_model,
-            tools=[],
-            # TODO: add this back
-            # tools=cast(
-            #     list[AgentToolType], tools_to_function_tools(dependencies.tools)
-            # ),
+            tools=cast(
+                list[AgentToolType], tools_to_function_tools(dependencies.tools)
+            ),
             model_settings=model_settings,
             tool_use_behavior="stop_on_first_tool",
         )
