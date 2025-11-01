@@ -59,6 +59,11 @@ def _run_agent_loop(
     force_use_tool: ForceUseTool | None = None,
 ) -> None:
     monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search()
+    # This should have already been called, but call it again here for good measure.
+    # TODO: Get to the root of why sometimes it seems litellm settings aren't configured.
+    from onyx.llm.litellm_singleton.config import initialize_litellm
+
+    initialize_litellm()
     # Split messages into three parts for clear tracking
     # TODO: Think about terminal tool calls like image gen
     # in multi turn conversations
@@ -200,7 +205,7 @@ def _fast_chat_turn_core(
     if len(final_answer) == 0 and not has_image_generation:
         raise ValueError(
             """Final answer is empty. Inference provider likely failed to provide
-            content packets and ended the stream without an error.
+            content packets.
             """
         )
     save_turn(

@@ -267,12 +267,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_braintrust_if_creds_available()
     setup_langfuse_if_creds_available()
 
-    from onyx.llm.litellm_singleton.config import initialize_litellm
-    from onyx.llm.litellm_singleton.monkey_patches import apply_monkey_patches
-
-    initialize_litellm()
-    apply_monkey_patches()
-
     # fill up Postgres connection pools
     await warm_up_connections()
 
