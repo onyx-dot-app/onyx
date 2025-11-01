@@ -133,7 +133,11 @@ function ChatInputBarInner({
   const { user } = useUser();
 
   // Draft persistence key - use session ID or "new" for new chats
-  const draftKey = `chat-draft-${chatSessionId || "new"}`;
+  // Memoize to prevent unnecessary effect triggers
+  const draftKey = useMemo(
+    () => `chat-draft-${chatSessionId || "new"}`,
+    [chatSessionId]
+  );
 
   // Load draft from sessionStorage or use initialMessage
   const [localMessage, setLocalMessage] = useState(() => {
@@ -188,13 +192,16 @@ function ChatInputBarInner({
 
   // Clear input when leaving "input" state (handles input→loading→streaming flow)
   const previousChatStateRef = React.useRef(chatState);
+  const draftKeyRef = React.useRef(draftKey);
+  draftKeyRef.current = draftKey; // Keep ref updated
+
   useEffect(() => {
     if (previousChatStateRef.current === "input" && chatState !== "input") {
       setLocalMessage("");
-      // Clear draft from sessionStorage
+      // Clear draft from sessionStorage using the ref (stable reference)
       if (typeof window !== "undefined") {
         try {
-          sessionStorage.removeItem(draftKey);
+          sessionStorage.removeItem(draftKeyRef.current);
         } catch (e) {
           console.warn("Failed to remove draft from sessionStorage:", e);
         }
@@ -214,7 +221,7 @@ function ChatInputBarInner({
       }
     }
     previousChatStateRef.current = chatState;
-  }, [chatState, textAreaRef, draftKey]);
+  }, [chatState, textAreaRef]); // Removed draftKey from deps - use ref instead
 
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
