@@ -40,6 +40,8 @@ from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
+from onyx.server.query_and_chat.streaming_models import ReasoningDelta
+from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
@@ -257,9 +259,9 @@ def _process_stream(
             _emit_clean_up_packets(dependencies, ctx)
             agent_stream.cancel()
             break
-        obj = _default_packet_translation(ev, ctx, processor)
-        if obj:
-            dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))
+        packets = _default_packet_translation(ev, ctx, processor)
+        for packet in packets:
+            dependencies.emitter.emit(packet)
         if isinstance(getattr(ev, "item", None), ToolCallItem):
             tool_call_events.append(cast(ResponseFunctionToolCall, ev.item.raw_item))
     if agent_stream.streamed is None:
@@ -307,16 +309,73 @@ def _emit_citations_for_final_answer(
 
 def _default_packet_translation(
     ev: object, ctx: ChatTurnContext, processor: CitationProcessor | None
-) -> PacketObj | None:
+) -> list[Packet]:
+    """Function is a bit messy atm, since there's a bug in OpenAI Agents SDK that
+    causes Anthropic packets to be out of order.
+
+    TODO (chris): clean this up once OpenAI Agents SDK is fixed.
+    """
+
+    # lazy loading to save memory
+    from openai.types.responses import ResponseReasoningSummaryPartAddedEvent
+    from openai.types.responses import ResponseReasoningSummaryPartDoneEvent
+    from openai.types.responses import ResponseReasoningSummaryTextDeltaEvent
+
+    packets: list[Packet] = []
+    obj: PacketObj | None = None
+
     if isinstance(ev, RawResponsesStreamEvent):
-        obj: PacketObj | None = None
-        if ev.data.type == "response.content_part.added":
+        output_index = getattr(ev.data, "output_index", None)
+
+        # ------------------------------------------------------------
+        # Reasoning packets
+        # ------------------------------------------------------------
+        if isinstance(ev.data, ResponseReasoningSummaryPartAddedEvent):
+            packets.append(Packet(ind=ctx.current_run_step, obj=ReasoningStart()))
+            ctx.current_output_index = output_index
+        elif isinstance(ev.data, ResponseReasoningSummaryTextDeltaEvent):
+            packets.append(
+                Packet(
+                    ind=ctx.current_run_step,
+                    obj=ReasoningDelta(reasoning=ev.data.delta),
+                )
+            )
+        elif isinstance(ev.data, ResponseReasoningSummaryPartDoneEvent):
+            # only do anything if we haven't already "gone past" this step
+            # (e.g. if we've already sent the MessageStart / MessageDelta packets, then we
+            # shouldn't do anything)
+            if ctx.current_output_index == output_index:
+                ctx.current_run_step += 1
+                ctx.current_output_index = None
+                packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
+
+                if ctx.held_back_message_start:
+                    packets.append(
+                        Packet(
+                            ind=ctx.current_run_step, obj=ctx.held_back_message_start
+                        )
+                    )
+                    ctx.held_back_message_start = None
+
+        # ------------------------------------------------------------
+        # Message packets
+        # ------------------------------------------------------------
+        elif ev.data.type == "response.content_part.added":
             retrieved_search_docs = saved_search_docs_from_llm_docs(
                 ctx.ordered_fetched_documents
             )
-            obj = MessageStart(
-                type="message_start", content="", final_documents=retrieved_search_docs
-            )
+            obj = MessageStart(content="", final_documents=retrieved_search_docs)
+
+            # if this appears in the middle of the reasoning response, we need to hold it back
+            # to not have multiple packet types ongoing at the same time
+            if (
+                output_index
+                and ctx.current_output_index is not None
+                and output_index == ctx.current_output_index + 1
+            ):
+                ctx.held_back_message_start = obj
+            else:
+                packets.append(Packet(ind=ctx.current_run_step, obj=obj))
         elif ev.data.type == "response.output_text.delta" and len(ev.data.delta) > 0:
             if processor:
                 final_answer_piece = ""
@@ -325,10 +384,30 @@ def _default_packet_translation(
                         ctx.citations.append(response_part)
                     else:
                         final_answer_piece += response_part.answer_piece or ""
-                obj = MessageDelta(type="message_delta", content=final_answer_piece)
+                obj = MessageDelta(content=final_answer_piece)
             else:
-                obj = MessageDelta(type="message_delta", content=ev.data.delta)
+                obj = MessageDelta(content=ev.data.delta)
+
+            ctx.current_output_index = output_index
+
+            # as soon as we get an actual message delta, we can emit the held back packet
+            # (if one exists)
+            if ctx.held_back_message_start:
+                # Force end of the previous packet section
+                packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
+
+                # increment the run step, since this means that we've started
+                # the next step for THIS packet (not the next packet, like we would
+                # for "end" packets)
+                ctx.current_run_step += 1
+                packets.append(
+                    Packet(ind=ctx.current_run_step, obj=ctx.held_back_message_start)
+                )
+                ctx.held_back_message_start = None
+
+            packets.append(Packet(ind=ctx.current_run_step, obj=obj))
         elif ev.data.type == "response.content_part.done":
-            obj = SectionEnd(type="section_end")
-        return obj
-    return None
+            packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
+            ctx.current_output_index = None
+
+    return packets
