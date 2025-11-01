@@ -76,11 +76,16 @@ def _run_agent_loop(
 
     while not last_call_is_final:
         current_messages = chat_history + [current_user_message] + agent_turn_messages
-        tool_choice = (
-            force_use_tool_to_function_tool_names(force_use_tool, dependencies.tools)
-            if first_iteration and force_use_tool
-            else None
-        ) or "auto"
+        if not dependencies.tools:
+            tool_choice = None
+        else:
+            tool_choice = (
+                force_use_tool_to_function_tool_names(
+                    force_use_tool, dependencies.tools
+                )
+                if first_iteration and force_use_tool
+                else None
+            ) or "auto"
         model_settings = replace(dependencies.model_settings, tool_choice=tool_choice)
         agent = Agent(
             name="Assistant",

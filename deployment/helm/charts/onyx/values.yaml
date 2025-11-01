@@ -859,6 +859,21 @@ auth:
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
     values:
       smtp_pass: ""
+  dbreadonly:
+    # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
+    enabled: false
+    # -- Overwrite the default secret name, ignored if existingSecret is defined
+    secretName: 'onyx-dbreadonly'
+    # -- Use a secret specified elsewhere
+    existingSecret: ""
+    # -- This defines the env var to secret map, key is always upper-cased as an env var
+    secretKeys:
+      DB_READONLY_USER: db_readonly_user
+      DB_READONLY_PASSWORD: db_readonly_password
+    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
+    values:
+      db_readonly_user: ""
+      db_readonly_password: ""
 
 configMap:
   # Change this for production uses unless Onyx is only accessible behind VPN
