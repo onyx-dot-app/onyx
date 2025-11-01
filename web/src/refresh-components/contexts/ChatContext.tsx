@@ -1,6 +1,12 @@
 "use client";
 
-import React, { createContext, useContext, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useMemo,
+  useCallback,
+} from "react";
 import {
   CCPairBasicInfo,
   DocumentSetSummary,
@@ -40,7 +46,7 @@ export function ChatProvider({
     chatSessions.find((chatSession) => chatSession.id === currentChatId) ||
     null;
 
-  async function refreshChatSessions() {
+  const refreshChatSessions = useCallback(async () => {
     try {
       const response = await fetch("/api/chat/get-user-chat-sessions");
       if (!response.ok) throw new Error("Failed to fetch chat sessions");
@@ -64,29 +70,36 @@ export function ChatProvider({
     } catch (error) {
       console.error("Error refreshing chat sessions:", error);
     }
-  }
+  }, [currentChatId, router]);
 
-  async function refreshInputPrompts() {
+  const refreshInputPrompts = useCallback(async () => {
     const response = await fetch("/api/input_prompt");
     if (!response.ok) throw new Error("Failed to fetch input prompts");
     const inputPrompts = await response.json();
     setInputPrompts(inputPrompts);
-  }
+  }, []);
+
+  const contextValue = useMemo(
+    () => ({
+      ...otherProps,
+      currentChat,
+      refreshChatSessions,
+      refreshInputPrompts,
+      inputPrompts,
+      chatSessions,
+    }),
+    [
+      otherProps,
+      currentChat,
+      refreshChatSessions,
+      refreshInputPrompts,
+      inputPrompts,
+      chatSessions,
+    ]
+  );
 
   return (
-    <ChatContext.Provider
-      value={{
-        ...otherProps,
-        currentChat,
-        refreshChatSessions,
-        refreshInputPrompts,
-
-        inputPrompts,
-        chatSessions,
-      }}
-    >
-      {children}
-    </ChatContext.Provider>
+    <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>
   );
 }
 
