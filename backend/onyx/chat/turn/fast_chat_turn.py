@@ -39,6 +39,7 @@ from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
@@ -325,6 +326,7 @@ def _default_packet_translation(
     from openai.types.responses import ResponseReasoningSummaryTextDeltaEvent
 
     packets: list[Packet] = []
+    obj: PacketObj | None = None
 
     if isinstance(ev, RawResponsesStreamEvent):
         output_index = getattr(ev.data, "output_index", None)

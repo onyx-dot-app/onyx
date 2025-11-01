@@ -24,6 +24,7 @@ from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OPENROUTER_PROVIDER_NAME
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
+from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import LLMProviderView
@@ -386,7 +387,7 @@ def get_llm_model_and_settings(
     model_kwargs: dict[str, Any] | None = None,
 ) -> tuple[Model, ModelSettings]:
     from onyx.llm.litellm_singleton import LitellmModel
-    from litellm import Reasoning
+    from openai.types.shared.reasoning import Reasoning
 
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -424,6 +425,7 @@ def get_llm_model_and_settings(
             elif k == VERTEX_LOCATION_KWARG:
                 model_kwargs[k] = v
                 continue
+
     # This is needed for Ollama to do proper function calling
     if provider == OLLAMA_PROVIDER_NAME and api_base is not None:
         os.environ["OLLAMA_API_BASE"] = api_base
@@ -433,9 +435,11 @@ def get_llm_model_and_settings(
     # Add timeout to model_kwargs so it gets passed to litellm
     model_kwargs["timeout"] = timeout
 
-    # Support reasoning streaming
-    # TODO: this doesn't work since openai provider can be used for non-openai models
-    if provider == "openai":
+    # Responses API needed to support reasoning streaming for OpenAI models
+    # NOTE: need to check if it's a true OpenAI model since openai provider
+    # is used generically as a catch-all for OpenAI-compatible providers. These
+    # providers may not support the responses API.
+    if is_true_openai_model(provider, model):
         provider = "openai/responses"
     if provider == "azure":
         provider = "azure/responses"
@@ -461,6 +465,7 @@ def get_llm_model_and_settings(
         extra_args=model_kwargs,
         reasoning=Reasoning(
             summary="detailed",
+            # TODO: dynamically set this?
             effort="medium",
         ),
     )
