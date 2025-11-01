@@ -96,11 +96,10 @@ export default function ProjectContextPanel({
 
   if (!currentProjectId) return null; // no selection yet
 
-  // Detect if there are any non-image files in the displayed files to determine if images should be compact
-  const shouldCompactImages = useMemo(() => {
-    const displayedFiles = allCurrentProjectFiles.slice(0, 4);
-    return hasNonImageFiles(displayedFiles);
-  }, [allCurrentProjectFiles]);
+  // Detect if there are any non-image files in the displayed files
+  // to determine if images should be compact
+  const displayedFiles = allCurrentProjectFiles.slice(0, 4);
+  const shouldCompactImages = hasNonImageFiles(displayedFiles);
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
