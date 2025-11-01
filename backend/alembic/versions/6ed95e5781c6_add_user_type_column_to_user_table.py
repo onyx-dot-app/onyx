@@ -34,8 +34,7 @@ def upgrade() -> None:
     """
     )
 
-    # Remove server_default after data migration (cleaner approach)
-    # The default will be handled by the SQLAlchemy model
+    # Remove the server_default after data migration
     op.alter_column("user", "user_type", server_default=None)
 
 
