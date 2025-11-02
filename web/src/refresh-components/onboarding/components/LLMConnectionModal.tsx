@@ -270,6 +270,7 @@ const LLMConnectionModal = () => {
           if (!result.ok) {
             setErrorMessage(result.errorMessage);
             setApiStatus("error");
+            setIsSubmitting(false);
             return;
           }
           setApiStatus("success");
@@ -387,8 +388,45 @@ const LLMConnectionModal = () => {
                 shouldReset = true;
               break;
             case "bedrock":
-              if (isEmpty(values?.custom_config?.AWS_REGION_NAME))
-                shouldReset = true;
+              {
+                const selectedAuth = values?.custom_config?.BEDROCK_AUTH_METHOD;
+                if (selectedAuth === "access_key") {
+                  formikProps.setFieldValue(
+                    "custom_config.AWS_BEARER_TOKEN_BEDROCK",
+                    ""
+                  );
+                  shouldReset = true;
+                } else if (selectedAuth === "long_term_api_key") {
+                  formikProps.setFieldValue(
+                    "custom_config.AWS_ACCESS_KEY_ID",
+                    ""
+                  );
+                  formikProps.setFieldValue(
+                    "custom_config.AWS_SECRET_ACCESS_KEY",
+                    ""
+                  );
+                  shouldReset = true;
+                } else if (selectedAuth === "iam") {
+                  // Clear both types when IAM is selected
+                  formikProps.setFieldValue(
+                    "custom_config.AWS_BEARER_TOKEN_BEDROCK",
+                    ""
+                  );
+                  formikProps.setFieldValue(
+                    "custom_config.AWS_ACCESS_KEY_ID",
+                    ""
+                  );
+                  formikProps.setFieldValue(
+                    "custom_config.AWS_SECRET_ACCESS_KEY",
+                    ""
+                  );
+                  shouldReset = true;
+                }
+
+                if (isEmpty(values?.custom_config?.AWS_REGION_NAME)) {
+                  shouldReset = true;
+                }
+              }
               break;
             default:
               break;
@@ -409,6 +447,7 @@ const LLMConnectionModal = () => {
           (formikProps.values as any).api_key,
           (formikProps.values as any).api_base,
           (formikProps.values as any).target_uri,
+          (formikProps.values as any).custom_config?.BEDROCK_AUTH_METHOD,
           (formikProps.values as any).custom_config,
         ]);
 

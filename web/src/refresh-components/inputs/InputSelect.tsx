@@ -6,12 +6,17 @@ import { useBoundingBox } from "@/hooks/useBoundingBox";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { ChevronDown } from "lucide-react";
 
-const triggerClasses = (active?: boolean, hovered?: boolean) =>
+const triggerClasses = (
+  active?: boolean,
+  hovered?: boolean,
+  isError?: boolean
+) =>
   ({
     defaulted: [
       "border",
-      hovered && "border-border-02",
-      active && "border-border-05",
+      isError && "!border-status-error-05",
+      !isError && hovered && "border-border-02",
+      !isError && active && "border-border-05",
     ],
     internal: [],
     disabled: ["bg-background-neutral-03"],
@@ -42,6 +47,7 @@ export interface InputSelectProps
   active?: boolean;
   internal?: boolean;
   disabled?: boolean;
+  isError?: boolean;
 
   // Select specific props
   value?: string;
@@ -65,6 +71,7 @@ function InputSelectInner(
     active,
     internal,
     disabled,
+    isError,
     value,
     onValueChange,
     options,
@@ -105,7 +112,7 @@ function InputSelectInner(
         ref={boundingBoxRef}
         className={cn(
           "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
-          triggerClasses(localActive, hovered)[state],
+          triggerClasses(localActive, hovered, isError)[state],
           className
         )}
       >

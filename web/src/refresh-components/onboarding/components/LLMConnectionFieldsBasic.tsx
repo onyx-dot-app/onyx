@@ -159,9 +159,12 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                 <PasswordInputTypeIn
                   {...field}
                   placeholder=""
+                  isError={apiStatus === "error"}
                   onBlur={(e) => {
                     field.onBlur(e);
-                    handleApiKeyInteraction(field.value);
+                    if (llmDescriptor?.name !== "azure") {
+                      handleApiKeyInteraction(field.value);
+                    }
                   }}
                   showClearButton={false}
                   disabled={
@@ -254,6 +257,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                         onValueSet={(value) =>
                           testFileInputChange({ [customConfigKey.name]: value })
                         }
+                        isError={apiStatus === "error"}
                         onBlur={(e) => {
                           field.onBlur(e);
                           if (field.value) {
@@ -271,6 +275,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                         placeholder={customConfigKey.default_value || ""}
                         showClearButton={false}
                         disabled={disabled}
+                        isError={apiStatus === "error"}
                       />
                     ) : (
                       <InputTypeIn
@@ -278,6 +283,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                         placeholder={customConfigKey.default_value || ""}
                         showClearButton={false}
                         disabled={disabled}
+                        isError={apiStatus === "error"}
                       />
                     )}
                   </FormField.Control>
