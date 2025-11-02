@@ -32,6 +32,8 @@ function ImageFileCard({
   const sizeClass = compact ? "h-14 w-14" : "h-20 w-20";
   const loaderSize = compact ? "h-5 w-5" : "h-8 w-8";
 
+  const doneUploading = String(file.status) !== UserFileStatus.UPLOADING;
+
   return (
     <div
       className={`relative group ${sizeClass} rounded-12 border border-border-01 ${
@@ -45,7 +47,7 @@ function ImageFileCard({
         }
       }}
     >
-      {String(file.status) !== UserFileStatus.UPLOADING && (
+      {doneUploading && (
         <button
           onClick={handleRemoveFile}
           title="Delete file"
@@ -83,7 +85,7 @@ function ImageFileCard({
           <X className="h-4 w-4 dark:text-dark-tremor-background-muted" />
         </button>
       )}
-      {isProcessing || !imageUrl ? (
+      {!doneUploading || !imageUrl ? (
         <div className="h-full w-full flex items-center justify-center">
           <Loader2 className={`${loaderSize} text-text-01 animate-spin`} />
         </div>
