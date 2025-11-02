@@ -15,7 +15,7 @@ import { SvgProps } from "@/icons";
 import SvgUser from "@/icons/user";
 import SvgActions from "@/icons/actions";
 import { useAgentsContext } from "./contexts/AgentsContext";
-import { cn } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
 import SvgEdit from "@/icons/edit";
 import { useRouter } from "next/navigation";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -57,81 +57,90 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
 
   return (
-    <Card className="flex flex-col group/AgentCard hover:shadow-01">
-      {/* Main Body */}
-      <div className="flex flex-col items-center gap-1 p-1">
-        <div className="flex flex-row items-center w-full gap-1">
-          <div className="flex flex-row items-center w-full p-1.5 gap-1.5">
-            <div className="px-0.5">
-              <AgentIcon agent={agent} size={18} />
+    <Card className="group/AgentCard">
+      <button
+        className="flex flex-col w-full text-left"
+        onClick={() => route({ agentId: agent.id })}
+      >
+        {/* Main Body */}
+        <div className="flex flex-col items-center gap-1 p-1">
+          <div className="flex flex-row items-center w-full gap-1">
+            <div className="flex flex-row items-center w-full p-1.5 gap-1.5">
+              <div className="px-0.5">
+                <AgentIcon agent={agent} size={18} />
+              </div>
+              <Truncated mainContentBody className="flex-1">
+                {agent.name}
+              </Truncated>
             </div>
-            <Truncated mainContentBody className="flex-1">
-              {agent.name}
-            </Truncated>
-          </div>
-          <div className={cn("flex flex-row p-0.5 items-center")}>
-            {isOwnedByUser && isPaidEnterpriseFeaturesEnabled && (
+            <div className={cn("flex flex-row p-0.5 items-center")}>
+              {isOwnedByUser && isPaidEnterpriseFeaturesEnabled && (
+                <IconButton
+                  icon={SvgBarChart}
+                  tertiary
+                  onClick={noProp(() =>
+                    router.push(`/assistants/stats/${agent.id}`)
+                  )}
+                  tooltip="View Agent Stats"
+                  className="hidden group-hover/AgentCard:flex"
+                />
+              )}
+              {isOwnedByUser && (
+                <IconButton
+                  icon={SvgEdit}
+                  tertiary
+                  onClick={noProp(() =>
+                    router.push(`/assistants/edit/${agent.id}`)
+                  )}
+                  tooltip="Edit Agent"
+                  className="hidden group-hover/AgentCard:flex"
+                />
+              )}
               <IconButton
-                icon={SvgBarChart}
+                icon={SvgPin}
                 tertiary
-                onClick={() => router.push(`/assistants/stats/${agent.id}`)}
-                tooltip="View Agent Stats"
-                className="hidden group-hover/AgentCard:flex"
+                onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
+                tooltip={pinned ? "Unpin Agent" : "Pin Agent"}
+                transient={pinned}
+                className={cn(!pinned && "hidden group-hover/AgentCard:flex")}
               />
-            )}
-            {isOwnedByUser && (
-              <IconButton
-                icon={SvgEdit}
-                tertiary
-                onClick={() => router.push(`/assistants/edit/${agent.id}`)}
-                tooltip="Edit Agent"
-                className="hidden group-hover/AgentCard:flex"
-              />
-            )}
-            <IconButton
-              icon={pinned ? SvgPinned : SvgPin}
-              tertiary
-              onClick={() => togglePinnedAgent(agent, !pinned)}
-              tooltip={pinned ? "Unpin Agent" : "Pin Agent"}
-              transient={pinned}
-              className={cn(!pinned && "hidden group-hover/AgentCard:flex")}
-            />
+            </div>
           </div>
-        </div>
-        <Text
-          secondaryBody
-          text03
-          className="pb-1 px-2 w-full line-clamp-2 truncate whitespace-normal h-[2.2rem] break-words"
-        >
-          {agent.description}
-        </Text>
-      </div>
-
-      {/* Footer section - bg-background-tint-01 */}
-      <div className="bg-background-tint-01 p-1 flex flex-row items-end justify-between">
-        {/* Left side - creator and actions */}
-        <div className="flex flex-col gap-1 py-1 px-2">
-          <IconLabel icon={SvgUser}>{agent.owner?.email || "Onyx"}</IconLabel>
-          <IconLabel icon={SvgActions}>
-            {agent.tools.length > 0
-              ? `${agent.tools.length} Action${
-                  agent.tools.length > 1 ? "s" : ""
-                }`
-              : "No Actions"}
-          </IconLabel>
-        </div>
-
-        {/* Right side - Start Chat button */}
-        <div className="p-0.5">
-          <Button
-            tertiary
-            rightIcon={SvgBubbleText}
-            onClick={() => route({ agentId: agent.id })}
+          <Text
+            secondaryBody
+            text03
+            className="pb-1 px-2 w-full line-clamp-2 truncate whitespace-normal h-[2.2rem] break-words"
           >
-            Start Chat
-          </Button>
+            {agent.description}
+          </Text>
         </div>
-      </div>
+
+        {/* Footer section - bg-background-tint-01 */}
+        <div className="bg-background-tint-01 p-1 flex flex-row items-end justify-between">
+          {/* Left side - creator and actions */}
+          <div className="flex flex-col gap-1 py-1 px-2">
+            <IconLabel icon={SvgUser}>{agent.owner?.email || "Onyx"}</IconLabel>
+            <IconLabel icon={SvgActions}>
+              {agent.tools.length > 0
+                ? `${agent.tools.length} Action${
+                    agent.tools.length > 1 ? "s" : ""
+                  }`
+                : "No Actions"}
+            </IconLabel>
+          </div>
+
+          {/* Right side - Start Chat button */}
+          <div className="p-0.5">
+            <Button
+              tertiary
+              rightIcon={SvgBubbleText}
+              onClick={noProp(() => route({ agentId: agent.id }))}
+            >
+              Start Chat
+            </Button>
+          </div>
+        </div>
+      </button>
     </Card>
   );
 }
