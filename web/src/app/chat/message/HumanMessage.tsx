@@ -1,7 +1,11 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { ChatFileType, FileDescriptor } from "@/app/chat/interfaces";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ChatFileType,
+  FileDescriptor,
+  isTextFile,
+} from "@/app/chat/interfaces";
 import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/chat/components/files/images/InMessageImage";
 import CsvContent from "@/components/tools/CSVContent";
@@ -15,10 +19,12 @@ import Button from "@/refresh-components/buttons/Button";
 import SvgCopy from "@/icons/copy";
 import { copyAll } from "@/app/chat/message/copyingUtils";
 import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 
 interface FileDisplayProps {
   files: FileDescriptor[];
   alignBubble?: boolean;
+  onOpenFile?: (file: FileDescriptor) => void;
 }
 
 interface MessageEditingProps {
@@ -27,12 +33,10 @@ interface MessageEditingProps {
   onCancelEdit: () => void;
 }
 
-function FileDisplay({ files, alignBubble }: FileDisplayProps) {
+function FileDisplay({ files, alignBubble, onOpenFile }: FileDisplayProps) {
   const [close, setClose] = useState(true);
   const textFiles = files.filter(
-    (file) =>
-      file.type === ChatFileType.PLAIN_TEXT ||
-      file.type === ChatFileType.DOCUMENT
+    (file) => isTextFile(file.type) && file.type !== ChatFileType.CSV
   );
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
   const csvFiles = files.filter((file) => file.type === ChatFileType.CSV);
@@ -46,7 +50,11 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
         >
           <div className="flex flex-col gap-2">
             {textFiles.map((file) => (
-              <Attachment key={file.id} fileName={file.name || file.id} />
+              <Attachment
+                key={file.id}
+                fileName={file.name || file.id}
+                open={onOpenFile ? () => onOpenFile(file) : undefined}
+              />
             ))}
           </div>
         </div>
@@ -178,6 +186,7 @@ interface HumanMessageProps {
   // Streaming and generation
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
+  setPresentingDocument?: (doc: MinimalOnyxDocument | null) => void;
 }
 
 export default function HumanMessage({
@@ -190,6 +199,7 @@ export default function HumanMessage({
   shared,
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
+  setPresentingDocument,
 }: HumanMessageProps) {
   // TODO (@raunakab):
   //
@@ -199,6 +209,25 @@ export default function HumanMessage({
 
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  const handleFileOpen = useCallback(
+    (file: FileDescriptor) => {
+      if (!setPresentingDocument) {
+        return;
+      }
+
+      const fileIdentifier = file.user_file_id ?? file.id;
+      if (!fileIdentifier) {
+        return;
+      }
+
+      setPresentingDocument({
+        document_id: `chat_file__${fileIdentifier}`,
+        semantic_identifier: file.name ?? fileIdentifier,
+      });
+    },
+    [setPresentingDocument]
+  );
 
   const currentMessageInd = messageId
     ? otherMessagesCanSwitchTo?.indexOf(messageId)
@@ -241,7 +270,11 @@ export default function HumanMessage({
       >
         <div className="xl:ml-8">
           <div className="flex flex-col desktop:mr-4">
-            <FileDisplay alignBubble files={files || []} />
+            <FileDisplay
+              alignBubble
+              files={files || []}
+              onOpenFile={handleFileOpen}
+            />
 
             <div className="flex justify-end mt-1">
               <div className="w-full ml-8 flex w-full w-[800px] break-words">
