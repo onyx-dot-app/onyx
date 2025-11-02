@@ -35,7 +35,6 @@ import { AuthType } from "@/lib/constants";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
-import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 export default function NRFPage({
@@ -338,7 +337,7 @@ export default function NRFPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {!user && authType !== "disabled" && showLoginModal ? (
+      {!user && authType !== "disabled" && showLoginModal && (
         <Modal className="max-w-md mx-auto">
           {fetchingAuth ? (
             <p className="p-4">Loading login info…</p>
@@ -373,8 +372,6 @@ export default function NRFPage({
             </div>
           )}
         </Modal>
-      ) : (
-        llmProviders.length == 0 && <ApiKeyModal setPopup={setPopup} />
       )}
     </div>
   );

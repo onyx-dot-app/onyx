@@ -31,7 +31,6 @@ import { ChatPopup } from "@/app/chat/components/ChatPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { useUser } from "@/components/user/UserProvider";
-import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import TextView from "@/components/chat/TextView";
@@ -120,7 +119,6 @@ export function ChatPage({
     tags,
     documentSets,
     llmProviders,
-    shouldShowWelcomeModal,
     refreshChatSessions,
   } = useChatContext();
 
@@ -145,10 +143,6 @@ export function ChatPage({
   const isInitialLoad = useRef(true);
 
   const { agents: availableAssistants } = useAgentsContext();
-
-  const [showApiKeyModal, setShowApiKeyModal] = useState(
-    !shouldShowWelcomeModal
-  );
 
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
@@ -632,10 +626,6 @@ export function ChatPage({
     );
   }, []);
 
-  const handleShowApiKeyModal = useCallback(() => {
-    setShowApiKeyModal(true);
-  }, []);
-
   const handleChatInputSubmit = useCallback(() => {
     onSubmit({
       message: message,
@@ -757,14 +747,7 @@ export function ChatPage({
     <>
       <HealthCheckBanner />
 
-      {showApiKeyModal && !shouldShowWelcomeModal && (
-        <ApiKeyModal
-          hide={() => setShowApiKeyModal(false)}
-          setPopup={setPopup}
-        />
-      )}
-
-      {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
+      {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit.
       Only used in the EE version of the app. */}
       {popup}
 
@@ -913,10 +896,6 @@ export function ChatPage({
                             setPresentingDocument={setPresentingDocument}
                           />
                         )}
-
-                        {/* <UnconfiguredLlmProviderText
-                          showConfigureAPIKey={handleShowApiKeyModal}
-                        /> */}
 
                         {(showOnboarding ||
                           (user?.role !== UserRole.ADMIN &&
