@@ -933,6 +933,7 @@ export function ChatPage({
                           handleFileUpload={handleMessageSpecificFileUpload}
                           textAreaRef={textAreaRef}
                           setPresentingDocument={setPresentingDocument}
+                          resetInputBar={resetInputBar}
                         />
                       </div>
 
