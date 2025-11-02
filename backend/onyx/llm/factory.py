@@ -3,6 +3,7 @@ from typing import Any
 
 from agents import ModelSettings
 from agents.models.interface import Model
+from agents.models.openai_responses import OpenAIResponsesModel
 
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
@@ -433,24 +434,11 @@ def get_llm_model_and_settings(
     # Add timeout to model_kwargs so it gets passed to litellm
     model_kwargs["timeout"] = timeout
 
-    # Build the full model name in provider/model format
-    model_name = f"{provider}/{deployment_name or model}"
-
-    # Create LitellmModel instance
-    litellm_model = LitellmModel(
-        model=model_name,
-        # NOTE: have to pass in None instead of empty string for these
-        # otherwise litellm can have some issues with bedrock
-        base_url=api_base or None,
-        api_key=api_key or None,
-    )
-
     # Responses API needed to support reasoning streaming for OpenAI models
     # NOTE: need to check if it's a true OpenAI model since openai provider
     # is used generically as a catch-all for OpenAI-compatible providers. These
     # providers may not support the responses API.
     if is_true_openai_model(provider, model):
-        from agents.models.openai_responses import OpenAIResponsesModel
         from openai import AsyncOpenAI
 
         litellm_model = OpenAIResponsesModel(
@@ -460,8 +448,7 @@ def get_llm_model_and_settings(
                 base_url=api_base or None,
             ),
         )
-    if provider == "azure":
-        from agents.models.openai_responses import OpenAIResponsesModel
+    elif provider == "azure":
         from openai import AsyncOpenAI
 
         if not api_base:
@@ -479,6 +466,17 @@ def get_llm_model_and_settings(
                 api_key=api_key,
                 base_url=base_url,
             ),
+        )
+    else:
+        # Create LitellmModel instance to handle all other models that
+        # don't use the responses API
+        model_name = f"{provider}/{deployment_name or model}"
+        litellm_model = LitellmModel(
+            model=model_name,
+            # NOTE: have to pass in None instead of empty string for these
+            # otherwise litellm can have some issues with bedrock
+            base_url=api_base or None,
+            api_key=api_key or None,
         )
 
     # Create ModelSettings with the provided configuration
