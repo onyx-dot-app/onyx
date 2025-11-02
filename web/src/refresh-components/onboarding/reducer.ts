@@ -29,6 +29,8 @@ export function onboardingReducer(
         ...state,
         currentStep: nextStep,
         stepIndex: STEP_CONFIG[nextStep].index,
+        isButtonActive:
+          nextStep === OnboardingStep.Complete ? true : state.isButtonActive,
         error: undefined,
       };
     }
@@ -51,6 +53,8 @@ export function onboardingReducer(
         ...state,
         currentStep: action.step,
         stepIndex: STEP_CONFIG[action.step].index,
+        isButtonActive:
+          action.step === OnboardingStep.Complete ? true : state.isButtonActive,
         error: undefined,
       };
 

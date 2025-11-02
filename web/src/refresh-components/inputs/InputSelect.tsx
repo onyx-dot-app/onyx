@@ -119,7 +119,7 @@ function InputSelectInner(
         <SelectPrimitive.Trigger
           ref={ref}
           className={cn(
-            "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none flex items-center justify-between",
+            "flex-1 h-[1.5rem] bg-transparent p-0.5 focus:outline-none flex items-center justify-between",
             valueClasses()[state]
           )}
           onFocus={() => setLocalActive(true)}
@@ -127,11 +127,25 @@ function InputSelectInner(
           {...props}
         >
           <SelectPrimitive.Value placeholder={placeholder} />
-          <SelectPrimitive.Icon asChild>
-            <ChevronDown className="h-4 w-4 opacity-50 ml-2 flex-shrink-0" />
-          </SelectPrimitive.Icon>
+          <div className="flex items-center">
+            {rightSection && (
+              <div
+                className="flex items-center"
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+              >
+                {rightSection}
+              </div>
+            )}
+            <SelectPrimitive.Icon asChild>
+              <ChevronDown className="h-4 w-4 opacity-50 ml-2 flex-shrink-0" />
+            </SelectPrimitive.Icon>
+          </div>
         </SelectPrimitive.Trigger>
-        {rightSection}
       </div>
 
       <SelectPrimitive.Portal>

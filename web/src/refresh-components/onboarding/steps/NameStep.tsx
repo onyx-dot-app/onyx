@@ -17,13 +17,20 @@ const NameStepInner = ({
   actions: onboardingActions,
 }: NameStepProps) => {
   const { userName } = onboardingState.data;
-  const { updateName, goToStep, setButtonActive } = onboardingActions;
+  const { updateName, goToStep, setButtonActive, nextStep } = onboardingActions;
 
   const isActive = onboardingState.currentStep === OnboardingStep.Name;
   const containerClasses = cn(
     "flex items-center justify-between w-full max-w-[800px] p-3 bg-background-tint-00 rounded-16 border border-border-01",
     isActive ? "opacity-100" : "opacity-50"
   );
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && userName && userName.trim().length > 0) {
+      e.preventDefault();
+      nextStep();
+    }
+  };
 
   const inputRef = useRef<HTMLInputElement>(null);
   return isActive ? (
@@ -50,6 +57,7 @@ const NameStepInner = ({
         placeholder="Your name"
         value={userName || ""}
         onChange={(e) => updateName(e.target.value)}
+        onKeyDown={handleKeyDown}
         className="w-[26%] min-w-40"
       />
     </div>

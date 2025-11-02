@@ -24,6 +24,16 @@ const OnboardingHeaderInner = ({
   const StepIcon = STEP_CONFIG[onboardingState.currentStep].icon;
   const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
   const isWelcomeStep = onboardingState.currentStep === OnboardingStep.Welcome;
+  const isCompleteStep =
+    onboardingState.currentStep === OnboardingStep.Complete;
+
+  const handleButtonClick = () => {
+    if (isCompleteStep) {
+      handleHideOnboarding();
+    } else {
+      onboardingActions.nextStep();
+    }
+  };
 
   return (
     <div className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01">
@@ -46,7 +56,7 @@ const OnboardingHeaderInner = ({
               </Text>
             )}
             <Button
-              onClick={onboardingActions.nextStep}
+              onClick={handleButtonClick}
               disabled={!onboardingState.isButtonActive}
             >
               {stepButtonText}

@@ -36,14 +36,13 @@ export const STEP_CONFIG: Record<OnboardingStep, StepConfig> = {
   [OnboardingStep.LlmSetup]: {
     index: 2,
     title: "Almost there! Connect your models to start chatting.",
-    buttonText: "Finish Setup",
+    buttonText: "Next",
     icon: SvgStep3,
   },
   [OnboardingStep.Complete]: {
     index: 3,
-    title:
-      "You're all set! It might be helpful to review the following settings.",
-    buttonText: "",
+    title: "You're all set, review the optional settings or click Finish Setup",
+    buttonText: "Finish Setup",
     icon: undefined,
   },
 } as const;
