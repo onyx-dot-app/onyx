@@ -429,20 +429,9 @@ def get_llm_model_and_settings(
     # This is needed for Ollama to do proper function calling
     if provider == OLLAMA_PROVIDER_NAME and api_base is not None:
         os.environ["OLLAMA_API_BASE"] = api_base
-    if api_version:
-        model_kwargs["api_version"] = api_version
 
     # Add timeout to model_kwargs so it gets passed to litellm
     model_kwargs["timeout"] = timeout
-
-    # Responses API needed to support reasoning streaming for OpenAI models
-    # NOTE: need to check if it's a true OpenAI model since openai provider
-    # is used generically as a catch-all for OpenAI-compatible providers. These
-    # providers may not support the responses API.
-    if is_true_openai_model(provider, model):
-        provider = "openai/responses"
-    if provider == "azure":
-        provider = "azure/responses"
 
     # Build the full model name in provider/model format
     model_name = f"{provider}/{deployment_name or model}"
@@ -455,6 +444,42 @@ def get_llm_model_and_settings(
         base_url=api_base or None,
         api_key=api_key or None,
     )
+
+    # Responses API needed to support reasoning streaming for OpenAI models
+    # NOTE: need to check if it's a true OpenAI model since openai provider
+    # is used generically as a catch-all for OpenAI-compatible providers. These
+    # providers may not support the responses API.
+    if is_true_openai_model(provider, model):
+        from agents.models.openai_responses import OpenAIResponsesModel
+        from openai import AsyncOpenAI
+
+        litellm_model = OpenAIResponsesModel(
+            model=model,
+            openai_client=AsyncOpenAI(
+                api_key=api_key,
+                base_url=api_base or None,
+            ),
+        )
+    if provider == "azure":
+        from agents.models.openai_responses import OpenAIResponsesModel
+        from openai import AsyncOpenAI
+
+        if not api_base:
+            raise ValueError("API base is required for Azure OpenAI")
+
+        base_url = api_base
+        if not base_url.endswith("/openai/v1/"):
+            base_url = f"{base_url}/openai/v1/"
+
+        azure_model_name = deployment_name or model
+
+        litellm_model = OpenAIResponsesModel(
+            model=azure_model_name,
+            openai_client=AsyncOpenAI(
+                api_key=api_key,
+                base_url=base_url,
+            ),
+        )
 
     # Create ModelSettings with the provided configuration
     model_settings = ModelSettings(

@@ -78,6 +78,7 @@ def _run_agent_loop(
 
     while not last_call_is_final:
         current_messages = chat_history + [current_user_message] + agent_turn_messages
+
         if not dependencies.tools:
             tool_choice = None
         else:
@@ -89,6 +90,7 @@ def _run_agent_loop(
                 else None
             ) or "auto"
         model_settings = replace(dependencies.model_settings, tool_choice=tool_choice)
+
         agent = Agent(
             name="Assistant",
             model=dependencies.llm_model,

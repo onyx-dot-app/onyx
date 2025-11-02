@@ -821,3 +821,14 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
             f"Failed to determine if {model_provider}/{model_name} is a true OpenAI model"
         )
         return False
+
+
+def is_responses_api_model(model_provider: str) -> bool:
+    """
+    Determines if a model uses OpenAI's /v1/responses API endpoint instead of /v1/chat/completions.
+    """
+    RESPONSES_API__PROVIDERS = ["openai/responses", "azure/responses"]
+    for provider_option in RESPONSES_API__PROVIDERS:
+        if model_provider.startswith(provider_option):
+            return True
+    return False
