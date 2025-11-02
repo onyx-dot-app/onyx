@@ -943,6 +943,7 @@ export function ChatPage({
                           handleFileUpload={handleMessageSpecificFileUpload}
                           textAreaRef={textAreaRef}
                           setPresentingDocument={setPresentingDocument}
+                          resetInputBar={resetInputBar}
                           disabled={
                             llmProviders.length === 0 ||
                             (llmProviders.length === 0 &&

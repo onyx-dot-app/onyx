@@ -136,6 +136,7 @@ export interface ChatInputBarProps {
   deepResearchEnabled: boolean;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
+  resetInputBar: () => void;
   disabled: boolean;
 }
 
@@ -161,6 +162,7 @@ function ChatInputBarInner({
   deepResearchEnabled,
   toggleDeepResearch,
   setPresentingDocument,
+  resetInputBar,
   disabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
@@ -169,14 +171,12 @@ function ChatInputBarInner({
 
   const isInitialMount = React.useRef(true);
   const prevChatState = React.useRef(chatState);
-  const currentDraftKey = React.useRef<string>("");
+  const prevDraftKey = React.useRef<string>("");
 
   const draftKey = useMemo(
     () => `chat-draft-${chatSessionId || "new"}`,
     [chatSessionId]
   );
-
-  currentDraftKey.current = draftKey;
 
   const [localMessage, setLocalMessage] = useState(() => {
     if (initialMessage) {
@@ -304,6 +304,19 @@ function ChatInputBarInner({
     [handlePromptInput, textAreaRef, draftKey]
   );
 
+  const handleSubmit = useCallback(
+    (message: string) => {
+      // Clear the draft immediately before submitting
+      // This must happen before onSubmit because chatSessionId might change
+      // during the submission, causing draftKey to change
+      removeDraft(draftKey);
+
+      // Call the parent's onSubmit
+      onSubmit(message);
+    },
+    [onSubmit, draftKey]
+  );
+
   const handleTextAreaRef = useCallback(
     (element: HTMLTextAreaElement | null) => {
       textAreaRef.current = element;
@@ -318,14 +331,22 @@ function ChatInputBarInner({
     [textAreaRef]
   );
 
+  // Load draft when switching between chats
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
+      prevDraftKey.current = draftKey;
       return;
     }
 
-    setLocalMessage(getDraft(draftKey) || "");
+    // When the draftKey changes (chat switch), load the draft for the new chat
+    const loadedDraft = getDraft(draftKey) || "";
+    setLocalMessage(loadedDraft);
 
+    // Update the previous draft key for future reference
+    prevDraftKey.current = draftKey;
+
+    // Resize textarea to match loaded content
     if (textAreaRef.current) {
       textAreaRef.current.style.height = "0px";
       textAreaRef.current.style.height = `${Math.min(
@@ -335,24 +356,28 @@ function ChatInputBarInner({
     }
   }, [draftKey, textAreaRef]);
 
+  // Clear input and reset height when transitioning away from input state
   useEffect(() => {
     if (prevChatState.current === "input" && chatState !== "input") {
+      // Clear the message
       setLocalMessage("");
-      removeDraft(currentDraftKey.current);
+
+      // Reset the input bar padding in the parent component
+      resetInputBar();
+
+      // Reset textarea height by directly manipulating the DOM
+      // We do this synchronously because React hasn't flushed the state update yet
       if (textAreaRef.current) {
+        textAreaRef.current.value = "";
         textAreaRef.current.style.height = "0px";
-        requestAnimationFrame(() => {
-          if (textAreaRef.current) {
-            textAreaRef.current.style.height = `${Math.min(
-              textAreaRef.current.scrollHeight,
-              MAX_INPUT_HEIGHT
-            )}px`;
-          }
-        });
+        textAreaRef.current.style.height = `${Math.min(
+          textAreaRef.current.scrollHeight,
+          MAX_INPUT_HEIGHT
+        )}px`;
       }
     }
     prevChatState.current = chatState;
-  }, [chatState, textAreaRef]);
+  }, [chatState, textAreaRef, resetInputBar]);
 
   const startFilterSlash = useMemo(() => {
     if (localMessage !== undefined) {
@@ -561,7 +586,7 @@ function ChatInputBarInner({
             ) {
               event.preventDefault();
               if (localMessage) {
-                onSubmit(localMessage);
+                handleSubmit(localMessage);
               }
             }
           }}
@@ -717,7 +742,7 @@ function ChatInputBarInner({
                 if (chatState == "streaming") {
                   stopGenerating();
                 } else if (localMessage) {
-                  onSubmit(localMessage);
+                  handleSubmit(localMessage);
                 }
               }}
             />
