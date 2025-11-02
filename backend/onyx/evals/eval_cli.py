@@ -43,6 +43,7 @@ def run_local(
     remote_dataset_name: str | None,
     search_permissions_email: str | None = None,
     no_send_logs: bool = False,
+    models: list[str] | None = None,
 ) -> EvalationAck:
     """
     Run evaluation with local configurations.
@@ -51,6 +52,8 @@ def run_local(
         local_data_path: Path to local JSON file
         remote_dataset_name: Name of remote Braintrust dataset
         search_permissions_email: Optional email address to impersonate for the evaluation
+        no_send_logs: Whether to send logs to Braintrust
+        models: List of model names to evaluate
 
     Returns:
         EvalationAck: The evaluation result
@@ -65,6 +68,7 @@ def run_local(
         search_permissions_email=search_permissions_email,
         dataset_name=remote_dataset_name or "blank",
         no_send_logs=no_send_logs,
+        models=models or ["gpt-4.1"],
     )
 
     if remote_dataset_name:
@@ -181,6 +185,14 @@ def main() -> None:
         default=False,
     )
 
+    parser.add_argument(
+        "--models",
+        type=str,
+        nargs="+",
+        help="List of model names to evaluate (e.g., --models gpt-4 gpt-4o)",
+        default=None,
+    )
+
     args = parser.parse_args()
 
     if args.local_data_path:
@@ -220,11 +232,15 @@ def main() -> None:
         if args.search_permissions_email:
             print(f"Using search permissions email: {args.search_permissions_email}")
 
+        if args.models:
+            print(f"Evaluating models: {', '.join(args.models)}")
+
         run_local(
             local_data_path=args.local_data_path,
             remote_dataset_name=args.remote_dataset_name,
             search_permissions_email=args.search_permissions_email,
             no_send_logs=args.no_send_logs,
+            models=args.models,
         )
 
 
