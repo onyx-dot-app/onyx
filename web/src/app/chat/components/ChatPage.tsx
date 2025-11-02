@@ -344,17 +344,26 @@ export function ChatPage({
     }, 100);
   }, [autoScrollEnabled]);
 
+  const debounceNumber = 100; // time for debouncing
+
+  // handle re-sizing of the text area
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+
   const resetInputBar = useCallback(() => {
     setCurrentMessageFiles([]);
     if (endPaddingRef.current) {
       endPaddingRef.current.style.height = `95px`;
     }
+    // Reset textarea height
+    if (textAreaRef.current) {
+      textAreaRef.current.value = "";
+      textAreaRef.current.style.height = "0px";
+      textAreaRef.current.style.height = `${Math.min(
+        textAreaRef.current.scrollHeight,
+        200 // MAX_INPUT_HEIGHT from ChatInputBar
+      )}px`;
+    }
   }, [setCurrentMessageFiles]);
-
-  const debounceNumber = 100; // time for debouncing
-
-  // handle re-sizing of the text area
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   // ResizeObserver watches inputRef for height changes
   useEffect(() => {

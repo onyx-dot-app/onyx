@@ -351,20 +351,14 @@ function ChatInputBarInner({
     }
   }, [draftKey, textAreaRef, resizeTextarea]);
 
-  // Clear input when transitioning away from input state
+  // Effect: Clear input when transitioning away from input state
   useEffect(() => {
     if (prevChatState.current === "input" && chatState !== "input") {
       setLocalMessage("");
-      resetInputBar();
-
-      // Directly manipulate DOM to reset height (React state hasn't flushed yet)
-      if (textAreaRef.current) {
-        textAreaRef.current.value = "";
-        resizeTextarea(textAreaRef.current);
-      }
+      resetInputBar(); // Handles both parent padding and textarea height
     }
     prevChatState.current = chatState;
-  }, [chatState, textAreaRef, resetInputBar, resizeTextarea]);
+  }, [chatState, resetInputBar]);
 
   const startFilterSlash = useMemo(() => {
     if (localMessage !== undefined) {
