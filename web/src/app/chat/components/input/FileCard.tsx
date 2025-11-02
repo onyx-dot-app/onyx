@@ -192,29 +192,8 @@ export function FileCard({
         className={`flex h-9 w-9 items-center justify-center rounded-08 p-2
       ${isProcessing ? "bg-background-neutral-03" : "bg-background-tint-01"}`}
       >
-        {isProcessing || file.status === UserFileStatus.UPLOADING ? (
+        {isProcessing ? (
           <Loader2 className="h-5 w-5 text-text-01 animate-spin" />
-        ) : isImage && imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={file.name}
-            className="h-full w-full object-cover rounded-08"
-            onError={(e) => {
-              // Fallback to file icon if image fails to load
-              const target = e.target as HTMLImageElement;
-              target.style.display = "none";
-              const parent = target.parentElement;
-              if (parent) {
-                parent.classList.add(
-                  "bg-background-tint-01",
-                  "p-spacing-interline"
-                );
-                const icon = document.createElement("div");
-                icon.innerHTML = '<svg class="h-5 w-5 stroke-text-02" />';
-                parent.appendChild(icon);
-              }
-            }}
-          />
         ) : (
           <SvgFileText className="h-5 w-5 stroke-text-02" />
         )}
