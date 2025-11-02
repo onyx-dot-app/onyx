@@ -21,6 +21,12 @@ type StepConfig = {
 };
 
 export const STEP_CONFIG: Record<OnboardingStep, StepConfig> = {
+  [OnboardingStep.Welcome]: {
+    index: 0,
+    title: "Let's take a moment to get you set up.",
+    buttonText: "Let's Go",
+    icon: SvgStep2,
+  },
   [OnboardingStep.Name]: {
     index: 1,
     title: "Let's take a moment to get you set up.",
@@ -48,7 +54,11 @@ export const STEP_NAVIGATION: Record<
   OnboardingStep,
   { next?: OnboardingStep; prev?: OnboardingStep }
 > = {
-  [OnboardingStep.Name]: { next: OnboardingStep.LlmSetup },
+  [OnboardingStep.Welcome]: { next: OnboardingStep.Name },
+  [OnboardingStep.Name]: {
+    next: OnboardingStep.LlmSetup,
+    prev: OnboardingStep.Welcome,
+  },
   [OnboardingStep.LlmSetup]: {
     next: OnboardingStep.Complete,
     prev: OnboardingStep.Name,

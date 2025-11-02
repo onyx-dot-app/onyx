@@ -7,11 +7,11 @@ import {
 import { STEP_NAVIGATION, STEP_CONFIG, TOTAL_STEPS } from "./constants";
 
 export const initialState: OnboardingState = {
-  currentStep: OnboardingStep.Name,
-  stepIndex: 1,
+  currentStep: OnboardingStep.Welcome,
+  stepIndex: 0,
   totalSteps: TOTAL_STEPS,
   data: {},
-  isButtonActive: false,
+  isButtonActive: true,
   isLoading: false,
 };
 

@@ -81,6 +81,8 @@ import { cn } from "@/lib/utils";
 import { Suggestions } from "@/sections/Suggestions";
 import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
+import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
+import { OnboardingStep } from "@/refresh-components/onboarding/types";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 interface ChatPageProps {
@@ -212,8 +214,15 @@ export function ChatPage({
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
-  const [isOnboardingCollapsed, setIsOnboardingCollapsed] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Initialize onboarding state
+  const {
+    state: onboardingState,
+    actions: onboardingActions,
+    llmDescriptors,
+  } = useOnboardingState();
+
   // Show onboarding if no LLM providers are configured
   //No need to automaticallychange when llmProviders changes
   useEffect(() => {
@@ -914,11 +923,12 @@ export function ChatPage({
                             !user?.personalization?.name)) &&
                           currentProjectId === null && (
                             <OnboardingFlow
-                              isCollapsed={isOnboardingCollapsed}
-                              onCollapsedChange={setIsOnboardingCollapsed}
                               handleHideOnboarding={() =>
                                 setShowOnboarding(false)
                               }
+                              state={onboardingState}
+                              actions={onboardingActions}
+                              llmDescriptors={llmDescriptors}
                             />
                           )}
                         <ChatInputBar
@@ -947,7 +957,9 @@ export function ChatPage({
                           setPresentingDocument={setPresentingDocument}
                           disabled={
                             llmProviders.length === 0 ||
-                            !user?.personalization?.name
+                            !user?.personalization?.name ||
+                            onboardingState.currentStep !==
+                              OnboardingStep.Complete
                           }
                         />
                       </div>

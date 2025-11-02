@@ -62,7 +62,7 @@ export function useOnboardingState(): {
       });
       return;
     }
-    if (userName) {
+    if (userName && state.currentStep === OnboardingStep.Welcome) {
       dispatch({
         type: OnboardingActionType.UPDATE_DATA,
         payload: { userName },
@@ -104,15 +104,23 @@ export function useOnboardingState(): {
     dispatch({ type: OnboardingActionType.PREV_STEP });
   }, []);
 
-  const goToStep = useCallback((step: OnboardingStep) => {
-    if (step === OnboardingStep.LlmSetup && llmProviders.length > 0) {
-      dispatch({
-        type: OnboardingActionType.SET_BUTTON_ACTIVE,
-        isButtonActive: true,
-      });
-    }
-    dispatch({ type: OnboardingActionType.GO_TO_STEP, step });
-  }, []);
+  const goToStep = useCallback(
+    (step: OnboardingStep) => {
+      if (step === OnboardingStep.LlmSetup && llmProviders.length > 0) {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: true,
+        });
+      } else if (step === OnboardingStep.LlmSetup) {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: false,
+        });
+      }
+      dispatch({ type: OnboardingActionType.GO_TO_STEP, step });
+    },
+    [llmProviders]
+  );
 
   const updateName = useCallback(
     (name: string) => {
