@@ -33,6 +33,7 @@ from onyx.db.models import ModelConfiguration
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
+from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.prompts.chat_prompts import CONTEXTUAL_RAG_TOKEN_ESTIMATE
 from onyx.prompts.chat_prompts import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
 from onyx.prompts.constants import CODE_BLOCK_PAT
@@ -798,19 +799,19 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
     LiteLLM uses the "openai" provider for any OpenAI-compatible server (e.g. vLLM, LiteLLM proxy),
     but this function checks if the model is actually from OpenAI's model registry.
     """
-    if model_provider != "openai":
+    if model_provider != OPENAI_PROVIDER_NAME:
         return False
 
     try:
         model_map = get_model_map()
         # Check if any model exists in litellm's registry with openai prefix
         # If it's registered as "openai/model-name", it's a real OpenAI model
-        if f"openai/{model_name}" in model_map:
+        if f"{OPENAI_PROVIDER_NAME}/{model_name}" in model_map:
             return True
 
         if (
             model_name in model_map
-            and model_map[model_name].get("litellm_provider") == "openai"
+            and model_map[model_name].get("litellm_provider") == OPENAI_PROVIDER_NAME
         ):
             return True
 
@@ -821,14 +822,3 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
             f"Failed to determine if {model_provider}/{model_name} is a true OpenAI model"
         )
         return False
-
-
-def is_responses_api_model(model_provider: str) -> bool:
-    """
-    Determines if a model uses OpenAI's /v1/responses API endpoint instead of /v1/chat/completions.
-    """
-    RESPONSES_API__PROVIDERS = ["openai/responses", "azure/responses"]
-    for provider_option in RESPONSES_API__PROVIDERS:
-        if model_provider.startswith(provider_option):
-            return True
-    return False
