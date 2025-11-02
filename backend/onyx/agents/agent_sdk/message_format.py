@@ -53,15 +53,16 @@ def _base_message_to_agent_sdk_msg(
                 }
                 return user_msg
         else:  # assistant
+            assistant_msg: AssistantMessageWithContent
             if is_responses_api:
                 from onyx.agents.agent_sdk.message_types import OutputTextContent
 
-                assistant_msg: AssistantMessageWithContent = {
+                assistant_msg = {
                     "role": "assistant",
                     "content": [OutputTextContent(type="output_text", text=content)],
                 }
             else:
-                assistant_msg: AssistantMessageWithContent = {
+                assistant_msg = {
                     "role": "assistant",
                     "content": [InputTextContent(type="input_text", text=content)],
                 }
