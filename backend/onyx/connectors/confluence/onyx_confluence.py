@@ -24,6 +24,7 @@ from typing import Any
 from typing import cast
 from typing import TypeVar
 from urllib.parse import quote
+from urllib.parse import urlparse, parse_qs
 
 import bs4
 from atlassian import Confluence  # type:ignore
@@ -578,13 +579,49 @@ class OnyxConfluence:
 
         while url_suffix:
             logger.debug(f"Making confluence call to {url_suffix}")
+            # Confluence sometimes echoes query params passed via `params` back into
+            # the `_links.next` URL, which can cause duplicate `expand` and
+            # `body-format` entries to accumulate across pages. To avoid URL
+            # growth and eventual 400s, strip these from the path before
+            # issuing the request and re-apply them via the `params` argument.
+            try:
+                parsed = urlparse(url_suffix)
+                q = parse_qs(parsed.query)
+                # capture existing expand(s) to merge later
+                existing_expand_values = q.get("expand", [])
+                existing_expansions: list[str] = []
+                seen_expansions: set[str] = set()
+                for val in existing_expand_values:
+                    for part in val.split(","):
+                        part = part.strip()
+                        if part and part not in seen_expansions:
+                            existing_expansions.append(part)
+                            seen_expansions.add(part)
+                q.pop("expand", None)
+                q.pop("body-format", None)
+                # rebuild sanitized path
+                base = url_suffix.split("?")[0]
+                sanitized_query = "&".join(
+                    f"{k}={quote(v[0])}" for k, v in q.items()
+                )
+                sanitized_url_suffix = (
+                    f"{base}?{sanitized_query}" if sanitized_query else base
+                )
+                # Build final expand param merging existing + required
+                if "body.atlas_doc_format" not in seen_expansions:
+                    existing_expansions.append("body.atlas_doc_format")
+                final_expand_value = ",".join(existing_expansions)
+            except Exception:
+                # Fall back to original if anything unexpected occurs
+                sanitized_url_suffix = url_suffix
+                final_expand_value = "body.atlas_doc_format"
             try:
                 raw_response = self.get(
-                    path=url_suffix,
+                    path=sanitized_url_suffix,
                     advanced_mode=True,
                     params={
                         "body-format": "atlas_doc_format",
-                        "expand": "body.atlas_doc_format",
+                        "expand": final_expand_value,
                     },
                 )
             except Exception as e:
@@ -914,10 +951,10 @@ class OnyxConfluence:
         response = self.post(url, data=data)
         logger.debug(f"jsonrpc response: {response}")
         if not response.get("result"):
-            logger.warning(
-                f"No jsonrpc response for space permissions for space {space_key}"
-                f"\nResponse: {response}"
+            logger.info(
+                f"No jsonrpc result for space permissions for space {space_key}; likely insufficient permissions."
             )
+            return []
 
         return response.get("result", [])
 
