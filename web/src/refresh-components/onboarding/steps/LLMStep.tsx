@@ -197,7 +197,11 @@ const LLMStepInner = ({
             providers={onboardingState.data.llmProviders || []}
           />
           <Text text04 mainUiAction>
-            {onboardingState.data.llmProviders?.length || 0} models connected
+            {onboardingState.data.llmProviders?.length || 0}{" "}
+            {(onboardingState.data.llmProviders?.length || 0) === 1
+              ? "model"
+              : "models"}{" "}
+            connected
           </Text>
         </div>
         <div className="p-1">

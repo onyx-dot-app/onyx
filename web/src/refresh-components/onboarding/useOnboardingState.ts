@@ -72,13 +72,27 @@ export function useOnboardingState(): {
         step: OnboardingStep.LlmSetup,
       });
     }
-  }, [llmProviders, userName]);
+  }, [llmProviders]);
 
   const nextStep = useCallback(() => {
     dispatch({
       type: OnboardingActionType.SET_BUTTON_ACTIVE,
       isButtonActive: false,
     });
+
+    if (state.currentStep === OnboardingStep.Name) {
+      if (llmProviders.length > 0) {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: true,
+        });
+      } else {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: false,
+        });
+      }
+    }
 
     if (state.currentStep === OnboardingStep.LlmSetup) {
       refreshLlmProviders();
@@ -91,6 +105,12 @@ export function useOnboardingState(): {
   }, []);
 
   const goToStep = useCallback((step: OnboardingStep) => {
+    if (step === OnboardingStep.LlmSetup && llmProviders.length > 0) {
+      dispatch({
+        type: OnboardingActionType.SET_BUTTON_ACTIVE,
+        isButtonActive: true,
+      });
+    }
     dispatch({ type: OnboardingActionType.GO_TO_STEP, step });
   }, []);
 

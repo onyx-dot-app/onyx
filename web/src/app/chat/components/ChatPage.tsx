@@ -40,7 +40,7 @@ import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
+import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import { ChatSearchModal } from "@/app/chat/chat_search/ChatSearchModal";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useScreenSize } from "@/hooks/useScreenSize";
@@ -909,7 +909,9 @@ export function ChatPage({
                           showConfigureAPIKey={handleShowApiKeyModal}
                         /> */}
 
-                        {(showOnboarding || !user?.personalization?.name) &&
+                        {(showOnboarding ||
+                          (user?.role !== UserRole.ADMIN &&
+                            !user?.personalization?.name)) &&
                           currentProjectId === null && (
                             <OnboardingFlow
                               isCollapsed={isOnboardingCollapsed}
