@@ -4,6 +4,7 @@ from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import AssistantMessageWithContent
 from onyx.agents.agent_sdk.message_types import AssistantMessageWithToolCalls
 from onyx.agents.agent_sdk.message_types import InputTextContent
+from onyx.agents.agent_sdk.message_types import OutputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import ToolCall
 from onyx.agents.agent_sdk.message_types import ToolCallFunction
@@ -26,11 +27,11 @@ def test_task_prompt_handler_with_no_user_messages() -> None:
     agent_turn_messages: Sequence[AgentSDKMessage] = [
         AssistantMessageWithContent(
             role="assistant",
-            content=[InputTextContent(type="input_text", text="Assistant message 1")],
+            content=[OutputTextContent(type="output_text", text="Assistant message 1")],
         ),
         AssistantMessageWithContent(
             role="assistant",
-            content=[InputTextContent(type="input_text", text="Assistant message 2")],
+            content=[OutputTextContent(type="output_text", text="Assistant message 2")],
         ),
     ]
 

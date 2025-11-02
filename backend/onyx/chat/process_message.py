@@ -10,6 +10,7 @@ from uuid import UUID
 
 from agents import Model
 from agents import ModelSettings
+from agents.models.openai_responses import OpenAIResponsesModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
@@ -895,8 +896,10 @@ def _fast_message_stream(
     llm_model: Model,
     model_settings: ModelSettings,
 ) -> Generator[Packet, None, None]:
+    # TODO: clean up this jank
+    is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
     messages = base_messages_to_agent_sdk_msgs(
-        answer.graph_inputs.prompt_builder.build()
+        answer.graph_inputs.prompt_builder.build(), is_responses_api=is_responses_api
     )
     emitter = get_default_emitter()
     return fast_chat_turn.fast_chat_turn(
