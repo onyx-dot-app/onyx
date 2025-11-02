@@ -127,8 +127,8 @@ export default async function RootLayout({
       <body className={`relative ${inter.variable} font-hanken`}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="light"
+          forcedTheme="light"
           disableTransitionOnChange
         >
           <div className="text-text min-h-screen bg-background">
