@@ -8,6 +8,7 @@ from fastapi import Request
 from passlib.hash import sha256_crypt
 from pydantic import BaseModel
 
+from onyx.auth.schemas import ApiKeyType
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import API_KEY_HASH_ROUNDS
 from shared_configs.configs import MULTI_TENANT
@@ -31,6 +32,8 @@ class ApiKeyDescriptor(BaseModel):
     api_key: str | None = None  # only present on initial creation
     api_key_name: str | None = None
     api_key_role: UserRole
+    api_key_type: ApiKeyType
+    user_email: str
 
     user_id: uuid.UUID
 

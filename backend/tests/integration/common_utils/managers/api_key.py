@@ -2,8 +2,9 @@ from uuid import uuid4
 
 import requests
 
+from onyx.auth.schemas import ApiKeyType
 from onyx.db.models import UserRole
-from onyx.server.api_key.models import APIKeyArgs
+from onyx.server.api_key.models import CreateAPIKeyArgs
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestAPIKey
@@ -15,12 +16,14 @@ class APIKeyManager:
     def create(
         name: str | None = None,
         api_key_role: UserRole = UserRole.ADMIN,
+        api_key_type: ApiKeyType = ApiKeyType.SERVICE_ACCOUNT,
         user_performing_action: DATestUser | None = None,
     ) -> DATestAPIKey:
         name = f"{name}-api-key" if name else f"test-api-key-{uuid4()}"
-        api_key_request = APIKeyArgs(
+        api_key_request = CreateAPIKeyArgs(
             name=name,
-            role=api_key_role,
+            type=api_key_type,
+            role=api_key_role if api_key_type == ApiKeyType.SERVICE_ACCOUNT else None,
         )
         api_key_response = requests.post(
             f"{API_SERVER_URL}/admin/api-key",
@@ -38,7 +41,7 @@ class APIKeyManager:
             api_key_display=api_key["api_key_display"],
             api_key=api_key["api_key"],
             api_key_name=name,
-            api_key_role=api_key_role,
+            api_key_role=api_key["api_key_role"],  # Use actual role from response
             user_id=api_key["user_id"],
             headers=GENERAL_HEADERS,
         )

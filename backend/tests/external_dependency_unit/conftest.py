@@ -5,6 +5,7 @@ import pytest
 from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.models import User
@@ -68,6 +69,7 @@ def create_test_user(db_session: Session, email_prefix: str) -> User:
         is_superuser=False,
         is_verified=True,
         role=UserRole.EXT_PERM_USER,
+        user_type=UserType.HUMAN,
     )
     db_session.add(user)
     db_session.commit()

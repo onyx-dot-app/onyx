@@ -26,7 +26,7 @@ import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { deleteApiKey, regenerateApiKey } from "./lib";
 import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
-import { APIKey } from "./types";
+import { APIKey, ApiKeyType } from "./types";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
 import SvgRefreshCw from "@/icons/refresh-cw";
@@ -169,6 +169,8 @@ function Main() {
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>API Key</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead>User</TableHead>
             <TableHead>Role</TableHead>
             <TableHead>Regenerate</TableHead>
             <TableHead>Delete</TableHead>
@@ -189,6 +191,8 @@ function Main() {
               <TableCell className="max-w-64">
                 {apiKey.api_key_display}
               </TableCell>
+              <TableCell className="max-w-64">{apiKey.api_key_type}</TableCell>
+              <TableCell className="max-w-64">{apiKey.user_email}</TableCell>
               <TableCell className="max-w-64">
                 {apiKey.api_key_role.toUpperCase()}
               </TableCell>

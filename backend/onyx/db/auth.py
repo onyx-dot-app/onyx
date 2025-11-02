@@ -16,6 +16,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
+from onyx.auth.schemas import UserType
 from onyx.db.api_key import get_api_key_email_pattern
 from onyx.db.engine.async_sql_engine import get_async_session
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
@@ -94,6 +95,8 @@ class SQLAlchemyUserAdminDB(SQLAlchemyUserDatabase[UP, ID]):
             create_dict["role"] = UserRole.ADMIN
         else:
             create_dict["role"] = UserRole.BASIC
+        if "user_type" not in create_dict:
+            create_dict["user_type"] = UserType.HUMAN
         return await super().create(create_dict)
 
 

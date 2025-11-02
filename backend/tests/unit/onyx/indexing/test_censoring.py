@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.auth.schemas import UserType
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
 from onyx.db.models import User
@@ -21,7 +22,7 @@ _post_query_chunk_censoring = fetch_ee_implementation_or_noop(
 class TestPostQueryChunkCensoring:
     @pytest.fixture(autouse=True)
     def setUp(self) -> None:
-        self.mock_user = User(id=1, email="test@example.com")
+        self.mock_user = User(id=1, email="test@example.com", user_type=UserType.HUMAN)
         self.mock_chunk_1 = InferenceChunk(
             document_id="doc1",
             chunk_id=1,

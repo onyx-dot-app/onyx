@@ -10,12 +10,15 @@ from onyx.auth.api_key import ApiKeyDescriptor
 from onyx.auth.api_key import build_displayable_api_key
 from onyx.auth.api_key import generate_api_key
 from onyx.auth.api_key import hash_api_key
+from onyx.auth.schemas import ApiKeyType
+from onyx.auth.schemas import UserType
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
 from onyx.db.models import ApiKey
 from onyx.db.models import User
-from onyx.server.api_key.models import APIKeyArgs
+from onyx.server.api_key.models import CreateAPIKeyArgs
+from onyx.server.api_key.models import UpdateAPIKeyArgs
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -37,6 +40,8 @@ def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
         ApiKeyDescriptor(
             api_key_id=api_key.id,
             api_key_role=api_key.user.role,
+            api_key_type=get_api_key_type(api_key.user),
+            user_email=api_key.user.email,
             api_key_display=api_key.api_key_display,
             api_key_name=api_key.name,
             user_id=api_key.user_id,
@@ -64,35 +69,55 @@ def get_api_key_fake_email(
     return f"{DANSWER_API_KEY_PREFIX}{name}@{unique_id}{DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN}"
 
 
-def insert_api_key(
-    db_session: Session, api_key_args: APIKeyArgs, user_id: uuid.UUID | None
-) -> ApiKeyDescriptor:
-    std_password_helper = PasswordHelper()
+def is_service_account_user(user: User) -> bool:
+    """Check if a user is a fake user created specifically for service account purposes.
 
+    API keys can be backed by either:
+    - Fake users (user_type=SERVICE_ACCOUNT): Created solely to represent the API key with a specific role
+    - Real users (user_type=HUMAN): API key mirrors the real user's permissions
+
+    This function returns True only for fake service account users.
+    """
+    return user.user_type == UserType.SERVICE_ACCOUNT
+
+
+def get_api_key_type(user: User) -> ApiKeyType:
+    """Determine the API key type based on the user.
+
+    Returns:
+    - ApiKeyType.SERVICE_ACCOUNT for fake service account users
+    - ApiKeyType.PERSONAL_ACCESS_TOKEN for real users
+    """
+    if is_service_account_user(user):
+        return ApiKeyType.SERVICE_ACCOUNT
+    else:
+        return ApiKeyType.PERSONAL_ACCESS_TOKEN
+
+
+def insert_api_key(
+    db_session: Session, create_args: CreateAPIKeyArgs, user_id: uuid.UUID | None
+) -> ApiKeyDescriptor:
     # Get tenant_id from context var (will be default schema for single tenant)
     tenant_id = get_current_tenant_id()
 
     api_key = generate_api_key(tenant_id)
-    api_key_user_id = uuid.uuid4()
 
-    display_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
-    api_key_user_row = User(
-        id=api_key_user_id,
-        email=get_api_key_fake_email(display_name, str(api_key_user_id)),
-        # a random password for the "user"
-        hashed_password=std_password_helper.hash(std_password_helper.generate()),
-        is_active=True,
-        is_superuser=False,
-        is_verified=True,
-        role=api_key_args.role,
-    )
-    db_session.add(api_key_user_row)
+    if create_args.type == ApiKeyType.PERSONAL_ACCESS_TOKEN:
+        # Personal Access Token: Link to real user
+        api_key_user = db_session.scalar(
+            select(User).where(User.id == user_id)  # type: ignore
+        )
+        if api_key_user is None:
+            raise ValueError(f"User with id {user_id} does not exist")
+    else:
+        # Service Account: Create fake service account user with specific role
+        api_key_user = create_service_account_user(db_session, create_args)
 
     api_key_row = ApiKey(
-        name=api_key_args.name,
+        name=create_args.name,
         hashed_api_key=hash_api_key(api_key),
         api_key_display=build_displayable_api_key(api_key),
-        user_id=api_key_user_id,
+        user_id=api_key_user.id,
         owner_id=user_id,
     )
     db_session.add(api_key_row)
@@ -100,45 +125,92 @@ def insert_api_key(
     db_session.commit()
     return ApiKeyDescriptor(
         api_key_id=api_key_row.id,
-        api_key_role=api_key_user_row.role,
+        api_key_role=api_key_user.role,
+        api_key_type=create_args.type,
+        user_email=api_key_user.email,
         api_key_display=api_key_row.api_key_display,
         api_key=api_key,
-        api_key_name=api_key_args.name,
-        user_id=api_key_user_id,
+        api_key_name=create_args.name,
+        user_id=api_key_user.id,
     )
+
+
+def create_service_account_user(
+    db_session: Session, create_args: CreateAPIKeyArgs
+) -> User:
+    service_account_user_id = uuid.uuid4()
+    std_password_helper = PasswordHelper()
+    display_name = create_args.name or UNNAMED_KEY_PLACEHOLDER
+    service_account_user = User(
+        id=service_account_user_id,
+        email=get_api_key_fake_email(display_name, str(service_account_user_id)),
+        # a random password for the "user"
+        hashed_password=std_password_helper.hash(std_password_helper.generate()),
+        is_active=True,
+        is_superuser=False,
+        is_verified=True,
+        role=create_args.role,
+        user_type=UserType.SERVICE_ACCOUNT,
+    )
+    db_session.add(service_account_user)
+    return service_account_user
 
 
 def update_api_key(
-    db_session: Session, api_key_id: int, api_key_args: APIKeyArgs
+    db_session: Session, api_key_id: int, update_args: UpdateAPIKeyArgs
 ) -> ApiKeyDescriptor:
-    existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
+    existing_api_key = db_session.scalar(
+        select(ApiKey).where(ApiKey.id == api_key_id)  # type: ignore
+    )
     if existing_api_key is None:
         raise ValueError(f"API key with id {api_key_id} does not exist")
 
-    existing_api_key.name = api_key_args.name
     api_key_user = db_session.scalar(
         select(User).where(User.id == existing_api_key.user_id)  # type: ignore
     )
+
     if api_key_user is None:
         raise RuntimeError("API Key does not have associated user.")
 
-    email_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
-    api_key_user.email = get_api_key_fake_email(email_name, str(api_key_user.id))
-    api_key_user.role = api_key_args.role
+    # Determine the API key type
+    api_key_type = get_api_key_type(api_key_user)
+
+    # Update the API key's name
+    existing_api_key.name = update_args.name
+
+    if api_key_type == ApiKeyType.SERVICE_ACCOUNT:
+        # Service Account: can update name, email, and role
+        if update_args.role is None:
+            raise ValueError("Service account keys require a role")
+
+        email_name = update_args.name or UNNAMED_KEY_PLACEHOLDER
+        api_key_user.email = get_api_key_fake_email(email_name, str(api_key_user.id))
+        api_key_user.role = update_args.role
+    else:
+        # Personal Access Token: only update the API key's name, not the user's role
+        if update_args.role is not None and update_args.role != api_key_user.role:
+            raise ValueError(
+                "Cannot update the role of API key based on the owner's role!"
+            )
+
     db_session.commit()
 
     return ApiKeyDescriptor(
         api_key_id=existing_api_key.id,
         api_key_display=existing_api_key.api_key_display,
-        api_key_name=api_key_args.name,
+        api_key_name=update_args.name,
         api_key_role=api_key_user.role,
+        api_key_type=api_key_type,
+        user_email=api_key_user.email,
         user_id=existing_api_key.user_id,
     )
 
 
 def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor:
     """NOTE: currently, any admin can regenerate any API key."""
-    existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
+    existing_api_key = db_session.scalar(
+        select(ApiKey).where(ApiKey.id == api_key_id)  # type: ignore
+    )
     if existing_api_key is None:
         raise ValueError(f"API key with id {api_key_id} does not exist")
 
@@ -162,12 +234,16 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
         api_key=new_api_key,
         api_key_name=existing_api_key.name,
         api_key_role=api_key_user.role,
+        api_key_type=get_api_key_type(api_key_user),
+        user_email=api_key_user.email,
         user_id=existing_api_key.user_id,
     )
 
 
 def remove_api_key(db_session: Session, api_key_id: int) -> None:
-    existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
+    existing_api_key = db_session.scalar(
+        select(ApiKey).where(ApiKey.id == api_key_id)  # type: ignore
+    )
     if existing_api_key is None:
         raise ValueError(f"API key with id {api_key_id} does not exist")
 
@@ -180,5 +256,7 @@ def remove_api_key(db_session: Session, api_key_id: int) -> None:
         )
 
     db_session.delete(existing_api_key)
-    db_session.delete(user_associated_with_key)
+    if is_service_account_user(user_associated_with_key):
+        # Only delete fake service account users. Do not delete real human users!
+        db_session.delete(user_associated_with_key)
     db_session.commit()

@@ -379,15 +379,15 @@ def test_user_preferences_cleanup() -> None:
             text(
                 """
                 INSERT INTO "user" (
-                    id, email, hashed_password, is_active, is_superuser, is_verified, role,
+                    id, email, hashed_password, is_active, is_superuser, is_verified, role, user_type,
                     chosen_assistants, visible_assistants, hidden_assistants, pinned_assistants
                 )
                 VALUES
                     ('11111111-1111-1111-1111-111111111111'::uuid, 'user1@test.com', 'dummy_hash',
-                     true, false, true, 'basic',
+                     true, false, true, 'basic', 'human',
                      '[0, -1, -3, 100]'::jsonb, '[0, -1, -3, 100]'::jsonb, '[]'::jsonb, '[0, -1]'::jsonb),
                     ('22222222-2222-2222-2222-222222222222'::uuid, 'user2@test.com', 'dummy_hash',
-                     true, false, true, 'basic',
+                     true, false, true, 'basic', 'human',
                      '[-1, -3]'::jsonb, '[-1, -3, 100]'::jsonb, '[0]'::jsonb, '[-3]'::jsonb)
                 """
             )

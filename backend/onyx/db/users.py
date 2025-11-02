@@ -14,6 +14,7 @@ from sqlalchemy.sql.elements import KeyedColumnElement
 
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.schemas import UserRole
+from onyx.auth.schemas import UserType
 from onyx.db.api_key import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.db.models import DocumentSet__User
 from onyx.db.models import Persona__User
@@ -232,6 +233,7 @@ def _generate_slack_user(email: str) -> User:
         email=email,
         hashed_password=hashed_pass,
         role=UserRole.SLACK_USER,
+        user_type=UserType.HUMAN,
     )
 
 
@@ -278,6 +280,7 @@ def _generate_ext_permissioned_user(email: str) -> User:
         email=email,
         hashed_password=hashed_pass,
         role=UserRole.EXT_PERM_USER,
+        user_type=UserType.HUMAN,
     )
 
 
