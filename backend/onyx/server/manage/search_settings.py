@@ -24,6 +24,9 @@ from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_search_settings_status
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.factory import get_default_document_index
+from onyx.file_processing.reductoai import delete_reductoai_api_key_and_env
+from onyx.file_processing.reductoai import get_reductoai_api_key_and_env
+from onyx.file_processing.reductoai import update_reductoai_api_key_and_env
 from onyx.file_processing.unstructured import delete_unstructured_api_key
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import update_unstructured_api_key
@@ -242,7 +245,6 @@ def unstructured_api_key_set(
     _: User | None = Depends(current_admin_user),
 ) -> bool:
     api_key = get_unstructured_api_key()
-    print(api_key)
     return api_key is not None
 
 
@@ -259,3 +261,30 @@ def delete_unstructured_api_key_endpoint(
     _: User | None = Depends(current_admin_user),
 ) -> None:
     delete_unstructured_api_key()
+
+
+@router.get("/get-reducto-api-conf")
+def reducto_api_conf_get(
+    _: User | None = Depends(current_admin_user),
+) -> dict:
+    api_key, env = get_reductoai_api_key_and_env()
+    return {
+        "apiKey": api_key is not None,
+        "apiEnv": env or "production",
+    }
+
+
+@router.put("/upsert-reducto-api-conf")
+def reducto_api_conf_get_upsert(
+    reducto_api_key: str | None = None,
+    reducto_api_env: str | None = None,
+    _: User | None = Depends(current_admin_user),
+) -> None:
+    update_reductoai_api_key_and_env(reducto_api_key, reducto_api_env)
+
+
+@router.delete("/delete-reducto-api-conf")
+def reducto_api_conf_get_delete(
+    _: User | None = Depends(current_admin_user),
+) -> None:
+    delete_reductoai_api_key_and_env()
