@@ -152,8 +152,6 @@ def validate_active_indexing_attempts(
     """
     logger.info("Validating active indexing attempts")
 
-    heartbeat_timeout_seconds = HEARTBEAT_TIMEOUT_SECONDS
-
     with get_session_with_current_tenant() as db_session:
 
         # Find all active indexing attempts
@@ -170,6 +168,9 @@ def validate_active_indexing_attempts(
 
         for attempt in active_attempts:
             lock_beat.reacquire()
+
+            # Initialize timeout for each attempt to prevent state pollution
+            heartbeat_timeout_seconds = HEARTBEAT_TIMEOUT_SECONDS
 
             # Double-check the attempt still exists and has the same status
             fresh_attempt = get_index_attempt(db_session, attempt.id)
