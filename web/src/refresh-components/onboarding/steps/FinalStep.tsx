@@ -13,11 +13,13 @@ const FinalStepItemInner = ({
   buttonText,
   buttonHref,
 }: FinalStepItemProps) => {
-  return (
-    <Link
-      href={buttonHref}
-      className="flex justify-between h-full w-full p-1 rounded-16 border border-border-01 bg-background-tint-01 hover:bg-background-tint-02 transition-colors group"
-    >
+  const isExternalLink = buttonHref.startsWith("http");
+  const linkProps = isExternalLink
+    ? { target: "_blank", rel: "noopener noreferrer" }
+    : {};
+
+  const content = (
+    <>
       <div className="flex gap-1 py-2 pr-2 pl-1">
         <div className="h-full p-0.5">
           <Icon className="w-4 h-4 stroke-text-03" />
@@ -34,6 +36,27 @@ const FinalStepItemInner = ({
       <Button tertiary rightIcon={SvgExternalLink} href={buttonHref}>
         {buttonText}
       </Button>
+    </>
+  );
+
+  if (isExternalLink) {
+    return (
+      <a
+        href={buttonHref}
+        className="flex justify-between h-full w-full p-1 rounded-16 border border-border-01 bg-background-tint-01 hover:bg-background-tint-02 transition-colors group"
+        {...linkProps}
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <Link
+      href={buttonHref}
+      className="flex justify-between h-full w-full p-1 rounded-16 border border-border-01 bg-background-tint-01 hover:bg-background-tint-02 transition-colors group"
+    >
+      {content}
     </Link>
   );
 };

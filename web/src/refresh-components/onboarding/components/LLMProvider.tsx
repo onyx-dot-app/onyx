@@ -114,6 +114,7 @@ const LLMProviderInner = ({
               icon={SvgSettings}
               disabled={disabled}
               onClick={handleSettingsClick}
+              className="hover:bg-transparent"
             />
           )}
           <div className="p-1">
