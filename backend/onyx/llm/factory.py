@@ -465,6 +465,7 @@ def get_llm_model_and_settings(
             openai_client=AsyncOpenAI(
                 api_key=api_key,
                 base_url=base_url,
+                timeout=timeout,
             ),
         )
     else:
@@ -477,6 +478,7 @@ def get_llm_model_and_settings(
             # otherwise litellm can have some issues with bedrock
             base_url=api_base or None,
             api_key=api_key or None,
+            timeout=timeout,
         )
 
     # Create ModelSettings with the provided configuration
