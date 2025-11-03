@@ -7,20 +7,34 @@ import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgX from "@/icons/x";
 import SvgCheckCircle from "@/icons/check-circle";
+import { OnboardingStep } from "../types";
+import router from "next/router";
 
 type OnboardingHeaderProps = {
   state: OnboardingState;
   actions: OnboardingActions;
-  onToggleCollapse?: () => void;
+  handleHideOnboarding: () => void;
 };
 
 const OnboardingHeaderInner = ({
   state: onboardingState,
   actions: onboardingActions,
-  onToggleCollapse,
+  handleHideOnboarding,
 }: OnboardingHeaderProps) => {
   const StepIcon = STEP_CONFIG[onboardingState.currentStep].icon;
   const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
+  const isWelcomeStep = onboardingState.currentStep === OnboardingStep.Welcome;
+  const isCompleteStep =
+    onboardingState.currentStep === OnboardingStep.Complete;
+
+  const handleButtonClick = () => {
+    if (isCompleteStep) {
+      handleHideOnboarding();
+    } else {
+      onboardingActions.nextStep();
+    }
+  };
+
   return (
     <div className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01">
       <div className="flex items-center gap-1">
@@ -36,19 +50,20 @@ const OnboardingHeaderInner = ({
       <div className="flex items-center gap-3">
         {stepButtonText ? (
           <>
-            <Text text03 mainUiBody>
-              Step {onboardingState.stepIndex} of {onboardingState.totalSteps}
-            </Text>
+            {!isWelcomeStep && (
+              <Text text03 mainUiBody>
+                Step {onboardingState.stepIndex} of {onboardingState.totalSteps}
+              </Text>
+            )}
             <Button
-              onClick={onboardingActions.nextStep}
+              onClick={handleButtonClick}
               disabled={!onboardingState.isButtonActive}
             >
               {stepButtonText}
             </Button>
-            <IconButton internal icon={SvgFold} onClick={onToggleCollapse} />
           </>
         ) : (
-          <IconButton internal icon={SvgX} onClick={() => {}} />
+          <IconButton internal icon={SvgX} onClick={handleHideOnboarding} />
         )}
       </div>
     </div>

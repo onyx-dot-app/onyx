@@ -323,8 +323,6 @@ export function LLMProviderUpdateForm({
           ),
         };
 
-        console.log("finalValues", finalValues);
-
         // test the configuration
         if (!isEqual(finalValues, initialValues)) {
           setIsTesting(true);
@@ -347,8 +345,6 @@ export function LLMProviderUpdateForm({
             return;
           }
         }
-
-        console.log("finalValues", finalValues);
 
         const response = await fetch(
           `${LLM_PROVIDERS_ADMIN_URL}${
@@ -497,6 +493,13 @@ export function LLMProviderUpdateForm({
 
             {llmProviderDescriptor.custom_config_keys?.map(
               (customConfigKey) => {
+                // Hide Bedrock auth method field in this admin form
+                if (
+                  llmProviderDescriptor.name === "bedrock" &&
+                  customConfigKey.name === "BEDROCK_AUTH_METHOD"
+                ) {
+                  return null;
+                }
                 if (customConfigKey.key_type === "text_input") {
                   return (
                     <div key={customConfigKey.name}>

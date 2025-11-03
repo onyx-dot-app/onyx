@@ -31,7 +31,6 @@ import { ChatPopup } from "@/app/chat/components/ChatPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { useUser } from "@/components/user/UserProvider";
-import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import TextView from "@/components/chat/TextView";
@@ -40,7 +39,7 @@ import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
+import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import { ChatSearchModal } from "@/app/chat/chat_search/ChatSearchModal";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useScreenSize } from "@/hooks/useScreenSize";
@@ -79,8 +78,9 @@ import {
 import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSessionList";
 import { cn } from "@/lib/utils";
 import { Suggestions } from "@/sections/Suggestions";
-import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
+import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
+import { OnboardingStep } from "@/refresh-components/onboarding/types";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 interface ChatPageProps {
@@ -118,7 +118,6 @@ export function ChatPage({
     tags,
     documentSets,
     llmProviders,
-    shouldShowWelcomeModal,
     refreshChatSessions,
   } = useChatContext();
 
@@ -143,10 +142,6 @@ export function ChatPage({
   const isInitialLoad = useRef(true);
 
   const { agents: availableAssistants } = useAgentsContext();
-
-  const [showApiKeyModal, setShowApiKeyModal] = useState(
-    !shouldShowWelcomeModal
-  );
 
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
@@ -212,7 +207,21 @@ export function ChatPage({
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
-  const [isOnboardingCollapsed, setIsOnboardingCollapsed] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Initialize onboarding state
+  const {
+    state: onboardingState,
+    actions: onboardingActions,
+    llmDescriptors,
+  } = useOnboardingState();
+
+  // On first render, open onboarding if there are no configured LLM providers.
+  // Intentionally exclude llmProviders from deps to avoid changing the state
+  // when data refreshes.
+  useEffect(() => {
+    setShowOnboarding(llmProviders.length === 0);
+  }, []);
 
   const llmManager = useLlmManager(
     llmProviders,
@@ -617,16 +626,13 @@ export function ChatPage({
     );
   }, []);
 
-  const handleShowApiKeyModal = useCallback(() => {
-    setShowApiKeyModal(true);
-  }, []);
-
   const handleChatInputSubmit = useCallback(() => {
     onSubmit({
       message: message,
       currentMessageFiles: currentMessageFiles,
       useAgentSearch: deepResearchEnabled,
     });
+    setShowOnboarding(false);
   }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
 
   // Memoized callbacks for DocumentResults
@@ -741,14 +747,7 @@ export function ChatPage({
     <>
       <HealthCheckBanner />
 
-      {showApiKeyModal && !shouldShowWelcomeModal && (
-        <ApiKeyModal
-          hide={() => setShowApiKeyModal(false)}
-          setPopup={setPopup}
-        />
-      )}
-
-      {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
+      {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit.
       Only used in the EE version of the app. */}
       {popup}
 
@@ -898,15 +897,19 @@ export function ChatPage({
                           />
                         )}
 
-                        <UnconfiguredLlmProviderText
-                          showConfigureAPIKey={handleShowApiKeyModal}
-                        />
-
-                        <OnboardingFlow
-                          isCollapsed={isOnboardingCollapsed}
-                          onCollapsedChange={setIsOnboardingCollapsed}
-                        />
-
+                        {(showOnboarding ||
+                          (user?.role !== UserRole.ADMIN &&
+                            !user?.personalization?.name)) &&
+                          currentProjectId === null && (
+                            <OnboardingFlow
+                              handleHideOnboarding={() =>
+                                setShowOnboarding(false)
+                              }
+                              state={onboardingState}
+                              actions={onboardingActions}
+                              llmDescriptors={llmDescriptors}
+                            />
+                          )}
                         <ChatInputBar
                           deepResearchEnabled={deepResearchEnabled}
                           toggleDeepResearch={toggleDeepResearch}
@@ -931,6 +934,12 @@ export function ChatPage({
                           handleFileUpload={handleMessageSpecificFileUpload}
                           textAreaRef={textAreaRef}
                           setPresentingDocument={setPresentingDocument}
+                          disabled={
+                            llmProviders.length === 0 ||
+                            !user?.personalization?.name ||
+                            onboardingState.currentStep !==
+                              OnboardingStep.Complete
+                          }
                         />
                       </div>
 

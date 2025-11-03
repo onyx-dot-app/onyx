@@ -13,7 +13,6 @@ import {
 } from "@/app/admin/configuration/llm/interfaces";
 import { updateUserPersonalization } from "@/lib/users/UserSettings";
 import { useUser } from "@/components/user/UserProvider";
-import { useChatController } from "@/app/chat/hooks/useChatController";
 import { useChatContext } from "../contexts/ChatContext";
 
 export function useOnboardingState(): {
@@ -23,7 +22,7 @@ export function useOnboardingState(): {
 } {
   const [state, dispatch] = useReducer(onboardingReducer, initialState);
   const { user, refreshUser } = useUser();
-  const { llmProviders } = useChatContext();
+  const { llmProviders, refreshLlmProviders } = useChatContext();
   const userName = user?.personalization?.name;
   const [llmDescriptors, setLlmDescriptors] = useState<
     WellKnownLLMProviderDescriptor[]
@@ -33,6 +32,7 @@ export function useOnboardingState(): {
   );
 
   useEffect(() => {
+    refreshLlmProviders();
     const fetchLlmDescriptors = async () => {
       try {
         const response = await fetch("/api/admin/llm/built-in/options");
@@ -63,71 +63,117 @@ export function useOnboardingState(): {
       });
       return;
     }
-    if (userName) {
+    if (userName && state.currentStep === OnboardingStep.Welcome) {
       dispatch({
         type: OnboardingActionType.UPDATE_DATA,
         payload: { userName },
       });
+      if (llmProviders.length > 0) {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: true,
+        });
+      } else {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: false,
+        });
+      }
       dispatch({
         type: OnboardingActionType.GO_TO_STEP,
         step: OnboardingStep.LlmSetup,
       });
     }
-  }, []);
+  }, [llmProviders]);
 
   const nextStep = useCallback(() => {
     dispatch({
       type: OnboardingActionType.SET_BUTTON_ACTIVE,
       isButtonActive: false,
     });
+
+    if (state.currentStep === OnboardingStep.Name) {
+      if (llmProviders.length > 0) {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: true,
+        });
+      } else {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: false,
+        });
+      }
+    }
+
+    if (state.currentStep === OnboardingStep.LlmSetup) {
+      refreshLlmProviders();
+    }
     dispatch({ type: OnboardingActionType.NEXT_STEP });
-  }, []);
+  }, [state, refreshLlmProviders]);
 
   const prevStep = useCallback(() => {
     dispatch({ type: OnboardingActionType.PREV_STEP });
   }, []);
 
-  const goToStep = useCallback((step: OnboardingStep) => {
-    dispatch({ type: OnboardingActionType.GO_TO_STEP, step });
-  }, []);
-
-  const updateName = useCallback((name: string) => {
-    dispatch({
-      type: OnboardingActionType.UPDATE_DATA,
-      payload: { userName: name },
-    });
-
-    if (nameUpdateTimeoutRef.current) {
-      clearTimeout(nameUpdateTimeoutRef.current);
-    }
-
-    if (name === "") {
-      dispatch({
-        type: OnboardingActionType.SET_BUTTON_ACTIVE,
-        isButtonActive: false,
-      });
-    } else {
-      dispatch({
-        type: OnboardingActionType.SET_BUTTON_ACTIVE,
-        isButtonActive: true,
-      });
-    }
-
-    nameUpdateTimeoutRef.current = setTimeout(async () => {
-      try {
-        await updateUserPersonalization({ name });
-        await refreshUser();
-      } catch (_e) {
+  const goToStep = useCallback(
+    (step: OnboardingStep) => {
+      if (step === OnboardingStep.LlmSetup && llmProviders.length > 0) {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: true,
+        });
+      } else if (step === OnboardingStep.LlmSetup) {
         dispatch({
           type: OnboardingActionType.SET_BUTTON_ACTIVE,
           isButtonActive: false,
         });
-        console.error("Error updating user name:", _e);
-      } finally {
-        nameUpdateTimeoutRef.current = null;
       }
-    }, 500);
-  }, []);
+      dispatch({ type: OnboardingActionType.GO_TO_STEP, step });
+    },
+    [llmProviders]
+  );
+
+  const updateName = useCallback(
+    (name: string) => {
+      dispatch({
+        type: OnboardingActionType.UPDATE_DATA,
+        payload: { userName: name },
+      });
+
+      if (nameUpdateTimeoutRef.current) {
+        clearTimeout(nameUpdateTimeoutRef.current);
+      }
+
+      if (name === "") {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: false,
+        });
+      } else {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: true,
+        });
+      }
+
+      nameUpdateTimeoutRef.current = setTimeout(async () => {
+        try {
+          await updateUserPersonalization({ name });
+          await refreshUser();
+        } catch (_e) {
+          dispatch({
+            type: OnboardingActionType.SET_BUTTON_ACTIVE,
+            isButtonActive: false,
+          });
+          console.error("Error updating user name:", _e);
+        } finally {
+          nameUpdateTimeoutRef.current = null;
+        }
+      }, 500);
+    },
+    [refreshUser]
+  );
 
   const updateData = useCallback((data: Partial<OnboardingData>) => {
     dispatch({ type: OnboardingActionType.UPDATE_DATA, payload: data });
