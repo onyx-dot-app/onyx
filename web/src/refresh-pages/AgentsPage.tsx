@@ -249,9 +249,11 @@ export default function AgentsPage() {
         description="Customize AI behavior and knowledge for you and your team’s use cases."
         className="bg-background-tint-01"
         rightChildren={
-          <Button href="/assistants/new" leftIcon={SvgPlus}>
-            New Agent
-          </Button>
+          <div data-testid="AgentsPage/new-agent-button">
+            <Button href="/assistants/new" leftIcon={SvgPlus}>
+              New Agent
+            </Button>
+          </div>
         }
       >
         <div className="flex flex-col gap-2">
