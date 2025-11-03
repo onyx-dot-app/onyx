@@ -170,15 +170,6 @@ export default function EmailPasswordForm({
         }}
       >
         {({ isSubmitting, isValid, dirty, values }) => {
-          // Clear API error as soon as the user edits either field
-          useEffect(() => {
-            if (showApiMessage && apiStatus === "error") {
-              setShowApiMessage(false);
-              setErrorMessage("");
-              setApiStatus("loading");
-            }
-          }, [(values as any).email, (values as any).password]);
-
           return (
             <Form className="gap-y-3">
               <FormikField<string>
@@ -189,6 +180,14 @@ export default function EmailPasswordForm({
                     <FormField.Control>
                       <InputTypeIn
                         {...field}
+                        onChange={(e) => {
+                          if (showApiMessage && apiStatus === "error") {
+                            setShowApiMessage(false);
+                            setErrorMessage("");
+                            setApiStatus("loading");
+                          }
+                          field.onChange(e);
+                        }}
                         placeholder="email@yourcompany.com"
                         onClear={() => helper.setValue("")}
                         data-testid="email"
@@ -208,6 +207,14 @@ export default function EmailPasswordForm({
                     <FormField.Control>
                       <PasswordInputTypeIn
                         {...field}
+                        onChange={(e) => {
+                          if (showApiMessage && apiStatus === "error") {
+                            setShowApiMessage(false);
+                            setErrorMessage("");
+                            setApiStatus("loading");
+                          }
+                          field.onChange(e);
+                        }}
                         placeholder="**************"
                         onClear={() => helper.setValue("")}
                         data-testid="password"
