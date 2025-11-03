@@ -7,14 +7,22 @@ import { SvgProps } from "@/icons";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Link from "next/link";
 
+const buttonClassNames = (heavyForced?: boolean) =>
+  heavyForced
+    ? ["bg-action-link-01", "hover:bg-background-tint-02"]
+    : ["bg-transparent", "hover:bg-background-tint-02"];
+
 const textClassNames = (forced?: boolean) =>
-  forced
-    ? ["text-action-link-05", "stroke-action-link-05"]
-    : ["text-text-04", "stroke-text-03"];
+  forced ? ["text-action-link-05"] : ["text-text-04"];
+
+const iconClassNames = (forced?: boolean) =>
+  forced ? ["stroke-action-link-05"] : ["stroke-text-03"];
+
 export interface LineItemProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  // variants
+  // Button variants
   forced?: boolean;
+  heavyForced?: boolean;
   strikethrough?: boolean;
 
   icon?: React.FunctionComponent<SvgProps>;
@@ -27,6 +35,7 @@ export interface LineItemProps
 
 export default function LineItem({
   forced,
+  heavyForced,
   strikethrough,
 
   icon: Icon,
@@ -40,14 +49,20 @@ export default function LineItem({
     <button
       type="button"
       className={cn(
-        "flex flex-col w-full justify-center items-start p-2 hover:bg-background-tint-02 rounded-08 group/LineItem"
+        "flex flex-col w-full justify-center items-start p-2 rounded-08 group/LineItem",
+        buttonClassNames(heavyForced)
       )}
       onClick={onClick}
     >
       <div className="flex flex-row items-center justify-start w-full gap-2">
         {Icon && (
-          <div className="h-[1rem] w-[1rem]">
-            <Icon className={cn("h-[1rem] w-[1rem]", textClassNames(forced))} />
+          <div className="h-[1rem] min-w-[1rem] bg-red">
+            <Icon
+              className={cn(
+                "h-[1rem] w-[1rem]",
+                iconClassNames(forced || heavyForced)
+              )}
+            />
           </div>
         )}
         {typeof children === "string" ? (
@@ -56,7 +71,7 @@ export default function LineItem({
             text04
             className={cn(
               "text-left w-full",
-              textClassNames(forced),
+              textClassNames(forced || heavyForced),
               strikethrough && "line-through decoration-[1.5px]"
             )}
           >

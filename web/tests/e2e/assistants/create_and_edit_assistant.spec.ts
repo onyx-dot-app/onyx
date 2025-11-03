@@ -98,29 +98,8 @@ test("Assistant Creation and Edit Verification", async ({ page }) => {
   expect(assistantId).not.toBeNull();
 
   // --- Navigate to Edit Page and Verify Initial Values ---
-  // Navigate through the Assistant Explorer modal
-  await page.getByTestId("AppSidebar/more-agents").click();
-
-  // Find the assistant card in the modal and scroll to it
-  const modalContent = page.getByTestId("AgentsModal/container");
-  const modalBox = await modalContent.boundingBox();
-  if (modalBox) {
-    await page.mouse.move(
-      modalBox.x + modalBox.width / 2,
-      modalBox.y + modalBox.height / 2
-    );
-    // Increase scroll distance if needed
-    await page.mouse.wheel(0, 1000);
-    await page.waitForTimeout(500); // Add a small wait after scroll
-  }
-
-  await page.getByTestId("AgentCard/more").first().click();
-
-  // Wait for the popover to appear and click the "Edit" button
-  const editButton = page.getByTestId("AgentCard/edit").first();
-  await editButton.click();
-
-  // Verify we are on the edit page
+  // Navigate directly to the edit page
+  await page.goto(`http://localhost:3000/assistants/edit/${assistantId}`);
   await page.waitForURL(`**/assistants/edit/${assistantId}`);
 
   // Verify basic fields

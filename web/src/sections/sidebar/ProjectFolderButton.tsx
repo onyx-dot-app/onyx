@@ -19,8 +19,7 @@ import SvgTrash from "@/icons/trash";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
 import Button from "@/refresh-components/buttons/Button";
 import ChatButton from "@/sections/sidebar/ChatButton";
-import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { useAppRouter } from "@/hooks/appNavigation";
 import { cn, noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "./constants";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
@@ -30,6 +29,7 @@ import { PopoverAnchor } from "@radix-ui/react-popover";
 import ButtonRenaming from "./ButtonRenaming";
 import { OpenFolderIcon } from "@/components/icons/CustomIcons";
 import { SvgProps } from "@/icons";
+import { useActiveSidebarTab } from "@/lib/hooks";
 
 interface ProjectFolderProps {
   project: Project;
@@ -37,7 +37,6 @@ interface ProjectFolderProps {
 
 function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   const route = useAppRouter();
-  const params = useAppParams();
   const [open, setOpen] = useState(false);
   const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
     useState(false);
@@ -45,6 +44,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isHoveringIcon, setIsHoveringIcon] = useState(false);
+  const activeSidebar = useActiveSidebarTab();
 
   // Make project droppable
   const dropId = `project-${project.id}`;
@@ -147,7 +147,9 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
               />
             )}
             active={
-              params(SEARCH_PARAM_NAMES.PROJECT_ID) === String(project.id)
+              typeof activeSidebar === "object" &&
+              activeSidebar.type === "project" &&
+              activeSidebar.id === String(project.id)
             }
             onClick={handleTextClick}
             rightChildren={

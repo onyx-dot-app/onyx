@@ -16,7 +16,7 @@ import {
   useDocumentSidebarVisible,
   useSelectedNodeForDocDisplay,
 } from "@/app/chat/stores/useChatSessionStore";
-import { copyAll, handleCopy } from "@/app/chat/message/copyingUtils";
+import { handleCopy } from "@/app/chat/message/copyingUtils";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import {
@@ -31,8 +31,7 @@ import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRen
 import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
 import AgentIcon from "@/refresh-components/AgentIcon";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgCopy from "@/icons/copy";
-import SvgCheck from "@/icons/check";
+import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import SvgThumbsUp from "@/icons/thumbs-up";
 import SvgThumbsDown from "@/icons/thumbs-down";
 import {
@@ -65,10 +64,32 @@ export default function AIMessage({
   onMessageSelection,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
-  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { toggleModal } = useChatModal();
-  const [copied, setCopied] = useState(false);
+  const { toggleModal, isOpen, getModalData } = useChatModal();
+
+  // Helper to check if feedback button should be in transient state
+  const isFeedbackTransient = useCallback(
+    (feedbackType: "like" | "dislike") => {
+      const hasCurrentFeedback = currentFeedback === feedbackType;
+      const modalOpen = isOpen(ModalIds.FeedbackModal);
+
+      if (!modalOpen) {
+        return hasCurrentFeedback;
+      }
+
+      const modalData = getModalData<{
+        feedbackType: string;
+        messageId: number;
+      }>();
+      const isModalForThisFeedback = modalData?.feedbackType === feedbackType;
+      const isModalForThisMessage = modalData?.messageId === messageId;
+
+      return (
+        hasCurrentFeedback || (isModalForThisFeedback && isModalForThisMessage)
+      );
+    },
+    [currentFeedback, isOpen, getModalData, messageId]
+  );
 
   // Handler for feedback button clicks with toggle logic
   const handleFeedbackClick = useCallback(
@@ -83,7 +104,8 @@ export default function AIMessage({
         // Clicking same button - remove feedback
         await chatState.handleFeedbackChange(null);
       } else if (clickedFeedback === "like") {
-        // Clicking like - check if we need modal for positive feedback
+        // Clicking like (will automatically clear dislike if it was active)
+        // Check if we need modal for positive feedback
         const predefinedOptions =
           process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS;
         if (predefinedOptions && predefinedOptions.trim()) {
@@ -94,11 +116,12 @@ export default function AIMessage({
             handleFeedbackChange: chatState.handleFeedbackChange,
           });
         } else {
-          // No modal needed - just submit like
+          // No modal needed - just submit like (this replaces any existing feedback)
           await chatState.handleFeedbackChange("like");
         }
       } else {
-        // Clicking dislike - always open modal
+        // Clicking dislike (will automatically clear like if it was active)
+        // Always open modal for dislike
         toggleModal(ModalIds.FeedbackModal, true, {
           feedbackType: "dislike",
           messageId,
@@ -158,16 +181,6 @@ export default function AIMessage({
   };
   useEffect(() => {
     resetState();
-  }, [nodeId]);
-
-  // Clean up copy timeout on unmount or when switching messages
-  useEffect(() => {
-    setCopied(false);
-    return () => {
-      if (copyTimeoutRef.current) {
-        clearTimeout(copyTimeoutRef.current);
-      }
-    };
   }, [nodeId]);
 
   // If the upstream replaces packets with a shorter list (reset), clear state
@@ -419,27 +432,16 @@ export default function AIMessage({
                             </div>
                           )}
 
-                          <IconButton
-                            icon={copied ? SvgCheck : SvgCopy}
-                            onClick={() => {
-                              copyAll(getTextContent(rawPackets));
-                              setCopied(true);
-                              if (copyTimeoutRef.current) {
-                                clearTimeout(copyTimeoutRef.current);
-                              }
-                              copyTimeoutRef.current = setTimeout(() => {
-                                setCopied(false);
-                              }, 3000);
-                            }}
+                          <CopyIconButton
+                            getCopyText={() => getTextContent(rawPackets)}
                             tertiary
-                            tooltip={copied ? "Copied!" : "Copy"}
                             data-testid="AIMessage/copy-button"
                           />
                           <IconButton
                             icon={SvgThumbsUp}
                             onClick={() => handleFeedbackClick("like")}
                             tertiary
-                            transient={currentFeedback === "like"}
+                            transient={isFeedbackTransient("like")}
                             tooltip={
                               currentFeedback === "like"
                                 ? "Remove Like"
@@ -451,7 +453,7 @@ export default function AIMessage({
                             icon={SvgThumbsDown}
                             onClick={() => handleFeedbackClick("dislike")}
                             tertiary
-                            transient={currentFeedback === "dislike"}
+                            transient={isFeedbackTransient("dislike")}
                             tooltip={
                               currentFeedback === "dislike"
                                 ? "Remove Dislike"

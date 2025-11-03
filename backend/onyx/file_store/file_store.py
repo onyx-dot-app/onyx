@@ -430,9 +430,20 @@ class S3BackedFileStore(FileStore):
 
                 # Delete from external storage
                 s3_client = self._get_s3_client()
-                s3_client.delete_object(
-                    Bucket=file_record.bucket_name, Key=file_record.object_key
-                )
+                try:
+                    s3_client.delete_object(
+                        Bucket=file_record.bucket_name, Key=file_record.object_key
+                    )
+                except ClientError as e:
+                    # If the object doesn't exist in file store, treat it as success
+                    # since the end goal (object not existing) is achieved
+                    if e.response.get("Error", {}).get("Code") == "NoSuchKey":
+                        logger.warning(
+                            f"delete_file: File {file_id} not found in file store (key: {file_record.object_key}), "
+                            "cleaning up database record."
+                        )
+                    else:
+                        raise
 
                 # Delete metadata from database
                 delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
