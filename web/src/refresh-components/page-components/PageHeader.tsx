@@ -28,8 +28,12 @@ export default function PageHeader({
   const headerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Find the scroll container (PageWrapper has overflow-y-auto)
-    const scrollContainer = headerRef.current?.closest(".overflow-y-auto");
+    // IMPORTANT: This component relies on PageWrapper.tsx having the ID "page-wrapper-scroll-container"
+    // on its scrollable container. If that ID is removed or changed, the scroll shadow will not work.
+    // See PageWrapper.tsx for more details.
+    const scrollContainer = document.getElementById(
+      "page-wrapper-scroll-container"
+    );
     if (!scrollContainer) return;
 
     const handleScroll = () => {
