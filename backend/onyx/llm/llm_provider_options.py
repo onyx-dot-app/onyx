@@ -294,7 +294,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
         ),
         WellKnownLLMProviderDescriptor(
             name=AZURE_PROVIDER_NAME,
-            display_name="Microsoft Azure",
+            display_name="Microsoft Azure Cloud",
             title="Azure OpenAI",
             api_key_required=True,
             api_base_required=True,

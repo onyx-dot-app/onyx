@@ -167,8 +167,8 @@ const LLMStepInner = ({
                 <LLMProvider
                   onboardingState={onboardingState}
                   onboardingActions={onboardingActions}
-                  title="custom LLM provider"
-                  subtitle="Connect models from other providers or your self-hosted models."
+                  title="Custom LLM Provider"
+                  subtitle="LiteLLM Compatible APIs"
                   disabled={disabled}
                   isConnected={onboardingState.data.llmProviders?.some(
                     (provider) => provider === "custom"
