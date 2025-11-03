@@ -39,6 +39,7 @@ class CustomConfigKey(BaseModel):
 class WellKnownLLMProviderDescriptor(BaseModel):
     name: str
     display_name: str
+    title: str
     api_key_required: bool
     api_base_required: bool
     api_version_required: bool
@@ -243,6 +244,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
         WellKnownLLMProviderDescriptor(
             name=OPENAI_PROVIDER_NAME,
             display_name="OpenAI",
+            title="GPT",
             api_key_required=True,
             api_base_required=False,
             api_version_required=False,
@@ -256,6 +258,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
         WellKnownLLMProviderDescriptor(
             name=OLLAMA_PROVIDER_NAME,
             display_name="Ollama",
+            title="Ollama",
             api_key_required=False,
             api_base_required=True,
             api_version_required=False,
@@ -278,6 +281,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
         WellKnownLLMProviderDescriptor(
             name=ANTHROPIC_PROVIDER_NAME,
             display_name="Anthropic",
+            title="Claude",
             api_key_required=True,
             api_base_required=False,
             api_version_required=False,
@@ -290,7 +294,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
         ),
         WellKnownLLMProviderDescriptor(
             name=AZURE_PROVIDER_NAME,
-            display_name="Azure OpenAI",
+            display_name="Microsoft Azure Cloud",
+            title="Azure OpenAI",
             api_key_required=True,
             api_base_required=True,
             api_version_required=True,
@@ -303,7 +308,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
         ),
         WellKnownLLMProviderDescriptor(
             name=BEDROCK_PROVIDER_NAME,
-            display_name="AWS Bedrock",
+            display_name="AWS",
+            title="Amazon Bedrock",
             api_key_required=False,
             api_base_required=False,
             api_version_required=False,
@@ -311,8 +317,34 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 CustomConfigKey(
                     name="AWS_REGION_NAME",
                     display_name="AWS Region Name",
+                    description="Region where your Amazon Bedrock models are hosted.",
                     key_type=CustomConfigKeyType.SELECT,
                     options=BEDROCK_REGION_OPTIONS,
+                ),
+                CustomConfigKey(
+                    name="BEDROCK_AUTH_METHOD",
+                    display_name="Authentication",
+                    description="Choose how Onyx should authenticate with Bedrock.",
+                    is_required=False,
+                    key_type=CustomConfigKeyType.SELECT,
+                    default_value="access_key",
+                    options=[
+                        CustomConfigOption(
+                            label="Environment IAM Role",
+                            value="iam",
+                            description="Recommended for AWS environments",
+                        ),
+                        CustomConfigOption(
+                            label="Access Key",
+                            value="access_key",
+                            description="For non-AWS environments",
+                        ),
+                        CustomConfigOption(
+                            label="Long-term API Key",
+                            value="long_term_api_key",
+                            description="For non-AWS environments",
+                        ),
+                    ],
                 ),
                 CustomConfigKey(
                     name="AWS_ACCESS_KEY_ID",
@@ -345,7 +377,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
         ),
         WellKnownLLMProviderDescriptor(
             name=VERTEXAI_PROVIDER_NAME,
-            display_name="GCP Vertex AI",
+            display_name="Google Cloud Vertex AI",
+            title="Gemini",
             api_key_required=False,
             api_base_required=False,
             api_version_required=False,
@@ -378,6 +411,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
         WellKnownLLMProviderDescriptor(
             name=OPENROUTER_PROVIDER_NAME,
             display_name="OpenRouter",
+            title="OpenRouter",
             api_key_required=True,
             api_base_required=True,
             api_version_required=False,

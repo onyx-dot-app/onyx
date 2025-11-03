@@ -50,7 +50,7 @@ export default function LoginPage({
                 authorizeUrl={authUrl}
                 authType={authTypeMetadata?.authType}
               />
-              <div className="flex flex-row items-center w-full gap-spacing-interline">
+              <div className="flex flex-row items-center w-full gap-2">
                 <div className="flex-1 border-t border-text-01" />
                 <Text text03 mainUiMuted>
                   or
@@ -69,7 +69,7 @@ export default function LoginPage({
       )}
 
       {authTypeMetadata?.authType === "basic" && (
-        <div className="flex flex-col w-full gap-padding-content">
+        <div className="flex flex-col w-full gap-6">
           <LoginText />
 
           <EmailPasswordForm nextUrl={nextUrl} />
