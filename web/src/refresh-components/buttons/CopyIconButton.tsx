@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import IconButton, { IconButtonProps } from "./IconButton";
 import SvgCopy from "@/icons/copy";
 import SvgCheck from "@/icons/check";
@@ -38,6 +38,15 @@ export default function CopyIconButton({
       setCopied(false);
     }, 3000);
   };
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <IconButton
