@@ -88,6 +88,30 @@ def default_build_system_message_v2(
         tag_handled_prompt += "\n\n# Tools\n"
         tag_handled_prompt += TOOL_PERSISTENCE_PROMPT
 
+        # Detect tool types
+        has_web_search = any(type(tool).__name__ == "WebSearchTool" for tool in tools)
+        has_internal_search = any(type(tool).__name__ == "SearchTool" for tool in tools)
+
+        # Add search guidance if web search or internal search is provided
+        if has_web_search or has_internal_search:
+            from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
+
+            tag_handled_prompt += "\n" + TOOL_DESCRIPTION_SEARCH_GUIDANCE + "\n"
+
+        # Add internal search guidance if internal search is provided
+        if has_internal_search:
+            from onyx.prompts.chat_prompts import INTERNAL_SEARCH_GUIDANCE
+
+            tag_handled_prompt += "\n" + INTERNAL_SEARCH_GUIDANCE + "\n"
+
+        # Add internal search vs web search guidance if both are provided
+        if has_internal_search and has_web_search:
+            from onyx.prompts.chat_prompts import (
+                INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE,
+            )
+
+            tag_handled_prompt += "\n" + INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE + "\n"
+
         for tool in tools:
             if type(tool).__name__ == "WebSearchTool":
                 # Import at runtime to avoid circular dependency

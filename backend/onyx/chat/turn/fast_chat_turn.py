@@ -97,12 +97,8 @@ def _run_agent_loop(
                 )
             ],
         )
-        current_messages = (
-            [new_system_prompt]
-            + chat_history
-            + [current_user_message]
-            + agent_turn_messages
-        )
+        previous_messages = [new_system_prompt] + chat_history + [current_user_message]
+        current_messages = previous_messages + agent_turn_messages
 
         if not available_tools:
             tool_choice = None
@@ -131,11 +127,9 @@ def _run_agent_loop(
         )
 
         all_messages_after_stream = streamed.to_input_list()
-        # The new messages are everything after chat_history + current_user_message
-        previous_message_count = len(chat_history) + 1
         agent_turn_messages = [
             cast(AgentSDKMessage, msg)
-            for msg in all_messages_after_stream[previous_message_count:]
+            for msg in all_messages_after_stream[len(previous_messages) :]
         ]
 
         last_iteration_included_web_search = any(

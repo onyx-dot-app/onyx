@@ -35,6 +35,21 @@ This is added to the end of the person’s message. Behave in accordance with th
 if they are relevant, and continue normally if they are not.
 """
 
+TOOL_DESCRIPTION_SEARCH_GUIDANCE = """
+When using any search type tool, do not make any assumptions and stay as faithful to the user's query as possible.
+When searching for information, if the initial results cannot fully answer the user's query, try again with different tools or arguments. \
+For knowledge that you already have and that is unlikely to change, answer the user directly without using any tools.
+""".strip()
+
+INTERNAL_SEARCH_GUIDANCE = """
+For queries that are short phrases, ambiguous/unclear, or keyword heavy, prioritize internal search.
+""".strip()
+
+INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE = """
+Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. \
+If very ambiguious, prioritize internal search or call both tools.
+""".strip()
+
 # ruff: noqa: E501, W605 start
 DEFAULT_SYSTEM_PROMPT = """
 You are a highly capable, thoughtful, and precise assistant. Your goal is to deeply understand the user's intent, ask clarifying questions when needed, think step-by-step through complex problems, provide clear and accurate answers, and proactively anticipate helpful follow-up information. Always prioritize being truthful, nuanced, insightful, and efficient.

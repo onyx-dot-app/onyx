@@ -13,6 +13,9 @@ from onyx.chat.prompt_builder.answer_prompt_builder import (
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
+from onyx.prompts.chat_prompts import INTERNAL_SEARCH_GUIDANCE
+from onyx.prompts.chat_prompts import INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE
+from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_implementations_v2.web import OPEN_URL_LONG_DESCRIPTION
@@ -144,7 +147,7 @@ def test_system_message_includes_personalization(
     system_message = default_build_system_message(
         config,
         llm_config,
-        memories_callback if has_memories else None,
+        memories_callback() if has_memories else None,
     )
 
     assert system_message is not None
@@ -193,7 +196,7 @@ def test_system_message_includes_personalization_for_default_assistant(
     system_message = default_build_system_message_v2(
         config,
         llm_config,
-        memories_callback if has_memories else None,
+        memories_callback() if has_memories else None,
     )
 
     assert system_message is not None
@@ -221,7 +224,7 @@ def test_tools_section_present_when_tools_given(
 ) -> None:
     tools = [test_tool]
     msg = default_build_system_message_v2(
-        prompt_config, llm_config, memories_callback=None, tools=tools
+        prompt_config, llm_config, memories=None, tools=tools
     )
     content = cast(str, msg.content)
 
@@ -237,7 +240,7 @@ def test_tools_section_empty_when_no_tools_given(
     llm_config: LLMConfig,
 ) -> None:
     msg = default_build_system_message_v2(
-        prompt_config, llm_config, memories_callback=None, tools=[]
+        prompt_config, llm_config, memories=None, tools=[]
     )
     content = cast(str, msg.content)
 
@@ -251,7 +254,7 @@ def test_custom_instructions_gone_when_empty_or_default(
     llm_config: LLMConfig,
 ) -> None:
     msg = default_build_system_message_v2(
-        make_prompt_config("", "", False), llm_config, memories_callback=None
+        make_prompt_config("", "", False), llm_config, memories=None
     )
     content = cast(str, msg.content)
     _assert_section(content, "Custom Instructions", False)
@@ -259,7 +262,7 @@ def test_custom_instructions_gone_when_empty_or_default(
     msg = default_build_system_message_v2(
         make_prompt_config(DEFAULT_SYSTEM_PROMPT, "", False),
         llm_config,
-        memories_callback=None,
+        memories=None,
     )
     content = cast(str, msg.content)
     _assert_section(content, "Custom Instructions", False)
@@ -272,7 +275,7 @@ def test_custom_instructions_present_when_set(
     msg = default_build_system_message_v2(
         make_prompt_config("You are helpful.", "", False),
         llm_config,
-        memories_callback=None,
+        memories=None,
     )
     content = cast(str, msg.content)
     _assert_section(content, "Custom Instructions", True)
@@ -289,7 +292,7 @@ def test_web_search_tool_present(
     llm_config: LLMConfig,
 ) -> None:
     msg = default_build_system_message_v2(
-        prompt_config, llm_config, memories_callback=None, tools=[web_search_tool]
+        prompt_config, llm_config, memories=None, tools=[web_search_tool]
     )
     content = cast(str, msg.content)
     _assert_section(content, "Tools", True)
@@ -299,3 +302,79 @@ def test_web_search_tool_present(
     assert "open_url" in body
     assert WEB_SEARCH_LONG_DESCRIPTION in body
     assert OPEN_URL_LONG_DESCRIPTION in body
+
+
+def test_tool_guidance_with_web_search_only(
+    prompt_config: PromptConfig,
+    llm_config: LLMConfig,
+    web_search_tool: Tool,
+) -> None:
+    """Test that TOOL_DESCRIPTION_SEARCH_GUIDANCE is added when only web search is provided."""
+    msg = default_build_system_message_v2(
+        prompt_config, llm_config, memories=None, tools=[web_search_tool]
+    )
+    content = cast(str, msg.content)
+
+    # Should have search guidance
+    assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in content
+    # Should NOT have internal search guidance
+    assert INTERNAL_SEARCH_GUIDANCE not in content
+    # Should NOT have internal vs web search guidance
+    assert INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE not in content
+
+
+def test_tool_guidance_with_internal_search_only(
+    prompt_config: PromptConfig,
+    llm_config: LLMConfig,
+    mock_search_tool: Tool,
+) -> None:
+    """Test that both guidances are added when only internal search is provided."""
+    msg = default_build_system_message_v2(
+        prompt_config, llm_config, memories=None, tools=[mock_search_tool]
+    )
+    content = cast(str, msg.content)
+
+    # Should have search guidance
+    assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in content
+    # Should have internal search guidance
+    assert INTERNAL_SEARCH_GUIDANCE in content
+    # Should NOT have internal vs web search guidance (no web search)
+    assert INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE not in content
+
+
+def test_tool_guidance_with_both_search_tools(
+    prompt_config: PromptConfig,
+    llm_config: LLMConfig,
+    web_search_tool: Tool,
+    mock_search_tool: Tool,
+) -> None:
+    """Test that all guidances are added when both search tools are provided."""
+    msg = default_build_system_message_v2(
+        prompt_config,
+        llm_config,
+        memories=None,
+        tools=[web_search_tool, mock_search_tool],
+    )
+    content = cast(str, msg.content)
+
+    # Should have all three guidances
+    assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in content
+    assert INTERNAL_SEARCH_GUIDANCE in content
+    assert INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE in content
+
+
+def test_tool_guidance_with_no_search_tools(
+    prompt_config: PromptConfig,
+    llm_config: LLMConfig,
+    test_tool: Tool,
+) -> None:
+    """Test that no search guidance is added when no search tools are provided."""
+    msg = default_build_system_message_v2(
+        prompt_config, llm_config, memories=None, tools=[test_tool]
+    )
+    content = cast(str, msg.content)
+
+    # Should NOT have any search guidance
+    assert TOOL_DESCRIPTION_SEARCH_GUIDANCE not in content
+    assert INTERNAL_SEARCH_GUIDANCE not in content
+    assert INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE not in content

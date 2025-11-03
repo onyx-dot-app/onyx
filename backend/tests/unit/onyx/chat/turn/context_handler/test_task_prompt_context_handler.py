@@ -1,10 +1,8 @@
 from collections.abc import Sequence
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
-from onyx.agents.agent_sdk.message_types import AssistantMessageWithContent
 from onyx.agents.agent_sdk.message_types import AssistantMessageWithToolCalls
 from onyx.agents.agent_sdk.message_types import InputTextContent
-from onyx.agents.agent_sdk.message_types import OutputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import ToolCall
 from onyx.agents.agent_sdk.message_types import ToolCallFunction
@@ -12,43 +10,10 @@ from onyx.agents.agent_sdk.message_types import ToolMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.chat.models import PromptConfig
 from onyx.chat.turn.context_handler.task_prompt import update_task_prompt
+from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 
 
-def test_task_prompt_handler_with_no_user_messages() -> None:
-    prompt_config = PromptConfig(
-        system_prompt="Test system prompt",
-        task_prompt="Test task prompt",
-        datetime_aware=False,
-    )
-    current_user_message: UserMessage = UserMessage(
-        role="user",
-        content=[InputTextContent(type="input_text", text="Current query")],
-    )
-    agent_turn_messages: Sequence[AgentSDKMessage] = [
-        AssistantMessageWithContent(
-            role="assistant",
-            content=[OutputTextContent(type="output_text", text="Assistant message 1")],
-        ),
-        AssistantMessageWithContent(
-            role="assistant",
-            content=[OutputTextContent(type="output_text", text="Assistant message 2")],
-        ),
-    ]
-
-    result = update_task_prompt(
-        current_user_message,
-        agent_turn_messages,
-        prompt_config,
-        should_cite_documents=False,
-    )
-
-    assert len(result) == 3
-    assert result[0].get("role") == "assistant"
-    assert result[1].get("role") == "assistant"
-    assert result[2].get("role") == "user"
-
-
-def test_task_prompt_handler_basic() -> None:
+def test_task_prompt_handler_previous_reminder() -> None:
     task_prompt = "reminder!"
     prompt_config = PromptConfig(
         system_prompt="Test system prompt",
@@ -171,8 +136,8 @@ def test_task_prompt_handler_with_web_search() -> None:
         last_iteration_included_web_search=True,
     )
 
-    # Just verify no errors occur - don't test exact contents
     assert len(result) == 3
     assert result[0].get("role") == "assistant"
     assert result[1].get("role") == "tool"
     assert result[2].get("role") == "user"
+    assert OPEN_URL_REMINDER in result[2].get("content")[0].get("text")

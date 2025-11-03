@@ -155,17 +155,23 @@ def build_task_prompt_reminders_v2(
     """
     base_task = prompt.task_prompt or ""
 
-    # Use CITATION_REMINDER for citations, or OPEN_URL_REMINDER if web search was used
-    if last_iteration_included_web_search:
-        citation_or_nothing = OPEN_URL_REMINDER if should_cite else ""
-    else:
-        citation_or_nothing = CITATION_REMINDER if should_cite else ""
+    open_url_or_nothing = (
+        OPEN_URL_REMINDER if last_iteration_included_web_search else ""
+    )
+    citation_or_nothing = CITATION_REMINDER if should_cite else ""
 
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
-    if len(base_task) + len(citation_or_nothing) + len(language_hint_or_nothing) > 0:
+    if (
+        len(base_task)
+        + len(open_url_or_nothing)
+        + len(citation_or_nothing)
+        + len(language_hint_or_nothing)
+        > 0
+    ):
         return f"""
         {LONG_CONVERSATION_REMINDER_TAG_OPEN}
         {base_task}
+        {open_url_or_nothing}
         {citation_or_nothing}
         {language_hint_or_nothing}
         {LONG_CONVERSATION_REMINDER_TAG_CLOSED}
