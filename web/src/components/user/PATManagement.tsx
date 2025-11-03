@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import useSWR from "swr";
 import SvgTrash from "@/icons/trash";
 import SvgCopy from "@/icons/copy";
 import SvgCheck from "@/icons/check";
 import SvgPlusCircle from "@/icons/plus-circle";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { humanReadableFormat, humanReadableFormatWithTime } from "@/lib/time";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
 import {
   Select,
   SelectContent,
@@ -17,27 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-// Utility: Format date consistently (UTC -> local)
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatDateTime(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 interface PAT {
   id: number;
@@ -48,29 +32,49 @@ interface PAT {
   last_used_at: string | null;
 }
 
+interface CreatedTokenState {
+  id: number;
+  token: string;
+}
+
 export function PATManagement() {
-  const [pats, setPats] = useState<PAT[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [newTokenName, setNewTokenName] = useState("");
   const [expirationDays, setExpirationDays] = useState<string>("30");
-  const [createdToken, setCreatedToken] = useState<string | null>(null);
-  const [copiedToken, setCopiedToken] = useState(false);
+  const [newlyCreatedToken, setNewlyCreatedToken] =
+    useState<CreatedTokenState | null>(null);
+  const [copiedTokenId, setCopiedTokenId] = useState<number | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [tokenToDelete, setTokenToDelete] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
   const { setPopup } = usePopup();
 
-  const fetchPATs = async () => {
-    try {
-      const response = await fetch("/api/user/tokens");
-      if (response.ok) {
-        const data = await response.json();
-        setPats(data);
-      } else {
-        setPopup({ message: "Failed to load tokens", type: "error" });
-      }
-    } catch (error) {
-      setPopup({ message: "Network error loading tokens", type: "error" });
+  // Use SWR for token fetching with caching
+  const {
+    data: pats = [],
+    mutate,
+    error,
+  } = useSWR<PAT[]>("/api/user/tokens", errorHandlingFetcher, {
+    revalidateOnFocus: true,
+    dedupingInterval: 2000,
+    fallbackData: [],
+  });
+
+  // Show error popup if SWR fetch fails
+  useEffect(() => {
+    if (error) {
+      setPopup({ message: "Failed to load tokens", type: "error" });
     }
-  };
+  }, [error, setPopup]);
+
+  // Show create form by default if no tokens exist
+  useEffect(() => {
+    if (pats.length === 0 && !newlyCreatedToken && !showCreateForm) {
+      setShowCreateForm(true);
+    }
+  }, [pats.length, newlyCreatedToken, showCreateForm]);
 
   const createPAT = async () => {
     if (!newTokenName.trim()) {
@@ -92,11 +96,13 @@ export function PATManagement() {
 
       if (response.ok) {
         const data = await response.json();
-        setCreatedToken(data.token);
+        // Store the newly created token with its ID and full token value
+        setNewlyCreatedToken({ id: data.id, token: data.token });
         setNewTokenName("");
         setExpirationDays("30");
         setPopup({ message: "Token created successfully", type: "success" });
-        await fetchPATs();
+        // Revalidate the token list
+        await mutate();
       } else {
         const error = await response.json();
         setPopup({
@@ -111,220 +117,231 @@ export function PATManagement() {
     }
   };
 
-  const deletePAT = async (patId: number, patName: string) => {
-    if (!confirm(`Are you sure you want to delete token "${patName}"?`)) {
-      return;
-    }
-
+  const deletePAT = async (patId: number) => {
     try {
       const response = await fetch(`/api/user/tokens/${patId}`, {
         method: "DELETE",
       });
 
       if (response.ok) {
-        await fetchPATs();
+        // Clear the newly created token if it's the one being deleted
+        if (newlyCreatedToken?.id === patId) {
+          setNewlyCreatedToken(null);
+        }
+        await mutate();
         setPopup({ message: "Token deleted successfully", type: "success" });
       } else {
         setPopup({ message: "Failed to delete token", type: "error" });
       }
     } catch (error) {
       setPopup({ message: "Network error deleting token", type: "error" });
+    } finally {
+      setTokenToDelete(null);
     }
   };
 
-  const copyToken = async (token: string) => {
+  const copyToken = async (token: string, tokenId: number) => {
     try {
       await navigator.clipboard.writeText(token);
-      setCopiedToken(true);
+      setCopiedTokenId(tokenId);
       setPopup({ message: "Copied to clipboard", type: "success" });
-      setTimeout(() => setCopiedToken(false), 2000);
+      setTimeout(() => setCopiedTokenId(null), 2000);
     } catch (error) {
       setPopup({ message: "Failed to copy token", type: "error" });
     }
   };
 
-  useEffect(() => {
-    fetchPATs();
-  }, []);
-
-  // Show create form by default if no tokens exist
-  useEffect(() => {
-    if (pats.length === 0 && !createdToken) {
-      setShowCreateForm(true);
-    }
-  }, [pats.length, createdToken]);
-
   return (
-    <div className="space-y-6">
-      {/* Token Creation Success Modal */}
-      {createdToken && (
-        <div
-          role="dialog"
-          aria-labelledby="token-modal-title"
-          aria-modal="true"
-          className="p-4 bg-background-emphasis border border-border-strong rounded-lg"
+    <>
+      {tokenToDelete && (
+        <ConfirmationModal
+          icon={SvgTrash}
+          title="Delete Token"
+          onClose={() => setTokenToDelete(null)}
+          submit={
+            <Button danger onClick={() => deletePAT(tokenToDelete.id)}>
+              Delete
+            </Button>
+          }
         >
-          <Text id="token-modal-title" headingH3 className="mb-2">
-            Token Created!
-          </Text>
-          <Text text02 secondaryBody className="mb-3">
-            Copy this token now. You won&apos;t be able to see it again.
-          </Text>
-          <code className="block p-3 bg-background-02 border border-border-01 rounded text-xs break-all font-mono text-text-01">
-            {createdToken}
-          </code>
-          <div className="flex gap-2 mt-3">
-            <Button
-              onClick={() => copyToken(createdToken)}
-              primary
-              leftIcon={copiedToken ? SvgCheck : SvgCopy}
-              aria-label="Copy token to clipboard"
-            >
-              {copiedToken ? "Copied!" : "Copy Token"}
-            </Button>
-            <Button
-              onClick={() => setCreatedToken(null)}
-              secondary
-              aria-label="Close token display"
-            >
-              Close
-            </Button>
-          </div>
-        </div>
+          Are you sure you want to delete token &quot;{tokenToDelete.name}
+          &quot;? This action cannot be undone.
+        </ConfirmationModal>
       )}
+      <div className="space-y-6">
+        {/* Create New Token Form */}
+        {showCreateForm && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Text headingH3>
+                {pats.length === 0
+                  ? "Create Your First Token"
+                  : "Create New Token"}
+              </Text>
+              {pats.length > 0 && (
+                <Button
+                  onClick={() => setShowCreateForm(false)}
+                  internal
+                  aria-label="Cancel token creation"
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
+            <div className="space-y-3">
+              <InputTypeIn
+                placeholder="Token name (e.g., 'MCP Client')"
+                value={newTokenName}
+                onChange={(e) => setNewTokenName(e.target.value)}
+                disabled={isCreating}
+                aria-label="Token name"
+              />
+              <div className="space-y-1">
+                {/* NOTE: Use Select dropdown (not free text input) to guide users to common values.
+                  Backend accepts any positive integer, but we provide curated options for UX. */}
+                <Select
+                  value={expirationDays}
+                  onValueChange={setExpirationDays}
+                  disabled={isCreating}
+                >
+                  <SelectTrigger aria-label="Select token expiration">
+                    <SelectValue placeholder="Select expiration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">7 days</SelectItem>
+                    <SelectItem value="30">30 days</SelectItem>
+                    <SelectItem value="365">365 days</SelectItem>
+                    <SelectItem value="null">No expiration</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Text text02 secondaryBody>
+                  Expires at end of day (23:59 UTC).
+                </Text>
+              </div>
+              <Button onClick={createPAT} disabled={isCreating} primary>
+                {isCreating ? "Creating..." : "Create Token"}
+              </Button>
+            </div>
+          </div>
+        )}
 
-      {/* Create New Token Form */}
-      {showCreateForm && (
+        {/* Token List */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <Text headingH3>
-              {pats.length === 0
-                ? "Create Your First Token"
-                : "Create New Token"}
-            </Text>
-            {pats.length > 0 && (
-              <Button
-                onClick={() => setShowCreateForm(false)}
-                internal
-                aria-label="Cancel token creation"
-              >
-                Cancel
-              </Button>
-            )}
-          </div>
-          <div className="space-y-3">
-            <InputTypeIn
-              placeholder="Token name (e.g., 'MCP Client')"
-              value={newTokenName}
-              onChange={(e) => setNewTokenName(e.target.value)}
-              disabled={isCreating}
-              aria-label="Token name"
-            />
-            <div className="space-y-1">
-              {/* NOTE: Use Select dropdown (not free text input) to guide users to common values.
-                  Backend accepts any positive integer, but we provide curated options for UX. */}
-              <Select
-                value={expirationDays}
-                onValueChange={setExpirationDays}
-                disabled={isCreating}
-              >
-                <SelectTrigger aria-label="Select token expiration">
-                  <SelectValue placeholder="Select expiration" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="7">7 days</SelectItem>
-                  <SelectItem value="30">30 days</SelectItem>
-                  <SelectItem value="365">365 days</SelectItem>
-                  <SelectItem value="null">No expiration</SelectItem>
-                </SelectContent>
-              </Select>
-              <Text text02 secondaryBody>
-                Expires at end of day (23:59 UTC).
-              </Text>
-            </div>
-            <Button onClick={createPAT} disabled={isCreating} primary>
-              {isCreating ? "Creating..." : "Create Token"}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Token List */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <Text headingH3>Your Tokens</Text>
-          {pats.length > 0 && !showCreateForm && (
-            <Button
-              onClick={() => setShowCreateForm(true)}
-              primary
-              leftIcon={SvgPlusCircle}
-              aria-label="Create new token"
-            >
-              New Token
-            </Button>
-          )}
-        </div>
-        {pats.length === 0 ? (
-          <div className="text-center py-8 px-4 border-2 border-dashed border-border-01 rounded-lg">
-            <Text text03 secondaryBody className="mb-4">
-              No tokens created yet. Create your first token to get started.
-            </Text>
-            {!showCreateForm && (
+            <Text headingH3>Your Tokens</Text>
+            {pats.length > 0 && !showCreateForm && (
               <Button
                 onClick={() => setShowCreateForm(true)}
                 primary
                 leftIcon={SvgPlusCircle}
-                aria-label="Create your first token"
+                aria-label="Create new token"
               >
-                Create Your First Token
+                New Token
               </Button>
             )}
           </div>
-        ) : (
-          <div className="space-y-2">
-            {pats.map((pat) => (
-              <div
-                key={pat.id}
-                className="flex items-center justify-between p-3 border border-border-01 rounded-lg bg-background-tint-01"
-              >
-                <div className="flex-1 min-w-0">
-                  <Text text01 mainUiAction className="truncate">
-                    {pat.name}
-                  </Text>
-                  <Text text03 secondaryMono>
-                    {pat.token_display}
-                  </Text>
-                  <Text text03 secondaryBody className="mt-1">
-                    <span title={formatDateTime(pat.created_at)}>
-                      Created: {formatDate(pat.created_at)}
-                    </span>
-                    {pat.expires_at && (
-                      <span title={formatDateTime(pat.expires_at)}>
-                        {" • Expires: "}
-                        {formatDate(pat.expires_at)}
-                      </span>
-                    )}
-                    {pat.last_used_at && (
-                      <span title={formatDateTime(pat.last_used_at)}>
-                        {" • Last used: "}
-                        {formatDate(pat.last_used_at)}
-                      </span>
-                    )}
-                  </Text>
-                </div>
+          {pats.length === 0 ? (
+            <div className="text-center py-8 px-4 border-2 border-dashed border-border-01 rounded-lg">
+              <Text text03 secondaryBody className="mb-4">
+                No tokens created yet. Create your first token to get started.
+              </Text>
+              {!showCreateForm && (
                 <Button
-                  onClick={() => deletePAT(pat.id, pat.name)}
-                  internal
-                  leftIcon={SvgTrash}
-                  className="ml-2"
-                  data-testid={`delete-pat-${pat.id}`}
-                  aria-label={`Delete token ${pat.name}`}
-                />
-              </div>
-            ))}
-          </div>
-        )}
+                  onClick={() => setShowCreateForm(true)}
+                  primary
+                  leftIcon={SvgPlusCircle}
+                  aria-label="Create your first token"
+                >
+                  Create Your First Token
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {pats.map((pat) => {
+                const isNewlyCreated = newlyCreatedToken?.id === pat.id;
+                const isCopied = copiedTokenId === pat.id;
+
+                return (
+                  <div
+                    key={pat.id}
+                    className={`flex items-center justify-between p-3 border rounded-lg ${
+                      isNewlyCreated
+                        ? "bg-accent-emphasis border-accent-strong"
+                        : "border-border-01 bg-background-tint-01"
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <Text text01 mainUiAction className="truncate">
+                        {pat.name}
+                      </Text>
+                      {isNewlyCreated ? (
+                        <>
+                          <Text text02 secondaryBody className="mb-2">
+                            Copy this token now. You won&apos;t be able to see
+                            it again.
+                          </Text>
+                          <code className="block p-2 bg-background-02 border border-border-01 rounded text-xs break-all font-mono text-text-01 mb-2">
+                            {newlyCreatedToken.token}
+                          </code>
+                          <Button
+                            onClick={() =>
+                              copyToken(newlyCreatedToken.token, pat.id)
+                            }
+                            primary
+                            leftIcon={isCopied ? SvgCheck : SvgCopy}
+                            aria-label="Copy token to clipboard"
+                          >
+                            {isCopied ? "Copied!" : "Copy Token"}
+                          </Button>
+                        </>
+                      ) : (
+                        <Text text03 secondaryMono>
+                          {pat.token_display}
+                        </Text>
+                      )}
+                      <Text text03 secondaryBody className="mt-1">
+                        <span
+                          title={humanReadableFormatWithTime(pat.created_at)}
+                        >
+                          Created: {humanReadableFormat(pat.created_at)}
+                        </span>
+                        {pat.expires_at && (
+                          <span
+                            title={humanReadableFormatWithTime(pat.expires_at)}
+                          >
+                            {" • Expires: "}
+                            {humanReadableFormat(pat.expires_at)}
+                          </span>
+                        )}
+                        {pat.last_used_at && (
+                          <span
+                            title={humanReadableFormatWithTime(
+                              pat.last_used_at
+                            )}
+                          >
+                            {" • Last used: "}
+                            {humanReadableFormat(pat.last_used_at)}
+                          </span>
+                        )}
+                      </Text>
+                    </div>
+                    <IconButton
+                      icon={SvgTrash}
+                      onClick={() =>
+                        setTokenToDelete({ id: pat.id, name: pat.name })
+                      }
+                      internal
+                      data-testid={`delete-pat-${pat.id}`}
+                      aria-label={`Delete token ${pat.name}`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
