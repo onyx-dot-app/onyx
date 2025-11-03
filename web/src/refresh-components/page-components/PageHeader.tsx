@@ -28,20 +28,19 @@ export default function PageHeader({
   const headerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleScroll = () => {
-      if (headerRef.current) {
-        const headerBottom = headerRef.current.getBoundingClientRect().bottom;
-        const viewportHeight = window.innerHeight;
+    // Find the scroll container (PageWrapper has overflow-y-auto)
+    const scrollContainer = headerRef.current?.closest(".overflow-y-auto");
+    if (!scrollContainer) return;
 
-        // Show shadow if there's content scrolled beneath the header
-        setShowShadow(headerBottom < viewportHeight);
-      }
+    const handleScroll = () => {
+      // Show shadow if the scroll container has been scrolled down
+      setShowShadow(scrollContainer.scrollTop > 0);
     };
 
-    window.addEventListener("scroll", handleScroll);
+    scrollContainer.addEventListener("scroll", handleScroll);
     handleScroll(); // Check initial state
 
-    return () => window.removeEventListener("scroll", handleScroll);
+    return () => scrollContainer.removeEventListener("scroll", handleScroll);
   }, []);
 
   return (
@@ -63,11 +62,17 @@ export default function PageHeader({
       </div>
       <div
         className={cn(
-          "absolute left-0 right-0 h-[1rem] pointer-events-none transition-opacity duration-200",
-          showShadow ? "opacity-100" : "opacity-0"
+          "absolute left-0 right-0 h-[0.5rem] pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
+          showShadow && "opacity-100"
         )}
         style={{
-          background: "linear-gradient(to bottom, var(--mask-02), transparent)",
+          background: "linear-gradient(to bottom, var(--mask-03), transparent)",
+          // If you want to implement a radial scroll-shadow, you can apply the bottom line.
+          // I tried playing around with this here, but wasn't able to find a configuration that just *hit the spot*...
+          // - @raunakab
+          //
+          // background:
+          //   "radial-gradient(ellipse 50% 80% at 50% 0%, var(--mask-03), transparent)",
         }}
       />
     </div>
