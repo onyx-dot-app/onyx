@@ -68,7 +68,7 @@
  * ```
  */
 
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useContext, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
 import SvgMinusCircle from "@/icons/minus-circle";
@@ -77,7 +77,7 @@ import IconButton from "../buttons/IconButton";
 import Button from "../buttons/Button";
 import SvgPlusCircle from "@/icons/plus-circle";
 import Text from "../texts/Text";
-import { useFieldContext } from "../form/FieldContext";
+import { FieldContext } from "../form/FieldContext";
 
 export type KeyValue = { key: string; value: string };
 
@@ -214,6 +214,20 @@ export interface KeyValueInputProps
   onValidationChange?: (isValid: boolean, errors: KeyValueError[]) => void;
   /** Callback to handle validation errors - integrates with Formik or custom error handling. Called with error message when invalid, null when valid */
   onValidationError?: (errorMessage: string | null) => void;
+  /** Optional custom validator for the key field. Return { isValid, message } */
+  onKeyValidate?: (
+    key: string,
+    index: number,
+    item: KeyValue,
+    items: KeyValue[]
+  ) => { isValid: boolean; message?: string };
+  /** Optional custom validator for the value field. Return { isValid, message } */
+  onValueValidate?: (
+    value: string,
+    index: number,
+    item: KeyValue,
+    items: KeyValue[]
+  ) => { isValid: boolean; message?: string };
   /** Whether to validate for duplicate keys */
   validateDuplicateKeys?: boolean;
   /** Whether to validate for empty keys */
@@ -234,20 +248,16 @@ const KeyValueInput = ({
   layout = "equal",
   onValidationChange,
   onValidationError,
+  onKeyValidate,
+  onValueValidate,
   validateDuplicateKeys = true,
   validateEmptyKeys = true,
   name,
   className,
   ...rest
 }: KeyValueInputProps) => {
-  // Try to get field context if used within FormField
-  let fieldContext;
-  try {
-    fieldContext = useFieldContext();
-  } catch {
-    // Not used within FormField, that's fine
-    fieldContext = null;
-  }
+  // Try to get field context if used within FormField (safe access)
+  const fieldContext = useContext(FieldContext);
 
   // Validation logic
   const errors = useMemo((): KeyValueError[] => {
@@ -275,6 +285,28 @@ const KeyValueInput = ({
         existing.push(index);
         keyCount.set(item.key, existing);
       }
+
+      // Custom key validation
+      if (onKeyValidate) {
+        const result = onKeyValidate(item.key, index, item, items);
+        if (result && result.isValid === false) {
+          const error = errorsList[index];
+          if (error) {
+            error.key = result.message || "Invalid key";
+          }
+        }
+      }
+
+      // Custom value validation
+      if (onValueValidate) {
+        const result = onValueValidate(item.value, index, item, items);
+        if (result && result.isValid === false) {
+          const error = errorsList[index];
+          if (error) {
+            error.value = result.message || "Invalid value";
+          }
+        }
+      }
     });
 
     // Validate duplicate keys
@@ -292,7 +324,13 @@ const KeyValueInput = ({
     }
 
     return errorsList;
-  }, [items, validateDuplicateKeys, validateEmptyKeys]);
+  }, [
+    items,
+    validateDuplicateKeys,
+    validateEmptyKeys,
+    onKeyValidate,
+    onValueValidate,
+  ]);
 
   const isValid = useMemo(() => {
     return errors.every((error) => !error.key && !error.value);

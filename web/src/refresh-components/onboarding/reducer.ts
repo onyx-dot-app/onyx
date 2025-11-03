@@ -7,11 +7,11 @@ import {
 import { STEP_NAVIGATION, STEP_CONFIG, TOTAL_STEPS } from "./constants";
 
 export const initialState: OnboardingState = {
-  currentStep: OnboardingStep.Name,
-  stepIndex: 1,
+  currentStep: OnboardingStep.Welcome,
+  stepIndex: 0,
   totalSteps: TOTAL_STEPS,
   data: {},
-  isButtonActive: false,
+  isButtonActive: true,
   isLoading: false,
 };
 
@@ -29,6 +29,8 @@ export function onboardingReducer(
         ...state,
         currentStep: nextStep,
         stepIndex: STEP_CONFIG[nextStep].index,
+        isButtonActive:
+          nextStep === OnboardingStep.Complete ? true : state.isButtonActive,
         error: undefined,
       };
     }
@@ -51,6 +53,8 @@ export function onboardingReducer(
         ...state,
         currentStep: action.step,
         stepIndex: STEP_CONFIG[action.step].index,
+        isButtonActive:
+          action.step === OnboardingStep.Complete ? true : state.isButtonActive,
         error: undefined,
       };
 
