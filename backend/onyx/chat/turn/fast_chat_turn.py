@@ -18,6 +18,7 @@ from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.models import PromptConfig
+from onyx.chat.packet_sniffing import has_had_message_start
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
@@ -379,15 +380,7 @@ def _default_packet_translation(
             else:
                 obj = MessageDelta(content=ev.data.delta)
 
-            needs_start = True
-            start_ind = len(packet_history) - 1
-            for i in range(start_ind, -1, -1):
-                if packet_history[i].obj.type == "message_start":
-                    needs_start = False
-                    break
-                elif packet_history[i].ind != ctx.current_run_step:
-                    break
-
+            needs_start = has_had_message_start(packet_history, ctx.current_run_step)
             if needs_start:
                 ctx.current_run_step += 1
                 retrieved_search_docs = saved_search_docs_from_llm_docs(
