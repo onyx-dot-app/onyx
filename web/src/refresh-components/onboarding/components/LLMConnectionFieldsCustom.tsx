@@ -30,14 +30,23 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
 }) => {
   const formikContext = useFormikContext<any>();
   const [modelConfigError, setModelConfigError] = useState<string | null>(null);
+  const [customConfigDraft, setCustomConfigDraft] = useState<KeyValue[]>(
+    Object.entries(formikContext.values.custom_config || {}).map(
+      ([key, value]) => ({ key, value: String(value) })
+    )
+  );
 
   const handleModelConfigsChange = (items: KeyValue[]) => {
     // Don't filter out empty items here - let the user edit them
     const configs = items.map((item) => ({
       name: item.key,
       is_visible: true,
-      max_input_tokens:
-        item.value.trim() === "" ? null : parseInt(item.value, 10),
+      max_input_tokens: (() => {
+        const t = item.value.trim();
+        if (t === "") return null;
+        if (!/^\d+$/.test(t)) return item.value;
+        return parseInt(t, 10);
+      })(),
       supports_image_input: false,
     }));
 
@@ -45,8 +54,10 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
   };
 
   const handleCustomConfigsChange = (items: KeyValue[]) => {
-    // Convert KeyValue[] to Record<string, string>
-    // Don't filter out empty items here - let the user edit them
+    // Preserve UI rows (including temporary duplicate/empty keys)
+    setCustomConfigDraft(items);
+
+    // Convert KeyValue[] to Record<string, string> for form value
     const config: Record<string, string> = {};
     items.forEach((item) => {
       config[item.key] = item.value;
@@ -60,14 +71,6 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
       key: config.name || "",
       value: config.max_input_tokens?.toString() || "",
     })) || [];
-
-  // Convert custom_config back to KeyValue[] for display
-  const customConfigAsKeyValue: KeyValue[] = Object.entries(
-    formikContext.values.custom_config || {}
-  ).map(([key, value]) => ({
-    key,
-    value: value as string,
-  }));
 
   return (
     <>
@@ -208,16 +211,16 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
           <FormField.Description>
             Optional additional properties as needed by the model provider. This
             is passed to LiteLLM{" "}
-            <Text text03 secondaryMono nowrap className="inline-block">
+            <span className="font-secondary-mono text-text-03 whitespace-nowrap inline-block">
               completion()
-            </Text>{" "}
+            </span>{" "}
             call as arguments in the environment variable.
           </FormField.Description>
           <FormField.Control asChild>
             <KeyValueInput
               keyTitle="Key"
               valueTitle="Value"
-              items={customConfigAsKeyValue}
+              items={customConfigDraft}
               onChange={handleCustomConfigsChange}
               mode="line"
               disabled={disabled}
@@ -249,6 +252,13 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
               valueTitle="Max Input Tokens"
               items={modelConfigsAsKeyValue}
               onChange={handleModelConfigsChange}
+              onValueValidate={(value) => {
+                const v = (value || "").trim();
+                if (v === "") return { isValid: true };
+                return /^\d+$/.test(v)
+                  ? { isValid: true }
+                  : { isValid: false, message: "Must be a number" };
+              }}
               onValidationError={setModelConfigError}
               mode="fixed-line"
               disabled={disabled}
