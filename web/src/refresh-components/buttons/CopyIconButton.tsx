@@ -23,7 +23,9 @@ export default function CopyIconButton({
     const text = getCopyText();
 
     // Copy to clipboard
-    navigator.clipboard.writeText(text);
+    navigator.clipboard
+      .writeText(text)
+      .catch((err) => console.error("Failed to copy:", err));
 
     // Show "copied" state
     setCopied(true);
