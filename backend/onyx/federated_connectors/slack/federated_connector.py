@@ -281,7 +281,7 @@ class SlackFederatedConnector(FederatedConnector):
 
         Args:
             query: The search query
-            entities: The entities to search within (validated by validate())
+            entities: Connector-level config (entity filtering configuration)
             access_token: The OAuth access token
             limit: Maximum number of results to return
             slack_event_context: Optional Slack context for slack bot
@@ -311,9 +311,9 @@ class SlackFederatedConnector(FederatedConnector):
                 query,
                 access_token,
                 db_session,
+                entities=entities,
                 limit=limit,
                 slack_event_context=slack_event_context,
                 bot_token=bot_token,
-                entities=entities,
                 team_id=team_id,
             )
