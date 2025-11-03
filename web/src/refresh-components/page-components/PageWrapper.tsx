@@ -5,7 +5,7 @@ export default function PageWrapper(
 ) {
   return (
     <div className="w-full h-full flex flex-col items-center overflow-y-auto">
-      <div className="h-full w-[42rem]">
+      <div className="h-full w-[50rem]">
         <div {...props} />
       </div>
     </div>

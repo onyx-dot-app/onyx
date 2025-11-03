@@ -247,7 +247,6 @@ export default function AgentsPage() {
         icon={SvgOnyxOctagon}
         title="Agents & Assistants"
         description="Customize AI behavior and knowledge for you and your team’s use cases."
-        sticky
         className="bg-background-tint-01"
         rightChildren={
           <Button href="/assistants/new" leftIcon={SvgPlus}>
