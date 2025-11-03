@@ -10,14 +10,18 @@ from agents import ToolCallItem
 from agents.tracing import trace
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
-from onyx.agents.agent_sdk.message_types import UserMessage
+from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.monkey_patches import (
     monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search,
 )
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
+from onyx.chat.memories import get_memories
 from onyx.chat.models import PromptConfig
+from onyx.chat.prompt_builder.answer_prompt_builder import (
+    default_build_system_message_for_default_assistant_v2,
+)
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
@@ -61,23 +65,30 @@ def _run_agent_loop(
     force_use_tool: ForceUseTool | None = None,
 ) -> None:
     monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search()
-    # Split messages into three parts for clear tracking
-    # TODO: Think about terminal tool calls like image gen
-    # in multi turn conversations
-    chat_history = messages[:-1]
+    # Skip the system prompt from messages since we dynamically regenerate it
+    chat_history = messages[1:-1]
     current_user_message = messages[-1]
-    if (
-        not isinstance(current_user_message, dict)
-        or current_user_message.get("role") != "user"
-    ):
-        raise ValueError("Last message must be a user message")
-    current_user_message_typed: UserMessage = current_user_message  # type: ignore
     agent_turn_messages: list[AgentSDKMessage] = []
     last_call_is_final = False
-    first_iteration = True
+    iteration_count = 0
 
     while not last_call_is_final:
-        current_messages = chat_history + [current_user_message] + agent_turn_messages
+        memories = get_memories(dependencies.user, dependencies.db_session)
+        langchain_system_message = (
+            default_build_system_message_for_default_assistant_v2(
+                dependencies.prompt_config,
+                dependencies.llm.config,
+                memories,
+                list(dependencies.tools),
+            )
+        )
+        new_system_prompt = SystemMessage(content=langchain_system_message.content)
+        current_messages = (
+            [new_system_prompt]
+            + chat_history
+            + [current_user_message]
+            + agent_turn_messages
+        )
 
         if not dependencies.tools:
             tool_choice = None
@@ -86,7 +97,7 @@ def _run_agent_loop(
                 force_use_tool_to_function_tool_names(
                     force_use_tool, dependencies.tools
                 )
-                if first_iteration and force_use_tool
+                if iteration_count == 0 and force_use_tool
                 else None
             ) or "auto"
         model_settings = replace(dependencies.model_settings, tool_choice=tool_choice)
@@ -119,7 +130,7 @@ def _run_agent_loop(
 
         agent_turn_messages = list(
             update_task_prompt(
-                current_user_message_typed,
+                current_user_message,
                 agent_turn_messages,
                 prompt_config,
                 ctx.should_cite_documents,
@@ -143,7 +154,7 @@ def _run_agent_loop(
             tool.name in stopping_tools for tool in tool_call_events
         ):
             last_call_is_final = True
-        first_iteration = False
+        iteration_count += 1
 
 
 def _fast_chat_turn_core(

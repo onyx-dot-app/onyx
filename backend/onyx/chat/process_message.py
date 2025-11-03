@@ -19,7 +19,7 @@ from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
 from onyx.chat.chat_utils import process_kg_commands
-from onyx.chat.memories import make_memories_callback
+from onyx.chat.memories import get_memories
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ChatBasicResponse
@@ -772,13 +772,13 @@ def stream_chat_message_objects(
             prompt_config=prompt_config,
             files=latest_query_files,
         )
-        mem_callback = make_memories_callback(user, db_session)
+        memories = get_memories(user, db_session)
         system_message = (
             default_build_system_message_for_default_assistant_v2(
-                prompt_config, llm.config, mem_callback, tools
+                prompt_config, llm.config, memories, tools
             )
             if not simple_agent_framework_disabled and persona.is_default_persona
-            else default_build_system_message(prompt_config, llm.config, mem_callback)
+            else default_build_system_message(prompt_config, llm.config, memories)
         )
         prompt_builder = AnswerPromptBuilder(
             user_message=prompt_user_message,
@@ -841,6 +841,7 @@ def stream_chat_message_objects(
                 prompt_config,
                 llm_model,
                 model_settings,
+                user,
             )
         else:
             from onyx.chat.packet_proccessing import process_streamed_packets
@@ -895,6 +896,7 @@ def _fast_message_stream(
     prompt_config: PromptConfig,
     llm_model: Model,
     model_settings: ModelSettings,
+    user: User,
 ) -> Generator[Packet, None, None]:
     # TODO: clean up this jank
     is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
@@ -913,6 +915,8 @@ def _fast_message_stream(
             db_session=db_session,
             redis_client=redis_client,
             emitter=emitter,
+            user=user,
+            prompt_config=prompt_config,
         ),
         chat_session_id=chat_session_id,
         message_id=reserved_message_id,

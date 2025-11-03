@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from collections.abc import Sequence
 from datetime import datetime
 from typing import cast
@@ -113,8 +112,7 @@ def handle_company_awareness(prompt_str: str) -> str:
         return prompt_str
 
 
-def handle_memories(prompt_str: str, memories_callback: Callable[[], list[str]]) -> str:
-    memories = memories_callback()
+def handle_memories(prompt_str: str, memories: list[str]) -> str:
     if not memories:
         return prompt_str
     memories_str = "\n".join(memories)

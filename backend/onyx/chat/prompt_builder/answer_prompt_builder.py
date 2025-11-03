@@ -42,7 +42,7 @@ from onyx.tools.tool import Tool
 def default_build_system_message_for_default_assistant_v2(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
-    memories_callback: Callable[[], list[str]] | None = None,
+    memories: list[str] | None = None,
     tools: list[Tool] | None = None,
 ) -> SystemMessage:
     # Check if we should include custom instructions (before date processing)
@@ -78,8 +78,8 @@ def default_build_system_message_for_default_assistant_v2(
 
     tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
 
-    if memories_callback:
-        tag_handled_prompt = handle_memories(tag_handled_prompt, memories_callback)
+    if memories:
+        tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
 
     # Add Tools section if tools are provided
     if tools:
@@ -115,7 +115,7 @@ def default_build_system_message_for_default_assistant_v2(
 def default_build_system_message(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
-    memories_callback: Callable[[], list[str]] | None = None,
+    memories: list[str] | None = None,
 ) -> SystemMessage | None:
     system_prompt = prompt_config.system_prompt.strip()
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
@@ -136,8 +136,8 @@ def default_build_system_message(
 
     tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
 
-    if memories_callback:
-        tag_handled_prompt = handle_memories(tag_handled_prompt, memories_callback)
+    if memories:
+        tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
 
     return SystemMessage(content=tag_handled_prompt)
 
