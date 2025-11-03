@@ -52,7 +52,7 @@ class ChatTurnDependencies:
     tools: Sequence[Tool]
     redis_client: Redis
     emitter: Emitter
-    user: User
+    user_or_none: User | None
     prompt_config: PromptConfig
 
 

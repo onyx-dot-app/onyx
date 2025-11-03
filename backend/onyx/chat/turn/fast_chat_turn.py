@@ -73,7 +73,7 @@ def _run_agent_loop(
     iteration_count = 0
 
     while not last_call_is_final:
-        memories = get_memories(dependencies.user, dependencies.db_session)
+        memories = get_memories(dependencies.user_or_none, dependencies.db_session)
         langchain_system_message = (
             default_build_system_message_for_default_assistant_v2(
                 dependencies.prompt_config,

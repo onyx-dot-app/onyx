@@ -896,7 +896,7 @@ def _fast_message_stream(
     prompt_config: PromptConfig,
     llm_model: Model,
     model_settings: ModelSettings,
-    user: User,
+    user_or_none: User | None,
 ) -> Generator[Packet, None, None]:
     # TODO: clean up this jank
     is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
@@ -915,7 +915,7 @@ def _fast_message_stream(
             db_session=db_session,
             redis_client=redis_client,
             emitter=emitter,
-            user=user,
+            user_or_none=user_or_none,
             prompt_config=prompt_config,
         ),
         chat_session_id=chat_session_id,
