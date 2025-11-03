@@ -637,7 +637,7 @@ export function ChatPage({
         useAgentSearch: deepResearchEnabled,
       });
       setShowOnboarding(false);
-  },
+    },
     [onSubmit, currentMessageFiles, deepResearchEnabled]
   );
 
