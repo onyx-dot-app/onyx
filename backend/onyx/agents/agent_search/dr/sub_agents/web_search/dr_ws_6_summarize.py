@@ -1,5 +1,7 @@
 from datetime import datetime
 from typing import cast
+from urllib.parse import urlparse
+from urllib.parse import urlunparse
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
@@ -26,6 +28,15 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def normalize_url(url: str) -> str:
+    """
+    Normalize a URL by removing query parameters and fragments.
+    This prevents KeyErrors when URLs differ only in query parameters like ?activeTab=explore.
+    """
+    parsed = urlparse(url)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+
+
 def is_summarize(
     state: SummarizeInput,
     config: RunnableConfig,
@@ -38,12 +49,17 @@ def is_summarize(
     node_start_time = datetime.now()
 
     # build branch iterations from fetch inputs
+    # Normalize URLs to handle mismatches from query parameters (e.g., ?activeTab=explore)
     url_to_raw_document: dict[str, InferenceSection] = {}
     for raw_document in state.raw_documents:
-        url_to_raw_document[raw_document.center_chunk.semantic_identifier] = (
-            raw_document
-        )
-    urls = state.branch_questions_to_urls[state.branch_question]
+        normalized_url = normalize_url(raw_document.center_chunk.semantic_identifier)
+        url_to_raw_document[normalized_url] = raw_document
+
+    # Normalize the URLs from branch_questions_to_urls as well
+    urls = [
+        normalize_url(url)
+        for url in state.branch_questions_to_urls[state.branch_question]
+    ]
     current_iteration = state.iteration_nr
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     research_type = graph_config.behavior.research_type

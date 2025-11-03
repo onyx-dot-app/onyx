@@ -69,7 +69,14 @@ def _run_agent_loop(
     force_use_tool: ForceUseTool | None = None,
 ) -> None:
     monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search()
-    # Skip the system prompt from messages since we dynamically regenerate it
+    # This should have already been called, but call it again here for good measure.
+    # TODO: Get to the root of why sometimes it seems litellm settings aren't configured.
+    from onyx.llm.litellm_singleton.config import initialize_litellm
+
+    initialize_litellm()
+    # Split messages into three parts for clear tracking
+    # TODO: Think about terminal tool calls like image gen
+    # in multi turn conversations
     chat_history = messages[1:-1]
     current_user_message = cast(UserMessage, messages[-1])
     agent_turn_messages: list[AgentSDKMessage] = []
@@ -214,6 +221,19 @@ def _fast_chat_turn_core(
     final_answer = extract_final_answer_from_packets(
         dependencies.emitter.packet_history
     )
+    # TODO: Make this error handling more robust and not so specific to the qwen ollama cloud case
+    # where if it happens to any cloud questions, it hangs on read url
+    has_image_generation = any(
+        packet.obj.type == "image_generation_tool_delta"
+        for packet in dependencies.emitter.packet_history
+    )
+    # Allow empty final answer if image generation tool was used (it produces images, not text)
+    if len(final_answer) == 0 and not has_image_generation:
+        raise ValueError(
+            """Final answer is empty. Inference provider likely failed to provide
+            content packets.
+            """
+        )
     save_turn(
         db_session=dependencies.db_session,
         message_id=message_id,

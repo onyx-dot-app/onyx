@@ -7,6 +7,7 @@ This directory contains Jest mocks for dependencies that are difficult to test w
 ### `@/components/user/UserProvider.tsx`
 
 **Problem:** The real `UserProvider` requires complex setup with props like:
+
 - `authTypeMetadata` (auth configuration)
 - `settings` (CombinedSettings object)
 - `user` (User object)
@@ -16,6 +17,7 @@ This directory contains Jest mocks for dependencies that are difficult to test w
 **Usage:** Automatically applied via `jest.config.js` moduleNameMapper. Components using `useUser()` will get the mock instead of the real provider.
 
 **Mock values:**
+
 ```typescript
 {
   user: null,

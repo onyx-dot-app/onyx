@@ -157,34 +157,27 @@ AZURE_PROVIDER_NAME = "azure"
 VERTEXAI_PROVIDER_NAME = "vertex_ai"
 VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
 VERTEX_LOCATION_KWARG = "vertex_location"
-VERTEXAI_DEFAULT_MODEL = "gemini-2.0-flash"
-VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.0-flash-lite"
+VERTEXAI_DEFAULT_MODEL = "gemini-2.5-flash"
+VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.5-flash-lite"
 VERTEXAI_MODEL_NAMES = [
     # 2.5 pro models
     "gemini-2.5-pro",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
+    VERTEXAI_DEFAULT_MODEL,
+    VERTEXAI_DEFAULT_FAST_MODEL,
     # "gemini-2.5-pro-preview-06-05",
     # "gemini-2.5-pro-preview-05-06",
     # 2.0 flash-lite models
-    VERTEXAI_DEFAULT_FAST_MODEL,
     "gemini-2.0-flash-lite-001",
     # "gemini-2.0-flash-lite-preview-02-05",
     # 2.0 flash models
-    VERTEXAI_DEFAULT_MODEL,
     "gemini-2.0-flash-001",
     "gemini-2.0-flash-exp",
     # "gemini-2.0-flash-exp-image-generation",
     # "gemini-2.0-flash-thinking-exp-01-21",
-    # 1.5 pro models
-    "gemini-1.5-pro",
-    "gemini-1.5-pro-001",
-    "gemini-1.5-pro-002",
-    # 1.5 flash models
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-001",
-    "gemini-1.5-flash-002",
     # Anthropic models
+    "claude-sonnet-4-5",
+    "claude-haiku-4-5",
+    "claude-opus-4-1@20250805",
     "claude-sonnet-4",
     "claude-opus-4",
     "claude-3-7-sonnet@20250219",
@@ -406,7 +399,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 ),
             ],
             default_model=VERTEXAI_DEFAULT_MODEL,
-            default_fast_model=VERTEXAI_DEFAULT_MODEL,
+            default_fast_model=VERTEXAI_DEFAULT_FAST_MODEL,
         ),
         WellKnownLLMProviderDescriptor(
             name=OPENROUTER_PROVIDER_NAME,
