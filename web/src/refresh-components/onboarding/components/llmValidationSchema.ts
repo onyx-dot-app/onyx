@@ -12,6 +12,37 @@ export const getValidationSchema = (
     default_model_name: Yup.string().required("Model name is required"),
   };
 
+  // Handle custom provider validation
+  if (providerName === "custom") {
+    return Yup.object().shape({
+      provider: Yup.string().required("Provider is required"),
+      api_key: Yup.string(),
+      api_base: Yup.string(),
+      api_version: Yup.string(),
+      model_configurations: Yup.array()
+        .of(
+          Yup.object({
+            name: Yup.string().required("Model name is required"),
+            is_visible: Yup.boolean().required("Visibility is required"),
+            max_input_tokens: Yup.number()
+              .transform((value, originalValue) =>
+                originalValue === "" ||
+                originalValue === undefined ||
+                originalValue === null
+                  ? null
+                  : value
+              )
+              .nullable()
+              .optional(),
+          })
+        )
+        .min(1, "At least one model configuration is required"),
+      default_model_name: Yup.string().required("Default model is required"),
+      fast_default_model_name: Yup.string().nullable(),
+      custom_config: Yup.object(),
+    });
+  }
+
   switch (providerName) {
     case "openai":
       return Yup.object().shape({

@@ -1,6 +1,7 @@
 import { SvgProps } from "@/icons";
 
 export enum OnboardingStep {
+  Welcome = "welcome",
   Name = "name",
   LlmSetup = "llm-setup",
   Complete = "complete",

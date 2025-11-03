@@ -32,6 +32,7 @@ export function useOnboardingState(): {
   );
 
   useEffect(() => {
+    refreshLlmProviders();
     const fetchLlmDescriptors = async () => {
       try {
         const response = await fetch("/api/admin/llm/built-in/options");
@@ -52,6 +53,7 @@ export function useOnboardingState(): {
   // If there are any configured LLM providers already present, skip to the final step
   useEffect(() => {
     if (Array.isArray(llmProviders) && llmProviders.length > 0) {
+      console.log("llmProviders", llmProviders);
       dispatch({
         type: OnboardingActionType.UPDATE_DATA,
         payload: { llmProviders: llmProviders.map((p) => p.provider) },
@@ -62,23 +64,48 @@ export function useOnboardingState(): {
       });
       return;
     }
-    if (userName) {
+    if (userName && state.currentStep === OnboardingStep.Welcome) {
       dispatch({
         type: OnboardingActionType.UPDATE_DATA,
         payload: { userName },
       });
+      if (llmProviders.length > 0) {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: true,
+        });
+      } else {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: false,
+        });
+      }
       dispatch({
         type: OnboardingActionType.GO_TO_STEP,
         step: OnboardingStep.LlmSetup,
       });
     }
-  }, [llmProviders, userName]);
+  }, [llmProviders]);
 
   const nextStep = useCallback(() => {
     dispatch({
       type: OnboardingActionType.SET_BUTTON_ACTIVE,
       isButtonActive: false,
     });
+
+    if (state.currentStep === OnboardingStep.Name) {
+      if (llmProviders.length > 0) {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: true,
+        });
+      } else {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: false,
+        });
+      }
+    }
 
     if (state.currentStep === OnboardingStep.LlmSetup) {
       refreshLlmProviders();
@@ -90,9 +117,23 @@ export function useOnboardingState(): {
     dispatch({ type: OnboardingActionType.PREV_STEP });
   }, []);
 
-  const goToStep = useCallback((step: OnboardingStep) => {
-    dispatch({ type: OnboardingActionType.GO_TO_STEP, step });
-  }, []);
+  const goToStep = useCallback(
+    (step: OnboardingStep) => {
+      if (step === OnboardingStep.LlmSetup && llmProviders.length > 0) {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: true,
+        });
+      } else if (step === OnboardingStep.LlmSetup) {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: false,
+        });
+      }
+      dispatch({ type: OnboardingActionType.GO_TO_STEP, step });
+    },
+    [llmProviders]
+  );
 
   const updateName = useCallback(
     (name: string) => {

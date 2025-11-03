@@ -19,7 +19,10 @@ import { fetchProjects } from "@/app/chat/projects/projectsService";
 export interface ChatProviderProps
   extends Omit<
     ChatContextProps,
-    "currentChat" | "refreshChatSessions" | "refreshInputPrompts"
+    | "currentChat"
+    | "refreshChatSessions"
+    | "refreshInputPrompts"
+    | "refreshLlmProviders"
   > {
   children: React.ReactNode;
 }
