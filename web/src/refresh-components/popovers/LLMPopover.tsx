@@ -22,6 +22,7 @@ export interface LLMPopoverProps {
   folded?: boolean;
   onSelect?: (value: string) => void;
   currentModelName?: string;
+  disabled?: boolean;
 }
 
 export default function LLMPopover({
@@ -30,6 +31,7 @@ export default function LLMPopover({
   folded,
   onSelect,
   currentModelName,
+  disabled = false,
 }: LLMPopoverProps) {
   const { llmProviders } = useChatContext();
 
@@ -77,6 +79,8 @@ export default function LLMPopover({
         transient={open}
         folded={folded}
         rightChevronIcon
+        disabled={disabled}
+        className={disabled ? "bg-transparent" : ""}
       >
         {getDisplayNameForModel(llmManager.currentLlm.modelName)}
       </SelectButton>
@@ -113,7 +117,7 @@ export default function LLMPopover({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+      <PopoverTrigger asChild disabled={disabled}>
         <div data-testid="llm-popover-trigger">{triggerContent}</div>
       </PopoverTrigger>
       <PopoverContent side="bottom" align="start">

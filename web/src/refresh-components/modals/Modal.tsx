@@ -20,7 +20,8 @@ interface ModalProps {
 
   // Base modal props
   id: ModalIds;
-  icon: React.FunctionComponent<SvgProps>;
+  icon?: React.FunctionComponent<SvgProps>;
+  startAdornment?: React.ReactNode;
   title: string;
   description?: string;
   className?: string;
@@ -35,6 +36,7 @@ export default function Modal({
 
   id,
   icon: Icon,
+  startAdornment,
   title,
   description,
   children,
@@ -64,7 +66,11 @@ export default function Modal({
     >
       <div className="flex flex-col gap-2 p-4">
         <div className="flex flex-row items-center justify-between">
-          <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
+          {Icon ? (
+            <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
+          ) : (
+            startAdornment
+          )}
           <div data-testid="Modal/close-modal">
             <IconButton
               icon={SvgX}
