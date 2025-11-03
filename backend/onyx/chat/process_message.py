@@ -35,7 +35,7 @@ from onyx.chat.models import UserKnowledgeFilePacket
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import (
-    default_build_system_message_for_default_assistant_v2,
+    default_build_system_message_v2,
 )
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.chat.turn import fast_chat_turn
@@ -774,9 +774,7 @@ def stream_chat_message_objects(
         )
         memories = get_memories(user, db_session)
         system_message = (
-            default_build_system_message_for_default_assistant_v2(
-                prompt_config, llm.config, memories, tools
-            )
+            default_build_system_message_v2(prompt_config, llm.config, memories, tools)
             if not simple_agent_framework_disabled and persona.is_default_persona
             else default_build_system_message(prompt_config, llm.config, memories)
         )

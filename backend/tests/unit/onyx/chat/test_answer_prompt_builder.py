@@ -8,7 +8,7 @@ from pytest_mock import MockerFixture
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import (
-    default_build_system_message_for_default_assistant_v2,
+    default_build_system_message_v2,
 )
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
@@ -190,7 +190,7 @@ def test_system_message_includes_personalization_for_default_assistant(
     if datetime_aware:
         config = prompt_config.model_copy(update={"datetime_aware": True})
 
-    system_message = default_build_system_message_for_default_assistant_v2(
+    system_message = default_build_system_message_v2(
         config,
         llm_config,
         memories_callback if has_memories else None,
@@ -220,7 +220,7 @@ def test_tools_section_present_when_tools_given(
     test_tool: Tool,
 ) -> None:
     tools = [test_tool]
-    msg = default_build_system_message_for_default_assistant_v2(
+    msg = default_build_system_message_v2(
         prompt_config, llm_config, memories_callback=None, tools=tools
     )
     content = cast(str, msg.content)
@@ -236,7 +236,7 @@ def test_tools_section_empty_when_no_tools_given(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
 ) -> None:
-    msg = default_build_system_message_for_default_assistant_v2(
+    msg = default_build_system_message_v2(
         prompt_config, llm_config, memories_callback=None, tools=[]
     )
     content = cast(str, msg.content)
@@ -250,13 +250,13 @@ def test_custom_instructions_gone_when_empty_or_default(
     make_prompt_config: Callable,
     llm_config: LLMConfig,
 ) -> None:
-    msg = default_build_system_message_for_default_assistant_v2(
+    msg = default_build_system_message_v2(
         make_prompt_config("", "", False), llm_config, memories_callback=None
     )
     content = cast(str, msg.content)
     _assert_section(content, "Custom Instructions", False)
 
-    msg = default_build_system_message_for_default_assistant_v2(
+    msg = default_build_system_message_v2(
         make_prompt_config(DEFAULT_SYSTEM_PROMPT, "", False),
         llm_config,
         memories_callback=None,
@@ -269,7 +269,7 @@ def test_custom_instructions_present_when_set(
     make_prompt_config: Callable,
     llm_config: LLMConfig,
 ) -> None:
-    msg = default_build_system_message_for_default_assistant_v2(
+    msg = default_build_system_message_v2(
         make_prompt_config("You are helpful.", "", False),
         llm_config,
         memories_callback=None,
@@ -288,7 +288,7 @@ def test_web_search_tool_present(
     web_search_tool: Tool,
     llm_config: LLMConfig,
 ) -> None:
-    msg = default_build_system_message_for_default_assistant_v2(
+    msg = default_build_system_message_v2(
         prompt_config, llm_config, memories_callback=None, tools=[web_search_tool]
     )
     content = cast(str, msg.content)

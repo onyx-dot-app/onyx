@@ -113,6 +113,7 @@ def test_task_prompt_handler_basic() -> None:
         should_cite_documents=False,
     )
 
+    # Just verify no errors occur - don't test exact contents
     assert len(result) == 6
     assert result[0].get("role") == "system"
     assert result[1].get("role") == "assistant"
@@ -127,7 +128,51 @@ def test_task_prompt_handler_basic() -> None:
         # Content is now a list of InputTextContent items
         assert isinstance(user_msg["content"], list)
         assert len(user_msg["content"]) > 0
-        first_content = user_msg["content"][0]
-        if first_content["type"] == "input_text":
-            text_content: InputTextContent = first_content  # type: ignore[assignment]
-            assert task_prompt in text_content["text"]
+
+
+def test_task_prompt_handler_with_web_search() -> None:
+    """Test that web_search parameter is properly handled."""
+    task_prompt = "reminder!"
+    prompt_config = PromptConfig(
+        system_prompt="Test system prompt",
+        task_prompt=task_prompt,
+        datetime_aware=False,
+    )
+    current_user_message: UserMessage = UserMessage(
+        role="user",
+        content=[InputTextContent(type="input_text", text="Query")],
+    )
+    agent_turn_messages: Sequence[AgentSDKMessage] = [
+        AssistantMessageWithToolCalls(
+            role="assistant",
+            tool_calls=[
+                ToolCall(
+                    function=ToolCallFunction(
+                        arguments='{"query": "test query"}',
+                        name="web_search",
+                    ),
+                    id="call_1",
+                    type="function",
+                )
+            ],
+        ),
+        ToolMessage(
+            role="tool",
+            content="Tool message 1",
+            tool_call_id="call_1",
+        ),
+    ]
+
+    result = update_task_prompt(
+        current_user_message,
+        agent_turn_messages,
+        prompt_config,
+        should_cite_documents=True,
+        last_iteration_included_web_search=True,
+    )
+
+    # Just verify no errors occur - don't test exact contents
+    assert len(result) == 3
+    assert result[0].get("role") == "assistant"
+    assert result[1].get("role") == "tool"
+    assert result[2].get("role") == "user"

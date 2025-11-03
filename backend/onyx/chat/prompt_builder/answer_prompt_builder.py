@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from collections.abc import Sequence
 from typing import cast
 
 from langchain_core.messages import BaseMessage
@@ -39,11 +40,12 @@ from onyx.tools.tool import Tool
 
 # TODO: We can provide do smoother templating than all these sequential
 # function calls
-def default_build_system_message_for_default_assistant_v2(
+def default_build_system_message_v2(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
     memories: list[str] | None = None,
-    tools: list[Tool] | None = None,
+    tools: Sequence[Tool] | None = None,
+    should_cite_documents: bool = False,
 ) -> SystemMessage:
     # Check if we should include custom instructions (before date processing)
     custom_instructions = prompt_config.system_prompt.strip()
@@ -55,7 +57,7 @@ def default_build_system_message_for_default_assistant_v2(
     )
 
     # Start with base prompt
-    system_prompt = DEFAULT_SYSTEM_PROMPT + "\n" + LONG_CONVERSATION_REMINDER_PROMPT
+    system_prompt = DEFAULT_SYSTEM_PROMPT
 
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
     # for o-series markdown generation
@@ -108,6 +110,15 @@ def default_build_system_message_for_default_assistant_v2(
                         f"\n## {tools_to_function_tools([tool])[0].name}\n"
                     )
                     tag_handled_prompt += tool.description
+
+    # Add citation requirement as second to last section if needed
+    if should_cite_documents:
+        from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
+
+        tag_handled_prompt += "\n\n" + REQUIRE_CITATION_STATEMENT
+
+    # Add the reminders section last
+    tag_handled_prompt += "\n\n" + LONG_CONVERSATION_REMINDER_PROMPT
 
     return SystemMessage(content=tag_handled_prompt)
 

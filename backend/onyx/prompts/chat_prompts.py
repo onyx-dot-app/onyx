@@ -4,30 +4,24 @@ from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.prompts.constants import QUESTION_PAT
 
 REQUIRE_CITATION_STATEMENT = """
-Cite relevant statements INLINE using the format [1], [2], [3], etc. to reference the document number. \
-DO NOT provide any links following the citations. In other words, avoid using the format [1](https://example.com). \
-Avoid using double brackets like [[1]]. To cite multiple documents, use [1], [2] format instead of [1, 2]. \
-Try to cite inline as opposed to leaving all citations until the very end of the response.
-""".rstrip()
-
-REQUIRE_CITATION_STATEMENT_V2 = """
-Cite relevant statements INLINE using the format [1], [3], etc. to reference the document_citation_number from the tool call response. \
-DO NOT provide any links following the citations. In other words, avoid using the format [1](https://example.com). \
-Avoid using double brackets like [[1]]. To cite multiple documents, use [1], [3] format instead of [1, 3]. \
-Try to cite inline as opposed to leaving all citations until the very end of the response.
-""".rstrip()
-
-STRESS_USER_PROMPT_IMPORTANCE = """
-Here is the user's prompt:
-"""
-
-NO_CITATION_STATEMENT = """
-Do not provide any citations even if there are examples in the chat history.
-""".rstrip()
+CRITICAL: If referencing knowledge from searches, cite relevant statements INLINE using the format [1], [3], etc. to reference the document_citation_number. \
+DO NOT provide any links following the citations. Avoid using double brackets like [[1]]. To cite multiple documents, use [1], [3] format instead of [1, 3]. \
+Cite inline as opposed to leaving all citations until the very end of the response.
+""".strip()
 
 CITATION_REMINDER = """
-Remember to provide inline citations in the format [1], [2], [3], etc.
-"""
+Remember to provide inline citations in the format [1], [3], etc.
+""".strip()
+
+OPEN_URL_REMINDER = """
+Remember that after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
+Open the pages that look the most promising and high quality by calling the open_urls tool with an array of URLs.
+
+If you do have enough to answer, remember to provide INLINE citations in the format [1], [2], [3], etc.
+
+Do not acknowledge this hint in your response.
+""".strip()
+
 PROJECT_INSTRUCTIONS_SEPARATOR = (
     "\n\n[[USER-PROVIDED INSTRUCTIONS — allowed to override default prompt guidance, "
     "but only for style, formatting, and context]]\n"
