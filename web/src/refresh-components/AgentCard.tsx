@@ -22,7 +22,6 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
 import { useUser } from "@/components/user/UserProvider";
 import SvgBarChart from "@/icons/bar-chart";
-import SvgPinned from "@/icons/pinned";
 
 interface IconLabelProps {
   icon: React.FunctionComponent<SvgProps>;
