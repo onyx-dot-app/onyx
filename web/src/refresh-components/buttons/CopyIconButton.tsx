@@ -31,6 +31,11 @@ export default function CopyIconButton({
     }
 
     try {
+      // Check if Clipboard API is available
+      if (!navigator.clipboard) {
+        throw new Error("Clipboard API not available");
+      }
+
       // Copy to clipboard
       await navigator.clipboard.writeText(text);
 
