@@ -7,10 +7,7 @@ import {
   OnboardingState,
   OnboardingStep,
 } from "./types";
-import {
-  WellKnownLLMProviderDescriptor,
-  LLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { updateUserPersonalization } from "@/lib/users/UserSettings";
 import { useUser } from "@/components/user/UserProvider";
 import { useChatContext } from "../contexts/ChatContext";

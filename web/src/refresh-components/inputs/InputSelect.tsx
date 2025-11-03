@@ -173,9 +173,9 @@ function InputSelectInner(
                 value={option.value}
                 disabled={option.disabled}
                 className={cn(
-                  "relative flex flex-col w-full cursor-default select-none rounded-08 p-1.5",
+                  "relative flex flex-col w-full cursor-default select-none rounded-08 p-1.5 group",
                   "text-text-04 outline-none",
-                  "hover:bg-background-tint-02",
+                  "hover:bg-background-tint-02 data-[highlighted]:bg-background-tint-02",
                   "data-[state=checked]:bg-action-link-01 data-[state=checked]:text-action-link-05",
                   "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                 )}
@@ -184,7 +184,7 @@ function InputSelectInner(
                   {option.label}
                 </SelectPrimitive.ItemText>
                 {option.description && (
-                  <span className="text-sm text-text-03 font-secondary-body data-[state=checked]:text-text-00 mt-0.5">
+                  <span className="text-sm text-text-03 font-secondary-body group-data-[state=checked]:text-text-00 mt-0.5">
                     {option.description}
                   </span>
                 )}
