@@ -223,9 +223,9 @@ export default function AgentsPage() {
     } else if (selectedCreatorIds.size === 1) {
       const selectedId = Array.from(selectedCreatorIds)[0];
       const creator = uniqueCreators.find((c) => c.id === selectedId);
-      return creator?.email || "Everyone";
+      return `By ${creator?.email}` || "Everyone";
     } else {
-      return `${selectedCreatorIds.size} selected`;
+      return `${selectedCreatorIds.size} people`;
     }
   }, [selectedCreatorIds, uniqueCreators]);
 
@@ -237,7 +237,7 @@ export default function AgentsPage() {
       const action = uniqueActions.find((a) => a.id === selectedId);
       return action?.display_name || "All Actions";
     } else {
-      return `${selectedActionIds.size} selected`;
+      return `${selectedActionIds.size} actions`;
     }
   }, [selectedActionIds, uniqueActions]);
 
