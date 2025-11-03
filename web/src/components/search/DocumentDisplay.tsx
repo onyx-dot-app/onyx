@@ -6,7 +6,6 @@ import { WebResultIcon } from "../WebResultIcon";
 import Text from "@/refresh-components/texts/Text";
 import { openDocument } from "@/lib/search/utils";
 import { SubQuestionDetail } from "@/app/chat/interfaces";
-import { cn } from "@/lib/utils";
 import { ValidSources } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 
@@ -135,7 +134,7 @@ export function CompactDocumentCard({
     document.is_internet || document.source_type === ValidSources.Web;
 
   return (
-    <Card className="shadow-00 w-[20rem] dbg-red">
+    <Card className="shadow-00 w-[20rem]">
       <button
         onClick={() => {
           openDocument(document, updatePresentingDocument);
