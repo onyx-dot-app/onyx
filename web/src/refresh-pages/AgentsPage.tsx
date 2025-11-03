@@ -53,8 +53,8 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
       <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
         {agents
           .sort((a, b) => b.id - a.id)
-          .map((agent, index) => (
-            <AgentCard key={index} agent={agent} />
+          .map((agent) => (
+            <AgentCard key={agent.id} agent={agent} />
           ))}
       </div>
     </div>
