@@ -107,7 +107,7 @@ export default function FilterButton({
               className={cn(
                 "w-[1rem] h-[1rem] transition-transform duration-200 ease-in-out",
                 iconClasses(transient)[state],
-                (transient || isHovered) && "-rotate-180"
+                transient && "-rotate-180"
               )}
             />
           </div>
