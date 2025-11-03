@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import IconButton, { IconButtonProps } from "./IconButton";
 import SvgCopy from "@/icons/copy";
 import SvgCheck from "@/icons/check";
+import SvgAlertTriangle from "@/icons/alert-triangle";
+
+type CopyState = "idle" | "copied" | "error";
 
 export interface CopyIconButtonProps
   extends Omit<IconButtonProps, "icon" | "onClick"> {
@@ -16,30 +19,35 @@ export default function CopyIconButton({
   tooltip,
   ...iconButtonProps
 }: CopyIconButtonProps) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<CopyState>("idle");
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleCopy = () => {
+  async function handleCopy() {
     const text = getCopyText();
-
-    // Copy to clipboard
-    navigator.clipboard
-      .writeText(text)
-      .catch((err) => console.error("Failed to copy:", err));
-
-    // Show "copied" state
-    setCopied(true);
 
     // Clear existing timeout if any
     if (copyTimeoutRef.current) {
       clearTimeout(copyTimeoutRef.current);
     }
 
+    try {
+      // Copy to clipboard
+      await navigator.clipboard.writeText(text);
+
+      // Show "copied" state
+      setCopyState("copied");
+    } catch (err) {
+      console.error("Failed to copy:", err);
+
+      // Show "error" state
+      setCopyState("error");
+    }
+
     // Reset to normal state after 3 seconds
     copyTimeoutRef.current = setTimeout(() => {
-      setCopied(false);
+      setCopyState("idle");
     }, 3000);
-  };
+  }
 
   // Clean up timeout on unmount
   useEffect(() => {
@@ -50,11 +58,35 @@ export default function CopyIconButton({
     };
   }, []);
 
+  function getIcon() {
+    switch (copyState) {
+      case "copied":
+        return SvgCheck;
+      case "error":
+        return SvgAlertTriangle;
+      case "idle":
+      default:
+        return SvgCopy;
+    }
+  }
+
+  function getTooltip() {
+    switch (copyState) {
+      case "copied":
+        return "Copied!";
+      case "error":
+        return "Failed to copy";
+      case "idle":
+      default:
+        return tooltip || "Copy";
+    }
+  }
+
   return (
     <IconButton
-      icon={copied ? SvgCheck : SvgCopy}
+      icon={getIcon()}
       onClick={handleCopy}
-      tooltip={copied ? "Copied!" : tooltip || "Copy"}
+      tooltip={getTooltip()}
       {...iconButtonProps}
     />
   );
