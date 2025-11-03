@@ -74,14 +74,69 @@ export default function AgentsPage() {
   const [selectedActionIds, setSelectedActionIds] = useState<Set<number>>(
     new Set()
   );
+  const [selectedMcpServerIds, setSelectedMcpServerIds] = useState<Set<number>>(
+    new Set()
+  );
   const [creatorSearchQuery, setCreatorSearchQuery] = useState("");
   const [actionsSearchQuery, setActionsSearchQuery] = useState("");
+  const [mcpServersMap, setMcpServersMap] = useState<
+    Map<number, { id: number; name: string }>
+  >(new Map());
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Focus the search input when the page loads
     searchInputRef.current?.focus();
   }, []);
+
+  // Fetch all MCP servers used by agents
+  useEffect(() => {
+    const fetchMCPServers = async () => {
+      const serverIds = new Set<number>();
+      agents.forEach((agent) => {
+        agent.tools.forEach((tool) => {
+          if (tool.mcp_server_id !== null && tool.mcp_server_id !== undefined) {
+            serverIds.add(tool.mcp_server_id);
+          }
+        });
+      });
+
+      if (serverIds.size === 0) return;
+
+      const serversMap = new Map<number, { id: number; name: string }>();
+
+      // Fetch server data for each unique server ID
+      for (const serverId of Array.from(serverIds)) {
+        try {
+          // We need to fetch from an agent that has this server
+          const agentWithServer = agents.find((agent) =>
+            agent.tools.some((tool) => tool.mcp_server_id === serverId)
+          );
+
+          if (agentWithServer) {
+            const response = await fetch(
+              `/api/mcp/servers/persona/${agentWithServer.id}`
+            );
+            if (response.ok) {
+              const data = await response.json();
+              const server = data.mcp_servers?.find(
+                (s: any) => s.id === serverId
+              );
+              if (server) {
+                serversMap.set(serverId, { id: server.id, name: server.name });
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching MCP server ${serverId}:`, error);
+        }
+      }
+
+      setMcpServersMap(serversMap);
+    };
+
+    fetchMCPServers();
+  }, [agents]);
 
   const uniqueCreators = useMemo(() => {
     const creatorsMap = new Map<string, { id: string; email: string }>();
@@ -125,7 +180,12 @@ export default function AgentsPage() {
   const uniqueActions = useMemo(() => {
     const actionsMap = new Map<
       number,
-      { id: number; name: string; display_name: string }
+      {
+        id: number;
+        name: string;
+        display_name: string;
+        mcp_server_id?: number | null;
+      }
     >();
     agents.forEach((agent) => {
       agent.tools.forEach((tool) => {
@@ -133,6 +193,7 @@ export default function AgentsPage() {
           id: tool.id,
           name: tool.name,
           display_name: tool.display_name,
+          mcp_server_id: tool.mcp_server_id,
         });
       });
     });
@@ -155,17 +216,95 @@ export default function AgentsPage() {
     systemTools.sort((a, b) => a.display_name.localeCompare(b.display_name));
     otherTools.sort((a, b) => a.display_name.localeCompare(b.display_name));
 
-    // Return system tools first, then other tools
-    return [...systemTools, ...otherTools];
-  }, [agents]);
+    // Group ALL tools by mcp_server_id (both system and other)
+    const mcpGroupsMap = new Map<number, typeof allActions>();
+    const nonMcpSystemTools: typeof systemTools = [];
+    const nonMcpOtherTools: typeof otherTools = [];
+
+    // Group system tools by MCP server
+    systemTools.forEach((tool) => {
+      if (tool.mcp_server_id !== null && tool.mcp_server_id !== undefined) {
+        const group = mcpGroupsMap.get(tool.mcp_server_id) || [];
+        group.push(tool);
+        mcpGroupsMap.set(tool.mcp_server_id, group);
+      } else {
+        nonMcpSystemTools.push(tool);
+      }
+    });
+
+    // Group other tools by MCP server
+    otherTools.forEach((tool) => {
+      if (tool.mcp_server_id !== null && tool.mcp_server_id !== undefined) {
+        const group = mcpGroupsMap.get(tool.mcp_server_id) || [];
+        group.push(tool);
+        mcpGroupsMap.set(tool.mcp_server_id, group);
+      } else {
+        nonMcpOtherTools.push(tool);
+      }
+    });
+
+    // Create grouped action items
+    type ActionItem =
+      | {
+          type: "tool";
+          id: number;
+          name: string;
+          display_name: string;
+          mcp_server_id?: number | null;
+        }
+      | {
+          type: "mcp_group";
+          mcp_server_id: number;
+          server_name: string;
+          tools: Array<{ id: number; name: string; display_name: string }>;
+        };
+
+    const mcpGroupItems: ActionItem[] = Array.from(mcpGroupsMap.entries()).map(
+      ([serverId, tools]) => {
+        const serverInfo = mcpServersMap.get(serverId);
+        return {
+          type: "mcp_group" as const,
+          mcp_server_id: serverId,
+          server_name: serverInfo?.name || `MCP Server ${serverId}`,
+          tools: tools.map((t) => ({
+            id: t.id,
+            name: t.name,
+            display_name: t.display_name,
+          })),
+        };
+      }
+    );
+
+    const nonMcpSystemToolItems: ActionItem[] = nonMcpSystemTools.map(
+      (tool) => ({ type: "tool" as const, ...tool })
+    );
+    const nonMcpOtherToolItems: ActionItem[] = nonMcpOtherTools.map((tool) => ({
+      type: "tool" as const,
+      ...tool,
+    }));
+
+    // Return non-MCP system tools first, then MCP groups, then non-MCP other tools
+    return [
+      ...nonMcpSystemToolItems,
+      ...mcpGroupItems,
+      ...nonMcpOtherToolItems,
+    ];
+  }, [agents, mcpServersMap]);
 
   const filteredActions = useMemo(() => {
     if (!actionsSearchQuery) return uniqueActions;
-    return uniqueActions.filter((action) =>
-      action.display_name
-        .toLowerCase()
-        .includes(actionsSearchQuery.toLowerCase())
-    );
+
+    const query = actionsSearchQuery.toLowerCase();
+    return uniqueActions.filter((action) => {
+      if (action.type === "tool") {
+        return action.display_name.toLowerCase().includes(query);
+      } else {
+        // For MCP groups, search through all tool names in the group
+        return action.tools.some((tool) =>
+          tool.display_name.toLowerCase().includes(query)
+        );
+      }
+    });
   }, [uniqueActions, actionsSearchQuery]);
 
   const memoizedCurrentlyVisibleAgents = useMemo(() => {
@@ -186,8 +325,14 @@ export default function AgentsPage() {
         (agent.owner && selectedCreatorIds.has(agent.owner.id));
 
       const actionsFilter =
-        selectedActionIds.size === 0 ||
-        agent.tools.some((tool) => selectedActionIds.has(tool.id));
+        (selectedActionIds.size === 0 && selectedMcpServerIds.size === 0) ||
+        agent.tools.some(
+          (tool) =>
+            selectedActionIds.has(tool.id) ||
+            (tool.mcp_server_id !== null &&
+              tool.mcp_server_id !== undefined &&
+              selectedMcpServerIds.has(tool.mcp_server_id))
+        );
 
       return (
         (nameMatches || labelMatches) &&
@@ -204,6 +349,7 @@ export default function AgentsPage() {
     user,
     selectedCreatorIds,
     selectedActionIds,
+    selectedMcpServerIds,
   ]);
 
   const featuredAgents = [
@@ -230,16 +376,39 @@ export default function AgentsPage() {
   }, [selectedCreatorIds, uniqueCreators]);
 
   const actionsFilterButtonText = useMemo(() => {
-    if (selectedActionIds.size === 0) {
+    const totalSelected = selectedActionIds.size + selectedMcpServerIds.size;
+
+    if (totalSelected === 0) {
       return "All Actions";
-    } else if (selectedActionIds.size === 1) {
-      const selectedId = Array.from(selectedActionIds)[0];
-      const action = uniqueActions.find((a) => a.id === selectedId);
-      return action?.display_name || "All Actions";
+    } else if (totalSelected === 1) {
+      // Check if it's a single tool
+      if (selectedActionIds.size === 1) {
+        const selectedId = Array.from(selectedActionIds)[0];
+        for (const action of uniqueActions) {
+          if (action.type === "tool" && action.id === selectedId) {
+            return action.display_name;
+          }
+        }
+      }
+
+      // Check if it's a single MCP server
+      if (selectedMcpServerIds.size === 1) {
+        const selectedServerId = Array.from(selectedMcpServerIds)[0];
+        for (const action of uniqueActions) {
+          if (
+            action.type === "mcp_group" &&
+            action.mcp_server_id === selectedServerId
+          ) {
+            return action.server_name;
+          }
+        }
+      }
+
+      return "All Actions";
     } else {
-      return `${selectedActionIds.size} actions`;
+      return `${totalSelected} selected`;
     }
-  }, [selectedActionIds, uniqueActions]);
+  }, [selectedActionIds, selectedMcpServerIds, uniqueActions]);
 
   return (
     <PageWrapper data-testid="AgentsPage/container" aria-label="Agents Page">
@@ -355,8 +524,13 @@ export default function AgentsPage() {
                 <FilterButton
                   leftIcon={SvgActions}
                   transient={actionsFilterOpen}
-                  active={selectedActionIds.size > 0}
-                  onClear={() => setSelectedActionIds(new Set())}
+                  active={
+                    selectedActionIds.size > 0 || selectedMcpServerIds.size > 0
+                  }
+                  onClear={() => {
+                    setSelectedActionIds(new Set());
+                    setSelectedMcpServerIds(new Set());
+                  }}
                 >
                   {actionsFilterButtonText}
                 </FilterButton>
@@ -373,44 +547,75 @@ export default function AgentsPage() {
                       onChange={(e) => setActionsSearchQuery(e.target.value)}
                     />,
                     ...filteredActions.flatMap((action, index) => {
-                      const isSelected = selectedActionIds.has(action.id);
-                      const systemIcon = SYSTEM_TOOL_ICONS[action.name];
-                      const isSystemTool = !!systemIcon;
+                      if (action.type === "tool") {
+                        const isSelected = selectedActionIds.has(action.id);
+                        const systemIcon = SYSTEM_TOOL_ICONS[action.name];
+                        const isSystemTool = !!systemIcon;
 
-                      // Check if we need to add a separator after this item
-                      const nextAction = filteredActions[index + 1];
-                      const nextIsSystemTool = nextAction
-                        ? !!SYSTEM_TOOL_ICONS[nextAction.name]
-                        : false;
-                      const needsSeparator =
-                        isSystemTool && nextAction && !nextIsSystemTool;
+                        // Check if we need to add a separator after this item
+                        const nextAction = filteredActions[index + 1];
+                        const nextIsSystemTool =
+                          nextAction && nextAction.type === "tool"
+                            ? !!SYSTEM_TOOL_ICONS[nextAction.name]
+                            : false;
+                        const needsSeparator =
+                          isSystemTool && nextAction && !nextIsSystemTool;
 
-                      // Determine icon: Check if selected, system icon if available, otherwise Actions icon
-                      const icon = systemIcon ? systemIcon : SvgActions;
+                        // Determine icon: system icon if available, otherwise Actions icon
+                        const icon = systemIcon ? systemIcon : SvgActions;
 
-                      const lineItem = (
-                        <LineItem
-                          key={action.id}
-                          icon={icon}
-                          heavyForced={isSelected}
-                          onClick={() => {
-                            setSelectedActionIds((prev) => {
-                              const newSet = new Set(prev);
-                              if (newSet.has(action.id)) {
-                                newSet.delete(action.id);
-                              } else {
-                                newSet.add(action.id);
-                              }
-                              return newSet;
-                            });
-                          }}
-                        >
-                          {action.display_name}
-                        </LineItem>
-                      );
+                        const lineItem = (
+                          <LineItem
+                            key={action.id}
+                            icon={icon}
+                            heavyForced={isSelected}
+                            onClick={() => {
+                              setSelectedActionIds((prev) => {
+                                const newSet = new Set(prev);
+                                if (newSet.has(action.id)) {
+                                  newSet.delete(action.id);
+                                } else {
+                                  newSet.add(action.id);
+                                }
+                                return newSet;
+                              });
+                            }}
+                          >
+                            {action.display_name}
+                          </LineItem>
+                        );
 
-                      // Return the line item, and optionally a separator
-                      return needsSeparator ? [lineItem, null] : [lineItem];
+                        return needsSeparator ? [lineItem, null] : [lineItem];
+                      } else {
+                        // MCP Group - render only the server name, not individual tools
+                        const groupKey = `mcp-group-${action.mcp_server_id}`;
+                        const isSelected = selectedMcpServerIds.has(
+                          action.mcp_server_id
+                        );
+
+                        const lineItem = (
+                          <LineItem
+                            key={groupKey}
+                            icon={SvgActions}
+                            heavyForced={isSelected}
+                            onClick={() => {
+                              setSelectedMcpServerIds((prev) => {
+                                const newSet = new Set(prev);
+                                if (newSet.has(action.mcp_server_id)) {
+                                  newSet.delete(action.mcp_server_id);
+                                } else {
+                                  newSet.add(action.mcp_server_id);
+                                }
+                                return newSet;
+                              });
+                            }}
+                          >
+                            {action.server_name}
+                          </LineItem>
+                        );
+
+                        return [lineItem];
+                      }
                     }),
                   ]}
                 </PopoverMenu>
