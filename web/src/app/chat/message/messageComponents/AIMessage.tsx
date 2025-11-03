@@ -16,7 +16,7 @@ import {
   useDocumentSidebarVisible,
   useSelectedNodeForDocDisplay,
 } from "@/app/chat/stores/useChatSessionStore";
-import { copyAll, handleCopy } from "@/app/chat/message/copyingUtils";
+import { handleCopy } from "@/app/chat/message/copyingUtils";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import {
@@ -65,7 +65,31 @@ export default function AIMessage({
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
 
-  const { toggleModal } = useChatModal();
+  const { toggleModal, isOpen, getModalData } = useChatModal();
+
+  // Helper to check if feedback button should be in transient state
+  const isFeedbackTransient = useCallback(
+    (feedbackType: "like" | "dislike") => {
+      const hasCurrentFeedback = currentFeedback === feedbackType;
+      const modalOpen = isOpen(ModalIds.FeedbackModal);
+
+      if (!modalOpen) {
+        return hasCurrentFeedback;
+      }
+
+      const modalData = getModalData<{
+        feedbackType: string;
+        messageId: number;
+      }>();
+      const isModalForThisFeedback = modalData?.feedbackType === feedbackType;
+      const isModalForThisMessage = modalData?.messageId === messageId;
+
+      return (
+        hasCurrentFeedback || (isModalForThisFeedback && isModalForThisMessage)
+      );
+    },
+    [currentFeedback, isOpen, getModalData, messageId]
+  );
 
   // Handler for feedback button clicks with toggle logic
   const handleFeedbackClick = useCallback(
@@ -80,7 +104,8 @@ export default function AIMessage({
         // Clicking same button - remove feedback
         await chatState.handleFeedbackChange(null);
       } else if (clickedFeedback === "like") {
-        // Clicking like - check if we need modal for positive feedback
+        // Clicking like (will automatically clear dislike if it was active)
+        // Check if we need modal for positive feedback
         const predefinedOptions =
           process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS;
         if (predefinedOptions && predefinedOptions.trim()) {
@@ -91,11 +116,12 @@ export default function AIMessage({
             handleFeedbackChange: chatState.handleFeedbackChange,
           });
         } else {
-          // No modal needed - just submit like
+          // No modal needed - just submit like (this replaces any existing feedback)
           await chatState.handleFeedbackChange("like");
         }
       } else {
-        // Clicking dislike - always open modal
+        // Clicking dislike (will automatically clear like if it was active)
+        // Always open modal for dislike
         toggleModal(ModalIds.FeedbackModal, true, {
           feedbackType: "dislike",
           messageId,
@@ -415,7 +441,7 @@ export default function AIMessage({
                             icon={SvgThumbsUp}
                             onClick={() => handleFeedbackClick("like")}
                             tertiary
-                            transient={currentFeedback === "like"}
+                            transient={isFeedbackTransient("like")}
                             tooltip={
                               currentFeedback === "like"
                                 ? "Remove Like"
@@ -427,7 +453,7 @@ export default function AIMessage({
                             icon={SvgThumbsDown}
                             onClick={() => handleFeedbackClick("dislike")}
                             tertiary
-                            transient={currentFeedback === "dislike"}
+                            transient={isFeedbackTransient("dislike")}
                             tooltip={
                               currentFeedback === "dislike"
                                 ? "Remove Dislike"
