@@ -27,9 +27,9 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import ButtonRenaming from "./ButtonRenaming";
-import { OpenFolderIcon } from "@/components/icons/CustomIcons";
 import { SvgProps } from "@/icons";
 import { useActiveSidebarTab } from "@/lib/hooks";
+import SvgFolderOpen from "@/icons/folder-open";
 
 interface ProjectFolderProps {
   project: Project;
@@ -56,26 +56,21 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
     },
   });
 
-  const getFolderIcon = (): React.FunctionComponent<SvgProps> => {
+  function getFolderIcon(): React.FunctionComponent<SvgProps> {
     if (open) {
-      return isHoveringIcon
-        ? SvgFolder
-        : (OpenFolderIcon as React.FunctionComponent<SvgProps>);
+      return isHoveringIcon ? SvgFolder : SvgFolderOpen;
     } else {
-      return isHoveringIcon
-        ? (OpenFolderIcon as React.FunctionComponent<SvgProps>)
-        : SvgFolder;
+      return isHoveringIcon ? SvgFolderOpen : SvgFolder;
     }
-  };
+  }
 
-  const handleIconClick = () => {
+  function handleIconClick() {
     setOpen((prev) => !prev);
-  };
+  }
 
-  const handleTextClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
+  function handleTextClick() {
     route({ projectId: project.id });
-  };
+  }
 
   async function handleRename(newName: string) {
     await renameProject(project.id, newName);
@@ -140,10 +135,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
                 onHover={(isHovering) => setIsHoveringIcon(isHovering)}
                 icon={getFolderIcon()}
                 internal
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleIconClick();
-                }}
+                onClick={noProp(handleIconClick)}
               />
             )}
             active={
@@ -151,7 +143,8 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
               activeSidebar.type === "project" &&
               activeSidebar.id === String(project.id)
             }
-            onClick={handleTextClick}
+            onClick={noProp(handleTextClick)}
+            focused={isEditing}
             rightChildren={
               <>
                 <PopoverTrigger asChild onClick={noProp()}>
