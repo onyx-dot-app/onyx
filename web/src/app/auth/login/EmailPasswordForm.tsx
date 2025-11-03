@@ -1,20 +1,18 @@
 "use client";
 
-import { TextFormField } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { basicLogin, basicSignup } from "@/lib/user";
 import Button from "@/refresh-components/buttons/Button";
-import { Form, Formik, FieldProps } from "formik";
+import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { requestEmailVerification } from "../lib";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Spinner } from "@/components/Spinner";
 import Link from "next/link";
 import { useUser } from "@/components/user/UserProvider";
 import SvgArrowRightCircle from "@/icons/arrow-right-circle";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
-import { Input } from "@/components/ui/input";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { validateInternalRedirect } from "@/lib/auth/redirectValidation";

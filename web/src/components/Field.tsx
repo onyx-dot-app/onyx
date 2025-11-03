@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FiInfo, FiPlus, FiX, FiEye, FiEyeOff } from "react-icons/fi";
+import { FiInfo, FiX } from "react-icons/fi";
 import {
   TooltipProvider,
   Tooltip,
@@ -29,9 +29,8 @@ import {
 } from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
-import { useState, useCallback, useEffect, memo, useRef } from "react";
+import { useState, useEffect, memo } from "react";
 import remarkGfm from "remark-gfm";
-import Button from "@/refresh-components/buttons/Button";
 import { Checkbox } from "@/components/ui/checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
@@ -46,7 +45,6 @@ import {
   FILE_TYPE_DEFINITIONS,
 } from "@/lib/connectors/fileTypes";
 import Text from "@/refresh-components/texts/Text";
-import SvgPlusCircle from "@/icons/plus-circle";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 import SvgEye from "@/icons/eye";
