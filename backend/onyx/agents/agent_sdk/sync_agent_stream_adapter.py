@@ -9,6 +9,7 @@ from typing import TypeVar
 
 from agents import Agent
 from agents import RunResultStreaming
+from agents import StreamEvent
 from agents import TContext
 from agents.run import Runner
 
@@ -53,7 +54,7 @@ class SyncAgentStream(Generic[T]):
         self._context = context
         self._max_turns = max_turns
 
-        self._q: "queue.Queue[object]" = queue.Queue(maxsize=queue_maxsize)
+        self._q: "queue.Queue[StreamEvent]" = queue.Queue(maxsize=queue_maxsize)
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
         self.streamed: RunResultStreaming | None = None
@@ -66,7 +67,7 @@ class SyncAgentStream(Generic[T]):
 
     # ---------- public sync API ----------
 
-    def __iter__(self) -> Iterator[T]:
+    def __iter__(self) -> Iterator[StreamEvent]:
         try:
             while True:
                 item = self._q.get()
@@ -76,7 +77,7 @@ class SyncAgentStream(Generic[T]):
                         raise self._exc
                     # Normal completion
                     return
-                yield item  # type: ignore[misc,return-value]
+                yield item
         finally:
             # Ensure we fully clean up whether we exited due to exception,
             # StopIteration, or external cancel.
