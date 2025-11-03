@@ -68,7 +68,13 @@
  * ```
  */
 
-import React, { useCallback, useContext, useEffect, useMemo } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useId,
+} from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
 import SvgMinusCircle from "@/icons/minus-circle";
@@ -97,6 +103,7 @@ interface KeyValueInputItemProps {
   canRemove: boolean;
   index: number;
   layout?: "equal" | "key-wide";
+  fieldId: string;
 }
 
 const KeyValueInputItem = ({
@@ -110,6 +117,7 @@ const KeyValueInputItem = ({
   canRemove,
   index,
   layout = "equal",
+  fieldId,
 }: KeyValueInputItemProps) => {
   // Layout classes: equal = both flex-1, key-wide = key gets more space (3/5 vs 2/5)
   const keyClassName = layout === "equal" ? "flex-1" : "flex-[3]";
@@ -125,7 +133,9 @@ const KeyValueInputItem = ({
             onChange={(e) => onChange({ ...item, key: e.target.value })}
             aria-label={`${keyPlaceholder || "Key"} ${index + 1}`}
             aria-invalid={!!error?.key}
-            aria-describedby={error?.key ? `key-error-${index}` : undefined}
+            aria-describedby={
+              error?.key ? `${fieldId}-key-error-${index}` : undefined
+            }
             disabled={disabled}
             showClearButton={false}
           />
@@ -135,7 +145,7 @@ const KeyValueInputItem = ({
                 <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />
               </div>
               <Text
-                id={`key-error-${index}`}
+                id={`${fieldId}-key-error-${index}`}
                 text03
                 secondaryBody
                 className="ml-0.5"
@@ -153,7 +163,9 @@ const KeyValueInputItem = ({
             onChange={(e) => onChange({ ...item, value: e.target.value })}
             aria-label={`${valuePlaceholder || "Value"} ${index + 1}`}
             aria-invalid={!!error?.value}
-            aria-describedby={error?.value ? `value-error-${index}` : undefined}
+            aria-describedby={
+              error?.value ? `${fieldId}-value-error-${index}` : undefined
+            }
             disabled={disabled}
             showClearButton={false}
           />
@@ -163,7 +175,7 @@ const KeyValueInputItem = ({
                 <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />
               </div>
               <Text
-                id={`value-error-${index}`}
+                id={`${fieldId}-value-error-${index}`}
                 text03
                 secondaryBody
                 className="ml-0.5"
@@ -414,7 +426,8 @@ const KeyValueInput = ({
     }
   }, [mode]); // Only run on mode change
 
-  const fieldId = fieldContext?.baseId || name || "key-value-input";
+  const autoId = useId();
+  const fieldId = fieldContext?.baseId || name || `key-value-input-${autoId}`;
 
   // Header layout classes to match input layout
   const headerKeyClassName = layout === "equal" ? "flex-1" : "flex-[3]";
@@ -458,6 +471,7 @@ const KeyValueInput = ({
                 canRemove={canRemoveItems}
                 index={index}
                 layout={layout}
+                fieldId={fieldId}
               />
             </div>
           ))}

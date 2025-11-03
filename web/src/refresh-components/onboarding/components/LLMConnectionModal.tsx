@@ -101,7 +101,7 @@ const LLMFormikEffects: React.FC<LLMFormikEffectsProps> = ({
       case "anthropic":
         if (isEmpty(values.api_key)) shouldReset = true;
         break;
-      case "ollama":
+      case "ollama_chat":
         if (activeTab === "self-hosted") {
           if (isEmpty(values.api_base)) shouldReset = true;
         } else if (activeTab === "cloud") {
