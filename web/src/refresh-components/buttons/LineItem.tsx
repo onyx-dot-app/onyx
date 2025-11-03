@@ -56,7 +56,7 @@ export default function LineItem({
     >
       <div className="flex flex-row items-center justify-start w-full gap-2">
         {Icon && (
-          <div className="h-[1rem] w-[1rem]">
+          <div className="h-[1rem] min-w-[1rem] bg-red">
             <Icon
               className={cn(
                 "h-[1rem] w-[1rem]",
