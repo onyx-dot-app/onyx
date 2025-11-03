@@ -1,13 +1,14 @@
 import React, { useMemo, useState, useEffect } from "react";
-import Modal from "@/refresh-components/modals/Modal";
 import {
   ModalIds,
   useChatModal,
 } from "@/refresh-components/contexts/ChatModalContext";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { Form, Formik, FormikProps } from "formik";
+import {
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
+import { Form, Formik, FormikProps, useFormikContext } from "formik";
 import { APIFormFieldState } from "@/refresh-components/form/types";
-import Button from "@/refresh-components/buttons/Button";
 import { MODAL_CONTENT_MAP, PROVIDER_TAB_CONFIG } from "../constants";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
 import { fetchModels } from "@/app/admin/configuration/llm/utils";
@@ -16,14 +17,161 @@ import {
   getModelOptions,
   canProviderFetchModels,
   testApiKeyHelper,
+  testCustomProvider,
 } from "./llmConnectionHelpers";
 import { LLMConnectionFieldsWithTabs } from "./LLMConnectionFieldsWithTabs";
 import { LLMConnectionFieldsBasic } from "./LLMConnectionFieldsBasic";
+import { LLMConnectionFieldsCustom } from "./LLMConnectionFieldsCustom";
+import { getValidationSchema } from "./llmValidationSchema";
+import { OnboardingActions, OnboardingState } from "../types";
+import ProviderModal from "./ProviderModal";
 
 type LLMConnectionModalData = {
   icon: React.ReactNode;
   title: string;
-  llmDescriptor: WellKnownLLMProviderDescriptor;
+  llmDescriptor?: WellKnownLLMProviderDescriptor;
+  isCustomProvider?: boolean;
+  onboardingState: OnboardingState;
+  onboardingActions: OnboardingActions;
+};
+
+type LLMFormikEffectsProps = {
+  tabConfig: any;
+  activeTab: string;
+  llmDescriptor?: WellKnownLLMProviderDescriptor;
+  setShowApiMessage: (v: boolean) => void;
+  setErrorMessage: (v: string) => void;
+  setFetchedModelConfigurations: (v: any[]) => void;
+  setModelsErrorMessage: (v: string) => void;
+  setModelsApiStatus: (v: APIFormFieldState) => void;
+  setShowModelsApiErrorMessage: (v: boolean) => void;
+  setApiStatus: (v: APIFormFieldState) => void;
+};
+
+const LLMFormikEffects: React.FC<LLMFormikEffectsProps> = ({
+  tabConfig,
+  activeTab,
+  llmDescriptor,
+  setShowApiMessage,
+  setErrorMessage,
+  setFetchedModelConfigurations,
+  setModelsErrorMessage,
+  setModelsApiStatus,
+  setShowModelsApiErrorMessage,
+  setApiStatus,
+}) => {
+  const formikProps = useFormikContext<any>();
+
+  useEffect(() => {
+    if (tabConfig && activeTab) {
+      const currentTab = tabConfig.tabs.find((t: any) => t.id === activeTab);
+      setShowApiMessage(false);
+      setErrorMessage("");
+      setFetchedModelConfigurations([]);
+      setModelsErrorMessage("");
+      setModelsApiStatus("loading");
+      setShowModelsApiErrorMessage(false);
+
+      if (currentTab?.hiddenFields) {
+        Object.entries(currentTab.hiddenFields).forEach(([key, value]) => {
+          formikProps.setFieldValue(key, value);
+        });
+      } else {
+        //set default api base when tab changes
+        if (
+          llmDescriptor?.default_api_base &&
+          formikProps.values.api_base !== llmDescriptor.default_api_base
+        ) {
+          formikProps.setFieldValue("api_base", llmDescriptor.default_api_base);
+        }
+      }
+    }
+  }, [activeTab, tabConfig, llmDescriptor]);
+
+  useEffect(() => {
+    if (!llmDescriptor) return;
+
+    const values = formikProps.values as any;
+    const isEmpty = (val: any) =>
+      val == null || (typeof val === "string" && val.trim() === "");
+
+    let shouldReset = false;
+    switch (llmDescriptor.name) {
+      case "openai":
+      case "anthropic":
+        if (isEmpty(values.api_key)) shouldReset = true;
+        break;
+      case "ollama_chat":
+        if (activeTab === "self-hosted") {
+          if (isEmpty(values.api_base)) shouldReset = true;
+        } else if (activeTab === "cloud") {
+          if (isEmpty(values?.custom_config?.OLLAMA_API_KEY))
+            shouldReset = true;
+        }
+        break;
+      case "azure":
+        if (isEmpty(values.api_key) || isEmpty(values.target_uri))
+          shouldReset = true;
+        break;
+      case "openrouter":
+        if (isEmpty(values.api_key) || isEmpty(values.api_base))
+          shouldReset = true;
+        break;
+      case "vertex_ai":
+        if (isEmpty(values?.custom_config?.vertex_credentials))
+          shouldReset = true;
+        break;
+      case "bedrock": {
+        const selectedAuth = values?.custom_config?.BEDROCK_AUTH_METHOD;
+        if (selectedAuth === "access_key") {
+          formikProps.setFieldValue(
+            "custom_config.AWS_BEARER_TOKEN_BEDROCK",
+            ""
+          );
+          shouldReset = true;
+        } else if (selectedAuth === "long_term_api_key") {
+          formikProps.setFieldValue("custom_config.AWS_ACCESS_KEY_ID", "");
+          formikProps.setFieldValue("custom_config.AWS_SECRET_ACCESS_KEY", "");
+          shouldReset = true;
+        } else if (selectedAuth === "iam") {
+          formikProps.setFieldValue(
+            "custom_config.AWS_BEARER_TOKEN_BEDROCK",
+            ""
+          );
+          formikProps.setFieldValue("custom_config.AWS_ACCESS_KEY_ID", "");
+          formikProps.setFieldValue("custom_config.AWS_SECRET_ACCESS_KEY", "");
+          shouldReset = true;
+        }
+
+        if (isEmpty(values?.custom_config?.AWS_REGION_NAME)) {
+          shouldReset = true;
+        }
+        break;
+      }
+      default:
+        break;
+    }
+
+    if (shouldReset) {
+      setShowApiMessage(false);
+      setErrorMessage("");
+      setModelsErrorMessage("");
+      setModelsApiStatus("loading");
+      setShowModelsApiErrorMessage(false);
+      setApiStatus("loading");
+      setFetchedModelConfigurations([]);
+    }
+  }, [
+    llmDescriptor,
+    activeTab,
+    (formikProps.values as any).api_key,
+    (formikProps.values as any).api_base,
+    (formikProps.values as any).target_uri,
+    (formikProps.values as any).custom_config?.BEDROCK_AUTH_METHOD,
+    (formikProps.values as any).custom_config,
+  ]);
+
+  return null;
 };
 
 const LLMConnectionModal = () => {
@@ -32,24 +180,34 @@ const LLMConnectionModal = () => {
   const icon = data?.icon;
   const title = data?.title ?? "";
   const llmDescriptor = data?.llmDescriptor;
-  const modalContent = llmDescriptor
-    ? MODAL_CONTENT_MAP[llmDescriptor.name]
-    : undefined;
+  const isCustomProvider = data?.isCustomProvider ?? false;
+  const modalContent = isCustomProvider
+    ? MODAL_CONTENT_MAP["custom"]
+    : llmDescriptor
+      ? MODAL_CONTENT_MAP[llmDescriptor.name]
+      : undefined;
+  const onboardingActions = data?.onboardingActions;
+  const onboardingState = data?.onboardingState;
 
   const initialValues = useMemo(
-    () => buildInitialValues(llmDescriptor),
-    [llmDescriptor]
+    () => buildInitialValues(llmDescriptor, isCustomProvider),
+    [llmDescriptor, isCustomProvider]
   );
 
   const [apiStatus, setApiStatus] = useState<APIFormFieldState>("loading");
   const [showApiMessage, setShowApiMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [modelsErrorMessage, setModelsErrorMessage] = useState<string>("");
+  const [modelsApiStatus, setModelsApiStatus] =
+    useState<APIFormFieldState>("loading");
+  const [showModelsApiErrorMessage, setShowModelsApiErrorMessage] =
+    useState(false);
   const [activeTab, setActiveTab] = useState<string>("");
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [fetchedModelConfigurations, setFetchedModelConfigurations] = useState<
     any[]
   >([]);
-  const isApiError = apiStatus === "error";
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Set default tab when llmDescriptor changes
   useEffect(() => {
@@ -61,6 +219,9 @@ const LLMConnectionModal = () => {
       setFetchedModelConfigurations([]);
       setShowApiMessage(false);
       setErrorMessage("");
+      setModelsErrorMessage("");
+      setModelsApiStatus("loading");
+      setShowModelsApiErrorMessage(false);
       setApiStatus("loading");
       setIsFetchingModels(false);
     }
@@ -72,12 +233,14 @@ const LLMConnectionModal = () => {
       setFetchedModelConfigurations([]);
       setShowApiMessage(false);
       setErrorMessage("");
+      setModelsErrorMessage("");
+      setModelsApiStatus("loading");
+      setShowModelsApiErrorMessage(false);
       setApiStatus("loading");
       setIsFetchingModels(false);
     }
   }, [data]);
 
-  // Get model options - use fetched models if available, otherwise use descriptor models
   const modelOptions = useMemo(
     () => getModelOptions(llmDescriptor, fetchedModelConfigurations as any[]),
     [llmDescriptor, fetchedModelConfigurations]
@@ -85,22 +248,21 @@ const LLMConnectionModal = () => {
 
   useEffect(() => {
     if (fetchedModelConfigurations.length > 0 && !isFetchingModels) {
-      setApiStatus("success");
+      setModelsApiStatus("success");
     }
   }, [fetchedModelConfigurations, isFetchingModels]);
 
-  // Check if provider supports dynamic model fetching
   const canFetchModels = useMemo(
     () => canProviderFetchModels(llmDescriptor),
     [llmDescriptor]
   );
 
   const setFetchModelsError = (error: string) => {
-    setApiStatus("loading");
-    setShowApiMessage(true);
-    setErrorMessage(error);
+    setModelsApiStatus("loading");
+    setShowModelsApiErrorMessage(true);
+    setModelsErrorMessage(error);
     if (error) {
-      setApiStatus("error");
+      setModelsApiStatus("error");
     }
   };
 
@@ -125,6 +287,51 @@ const LLMConnectionModal = () => {
     }
   };
 
+  const testModelChangeWithApiKey = async (
+    modelName: string,
+    formikProps: FormikProps<any>
+  ) => {
+    if (!llmDescriptor) return;
+    setApiStatus("loading");
+    setShowApiMessage(true);
+    const result = await testApiKeyHelper(
+      llmDescriptor,
+      initialValues,
+      formikProps.values,
+      undefined,
+      modelName
+    );
+    if (result.ok) {
+      setApiStatus("success");
+    } else {
+      setErrorMessage(result.errorMessage);
+      setApiStatus("error");
+    }
+  };
+
+  const testFileInputChange = async (
+    customConfig: Record<string, any>,
+    formikProps: FormikProps<any>
+  ) => {
+    if (!llmDescriptor) return;
+    setApiStatus("loading");
+    setShowApiMessage(true);
+    const result = await testApiKeyHelper(
+      llmDescriptor,
+      initialValues,
+      formikProps.values,
+      undefined,
+      undefined,
+      customConfig
+    );
+    if (result.ok) {
+      setApiStatus("success");
+    } else {
+      setErrorMessage(result.errorMessage);
+      setApiStatus("error");
+    }
+  };
+
   if (!data) return null;
 
   const tabConfig = llmDescriptor
@@ -132,124 +339,194 @@ const LLMConnectionModal = () => {
     : null;
 
   return (
-    <Modal
-      id={ModalIds.LLMConnectionModal}
-      title={title}
-      description={modalContent?.description}
-      startAdornment={icon}
-      xs
-    >
-      <Formik
-        initialValues={initialValues}
-        enableReinitialize
-        onSubmit={async (values, { setSubmitting }) => {
-          // Apply hidden fields based on active tab
-          let finalValues = { ...values };
-          if (tabConfig) {
-            const currentTab = tabConfig.tabs.find((t) => t.id === activeTab);
-            if (currentTab?.hiddenFields) {
-              finalValues = { ...finalValues, ...currentTab.hiddenFields };
-            }
+    <Formik
+      initialValues={initialValues}
+      validationSchema={getValidationSchema(
+        isCustomProvider ? "custom" : llmDescriptor?.name,
+        activeTab
+      )}
+      enableReinitialize
+      onSubmit={async (values, { setSubmitting }) => {
+        setIsSubmitting(true);
+        // Apply hidden fields based on active tab
+        let finalValues = { ...values };
+        if (tabConfig) {
+          const currentTab = tabConfig.tabs.find((t) => t.id === activeTab);
+          if (currentTab?.hiddenFields) {
+            finalValues = { ...finalValues, ...currentTab.hiddenFields };
           }
+        }
 
-          // Use fetched model configurations if available
-          const modelConfigsToUse =
-            fetchedModelConfigurations.length > 0
-              ? fetchedModelConfigurations
-              : llmDescriptor?.model_configurations.map((model) => ({
-                  name: model.name,
-                  is_visible: true,
-                  max_input_tokens: model.max_input_tokens,
-                  supports_image_input: model.supports_image_input,
-                })) ?? [];
+        // Use fetched model configurations if available
+        let modelConfigsToUse =
+          fetchedModelConfigurations.length > 0
+            ? fetchedModelConfigurations
+            : llmDescriptor?.model_configurations.map((model) => ({
+                name: model.name,
+                is_visible: true,
+                max_input_tokens: model.max_input_tokens,
+                supports_image_input: model.supports_image_input,
+              })) ?? [];
 
-          const payload = {
-            ...initialValues,
-            ...finalValues,
-            model_configurations: modelConfigsToUse,
-          };
-          console.log("payload", payload);
-          const response = await fetch(
-            `${LLM_PROVIDERS_ADMIN_URL}${"?is_creation=true"}`,
-            {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                ...payload,
-              }),
-            }
+        // For custom providers, use the values from the form and filter out empty entries
+        if (isCustomProvider) {
+          modelConfigsToUse = (finalValues.model_configurations || []).filter(
+            (config: any) => config.name && config.name.trim() !== ""
           );
-          if (!response.ok) {
-            const errorMsg = (await response.json()).detail;
-            console.log("errorMsg", errorMsg);
-            return;
-          }
 
-          toggleModal(ModalIds.LLMConnectionModal, false);
-        }}
-      >
-        {(formikProps) => {
-          // Apply hidden fields when tab changes
-          useEffect(() => {
-            if (tabConfig && activeTab) {
-              const currentTab = tabConfig.tabs.find((t) => t.id === activeTab);
-              setShowApiMessage(false);
-              setErrorMessage("");
-              setFetchedModelConfigurations([]);
-
-              if (currentTab?.hiddenFields) {
-                // Apply hidden fields for current tab
-                Object.entries(currentTab.hiddenFields).forEach(
-                  ([key, value]) => {
-                    formikProps.setFieldValue(key, value);
-                  }
-                );
-              } else {
-                // Reset to defaults when switching to a tab without hidden fields
-                if (
-                  llmDescriptor?.default_api_base &&
-                  formikProps.values.api_base !== llmDescriptor.default_api_base
-                ) {
-                  formikProps.setFieldValue(
-                    "api_base",
-                    llmDescriptor.default_api_base
-                  );
-                }
+          // Filter out empty custom config entries
+          const filteredCustomConfig: Record<string, string> = {};
+          Object.entries(finalValues.custom_config || {}).forEach(
+            ([key, value]) => {
+              if (key.trim() !== "") {
+                filteredCustomConfig[key] = value as string;
               }
             }
-          }, [activeTab, tabConfig, llmDescriptor]);
+          );
+          finalValues.custom_config = filteredCustomConfig;
+        }
 
-          const handleFetchModels = async () => {
-            if (!llmDescriptor) return;
+        const payload = {
+          ...initialValues,
+          ...finalValues,
+          model_configurations: modelConfigsToUse,
+        };
 
-            await fetchModels(
+        if (apiStatus !== "success") {
+          setApiStatus("loading");
+          setShowApiMessage(true);
+          let result;
+
+          if (llmDescriptor) {
+            result = await testApiKeyHelper(
               llmDescriptor,
-              undefined, // existingLlmProvider
-              formikProps.values,
-              (field: string, value: any) => {
-                // Custom setFieldValue to handle our state
-                if (field === "fetched_model_configurations") {
-                  setFetchedModelConfigurations(value);
-                } else if (field === "default_model_name") {
-                  formikProps.setFieldValue("default_model_name", value);
-                } else if (field === "_modelListUpdated") {
-                  // Ignore this field as it's just for forcing re-renders
-                  return;
-                } else {
-                  formikProps.setFieldValue(field, value);
-                }
-              },
-              setIsFetchingModels,
-              setFetchModelsError
+              initialValues,
+              payload
             );
-          };
+          } else {
+            result = await testCustomProvider(payload);
+          }
+          if (!result.ok) {
+            setErrorMessage(result.errorMessage);
+            setApiStatus("error");
+            setIsSubmitting(false);
+            return;
+          }
+          setApiStatus("success");
+        }
 
-          return (
+        const response = await fetch(
+          `${LLM_PROVIDERS_ADMIN_URL}${"?is_creation=true"}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          }
+        );
+        if (!response.ok) {
+          const errorMsg = (await response.json()).detail;
+          console.error("Failed to create LLM provider", errorMsg);
+          setIsSubmitting(false);
+          return;
+        }
+        // If this is the first LLM provider, set it as the default provider
+        if (onboardingState?.data?.llmProviders == null) {
+          try {
+            const newLlmProvider = await response.json();
+            if (newLlmProvider?.id != null) {
+              const setDefaultResponse = await fetch(
+                `${LLM_PROVIDERS_ADMIN_URL}/${newLlmProvider.id}/default`,
+                { method: "POST" }
+              );
+              if (!setDefaultResponse.ok) {
+                const err = await setDefaultResponse.json().catch(() => ({}));
+                console.error("Failed to set provider as default", err?.detail);
+              }
+            }
+          } catch (_e) {
+            console.error("Failed to set new provider as default", _e);
+          }
+        }
+        onboardingActions?.updateData({
+          llmProviders: [
+            ...(onboardingState?.data.llmProviders ?? []),
+            isCustomProvider ? "custom" : llmDescriptor?.name ?? "",
+          ],
+        });
+        onboardingActions?.setButtonActive(true);
+        setIsSubmitting(false);
+        toggleModal(ModalIds.LLMConnectionModal, false);
+      }}
+    >
+      {(formikProps) => {
+        const handleFetchModels = async () => {
+          if (!llmDescriptor) return;
+
+          await fetchModels(
+            llmDescriptor,
+            undefined, // existingLlmProvider
+            formikProps.values,
+            (field: string, value: any) => {
+              // Custom setFieldValue to handle our state
+              if (field === "fetched_model_configurations") {
+                setFetchedModelConfigurations(value);
+              } else if (field === "default_model_name") {
+                formikProps.setFieldValue("default_model_name", value);
+                // Trigger validation of the newly set default model
+                if (value) {
+                  testModelChangeWithApiKey(value, formikProps);
+                }
+              } else if (field === "_modelListUpdated") {
+                // Ignore this field as it's just for forcing re-renders
+                return;
+              } else {
+                formikProps.setFieldValue(field, value);
+              }
+            },
+            setIsFetchingModels,
+            setFetchModelsError
+          );
+        };
+
+        return (
+          <ProviderModal
+            id={ModalIds.LLMConnectionModal}
+            title={title}
+            description={modalContent?.description}
+            startAdornment={icon}
+            xs
+            onSubmit={formikProps.submitForm}
+            submitDisabled={
+              isCustomProvider
+                ? !formikProps.isValid || !formikProps.dirty
+                : !formikProps.isValid || !formikProps.dirty
+            }
+            isSubmitting={isSubmitting}
+          >
+            <LLMFormikEffects
+              tabConfig={tabConfig}
+              activeTab={activeTab}
+              llmDescriptor={llmDescriptor}
+              setShowApiMessage={setShowApiMessage}
+              setErrorMessage={setErrorMessage}
+              setFetchedModelConfigurations={setFetchedModelConfigurations}
+              setModelsErrorMessage={setModelsErrorMessage}
+              setModelsApiStatus={setModelsApiStatus}
+              setShowModelsApiErrorMessage={setShowModelsApiErrorMessage}
+              setApiStatus={setApiStatus}
+            />
             <Form className="flex flex-col gap-0">
               <div className="flex flex-col p-4 gap-4 bg-background-tint-01 w-full">
-                {tabConfig ? (
+                {isCustomProvider ? (
+                  <LLMConnectionFieldsCustom
+                    showApiMessage={showApiMessage}
+                    apiStatus={apiStatus}
+                    errorMessage={errorMessage}
+                    disabled={isSubmitting}
+                  />
+                ) : tabConfig ? (
                   <LLMConnectionFieldsWithTabs
                     llmDescriptor={llmDescriptor!}
                     tabConfig={tabConfig}
@@ -263,6 +540,13 @@ const LLMConnectionModal = () => {
                     canFetchModels={canFetchModels}
                     activeTab={activeTab}
                     setActiveTab={setActiveTab}
+                    testModelChangeWithApiKey={(modelName) =>
+                      testModelChangeWithApiKey(modelName, formikProps)
+                    }
+                    modelsApiStatus={modelsApiStatus}
+                    modelsErrorMessage={modelsErrorMessage}
+                    showModelsApiErrorMessage={showModelsApiErrorMessage}
+                    disabled={isSubmitting}
                   />
                 ) : (
                   <LLMConnectionFieldsBasic
@@ -278,26 +562,26 @@ const LLMConnectionModal = () => {
                     setDefaultModelName={(value) =>
                       formikProps.setFieldValue("default_model_name", value)
                     }
+                    onFetchModels={handleFetchModels}
+                    canFetchModels={canFetchModels}
+                    modelsApiStatus={modelsApiStatus}
+                    modelsErrorMessage={modelsErrorMessage}
+                    showModelsApiErrorMessage={showModelsApiErrorMessage}
+                    testModelChangeWithApiKey={(modelName) =>
+                      testModelChangeWithApiKey(modelName, formikProps)
+                    }
+                    testFileInputChange={(customConfig) =>
+                      testFileInputChange(customConfig, formikProps)
+                    }
+                    disabled={isSubmitting}
                   />
                 )}
               </div>
-              <div className="flex justify-end gap-2 w-full p-4">
-                <Button
-                  type="button"
-                  secondary
-                  onClick={() =>
-                    toggleModal(ModalIds.LLMConnectionModal, false)
-                  }
-                >
-                  Cancel
-                </Button>
-                <Button type="submit">Connect</Button>
-              </div>
             </Form>
-          );
-        }}
-      </Formik>
-    </Modal>
+          </ProviderModal>
+        );
+      }}
+    </Formik>
   );
 };
 

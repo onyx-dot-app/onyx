@@ -7,12 +7,13 @@ import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSearch from "@/icons/search";
 
-const divClasses = (active?: boolean, hovered?: boolean) =>
+const divClasses = (active?: boolean, hovered?: boolean, isError?: boolean) =>
   ({
     defaulted: [
       "border",
-      hovered && "border-border-02",
-      active && "border-border-05",
+      isError && "!border-status-error-05",
+      !isError && hovered && "border-border-02",
+      !isError && active && "border-border-05",
     ],
     internal: [],
     disabled: ["bg-background-neutral-03"],
@@ -33,6 +34,7 @@ export interface InputTypeInProps
   active?: boolean;
   internal?: boolean;
   disabled?: boolean;
+  isError?: boolean;
 
   // Stylings:
   leftSearchIcon?: boolean;
@@ -54,6 +56,7 @@ function InputTypeInInner(
     active,
     internal,
     disabled,
+    isError,
 
     leftSearchIcon,
 
@@ -111,7 +114,7 @@ function InputTypeInInner(
       ref={boundingBoxRef}
       className={cn(
         "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
-        divClasses(localActive, hovered)[state],
+        divClasses(localActive, hovered, isError)[state],
         className
       )}
       onClick={() => {

@@ -31,6 +31,11 @@ type Props = {
   canFetchModels: boolean;
   activeTab: string;
   setActiveTab: (tabId: string) => void;
+  testModelChangeWithApiKey: (modelName: string) => Promise<void>;
+  modelsApiStatus: "idle" | "loading" | "success" | "error";
+  modelsErrorMessage: string;
+  showModelsApiErrorMessage: boolean;
+  disabled?: boolean;
 };
 
 export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
@@ -46,6 +51,11 @@ export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
   canFetchModels,
   activeTab,
   setActiveTab,
+  testModelChangeWithApiKey,
+  modelsApiStatus,
+  modelsErrorMessage,
+  showModelsApiErrorMessage,
+  disabled = false,
 }) => {
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -71,6 +81,11 @@ export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
               onFetchModels={onFetchModels}
               isFetchingModels={isFetchingModels}
               canFetchModels={canFetchModels}
+              testModelChangeWithApiKey={testModelChangeWithApiKey}
+              modelsApiStatus={modelsApiStatus}
+              modelsErrorMessage={modelsErrorMessage}
+              showModelsApiErrorMessage={showModelsApiErrorMessage}
+              disabled={disabled}
             />
           </div>
         </TabsContent>
