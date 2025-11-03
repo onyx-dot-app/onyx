@@ -30,7 +30,8 @@ const FieldMessageContent: React.FC<{
   state: "idle" | "error" | "success" | "loading";
   content: React.ReactNode;
   className?: string;
-}> = ({ baseId, state, content, className }) => {
+  idSuffix?: string;
+}> = ({ baseId, state, content, className, idSuffix = "msg" }) => {
   return (
     <div className="flex flex-row items-center gap-x-0.5">
       {state !== "idle" && (
@@ -39,7 +40,7 @@ const FieldMessageContent: React.FC<{
         </div>
       )}
       <Text
-        id={`${baseId}-msg`}
+        id={`${baseId}-${idSuffix}`}
         text03
         secondaryBody
         className={cn("ml-0.5", className)}
@@ -63,7 +64,7 @@ export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
   const baseId = id ?? `field_${reactId}`;
 
   const describedByIds = useMemo(() => {
-    return [`${baseId}-desc`, `${baseId}-msg`];
+    return [`${baseId}-desc`, `${baseId}-msg`, `${baseId}-api-msg`];
   }, [baseId]);
 
   const contextValue: FieldContextType = {
@@ -200,6 +201,7 @@ export const FormAPIFieldMessage: React.FC<APIMessageProps> = ({
       state={state}
       content={content}
       className={className}
+      idSuffix="api-msg"
     />
   ) : null;
 };

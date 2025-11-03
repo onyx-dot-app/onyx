@@ -936,7 +936,8 @@ export function ChatPage({
                           setPresentingDocument={setPresentingDocument}
                           disabled={
                             llmProviders.length === 0 ||
-                            !user?.personalization?.name ||
+                            (llmProviders.length === 0 &&
+                              !user?.personalization?.name) ||
                             onboardingState.currentStep !==
                               OnboardingStep.Complete
                           }

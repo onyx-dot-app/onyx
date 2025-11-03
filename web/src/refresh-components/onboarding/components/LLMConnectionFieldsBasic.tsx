@@ -383,6 +383,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                       />
                     ) : undefined
                   }
+                  onBlur={field.onBlur}
                 />
               )}
               {modelOptions.length === 0 && (
@@ -411,6 +412,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                       />
                     ) : undefined
                   }
+                  onBlur={field.onBlur}
                 />
               )}
             </FormField.Control>
