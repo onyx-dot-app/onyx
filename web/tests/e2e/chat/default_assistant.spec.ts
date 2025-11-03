@@ -64,7 +64,7 @@ test.describe("Default Assistant Tests", () => {
 
       // Create a custom assistant to test non-default behavior
       await page.getByTestId("AppSidebar/more-agents").click();
-      await page.getByRole("button", { name: "Create", exact: true }).click();
+      await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
       await page.getByTestId("name").fill("Custom Test Assistant");
       await page.getByTestId("description").fill("Test Description");
@@ -101,7 +101,7 @@ test.describe("Default Assistant Tests", () => {
     }) => {
       // Create a custom assistant
       await page.getByTestId("AppSidebar/more-agents").click();
-      await page.getByRole("button", { name: "Create", exact: true }).click();
+      await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
       await page.getByTestId("name").fill("Custom Assistant");
       await page.getByTestId("description").fill("Test Description");
@@ -145,7 +145,7 @@ test.describe("Default Assistant Tests", () => {
     }) => {
       // Create a custom assistant with starter messages
       await page.getByTestId("AppSidebar/more-agents").click();
-      await page.getByRole("button", { name: "Create", exact: true }).click();
+      await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
       await page.getByTestId("name").fill("Test Assistant with Starters");
       await page.getByTestId("description").fill("Test Description");
@@ -218,7 +218,7 @@ test.describe("Default Assistant Tests", () => {
     }) => {
       // Create a custom assistant
       await page.getByTestId("AppSidebar/more-agents").click();
-      await page.getByRole("button", { name: "Create", exact: true }).click();
+      await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
       await page.getByTestId("name").fill("Switch Test Assistant");
       await page.getByTestId("description").fill("Test Description");

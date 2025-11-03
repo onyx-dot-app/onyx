@@ -254,8 +254,11 @@ def test_multi_tenant_access_control(reset_multitenant: None) -> None:
     assert not response_doc_ids.intersection(test_data["tenant1_doc_ids"])
 
     # User 1 tries to access Tenant 2's documents and fails
+    user1_second_chat_session = ChatSessionManager.create(
+        user_performing_action=test_data["admin_user1"]
+    )
     response_cross = ChatSessionManager.send_message(
-        chat_session_id=test_data["chat_session1"].id,
+        chat_session_id=user1_second_chat_session.id,
         message="What is in Tenant 2's documents? Run an internal search.",
         user_performing_action=test_data["admin_user1"],
     )
@@ -269,8 +272,11 @@ def test_multi_tenant_access_control(reset_multitenant: None) -> None:
     assert not response_doc_ids.intersection(test_data["tenant2_doc_ids"])
 
     # User 2 tries to access Tenant 1's documents and fails
+    user2_second_chat_session = ChatSessionManager.create(
+        user_performing_action=test_data["admin_user2"]
+    )
     response_cross2 = ChatSessionManager.send_message(
-        chat_session_id=test_data["chat_session2"].id,
+        chat_session_id=user2_second_chat_session.id,
         message="What is in Tenant 1's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )

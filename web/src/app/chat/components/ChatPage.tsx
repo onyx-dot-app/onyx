@@ -768,7 +768,7 @@ export function ChatPage({
             title="Sources"
           >
             {/* IMPORTANT: this is a memoized component, and it's very important
-            for performance reasons that this stays true. MAKE SURE that all function 
+            for performance reasons that this stays true. MAKE SURE that all function
             props are wrapped in useCallback. */}
             <DocumentResults
               setPresentingDocument={setPresentingDocument}

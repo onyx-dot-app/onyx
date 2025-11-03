@@ -79,7 +79,7 @@ from onyx.db.projects import get_user_files_from_project
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.feature_flags.factory import get_default_feature_flag_provider
-from onyx.feature_flags.feature_flags_keys import SIMPLE_AGENT_FRAMEWORK
+from onyx.feature_flags.feature_flags_keys import DISABLE_SIMPLE_AGENT_FRAMEWORK
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import build_frontend_file_url
@@ -758,13 +758,13 @@ def stream_chat_message_objects(
                 ]
             )
         feature_flag_provider = get_default_feature_flag_provider()
-        simple_agent_framework_enabled = (
+        simple_agent_framework_disabled = (
             feature_flag_provider.feature_enabled_for_user_tenant(
-                flag_key=SIMPLE_AGENT_FRAMEWORK,
+                flag_key=DISABLE_SIMPLE_AGENT_FRAMEWORK,
                 user=user,
                 tenant_id=tenant_id,
             )
-            and not new_msg_req.use_agentic_search
+            or new_msg_req.use_agentic_search
         )
         prompt_user_message = default_build_user_message(
             user_query=final_msg.message,
@@ -776,7 +776,7 @@ def stream_chat_message_objects(
             default_build_system_message_for_default_assistant_v2(
                 prompt_config, llm.config, mem_callback, tools
             )
-            if simple_agent_framework_enabled and persona.is_default_persona
+            if not simple_agent_framework_disabled and persona.is_default_persona
             else default_build_system_message(prompt_config, llm.config, mem_callback)
         )
         prompt_builder = AnswerPromptBuilder(
@@ -823,7 +823,7 @@ def stream_chat_message_objects(
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
             project_instructions=project_instructions,
         )
-        if simple_agent_framework_enabled:
+        if not simple_agent_framework_disabled:
             llm_model, model_settings = get_llm_model_and_settings_for_persona(
                 persona=persona,
                 llm_override=(new_msg_req.llm_override or chat_session.llm_override),
