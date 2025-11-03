@@ -1,6 +1,7 @@
 import { SvgProps } from "@/icons";
 
 export enum OnboardingStep {
+  Welcome = "welcome",
   Name = "name",
   LlmSetup = "llm-setup",
   Complete = "complete",
@@ -27,6 +28,7 @@ export enum OnboardingActionType {
   PREV_STEP = "PREV_STEP",
   GO_TO_STEP = "GO_TO_STEP",
   UPDATE_DATA = "UPDATE_DATA",
+  SET_BUTTON_ACTIVE = "SET_BUTTON_ACTIVE",
   SET_LOADING = "SET_LOADING",
   SET_ERROR = "SET_ERROR",
   RESET = "RESET",
@@ -37,6 +39,7 @@ export type OnboardingAction =
   | { type: OnboardingActionType.PREV_STEP }
   | { type: OnboardingActionType.GO_TO_STEP; step: OnboardingStep }
   | { type: OnboardingActionType.UPDATE_DATA; payload: Partial<OnboardingData> }
+  | { type: OnboardingActionType.SET_BUTTON_ACTIVE; isButtonActive: boolean }
   | { type: OnboardingActionType.SET_LOADING; isLoading: boolean }
   | { type: OnboardingActionType.SET_ERROR; error: string | undefined }
   | { type: OnboardingActionType.RESET };
@@ -46,11 +49,14 @@ export type FinalStepItemProps = {
   description: string;
   icon: React.FunctionComponent<SvgProps>;
   buttonText: string;
+  buttonHref: string;
 };
 
 export type OnboardingActions = {
   nextStep: () => void;
   prevStep: () => void;
+  goToStep: (step: OnboardingStep) => void;
+  setButtonActive: (active: boolean) => void;
   updateName: (name: string) => void;
   updateData: (data: Partial<OnboardingData>) => void;
   setLoading: (isLoading: boolean) => void;

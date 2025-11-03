@@ -4,14 +4,19 @@ import React, { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useBoundingBox } from "@/hooks/useBoundingBox";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { ChevronDown, Check } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
-const triggerClasses = (active?: boolean, hovered?: boolean) =>
+const triggerClasses = (
+  active?: boolean,
+  hovered?: boolean,
+  isError?: boolean
+) =>
   ({
     defaulted: [
       "border",
-      hovered && "border-border-02",
-      active && "border-border-05",
+      isError && "!border-status-error-05",
+      !isError && hovered && "border-border-02",
+      !isError && active && "border-border-05",
     ],
     internal: [],
     disabled: ["bg-background-neutral-03"],
@@ -29,14 +34,20 @@ const valueClasses = () =>
 export interface InputSelectOption {
   value: string;
   label: string;
+  description?: string;
   disabled?: boolean;
 }
 
-export interface InputSelectProps {
+export interface InputSelectProps
+  extends Omit<
+    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>,
+    "value" | "onValueChange" | "disabled"
+  > {
   // Input states:
   active?: boolean;
   internal?: boolean;
   disabled?: boolean;
+  isError?: boolean;
 
   // Select specific props
   value?: string;
@@ -60,6 +71,7 @@ function InputSelectInner(
     active,
     internal,
     disabled,
+    isError,
     value,
     onValueChange,
     options,
@@ -68,6 +80,7 @@ function InputSelectInner(
     className,
     name,
     required,
+    ...props
   }: InputSelectProps,
   ref: React.ForwardedRef<HTMLButtonElement>
 ) {
@@ -98,32 +111,47 @@ function InputSelectInner(
       <div
         ref={boundingBoxRef}
         className={cn(
-          "flex flex-row items-center justify-between w-full h-fit p-spacing-interline-mini rounded-08 bg-background-neutral-00 relative",
-          triggerClasses(localActive, hovered)[state],
+          "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
+          triggerClasses(localActive, hovered, isError)[state],
           className
         )}
       >
         <SelectPrimitive.Trigger
           ref={ref}
           className={cn(
-            "w-full h-[1.5rem] bg-transparent p-spacing-inline-mini focus:outline-none flex items-center justify-between",
+            "flex-1 h-[1.5rem] bg-transparent p-0.5 focus:outline-none flex items-center justify-between",
             valueClasses()[state]
           )}
           onFocus={() => setLocalActive(true)}
           onBlur={() => setLocalActive(false)}
+          {...props}
         >
           <SelectPrimitive.Value placeholder={placeholder} />
-          <SelectPrimitive.Icon asChild>
-            <ChevronDown className="h-4 w-4 opacity-50 ml-2 flex-shrink-0" />
-          </SelectPrimitive.Icon>
+          <div className="flex items-center">
+            {rightSection && (
+              <div
+                className="flex items-center"
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+              >
+                {rightSection}
+              </div>
+            )}
+            <SelectPrimitive.Icon asChild>
+              <ChevronDown className="h-4 w-4 opacity-50 ml-2 flex-shrink-0" />
+            </SelectPrimitive.Icon>
+          </div>
         </SelectPrimitive.Trigger>
-        {rightSection}
       </div>
 
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content
           className={cn(
-            "relative z-[2000] max-h-96 min-w-[8rem] overflow-hidden rounded-08 border border-border-01 bg-background-neutral-00 shadow-lg",
+            "relative z-[2000] max-h-72 min-w-[8rem] overflow-hidden rounded-12 border border-border-01 bg-background-neutral-00 shadow-02",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
@@ -132,6 +160,7 @@ function InputSelectInner(
           )}
           position="popper"
           sideOffset={4}
+          style={{ width: "var(--radix-select-trigger-width)" }}
         >
           <SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1">
             <ChevronDown className="h-4 w-4 rotate-180" />
@@ -144,20 +173,21 @@ function InputSelectInner(
                 value={option.value}
                 disabled={option.disabled}
                 className={cn(
-                  "relative flex w-full cursor-default select-none items-center rounded-04 py-spacing-interline-mini px-spacing-inline-mini pl-8",
+                  "relative flex flex-col w-full cursor-default select-none rounded-08 p-1.5 group",
                   "text-text-04 outline-none",
-                  "focus:bg-background-neutral-02 hover:bg-background-neutral-02",
+                  "hover:bg-background-tint-02 data-[highlighted]:bg-background-tint-02",
+                  "data-[state=checked]:bg-action-link-01 data-[state=checked]:text-action-link-05",
                   "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                 )}
               >
-                <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-                  <SelectPrimitive.ItemIndicator>
-                    <Check className="h-4 w-4" />
-                  </SelectPrimitive.ItemIndicator>
-                </span>
-                <SelectPrimitive.ItemText>
+                <SelectPrimitive.ItemText className="text-text-04 font-main-ui-action">
                   {option.label}
                 </SelectPrimitive.ItemText>
+                {option.description && (
+                  <span className="text-sm text-text-03 font-secondary-body group-data-[state=checked]:text-text-00 mt-0.5">
+                    {option.description}
+                  </span>
+                )}
               </SelectPrimitive.Item>
             ))}
           </SelectPrimitive.Viewport>

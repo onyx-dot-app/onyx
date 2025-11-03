@@ -29,8 +29,11 @@ export async function loginAs(
   console.log(`[loginAs] Navigating to /auth/login as ${userType}`);
   await page.goto("http://localhost:3000/auth/login");
 
-  await page.fill("#email", email);
-  await page.fill("#password", password);
+  const emailInput = page.getByTestId("email");
+  const passwordInput = page.getByTestId("password");
+  await emailInput.waitFor({ state: "visible", timeout: 30000 });
+  await emailInput.fill(email);
+  await passwordInput.fill(password);
 
   // Click the login button
   await page.click('button[type="submit"]');
@@ -53,8 +56,11 @@ export async function loginAs(
     console.log(`[loginAs] Navigating to /auth/signup as fallback`);
     await page.goto("http://localhost:3000/auth/signup");
 
-    await page.fill("#email", email);
-    await page.fill("#password", password);
+    const signupEmailInput = page.getByTestId("email");
+    const signupPasswordInput = page.getByTestId("password");
+    await signupEmailInput.waitFor({ state: "visible", timeout: 30000 });
+    await signupEmailInput.fill(email);
+    await signupPasswordInput.fill(password);
 
     // Click the login button
     await page.click('button[type="submit"]');
@@ -122,8 +128,11 @@ export async function loginAsRandomUser(page: Page) {
 
   await page.goto("http://localhost:3000/auth/signup");
 
-  await page.fill("#email", email);
-  await page.fill("#password", password);
+  const emailInput = page.getByTestId("email");
+  const passwordInput = page.getByTestId("password");
+  await emailInput.waitFor({ state: "visible", timeout: 30000 });
+  await emailInput.fill(email);
+  await passwordInput.fill(password);
 
   // Click the signup button
   await page.click('button[type="submit"]');
