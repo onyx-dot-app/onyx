@@ -138,11 +138,11 @@ export function UserSettings({ onClose }: UserSettingsProps) {
       visibleSections.push({ id: "password", label: "Password" });
     }
 
-    // Always show Connectors tab, will be disabled if loading or no connectors
-    visibleSections.push({ id: "connectors", label: "Connectors" });
-
     // Always show tokens tab
     visibleSections.push({ id: "tokens", label: "Access Tokens" });
+
+    // Always show Connectors tab, will be disabled if loading or no connectors
+    visibleSections.push({ id: "connectors", label: "Connectors" });
 
     return visibleSections;
   }, [showPasswordSection]);
