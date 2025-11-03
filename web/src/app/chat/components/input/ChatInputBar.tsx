@@ -41,6 +41,39 @@ import {
 
 const MAX_INPUT_HEIGHT = 200;
 
+// Draft storage helpers - SSR-safe sessionStorage operations
+function getDraft(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return sessionStorage.getItem(key);
+  } catch (e) {
+    console.warn("Failed to load draft from sessionStorage:", e);
+    return null;
+  }
+}
+
+function saveDraft(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (value.trim()) {
+      sessionStorage.setItem(key, value);
+    } else {
+      sessionStorage.removeItem(key);
+    }
+  } catch (e) {
+    console.warn("Failed to save draft to sessionStorage:", e);
+  }
+}
+
+function removeDraft(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(key);
+  } catch (e) {
+    console.warn("Failed to remove draft from sessionStorage:", e);
+  }
+}
+
 export interface SourceChipProps {
   icon?: React.ReactNode;
   title: string;
@@ -88,6 +121,7 @@ export interface ChatInputBarProps {
   onSubmit: (message: string) => void;
   llmManager: LlmManager;
   chatState: ChatState;
+  chatSessionId: string | null;
   currentSessionFileTokenCount: number;
   availableContextTokens: number;
 
@@ -102,6 +136,7 @@ export interface ChatInputBarProps {
   deepResearchEnabled: boolean;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
+  resetInputBar: () => void;
   disabled: boolean;
 }
 
@@ -115,6 +150,7 @@ function ChatInputBarInner({
   stopGenerating,
   onSubmit,
   chatState,
+  chatSessionId,
   currentSessionFileTokenCount,
   availableContextTokens,
   // assistants
@@ -126,44 +162,31 @@ function ChatInputBarInner({
   deepResearchEnabled,
   toggleDeepResearch,
   setPresentingDocument,
+  resetInputBar,
   disabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
-
-  // Localize message state to prevent parent re-renders
-  const [localMessage, setLocalMessage] = useState(initialMessage);
-
-  // Callback ref to set initial textarea height synchronously on mount
-  const handleTextAreaRef = useCallback(
-    (element: HTMLTextAreaElement | null) => {
-      // Assign to parent ref (now properly typed as MutableRefObject)
-      textAreaRef.current = element;
-      if (element) {
-        element.style.height = "0px";
-        element.style.height = `${Math.min(
-          element.scrollHeight,
-          MAX_INPUT_HEIGHT
-        )}px`;
-      }
-    },
-    [textAreaRef]
-  );
-
-  // Clear input when leaving "input" state (handles input→loading→streaming flow)
-  const previousChatStateRef = React.useRef(chatState);
-  useEffect(() => {
-    if (previousChatStateRef.current === "input" && chatState !== "input") {
-      setLocalMessage("");
-      // Reset textarea height
-      if (textAreaRef.current) {
-        textAreaRef.current.style.height = "0px";
-      }
-    }
-    previousChatStateRef.current = chatState;
-  }, [chatState, textAreaRef]); // textAreaRef is stable, but included for clarity
-
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
+
+  // Draft persistence: compute key based on chatSessionId
+  const draftKey = useMemo(
+    () => `chat-draft-${chatSessionId || "new"}`,
+    [chatSessionId]
+  );
+
+  // Local message state: initialize from URL param or saved draft
+  const [localMessage, setLocalMessage] = useState(() => {
+    if (initialMessage) {
+      return initialMessage;
+    }
+    return getDraft(draftKey) || "";
+  });
+
+  // Refs for tracking previous values across renders
+  const isInitialMount = React.useRef(true);
+  const prevChatState = React.useRef(chatState);
+  const prevDraftKey = React.useRef<string>("");
 
   const currentIndexingFiles = useMemo(() => {
     return currentMessageFiles.filter(
@@ -264,24 +287,78 @@ function ChatInputBarInner({
     [hidePrompts]
   );
 
+  // Helper to resize textarea based on content
+  const resizeTextarea = useCallback((textarea: HTMLTextAreaElement) => {
+    textarea.style.height = "0px";
+    textarea.style.height = `${Math.min(
+      textarea.scrollHeight,
+      MAX_INPUT_HEIGHT
+    )}px`;
+  }, []);
+
   const handleInputChange = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       const text = event.target.value;
       setLocalMessage(text);
       handlePromptInput(text);
 
-      // Resize imperatively (no effect needed)
-      const textarea = textAreaRef.current;
-      if (textarea) {
-        textarea.style.height = "0px";
-        textarea.style.height = `${Math.min(
-          textarea.scrollHeight,
-          MAX_INPUT_HEIGHT
-        )}px`;
+      saveDraft(draftKey, text);
+
+      if (textAreaRef.current) {
+        resizeTextarea(textAreaRef.current);
       }
     },
-    [handlePromptInput, textAreaRef]
+    [handlePromptInput, textAreaRef, draftKey, resizeTextarea]
   );
+
+  // Callback ref to set initial textarea height on mount
+  const handleTextAreaRef = useCallback(
+    (element: HTMLTextAreaElement | null) => {
+      textAreaRef.current = element;
+      if (element) {
+        resizeTextarea(element);
+      }
+    },
+    [textAreaRef, resizeTextarea]
+  );
+
+  // Wrap onSubmit to clear draft immediately before submission
+  const handleSubmit = useCallback(
+    (message: string) => {
+      // Clear draft synchronously before onSubmit to prevent race condition
+      // (chatSessionId may update during submission, changing draftKey)
+      removeDraft(draftKey);
+      onSubmit(message);
+    },
+    [onSubmit, draftKey]
+  );
+
+  // Load draft when switching between chats
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      prevDraftKey.current = draftKey;
+      return;
+    }
+
+    const loadedDraft = getDraft(draftKey) || "";
+    setLocalMessage(loadedDraft);
+    prevDraftKey.current = draftKey;
+
+    // Resize textarea to match loaded content
+    if (textAreaRef.current) {
+      resizeTextarea(textAreaRef.current);
+    }
+  }, [draftKey, textAreaRef, resizeTextarea]);
+
+  // Effect: Clear input when transitioning away from input state
+  useEffect(() => {
+    if (prevChatState.current === "input" && chatState !== "input") {
+      setLocalMessage("");
+      resetInputBar(); // Handles both parent padding and textarea height
+    }
+    prevChatState.current = chatState;
+  }, [chatState, resetInputBar]);
 
   const startFilterSlash = useMemo(() => {
     if (localMessage !== undefined) {
@@ -490,7 +567,7 @@ function ChatInputBarInner({
             ) {
               event.preventDefault();
               if (localMessage) {
-                onSubmit(localMessage);
+                handleSubmit(localMessage);
               }
             }
           }}
@@ -646,7 +723,7 @@ function ChatInputBarInner({
                 if (chatState == "streaming") {
                   stopGenerating();
                 } else if (localMessage) {
-                  onSubmit(localMessage);
+                  handleSubmit(localMessage);
                 }
               }}
             />
