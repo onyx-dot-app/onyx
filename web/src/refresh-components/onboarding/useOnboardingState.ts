@@ -32,6 +32,7 @@ export function useOnboardingState(): {
   );
 
   useEffect(() => {
+    refreshLlmProviders();
     const fetchLlmDescriptors = async () => {
       try {
         const response = await fetch("/api/admin/llm/built-in/options");
@@ -52,6 +53,7 @@ export function useOnboardingState(): {
   // If there are any configured LLM providers already present, skip to the final step
   useEffect(() => {
     if (Array.isArray(llmProviders) && llmProviders.length > 0) {
+      console.log("llmProviders", llmProviders);
       dispatch({
         type: OnboardingActionType.UPDATE_DATA,
         payload: { llmProviders: llmProviders.map((p) => p.provider) },
@@ -67,6 +69,17 @@ export function useOnboardingState(): {
         type: OnboardingActionType.UPDATE_DATA,
         payload: { userName },
       });
+      if (llmProviders.length > 0) {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: true,
+        });
+      } else {
+        dispatch({
+          type: OnboardingActionType.SET_BUTTON_ACTIVE,
+          isButtonActive: false,
+        });
+      }
       dispatch({
         type: OnboardingActionType.GO_TO_STEP,
         step: OnboardingStep.LlmSetup,

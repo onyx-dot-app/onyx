@@ -6,6 +6,8 @@ import { OnboardingState, OnboardingActions, OnboardingStep } from "../types";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import SvgCheckCircle from "@/icons/check-circle";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgEdit from "@/icons/edit";
 
 type NameStepProps = {
   state: OnboardingState;
@@ -21,8 +23,7 @@ const NameStepInner = ({
 
   const isActive = onboardingState.currentStep === OnboardingStep.Name;
   const containerClasses = cn(
-    "flex items-center justify-between w-full max-w-[800px] p-3 bg-background-tint-00 rounded-16 border border-border-01",
-    isActive ? "opacity-100" : "opacity-50"
+    "flex items-center justify-between w-full max-w-[800px] p-3 bg-background-tint-00 rounded-16 border border-border-01"
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -62,16 +63,17 @@ const NameStepInner = ({
       />
     </div>
   ) : (
-    <button
-      type="button"
-      className={containerClasses}
+    <div
+      className={cn(containerClasses, "group")}
       onClick={() => {
         setButtonActive(true);
         goToStep(OnboardingStep.Name);
       }}
       aria-label="Edit display name"
+      role="button"
+      tabIndex={0}
     >
-      <div className="flex items-center gap-1">
+      <div className={cn("flex items-center gap-1", !isActive && "opacity-50")}>
         <Avatar
           className={cn(
             "flex items-center justify-center bg-background-neutral-inverted-00",
@@ -86,10 +88,21 @@ const NameStepInner = ({
           {userName}
         </Text>
       </div>
-      <div className="p-1">
-        <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+      <div className="p-1 flex items-center gap-1">
+        <IconButton
+          internal
+          icon={SvgEdit}
+          tooltip="Edit"
+          className="opacity-0 group-hover:opacity-100 transition-opacity"
+        />
+        <SvgCheckCircle
+          className={cn(
+            "w-4 h-4 stroke-status-success-05",
+            !isActive && "opacity-50"
+          )}
+        />
       </div>
-    </button>
+    </div>
   );
 };
 

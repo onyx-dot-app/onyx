@@ -353,6 +353,7 @@ function ChatInputBarInner({
         "max-w-full w-[50rem]",
         disabled && "opacity-50 cursor-not-allowed pointer-events-none"
       )}
+      aria-disabled={disabled}
     >
       {showPrompts && user?.preferences?.shortcut_enabled && (
         <div className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full">
@@ -431,7 +432,7 @@ function ChatInputBarInner({
             "pb-2",
             "pt-3"
           )}
-          autoFocus
+          autoFocus={!disabled}
           style={{ scrollbarWidth: "thin" }}
           role="textarea"
           aria-multiline
@@ -458,6 +459,7 @@ function ChatInputBarInner({
             }
           }}
           suppressContentEditableWarning={true}
+          disabled={disabled}
         />
 
         {(selectedDocuments.length > 0 ||
@@ -537,6 +539,7 @@ function ChatInputBarInner({
                   tooltip="Attach Files"
                   tertiary
                   transient={open}
+                  disabled={disabled}
                 />
               )}
               selectedFileIds={currentMessageFiles.map((f) => f.id)}
@@ -546,6 +549,7 @@ function ChatInputBarInner({
                 selectedAssistant={selectedAssistant}
                 filterManager={filterManager}
                 availableSources={memoizedAvailableSources}
+                disabled={disabled}
               />
             )}
             {showDeepResearch && (
@@ -555,6 +559,8 @@ function ChatInputBarInner({
                 engaged={deepResearchEnabled}
                 action
                 folded
+                disabled={disabled}
+                className={disabled ? "bg-transparent" : ""}
               >
                 Deep Research
               </SelectButton>
@@ -579,6 +585,8 @@ function ChatInputBarInner({
                     }}
                     engaged
                     action
+                    disabled={disabled}
+                    className={disabled ? "bg-transparent" : ""}
                   >
                     {tool.display_name}
                   </SelectButton>
@@ -591,6 +599,7 @@ function ChatInputBarInner({
               <LLMPopover
                 llmManager={llmManager}
                 requiresImageGeneration={false}
+                disabled={disabled}
               />
             </div>
             <IconButton

@@ -39,22 +39,11 @@ const FinalStepItemInner = ({
     </>
   );
 
-  if (isExternalLink) {
-    return (
-      <a
-        href={buttonHref}
-        className="flex justify-between h-full w-full p-1 rounded-16 border border-border-01 bg-background-tint-01 hover:bg-background-tint-02 transition-colors group"
-        {...linkProps}
-      >
-        {content}
-      </a>
-    );
-  }
-
   return (
     <Link
       href={buttonHref}
       className="flex justify-between h-full w-full p-1 rounded-16 border border-border-01 bg-background-tint-01 hover:bg-background-tint-02 transition-colors group"
+      {...linkProps}
     >
       {content}
     </Link>

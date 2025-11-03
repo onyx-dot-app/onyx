@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import React, { memo, useEffect } from "react";
 import SvgCpu from "@/icons/cpu";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
@@ -90,7 +90,6 @@ const LLMStepInner = ({
   disabled,
 }: LLMStepProps) => {
   const isLoading = !llmDescriptors || llmDescriptors.length === 0;
-
   if (
     onboardingState.currentStep === OnboardingStep.LlmSetup ||
     onboardingState.currentStep === OnboardingStep.Name
