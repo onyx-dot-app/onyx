@@ -5,7 +5,6 @@ import useSWR from "swr";
 import SvgTrash from "@/icons/trash";
 import SvgCopy from "@/icons/copy";
 import SvgCheck from "@/icons/check";
-import SvgPlusCircle from "@/icons/plus-circle";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -44,7 +43,6 @@ export function PATManagement() {
   const [newlyCreatedToken, setNewlyCreatedToken] =
     useState<CreatedTokenState | null>(null);
   const [copiedTokenId, setCopiedTokenId] = useState<number | null>(null);
-  const [showCreateForm, setShowCreateForm] = useState(false);
   const [tokenToDelete, setTokenToDelete] = useState<{
     id: number;
     name: string;
@@ -56,6 +54,7 @@ export function PATManagement() {
     data: pats = [],
     mutate,
     error,
+    isLoading,
   } = useSWR<PAT[]>("/api/user/tokens", errorHandlingFetcher, {
     revalidateOnFocus: true,
     dedupingInterval: 2000,
@@ -68,13 +67,6 @@ export function PATManagement() {
       setPopup({ message: "Failed to load tokens", type: "error" });
     }
   }, [error, setPopup]);
-
-  // Show create form by default if no tokens exist
-  useEffect(() => {
-    if (pats.length === 0 && !newlyCreatedToken && !showCreateForm) {
-      setShowCreateForm(true);
-    }
-  }, [pats.length, newlyCreatedToken, showCreateForm]);
 
   const createPAT = async () => {
     if (!newTokenName.trim()) {
@@ -170,91 +162,54 @@ export function PATManagement() {
       )}
       <div className="space-y-6">
         {/* Create New Token Form */}
-        {showCreateForm && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Text headingH3>
-                {pats.length === 0
-                  ? "Create Your First Token"
-                  : "Create New Token"}
-              </Text>
-              {pats.length > 0 && (
-                <Button
-                  onClick={() => setShowCreateForm(false)}
-                  internal
-                  aria-label="Cancel token creation"
-                >
-                  Cancel
-                </Button>
-              )}
-            </div>
-            <div className="space-y-3">
-              <InputTypeIn
-                placeholder="Token name (e.g., 'MCP Client')"
-                value={newTokenName}
-                onChange={(e) => setNewTokenName(e.target.value)}
-                disabled={isCreating}
-                aria-label="Token name"
-              />
-              <div className="space-y-1">
-                {/* NOTE: Use Select dropdown (not free text input) to guide users to common values.
+        <div className="space-y-4">
+          <Text headingH3Muted>Create New Token</Text>
+          <div className="space-y-3">
+            <InputTypeIn
+              placeholder="Token name (e.g., 'MCP Client')"
+              value={newTokenName}
+              onChange={(e) => setNewTokenName(e.target.value)}
+              disabled={isCreating}
+              aria-label="Token name"
+            />
+            <div className="space-y-1">
+              {/* NOTE: Use Select dropdown (not free text input) to guide users to common values.
                   Backend accepts any positive integer, but we provide curated options for UX. */}
-                <Select
-                  value={expirationDays}
-                  onValueChange={setExpirationDays}
-                  disabled={isCreating}
-                >
-                  <SelectTrigger aria-label="Select token expiration">
-                    <SelectValue placeholder="Select expiration" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="7">7 days</SelectItem>
-                    <SelectItem value="30">30 days</SelectItem>
-                    <SelectItem value="365">365 days</SelectItem>
-                    <SelectItem value="null">No expiration</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Text text02 secondaryBody>
-                  Expires at end of day (23:59 UTC).
-                </Text>
-              </div>
-              <Button onClick={createPAT} disabled={isCreating} primary>
-                {isCreating ? "Creating..." : "Create Token"}
-              </Button>
+              <Select
+                value={expirationDays}
+                onValueChange={setExpirationDays}
+                disabled={isCreating}
+              >
+                <SelectTrigger aria-label="Select token expiration">
+                  <SelectValue placeholder="Select expiration" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">7 days</SelectItem>
+                  <SelectItem value="30">30 days</SelectItem>
+                  <SelectItem value="365">365 days</SelectItem>
+                  <SelectItem value="null">No expiration</SelectItem>
+                </SelectContent>
+              </Select>
+              <Text text02 secondaryBody>
+                Expires at end of day (23:59 UTC).
+              </Text>
             </div>
+            <Button onClick={createPAT} disabled={isCreating} primary>
+              {isCreating ? "Creating..." : "Create Token"}
+            </Button>
           </div>
-        )}
+        </div>
 
         {/* Token List */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Text headingH3>Your Tokens</Text>
-            {pats.length > 0 && !showCreateForm && (
-              <Button
-                onClick={() => setShowCreateForm(true)}
-                primary
-                leftIcon={SvgPlusCircle}
-                aria-label="Create new token"
-              >
-                New Token
-              </Button>
-            )}
-          </div>
+          <Text headingH3Muted>Your Tokens</Text>
           {pats.length === 0 ? (
             <div className="text-center py-8 px-4 border-2 border-dashed border-border-01 rounded-lg">
-              <Text text03 secondaryBody className="mb-4">
-                No tokens created yet. Create your first token to get started.
+              <Text text03 secondaryBody>
+                {isLoading
+                  ? "Loading tokens..."
+                  : "No tokens created yet. Create your first token above."}
               </Text>
-              {!showCreateForm && (
-                <Button
-                  onClick={() => setShowCreateForm(true)}
-                  primary
-                  leftIcon={SvgPlusCircle}
-                  aria-label="Create your first token"
-                >
-                  Create Your First Token
-                </Button>
-              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -272,12 +227,12 @@ export function PATManagement() {
                     }`}
                   >
                     <div className="flex-1 min-w-0">
-                      <Text text01 mainUiAction className="truncate">
+                      <Text text05 mainUiAction className="truncate">
                         {pat.name}
                       </Text>
                       {isNewlyCreated ? (
                         <>
-                          <Text text02 secondaryBody className="mb-2">
+                          <Text text05 secondaryBody className="mb-2">
                             Copy this token now. You won&apos;t be able to see
                             it again.
                           </Text>
