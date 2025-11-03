@@ -313,10 +313,10 @@ export default function AgentsPage() {
                         isCurrentUser && nextCreator && !nextIsCurrentUser;
 
                       // Determine icon: Check if selected, User icon if current user, otherwise no icon
-                      const icon = isSelected
-                        ? SvgCheck
-                        : isCurrentUser
-                          ? SvgUser
+                      const icon = isCurrentUser
+                        ? SvgUser
+                        : isSelected
+                          ? SvgCheck
                           : () => null;
 
                       const lineItem = (
@@ -386,11 +386,7 @@ export default function AgentsPage() {
                         isSystemTool && nextAction && !nextIsSystemTool;
 
                       // Determine icon: Check if selected, system icon if available, otherwise Actions icon
-                      const icon = isSelected
-                        ? SvgCheck
-                        : systemIcon
-                          ? systemIcon
-                          : SvgActions;
+                      const icon = systemIcon ? systemIcon : SvgActions;
 
                       const lineItem = (
                         <LineItem
