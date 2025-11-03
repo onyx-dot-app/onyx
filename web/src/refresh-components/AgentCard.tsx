@@ -22,6 +22,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
 import { useUser } from "@/components/user/UserProvider";
 import SvgBarChart from "@/icons/bar-chart";
+import SvgPinned from "@/icons/pinned";
 
 interface IconLabelProps {
   icon: React.FunctionComponent<SvgProps>;
@@ -54,9 +55,14 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const { user } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
+  const [hovered, setHovered] = React.useState(false);
 
   return (
-    <Card className="group/AgentCard">
+    <Card
+      className="group/AgentCard"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <button
         className="flex flex-col w-full text-left"
         onClick={() => route({ agentId: agent.id })}
@@ -96,11 +102,11 @@ export default function AgentCard({ agent }: AgentCardProps) {
                 />
               )}
               <IconButton
-                icon={SvgPin}
+                icon={pinned ? SvgPinned : SvgPin}
                 tertiary
                 onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
                 tooltip={pinned ? "Unpin Agent" : "Pin Agent"}
-                transient={pinned}
+                transient={hovered && pinned}
                 className={cn(!pinned && "hidden group-hover/AgentCard:flex")}
               />
             </div>
