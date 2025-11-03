@@ -64,7 +64,6 @@ from onyx.auth.email_utils import send_user_verification_email
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.jwt import verify_jwt_token
-from onyx.auth.pat import extract_tenant_from_pat_header
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
@@ -1086,27 +1085,7 @@ async def optional_user(
     if user is None:
         hashed_pat = get_hashed_pat_from_request(request)
         if hashed_pat:
-            if MULTI_TENANT:
-                # CRITICAL: Extract tenant from PAT itself (not from header like API keys do)
-                tenant_id = extract_tenant_from_pat_header(request)
-                if not tenant_id:
-                    # SECURITY: Reject malformed PATs to prevent tenant bypass
-                    raise HTTPException(
-                        status_code=401,
-                        detail="Invalid PAT: missing tenant information",
-                    )
-
-                CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-                try:
-                    user = await fetch_user_for_pat(hashed_pat, async_db_session)
-                    if user:
-                        return user
-                finally:
-                    pass  # Leave tenant set for the rest of the request
-            else:
-                user = await fetch_user_for_pat(hashed_pat, async_db_session)
-                if user:
-                    return user
+            user = await fetch_user_for_pat(hashed_pat, async_db_session)
 
     # check if an API key is present
     if user is None:
