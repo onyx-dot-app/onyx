@@ -18,8 +18,7 @@ import {
   PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { useAppRouter } from "@/hooks/appNavigation";
 import {
   Project,
   removeChatSessionFromProject,
