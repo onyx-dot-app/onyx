@@ -271,7 +271,6 @@ export function LLMProviderUpdateForm({
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting }) => {
-        console.log("values", values);
         setSubmitting(true);
 
         // build final payload
@@ -324,8 +323,6 @@ export function LLMProviderUpdateForm({
           ),
         };
 
-        console.log("finalValues", finalValues);
-
         // test the configuration
         if (!isEqual(finalValues, initialValues)) {
           setIsTesting(true);
@@ -348,8 +345,6 @@ export function LLMProviderUpdateForm({
             return;
           }
         }
-
-        console.log("finalValues", finalValues);
 
         const response = await fetch(
           `${LLM_PROVIDERS_ADMIN_URL}${

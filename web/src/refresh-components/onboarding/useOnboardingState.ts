@@ -53,7 +53,6 @@ export function useOnboardingState(): {
   // If there are any configured LLM providers already present, skip to the final step
   useEffect(() => {
     if (Array.isArray(llmProviders) && llmProviders.length > 0) {
-      console.log("llmProviders", llmProviders);
       dispatch({
         type: OnboardingActionType.UPDATE_DATA,
         payload: { llmProviders: llmProviders.map((p) => p.provider) },

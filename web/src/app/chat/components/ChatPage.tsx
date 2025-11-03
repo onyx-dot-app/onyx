@@ -78,7 +78,6 @@ import {
 import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSessionList";
 import { cn } from "@/lib/utils";
 import { Suggestions } from "@/sections/Suggestions";
-import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
 import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
@@ -217,8 +216,9 @@ export function ChatPage({
     llmDescriptors,
   } = useOnboardingState();
 
-  // Show onboarding if no LLM providers are configured
-  //No need to automaticallychange when llmProviders changes
+  // On first render, open onboarding if there are no configured LLM providers.
+  // Intentionally exclude llmProviders from deps to avoid changing the state
+  // when data refreshes.
   useEffect(() => {
     setShowOnboarding(llmProviders.length === 0);
   }, []);

@@ -325,7 +325,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     name="BEDROCK_AUTH_METHOD",
                     display_name="Authentication",
                     description="Choose how Onyx should authenticate with Bedrock.",
-                    is_required=True,
+                    is_required=False,
                     key_type=CustomConfigKeyType.SELECT,
                     default_value="access_key",
                     options=[
@@ -337,12 +337,12 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                         CustomConfigOption(
                             label="Access Key",
                             value="access_key",
-                            description="For non-AWS environements",
+                            description="For non-AWS environments",
                         ),
                         CustomConfigOption(
                             label="Long-term API Key",
                             value="long_term_api_key",
-                            description="For non-AWS environements",
+                            description="For non-AWS environments",
                         ),
                     ],
                 ),

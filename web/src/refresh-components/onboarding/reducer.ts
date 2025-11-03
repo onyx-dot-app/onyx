@@ -23,8 +23,6 @@ export function onboardingReducer(
     case OnboardingActionType.NEXT_STEP: {
       const nextStep = STEP_NAVIGATION[state.currentStep].next;
       if (!nextStep) return state;
-      console.log("currentStep", state.currentStep);
-      console.log("nextStep", nextStep);
       return {
         ...state,
         currentStep: nextStep,
@@ -48,7 +46,6 @@ export function onboardingReducer(
     }
 
     case OnboardingActionType.GO_TO_STEP:
-      console.log("goToStep", action.step, state.currentStep);
       return {
         ...state,
         currentStep: action.step,

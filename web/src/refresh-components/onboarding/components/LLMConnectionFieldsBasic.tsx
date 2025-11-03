@@ -14,8 +14,7 @@ import {
 } from "../constants";
 import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Info } from "lucide-react";
+import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/texts/Text";
 
 type Props = {
@@ -317,7 +316,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                       "") === "iam" && (
                       <div className="flex gap-1 p-2 border border-border-01 rounded-12 bg-background-tint-01">
                         <div className="p-1">
-                          <Info className="h-4 w-4 stroke-text-03" />
+                          <SvgAlertCircle className="h-4 w-4 stroke-text-03" />
                         </div>
                         <Text text04 mainUiBody>
                           Onyx will use the IAM role attached to the environment

@@ -72,11 +72,9 @@ export function ChatProvider({
   }
 
   async function refreshLlmProviders() {
-    console.log("refreshing llm providers");
     const response = await fetch("/api/admin/llm/provider");
     if (!response.ok) throw new Error("Failed to fetch llm providers");
     const llmProviders = await response.json();
-    console.log("llm providers", llmProviders);
     setLlmProviders(llmProviders);
   }
 
