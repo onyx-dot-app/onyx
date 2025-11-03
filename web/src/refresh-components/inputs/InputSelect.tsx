@@ -85,19 +85,25 @@ function InputSelectInner(
   ref: React.ForwardedRef<HTMLButtonElement>
 ) {
   const { ref: boundingBoxRef, inside: hovered } = useBoundingBox();
-  const [localActive, setLocalActive] = useState(active);
+  const [isFocused, setIsFocused] = useState(false);
 
   const state = internal ? "internal" : disabled ? "disabled" : "defaulted";
+  const visualActive = active ?? isFocused;
 
   useEffect(() => {
+    const previousCursor = document.body.style.cursor;
+
     // if disabled, set cursor to "not-allowed"
-    if (disabled && hovered) {
-      document.body.style.cursor = "not-allowed";
-    } else if (!disabled && hovered) {
-      document.body.style.cursor = "pointer";
+    if (hovered) {
+      document.body.style.cursor = disabled ? "not-allowed" : "pointer";
     } else {
-      document.body.style.cursor = "default";
+      document.body.style.cursor = ""; // revert to stylesheet default when not hovered
     }
+
+    return () => {
+      // restore previous cursor on unmount or dep change
+      document.body.style.cursor = previousCursor;
+    };
   }, [hovered, disabled]);
 
   return (
@@ -112,7 +118,7 @@ function InputSelectInner(
         ref={boundingBoxRef}
         className={cn(
           "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
-          triggerClasses(localActive, hovered, isError)[state],
+          triggerClasses(visualActive, hovered, isError)[state],
           className
         )}
       >
@@ -122,8 +128,8 @@ function InputSelectInner(
             "flex-1 h-[1.5rem] bg-transparent p-0.5 focus:outline-none flex items-center justify-between",
             valueClasses()[state]
           )}
-          onFocus={() => setLocalActive(true)}
-          onBlur={() => setLocalActive(false)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           {...props}
         >
           <SelectPrimitive.Value placeholder={placeholder} />
