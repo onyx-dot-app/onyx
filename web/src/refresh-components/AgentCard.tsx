@@ -105,7 +105,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                 icon={pinned ? SvgPinned : SvgPin}
                 tertiary
                 onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
-                tooltip={pinned ? "Unpin Agent" : "Pin Agent"}
+                tooltip={pinned ? "Unpin from Sidebar" : "Pin to Sidebar"}
                 transient={hovered && pinned}
                 className={cn(!pinned && "hidden group-hover/AgentCard:flex")}
               />
