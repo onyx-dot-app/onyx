@@ -203,7 +203,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
       expect(assistantId).not.toBeNull();
 
-
       // Navigate directly to the edit page
       await page.goto(`http://localhost:3000/assistants/edit/${assistantId}`);
       await page.waitForURL(`**/assistants/edit/${assistantId}`);
