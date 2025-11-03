@@ -140,4 +140,13 @@ def test_task_prompt_handler_with_web_search() -> None:
     assert result[0].get("role") == "assistant"
     assert result[1].get("role") == "tool"
     assert result[2].get("role") == "user"
-    assert OPEN_URL_REMINDER in result[2].get("content")[0].get("text")
+    # Type narrow to UserMessage after checking role
+    last_msg = result[2]
+    if last_msg.get("role") == "user":
+        user_msg: UserMessage = last_msg  # type: ignore[assignment]
+        assert isinstance(user_msg["content"], list)
+        assert len(user_msg["content"]) > 0
+        first_content = user_msg["content"][0]
+        # Type narrow to InputTextContent
+        text_content: InputTextContent = first_content  # type: ignore[assignment]
+        assert OPEN_URL_REMINDER in text_content["text"]
