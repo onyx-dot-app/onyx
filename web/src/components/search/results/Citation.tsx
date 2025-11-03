@@ -95,15 +95,13 @@ export function Citation({
           </span>
         </TooltipTrigger>
         <TooltipContent
-          className="!p-2 border-border-01 border rounded-12 bg-background-neutral-00 shadow-02"
-          width="mb-2 max-w-lg"
+          className="bg-transparent p-0 shadow-none"
           side="bottom"
           align="start"
         >
           {document_info?.document ? (
             <CompactDocumentCard
               updatePresentingDocument={document_info.updatePresentingDocument}
-              url={document_info.url}
               document={document_info.document}
             />
           ) : (
