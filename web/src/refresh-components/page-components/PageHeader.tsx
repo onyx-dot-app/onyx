@@ -70,7 +70,7 @@ export default function PageHeader({
           showShadow && "opacity-100"
         )}
         style={{
-          background: "linear-gradient(to bottom, var(--mask-03), transparent)",
+          background: "linear-gradient(to bottom, var(--mask-02), transparent)",
           // If you want to implement a radial scroll-shadow, you can apply the bottom line.
           // I tried playing around with this here, but wasn't able to find a configuration that just *hit the spot*...
           // - @raunakab
