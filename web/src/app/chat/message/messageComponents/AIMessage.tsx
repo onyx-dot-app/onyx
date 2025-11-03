@@ -239,14 +239,14 @@ export default function AIMessage({
 
       // If we see a new index, inject SECTION_END for previous tool indices
       if (isNewIndex && seenIndicesRef.current.size > 0) {
-        for (const prevInd of seenIndicesRef.current) {
+        Array.from(seenIndicesRef.current).forEach((prevInd) => {
           if (
             toolIndicesRef.current.has(prevInd) &&
             !indicesWithSectionEndRef.current.has(prevInd)
           ) {
             injectSectionEnd(prevInd);
           }
-        }
+        });
       }
 
       // Track this index
@@ -311,11 +311,11 @@ export default function AIMessage({
       if (packet.obj.type === PacketType.STOP && !stopPacketSeenRef.current) {
         setStopPacketSeen(true);
         // Inject SECTION_END for all tool indices that don't have one
-        for (const toolInd of toolIndicesRef.current) {
+        Array.from(toolIndicesRef.current).forEach((toolInd) => {
           if (!indicesWithSectionEndRef.current.has(toolInd)) {
             injectSectionEnd(toolInd);
           }
-        }
+        });
       }
 
       // handles case where we get a Message packet from Claude, and then tool
