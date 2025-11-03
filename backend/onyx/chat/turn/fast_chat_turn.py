@@ -22,10 +22,10 @@ from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.memories import get_memories
 from onyx.chat.models import PromptConfig
+from onyx.chat.packet_sniffing import has_had_message_start
 from onyx.chat.prompt_builder.answer_prompt_builder import (
     default_build_system_message_v2,
 )
-from onyx.chat.packet_sniffing import has_had_message_start
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
