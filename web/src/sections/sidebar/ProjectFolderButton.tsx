@@ -132,7 +132,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
           <SidebarTab
             leftIcon={() => (
               <IconButton
-                onHover={(isHovering) => setIsHoveringIcon(isHovering)}
+                onHover={setIsHoveringIcon}
                 icon={getFolderIcon()}
                 internal
                 onClick={noProp(handleIconClick)}
