@@ -288,6 +288,8 @@ const LLMConnectionModal = () => {
         );
         if (!response.ok) {
           const errorMsg = (await response.json()).detail;
+          console.error("Failed to create LLM provider", errorMsg);
+          setIsSubmitting(false);
           return;
         }
         // If this is the first LLM provider, set it as the default provider

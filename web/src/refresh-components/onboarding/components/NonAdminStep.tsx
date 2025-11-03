@@ -40,7 +40,7 @@ export default function NonAdminStep() {
           className="w-[26%] min-w-40"
         />
         <Button
-          disabled={name == ""}
+          disabled={name === ""}
           onClick={() => {
             updateUserPersonalization({ name })
               .then(() => {
