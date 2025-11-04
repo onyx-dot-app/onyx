@@ -505,6 +505,365 @@ def test_fast_chat_turn_tool_call_cancellation(
     assert_cancellation_packets(packets, expect_cancelled_message=True)
 
 
+def test_fast_chat_turn_context_handlers(
+    chat_turn_dependencies: ChatTurnDependencies,
+    sample_messages: list[AgentSDKMessage],
+    chat_session_id: UUID,
+    message_id: int,
+    research_type: ResearchType,
+    fake_dummy_tool: Any,
+) -> None:
+    """Test that context handlers work correctly in tandem.
+
+    This test verifies that messages are properly constructed with context handlers:
+    - First LLM call: [system, user message, custom instructions]
+    - Second LLM call (after tool call): [system, user message, tool call,
+      tool call response, custom instructions, user message with reminder]
+    """
+    from typing import Any
+
+    from agents import Tool as AgentSDKTool
+
+    from onyx.chat.models import PromptConfig
+    from onyx.chat.turn.fast_chat_turn import fast_chat_turn
+
+    # Create a model that tracks input history and returns tool call on first call
+    class FakeModelWithInputTracking(FakeToolCallModel):
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(**kwargs)
+            # input_history to track all inputs
+            self.input_history: list[str | list] = []
+            self.stream_call_count = 0
+
+        async def get_response(
+            self,
+            system_instructions: str | None,
+            input: str | list,
+            model_settings: Any,
+            tools: list[AgentSDKTool],
+            output_schema: Any,
+            handoffs: Any,
+            tracing: Any,
+            *,
+            previous_response_id: str | None = None,
+            conversation_id: str | None = None,
+            prompt: Any = None,
+        ) -> Any:
+            """Override to track input history."""
+            # Track input
+            self.input_history.append(input)
+            self.stream_call_count += 1
+
+            print(f"\n[DEBUG] get_response called, count={self.stream_call_count}")
+            print(
+                f"[DEBUG] Input has {len(input) if isinstance(input, list) else 'non-list'} items"
+            )
+
+            # On first call, return tool call
+            # On subsequent calls, return regular text response
+            if self.stream_call_count == 1:
+                print(f"[DEBUG] Returning tool call (call {self.stream_call_count})")
+                # Create a proper tool call response
+                # Tool calls go directly in the output list, not inside a message
+                from agents import ModelResponse
+                from agents.items import ResponseFunctionToolCall
+
+                from tests.unit.onyx.chat.turn.utils import create_fake_usage
+
+                # Create tool call that goes directly in output
+                tool_call = ResponseFunctionToolCall(
+                    call_id="tool-call-1",
+                    name="dummy_tool",
+                    arguments="{}",
+                    type="function_call",
+                    id="tool-call-1",
+                )
+
+                usage = create_fake_usage()
+                return ModelResponse(
+                    output=[tool_call],  # type: ignore[list-item]
+                    usage=usage,
+                    response_id="fake-response-id-1",
+                )
+            else:
+                print(
+                    f"[DEBUG] Returning regular text response (call {self.stream_call_count})"
+                )
+                # Return regular text response
+                from agents import ModelResponse
+
+                from tests.unit.onyx.chat.turn.utils import create_fake_message
+                from tests.unit.onyx.chat.turn.utils import create_fake_usage
+
+                message = create_fake_message(text="This is the final answer")
+                usage = create_fake_usage()
+                return ModelResponse(
+                    output=[message], usage=usage, response_id="fake-response-id-2"
+                )
+
+        def stream_response(  # type: ignore[override]
+            self,
+            system_instructions: str | None,
+            input: str | list,
+            model_settings: Any,
+            tools: list[AgentSDKTool],
+            output_schema: Any,
+            handoffs: Any,
+            tracing: Any,
+            *,
+            previous_response_id: str | None = None,
+            conversation_id: str | None = None,
+            prompt: Any = None,
+        ) -> Any:
+            """Override to track input history and return tool call then text."""
+            from collections.abc import AsyncIterator
+
+            from openai.types.responses.response_stream_event import (
+                ResponseCompletedEvent,
+            )
+            from openai.types.responses.response_stream_event import (
+                ResponseCreatedEvent,
+            )
+            from openai.types.responses.response_stream_event import (
+                ResponseTextDeltaEvent,
+            )
+
+            from tests.unit.onyx.chat.turn.utils import create_fake_message
+            from tests.unit.onyx.chat.turn.utils import create_fake_response
+
+            # Track input
+            self.input_history.append(input)
+            self.stream_call_count += 1
+
+            print(f"\n[DEBUG] stream_response called, count={self.stream_call_count}")
+            print(
+                f"[DEBUG] Input has {len(input) if isinstance(input, list) else 'non-list'} items"
+            )
+
+            # On first call, return tool call stream
+            # On subsequent calls, return regular text response
+            if self.stream_call_count == 1:
+                print(
+                    f"[DEBUG] Returning tool call stream (call {self.stream_call_count})"
+                )
+
+                # Return tool call stream events
+                async def _gen_tool() -> AsyncIterator[object]:  # type: ignore[misc]
+                    from agents.items import ResponseFunctionToolCall
+                    from openai.types.responses import Response
+
+                    from tests.unit.onyx.chat.turn.utils import (
+                        create_fake_response_usage,
+                    )
+
+                    # Create tool call that goes directly in output
+                    tool_call = ResponseFunctionToolCall(
+                        call_id="tool-call-1",
+                        name="dummy_tool",
+                        arguments="{}",
+                        type="function_call",
+                    )
+
+                    # Create Response with tool call in output
+                    fake_response = Response(
+                        id="fake-response-id-1",
+                        created_at=1234567890,
+                        object="response",
+                        output=[tool_call],  # Tool call goes directly in output
+                        usage=create_fake_response_usage(),
+                        status="completed",
+                        model="fake-model",
+                        parallel_tool_calls=False,
+                        tool_choice="auto",
+                        tools=[],
+                    )
+
+                    # 1) created
+                    yield ResponseCreatedEvent(
+                        response=fake_response,
+                        sequence_number=1,
+                        type="response.created",
+                    )
+
+                    # 2) completed (tool calls are in the response already)
+                    yield ResponseCompletedEvent(
+                        response=fake_response,
+                        sequence_number=2,
+                        type="response.completed",
+                    )
+
+                return _gen_tool()
+            else:
+                print(
+                    f"[DEBUG] Returning regular text stream (call {self.stream_call_count})"
+                )
+
+                # Return regular text response stream
+                async def _gen() -> AsyncIterator[object]:  # type: ignore[misc]
+                    from openai.types.responses.response_stream_event import (
+                        ResponseContentPartAddedEvent,
+                    )
+                    from openai.types.responses.response_stream_event import (
+                        ResponseContentPartDoneEvent,
+                    )
+
+                    from tests.unit.onyx.chat.turn.utils import ResponseOutputText
+
+                    msg = create_fake_message(text="This is the final answer")
+                    fake_response = create_fake_response(
+                        response_id="fake-response-id-2", message=msg
+                    )
+
+                    # 1) created
+                    yield ResponseCreatedEvent(
+                        response=fake_response,
+                        sequence_number=1,
+                        type="response.created",
+                    )
+
+                    # 2) content_part.added - triggers MessageStart
+                    yield ResponseContentPartAddedEvent(
+                        content_index=0,
+                        item_id="fake-item-id",
+                        output_index=0,
+                        part=ResponseOutputText(
+                            text="", type="output_text", annotations=[]
+                        ),
+                        sequence_number=2,
+                        type="response.content_part.added",
+                    )
+
+                    # 3) stream some text deltas
+                    yield ResponseTextDeltaEvent(
+                        content_index=0,
+                        delta="This is the final answer",
+                        item_id="fake-item-id",
+                        logprobs=[],
+                        output_index=0,
+                        sequence_number=3,
+                        type="response.output_text.delta",
+                    )
+
+                    # 4) content_part.done - triggers SectionEnd
+                    yield ResponseContentPartDoneEvent(
+                        content_index=0,
+                        item_id="fake-item-id",
+                        output_index=0,
+                        part=ResponseOutputText(
+                            text="This is the final answer",
+                            type="output_text",
+                            annotations=[],
+                        ),
+                        sequence_number=4,
+                        type="response.content_part.done",
+                    )
+
+                    # 5) completed
+                    yield ResponseCompletedEvent(
+                        response=fake_response,
+                        sequence_number=5,
+                        type="response.completed",
+                    )
+
+                return _gen()
+
+        @property
+        def call_count(self) -> int:
+            """Alias for stream_call_count for backward compatibility."""
+            return self.stream_call_count
+
+    # Create the fake model with tool
+    fake_model_with_tool = FakeModelWithInputTracking()
+
+    # Set up dependencies with the fake model and tool
+    chat_turn_dependencies.llm_model = fake_model_with_tool
+    chat_turn_dependencies.tools = [fake_dummy_tool]
+
+    # Create a prompt config with custom instructions
+    prompt_config = PromptConfig(
+        default_behavior_system_prompt="You are a helpful assistant.",
+        custom_instructions="Always be polite and helpful.",
+        reminder="Answer the user's question.",
+        datetime_aware=False,
+    )
+
+    # Run the fast chat turn
+    # The model will return a tool call on first response, execute the tool,
+    # then return a regular text response on second call
+    generator = fast_chat_turn(
+        sample_messages,
+        chat_turn_dependencies,
+        chat_session_id,
+        message_id,
+        research_type,
+        prompt_config,
+    )
+    packets = list(generator)
+
+    # Verify that the model was called at least twice (once for tool call, once for final response)
+    # Note: call_count might be higher due to multiple method calls
+    assert (
+        fake_model_with_tool.call_count >= 2
+    ), f"Expected model to be called at least twice, but was called {fake_model_with_tool.call_count} times"
+
+    # Verify that we have input history (at least 2 inputs, one for tool call and one for final answer)
+    assert (
+        len(fake_model_with_tool.input_history) >= 2
+    ), f"Expected at least 2 inputs in history, got {len(fake_model_with_tool.input_history)}"
+
+    # Print debug info to understand what's happening
+    print(f"\nDebug: call_count={fake_model_with_tool.call_count}")
+    print(f"Debug: input_history length={len(fake_model_with_tool.input_history)}")
+    for i, inp in enumerate(fake_model_with_tool.input_history):
+        if isinstance(inp, list):
+            print(f"Debug: input[{i}] has {len(inp)} messages")
+        else:
+            print(f"Debug: input[{i}] is type: {type(inp)}")
+
+    # Verify first input: [system, user message, custom instructions]
+    first_input = fake_model_with_tool.input_history[0]
+    assert (
+        len(first_input) == 3
+    ), f"First input should have at least 3 messages (system, user, custom instructions), got {len(first_input)}"
+
+    assert first_input[0]["role"] == "system", "First message should be system message"
+    assert (
+        first_input[1]["role"] == "user"
+    ), "Second message should be custom instructions"
+    assert first_input[2]["role"] == "user", "Third message should be user message"
+
+    # Verify second input: [system, user message, tool call, tool call response, custom instructions, user message with reminder]
+    second_input = fake_model_with_tool.input_history[1]
+    assert isinstance(second_input, list), "Second input should be a list of messages"
+    assert len(second_input) == 5, (
+        f"Second input should have at least 5 messages "
+        f"(system, user, tool call, tool response, custom instructions, reminder), "
+        f"got {len(second_input)}"
+    )
+
+    # Check that first message is still system message
+    assert (
+        second_input[0]["role"] == "system"
+    ), "First message in second input should be system message"
+    assert (
+        second_input[1]["role"] == "user"
+    ), "Second message in second input should be user message"
+    assert (
+        second_input[2]["type"] == "function_call"
+    ), "Third message in second input should be tool call invocation"
+    assert (
+        second_input[3]["type"] == "function_call_output"
+    ), "Fourth message in second input should be tool call response"
+    assert (
+        second_input[4]["role"] == "user"
+    ), "Fifth message in second input should be custom instructions"
+    assert (
+        second_input[5]["role"] == "user"
+    ), "Sixth message in second input should be reminder message"
+    # Verify that packets were generated successfully
+    assert_packets_contain_stop(packets)
+
+
 def test_fast_chat_turn_citation_processing(
     chat_turn_context: ChatTurnContext,
     sample_messages: list[AgentSDKMessage],

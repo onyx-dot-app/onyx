@@ -18,6 +18,8 @@ class WebSearchResult(BaseModel):
     title: str
     link: str
     snippet: str | None = None
+    author: str | None = None
+    published_date: datetime | None = None
 
 
 class WebContent(BaseModel):

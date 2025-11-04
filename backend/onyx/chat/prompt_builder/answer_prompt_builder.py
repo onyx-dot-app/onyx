@@ -22,7 +22,6 @@ from onyx.llm.utils import model_supports_image_input
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
 from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
-from onyx.prompts.chat_prompts import CUSTOM_INSTRUCTIONS_PROMPT
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
 from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_PROMPT
 from onyx.prompts.chat_prompts import TOOL_PERSISTENCE_PROMPT
@@ -128,12 +127,11 @@ def default_build_system_message(
     memories: list[str] | None = None,
 ) -> SystemMessage | None:
     # Build system prompt from default behavior and custom instructions
-    system_prompt = prompt_config.default_behavior_system_prompt or ""
+    # for backwards compatibility
     if prompt_config.custom_instructions:
-        if system_prompt:
-            system_prompt += "\n\n## Custom Instructions\n"
-            system_prompt += CUSTOM_INSTRUCTIONS_PROMPT
-        system_prompt += prompt_config.custom_instructions
+        system_prompt = prompt_config.custom_instructions.strip()
+    else:
+        system_prompt = prompt_config.default_behavior_system_prompt.strip()
 
     system_prompt = system_prompt.strip()
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix

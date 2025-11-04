@@ -315,7 +315,7 @@ class PromptConfig(BaseModel):
 
         return cls(
             default_behavior_system_prompt=default_behavior_system_prompt,
-            custom_instruction=custom_instruction,
+            custom_instructions=custom_instruction,
             reminder=override_task_prompt or model.task_prompt or "",
             datetime_aware=model.datetime_aware,
         )

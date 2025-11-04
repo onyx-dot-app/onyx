@@ -37,7 +37,7 @@ logger = setup_logger()
 def get_prompt_tokens(prompt_config: PromptConfig) -> int:
     # Note: currently custom prompts do not allow datetime aware, only default prompts
     return (
-        check_number_of_tokens(prompt_config.system_prompt)
+        check_number_of_tokens(prompt_config.default_behavior_system_prompt)
         + check_number_of_tokens(prompt_config.reminder)
         + CHAT_USER_PROMPT_WITH_CONTEXT_OVERHEAD_TOKEN_CNT
         + CITATION_STATEMENT_TOKEN_CNT
