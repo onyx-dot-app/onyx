@@ -291,7 +291,9 @@ class PromptConfig(BaseModel):
         # Get the default persona's system prompt
         default_persona = get_default_persona(db_session)
         default_behavior_system_prompt = (
-            default_persona.system_prompt if default_persona else ""
+            default_persona.system_prompt
+            if default_persona and default_persona.system_prompt
+            else ""
         )
 
         # If this persona IS the default assistant, custom_instruction should be None

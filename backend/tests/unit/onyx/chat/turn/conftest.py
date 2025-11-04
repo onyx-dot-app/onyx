@@ -61,7 +61,9 @@ class FakeDummyTool(CustomTool):
             user_oauth_token=None,
         )
 
-    def run(self, **kwargs: Any) -> Generator[ToolResponse, None, None]:
+    def run(
+        self, override_kwargs: dict[str, Any] | None = None, **kwargs: Any
+    ) -> Generator[ToolResponse, None, None]:
         """Override run to return a fixed response without making HTTP calls."""
         # Return the response in the format CustomTool expects
         yield ToolResponse(

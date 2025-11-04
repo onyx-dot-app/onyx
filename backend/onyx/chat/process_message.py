@@ -654,9 +654,10 @@ def stream_chat_message_objects(
         prompt_override = new_msg_req.prompt_override or chat_session.prompt_override
         if new_msg_req.persona_override_config:
             prompt_config = PromptConfig(
-                system_prompt=new_msg_req.persona_override_config.prompts[
+                default_behavior_system_prompt=new_msg_req.persona_override_config.prompts[
                     0
                 ].system_prompt,
+                custom_instructions=None,
                 reminder=new_msg_req.persona_override_config.prompts[0].task_prompt,
                 datetime_aware=new_msg_req.persona_override_config.prompts[
                     0

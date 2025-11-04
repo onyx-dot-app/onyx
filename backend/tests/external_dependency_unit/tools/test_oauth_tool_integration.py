@@ -189,7 +189,8 @@ class TestOAuthToolIntegrationPriority:
 
         # Construct tools
         prompt_config = PromptConfig(
-            system_prompt="Test",
+            default_behavior_system_prompt="Test",
+            custom_instructions=None,
             reminder="Test",
             datetime_aware=False,
         )
@@ -262,7 +263,8 @@ class TestOAuthToolIntegrationPriority:
 
         # Construct tools
         prompt_config = PromptConfig(
-            system_prompt="Test",
+            default_behavior_system_prompt="Test",
+            custom_instructions=None,
             reminder="Test",
             datetime_aware=False,
         )
@@ -321,7 +323,8 @@ class TestOAuthToolIntegrationPriority:
 
         # Construct tools
         prompt_config = PromptConfig(
-            system_prompt="Test",
+            default_behavior_system_prompt="Test",
+            custom_instructions=None,
             reminder="Test",
             datetime_aware=False,
         )
@@ -391,7 +394,8 @@ class TestOAuthToolIntegrationPriority:
 
         # Construct tools
         prompt_config = PromptConfig(
-            system_prompt="Test",
+            default_behavior_system_prompt="Test",
+            custom_instructions=None,
             reminder="Test",
             datetime_aware=False,
         )
@@ -470,7 +474,8 @@ class TestOAuthToolIntegrationPriority:
 
             # Construct tools
             prompt_config = PromptConfig(
-                system_prompt="Test",
+                default_behavior_system_prompt="Test",
+                custom_instructions=None,
                 reminder="Test",
                 datetime_aware=False,
             )
@@ -545,7 +550,8 @@ class TestOAuthToolIntegrationPriority:
 
         # Construct tools
         prompt_config = PromptConfig(
-            system_prompt="Test",
+            default_behavior_system_prompt="Test",
+            custom_instructions=None,
             reminder="Test",
             datetime_aware=False,
         )
@@ -606,7 +612,8 @@ class TestOAuthToolIntegrationPriority:
 
         # Construct tools
         prompt_config = PromptConfig(
-            system_prompt="Test",
+            default_behavior_system_prompt="Test",
+            custom_instructions=None,
             reminder="Test",
             datetime_aware=False,
         )

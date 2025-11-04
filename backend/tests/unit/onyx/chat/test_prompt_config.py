@@ -1,5 +1,7 @@
 """Tests for PromptConfig.from_model() behavior with default and custom personas."""
 
+from typing import cast
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -131,7 +133,7 @@ def test_prompt_config_with_no_default_persona(
         mock_get_default_persona_none,
     )
 
-    mock_db_session = {}  # type: ignore
+    mock_db_session = cast(Session, {})
     prompt_config = PromptConfig.from_model(custom_persona, db_session=mock_db_session)
 
     # default_behavior_system_prompt should be empty string when no default exists

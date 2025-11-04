@@ -108,7 +108,7 @@ def compute_max_llm_input_tokens(llm_config: LLMConfig) -> int:
 def build_citations_system_message(
     prompt_config: PromptConfig,
 ) -> SystemMessage:
-    system_prompt = prompt_config.system_prompt.strip()
+    system_prompt = prompt_config.default_behavior_system_prompt.strip()
     # Citations are always enabled
     system_prompt += REQUIRE_CITATION_STATEMENT
     tag_handled_prompt = handle_onyx_date_awareness(

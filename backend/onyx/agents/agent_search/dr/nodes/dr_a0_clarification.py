@@ -645,7 +645,7 @@ def clarifier(
                 persona = graph_config.inputs.persona
                 if persona is not None:
                     prompt_config = PromptConfig.from_model(
-                        persona, db_session=graph_config.inputs.db_session
+                        persona, db_session=graph_config.persistence.db_session
                     )
                 else:
                     prompt_config = PromptConfig(

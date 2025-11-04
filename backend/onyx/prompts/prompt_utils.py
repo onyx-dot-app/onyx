@@ -132,7 +132,11 @@ def build_task_prompt_reminders(
     citation_str: str = CITATION_REMINDER,
     language_hint_str: str = LANGUAGE_HINT,
 ) -> str:
-    base_task = prompt.reminder or ""
+    base_task = (
+        prompt.reminder
+        if isinstance(prompt, PromptConfig)
+        else prompt.task_prompt or ""
+    )
     citation_or_nothing = citation_str
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
     return base_task + citation_or_nothing + language_hint_or_nothing
@@ -159,7 +163,11 @@ def build_task_prompt_reminders_v2(
     Returns:
         Task prompt with optional citation statement and language hint
     """
-    base_task = prompt.reminder or ""
+    base_task = (
+        prompt.reminder
+        if isinstance(prompt, PromptConfig)
+        else prompt.task_prompt or ""
+    )
 
     open_url_or_nothing = (
         OPEN_URL_REMINDER if last_iteration_included_web_search else ""

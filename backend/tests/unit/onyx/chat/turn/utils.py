@@ -262,7 +262,7 @@ class FakeModel(StreamableFakeModel):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._output_schema: AgentOutputSchemaBase | None = None
-        self.input_history: list[str] = []
+        self.input_history: list[str | list] = []
 
     async def get_response(
         self,

@@ -822,21 +822,22 @@ def test_fast_chat_turn_context_handlers(
 
     # Verify first input: [system, user message, custom instructions]
     first_input = fake_model_with_tool.input_history[0]
+    assert isinstance(first_input, list), "First input should be a list"
     assert (
         len(first_input) == 3
     ), f"First input should have at least 3 messages (system, user, custom instructions), got {len(first_input)}"
 
-    assert first_input[0]["role"] == "system", "First message should be system message"
+    assert first_input[0]["role"] == "system", "First message should be system message"  # type: ignore
     assert (
-        first_input[1]["role"] == "user"
+        first_input[1]["role"] == "user"  # type: ignore
     ), "Second message should be custom instructions"
-    assert first_input[2]["role"] == "user", "Third message should be user message"
+    assert first_input[2]["role"] == "user", "Third message should be user message"  # type: ignore
 
     # Verify second input: [system, user message, tool call, tool call response, custom instructions, user message with reminder]
     second_input = fake_model_with_tool.input_history[1]
     assert isinstance(second_input, list), "Second input should be a list of messages"
     assert len(second_input) == 5, (
-        f"Second input should have at least 5 messages "
+        f"Second input should have 5 messages "
         f"(system, user, tool call, tool response, custom instructions, reminder), "
         f"got {len(second_input)}"
     )
