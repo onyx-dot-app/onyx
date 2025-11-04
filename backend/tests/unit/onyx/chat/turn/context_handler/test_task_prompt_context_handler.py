@@ -144,8 +144,9 @@ def test_task_prompt_handler_with_web_search() -> None:
     """Test that web_search parameter is properly handled."""
     task_prompt = "reminder!"
     prompt_config = PromptConfig(
-        system_prompt="Test system prompt",
-        task_prompt=task_prompt,
+        default_behavior_system_prompt="Test system prompt",
+        custom_instructions=None,
+        reminder=task_prompt,
         datetime_aware=False,
     )
     current_user_message: UserMessage = UserMessage(
