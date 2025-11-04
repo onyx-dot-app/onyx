@@ -3,7 +3,7 @@
  * Tests complete user flow: login → create → authenticate → delete
  */
 import { test, expect } from "@chromatic-com/playwright";
-import { loginAsRandomUser } from "./utils/auth";
+import { loginAsRandomUser } from "../utils/auth";
 
 test("PAT Complete Workflow", async ({ page }, testInfo) => {
   // Skip in admin project - we test with fresh user auth
