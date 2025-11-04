@@ -1,0 +1,7 @@
+# build + package managers
+dist/
+*.tsbuildinfo
+node_modules/
+
+# macOS
+.DS_Store

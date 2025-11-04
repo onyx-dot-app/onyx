@@ -27,6 +27,7 @@ const nextConfig = {
   publicRuntimeConfig: {
     version,
   },
+  transpilePackages: ["@onyx/opal"],
   images: {
     // Used to fetch favicons
     remotePatterns: [
