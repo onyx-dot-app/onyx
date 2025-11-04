@@ -18,7 +18,7 @@ from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 def test_task_prompt_handler_with_no_user_messages() -> None:
     prompt_config = PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction="Test system prompt",
+        custom_instructions="Test system prompt",
         reminder="Test task prompt",
         datetime_aware=False,
     )
@@ -59,7 +59,7 @@ def test_task_prompt_handler_basic() -> None:
     task_prompt = "reminder!"
     prompt_config = PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction="Test system prompt",
+        custom_instructions="Test system prompt",
         reminder=task_prompt,
         datetime_aware=False,
     )

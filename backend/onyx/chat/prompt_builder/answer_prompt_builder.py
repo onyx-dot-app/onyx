@@ -129,11 +129,11 @@ def default_build_system_message(
 ) -> SystemMessage | None:
     # Build system prompt from default behavior and custom instructions
     system_prompt = prompt_config.default_behavior_system_prompt or ""
-    if prompt_config.custom_instruction:
+    if prompt_config.custom_instructions:
         if system_prompt:
             system_prompt += "\n\n## Custom Instructions\n"
             system_prompt += CUSTOM_INSTRUCTIONS_PROMPT
-        system_prompt += prompt_config.custom_instruction
+        system_prompt += prompt_config.custom_instructions
 
     system_prompt = system_prompt.strip()
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix

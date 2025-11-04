@@ -36,7 +36,7 @@ def answer_style_config() -> AnswerStyleConfig:
 def prompt_config() -> PromptConfig:
     return PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction="System prompt",
+        custom_instructions="System prompt",
         reminder="Task prompt",
         datetime_aware=False,
     )

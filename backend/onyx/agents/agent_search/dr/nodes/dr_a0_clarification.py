@@ -650,7 +650,7 @@ def clarifier(
                 else:
                     prompt_config = PromptConfig(
                         default_behavior_system_prompt=assistant_system_prompt,
-                        custom_instruction=None,
+                        custom_instructions=None,
                         reminder="",
                         datetime_aware=True,
                     )

@@ -51,7 +51,7 @@ def llm_config() -> LLMConfig:
 def prompt_config() -> PromptConfig:
     return PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction="You are helpful.",
+        custom_instructions="You are helpful.",
         reminder="",
         datetime_aware=False,
     )
@@ -64,7 +64,7 @@ def make_prompt_config() -> Callable:
     ) -> PromptConfig:
         return PromptConfig(
             default_behavior_system_prompt="You are a helpful assistant.",
-            custom_instruction=system_prompt,
+            custom_instructions=system_prompt,
             reminder=task_prompt,
             datetime_aware=datetime_aware,
         )

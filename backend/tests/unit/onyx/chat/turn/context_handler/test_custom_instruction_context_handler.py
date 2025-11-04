@@ -15,7 +15,7 @@ def test_add_custom_instruction_with_instruction() -> None:
     """Test that custom instruction is added when present in prompt_config."""
     prompt_config = PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction="Be concise and friendly.",
+        custom_instructions="Be concise and friendly.",
         reminder="Answer the question.",
         datetime_aware=False,
     )
@@ -66,7 +66,7 @@ def test_add_custom_instruction_without_instruction() -> None:
     """Test that no message is added when custom_instruction is None."""
     prompt_config = PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction=None,
+        custom_instructions=None,
         reminder="Answer the question.",
         datetime_aware=False,
     )
@@ -104,7 +104,7 @@ def test_add_custom_instruction_with_empty_string() -> None:
     """Test that no message is added when custom_instruction is empty string."""
     prompt_config = PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction="",
+        custom_instructions="",
         reminder="Answer the question.",
         datetime_aware=False,
     )
@@ -142,7 +142,7 @@ def test_add_custom_instruction_empty_messages() -> None:
     """Test that custom instruction is added even with empty input messages."""
     prompt_config = PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction="Always be polite.",
+        custom_instructions="Always be polite.",
         reminder="Answer the question.",
         datetime_aware=False,
     )
@@ -170,7 +170,7 @@ def test_add_custom_instruction_preserves_order() -> None:
     """Test that custom instruction is appended at the end."""
     prompt_config = PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction="Be detailed.",
+        custom_instructions="Be detailed.",
         reminder="Answer the question.",
         datetime_aware=False,
     )

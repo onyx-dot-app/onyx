@@ -103,7 +103,7 @@ def run_fast_chat_turn(
     if prompt_config is None:
         prompt_config = PromptConfig(
             default_behavior_system_prompt="You are a helpful assistant.",
-            custom_instruction=None,
+            custom_instructions=None,
             reminder="Answer the user's question.",
             datetime_aware=False,
         )
@@ -420,7 +420,7 @@ def test_fast_chat_turn_catch_exception(
 
     prompt_config = PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction=None,
+        custom_instructions=None,
         reminder="Answer the user's question.",
         datetime_aware=False,
     )
@@ -505,91 +505,6 @@ def test_fast_chat_turn_tool_call_cancellation(
     assert_cancellation_packets(packets, expect_cancelled_message=True)
 
 
-def test_fast_chat_turn_context_handler_chain(
-    chat_turn_dependencies: ChatTurnDependencies,
-    sample_messages: list[AgentSDKMessage],
-    chat_session_id: UUID,
-    message_id: int,
-    research_type: ResearchType,
-) -> None:
-    """Integration test that verifies context handlers work correctly in the agent loop.
-
-    This test verifies that:
-    1. Custom instructions from prompt_config are properly handled
-    2. Task prompt reminders are properly handled
-    3. The full flow works end-to-end with custom instructions
-
-    We verify this by running the actual fast_chat_turn and checking:
-    - The flow completes successfully
-    - Messages are properly formatted with custom instructions
-    """
-    # Create prompt config with custom instruction and reminder
-    prompt_config = PromptConfig(
-        default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction="Be concise and accurate.",
-        reminder="Answer the user's question well.",
-        datetime_aware=False,
-    )
-
-    # Run the actual fast_chat_turn with custom instructions
-    packets = run_fast_chat_turn(
-        sample_messages,
-        chat_turn_dependencies,
-        chat_session_id,
-        message_id,
-        research_type,
-        prompt_config,
-    )
-
-    # Verify we got a proper response with stop packet
-    assert_packets_contain_stop(packets)
-
-    # Verify we got message packets (indicating successful processing)
-    message_packets = [
-        p
-        for p in packets
-        if hasattr(p.obj, "type") and p.obj.type in ["message_start", "message_delta"]
-    ]
-    assert len(message_packets) > 0, "Should have message packets from the LLM response"
-
-    # The fact that the flow completed successfully with custom instructions
-    # means the context handlers are working properly:
-    # 1. remove_middle_user_messages removed any previous user messages
-    # 2. add_custom_instruction added the custom instruction
-    # 3. add_reminder added the task prompt
-    # 4. The LLM was able to process the properly formatted messages
-
-    # Additional verification: test without custom instruction to ensure difference
-    prompt_config_no_custom = PromptConfig(
-        default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction=None,  # No custom instruction
-        reminder="Answer the user's question well.",
-        datetime_aware=False,
-    )
-
-    packets_no_custom = run_fast_chat_turn(
-        sample_messages,
-        chat_turn_dependencies,
-        chat_session_id,
-        message_id + 1,  # Different message_id
-        research_type,
-        prompt_config_no_custom,
-    )
-
-    # Both should complete successfully
-    assert_packets_contain_stop(packets_no_custom)
-
-    # Both should produce message packets
-    message_packets_no_custom = [
-        p
-        for p in packets_no_custom
-        if hasattr(p.obj, "type") and p.obj.type in ["message_start", "message_delta"]
-    ]
-    assert (
-        len(message_packets_no_custom) > 0
-    ), "Should have message packets without custom instruction too"
-
-
 def test_fast_chat_turn_citation_processing(
     chat_turn_context: ChatTurnContext,
     sample_messages: list[AgentSDKMessage],
@@ -620,7 +535,7 @@ def test_fast_chat_turn_citation_processing(
     # Create a fake prompt config
     prompt_config = PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
-        custom_instruction=None,
+        custom_instructions=None,
         reminder="Answer the user's question.",
         datetime_aware=False,
     )

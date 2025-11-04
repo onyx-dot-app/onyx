@@ -89,7 +89,7 @@ def test_prompt_config_from_default_persona(
     assert prompt_config.default_behavior_system_prompt == default_persona.system_prompt
 
     # custom_instruction should be None for the default persona
-    assert prompt_config.custom_instruction is None
+    assert prompt_config.custom_instructions is None
 
     # reminder and datetime_aware should be preserved
     assert prompt_config.reminder == default_persona.task_prompt
@@ -108,7 +108,7 @@ def test_prompt_config_from_custom_persona(
     assert prompt_config.default_behavior_system_prompt == default_persona.system_prompt
 
     # custom_instruction should be the custom persona's system_prompt
-    assert prompt_config.custom_instruction == custom_persona.system_prompt
+    assert prompt_config.custom_instructions == custom_persona.system_prompt
 
     # reminder and datetime_aware should be from the custom persona
     assert prompt_config.reminder == custom_persona.task_prompt
@@ -138,7 +138,7 @@ def test_prompt_config_with_no_default_persona(
     assert prompt_config.default_behavior_system_prompt == ""
 
     # custom_instruction should still be the custom persona's system_prompt
-    assert prompt_config.custom_instruction == custom_persona.system_prompt
+    assert prompt_config.custom_instructions == custom_persona.system_prompt
 
 
 def test_prompt_config_with_prompt_override_on_default_persona(
@@ -161,7 +161,7 @@ def test_prompt_config_with_prompt_override_on_default_persona(
     assert prompt_config.default_behavior_system_prompt == override.system_prompt
 
     # custom_instruction should still be None
-    assert prompt_config.custom_instruction is None
+    assert prompt_config.custom_instructions is None
 
     # reminder should use the override
     assert prompt_config.reminder == override.task_prompt
@@ -188,7 +188,7 @@ def test_prompt_config_with_prompt_override_on_custom_persona(
     assert prompt_config.default_behavior_system_prompt == default_persona.system_prompt
 
     # Override should apply to custom_instruction for non-default persona
-    assert prompt_config.custom_instruction == override.system_prompt
+    assert prompt_config.custom_instructions == override.system_prompt
 
     # reminder should use the override
     assert prompt_config.reminder == override.task_prompt
@@ -232,7 +232,7 @@ def test_prompt_config_with_empty_system_prompts(
     prompt_config = PromptConfig.from_model(persona, db_session=mock_db_session)
 
     # custom_instruction should be None when system_prompt is empty
-    assert prompt_config.custom_instruction is None
+    assert prompt_config.custom_instructions is None
 
     # reminder should be empty string
     assert prompt_config.reminder == ""

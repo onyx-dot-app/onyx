@@ -91,7 +91,7 @@ def handle_onyx_date_awareness(
         for text in [
             prompt_str,
             prompt_config.default_behavior_system_prompt,
-            prompt_config.custom_instruction,
+            prompt_config.custom_instructions,
             prompt_config.reminder,
         ]
         if text

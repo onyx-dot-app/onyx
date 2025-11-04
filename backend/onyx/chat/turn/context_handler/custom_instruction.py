@@ -25,10 +25,12 @@ def add_custom_instruction(
     Returns:
         Updated message list with custom instruction user message appended (if applicable)
     """
-    if not prompt_config.custom_instruction:
+    if not prompt_config.custom_instructions:
         return list(agent_turn_messages)
 
-    custom_instruction_text = f"Custom Instructions: {prompt_config.custom_instruction}"
+    custom_instruction_text = (
+        f"Custom Instructions: {prompt_config.custom_instructions}"
+    )
 
     text_content: InputTextContent = {
         "type": "input_text",

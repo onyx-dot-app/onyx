@@ -275,7 +275,7 @@ class PromptConfig(BaseModel):
     into the `PromptBuilder` object."""
 
     default_behavior_system_prompt: str
-    custom_instruction: str | None
+    custom_instructions: str | None
     reminder: str
     datetime_aware: bool
 

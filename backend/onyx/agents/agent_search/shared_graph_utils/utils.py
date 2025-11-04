@@ -146,10 +146,10 @@ def get_persona_agent_prompt_expressions(
     prompt_config = PromptConfig.from_model(persona, db_session=db_session)
     # Combine default behavior and custom instructions
     system_prompt = prompt_config.default_behavior_system_prompt or ""
-    if prompt_config.custom_instruction:
+    if prompt_config.custom_instructions:
         if system_prompt:
             system_prompt += "\n\n"
-        system_prompt += prompt_config.custom_instruction
+        system_prompt += prompt_config.custom_instructions
 
     datetime_aware_system_prompt = handle_onyx_date_awareness(
         prompt_str=system_prompt,
