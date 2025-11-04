@@ -33,7 +33,6 @@ from onyx.chat.stream_processing.utils import map_document_id_order_v2
 from onyx.chat.turn.context_handler.citation import (
     assign_citation_numbers_recent_tool_calls,
 )
-from onyx.chat.turn.context_handler.custom_instruction import append_custom_instruction
 from onyx.chat.turn.context_handler.reminder import maybe_append_reminder
 from onyx.chat.turn.context_handler.remove_user_messages import (
     remove_middle_user_messages,
@@ -42,6 +41,7 @@ from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
 from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
+from onyx.chat.turn.prompts.custom_instruction import build_custom_instructions
 from onyx.chat.turn.save_turn import extract_final_answer_from_packets
 from onyx.chat.turn.save_turn import save_turn
 from onyx.server.query_and_chat.streaming_models import CitationDelta
@@ -110,8 +110,7 @@ def _run_agent_loop(
                 )
             ],
         )
-        # TODO make custom instructions a bit simpler and it shouldn't be a context handler
-        custom_instructions = append_custom_instruction([], prompt_config)
+        custom_instructions = build_custom_instructions(prompt_config)
         previous_messages = (
             [new_system_prompt]
             + chat_history

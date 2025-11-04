@@ -1,17 +1,13 @@
 """Custom instruction context handler for adding custom instructions to agent messages."""
 
-from collections.abc import Sequence
-
-from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.chat.models import PromptConfig
 
 
-def append_custom_instruction(
-    agent_turn_messages: Sequence[AgentSDKMessage],
+def build_custom_instructions(
     prompt_config: PromptConfig,
-) -> list[AgentSDKMessage]:
+) -> list[UserMessage]:
     """Add custom instructions as a user message if present in prompt_config.
 
     This function adds a user message containing custom instructions before
@@ -26,7 +22,7 @@ def append_custom_instruction(
         Updated message list with custom instruction user message appended (if applicable)
     """
     if not prompt_config.custom_instructions:
-        return list(agent_turn_messages)
+        return []
 
     custom_instruction_text = (
         f"Custom Instructions: {prompt_config.custom_instructions}"
@@ -41,4 +37,4 @@ def append_custom_instruction(
         "content": [text_content],
     }
 
-    return list(agent_turn_messages) + [custom_instruction_message]
+    return [custom_instruction_message]
