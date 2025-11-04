@@ -22,8 +22,7 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@tests/*": ["./tests/*"],
-      "@onyx/opal": ["../libs/opal/src"]
+      "@tests/*": ["./tests/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

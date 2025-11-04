@@ -1,68 +1,25 @@
 {
-  "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
-    /* Language and Environment */
     "target": "ES2020",
+    "module": "ESNext",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
-
-    /* Modules */
-    "module": "ESNext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
-
-    /* JavaScript Support - Disabled for TypeScript-only project */
-    "allowJs": false,
-    "checkJs": false,
-
-    /* Emit */
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "noEmit": false,
-    "removeComments": false,
-    "importHelpers": false,
-
-    /* Interop Constraints */
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "isolatedModules": true,
+    "noEmit": true,
 
-    /* Type Checking - Strict TypeScript */
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "strictBindCallApply": true,
-    "strictPropertyInitialization": true,
-    "noImplicitThis": true,
-    "alwaysStrict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    "noPropertyAccessFromIndexSignature": true,
-
-    /* Completeness */
-    "skipLibCheck": true,
-
-    /* Advanced */
-    "types": []
+    // KEY: Tell TypeScript where to find node_modules
+    "typeRoots": [
+      "../../web/node_modules/@types"
+    ],
+    "baseUrl": "../../web"
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "**/*.spec.ts",
-    "**/*.spec.tsx",
-    "**/*.test.ts",
-    "**/*.test.tsx",
-    "**/*.js",
-    "**/*.jsx"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

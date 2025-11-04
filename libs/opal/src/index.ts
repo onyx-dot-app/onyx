@@ -1,9 +1,5 @@
-// Opal - A TSX component library for Onyx
-// This is the main entry point for the library
+// Opal - A TSX component library for Onyx.
+// This is the main entry point for the library.
 
-// Export all components here
-export { Button } from "./components/Button";
-export type { ButtonProps } from "./components/Button";
-
-// Version constant
+// Version constant (must be defined for builds to work).
 export const OPAL_VERSION = "0.1.0";
