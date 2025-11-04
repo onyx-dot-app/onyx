@@ -1,5 +1,7 @@
 """Tests for add_custom_instruction context handler."""
 
+from typing import cast
+
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import AssistantMessageWithToolCalls
 from onyx.agents.agent_sdk.message_types import InputTextContent
@@ -51,15 +53,12 @@ def test_add_custom_instruction_with_instruction() -> None:
 
     # Verify custom instruction content
     last_msg = result[2]
-    if last_msg.get("role") == "user":
-        user_msg: UserMessage = last_msg  # type: ignore[assignment]
-        assert isinstance(user_msg["content"], list)
-        assert len(user_msg["content"]) > 0
-        first_content = user_msg["content"][0]
-        if first_content["type"] == "input_text":
-            text_content: InputTextContent = first_content  # type: ignore[assignment]
-            assert "Custom Instructions:" in text_content["text"]
-            assert "Be concise and friendly." in text_content["text"]
+    assert last_msg.get("role") == "user"
+    user_msg = cast(UserMessage, last_msg)
+    assert len(user_msg["content"]) > 0
+    first_content = user_msg["content"][0]
+    text_content = cast(InputTextContent, first_content)
+    assert "Be concise and friendly." in text_content["text"]
 
 
 def test_add_custom_instruction_without_instruction() -> None:
