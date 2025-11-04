@@ -33,8 +33,6 @@ def build_displayable_pat(token: str) -> str:
 
     Example: onyx_pat_abc1****xyz9
     """
-    if len(token) < 12:
-        return token
     # Show first 12 chars (onyx_pat_ + 4 random chars) and last 4 chars
     return f"{token[:12]}****{token[-4:]}"
 
