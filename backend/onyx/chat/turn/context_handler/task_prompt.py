@@ -14,6 +14,7 @@ def add_reminder(
     agent_turn_messages: Sequence[AgentSDKMessage],
     prompt_config: PromptConfig,
     should_cite_documents: bool,
+    last_iteration_included_web_search: bool = False,
 ) -> list[AgentSDKMessage]:
     """Add task prompt reminder as a user message.
 
@@ -31,11 +32,13 @@ def add_reminder(
         Updated message list with task prompt reminder appended
     """
     user_query = _extract_user_query(current_user_message)
+
     new_task_prompt_text = build_task_prompt_reminders_v2(
         user_query,
         prompt_config,
         use_language_hint=False,
         should_cite=should_cite_documents,
+        last_iteration_included_web_search=last_iteration_included_web_search,
     )
 
     text_content: InputTextContent = {

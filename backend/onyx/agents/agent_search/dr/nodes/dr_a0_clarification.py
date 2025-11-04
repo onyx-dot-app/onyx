@@ -41,7 +41,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.chat_utils import build_citation_map_from_numbers
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
-from onyx.chat.memories import make_memories_callback
+from onyx.chat.memories import get_memories
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.citations_prompt import build_citations_system_message
 from onyx.chat.prompt_builder.citations_prompt import build_citations_user_message
@@ -490,11 +490,9 @@ def clarifier(
         if graph_config.tooling.search_tool
         else None
     )
-    memories_callback = make_memories_callback(user, db_session)
+    memories = get_memories(user, db_session)
     assistant_system_prompt = handle_company_awareness(assistant_system_prompt)
-    assistant_system_prompt = handle_memories(
-        assistant_system_prompt, memories_callback
-    )
+    assistant_system_prompt = handle_memories(assistant_system_prompt, memories)
 
     chat_history_string = (
         get_chat_history_string(
