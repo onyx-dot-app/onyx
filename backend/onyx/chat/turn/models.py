@@ -20,8 +20,10 @@ from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.chat.models import LlmDoc
+from onyx.chat.models import PromptConfig
 from onyx.chat.turn.infra.emitter import Emitter
 from onyx.context.search.models import InferenceSection
+from onyx.db.models import User
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.tool import Tool
@@ -49,6 +51,8 @@ class ChatTurnDependencies:
     tools: Sequence[Tool]
     redis_client: Redis
     emitter: Emitter
+    user_or_none: User | None
+    prompt_config: PromptConfig
 
 
 @dataclass

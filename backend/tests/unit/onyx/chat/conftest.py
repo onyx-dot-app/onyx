@@ -130,7 +130,10 @@ def mock_search_results(
 @pytest.fixture
 def mock_search_tool(mock_search_results: list[LlmDoc]) -> MagicMock:
     mock_tool = MagicMock(spec=SearchTool)
+    # Make type().__name__ return "SearchTool" for prompt builder checks
+    type(mock_tool).__name__ = "SearchTool"
     mock_tool.name = "search"
+    mock_tool.description = "Search for information"
     mock_tool.build_tool_message_content.return_value = "search_response"
     mock_tool.get_args_for_non_tool_calling_llm.return_value = DEFAULT_SEARCH_ARGS
     mock_tool.final_result.return_value = [
