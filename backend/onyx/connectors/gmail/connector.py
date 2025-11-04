@@ -1,4 +1,5 @@
 from base64 import urlsafe_b64decode
+from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Any
 from typing import cast
@@ -14,7 +15,11 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
+from onyx.connectors.google_utils.google_utils import (
+    execute_paginated_retrieval_with_max_pages,
+)
 from onyx.connectors.google_utils.google_utils import execute_single_retrieval
+from onyx.connectors.google_utils.google_utils import PAGE_TOKEN_KEY
 from onyx.connectors.google_utils.resources import get_admin_service
 from onyx.connectors.google_utils.resources import get_gmail_service
 from onyx.connectors.google_utils.resources import GmailService
@@ -63,6 +68,8 @@ EMAIL_FIELDS = [
 ]
 
 MAX_MESSAGE_BODY_BYTES = 10 * 1024 * 1024  # 10MB cap to keep large threads safe
+
+PAGES_PER_CHECKPOINT = 1
 
 add_retries = retry_builder(tries=50, max_delay=30)
 
@@ -327,6 +334,7 @@ def _slim_thread_from_id(
 
 class GmailCheckpoint(ConnectorCheckpoint):
     user_emails: list[str] = []  # stack of user emails to process
+    page_token: str | None = None
 
 
 class GmailConnector(
@@ -413,6 +421,8 @@ class GmailConnector(
         time_range_start: SecondsSinceUnixEpoch | None = None,
         time_range_end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
+        page_token: str | None = None,
+        set_page_token: Callable[[str | None], None] = lambda x: None,
         is_slim: bool = False,
     ) -> Iterator[Document | ConnectorFailure] | GenerateSlimDocumentOutput:
         query = _build_time_range_query(time_range_start, time_range_end)
@@ -422,14 +432,20 @@ class GmailConnector(
         )
         gmail_service = get_gmail_service(self.creds, user_email)
         try:
-            for thread in execute_paginated_retrieval(
+            for thread in execute_paginated_retrieval_with_max_pages(
+                max_num_pages=PAGES_PER_CHECKPOINT,
                 retrieval_function=gmail_service.users().threads().list,
                 list_key="threads",
                 userId=user_email,
                 fields=THREAD_LIST_FIELDS,
                 q=query,
                 continue_on_404_or_403=True,
+                **({PAGE_TOKEN_KEY: page_token} if page_token else {}),
             ):
+                # if a page token is returned, set it and leave the function
+                if isinstance(thread, str):
+                    set_page_token(thread)
+                    return
                 if is_slim:
                     slim_doc_batch.append(
                         SlimDocument(
@@ -462,6 +478,9 @@ class GmailConnector(
                     callback.progress(tag, 1)
             if slim_doc_batch:
                 yield slim_doc_batch
+
+            # done with user
+            set_page_token(None)
         except HttpError as e:
             if _is_mail_service_disabled_error(e):
                 logger.warning(
@@ -474,6 +493,8 @@ class GmailConnector(
     def _fetch_threads(
         self,
         user_email: str,
+        page_token: str | None = None,
+        set_page_token: Callable[[str | None], None] = lambda x: None,
         time_range_start: SecondsSinceUnixEpoch | None = None,
         time_range_end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
@@ -481,13 +502,21 @@ class GmailConnector(
         yield from cast(
             Iterator[Document | ConnectorFailure],
             self._fetch_threads_impl(
-                user_email, time_range_start, time_range_end, callback, False
+                user_email,
+                time_range_start,
+                time_range_end,
+                callback,
+                page_token,
+                set_page_token,
+                False,
             ),
         )
 
     def _fetch_slim_threads(
         self,
         user_email: str,
+        page_token: str | None = None,
+        set_page_token: Callable[[str | None], None] = lambda x: None,
         time_range_start: SecondsSinceUnixEpoch | None = None,
         time_range_end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
@@ -495,7 +524,13 @@ class GmailConnector(
         yield from cast(
             GenerateSlimDocumentOutput,
             self._fetch_threads_impl(
-                user_email, time_range_start, time_range_end, callback, True
+                user_email,
+                time_range_start,
+                time_range_end,
+                callback,
+                page_token,
+                set_page_token,
+                True,
             ),
         )
 
@@ -508,10 +543,22 @@ class GmailConnector(
         if not checkpoint.user_emails:
             checkpoint.user_emails = self._get_all_user_emails()
         try:
+
+            def set_page_token(page_token: str | None) -> None:
+                checkpoint.page_token = page_token
+
             yield from self._fetch_threads(
-                checkpoint.user_emails[-1], start, end, callback=None
+                checkpoint.user_emails[-1],
+                checkpoint.page_token,
+                set_page_token,
+                start,
+                end,
+                callback=None,
             )
-            checkpoint.user_emails.pop()
+            if checkpoint.page_token is None:
+                # we're done with this user
+                checkpoint.user_emails.pop()
+
             if len(checkpoint.user_emails) == 0:
                 checkpoint.has_more = False
             return checkpoint
@@ -553,9 +600,19 @@ class GmailConnector(
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         try:
+            pt_dict: dict[str, str | None] = {PAGE_TOKEN_KEY: None}
+
+            def set_page_token(page_token: str | None) -> None:
+                pt_dict[PAGE_TOKEN_KEY] = page_token
+
             for user_email in self._get_all_user_emails():
                 yield from self._fetch_slim_threads(
-                    user_email, start, end, callback=callback
+                    user_email,
+                    pt_dict[PAGE_TOKEN_KEY],
+                    set_page_token,
+                    start,
+                    end,
+                    callback=callback,
                 )
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
