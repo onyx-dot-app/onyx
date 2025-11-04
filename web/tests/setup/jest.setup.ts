@@ -59,6 +59,35 @@ if (typeof window !== "undefined") {
 
   // Mock window.scrollTo
   global.scrollTo = jest.fn();
+
+  // Polyfill pointer capture methods for Radix UI Select
+  if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = jest.fn();
+  }
+  if (!Element.prototype.setPointerCapture) {
+    Element.prototype.setPointerCapture = jest.fn();
+  }
+  if (!Element.prototype.releasePointerCapture) {
+    Element.prototype.releasePointerCapture = jest.fn();
+  }
+
+  // Polyfill scrollIntoView for Radix UI
+  Element.prototype.scrollIntoView = jest.fn();
+
+  // Mock navigator.clipboard (configurable so userEvent can override it)
+  Object.defineProperty(navigator, "clipboard", {
+    writable: true,
+    configurable: true,
+    value: {
+      writeText: jest.fn().mockResolvedValue(undefined),
+      readText: jest.fn(),
+    },
+  });
+
+  // Create modal-root div for modals
+  const modalRoot = document.createElement("div");
+  modalRoot.setAttribute("id", "modal-root");
+  document.body.appendChild(modalRoot);
 }
 
 // Suppress console errors in tests (optional - comment out if you want to see them)
