@@ -4,6 +4,7 @@ import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { Separator } from "@/components/ui/separator";
+import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import InputFile from "@/refresh-components/inputs/InputFile";
@@ -16,6 +17,7 @@ import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/texts/Text";
+import { strict } from "assert";
 
 type Props = {
   llmDescriptor: WellKnownLLMProviderDescriptor;
@@ -353,68 +355,44 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
           <FormField name="default_model_name" state={state} className="w-full">
             <FormField.Label>Default Model</FormField.Label>
             <FormField.Control>
-              {modelOptions.length > 0 && (
-                <InputSelect
-                  value={field.value}
-                  onValueChange={(value) => {
-                    helper.setValue(value);
-                    setDefaultModelName(value);
-                    if (testModelChangeWithApiKey && value) {
-                      testModelChangeWithApiKey(value);
-                    }
-                  }}
-                  options={modelOptions}
-                  disabled={
-                    disabled || modelOptions.length === 0 || isFetchingModels
+              <InputComboBox
+                value={field.value}
+                onValueChange={(value) => {
+                  helper.setValue(value);
+                  setDefaultModelName(value);
+                }}
+                onChange={(e) => {
+                  helper.setValue(e.target.value);
+                  setDefaultModelName(e.target.value);
+                }}
+                options={modelOptions}
+                disabled={
+                  disabled || modelOptions.length === 0 || isFetchingModels
+                }
+                rightSection={
+                  canFetchModels ? (
+                    <IconButton
+                      internal
+                      icon={SvgRefreshCw}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onFetchModels?.();
+                      }}
+                      tooltip="Fetch available models"
+                      disabled={disabled || isFetchingModels}
+                      className={isFetchingModels ? "animate-spin" : ""}
+                    />
+                  ) : undefined
+                }
+                onBlur={field.onBlur}
+                placeholder="Select a model"
+                onValidationError={(error) => {
+                  if (error) {
+                    helper.setError(error);
                   }
-                  rightSection={
-                    canFetchModels ? (
-                      <IconButton
-                        internal
-                        icon={SvgRefreshCw}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onFetchModels?.();
-                        }}
-                        tooltip="Fetch available models"
-                        disabled={disabled || isFetchingModels}
-                        className={isFetchingModels ? "animate-spin" : ""}
-                      />
-                    ) : undefined
-                  }
-                  onBlur={field.onBlur}
-                />
-              )}
-              {modelOptions.length === 0 && (
-                <InputTypeIn
-                  value={field.value}
-                  onChange={(e) => {
-                    helper.setValue(e.target.value);
-                    setDefaultModelName(e.target.value);
-                  }}
-                  placeholder="E.g. gpt-4"
-                  showClearButton={false}
-                  disabled={disabled}
-                  rightSection={
-                    canFetchModels ? (
-                      <IconButton
-                        internal
-                        icon={SvgRefreshCw}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onFetchModels?.();
-                        }}
-                        tooltip="Fetch available models"
-                        disabled={disabled || isFetchingModels}
-                        className={isFetchingModels ? "animate-spin" : ""}
-                      />
-                    ) : undefined
-                  }
-                  onBlur={field.onBlur}
-                />
-              )}
+                }}
+              />
             </FormField.Control>
             {!showModelsApiErrorMessage && (
               <FormField.Message
