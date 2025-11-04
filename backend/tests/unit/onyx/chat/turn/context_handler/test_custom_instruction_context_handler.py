@@ -10,7 +10,7 @@ from onyx.agents.agent_sdk.message_types import ToolCallFunction
 from onyx.agents.agent_sdk.message_types import ToolMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.chat.models import PromptConfig
-from onyx.chat.turn.context_handler.custom_instruction import add_custom_instruction
+from onyx.chat.turn.context_handler.custom_instruction import append_custom_instruction
 
 
 def test_add_custom_instruction_with_instruction() -> None:
@@ -43,7 +43,7 @@ def test_add_custom_instruction_with_instruction() -> None:
         ),
     ]
 
-    result = add_custom_instruction(agent_turn_messages, prompt_config)
+    result = append_custom_instruction(agent_turn_messages, prompt_config)
 
     # Should have original messages plus custom instruction user message
     assert len(result) == 3
@@ -91,7 +91,7 @@ def test_add_custom_instruction_without_instruction() -> None:
         ),
     ]
 
-    result = add_custom_instruction(agent_turn_messages, prompt_config)
+    result = append_custom_instruction(agent_turn_messages, prompt_config)
 
     # Should have same messages as input
     assert len(result) == 2
@@ -129,7 +129,7 @@ def test_add_custom_instruction_with_empty_string() -> None:
         ),
     ]
 
-    result = add_custom_instruction(agent_turn_messages, prompt_config)
+    result = append_custom_instruction(agent_turn_messages, prompt_config)
 
     # Should have same messages as input (empty string is falsy)
     assert len(result) == 2
@@ -148,7 +148,7 @@ def test_add_custom_instruction_empty_messages() -> None:
 
     agent_turn_messages: list[AgentSDKMessage] = []
 
-    result = add_custom_instruction(agent_turn_messages, prompt_config)
+    result = append_custom_instruction(agent_turn_messages, prompt_config)
 
     # Should have just the custom instruction user message
     assert len(result) == 1
@@ -213,7 +213,7 @@ def test_add_custom_instruction_preserves_order() -> None:
         ),
     ]
 
-    result = add_custom_instruction(agent_turn_messages, prompt_config)
+    result = append_custom_instruction(agent_turn_messages, prompt_config)
 
     # Should preserve original order and append custom instruction at end
     assert len(result) == 5

@@ -8,7 +8,7 @@ from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.chat.models import PromptConfig
 
 
-def add_custom_instruction(
+def append_custom_instruction(
     agent_turn_messages: Sequence[AgentSDKMessage],
     prompt_config: PromptConfig,
 ) -> list[AgentSDKMessage]:

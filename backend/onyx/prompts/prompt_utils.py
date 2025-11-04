@@ -143,13 +143,12 @@ def build_task_prompt_reminders(
 
 
 def build_task_prompt_reminders_v2(
-    chat_turn_user_message: str,
     prompt: Persona | PromptConfig,
     use_language_hint: bool,
     should_cite: bool,
     last_iteration_included_web_search: bool = False,
     language_hint_str: str = LANGUAGE_HINT,
-) -> str:
+) -> str | None:
     """V2 version that conditionally includes citation requirements.
 
     Args:
@@ -175,24 +174,22 @@ def build_task_prompt_reminders_v2(
     citation_or_nothing = CITATION_REMINDER if should_cite else ""
 
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
-    if (
-        len(base_task)
-        + len(open_url_or_nothing)
-        + len(citation_or_nothing)
-        + len(language_hint_or_nothing)
-        > 0
-    ):
-        return f"""
-        {LONG_CONVERSATION_REMINDER_TAG_OPEN}
-        {base_task}
-        {open_url_or_nothing}
-        {citation_or_nothing}
-        {language_hint_or_nothing}
-        {LONG_CONVERSATION_REMINDER_TAG_CLOSED}
-        {chat_turn_user_message}
-        """
-    else:
-        return chat_turn_user_message
+    lines = []
+    if base_task:
+        lines.append(base_task)
+    if open_url_or_nothing:
+        lines.append(open_url_or_nothing)
+    if citation_or_nothing:
+        lines.append(citation_or_nothing)
+    if language_hint_or_nothing:
+        lines.append(language_hint_or_nothing)
+    if lines:
+        return "\n".join(
+            [LONG_CONVERSATION_REMINDER_TAG_OPEN]
+            + lines
+            + [LONG_CONVERSATION_REMINDER_TAG_CLOSED]
+        )
+    return None
 
 
 # Maps connector enum string to a more natural language representation for the LLM

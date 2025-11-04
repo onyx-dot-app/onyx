@@ -33,11 +33,11 @@ from onyx.chat.stream_processing.utils import map_document_id_order_v2
 from onyx.chat.turn.context_handler.citation import (
     assign_citation_numbers_recent_tool_calls,
 )
-from onyx.chat.turn.context_handler.custom_instruction import add_custom_instruction
+from onyx.chat.turn.context_handler.custom_instruction import append_custom_instruction
+from onyx.chat.turn.context_handler.reminder import maybe_append_reminder
 from onyx.chat.turn.context_handler.remove_user_messages import (
     remove_middle_user_messages,
 )
-from onyx.chat.turn.context_handler.task_prompt import add_reminder
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
 from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
@@ -81,9 +81,6 @@ def _run_agent_loop(
     from onyx.llm.litellm_singleton.config import initialize_litellm
 
     initialize_litellm()
-    # Split messages into three parts for clear tracking
-    # TODO: Think about terminal tool calls like image gen
-    # in multi turn conversations
     chat_history = messages[1:-1]
     current_user_message = cast(UserMessage, messages[-1])
     agent_turn_messages: list[AgentSDKMessage] = []
@@ -95,6 +92,9 @@ def _run_agent_loop(
             dependencies.tools if iteration_count < MAX_ITERATIONS else []
         )
         memories = get_memories(dependencies.user_or_none, dependencies.db_session)
+        # TODO: The system is rather prompt-cache efficient except for rebuilding the system prompt.
+        # The biggest offender is when we hit max iterations and then all the tool calls cannot
+        # be cached anymore since the system message will be differ in that it will have no tools.
         langchain_system_message = default_build_system_message_v2(
             dependencies.prompt_config,
             dependencies.llm.config,
@@ -110,7 +110,14 @@ def _run_agent_loop(
                 )
             ],
         )
-        previous_messages = [new_system_prompt] + chat_history + [current_user_message]
+        # TODO make custom instructions a bit simpler and it shouldn't be a context handler
+        custom_instructions = append_custom_instruction([], prompt_config)
+        previous_messages = (
+            [new_system_prompt]
+            + chat_history
+            + custom_instructions
+            + [current_user_message]
+        )
         current_messages = previous_messages + agent_turn_messages
 
         if not available_tools:
@@ -146,25 +153,21 @@ def _run_agent_loop(
         ]
 
         # Apply context handlers in order:
-        # 1. Remove all user messages in the middle (previous reminders/instructions)
+        # 1. Remove all user messages in the middle (previous reminders)
         agent_turn_messages = remove_middle_user_messages(agent_turn_messages)
 
-        # 2. Add custom instructions (if present)
-        agent_turn_messages = add_custom_instruction(agent_turn_messages, prompt_config)
-
-        # 3. Add task prompt reminder
+        # 2. Add task prompt reminder
         last_iteration_included_web_search = any(
             tool_call.name == "web_search" for tool_call in tool_call_events
         )
-        agent_turn_messages = add_reminder(
-            current_user_message,
+        agent_turn_messages = maybe_append_reminder(
             agent_turn_messages,
             prompt_config,
             ctx.should_cite_documents,
             last_iteration_included_web_search,
         )
 
-        # 4. Assign citation numbers to tool call outputs
+        # 3. Assign citation numbers to tool call outputs
         citation_result = assign_citation_numbers_recent_tool_calls(
             agent_turn_messages, ctx
         )

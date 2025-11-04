@@ -29,6 +29,7 @@ from openai.types.responses.response_stream_event import ResponseCreatedEvent
 from openai.types.responses.response_stream_event import ResponseTextDeltaEvent
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
+from onyx.agents.agent_sdk.message_types import AssistantMessageWithContent
 from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
@@ -45,6 +46,7 @@ from tests.unit.onyx.chat.turn.utils import BaseFakeModel
 from tests.unit.onyx.chat.turn.utils import create_fake_message
 from tests.unit.onyx.chat.turn.utils import create_fake_response
 from tests.unit.onyx.chat.turn.utils import create_fake_usage
+from tests.unit.onyx.chat.turn.utils import FakeModel
 from tests.unit.onyx.chat.turn.utils import get_model_with_response
 from tests.unit.onyx.chat.turn.utils import StreamableFakeModel
 
@@ -505,6 +507,78 @@ def test_fast_chat_turn_tool_call_cancellation(
     assert_cancellation_packets(packets, expect_cancelled_message=True)
 
 
+def test_fast_chat_turn_next_turn_context_handlers(
+    chat_turn_dependencies: ChatTurnDependencies,
+    chat_session_id: UUID,
+    message_id: int,
+    research_type: ResearchType,
+) -> None:
+    from onyx.chat.turn.fast_chat_turn import fast_chat_turn
+
+    """Test that context handlers work correctly in tandem for the next turn."""
+    prompt_config = PromptConfig(
+        default_behavior_system_prompt="You are a helpful assistant.",
+        custom_instructions="Always be polite and helpful.",
+        reminder="Answer the user's question.",
+        datetime_aware=False,
+    )
+
+    starter_messages = [
+        SystemMessage(
+            role="system",
+            content=[
+                InputTextContent(
+                    type="input_text",
+                    text="You are a helpful assistant.",
+                )
+            ],
+        ),
+        UserMessage(
+            role="user",
+            content=[
+                InputTextContent(
+                    type="input_text",
+                    text="hi",
+                )
+            ],
+        ),
+        AssistantMessageWithContent(
+            role="assistant",
+            content=[
+                InputTextContent(
+                    type="input_text",
+                    text="I need to use a tool",
+                )
+            ],
+        ),
+    ]
+    generator = fast_chat_turn(
+        starter_messages,
+        chat_turn_dependencies,
+        chat_session_id,
+        message_id,
+        research_type,
+        prompt_config,
+    )
+    packets = list(generator)
+    assert_packets_contain_stop(packets)
+    assert isinstance(chat_turn_dependencies.llm_model, FakeModel)
+    input_history = chat_turn_dependencies.llm_model.input_history
+    first_input = input_history[0]
+    assert isinstance(first_input, list), "First input should be a list"
+    assert (
+        len(first_input) == 5
+    ), f"First input should have at least 3 messages (system, user, assistant, custom instructions, user), got {len(first_input)}"
+
+    assert first_input[0]["role"] == "system", "First message should be system message"  # type: ignore
+    assert (
+        first_input[1]["role"] == "user"
+    ), "Second message should be user message from previous turn"
+    assert first_input[2]["role"] == "assistant", "Third message should be assistant message"  # type: ignore
+    assert first_input[3]["role"] == "user", "Fourth message should be custom instructions message"  # type: ignore
+    assert first_input[4]["role"] == "user", "Fifth message should be user message"  # type: ignore
+
+
 def test_fast_chat_turn_context_handlers(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[AgentSDKMessage],
@@ -554,15 +628,9 @@ def test_fast_chat_turn_context_handlers(
             self.input_history.append(input)
             self.stream_call_count += 1
 
-            print(f"\n[DEBUG] get_response called, count={self.stream_call_count}")
-            print(
-                f"[DEBUG] Input has {len(input) if isinstance(input, list) else 'non-list'} items"
-            )
-
             # On first call, return tool call
             # On subsequent calls, return regular text response
             if self.stream_call_count == 1:
-                print(f"[DEBUG] Returning tool call (call {self.stream_call_count})")
                 # Create a proper tool call response
                 # Tool calls go directly in the output list, not inside a message
                 from agents import ModelResponse
@@ -586,9 +654,6 @@ def test_fast_chat_turn_context_handlers(
                     response_id="fake-response-id-1",
                 )
             else:
-                print(
-                    f"[DEBUG] Returning regular text response (call {self.stream_call_count})"
-                )
                 # Return regular text response
                 from agents import ModelResponse
 
@@ -635,18 +700,9 @@ def test_fast_chat_turn_context_handlers(
             self.input_history.append(input)
             self.stream_call_count += 1
 
-            print(f"\n[DEBUG] stream_response called, count={self.stream_call_count}")
-            print(
-                f"[DEBUG] Input has {len(input) if isinstance(input, list) else 'non-list'} items"
-            )
-
             # On first call, return tool call stream
             # On subsequent calls, return regular text response
             if self.stream_call_count == 1:
-                print(
-                    f"[DEBUG] Returning tool call stream (call {self.stream_call_count})"
-                )
-
                 # Return tool call stream events
                 async def _gen_tool() -> AsyncIterator[object]:  # type: ignore[misc]
                     from agents.items import ResponseFunctionToolCall
@@ -694,10 +750,6 @@ def test_fast_chat_turn_context_handlers(
 
                 return _gen_tool()
             else:
-                print(
-                    f"[DEBUG] Returning regular text stream (call {self.stream_call_count})"
-                )
-
                 # Return regular text response stream
                 async def _gen() -> AsyncIterator[object]:  # type: ignore[misc]
                     from openai.types.responses.response_stream_event import (
@@ -811,15 +863,6 @@ def test_fast_chat_turn_context_handlers(
         len(fake_model_with_tool.input_history) >= 2
     ), f"Expected at least 2 inputs in history, got {len(fake_model_with_tool.input_history)}"
 
-    # Print debug info to understand what's happening
-    print(f"\nDebug: call_count={fake_model_with_tool.call_count}")
-    print(f"Debug: input_history length={len(fake_model_with_tool.input_history)}")
-    for i, inp in enumerate(fake_model_with_tool.input_history):
-        if isinstance(inp, list):
-            print(f"Debug: input[{i}] has {len(inp)} messages")
-        else:
-            print(f"Debug: input[{i}] is type: {type(inp)}")
-
     # Verify first input: [system, user message, custom instructions]
     first_input = fake_model_with_tool.input_history[0]
     assert isinstance(first_input, list), "First input should be a list"
@@ -836,8 +879,8 @@ def test_fast_chat_turn_context_handlers(
     # Verify second input: [system, user message, tool call, tool call response, custom instructions, user message with reminder]
     second_input = fake_model_with_tool.input_history[1]
     assert isinstance(second_input, list), "Second input should be a list of messages"
-    assert len(second_input) == 5, (
-        f"Second input should have 5 messages "
+    assert len(second_input) == 6, (
+        f"Second input should have 6 messages "
         f"(system, user, tool call, tool response, custom instructions, reminder), "
         f"got {len(second_input)}"
     )
@@ -848,16 +891,16 @@ def test_fast_chat_turn_context_handlers(
     ), "First message in second input should be system message"
     assert (
         second_input[1]["role"] == "user"
-    ), "Second message in second input should be user message"
+    ), "Second message in second input should be custom instructions"
     assert (
-        second_input[2]["type"] == "function_call"
-    ), "Third message in second input should be tool call invocation"
+        second_input[2]["role"] == "user"
+    ), "Third message in second input should be user query"
     assert (
-        second_input[3]["type"] == "function_call_output"
-    ), "Fourth message in second input should be tool call response"
+        second_input[3]["type"] == "function_call"
+    ), "Fourth message in second input should be tool call invocation"
     assert (
-        second_input[4]["role"] == "user"
-    ), "Fifth message in second input should be custom instructions"
+        second_input[4]["type"] == "function_call_output"
+    ), "Fifth message in second input should be tool call response"
     assert (
         second_input[5]["role"] == "user"
     ), "Sixth message in second input should be reminder message"
