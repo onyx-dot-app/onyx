@@ -287,28 +287,6 @@ const LLMConnectionModal = () => {
     }
   };
 
-  const testModelChangeWithApiKey = async (
-    modelName: string,
-    formikProps: FormikProps<any>
-  ) => {
-    if (!llmDescriptor) return;
-    setApiStatus("loading");
-    setShowApiMessage(true);
-    const result = await testApiKeyHelper(
-      llmDescriptor,
-      initialValues,
-      formikProps.values,
-      undefined,
-      modelName
-    );
-    if (result.ok) {
-      setApiStatus("success");
-    } else {
-      setErrorMessage(result.errorMessage);
-      setApiStatus("error");
-    }
-  };
-
   const testFileInputChange = async (
     customConfig: Record<string, any>,
     formikProps: FormikProps<any>
@@ -474,10 +452,6 @@ const LLMConnectionModal = () => {
                 setFetchedModelConfigurations(value);
               } else if (field === "default_model_name") {
                 formikProps.setFieldValue("default_model_name", value);
-                // Trigger validation of the newly set default model
-                if (value) {
-                  testModelChangeWithApiKey(value, formikProps);
-                }
               } else if (field === "_modelListUpdated") {
                 // Ignore this field as it's just for forcing re-renders
                 return;
@@ -531,7 +505,6 @@ const LLMConnectionModal = () => {
                     llmDescriptor={llmDescriptor!}
                     tabConfig={tabConfig}
                     modelOptions={modelOptions}
-                    onApiKeyBlur={(apiKey) => testApiKey(apiKey, formikProps)}
                     showApiMessage={showApiMessage}
                     apiStatus={apiStatus}
                     errorMessage={errorMessage}
@@ -540,9 +513,6 @@ const LLMConnectionModal = () => {
                     canFetchModels={canFetchModels}
                     activeTab={activeTab}
                     setActiveTab={setActiveTab}
-                    testModelChangeWithApiKey={(modelName) =>
-                      testModelChangeWithApiKey(modelName, formikProps)
-                    }
                     modelsApiStatus={modelsApiStatus}
                     modelsErrorMessage={modelsErrorMessage}
                     showModelsApiErrorMessage={showModelsApiErrorMessage}
@@ -557,7 +527,6 @@ const LLMConnectionModal = () => {
                     apiStatus={apiStatus}
                     errorMessage={errorMessage}
                     isFetchingModels={isFetchingModels}
-                    onApiKeyBlur={(apiKey) => testApiKey(apiKey, formikProps)}
                     formikValues={formikProps.values}
                     setDefaultModelName={(value) =>
                       formikProps.setFieldValue("default_model_name", value)
@@ -567,9 +536,6 @@ const LLMConnectionModal = () => {
                     modelsApiStatus={modelsApiStatus}
                     modelsErrorMessage={modelsErrorMessage}
                     showModelsApiErrorMessage={showModelsApiErrorMessage}
-                    testModelChangeWithApiKey={(modelName) =>
-                      testModelChangeWithApiKey(modelName, formikProps)
-                    }
                     testFileInputChange={(customConfig) =>
                       testFileInputChange(customConfig, formikProps)
                     }

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, forwardRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { OptionsList } from "./OptionsList";
@@ -33,78 +33,92 @@ interface ComboBoxDropdownProps {
  * Renders the dropdown menu in a portal
  * Handles scroll-into-view for highlighted options
  */
-export const ComboBoxDropdown: React.FC<ComboBoxDropdownProps> = ({
-  isOpen,
-  disabled,
-  dropdownPosition,
-  fieldId,
-  placeholder,
-  matchedOptions,
-  unmatchedOptions,
-  hasSearchTerm,
-  separatorLabel,
-  value,
-  highlightedIndex,
-  onSelect,
-  onMouseEnter,
-  onMouseMove,
-  isExactMatch,
-}) => {
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Scroll highlighted option into view
-  useEffect(() => {
-    if (isOpen && dropdownRef.current && highlightedIndex >= 0) {
-      const highlightedElement = dropdownRef.current.querySelector(
-        `[data-index="${highlightedIndex}"]`
-      );
-      if (highlightedElement) {
-        highlightedElement.scrollIntoView({
-          block: "nearest",
-          behavior: "smooth",
-        });
+export const ComboBoxDropdown = forwardRef<
+  HTMLDivElement,
+  ComboBoxDropdownProps
+>(
+  (
+    {
+      isOpen,
+      disabled,
+      dropdownPosition,
+      fieldId,
+      placeholder,
+      matchedOptions,
+      unmatchedOptions,
+      hasSearchTerm,
+      separatorLabel,
+      value,
+      highlightedIndex,
+      onSelect,
+      onMouseEnter,
+      onMouseMove,
+      isExactMatch,
+    },
+    ref
+  ) => {
+    // Scroll highlighted option into view
+    useEffect(() => {
+      if (
+        isOpen &&
+        ref &&
+        typeof ref !== "function" &&
+        ref.current &&
+        highlightedIndex >= 0
+      ) {
+        const highlightedElement = ref.current.querySelector(
+          `[data-index="${highlightedIndex}"]`
+        );
+        if (highlightedElement) {
+          highlightedElement.scrollIntoView({
+            block: "nearest",
+            behavior: "smooth",
+          });
+        }
       }
+    }, [highlightedIndex, isOpen, ref]);
+
+    if (
+      !isOpen ||
+      disabled ||
+      !dropdownPosition ||
+      typeof document === "undefined"
+    ) {
+      return null;
     }
-  }, [highlightedIndex, isOpen]);
 
-  if (
-    !isOpen ||
-    disabled ||
-    !dropdownPosition ||
-    typeof document === "undefined"
-  ) {
-    return null;
+    return createPortal(
+      <div
+        ref={ref}
+        id={`${fieldId}-listbox`}
+        role="listbox"
+        aria-label={placeholder}
+        className={cn(
+          "fixed z-[9999] bg-background-neutral-00 border border-border-02 rounded-12 shadow-02 max-h-60 overflow-auto p-1"
+        )}
+        style={{
+          top: `${dropdownPosition.top}px`,
+          left: `${dropdownPosition.left}px`,
+          width: `${dropdownPosition.width}px`,
+        }}
+      >
+        <OptionsList
+          matchedOptions={matchedOptions}
+          unmatchedOptions={unmatchedOptions}
+          hasSearchTerm={hasSearchTerm}
+          separatorLabel={separatorLabel}
+          value={value}
+          highlightedIndex={highlightedIndex}
+          fieldId={fieldId}
+          onSelect={onSelect}
+          onMouseEnter={onMouseEnter}
+          onMouseMove={onMouseMove}
+          isExactMatch={isExactMatch}
+        />
+      </div>,
+      document.body
+    );
   }
+);
 
-  return createPortal(
-    <div
-      ref={dropdownRef}
-      id={`${fieldId}-listbox`}
-      role="listbox"
-      aria-label={placeholder}
-      className={cn(
-        "fixed z-[9999] bg-background-neutral-00 border border-border-02 rounded-12 shadow-02 max-h-60 overflow-auto p-1"
-      )}
-      style={{
-        top: `${dropdownPosition.top}px`,
-        left: `${dropdownPosition.left}px`,
-        width: `${dropdownPosition.width}px`,
-      }}
-    >
-      <OptionsList
-        matchedOptions={matchedOptions}
-        unmatchedOptions={unmatchedOptions}
-        hasSearchTerm={hasSearchTerm}
-        separatorLabel={separatorLabel}
-        value={value}
-        highlightedIndex={highlightedIndex}
-        fieldId={fieldId}
-        onSelect={onSelect}
-        onMouseEnter={onMouseEnter}
-        onMouseMove={onMouseMove}
-        isExactMatch={isExactMatch}
-      />
-    </div>,
-    document.body
-  );
-};
+ComboBoxDropdown.displayName = "ComboBoxDropdown";

@@ -21,14 +21,12 @@ interface DynamicProviderFieldsProps {
       description?: string;
     }
   >;
-  onApiKeyBlur?: (apiKey: string) => void;
   showApiMessage?: boolean;
   apiStatus?: APIFormFieldState;
   errorMessage?: string;
   onFetchModels?: () => void;
   isFetchingModels?: boolean;
   canFetchModels?: boolean;
-  testModelChangeWithApiKey?: (modelName: string) => Promise<void>;
   modelsApiStatus?: APIFormFieldState;
   modelsErrorMessage?: string;
   showModelsApiErrorMessage?: boolean;
@@ -40,14 +38,12 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
   fields,
   modelOptions,
   fieldOverrides = {},
-  onApiKeyBlur,
   showApiMessage = false,
   apiStatus = "loading",
   errorMessage = "",
   onFetchModels,
   isFetchingModels = false,
   canFetchModels = false,
-  testModelChangeWithApiKey,
   modelsApiStatus = "loading",
   modelsErrorMessage = "",
   showModelsApiErrorMessage = false,
@@ -58,8 +54,6 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
     if (!apiKey) return;
     if (llmDescriptor?.name === "ollama_chat") {
       onFetchModels?.();
-    } else {
-      onApiKeyBlur?.(apiKey);
     }
   };
 

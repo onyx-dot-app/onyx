@@ -84,10 +84,13 @@ import SvgXOctagon from "@/icons/x-octagon";
 import Text from "../../texts/Text";
 
 // Hooks
-import { useComboBoxState } from "./hooks/useComboBoxState";
-import { useDropdownPosition } from "./hooks/useDropdownPosition";
-import { useComboBoxKeyboard } from "./hooks/useComboBoxKeyboard";
-import { useOptionFiltering } from "./hooks/useOptionFiltering";
+import {
+  useComboBoxState,
+  useDropdownPosition,
+  useComboBoxKeyboard,
+  useOptionFiltering,
+  useClickOutside,
+} from "./hooks";
 import { useValidation } from "./utils/validation";
 import { buildAriaAttributes } from "./utils/aria";
 
@@ -115,6 +118,7 @@ const InputComboBox = ({
   ...rest
 }: InputComboBoxProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const fieldContext = useContext(FieldContext);
 
   const hasOptions = options.length > 0;
@@ -234,6 +238,16 @@ const InputComboBox = ({
     hasOptions,
   });
 
+  // 6️⃣ Click Outside Hook
+  useClickOutside({
+    isOpen,
+    refs: [inputRef, dropdownRef],
+    onClickOutside: useCallback(() => {
+      setIsOpen(false);
+      setIsKeyboardNav(false);
+    }, [setIsOpen, setIsKeyboardNav]),
+  });
+
   const handleFocus = useCallback(() => {
     if (hasOptions) {
       setIsOpen(true);
@@ -258,7 +272,7 @@ const InputComboBox = ({
   const autoId = useId();
   const fieldId = fieldContext?.baseId || name || `combo-box-${autoId}`;
 
-  // 6️⃣ ARIA Attributes Builder
+  // 7️⃣ ARIA Attributes Builder
   const ariaProps = buildAriaAttributes({
     hasOptions,
     isOpen,
@@ -336,6 +350,7 @@ const InputComboBox = ({
 
         {/* Dropdown - Rendered in Portal */}
         <ComboBoxDropdown
+          ref={dropdownRef}
           isOpen={isOpen}
           disabled={disabled}
           dropdownPosition={dropdownPosition}

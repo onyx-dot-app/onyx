@@ -27,7 +27,6 @@ type Props = {
   apiStatus: "idle" | "loading" | "success" | "error";
   errorMessage: string;
   isFetchingModels: boolean;
-  onApiKeyBlur: (apiKey: string) => void;
   formikValues: any;
   setDefaultModelName: (value: string) => void;
   onFetchModels?: () => void;
@@ -35,7 +34,6 @@ type Props = {
   modelsApiStatus: "idle" | "loading" | "success" | "error";
   modelsErrorMessage: string;
   showModelsApiErrorMessage: boolean;
-  testModelChangeWithApiKey: (modelName: string) => Promise<void>;
   testFileInputChange: (
     customConfig: Record<string, any>
   ) => Promise<void> | void;
@@ -50,7 +48,6 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
   apiStatus,
   errorMessage,
   isFetchingModels,
-  onApiKeyBlur,
   formikValues,
   setDefaultModelName,
   onFetchModels,
@@ -58,7 +55,6 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
   modelsApiStatus,
   modelsErrorMessage,
   showModelsApiErrorMessage,
-  testModelChangeWithApiKey,
   testFileInputChange,
   disabled = false,
 }) => {
@@ -66,8 +62,6 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
     if (!apiKey) return;
     if (llmDescriptor?.name === "openrouter") {
       onFetchModels?.();
-    } else {
-      onApiKeyBlur(apiKey);
     }
   };
   return (

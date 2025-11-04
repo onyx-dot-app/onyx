@@ -22,7 +22,6 @@ type Props = {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   tabConfig: ProviderTabConfig;
   modelOptions: Array<{ label: string; value: string }>;
-  onApiKeyBlur: (apiKey: string) => void;
   showApiMessage: boolean;
   apiStatus: "idle" | "loading" | "success" | "error";
   errorMessage: string;
@@ -31,7 +30,6 @@ type Props = {
   canFetchModels: boolean;
   activeTab: string;
   setActiveTab: (tabId: string) => void;
-  testModelChangeWithApiKey: (modelName: string) => Promise<void>;
   modelsApiStatus: "idle" | "loading" | "success" | "error";
   modelsErrorMessage: string;
   showModelsApiErrorMessage: boolean;
@@ -42,7 +40,6 @@ export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
   llmDescriptor,
   tabConfig,
   modelOptions,
-  onApiKeyBlur,
   showApiMessage,
   apiStatus,
   errorMessage,
@@ -51,7 +48,6 @@ export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
   canFetchModels,
   activeTab,
   setActiveTab,
-  testModelChangeWithApiKey,
   modelsApiStatus,
   modelsErrorMessage,
   showModelsApiErrorMessage,
@@ -74,14 +70,12 @@ export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
               fields={tab.fields}
               modelOptions={modelOptions}
               fieldOverrides={tab.fieldOverrides}
-              onApiKeyBlur={onApiKeyBlur}
               showApiMessage={showApiMessage}
               apiStatus={apiStatus}
               errorMessage={errorMessage}
               onFetchModels={onFetchModels}
               isFetchingModels={isFetchingModels}
               canFetchModels={canFetchModels}
-              testModelChangeWithApiKey={testModelChangeWithApiKey}
               modelsApiStatus={modelsApiStatus}
               modelsErrorMessage={modelsErrorMessage}
               showModelsApiErrorMessage={showModelsApiErrorMessage}
