@@ -8,7 +8,7 @@ from fastapi import Request
 from fastapi import Response
 
 from ee.onyx.auth.users import decode_anonymous_user_jwt_token
-from onyx.auth.api_key import extract_tenant_from_api_key_header
+from onyx.auth.utils import extract_tenant_from_auth_header
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.engine.sql_engine import is_valid_schema_name
@@ -49,13 +49,13 @@ async def _get_tenant_id_from_request(
 ) -> str:
     """
     Attempt to extract tenant_id from:
-    1) The API key header
+    1) The API key or PAT (Personal Access Token) header
     2) The Redis-based token (stored in Cookie: fastapiusersauth)
     3) The anonymous user cookie
     Fallback: POSTGRES_DEFAULT_SCHEMA
     """
-    # Check for API key
-    tenant_id = extract_tenant_from_api_key_header(request)
+    # Check for API key or PAT in Authorization header
+    tenant_id = extract_tenant_from_auth_header(request)
     if tenant_id is not None:
         return tenant_id
 
