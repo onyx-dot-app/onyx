@@ -142,19 +142,17 @@ def get_persona_agent_prompt_expressions(
             contextualized_prompt=ASSISTANT_SYSTEM_PROMPT_DEFAULT, base_prompt=""
         )
 
-    # Prompts are now embedded directly on the Persona model
+    # Pull custom instructions if they exist for backwards compatibility
     prompt_config = PromptConfig.from_model(persona, db_session=db_session)
-    # Combine default behavior and custom instructions
-    system_prompt = prompt_config.default_behavior_system_prompt or ""
     if prompt_config.custom_instructions:
-        if system_prompt:
-            system_prompt += "\n\n"
-        system_prompt += prompt_config.custom_instructions
+        system_prompt = prompt_config.custom_instructions
+    else:
+        system_prompt = prompt_config.default_behavior_system_prompt
 
     datetime_aware_system_prompt = handle_onyx_date_awareness(
         prompt_str=system_prompt,
         prompt_config=prompt_config,
-        add_additional_info_if_no_tag=persona.datetime_aware,
+        add_additional_info_if_no_tag=persona.datetime_aware if persona else False,
     )
 
     return PersonaPromptExpressions(
