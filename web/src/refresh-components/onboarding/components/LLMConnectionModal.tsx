@@ -370,28 +370,26 @@ const LLMConnectionModal = () => {
           model_configurations: modelConfigsToUse,
         };
 
-        if (apiStatus !== "success") {
-          setApiStatus("loading");
-          setShowApiMessage(true);
-          let result;
+        setApiStatus("loading");
+        setShowApiMessage(true);
+        let result;
 
-          if (llmDescriptor) {
-            result = await testApiKeyHelper(
-              llmDescriptor,
-              initialValues,
-              payload
-            );
-          } else {
-            result = await testCustomProvider(payload);
-          }
-          if (!result.ok) {
-            setErrorMessage(result.errorMessage);
-            setApiStatus("error");
-            setIsSubmitting(false);
-            return;
-          }
-          setApiStatus("success");
+        if (llmDescriptor) {
+          result = await testApiKeyHelper(
+            llmDescriptor,
+            initialValues,
+            payload
+          );
+        } else {
+          result = await testCustomProvider(payload);
         }
+        if (!result.ok) {
+          setErrorMessage(result.errorMessage);
+          setApiStatus("error");
+          setIsSubmitting(false);
+          return;
+        }
+        setApiStatus("success");
 
         const response = await fetch(
           `${LLM_PROVIDERS_ADMIN_URL}${"?is_creation=true"}`,
