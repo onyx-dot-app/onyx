@@ -1,3 +1,5 @@
+import { JSX } from "react";
+
 export function MetadataBadge({
   icon,
   value,

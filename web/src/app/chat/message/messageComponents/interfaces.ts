@@ -1,3 +1,4 @@
+import { JSX } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { FeedbackType } from "../../interfaces";
 import { Packet } from "../../services/streamingModels";

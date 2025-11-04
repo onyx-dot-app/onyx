@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
+  JSX,
 } from "react";
 import { ChevronDownIcon, PlusIcon } from "./icons/icons";
 import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";

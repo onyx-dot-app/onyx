@@ -5,6 +5,7 @@ import React, {
   useEffect,
   ReactNode,
   useContext,
+  JSX,
 } from "react";
 import { SettingsContext } from "../settings/SettingsProvider";
 
