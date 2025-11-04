@@ -1,10 +1,39 @@
 # Opal
 
-A TSX component library for the Onyx project.
+A Typescript component library for Onyx.
 
-## Overview
+## Usage
 
-Opal is an internal library that provides reusable React/TSX components for the Onyx web application. It's designed to maintain consistency and promote code reuse across the project.
+```tsx
+import { Button } from '@onyx/opal';
+
+function MyComponent() {
+  return (
+    <Button onClick={() => console.log('Clicked!')}>
+      Click me
+    </Button>
+  );
+}
+```
+
+## Build
+
+Opal is built in such a way that it *reuses* the `/web/node_modules` directory.
+Therefore, builds don't incur duplicate space-costs (i.e., what would have happened if Opal had its own `node_modules`).
+If you want to add dependencies to Opal, define that dependency inside of `/libs/opal/package.json` under `peerDependencies`.
+Then, go to `/web` and run the install:
+
+```sh
+npm i
+
+# Or, if you prefer `bun`
+bun i
+```
+
+Those dependencies will then install inside of `/web/node_modules` and be available to Opal.
+
+Lastly, this library is fully typed with TypeScript.
+Type definitions are automatically generated during the build process.
 
 ## Structure
 
@@ -13,58 +42,7 @@ libs/opal/
 ├── src/
 │   ├── components/    # React components
 │   └── index.ts       # Main export file
-├── dist/              # Compiled output (generated)
 ├── package.json
 ├── tsconfig.json
 └── README.md
 ```
-
-## Development
-
-### Building the library
-
-```bash
-cd libs/opal
-npm run build
-```
-
-### Watch mode for development
-
-```bash
-cd libs/opal
-npm run dev
-```
-
-### Clean build artifacts
-
-```bash
-cd libs/opal
-npm run clean
-```
-
-## Usage in web application
-
-The library is linked as a local dependency in the `web` application:
-
-```tsx
-import { Button } from '@onyx/opal';
-
-function MyComponent() {
-  return (
-    <Button variant="primary" onClick={() => console.log('Clicked!')}>
-      Click me
-    </Button>
-  );
-}
-```
-
-## Adding new components
-
-1. Create your component in `src/components/YourComponent.tsx`
-2. Export it from `src/index.ts`
-3. Rebuild the library with `npm run build`
-4. The component will be available in the web app
-
-## TypeScript
-
-The library is fully typed with TypeScript. Type definitions are automatically generated during the build process.
