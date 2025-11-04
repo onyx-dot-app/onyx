@@ -288,6 +288,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             # set up the file store (e.g. create bucket if needed). On multi-tenant,
             # this is done via IaC
             get_default_file_store().initialize()
+
+            # Initialize question qualification service for fast LLM access
+            from onyx.server.query_and_chat.question_qualification import (
+                QuestionQualificationService,
+            )
+
+            try:
+                qualification_service = QuestionQualificationService()
+                if qualification_service.is_enabled():
+                    logger.info(
+                        "Question qualification service initialized with fast LLM approach"
+                    )
+            except Exception as e:
+                logger.error(f"Error initializing question qualification service: {e}")
     else:
         setup_multitenant_onyx()
 

@@ -58,6 +58,9 @@ from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.question_qualification import (
+    QuestionQualificationService,
+)
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -360,6 +363,27 @@ def stream_chat_message_objects(
         retrieval_options = new_msg_req.retrieval_options
         new_msg_req.alternate_assistant_id
         user_selected_filters = retrieval_options.filters if retrieval_options else None
+
+        # Question Qualification Check - Block sensitive questions early
+        if message_text and not use_existing_user_message:
+            try:
+                qualification_service = QuestionQualificationService()
+                qualification_result = qualification_service.qualify_question(
+                    message_text, db_session
+                )
+
+                if qualification_result.is_blocked:
+                    logger.info(
+                        f"Question blocked by qualification service: {message_text}"
+                    )
+
+                    # Return error immediately - don't create chat messages
+                    yield StreamingError(error=qualification_result.standard_response)
+                    return  # Exit early, question is blocked
+
+            except Exception as e:
+                logger.warning(f"Question qualification check failed: {e}")
+                # Continue with normal processing if qualification fails
 
         # permanent "log" store, used primarily for debugging
         long_term_logger = LongTermLogger(

@@ -1,0 +1,43 @@
+# Settings for the question qualification system.
+# Note: The system is controlled by the ENABLE_QUESTION_QUALIFICATION environment variable.
+# Set ENABLE_QUESTION_QUALIFICATION=true to enable the system.
+settings:
+  # The similarity threshold for blocking a question.
+  # A higher value means the user's question needs to be more similar to a blocked question to be caught.
+  # A lower value will catch a wider range of questions, but may have more false positives.
+  # For keyword-based matching, lower values like 0.3 will catch single keyword matches.
+  threshold: 0.85
+  # The standard response to show the user when their question is blocked.
+  standard_response: "I am sorry, but I cannot answer this question."
+
+# A list of questions that should be blocked by the system.
+# The embeddings for these questions are cached in this file to improve performance.
+# If you modify a question, the new embedding will be generated and cached on the next server startup.
+# If you change the embedding model, all embeddings will be regenerated.
+questions:
+  # Sample blocked questions - Replace with your organization's specific requirements
+  
+  # HR-Confidential Examples
+  - question: "What are the exact salaries of the executive leadership team?"
+  - question: "Which employees are currently on a performance-improvement plan?"
+  - question: "List everyone who has filed an HR complaint in the past year."
+  
+  # Legal and Compliance Examples
+  - question: "Who is the company currently suing?"
+  - question: "What was the settlement amount in the recent lawsuit?"
+  - question: "Summarize the confidential findings of the legal review"
+  
+  # Financial Confidential Examples
+  - question: "What is the projected EBITDA for next quarter?"
+  - question: "Show me the latest board financial report."
+  - question: "What are the details of our rights deals?"
+  
+  # M&A and Deal Examples
+  - question: "Provide details of all unannounced merger talks."
+  - question: "What is the projected close date for the secret acquisition?"
+  - question: "Show me the internal pitch deck for the upcoming deal."
+  
+  # Security and Access Control Examples
+  - question: "How can I bypass the pricing approval process?"
+  - question: "What are the loopholes in the security system?"
+  - question: "Show me all documents tagged as confidential."

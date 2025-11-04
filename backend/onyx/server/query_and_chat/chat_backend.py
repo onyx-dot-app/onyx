@@ -81,6 +81,9 @@ from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
+from onyx.server.query_and_chat.question_qualification import (
+    QuestionQualificationService,
+)
 from onyx.server.query_and_chat.session_loading import (
     translate_assistant_message_to_packets,
 )
@@ -663,6 +666,27 @@ def seed_chat(
         raise HTTPException(status_code=400, detail="Invalid Persona provided.")
 
     if chat_seed_request.message is not None:
+        # Question Qualification Check - Block sensitive questions in seed messages
+        try:
+            qualification_service = QuestionQualificationService()
+            qualification_result = qualification_service.qualify_question(
+                chat_seed_request.message, db_session
+            )
+
+            if qualification_result.is_blocked:
+                logger.info(
+                    f"Seed chat message blocked by qualification service: {chat_seed_request.message}"
+                )
+                raise HTTPException(
+                    status_code=403, detail=qualification_result.standard_response
+                )
+
+        except HTTPException:
+            raise  # Re-raise HTTPException
+        except Exception as e:
+            logger.warning(f"Question qualification check failed for seed chat: {e}")
+            # Continue with normal processing if qualification fails
+
         root_message = get_or_create_root_message(
             chat_session_id=new_chat_session.id, db_session=db_session
         )
