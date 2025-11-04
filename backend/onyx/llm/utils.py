@@ -748,7 +748,8 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
                 "this model may or may not support image input."
             )
             return False
-        return model_obj.get("supports_vision", False)
+        supports_vision = model_obj.get("supports_vision", False)
+        return False if supports_vision is None else supports_vision
     except Exception:
         logger.exception(
             f"Failed to get model object for {model_provider}/{model_name}"
