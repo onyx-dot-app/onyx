@@ -345,7 +345,7 @@ export function useClickOutside({
     const handleClickOutside = (event: MouseEvent) => {
       // Check if click is outside all provided refs
       const isOutside = refs.every(
-        (ref) => ref.current && !ref.current.contains(event.target as Node)
+        (ref) => !ref.current || !ref.current.contains(event.target as Node)
       );
 
       if (isOutside) {

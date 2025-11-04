@@ -79,9 +79,11 @@ import React, { useCallback, useContext, useMemo, useRef, useId } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "../InputTypeIn";
 import { FieldContext } from "../../form/FieldContext";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import SvgChevronDown from "@/icons/chevron-down";
+import SvgChevronUp from "@/icons/chevron-up";
 import SvgXOctagon from "@/icons/x-octagon";
 import Text from "../../texts/Text";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 // Hooks
 import {
@@ -324,23 +326,18 @@ const InputComboBox = ({
                 </div>
               )}
               {hasOptions && (
-                <button
-                  type="button"
-                  onClick={toggleDropdown}
+                <IconButton
+                  internal
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleDropdown();
+                  }}
                   disabled={disabled}
-                  className={cn(
-                    "flex items-center justify-center p-1 rounded hover:bg-background-neutral-01 transition-colors",
-                    disabled && "cursor-not-allowed opacity-50"
-                  )}
+                  icon={isOpen ? SvgChevronUp : SvgChevronDown}
                   aria-label={isOpen ? "Close dropdown" : "Open dropdown"}
                   tabIndex={-1}
-                >
-                  {isOpen ? (
-                    <ChevronUp className="w-4 h-4 text-text-02" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-text-02" />
-                  )}
-                </button>
+                  type="button"
+                />
               )}
             </>
           }

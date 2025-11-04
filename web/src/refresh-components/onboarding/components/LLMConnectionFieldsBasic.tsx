@@ -17,7 +17,6 @@ import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/texts/Text";
-import { strict } from "assert";
 
 type Props = {
   llmDescriptor: WellKnownLLMProviderDescriptor;
