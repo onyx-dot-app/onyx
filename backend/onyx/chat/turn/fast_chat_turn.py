@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import replace
 from typing import cast
 from typing import TYPE_CHECKING
@@ -10,6 +11,8 @@ from agents import ToolCallItem
 from agents.tracing import trace
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
+from onyx.agents.agent_sdk.message_types import InputTextContent
+from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.agents.agent_sdk.monkey_patches import (
     monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search,
@@ -17,7 +20,12 @@ from onyx.agents.agent_sdk.monkey_patches import (
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
+from onyx.chat.memories import get_memories
 from onyx.chat.models import PromptConfig
+from onyx.chat.packet_sniffing import has_had_message_start
+from onyx.chat.prompt_builder.answer_prompt_builder import (
+    default_build_system_message_v2,
+)
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
@@ -40,13 +48,18 @@ from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
+from onyx.server.query_and_chat.streaming_models import ReasoningDelta
+from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 from onyx.tools.force import ForceUseTool
+from onyx.tools.tool import Tool
 
 if TYPE_CHECKING:
     from litellm import ResponseFunctionToolCall
+
+MAX_ITERATIONS = 10
 
 
 # TODO -- this can be refactored out and played with in evals + normal demo
@@ -59,35 +72,57 @@ def _run_agent_loop(
     force_use_tool: ForceUseTool | None = None,
 ) -> None:
     monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search()
+    # This should have already been called, but call it again here for good measure.
+    # TODO: Get to the root of why sometimes it seems litellm settings aren't configured.
+    from onyx.llm.litellm_singleton.config import initialize_litellm
+
+    initialize_litellm()
     # Split messages into three parts for clear tracking
     # TODO: Think about terminal tool calls like image gen
     # in multi turn conversations
-    chat_history = messages[:-1]
-    current_user_message = messages[-1]
-    if (
-        not isinstance(current_user_message, dict)
-        or current_user_message.get("role") != "user"
-    ):
-        raise ValueError("Last message must be a user message")
-    current_user_message_typed: UserMessage = current_user_message  # type: ignore
+    chat_history = messages[1:-1]
+    current_user_message = cast(UserMessage, messages[-1])
     agent_turn_messages: list[AgentSDKMessage] = []
     last_call_is_final = False
-    first_iteration = True
+    iteration_count = 0
 
     while not last_call_is_final:
-        current_messages = chat_history + [current_user_message] + agent_turn_messages
-        tool_choice = (
-            force_use_tool_to_function_tool_names(force_use_tool, dependencies.tools)
-            if first_iteration and force_use_tool
-            else None
-        ) or "auto"
+        available_tools: Sequence[Tool] = (
+            dependencies.tools if iteration_count < MAX_ITERATIONS else []
+        )
+        memories = get_memories(dependencies.user_or_none, dependencies.db_session)
+        langchain_system_message = default_build_system_message_v2(
+            dependencies.prompt_config,
+            dependencies.llm.config,
+            memories,
+            available_tools,
+            ctx.should_cite_documents,
+        )
+        new_system_prompt = SystemMessage(
+            role="system",
+            content=[
+                InputTextContent(
+                    type="input_text", text=str(langchain_system_message.content)
+                )
+            ],
+        )
+        previous_messages = [new_system_prompt] + chat_history + [current_user_message]
+        current_messages = previous_messages + agent_turn_messages
+
+        if not available_tools:
+            tool_choice = None
+        else:
+            tool_choice = (
+                force_use_tool_to_function_tool_names(force_use_tool, available_tools)
+                if iteration_count == 0 and force_use_tool
+                else None
+            ) or "auto"
         model_settings = replace(dependencies.model_settings, tool_choice=tool_choice)
+
         agent = Agent(
             name="Assistant",
             model=dependencies.llm_model,
-            tools=cast(
-                list[AgentToolType], tools_to_function_tools(dependencies.tools)
-            ),
+            tools=cast(list[AgentToolType], tools_to_function_tools(available_tools)),
             model_settings=model_settings,
             tool_use_behavior="stop_on_first_tool",
         )
@@ -101,19 +136,22 @@ def _run_agent_loop(
         )
 
         all_messages_after_stream = streamed.to_input_list()
-        # The new messages are everything after chat_history + current_user_message
-        previous_message_count = len(chat_history) + 1
         agent_turn_messages = [
             cast(AgentSDKMessage, msg)
-            for msg in all_messages_after_stream[previous_message_count:]
+            for msg in all_messages_after_stream[len(previous_messages) :]
         ]
+
+        last_iteration_included_web_search = any(
+            tool_call.name == "web_search" for tool_call in tool_call_events
+        )
 
         agent_turn_messages = list(
             update_task_prompt(
-                current_user_message_typed,
+                current_user_message,
                 agent_turn_messages,
                 prompt_config,
                 ctx.should_cite_documents,
+                last_iteration_included_web_search,
             )
         )
         citation_result = assign_citation_numbers_recent_tool_calls(
@@ -134,7 +172,7 @@ def _run_agent_loop(
             tool.name in stopping_tools for tool in tool_call_events
         ):
             last_call_is_final = True
-        first_iteration = False
+        iteration_count += 1
 
 
 def _fast_chat_turn_core(
@@ -185,6 +223,19 @@ def _fast_chat_turn_core(
     final_answer = extract_final_answer_from_packets(
         dependencies.emitter.packet_history
     )
+    # TODO: Make this error handling more robust and not so specific to the qwen ollama cloud case
+    # where if it happens to any cloud questions, it hangs on read url
+    has_image_generation = any(
+        packet.obj.type == "image_generation_tool_delta"
+        for packet in dependencies.emitter.packet_history
+    )
+    # Allow empty final answer if image generation tool was used (it produces images, not text)
+    if len(final_answer) == 0 and not has_image_generation:
+        raise ValueError(
+            """Final answer is empty. Inference provider likely failed to provide
+            content packets.
+            """
+        )
     save_turn(
         db_session=dependencies.db_session,
         message_id=message_id,
@@ -252,9 +303,11 @@ def _process_stream(
             _emit_clean_up_packets(dependencies, ctx)
             agent_stream.cancel()
             break
-        obj = _default_packet_translation(ev, ctx, processor)
-        if obj:
-            dependencies.emitter.emit(Packet(ind=ctx.current_run_step, obj=obj))
+        packets = _default_packet_translation(
+            ev, ctx, processor, dependencies.emitter.packet_history
+        )
+        for packet in packets:
+            dependencies.emitter.emit(packet)
         if isinstance(getattr(ev, "item", None), ToolCallItem):
             tool_call_events.append(cast(ResponseFunctionToolCall, ev.item.raw_item))
     if agent_stream.streamed is None:
@@ -301,17 +354,61 @@ def _emit_citations_for_final_answer(
 
 
 def _default_packet_translation(
-    ev: object, ctx: ChatTurnContext, processor: CitationProcessor | None
-) -> PacketObj | None:
+    ev: object,
+    ctx: ChatTurnContext,
+    processor: CitationProcessor | None,
+    packet_history: list[Packet],
+) -> list[Packet]:
+    """Function is a bit messy atm, since there's a bug in OpenAI Agents SDK that
+    causes Anthropic packets to be out of order.
+
+    TODO (chris): clean this up once OpenAI Agents SDK is fixed.
+    """
+
+    # lazy loading to save memory
+    from openai.types.responses import ResponseReasoningSummaryPartAddedEvent
+    from openai.types.responses import ResponseReasoningSummaryPartDoneEvent
+    from openai.types.responses import ResponseReasoningSummaryTextDeltaEvent
+
+    packets: list[Packet] = []
+    obj: PacketObj | None = None
     if isinstance(ev, RawResponsesStreamEvent):
-        obj: PacketObj | None = None
-        if ev.data.type == "response.content_part.added":
-            retrieved_search_docs = saved_search_docs_from_llm_docs(
-                ctx.ordered_fetched_documents
+        output_index = getattr(ev.data, "output_index", None)
+
+        # ------------------------------------------------------------
+        # Reasoning packets
+        # ------------------------------------------------------------
+        if isinstance(ev.data, ResponseReasoningSummaryPartAddedEvent):
+            packets.append(Packet(ind=ctx.current_run_step, obj=ReasoningStart()))
+            ctx.current_output_index = output_index
+        elif isinstance(ev.data, ResponseReasoningSummaryTextDeltaEvent):
+            packets.append(
+                Packet(
+                    ind=ctx.current_run_step,
+                    obj=ReasoningDelta(reasoning=ev.data.delta),
+                )
             )
-            obj = MessageStart(
-                type="message_start", content="", final_documents=retrieved_search_docs
-            )
+        elif isinstance(ev.data, ResponseReasoningSummaryPartDoneEvent):
+            # only do anything if we haven't already "gone past" this step
+            # (e.g. if we've already sent the MessageStart / MessageDelta packets, then we
+            # shouldn't do anything)
+            if ctx.current_output_index == output_index:
+                ctx.current_run_step += 1
+                ctx.current_output_index = None
+                packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
+
+        # ------------------------------------------------------------
+        # Message packets
+        # ------------------------------------------------------------
+
+        # TODO: add this back in. We'd like this to be a simple, dumb translation layer
+        # but we can't do that right now since there are weird provider behavior w/ empty
+        # `response.content_part.added` packets
+        # elif ev.data.type == "response.content_part.added":
+        #     retrieved_search_docs = saved_search_docs_from_llm_docs(
+        #         ctx.ordered_fetched_documents
+        #     )
+        #     obj = MessageStart(content="", final_documents=retrieved_search_docs)
         elif ev.data.type == "response.output_text.delta" and len(ev.data.delta) > 0:
             if processor:
                 final_answer_piece = ""
@@ -320,10 +417,28 @@ def _default_packet_translation(
                         ctx.citations.append(response_part)
                     else:
                         final_answer_piece += response_part.answer_piece or ""
-                obj = MessageDelta(type="message_delta", content=final_answer_piece)
+                obj = MessageDelta(content=final_answer_piece)
             else:
-                obj = MessageDelta(type="message_delta", content=ev.data.delta)
+                obj = MessageDelta(content=ev.data.delta)
+
+            needs_start = has_had_message_start(packet_history, ctx.current_run_step)
+            if needs_start:
+                ctx.current_run_step += 1
+                retrieved_search_docs = saved_search_docs_from_llm_docs(
+                    ctx.ordered_fetched_documents
+                )
+                packets.append(
+                    Packet(
+                        ind=ctx.current_run_step,
+                        obj=MessageStart(
+                            content="", final_documents=retrieved_search_docs
+                        ),
+                    )
+                )
+
+            packets.append(Packet(ind=ctx.current_run_step, obj=obj))
         elif ev.data.type == "response.content_part.done":
-            obj = SectionEnd(type="section_end")
-        return obj
-    return None
+            packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
+            ctx.current_output_index = None
+
+    return packets

@@ -37,6 +37,7 @@ from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
 from onyx.llm.utils import model_is_reasoning_model
@@ -312,7 +313,9 @@ class DefaultMultiLLM(LLM):
                     os.environ[k] = v
                 else:
                     os.environ.pop(k, None)
-
+        # This is needed for Ollama to do proper function calling
+        if model_provider == OLLAMA_PROVIDER_NAME and api_base is not None:
+            os.environ["OLLAMA_API_BASE"] = api_base
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
         if extra_body:

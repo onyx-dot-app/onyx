@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/tooltip";
 import { openDocument } from "@/lib/search/utils";
 import { SubQuestionDetail } from "@/app/chat/interfaces";
-import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { getSourceDisplayName } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
 import Text from "@/refresh-components/texts/Text";
@@ -19,7 +18,6 @@ const MAX_CITATION_TEXT_LENGTH = 40;
 export interface DocumentCardProps {
   document: LoadedOnyxDocument;
   updatePresentingDocument: (document: OnyxDocument) => void;
-  icon?: React.ReactNode;
   url?: string;
 }
 export interface QuestionCardProps {
@@ -63,15 +61,6 @@ export function Citation({
     return <>{children}</>;
   }
   const sourceType = document_info?.document?.source_type;
-  const icon = document_info?.document
-    ? getFileIconFromFileNameAndLink(
-        document_info.document.semantic_identifier || "",
-        sourceType === ValidSources.UserFile
-          ? ""
-          : document_info.document.link || ""
-      )
-    : null;
-
   const title = document_info?.document?.semantic_identifier;
   const citationText =
     (sourceType && sourceType != ValidSources.Web
@@ -106,16 +95,13 @@ export function Citation({
           </span>
         </TooltipTrigger>
         <TooltipContent
-          className="!p-2 border-border-01 border rounded-12 bg-background-neutral-00 shadow-02"
-          width="mb-2 max-w-lg"
+          className="bg-transparent p-0 shadow-none"
           side="bottom"
           align="start"
         >
           {document_info?.document ? (
             <CompactDocumentCard
               updatePresentingDocument={document_info.updatePresentingDocument}
-              url={document_info.url}
-              icon={icon}
               document={document_info.document}
             />
           ) : (

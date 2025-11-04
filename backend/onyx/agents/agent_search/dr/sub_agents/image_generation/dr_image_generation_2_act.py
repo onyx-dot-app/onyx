@@ -117,10 +117,8 @@ def image_generation(
 
     # save images to file store
     file_ids = save_files(
-        urls=[img.url for img in image_generation_responses if img.url],
-        base64_files=[
-            img.image_data for img in image_generation_responses if img.image_data
-        ],
+        urls=[],
+        base64_files=[img.image_data for img in image_generation_responses],
     )
 
     final_generated_images = [

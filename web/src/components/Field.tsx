@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FiInfo, FiPlus, FiX } from "react-icons/fi";
+import { FiInfo, FiX } from "react-icons/fi";
 import {
   TooltipProvider,
   Tooltip,
@@ -29,9 +29,8 @@ import {
 } from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
-import { useState, useCallback, useEffect, memo, useRef } from "react";
+import { useState, useEffect, memo } from "react";
 import remarkGfm from "remark-gfm";
-import Button from "@/refresh-components/buttons/Button";
 import { Checkbox } from "@/components/ui/checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
@@ -46,8 +45,10 @@ import {
   FILE_TYPE_DEFINITIONS,
 } from "@/lib/connectors/fileTypes";
 import Text from "@/refresh-components/texts/Text";
-import SvgPlusCircle from "@/icons/plus-circle";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
+
+import SvgEye from "@/icons/eye";
+import SvgEyeClosed from "@/icons/eye-closed";
 
 export function SectionHeader({
   children,
@@ -142,7 +143,9 @@ export function ExplanationText({
       {text}
     </a>
   ) : (
-    <div className="text-sm font-semibold">{text}</div>
+    <Text text03 secondaryBody>
+      {text}
+    </Text>
   );
 }
 
@@ -240,6 +243,7 @@ export function TextFormField({
   width,
   vertical,
   className,
+  showPasswordToggle = false,
 }: {
   name: string;
   removeLabel?: boolean;
@@ -267,6 +271,7 @@ export function TextFormField({
   width?: string;
   vertical?: boolean;
   className?: string;
+  showPasswordToggle?: boolean;
 }) {
   let heightString = defaultHeight || "";
   if (isTextArea && !heightString) {
@@ -303,6 +308,9 @@ export function TextFormField({
   };
 
   const sizeClass = textSizeClasses[fontSize || "sm"];
+  const isPasswordField = type === "password";
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const effectiveType = isPasswordField && isPasswordVisible ? "text" : type;
 
   return (
     <div className={`w-full ${maxWidth} ${width}`}>
@@ -323,7 +331,7 @@ export function TextFormField({
           onChange={handleChange}
           min={min}
           as={isTextArea ? "textarea" : "input"}
-          type={type}
+          type={effectiveType}
           data-testid={name}
           name={name}
           id={name}
@@ -364,11 +372,27 @@ export function TextFormField({
             ${isCode ? "font-mono" : ""}
             ${className}
             bg-background-neutral-00
+            ${isPasswordField && showPasswordToggle ? "pr-10" : ""}
           `}
           disabled={disabled}
           placeholder={placeholder}
           autoComplete={autoCompleteDisabled ? "off" : undefined}
         />
+        {!isTextArea && isPasswordField && showPasswordToggle && (
+          <button
+            type="button"
+            aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+            className="absolute right-3 top-1/2 -translate-y-1/2 stroke-text-02 hover:stroke-text-03 mt-0.5"
+            onClick={() => setIsPasswordVisible((v) => !v)}
+            tabIndex={0}
+          >
+            {isPasswordVisible ? (
+              <SvgEye className="h-4 w-4" />
+            ) : (
+              <SvgEyeClosed className="h-4 w-4" />
+            )}
+          </button>
+        )}
       </div>
 
       {explanationText && (

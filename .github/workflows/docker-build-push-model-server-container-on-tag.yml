@@ -153,6 +153,11 @@ jobs:
           else
             echo "is_stable=false" >> $GITHUB_OUTPUT
           fi
+          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]] && [[ "${{ github.ref_name }}" != *"cloud"* ]]; then
+            echo "is_beta=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_beta=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -173,6 +178,11 @@ jobs:
           fi
           if [[ "${{ env.EDGE_TAG }}" == "true" ]]; then
             docker buildx imagetools create -t ${{ env.REGISTRY_IMAGE }}:edge \
+              ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-amd64 \
+              ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-arm64
+          fi
+          if [[ "${{ steps.check_version.outputs.is_beta }}" == "true" ]]; then
+            docker buildx imagetools create -t ${{ env.REGISTRY_IMAGE }}:beta \
               ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-amd64 \
               ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-arm64
           fi

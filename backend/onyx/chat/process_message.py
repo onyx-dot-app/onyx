@@ -10,6 +10,7 @@ from uuid import UUID
 
 from agents import Model
 from agents import ModelSettings
+from agents.models.openai_responses import OpenAIResponsesModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
@@ -18,7 +19,7 @@ from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
 from onyx.chat.chat_utils import process_kg_commands
-from onyx.chat.memories import make_memories_callback
+from onyx.chat.memories import get_memories
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ChatBasicResponse
@@ -34,7 +35,7 @@ from onyx.chat.models import UserKnowledgeFilePacket
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import (
-    default_build_system_message_for_default_assistant_v2,
+    default_build_system_message_v2,
 )
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.chat.turn import fast_chat_turn
@@ -79,7 +80,7 @@ from onyx.db.projects import get_user_files_from_project
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.feature_flags.factory import get_default_feature_flag_provider
-from onyx.feature_flags.feature_flags_keys import SIMPLE_AGENT_FRAMEWORK
+from onyx.feature_flags.feature_flags_keys import DISABLE_SIMPLE_AGENT_FRAMEWORK
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import build_frontend_file_url
@@ -723,9 +724,7 @@ def stream_chat_message_objects(
                 answer_style_config=answer_style_config,
                 document_pruning_config=document_pruning_config,
             ),
-            image_generation_tool_config=ImageGenerationToolConfig(
-                additional_headers=litellm_additional_headers,
-            ),
+            image_generation_tool_config=ImageGenerationToolConfig(),
             custom_tool_config=CustomToolConfig(
                 chat_session_id=chat_session_id,
                 message_id=user_message.id if user_message else None,
@@ -760,26 +759,24 @@ def stream_chat_message_objects(
                 ]
             )
         feature_flag_provider = get_default_feature_flag_provider()
-        simple_agent_framework_enabled = (
+        simple_agent_framework_disabled = (
             feature_flag_provider.feature_enabled_for_user_tenant(
-                flag_key=SIMPLE_AGENT_FRAMEWORK,
+                flag_key=DISABLE_SIMPLE_AGENT_FRAMEWORK,
                 user=user,
                 tenant_id=tenant_id,
             )
-            and not new_msg_req.use_agentic_search
+            or new_msg_req.use_agentic_search
         )
         prompt_user_message = default_build_user_message(
             user_query=final_msg.message,
             prompt_config=prompt_config,
             files=latest_query_files,
         )
-        mem_callback = make_memories_callback(user, db_session)
+        memories = get_memories(user, db_session)
         system_message = (
-            default_build_system_message_for_default_assistant_v2(
-                prompt_config, llm.config, mem_callback, tools
-            )
-            if simple_agent_framework_enabled and persona.is_default_persona
-            else default_build_system_message(prompt_config, llm.config, mem_callback)
+            default_build_system_message_v2(prompt_config, llm.config, memories, tools)
+            if not simple_agent_framework_disabled and persona.is_default_persona
+            else default_build_system_message(prompt_config, llm.config, memories)
         )
         prompt_builder = AnswerPromptBuilder(
             user_message=prompt_user_message,
@@ -825,7 +822,7 @@ def stream_chat_message_objects(
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
             project_instructions=project_instructions,
         )
-        if simple_agent_framework_enabled:
+        if not simple_agent_framework_disabled:
             llm_model, model_settings = get_llm_model_and_settings_for_persona(
                 persona=persona,
                 llm_override=(new_msg_req.llm_override or chat_session.llm_override),
@@ -842,6 +839,7 @@ def stream_chat_message_objects(
                 prompt_config,
                 llm_model,
                 model_settings,
+                user,
             )
         else:
             from onyx.chat.packet_proccessing import process_streamed_packets
@@ -896,9 +894,12 @@ def _fast_message_stream(
     prompt_config: PromptConfig,
     llm_model: Model,
     model_settings: ModelSettings,
+    user_or_none: User | None,
 ) -> Generator[Packet, None, None]:
+    # TODO: clean up this jank
+    is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
     messages = base_messages_to_agent_sdk_msgs(
-        answer.graph_inputs.prompt_builder.build()
+        answer.graph_inputs.prompt_builder.build(), is_responses_api=is_responses_api
     )
     emitter = get_default_emitter()
     return fast_chat_turn.fast_chat_turn(
@@ -912,6 +913,8 @@ def _fast_message_stream(
             db_session=db_session,
             redis_client=redis_client,
             emitter=emitter,
+            user_or_none=user_or_none,
+            prompt_config=prompt_config,
         ),
         chat_session_id=chat_session_id,
         message_id=reserved_message_id,

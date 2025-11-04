@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from collections.abc import Sequence
 from typing import cast
 
 from langchain_core.messages import BaseMessage
@@ -39,11 +40,12 @@ from onyx.tools.tool import Tool
 
 # TODO: We can provide do smoother templating than all these sequential
 # function calls
-def default_build_system_message_for_default_assistant_v2(
+def default_build_system_message_v2(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
-    memories_callback: Callable[[], list[str]] | None = None,
-    tools: list[Tool] | None = None,
+    memories: list[str] | None = None,
+    tools: Sequence[Tool] | None = None,
+    should_cite_documents: bool = False,
 ) -> SystemMessage:
     # Check if we should include custom instructions (before date processing)
     custom_instructions = prompt_config.system_prompt.strip()
@@ -55,7 +57,7 @@ def default_build_system_message_for_default_assistant_v2(
     )
 
     # Start with base prompt
-    system_prompt = DEFAULT_SYSTEM_PROMPT + "\n" + LONG_CONVERSATION_REMINDER_PROMPT
+    system_prompt = DEFAULT_SYSTEM_PROMPT
 
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
     # for o-series markdown generation
@@ -78,13 +80,37 @@ def default_build_system_message_for_default_assistant_v2(
 
     tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
 
-    if memories_callback:
-        tag_handled_prompt = handle_memories(tag_handled_prompt, memories_callback)
+    if memories:
+        tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
 
     # Add Tools section if tools are provided
     if tools:
         tag_handled_prompt += "\n\n# Tools\n"
         tag_handled_prompt += TOOL_PERSISTENCE_PROMPT
+
+        # Detect tool types
+        has_web_search = any(type(tool).__name__ == "WebSearchTool" for tool in tools)
+        has_internal_search = any(type(tool).__name__ == "SearchTool" for tool in tools)
+
+        # Add search guidance if web search or internal search is provided
+        if has_web_search or has_internal_search:
+            from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
+
+            tag_handled_prompt += "\n" + TOOL_DESCRIPTION_SEARCH_GUIDANCE + "\n"
+
+        # Add internal search guidance if internal search is provided
+        if has_internal_search:
+            from onyx.prompts.chat_prompts import INTERNAL_SEARCH_GUIDANCE
+
+            tag_handled_prompt += "\n" + INTERNAL_SEARCH_GUIDANCE + "\n"
+
+        # Add internal search vs web search guidance if both are provided
+        if has_internal_search and has_web_search:
+            from onyx.prompts.chat_prompts import (
+                INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE,
+            )
+
+            tag_handled_prompt += "\n" + INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE + "\n"
 
         for tool in tools:
             if type(tool).__name__ == "WebSearchTool":
@@ -109,13 +135,22 @@ def default_build_system_message_for_default_assistant_v2(
                     )
                     tag_handled_prompt += tool.description
 
+    # Add citation requirement as second to last section if needed
+    if should_cite_documents:
+        from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
+
+        tag_handled_prompt += "\n\n" + REQUIRE_CITATION_STATEMENT
+
+    # Add the reminders section last
+    tag_handled_prompt += "\n\n" + LONG_CONVERSATION_REMINDER_PROMPT
+
     return SystemMessage(content=tag_handled_prompt)
 
 
 def default_build_system_message(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
-    memories_callback: Callable[[], list[str]] | None = None,
+    memories: list[str] | None = None,
 ) -> SystemMessage | None:
     system_prompt = prompt_config.system_prompt.strip()
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
@@ -136,8 +171,8 @@ def default_build_system_message(
 
     tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
 
-    if memories_callback:
-        tag_handled_prompt = handle_memories(tag_handled_prompt, memories_callback)
+    if memories:
+        tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
 
     return SystemMessage(content=tag_handled_prompt)
 

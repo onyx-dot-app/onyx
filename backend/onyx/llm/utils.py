@@ -789,3 +789,37 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
             f"Failed to get model object for {model_provider}/{model_name}"
         )
         return False
+
+
+def is_true_openai_model(model_provider: str, model_name: str) -> bool:
+    """
+    Determines if a model is a true OpenAI model or just using OpenAI-compatible API.
+
+    LiteLLM uses the "openai" provider for any OpenAI-compatible server (e.g. vLLM, LiteLLM proxy),
+    but this function checks if the model is actually from OpenAI's model registry.
+    """
+
+    # NOTE: not using the OPENAI_PROVIDER_NAME constant here due to circular import issues
+    if model_provider != "openai":
+        return False
+
+    try:
+        model_map = get_model_map()
+        # Check if any model exists in litellm's registry with openai prefix
+        # If it's registered as "openai/model-name", it's a real OpenAI model
+        if f"openai/{model_name}" in model_map:
+            return True
+
+        if (
+            model_name in model_map
+            and model_map[model_name].get("litellm_provider") == "openai"
+        ):
+            return True
+
+        return False
+
+    except Exception:
+        logger.exception(
+            f"Failed to determine if {model_provider}/{model_name} is a true OpenAI model"
+        )
+        return False

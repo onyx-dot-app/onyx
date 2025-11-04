@@ -145,23 +145,12 @@ def web_search(
 
 # TODO: Make a ToolV2 class to encapsulate all of this
 WEB_SEARCH_LONG_DESCRIPTION = """
-### Decision boundary
-- You MUST call this tool to discover sources when the request involves:
-    - Fresh/unstable info (news, prices, laws, schedules, product specs, scores, exchange rates).
-    - Recommendations, or any query where the specific sources matter.
-    - Verifiable claims, quotes, or citations.
-- After ANY successful `web_search` call that yields candidate URLs, you MUST call
-    `open_url` on the selected URLs BEFORE answering. Do NOT answer from snippets.
-
-### When NOT to use
-- Casual chat, rewriting/summarizing user-provided text, or translation.
-- When the user already provided URLs (go straight to `open_url`).
-
-### Usage hints
-- Expand the users's query into a broader list of queries.
-- Batch a list of natural-language queries per call.
-- Prefer searches for distinct intents; then batch-fetch best URLs.
-- Deduplicate domains/near-duplicates. Prefer recent, authoritative sources.
+Use the `web_search` tool to access up-to-date information from the web. Some examples of when to use the `web_search` tool \
+include:
+- Freshness: if up-to-date information on a topic could change or enhance the answer. Very important for topics that are \
+changing or evolving.
+- Niche Information: detailed info not widely known or understood (but that is likely found on the internet).
+- Accuracy: if the cost of outdated information is high, use web sources directly.
 """
 
 
@@ -241,18 +230,9 @@ def open_url(
 
 # TODO: Make a ToolV2 class to encapsulate all of this
 OPEN_URL_LONG_DESCRIPTION = """
-### Decision boundary
-- You MUST use this tool before quoting, citing, or relying on page content.
-- Use it whenever you already have URLs (from the user or from `web_search`).
-- Do NOT answer questions based on search snippets alone.
-- After a web_search call, strong bias towards using this tool to investigate further.
-
-### When NOT to use
-- If you do not yet have URLs (search first).
-
-### Usage hints
-- If you've just called web_search, be generous with the number of URLs you fetch.
-- Avoid many tiny calls; batch URLs in one request.
-- Prefer primary, recent, and reputable sources.
-- If PDFs/long docs appear, still fetch; you may summarize sections explicitly.
+Use the open_urls tool to read the content of one or more URLs. Use this tool to access the contents of the most promising \
+web pages from your searches.
+You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most \
+promising pages and reputable sources.
+You should almost always use open_urls after a web_search call.
 """

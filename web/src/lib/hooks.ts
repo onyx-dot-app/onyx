@@ -39,6 +39,36 @@ import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
+import { usePathname, useSearchParams } from "next/navigation";
+import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+
+type ActiveSidebarTab =
+  | { type: "agent" | "project" | "chat"; id: string }
+  | "new-session"
+  | "more-agents";
+
+export function useActiveSidebarTab(): ActiveSidebarTab {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Check if we're on the agents page
+  if (pathname === "/chat/agents") {
+    return "more-agents";
+  }
+
+  // Check search params for chat, agent, or project
+  const chatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
+  if (chatId) return { type: "chat", id: chatId };
+
+  const agentId = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+  if (agentId) return { type: "agent", id: agentId };
+
+  const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
+  if (projectId) return { type: "project", id: projectId };
+
+  // No search params means we're on a new session
+  return "new-session";
+}
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 

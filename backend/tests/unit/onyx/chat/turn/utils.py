@@ -623,7 +623,14 @@ def chat_turn_dependencies(
     fake_redis_client: FakeRedis,
 ) -> ChatTurnDependencies:
     """Fixture providing a complete ChatTurnDependencies object with fake implementations."""
+    from onyx.chat.models import PromptConfig
+
     emitter = get_default_emitter()
+    prompt_config = PromptConfig(
+        system_prompt="You are a helpful assistant.",
+        task_prompt="Answer the user's question.",
+        datetime_aware=False,
+    )
     return ChatTurnDependencies(
         llm_model=fake_model,
         model_settings=ModelSettings(temperature=0.0, include_usage=True),
@@ -632,6 +639,8 @@ def chat_turn_dependencies(
         tools=fake_tools,
         redis_client=fake_redis_client,  # type: ignore[arg-type]
         emitter=emitter,
+        user_or_none=None,
+        prompt_config=prompt_config,
     )
 
 
