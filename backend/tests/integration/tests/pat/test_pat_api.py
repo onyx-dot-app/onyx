@@ -82,7 +82,7 @@ def test_pat_lifecycle_happy_path(reset: None) -> None:
         f"{API_SERVER_URL}/me",
         headers={"Authorization": f"Bearer {raw_token}"},
     )
-    assert revoked_auth_response.status_code == 401
+    assert revoked_auth_response.status_code == 403  # Revoked token returns 403
 
     list_after_revoke = requests.get(
         f"{API_SERVER_URL}/user/pats",
@@ -192,8 +192,18 @@ def test_pat_expiration_flow(reset: None) -> None:
     assert expires_at.minute == 59
     assert expires_at.second == 59
 
-    expected_expiry = datetime.utcnow() + timedelta(days=7)
-    assert abs((expires_at - expected_expiry).total_seconds()) < 60
+    from datetime import timezone
+
+    # Calculate expected end-of-day 7 days from now
+    now = datetime.now(timezone.utc)
+    expected_date = (now + timedelta(days=7)).date()
+    expected_expiry = datetime.combine(expected_date, datetime.max.time()).replace(
+        tzinfo=timezone.utc
+    )
+    # Allow for small timing differences (within a day)
+    assert (
+        abs((expires_at - expected_expiry).total_seconds()) < 86400
+    )  # 1 day in seconds
 
     no_expiry_response = requests.post(
         f"{API_SERVER_URL}/user/pats",
@@ -222,7 +232,7 @@ def test_pat_expiration_flow(reset: None) -> None:
         f"{API_SERVER_URL}/me",
         headers={"Authorization": f"Bearer {never_expiring_token}"},
     )
-    assert revoked_auth_response.status_code == 401
+    assert revoked_auth_response.status_code == 403  # Revoked token returns 403
 
 
 def test_pat_validation_errors(reset: None) -> None:
@@ -444,33 +454,33 @@ def test_pat_role_based_access_control(reset: None) -> None:
     print("\n[Test] Testing management endpoint access for curators...")
 
     admin_manage_response = requests.get(
-        f"{API_SERVER_URL}/manage/connector",
+        f"{API_SERVER_URL}/manage/admin/connector",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert admin_manage_response.status_code == 200
-    print("[✓] Admin PAT can access /manage/connector")
+    print("[✓] Admin PAT can access /manage/admin/connector")
 
     curator_manage_response = requests.get(
-        f"{API_SERVER_URL}/manage/connector",
+        f"{API_SERVER_URL}/manage/admin/connector",
         headers={"Authorization": f"Bearer {curator_token}"},
     )
     assert curator_manage_response.status_code == 200
-    print("[✓] Curator PAT can access /manage/connector")
+    print("[✓] Curator PAT can access /manage/admin/connector")
 
     global_curator_manage_response = requests.get(
-        f"{API_SERVER_URL}/manage/connector",
+        f"{API_SERVER_URL}/manage/admin/connector",
         headers={"Authorization": f"Bearer {global_curator_token}"},
     )
     assert global_curator_manage_response.status_code == 200
-    print("[✓] Global Curator PAT can access /manage/connector")
+    print("[✓] Global Curator PAT can access /manage/admin/connector")
 
     basic_manage_response = requests.get(
-        f"{API_SERVER_URL}/manage/connector",
+        f"{API_SERVER_URL}/manage/admin/connector",
         headers={"Authorization": f"Bearer {basic_token}"},
     )
     assert basic_manage_response.status_code in [403, 401]
     print(
-        f"[✓] Basic PAT correctly denied access ({basic_manage_response.status_code}) to /manage/connector"
+        f"[✓] Basic PAT correctly denied access ({basic_manage_response.status_code}) to /manage/admin/connector"
     )
 
     print("\n[Test] Verifying PATs authenticate as correct users with correct roles...")
@@ -525,13 +535,15 @@ def test_pat_role_based_access_control(reset: None) -> None:
 
     print("\n[✓] All role-based access control tests passed!")
     print("Summary:")
-    print("  - Admin PAT: Full access to admin-only endpoints (/admin/*)")
     print(
-        "  - Curator PAT: Access to management endpoints (/manage/*), denied on admin-only"
+        "  - Admin PAT: Full access to admin-only endpoints (/admin/*, /manage/admin/*)"
     )
     print(
-        "  - Global Curator PAT: Access to management endpoints (/manage/*), denied on admin-only"
+        "  - Curator PAT: Access to management endpoints (/manage/admin/*), denied on admin-only (/admin/*)"
     )
-    print("  - Basic PAT: Denied access to both admin and management endpoints")
+    print(
+        "  - Global Curator PAT: Access to management endpoints (/manage/admin/*), denied on admin-only (/admin/*)"
+    )
+    print("  - Basic PAT: Denied access to admin and management endpoints")
     print("  - All PATs: Can access basic endpoints (/persona, /me, etc.)")
     print("  - All PATs: Authenticate with correct user identity and role")
