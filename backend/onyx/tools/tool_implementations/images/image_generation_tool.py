@@ -91,12 +91,14 @@ class ImageGenerationTool(Tool[None]):
         tool_id: int,
         model: str = IMAGE_MODEL_NAME,
         num_imgs: int = 1,
+        image_model_name: str | None = None,
     ) -> None:
         self.api_key = api_key
         self.api_base = api_base
         self.api_version = api_version
 
         self.model = model
+        self.image_model_name = image_model_name or model
         self.num_imgs = num_imgs
 
         self._id = tool_id
@@ -222,19 +224,25 @@ class ImageGenerationTool(Tool[None]):
     ) -> ImageGenerationResponse:
         from litellm import image_generation  # type: ignore
 
+        target_model = self.image_model_name
         if shape == ImageShape.LANDSCAPE:
-            if self.model == "gpt-image-1":
+            if target_model == "gpt-image-1":
                 size = "1536x1024"
             else:
                 size = "1792x1024"
         elif shape == ImageShape.PORTRAIT:
-            if self.model == "gpt-image-1":
+            if target_model == "gpt-image-1":
                 size = "1024x1536"
             else:
                 size = "1024x1792"
         else:
             size = "1024x1024"
-        logger.debug(f"Generating image with model: {self.model}, size: {size}")
+        logger.debug(
+            "Generating image with model: %s (image_model_name: %s), size: %s",
+            self.model,
+            target_model,
+            size,
+        )
         try:
             response = image_generation(
                 prompt=prompt,
@@ -243,7 +251,9 @@ class ImageGenerationTool(Tool[None]):
                 api_base=self.api_base or None,
                 api_version=self.api_version or None,
                 # response_format parameter is not supported for gpt-image-1
-                response_format=None if self.model == "gpt-image-1" else "b64_json",
+                response_format=(
+                    None if target_model == "gpt-image-1" else "b64_json"
+                ),
                 size=size,
                 n=1,
             )

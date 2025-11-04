@@ -14,6 +14,8 @@ from onyx.configs.app_configs import AZURE_DALLE_API_BASE
 from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import AZURE_DALLE_API_VERSION
 from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
+from onyx.configs.app_configs import AZURE_IMAGE_DEPLOYMENT_NAME
+from onyx.configs.app_configs import AZURE_IMAGE_MODEL_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
@@ -115,13 +117,19 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         )
 
     if llm.config.model_provider == "azure" and AZURE_DALLE_API_KEY is not None:
+        azure_image_deployment = AZURE_IMAGE_DEPLOYMENT_NAME or AZURE_DALLE_DEPLOYMENT_NAME
+        if not azure_image_deployment:
+            raise ValueError(
+                "Image generation tool requires an Azure image deployment name"
+            )
         return LLMConfig(
             model_provider="azure",
-            model_name=f"azure/{AZURE_DALLE_DEPLOYMENT_NAME}",
+            model_name=f"azure/{azure_image_deployment}",
             temperature=GEN_AI_TEMPERATURE,
             api_key=AZURE_DALLE_API_KEY,
             api_base=AZURE_DALLE_API_BASE,
             api_version=AZURE_DALLE_API_VERSION,
+            deployment_name=azure_image_deployment,
             max_input_tokens=llm.config.max_input_tokens,
         )
 
@@ -266,12 +274,19 @@ def construct_tools(
                     llm, db_session
                 )
 
+                image_model_name = (
+                    AZURE_IMAGE_MODEL_NAME
+                    if img_generation_llm_config.model_provider == "azure"
+                    else img_generation_llm_config.model_name
+                )
+
                 tool_dict[db_tool_model.id] = [
                     ImageGenerationTool(
                         api_key=cast(str, img_generation_llm_config.api_key),
                         api_base=img_generation_llm_config.api_base,
                         api_version=img_generation_llm_config.api_version,
                         model=img_generation_llm_config.model_name,
+                        image_model_name=image_model_name,
                         tool_id=db_tool_model.id,
                     )
                 ]
