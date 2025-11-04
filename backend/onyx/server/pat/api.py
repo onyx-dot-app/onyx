@@ -19,7 +19,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-router = APIRouter(prefix="/user/tokens")
+router = APIRouter(prefix="/user/pats")
 
 
 @router.get("")
