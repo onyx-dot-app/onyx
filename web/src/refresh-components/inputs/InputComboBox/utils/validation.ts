@@ -17,6 +17,8 @@ interface ValidationResult {
 /**
  * Handles validation logic for the ComboBox
  * Supports both external error state and internal strict mode validation
+ * external error state has precedence over internal validation.When we have external error, internal error is
+ * not displayed we need to display external error separately
  */
 export function useValidation({
   value,

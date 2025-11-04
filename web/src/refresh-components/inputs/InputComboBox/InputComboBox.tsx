@@ -123,7 +123,7 @@ const InputComboBox = ({
 
   const hasOptions = options.length > 0;
 
-  // 1️⃣ State Management Hook
+  //State Management Hook
   const {
     isOpen,
     setIsOpen,
@@ -135,7 +135,7 @@ const InputComboBox = ({
     setIsKeyboardNav,
   } = useComboBoxState({ value, options });
 
-  // 2️⃣ Filtering Hook
+  // Filtering Hook
   const { matchedOptions, unmatchedOptions, hasSearchTerm } =
     useOptionFiltering({ options, inputValue });
 
@@ -144,7 +144,7 @@ const InputComboBox = ({
     return [...matchedOptions, ...unmatchedOptions];
   }, [matchedOptions, unmatchedOptions]);
 
-  // 3️⃣ Position Hook
+  // Position Hook
   const { dropdownPosition, containerRef } = useDropdownPosition({ isOpen });
 
   // Check if an option is an exact match
@@ -161,7 +161,7 @@ const InputComboBox = ({
     [inputValue, value]
   );
 
-  // 4️⃣ Validation Logic
+  // Validation Logic
   const { isValid, errorMessage } = useValidation({
     value,
     options,
@@ -226,7 +226,7 @@ const InputComboBox = ({
     [onChange, onValueChange, setInputValue, setIsOpen]
   );
 
-  // 5️⃣ Keyboard Navigation Hook
+  // Keyboard Navigation Hook
   const { handleKeyDown } = useComboBoxKeyboard({
     isOpen,
     setIsOpen,
@@ -238,7 +238,7 @@ const InputComboBox = ({
     hasOptions,
   });
 
-  // 6️⃣ Click Outside Hook
+  // Click Outside Hook
   useClickOutside({
     isOpen,
     refs: [inputRef, dropdownRef],
@@ -272,7 +272,7 @@ const InputComboBox = ({
   const autoId = useId();
   const fieldId = fieldContext?.baseId || name || `combo-box-${autoId}`;
 
-  // 7️⃣ ARIA Attributes Builder
+  // ARIA Attributes Builder
   const ariaProps = buildAriaAttributes({
     hasOptions,
     isOpen,
