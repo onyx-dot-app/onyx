@@ -55,7 +55,7 @@ export function PATManagement() {
     mutate,
     error,
     isLoading,
-  } = useSWR<PAT[]>("/api/user/tokens", errorHandlingFetcher, {
+  } = useSWR<PAT[]>("/api/user/pats", errorHandlingFetcher, {
     revalidateOnFocus: true,
     dedupingInterval: 2000,
     fallbackData: [],
@@ -76,7 +76,7 @@ export function PATManagement() {
 
     setIsCreating(true);
     try {
-      const response = await fetch("/api/user/tokens", {
+      const response = await fetch("/api/user/pats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -111,7 +111,7 @@ export function PATManagement() {
 
   const deletePAT = async (patId: number) => {
     try {
-      const response = await fetch(`/api/user/tokens/${patId}`, {
+      const response = await fetch(`/api/user/pats/${patId}`, {
         method: "DELETE",
       });
 

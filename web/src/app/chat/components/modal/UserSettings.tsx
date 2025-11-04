@@ -84,7 +84,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   // Prefetch tokens when modal opens for instant display
   useEffect(() => {
     // Prefetch into SWR cache so PATManagement component has instant data
-    globalMutate("/api/user/tokens", errorHandlingFetcher("/api/user/tokens"));
+    globalMutate("/api/user/pats", errorHandlingFetcher("/api/user/pats"));
   }, []); // Only run once on mount
 
   // Fetch federated-connector info so the modal can list/refresh them
