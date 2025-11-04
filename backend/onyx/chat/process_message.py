@@ -885,6 +885,7 @@ def stream_chat_message_objects(
                 message_id=user_message.id if user_message else None,
                 additional_headers=custom_tool_additional_headers,
             ),
+            user_file_files=user_file_files,
         )
 
         tools: list[Tool] = []
@@ -894,9 +895,10 @@ def stream_chat_message_objects(
         force_use_tool = _get_force_search_settings(
             new_msg_req, tools, user_file_ids, user_folder_ids
         )
+        langflow_tool_present = any(isinstance(tool, LangflowTool) for tool in tools)
 
         # Set force_use if user files exceed token limit
-        if use_search_for_user_files:
+        if use_search_for_user_files and not langflow_tool_present:
             try:
                 # Check if search tool is available in the tools list
                 search_tool_available = any(
