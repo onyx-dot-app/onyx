@@ -230,12 +230,11 @@ export function useComboBoxKeyboard({
           break;
         case "Enter":
           e.preventDefault();
-          if (
-            isOpen &&
-            highlightedIndex >= 0 &&
-            allVisibleOptions[highlightedIndex]
-          ) {
-            onSelect(allVisibleOptions[highlightedIndex]);
+          if (isOpen && highlightedIndex >= 0) {
+            const option = allVisibleOptions[highlightedIndex];
+            if (option) {
+              onSelect(option);
+            }
           }
           break;
         case "Escape":

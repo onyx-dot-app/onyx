@@ -23,6 +23,11 @@ export function buildAriaAttributes({
   allVisibleOptions,
   placeholder,
 }: BuildAriaAttributesProps) {
+  const activeOption =
+    hasOptions && isOpen && highlightedIndex >= 0
+      ? allVisibleOptions[highlightedIndex]
+      : undefined;
+
   return {
     "aria-label": placeholder,
     "aria-invalid": !isValid,
@@ -30,13 +35,9 @@ export function buildAriaAttributes({
     "aria-expanded": hasOptions ? isOpen : undefined,
     "aria-haspopup": hasOptions ? ("listbox" as const) : undefined,
     "aria-controls": hasOptions ? `${fieldId}-listbox` : undefined,
-    "aria-activedescendant":
-      hasOptions &&
-      isOpen &&
-      highlightedIndex >= 0 &&
-      allVisibleOptions[highlightedIndex]
-        ? `${fieldId}-option-${allVisibleOptions[highlightedIndex].value}`
-        : undefined,
+    "aria-activedescendant": activeOption
+      ? `${fieldId}-option-${activeOption.value}`
+      : undefined,
     "aria-autocomplete": hasOptions ? ("list" as const) : undefined,
     role: hasOptions ? ("combobox" as const) : undefined,
   };
