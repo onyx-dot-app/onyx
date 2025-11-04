@@ -190,7 +190,7 @@ class TestOAuthToolIntegrationPriority:
         # Construct tools
         prompt_config = PromptConfig(
             system_prompt="Test",
-            task_prompt="Test",
+            reminder="Test",
             datetime_aware=False,
         )
         search_tool_config = SearchToolConfig(
@@ -263,7 +263,7 @@ class TestOAuthToolIntegrationPriority:
         # Construct tools
         prompt_config = PromptConfig(
             system_prompt="Test",
-            task_prompt="Test",
+            reminder="Test",
             datetime_aware=False,
         )
 
@@ -322,7 +322,7 @@ class TestOAuthToolIntegrationPriority:
         # Construct tools
         prompt_config = PromptConfig(
             system_prompt="Test",
-            task_prompt="Test",
+            reminder="Test",
             datetime_aware=False,
         )
 
@@ -392,7 +392,7 @@ class TestOAuthToolIntegrationPriority:
         # Construct tools
         prompt_config = PromptConfig(
             system_prompt="Test",
-            task_prompt="Test",
+            reminder="Test",
             datetime_aware=False,
         )
 
@@ -471,7 +471,7 @@ class TestOAuthToolIntegrationPriority:
             # Construct tools
             prompt_config = PromptConfig(
                 system_prompt="Test",
-                task_prompt="Test",
+                reminder="Test",
                 datetime_aware=False,
             )
 
@@ -546,7 +546,7 @@ class TestOAuthToolIntegrationPriority:
         # Construct tools
         prompt_config = PromptConfig(
             system_prompt="Test",
-            task_prompt="Test",
+            reminder="Test",
             datetime_aware=False,
         )
 
@@ -607,7 +607,7 @@ class TestOAuthToolIntegrationPriority:
         # Construct tools
         prompt_config = PromptConfig(
             system_prompt="Test",
-            task_prompt="Test",
+            reminder="Test",
             datetime_aware=False,
         )
 

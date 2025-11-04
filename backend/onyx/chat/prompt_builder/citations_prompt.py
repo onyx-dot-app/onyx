@@ -1,5 +1,6 @@
 from langchain.schema.messages import HumanMessage
 from langchain.schema.messages import SystemMessage
+from sqlalchemy.orm import Session
 
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
@@ -37,7 +38,7 @@ def get_prompt_tokens(prompt_config: PromptConfig) -> int:
     # Note: currently custom prompts do not allow datetime aware, only default prompts
     return (
         check_number_of_tokens(prompt_config.system_prompt)
-        + check_number_of_tokens(prompt_config.task_prompt)
+        + check_number_of_tokens(prompt_config.reminder)
         + CHAT_USER_PROMPT_WITH_CONTEXT_OVERHEAD_TOKEN_CNT
         + CITATION_STATEMENT_TOKEN_CNT
         + CITATION_REMINDER_TOKEN_CNT
@@ -88,11 +89,12 @@ def compute_max_document_tokens(
 
 def compute_max_document_tokens_for_persona(
     persona: Persona,
+    db_session: Session,
     actual_user_input: str | None = None,
 ) -> int:
     # Use the persona directly since prompts are now embedded
     return compute_max_document_tokens(
-        prompt_config=PromptConfig.from_model(persona),
+        prompt_config=PromptConfig.from_model(persona, db_session=db_session),
         llm_config=get_main_llm_from_tuple(get_llms_for_persona(persona)).config,
         actual_user_input=actual_user_input,
     )

@@ -9,12 +9,27 @@ from onyx.chat.models import PromptConfig
 from onyx.prompts.prompt_utils import build_task_prompt_reminders_v2
 
 
-def update_task_prompt(
+def add_reminder(
     current_user_message: UserMessage,
     agent_turn_messages: Sequence[AgentSDKMessage],
     prompt_config: PromptConfig,
     should_cite_documents: bool,
 ) -> list[AgentSDKMessage]:
+    """Add task prompt reminder as a user message.
+
+    This function simply appends the task prompt reminder to the agent turn messages.
+    The removal of previous user messages (including previous reminders) is handled
+    by the remove_middle_user_messages context handler.
+
+    Args:
+        current_user_message: The current user message being processed
+        agent_turn_messages: Messages from the current agent turn iteration
+        prompt_config: Configuration containing reminder field
+        should_cite_documents: Whether citation requirements should be included
+
+    Returns:
+        Updated message list with task prompt reminder appended
+    """
     user_query = _extract_user_query(current_user_message)
     new_task_prompt_text = build_task_prompt_reminders_v2(
         user_query,
@@ -22,15 +37,6 @@ def update_task_prompt(
         use_language_hint=False,
         should_cite=should_cite_documents,
     )
-    last_user_idx = max(
-        (i for i, m in enumerate(agent_turn_messages) if m.get("role") == "user"),
-        default=-1,
-    )
-
-    # Filter out last user message and add new task prompt as user message
-    filtered_messages: list[AgentSDKMessage] = [
-        m for i, m in enumerate(agent_turn_messages) if i != last_user_idx
-    ]
 
     text_content: InputTextContent = {
         "type": "input_text",
@@ -38,7 +44,7 @@ def update_task_prompt(
     }
     new_user_message: UserMessage = {"role": "user", "content": [text_content]}
 
-    return filtered_messages + [new_user_message]
+    return list(agent_turn_messages) + [new_user_message]
 
 
 def _extract_user_query(current_user_message: UserMessage) -> str:

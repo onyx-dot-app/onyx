@@ -45,17 +45,10 @@ def default_build_system_message_for_default_assistant_v2(
     memories_callback: Callable[[], list[str]] | None = None,
     tools: list[Tool] | None = None,
 ) -> SystemMessage:
-    # Check if we should include custom instructions (before date processing)
-    custom_instructions = prompt_config.system_prompt.strip()
-    clean_custom_instructions = "".join(custom_instructions.split())
-    clean_default_system_prompt = "".join(DEFAULT_SYSTEM_PROMPT.split())
-    should_include_custom_instructions = (
-        clean_custom_instructions
-        and clean_custom_instructions != clean_default_system_prompt
-    )
-
-    # Start with base prompt
-    system_prompt = DEFAULT_SYSTEM_PROMPT + "\n" + LONG_CONVERSATION_REMINDER_PROMPT
+    # Start with the default behavior system prompt
+    # Use DEFAULT_SYSTEM_PROMPT as fallback if not set
+    base_prompt = prompt_config.default_behavior_system_prompt or DEFAULT_SYSTEM_PROMPT
+    system_prompt = base_prompt + "\n" + LONG_CONVERSATION_REMINDER_PROMPT
 
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
     # for o-series markdown generation
@@ -65,10 +58,11 @@ def default_build_system_message_for_default_assistant_v2(
     ):
         system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
 
-    if should_include_custom_instructions:
+    # Add custom instructions if present (from a non-default persona)
+    if prompt_config.custom_instruction:
         system_prompt += "\n\n## Custom Instructions\n"
         system_prompt += CUSTOM_INSTRUCTIONS_PROMPT
-        system_prompt += custom_instructions
+        system_prompt += prompt_config.custom_instruction
 
     tag_handled_prompt = handle_onyx_date_awareness(
         system_prompt,
@@ -117,7 +111,15 @@ def default_build_system_message(
     llm_config: LLMConfig,
     memories_callback: Callable[[], list[str]] | None = None,
 ) -> SystemMessage | None:
-    system_prompt = prompt_config.system_prompt.strip()
+    # Build system prompt from default behavior and custom instructions
+    system_prompt = prompt_config.default_behavior_system_prompt or ""
+    if prompt_config.custom_instruction:
+        if system_prompt:
+            system_prompt += "\n\n## Custom Instructions\n"
+            system_prompt += CUSTOM_INSTRUCTIONS_PROMPT
+        system_prompt += prompt_config.custom_instruction
+
+    system_prompt = system_prompt.strip()
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
     # for o-series markdown generation
     if (
@@ -157,10 +159,10 @@ def default_build_user_message(
     user_prompt = (
         CHAT_USER_CONTEXT_FREE_PROMPT.format(
             history_block=history_block,
-            task_prompt=prompt_config.task_prompt,
+            task_prompt=prompt_config.reminder,
             user_query=user_query,
         )
-        if prompt_config.task_prompt
+        if prompt_config.reminder
         else user_query
     )
 

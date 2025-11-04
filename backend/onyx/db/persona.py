@@ -46,6 +46,15 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 logger = setup_logger()
 
 
+def get_default_persona(db_session: Session) -> Persona | None:
+    """Fetch the persona marked as default (is_default_persona=True).
+    Returns None if no default persona exists."""
+    stmt = select(Persona).where(
+        Persona.is_default_persona.is_(True), Persona.deleted.is_(False)
+    )
+    return db_session.scalars(stmt).first()
+
+
 class PersonaLoadType(Enum):
     NONE = "none"
     MINIMAL = "minimal"

@@ -657,7 +657,7 @@ def stream_chat_message_objects(
                 system_prompt=new_msg_req.persona_override_config.prompts[
                     0
                 ].system_prompt,
-                task_prompt=new_msg_req.persona_override_config.prompts[0].task_prompt,
+                reminder=new_msg_req.persona_override_config.prompts[0].task_prompt,
                 datetime_aware=new_msg_req.persona_override_config.prompts[
                     0
                 ].datetime_aware,
@@ -666,10 +666,11 @@ def stream_chat_message_objects(
             # Apply prompt override on top of persona-embedded prompt
             prompt_config = PromptConfig.from_model(
                 persona,
+                db_session=db_session,
                 prompt_override=prompt_override,
             )
         else:
-            prompt_config = PromptConfig.from_model(persona)
+            prompt_config = PromptConfig.from_model(persona, db_session=db_session)
 
         # Retrieve project-specific instructions if this chat session is associated with a project.
         project_instructions: str | None = (

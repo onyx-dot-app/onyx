@@ -89,7 +89,13 @@ def handle_onyx_date_awareness(
         return prompt_with_datetime
     any_tag_present = any(
         _DANSWER_DATETIME_REPLACEMENT_PAT in text
-        for text in [prompt_str, prompt_config.system_prompt, prompt_config.task_prompt]
+        for text in [
+            prompt_str,
+            prompt_config.default_behavior_system_prompt,
+            prompt_config.custom_instruction,
+            prompt_config.reminder,
+        ]
+        if text
     )
     if add_additional_info_if_no_tag and not any_tag_present:
         return prompt_str + build_date_time_string()
@@ -128,7 +134,7 @@ def build_task_prompt_reminders(
     citation_str: str = CITATION_REMINDER,
     language_hint_str: str = LANGUAGE_HINT,
 ) -> str:
-    base_task = prompt.task_prompt or ""
+    base_task = prompt.reminder or ""
     citation_or_nothing = citation_str
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
     return base_task + citation_or_nothing + language_hint_or_nothing
@@ -152,7 +158,7 @@ def build_task_prompt_reminders_v2(
     Returns:
         Task prompt with optional citation statement and language hint
     """
-    base_task = prompt.task_prompt or ""
+    base_task = prompt.reminder or ""
     citation_or_nothing = REQUIRE_CITATION_STATEMENT_V2 if should_cite else ""
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
     if len(base_task) + len(citation_or_nothing) + len(language_hint_or_nothing) > 0:

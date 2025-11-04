@@ -47,8 +47,9 @@ def llm_config() -> LLMConfig:
 @pytest.fixture
 def prompt_config() -> PromptConfig:
     return PromptConfig(
-        system_prompt="You are helpful.",
-        task_prompt="",
+        default_behavior_system_prompt="You are a helpful assistant.",
+        custom_instruction="You are helpful.",
+        reminder="",
         datetime_aware=False,
     )
 
@@ -59,8 +60,9 @@ def make_prompt_config() -> Callable:
         system_prompt: str, task_prompt: str, datetime_aware: bool
     ) -> PromptConfig:
         return PromptConfig(
-            system_prompt=system_prompt,
-            task_prompt=task_prompt,
+            default_behavior_system_prompt="You are a helpful assistant.",
+            custom_instruction=system_prompt,
+            reminder=task_prompt,
             datetime_aware=datetime_aware,
         )
 

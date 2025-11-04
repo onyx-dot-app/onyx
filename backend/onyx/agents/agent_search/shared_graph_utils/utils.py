@@ -10,6 +10,7 @@ from typing import TypedDict
 
 from langchain_core.messages import BaseMessage
 from langgraph.types import StreamWriter
+from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.shared_graph_utils.models import BaseMessage_Content
 from onyx.agents.agent_search.shared_graph_utils.models import (
@@ -134,6 +135,7 @@ def format_entity_term_extraction(
 
 def get_persona_agent_prompt_expressions(
     persona: Persona | None,
+    db_session: Session,
 ) -> PersonaPromptExpressions:
     if persona is None:
         return PersonaPromptExpressions(
@@ -141,9 +143,16 @@ def get_persona_agent_prompt_expressions(
         )
 
     # Prompts are now embedded directly on the Persona model
-    prompt_config = PromptConfig.from_model(persona)
+    prompt_config = PromptConfig.from_model(persona, db_session=db_session)
+    # Combine default behavior and custom instructions
+    system_prompt = prompt_config.default_behavior_system_prompt or ""
+    if prompt_config.custom_instruction:
+        if system_prompt:
+            system_prompt += "\n\n"
+        system_prompt += prompt_config.custom_instruction
+
     datetime_aware_system_prompt = handle_onyx_date_awareness(
-        prompt_str=prompt_config.system_prompt,
+        prompt_str=system_prompt,
         prompt_config=prompt_config,
         add_additional_info_if_no_tag=persona.datetime_aware,
     )

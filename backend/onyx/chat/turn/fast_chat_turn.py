@@ -26,7 +26,11 @@ from onyx.chat.stream_processing.utils import map_document_id_order_v2
 from onyx.chat.turn.context_handler.citation import (
     assign_citation_numbers_recent_tool_calls,
 )
-from onyx.chat.turn.context_handler.task_prompt import update_task_prompt
+from onyx.chat.turn.context_handler.custom_instruction import add_custom_instruction
+from onyx.chat.turn.context_handler.remove_user_messages import (
+    remove_middle_user_messages,
+)
+from onyx.chat.turn.context_handler.task_prompt import add_reminder
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
 from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
@@ -123,14 +127,22 @@ def _run_agent_loop(
             for msg in all_messages_after_stream[previous_message_count:]
         ]
 
-        agent_turn_messages = list(
-            update_task_prompt(
-                current_user_message_typed,
-                agent_turn_messages,
-                prompt_config,
-                ctx.should_cite_documents,
-            )
+        # Apply context handlers in order:
+        # 1. Remove all user messages in the middle (previous reminders/instructions)
+        agent_turn_messages = remove_middle_user_messages(agent_turn_messages)
+
+        # 2. Add custom instructions (if present)
+        agent_turn_messages = add_custom_instruction(agent_turn_messages, prompt_config)
+
+        # 3. Add task prompt reminder
+        agent_turn_messages = add_reminder(
+            current_user_message_typed,
+            agent_turn_messages,
+            prompt_config,
+            ctx.should_cite_documents,
         )
+
+        # 4. Assign citation numbers to tool call outputs
         citation_result = assign_citation_numbers_recent_tool_calls(
             agent_turn_messages, ctx
         )

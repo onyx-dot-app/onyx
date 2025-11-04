@@ -17,8 +17,6 @@ class ProviderType(Enum):
 class WebSearchResult(BaseModel):
     title: str
     link: str
-    author: str | None = None
-    published_date: datetime | None = None
     snippet: str | None = None
 
 
