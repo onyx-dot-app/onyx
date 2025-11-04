@@ -22,7 +22,7 @@ describe("PATManagement", () => {
   test("user can create a new token and see it displayed", async () => {
     const user = setupUser();
 
-    // Mock GET /api/user/tokens (initial empty list)
+    // Mock GET /api/user/pats (initial empty list)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [],
@@ -47,7 +47,7 @@ describe("PATManagement", () => {
     const sevenDaysOption = await screen.findByText("7 days");
     await user.click(sevenDaysOption);
 
-    // Mock POST /api/user/tokens (create token)
+    // Mock POST /api/user/pats (create token)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -61,7 +61,7 @@ describe("PATManagement", () => {
       }),
     } as Response);
 
-    // Mock GET /api/user/tokens (after creation, returns new token)
+    // Mock GET /api/user/pats (after creation, returns new token)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [
@@ -83,7 +83,7 @@ describe("PATManagement", () => {
     // Verify POST was called with correct data
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
-        "/api/user/tokens",
+        "/api/user/pats",
         expect.objectContaining({
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -110,7 +110,7 @@ describe("PATManagement", () => {
   test("user can copy a newly created token", async () => {
     const user = setupUser();
 
-    // Mock GET /api/user/tokens (initial empty list)
+    // Mock GET /api/user/pats (initial empty list)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [],
@@ -127,7 +127,7 @@ describe("PATManagement", () => {
 
     await user.type(screen.getByLabelText(/token name/i), "Copy Test Token");
 
-    // Mock POST /api/user/tokens
+    // Mock POST /api/user/pats
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -141,7 +141,7 @@ describe("PATManagement", () => {
       }),
     } as Response);
 
-    // Mock GET /api/user/tokens (after creation)
+    // Mock GET /api/user/pats (after creation)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [
@@ -185,7 +185,7 @@ describe("PATManagement", () => {
   test("user can delete a token with confirmation", async () => {
     const user = setupUser();
 
-    // Mock GET /api/user/tokens (list with one token)
+    // Mock GET /api/user/pats (list with one token)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [
@@ -221,13 +221,13 @@ describe("PATManagement", () => {
       ).toBeInTheDocument();
     });
 
-    // Mock DELETE /api/user/tokens/3
+    // Mock DELETE /api/user/pats/3
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
     } as Response);
 
-    // Mock GET /api/user/tokens (after deletion, empty list)
+    // Mock GET /api/user/pats (after deletion, empty list)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [],
@@ -241,7 +241,7 @@ describe("PATManagement", () => {
 
     // Verify DELETE was called
     await waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalledWith("/api/user/tokens/3", {
+      expect(fetchSpy).toHaveBeenCalledWith("/api/user/pats/3", {
         method: "DELETE",
       });
     });
@@ -256,7 +256,7 @@ describe("PATManagement", () => {
   test("user can cancel token deletion", async () => {
     const user = setupUser();
 
-    // Mock GET /api/user/tokens
+    // Mock GET /api/user/pats
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [
@@ -302,7 +302,7 @@ describe("PATManagement", () => {
   test("shows validation error when creating token with empty name", async () => {
     const user = setupUser();
 
-    // Mock GET /api/user/tokens (empty list)
+    // Mock GET /api/user/pats (empty list)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [],
@@ -326,7 +326,7 @@ describe("PATManagement", () => {
   test("displays multiple tokens with different expiration states", async () => {
     const user = setupUser();
 
-    // Mock GET /api/user/tokens (list with multiple tokens)
+    // Mock GET /api/user/pats (list with multiple tokens)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [
@@ -389,7 +389,7 @@ describe("PATManagement", () => {
   test("handles API error when creating token", async () => {
     const user = setupUser();
 
-    // Mock GET /api/user/tokens (empty list)
+    // Mock GET /api/user/pats (empty list)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [],
@@ -399,7 +399,7 @@ describe("PATManagement", () => {
 
     await user.type(screen.getByLabelText(/token name/i), "Token with Error");
 
-    // Mock POST /api/user/tokens (server error)
+    // Mock POST /api/user/pats (server error)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 422,
@@ -413,7 +413,7 @@ describe("PATManagement", () => {
     // Verify POST was called
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
-        "/api/user/tokens",
+        "/api/user/pats",
         expect.objectContaining({ method: "POST" })
       );
     });
@@ -423,7 +423,7 @@ describe("PATManagement", () => {
   });
 
   test("handles network error when loading tokens", async () => {
-    // Mock GET /api/user/tokens (network error)
+    // Mock GET /api/user/pats (network error)
     fetchSpy.mockRejectedValueOnce(new Error("Network error"));
 
     render(<PATManagement />);
@@ -436,7 +436,7 @@ describe("PATManagement", () => {
   test("user can select no expiration option", async () => {
     const user = setupUser();
 
-    // Mock GET /api/user/tokens (empty list)
+    // Mock GET /api/user/pats (empty list)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [],
@@ -454,7 +454,7 @@ describe("PATManagement", () => {
     const noExpirationOption = await screen.findByText("No expiration");
     await user.click(noExpirationOption);
 
-    // Mock POST /api/user/tokens
+    // Mock POST /api/user/pats
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -468,7 +468,7 @@ describe("PATManagement", () => {
       }),
     } as Response);
 
-    // Mock GET /api/user/tokens (after creation)
+    // Mock GET /api/user/pats (after creation)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [
@@ -488,7 +488,7 @@ describe("PATManagement", () => {
     // Verify POST was called with null expiration_days
     await waitFor(() => {
       const postCall = fetchSpy.mock.calls.find(
-        (call) => call[0] === "/api/user/tokens" && call[1]?.method === "POST"
+        (call) => call[0] === "/api/user/pats" && call[1]?.method === "POST"
       );
       const requestBody = JSON.parse(postCall[1].body);
       expect(requestBody.expiration_days).toBeNull();
@@ -498,7 +498,7 @@ describe("PATManagement", () => {
   test("form clears after successful token creation", async () => {
     const user = setupUser();
 
-    // Mock GET /api/user/tokens (empty list)
+    // Mock GET /api/user/pats (empty list)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [],
@@ -509,7 +509,7 @@ describe("PATManagement", () => {
     const nameInput = screen.getByLabelText(/token name/i);
     await user.type(nameInput, "Test Token");
 
-    // Mock POST /api/user/tokens
+    // Mock POST /api/user/pats
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -523,7 +523,7 @@ describe("PATManagement", () => {
       }),
     } as Response);
 
-    // Mock GET /api/user/tokens (after creation)
+    // Mock GET /api/user/pats (after creation)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => [

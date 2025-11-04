@@ -26,7 +26,7 @@ def test_pat_lifecycle_happy_path(reset: None) -> None:
     user: DATestUser = UserManager.create(name="pat_user")
 
     create_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "My Integration Token", "expiration_days": 30},
         headers=user.headers,
     )
@@ -52,7 +52,7 @@ def test_pat_lifecycle_happy_path(reset: None) -> None:
     assert token_display.startswith("onyx_pat_")
 
     list_response = requests.get(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         headers=user.headers,
     )
     assert list_response.status_code == 200
@@ -73,7 +73,7 @@ def test_pat_lifecycle_happy_path(reset: None) -> None:
     assert me_data["id"] == user.id
 
     revoke_response = requests.delete(
-        f"{API_SERVER_URL}/api/user/tokens/{token_id}",
+        f"{API_SERVER_URL}/api/user/pats/{token_id}",
         headers=user.headers,
     )
     assert revoke_response.status_code == 200
@@ -85,7 +85,7 @@ def test_pat_lifecycle_happy_path(reset: None) -> None:
     assert revoked_auth_response.status_code == 401
 
     list_after_revoke = requests.get(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         headers=user.headers,
     )
     assert list_after_revoke.status_code == 200
@@ -102,7 +102,7 @@ def test_pat_user_isolation_and_authentication(reset: None) -> None:
     user_a_tokens = []
     for i in range(2):
         response = requests.post(
-            f"{API_SERVER_URL}/api/user/tokens",
+            f"{API_SERVER_URL}/api/user/pats",
             json={"name": f"User A Token {i+1}", "expiration_days": 30},
             headers=user_a.headers,
         )
@@ -117,7 +117,7 @@ def test_pat_user_isolation_and_authentication(reset: None) -> None:
     user_b_tokens = []
     for i in range(2):
         response = requests.post(
-            f"{API_SERVER_URL}/api/user/tokens",
+            f"{API_SERVER_URL}/api/user/pats",
             json={"name": f"User B Token {i+1}", "expiration_days": 30},
             headers=user_b.headers,
         )
@@ -140,34 +140,34 @@ def test_pat_user_isolation_and_authentication(reset: None) -> None:
         assert me_data["id"] == user.id
 
     user_a_list = requests.get(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         headers=user_a.headers,
     )
     assert user_a_list.status_code == 200
     assert len(user_a_list.json()) == 2
 
     user_b_list = requests.get(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         headers=user_b.headers,
     )
     assert user_b_list.status_code == 200
     assert len(user_b_list.json()) == 2
 
     delete_response = requests.delete(
-        f"{API_SERVER_URL}/api/user/tokens/{user_b_tokens[0]['id']}",
+        f"{API_SERVER_URL}/api/user/pats/{user_b_tokens[0]['id']}",
         headers={"Authorization": f"Bearer {user_a_tokens[0]['token']}"},
     )
     assert delete_response.status_code == 404
 
     user_b_list_after = requests.get(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         headers=user_b.headers,
     )
     assert user_b_list_after.status_code == 200
     assert len(user_b_list_after.json()) == 2
 
     delete_fake = requests.delete(
-        f"{API_SERVER_URL}/api/user/tokens/999999",
+        f"{API_SERVER_URL}/api/user/pats/999999",
         headers=user_a.headers,
     )
     assert delete_fake.status_code == 404
@@ -178,7 +178,7 @@ def test_pat_expiration_flow(reset: None) -> None:
     user: DATestUser = UserManager.create(name="expiration_user")
 
     create_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "Expiring Token", "expiration_days": 7},
         headers=user.headers,
     )
@@ -196,7 +196,7 @@ def test_pat_expiration_flow(reset: None) -> None:
     assert abs((expires_at - expected_expiry).total_seconds()) < 60
 
     no_expiry_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "Never Expiring Token", "expiration_days": None},
         headers=user.headers,
     )
@@ -213,7 +213,7 @@ def test_pat_expiration_flow(reset: None) -> None:
     assert auth_response.status_code == 200
 
     revoke_response = requests.delete(
-        f"{API_SERVER_URL}/api/user/tokens/{never_expiring_token_id}",
+        f"{API_SERVER_URL}/api/user/pats/{never_expiring_token_id}",
         headers=user.headers,
     )
     assert revoke_response.status_code == 200
@@ -230,7 +230,7 @@ def test_pat_validation_errors(reset: None) -> None:
     user: DATestUser = UserManager.create(name="validation_user")
 
     empty_name_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "", "expiration_days": 30},
         headers=user.headers,
     )
@@ -238,21 +238,21 @@ def test_pat_validation_errors(reset: None) -> None:
 
     long_name = "a" * 101
     long_name_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": long_name, "expiration_days": 30},
         headers=user.headers,
     )
     assert long_name_response.status_code == 422
 
     negative_exp_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "Test Token", "expiration_days": -1},
         headers=user.headers,
     )
     assert negative_exp_response.status_code == 422
 
     zero_exp_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "Test Token", "expiration_days": 0},
         headers=user.headers,
     )
@@ -260,14 +260,14 @@ def test_pat_validation_errors(reset: None) -> None:
 
     valid_name = "a" * 100
     valid_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": valid_name, "expiration_days": 7},
         headers=user.headers,
     )
     assert valid_response.status_code == 200
 
     missing_name_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"expiration_days": 30},
         headers=user.headers,
     )
@@ -279,7 +279,7 @@ def test_pat_sorting_and_last_used(reset: None) -> None:
     user: DATestUser = UserManager.create(name="sorting_user")
 
     token1_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "First Token", "expiration_days": 30},
         headers=user.headers,
     )
@@ -292,7 +292,7 @@ def test_pat_sorting_and_last_used(reset: None) -> None:
     time.sleep(0.1)
 
     token2_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "Second Token", "expiration_days": 30},
         headers=user.headers,
     )
@@ -301,14 +301,14 @@ def test_pat_sorting_and_last_used(reset: None) -> None:
     time.sleep(0.1)
 
     token3_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "Third Token", "expiration_days": 30},
         headers=user.headers,
     )
     assert token3_response.status_code == 200
 
     list_response = requests.get(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         headers=user.headers,
     )
     assert list_response.status_code == 200
@@ -331,7 +331,7 @@ def test_pat_sorting_and_last_used(reset: None) -> None:
     time.sleep(0.5)
 
     list_after_use = requests.get(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         headers=user.headers,
     )
     assert list_after_use.status_code == 200
@@ -378,7 +378,7 @@ def test_pat_role_based_access_control(reset: None) -> None:
     assert global_curator_user.role == UserRole.GLOBAL_CURATOR
 
     admin_pat_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "Admin Token", "expiration_days": 7},
         headers=admin_user.headers,
     )
@@ -386,7 +386,7 @@ def test_pat_role_based_access_control(reset: None) -> None:
     admin_token = admin_pat_response.json()["token"]
 
     basic_pat_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "Basic Token", "expiration_days": 7},
         headers=basic_user.headers,
     )
@@ -394,7 +394,7 @@ def test_pat_role_based_access_control(reset: None) -> None:
     basic_token = basic_pat_response.json()["token"]
 
     curator_pat_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "Curator Token", "expiration_days": 7},
         headers=curator_user.headers,
     )
@@ -402,7 +402,7 @@ def test_pat_role_based_access_control(reset: None) -> None:
     curator_token = curator_pat_response.json()["token"]
 
     global_curator_pat_response = requests.post(
-        f"{API_SERVER_URL}/api/user/tokens",
+        f"{API_SERVER_URL}/api/user/pats",
         json={"name": "Global Curator Token", "expiration_days": 7},
         headers=global_curator_user.headers,
     )
