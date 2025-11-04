@@ -80,7 +80,9 @@ class ImageShape(str, Enum):
 # override_kwargs is not supported for image generation tools
 class ImageGenerationTool(Tool[None]):
     _NAME = "run_image_generation"
-    _DESCRIPTION = "Generate an image from a prompt."
+    _DESCRIPTION = (
+        "NEVER use generate_image unless the user specifically requests an image."
+    )
     _DISPLAY_NAME = "Image Generation"
 
     def __init__(
