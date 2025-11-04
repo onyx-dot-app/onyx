@@ -171,7 +171,9 @@ export function PATManagement() {
               onChange={(e) => setNewTokenName(e.target.value)}
               disabled={isCreating}
               aria-label="Token name"
+              autoComplete="new-password"
             />
+            {/* autoComplete="new-password" is a workaround for Safari browers to disable autoComplete*/}
             <div className="space-y-1">
               {/* NOTE: Use Select dropdown (not free text input) to guide users to common values.
                   Backend accepts any positive integer, but we provide curated options for UX. */}
@@ -194,7 +196,11 @@ export function PATManagement() {
                 Expires at end of day (23:59 UTC).
               </Text>
             </div>
-            <Button onClick={createPAT} disabled={isCreating} primary>
+            <Button
+              onClick={createPAT}
+              disabled={isCreating || !newTokenName.trim()}
+              primary
+            >
               {isCreating ? "Creating..." : "Create Token"}
             </Button>
           </div>
