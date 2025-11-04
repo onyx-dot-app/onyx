@@ -13,7 +13,7 @@ interface PopupProps {
   children: JSX.Element;
   content: (
     close: () => void,
-    ref?: React.RefObject<HTMLDivElement>
+    ref?: React.RefObject<HTMLDivElement | null>
   ) => ReactNode;
   position?: "top" | "bottom" | "left" | "right" | "top-right";
   removePadding?: boolean;

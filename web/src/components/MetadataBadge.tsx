@@ -5,7 +5,7 @@ export function MetadataBadge({
   value,
   flexNone,
 }: {
-  icon?: React.FC<{ size?: number; className?: string }>;
+  icon?: (props: { size?: number; className?: string }) => JSX.Element;
   value: string | JSX.Element;
   flexNone?: boolean;
 }) {
