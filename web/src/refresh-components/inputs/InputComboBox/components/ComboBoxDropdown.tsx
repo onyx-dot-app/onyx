@@ -1,0 +1,110 @@
+import React, { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
+import { OptionsList } from "./OptionsList";
+import { ComboBoxOption } from "../types";
+
+interface DropdownPosition {
+  top: number;
+  left: number;
+  width: number;
+  flipped: boolean;
+}
+
+interface ComboBoxDropdownProps {
+  isOpen: boolean;
+  disabled: boolean;
+  dropdownPosition: DropdownPosition | null;
+  fieldId: string;
+  placeholder: string;
+  matchedOptions: ComboBoxOption[];
+  unmatchedOptions: ComboBoxOption[];
+  hasSearchTerm: boolean;
+  separatorLabel: string;
+  value: string;
+  highlightedIndex: number;
+  onSelect: (option: ComboBoxOption) => void;
+  onMouseEnter: (index: number) => void;
+  onMouseMove: () => void;
+  isExactMatch: (option: ComboBoxOption) => boolean;
+}
+
+/**
+ * Renders the dropdown menu in a portal
+ * Handles scroll-into-view for highlighted options
+ */
+export const ComboBoxDropdown: React.FC<ComboBoxDropdownProps> = ({
+  isOpen,
+  disabled,
+  dropdownPosition,
+  fieldId,
+  placeholder,
+  matchedOptions,
+  unmatchedOptions,
+  hasSearchTerm,
+  separatorLabel,
+  value,
+  highlightedIndex,
+  onSelect,
+  onMouseEnter,
+  onMouseMove,
+  isExactMatch,
+}) => {
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Scroll highlighted option into view
+  useEffect(() => {
+    if (isOpen && dropdownRef.current && highlightedIndex >= 0) {
+      const highlightedElement = dropdownRef.current.querySelector(
+        `[data-index="${highlightedIndex}"]`
+      );
+      if (highlightedElement) {
+        highlightedElement.scrollIntoView({
+          block: "nearest",
+          behavior: "smooth",
+        });
+      }
+    }
+  }, [highlightedIndex, isOpen]);
+
+  if (
+    !isOpen ||
+    disabled ||
+    !dropdownPosition ||
+    typeof document === "undefined"
+  ) {
+    return null;
+  }
+
+  return createPortal(
+    <div
+      ref={dropdownRef}
+      id={`${fieldId}-listbox`}
+      role="listbox"
+      aria-label={placeholder}
+      className={cn(
+        "fixed z-[9999] bg-background-neutral-00 border border-border-02 rounded-12 shadow-02 max-h-60 overflow-auto p-1"
+      )}
+      style={{
+        top: `${dropdownPosition.top}px`,
+        left: `${dropdownPosition.left}px`,
+        width: `${dropdownPosition.width}px`,
+      }}
+    >
+      <OptionsList
+        matchedOptions={matchedOptions}
+        unmatchedOptions={unmatchedOptions}
+        hasSearchTerm={hasSearchTerm}
+        separatorLabel={separatorLabel}
+        value={value}
+        highlightedIndex={highlightedIndex}
+        fieldId={fieldId}
+        onSelect={onSelect}
+        onMouseEnter={onMouseEnter}
+        onMouseMove={onMouseMove}
+        isExactMatch={isExactMatch}
+      />
+    </div>,
+    document.body
+  );
+};
