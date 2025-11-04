@@ -507,7 +507,7 @@ def test_fast_chat_turn_tool_call_cancellation(
     assert_cancellation_packets(packets, expect_cancelled_message=True)
 
 
-def test_fast_chat_turn_next_turn_context_handlers(
+def test_fast_chat_turn_second_turn_context_handlers(
     chat_turn_dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     message_id: int,
@@ -548,6 +548,15 @@ def test_fast_chat_turn_next_turn_context_handlers(
                 InputTextContent(
                     type="input_text",
                     text="I need to use a tool",
+                )
+            ],
+        ),
+        UserMessage(
+            role="user",
+            content=[
+                InputTextContent(
+                    type="input_text",
+                    text="hi again",
                 )
             ],
         ),
