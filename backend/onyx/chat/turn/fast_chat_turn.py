@@ -59,6 +59,8 @@ from onyx.tools.tool import Tool
 if TYPE_CHECKING:
     from litellm import ResponseFunctionToolCall
 
+MAX_ITERATIONS = 10
+
 
 # TODO -- this can be refactored out and played with in evals + normal demo
 def _run_agent_loop(
@@ -83,11 +85,10 @@ def _run_agent_loop(
     agent_turn_messages: list[AgentSDKMessage] = []
     last_call_is_final = False
     iteration_count = 0
-    max_iterations = 10
 
     while not last_call_is_final:
         available_tools: Sequence[Tool] = (
-            dependencies.tools if iteration_count < max_iterations else []
+            dependencies.tools if iteration_count < MAX_ITERATIONS else []
         )
         memories = get_memories(dependencies.user_or_none, dependencies.db_session)
         langchain_system_message = default_build_system_message_v2(
