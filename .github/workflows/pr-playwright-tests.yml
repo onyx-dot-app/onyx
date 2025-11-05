@@ -30,10 +30,10 @@ jobs:
     runs-on: blacksmith-8vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # ratchet:aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
@@ -41,13 +41,13 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # ratchet:aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
 
       - name: Build and push Web Docker image
-        uses: useblacksmith/build-push-action@v2
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
         with:
           context: ./web
           file: ./web/Dockerfile
@@ -63,10 +63,10 @@ jobs:
     runs-on: blacksmith-8vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # ratchet:aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
@@ -74,13 +74,13 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # ratchet:aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
 
       - name: Build and push Backend Docker image
-        uses: useblacksmith/build-push-action@v2
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -96,10 +96,10 @@ jobs:
     runs-on: blacksmith-8vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # ratchet:aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
@@ -107,13 +107,13 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # ratchet:aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
 
       - name: Build and push Model Server Docker image
-        uses: useblacksmith/build-push-action@v2
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -131,12 +131,12 @@ jobs:
     runs-on: blacksmith-8vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # ratchet:aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
@@ -144,13 +144,13 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # ratchet:aws-actions/amazon-ecr-login@v2
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -173,7 +173,7 @@ jobs:
           docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
 
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # ratchet:actions/setup-node@v4
         with:
           node-version: 22
 
@@ -244,7 +244,7 @@ jobs:
           mkdir -p test-results
           npx playwright test
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
         if: always()
         with:
           # Includes test results and trace.zip files
@@ -262,7 +262,7 @@ jobs:
 
       - name: Upload logs
         if: success() || failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
         with:
           name: docker-logs
           path: ${{ github.workspace }}/docker-compose.log
@@ -289,12 +289,12 @@ jobs:
 #     ]
 #   steps:
 #     - name: Checkout code
-#       uses: actions/checkout@v4
+#       uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 #       with:
 #         fetch-depth: 0
 
 #     - name: Setup node
-#       uses: actions/setup-node@v4
+#       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # ratchet:actions/setup-node@v4
 #       with:
 #         node-version: 22
 
@@ -303,7 +303,7 @@ jobs:
 #       run: npm ci
 
 #     - name: Download Playwright test results
-#       uses: actions/download-artifact@v4
+#       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
 #       with:
 #         name: test-results
 #         path: ./web/test-results

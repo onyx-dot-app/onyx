@@ -36,7 +36,7 @@ jobs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
       - name: Discover test directories
         id: set-matrix
@@ -62,7 +62,7 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
       - name: Prepare build
         uses: ./.github/actions/prepare-build
@@ -71,20 +71,20 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
       - name: Login to Private Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           registry: ${{ env.PRIVATE_REGISTRY }}
           username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
           password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
 
       - name: Build and push Backend Docker image
-        uses: useblacksmith/build-push-action@v2
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -99,20 +99,20 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
       - name: Login to Private Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           registry: ${{ env.PRIVATE_REGISTRY }}
           username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
           password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
 
       - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
 
       - name: Build and push Model Server Docker image
-        uses: useblacksmith/build-push-action@v2
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -129,23 +129,23 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
       - name: Login to Private Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           registry: ${{ env.PRIVATE_REGISTRY }}
           username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
           password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
 
       - name: Download OpenAPI artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
         with:
           name: openapi-artifacts
           path: backend/generated/
 
       - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
 
       - name: Build and push integration test image with Docker Bake
         env:
@@ -171,10 +171,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
       - name: Login to Private Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           registry: ${{ env.PRIVATE_REGISTRY }}
           username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
@@ -184,7 +184,7 @@ jobs:
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -273,7 +273,7 @@ jobs:
 
       # NOTE: Use pre-ping/null to reduce flakiness due to dropped connections
       - name: Run Integration Tests for ${{ matrix.test-dir.name }}
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
         with:
           timeout_minutes: 20
           max_attempts: 3
@@ -329,7 +329,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
         with:
           name: docker-all-logs-${{ matrix.test-dir.name }}
           path: ${{ github.workspace }}/docker-compose.log
@@ -347,7 +347,7 @@ jobs:
     needs: [integration-tests-mit]
     if: ${{ always() }}
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
         with:
           script: |
             const needs = ${{ toJSON(needs) }};
