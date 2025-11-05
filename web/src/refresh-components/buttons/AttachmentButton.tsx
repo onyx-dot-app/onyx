@@ -76,7 +76,7 @@ export default function AttachmentButton({
         </div>
         <div className="flex flex-col items-start justify-center">
           <div className="flex flex-row items-center gap-2">
-            <Truncated mainUiMuted text04 nowrap>
+            <Truncated mainUiMuted text04 nowrap className="max-w-72 truncate">
               {children}
             </Truncated>
             {onView && (

@@ -5,7 +5,10 @@ import { useDropzone } from "react-dropzone";
 import { Separator } from "@/components/ui/separator";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import type { ProjectFile } from "../../projects/projectsService";
+import {
+  UserFileStatus,
+  type ProjectFile,
+} from "../../projects/projectsService";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Button from "@/refresh-components/buttons/Button";
@@ -158,6 +161,8 @@ export default function ProjectContextPanel({
             )}
             onFileClick={handleOnView}
             onPickRecent={async (file) => {
+              if (file.status === UserFileStatus.UPLOADING) return;
+              if (file.status === UserFileStatus.DELETING) return;
               if (!currentProjectId) return;
               if (!linkFileToProject) return;
               linkFileToProject(currentProjectId, file);
