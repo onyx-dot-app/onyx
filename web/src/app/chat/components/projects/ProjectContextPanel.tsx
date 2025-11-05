@@ -30,6 +30,7 @@ import { FileCard } from "../input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
 import { handleEnterPress, useEscapePress } from "@/lib/typingUtils";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { FileCardSkeleton } from "@/app/chat/components/input/FileCard";
 
 export default function ProjectContextPanel({
   projectTokenCount = 0,
@@ -69,6 +70,7 @@ export default function ProjectContextPanel({
     unlinkFileFromProject,
     linkFileToProject,
     allCurrentProjectFiles,
+    isLoadingProjectDetails,
     beginUpload,
     projects,
     renameProject,
@@ -185,11 +187,13 @@ export default function ProjectContextPanel({
 
       <Separator className="my-0" />
       <div className="flex flex-row gap-2 justify-between">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <Text headingH3 text04>
             Instructions
           </Text>
-          {currentProjectDetails?.project?.instructions ? (
+          {isLoadingProjectDetails && !currentProjectDetails ? (
+            <div className="h-5 w-3/4 rounded bg-background-tint-02 animate-pulse" />
+          ) : currentProjectDetails?.project?.instructions ? (
             <Text text02 secondaryBody className="truncate">
               {currentProjectDetails.project.instructions}
             </Text>
@@ -247,7 +251,22 @@ export default function ProjectContextPanel({
         {/* Hidden input just to satisfy dropzone contract; we rely on FilePicker for clicks */}
         <input {...getInputProps()} />
 
-        {allCurrentProjectFiles.length > 0 ? (
+        {isLoadingProjectDetails && !currentProjectDetails ? (
+          <>
+            {/* Mobile / small screens: show skeleton */}
+            <div className="sm:hidden">
+              <div className="w-full h-[68px] rounded-xl bg-background-tint-02 animate-pulse" />
+            </div>
+
+            {/* Desktop / larger screens: show skeleton file cards */}
+            <div className="hidden sm:flex gap-1">
+              <FileCardSkeleton />
+              <FileCardSkeleton />
+              <FileCardSkeleton />
+              <FileCardSkeleton />
+            </div>
+          </>
+        ) : allCurrentProjectFiles.length > 0 ? (
           <>
             {/* Mobile / small screens: just show a button to view files */}
             <div className="sm:hidden">

@@ -13,11 +13,27 @@ import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 
+// Skeleton component for chat session items
+const ChatSessionSkeleton = () => (
+  <div className="w-full rounded-08 py-2 p-1.5">
+    <div className="flex gap-3 min-w-0 w-full">
+      <div className="flex h-full w-fit pt-1 pl-1">
+        <div className="h-4 w-4 rounded-full bg-background-tint-02 animate-pulse" />
+      </div>
+      <div className="flex flex-col w-full gap-1">
+        <div className="h-5 w-2/3 rounded bg-background-tint-02 animate-pulse" />
+        <div className="h-4 w-1/2 rounded bg-background-tint-02 animate-pulse" />
+      </div>
+    </div>
+  </div>
+);
+
 export default function ProjectChatSessionList() {
   const {
     currentProjectDetails,
     currentProjectId,
     refreshCurrentProjectDetails,
+    isLoadingProjectDetails,
   } = useProjectsContext();
   const { agents: assistants } = useAgentsContext();
   const [isRenamingChat, setIsRenamingChat] = React.useState<string | null>(
@@ -43,7 +59,13 @@ export default function ProjectChatSessionList() {
         </Text>
       </div>
 
-      {projectChats.length === 0 ? (
+      {isLoadingProjectDetails && !currentProjectDetails ? (
+        <div className="flex flex-col gap-2">
+          <ChatSessionSkeleton />
+          <ChatSessionSkeleton />
+          <ChatSessionSkeleton />
+        </div>
+      ) : projectChats.length === 0 ? (
         <Text text02 secondaryBody className="p-2">
           No chats yet.
         </Text>
