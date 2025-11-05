@@ -64,12 +64,10 @@ function ImageFileCard({
             "justify-center",
             "rounded-[4px]",
             "border",
-            "border-border",
+            "border-border-01",
             "text-[11px]",
-            "bg-[#1f1f1f]",
-            "text-white",
-            "dark:bg-[#fefcfa]",
-            "dark:text-black",
+            "bg-background-neutral-inverted-04",
+            "text-text-inverted-05",
             "shadow-sm",
             "opacity-0",
             "group-hover:opacity-100",
@@ -82,7 +80,7 @@ function ImageFileCard({
             "hover:opacity-90"
           )}
         >
-          <X className="h-4 w-4 dark:text-dark-tremor-background-muted" />
+          <X className="h-4 w-4" />
         </button>
       )}
       {!doneUploading || !imageUrl ? (
@@ -185,9 +183,9 @@ export function FileCard({
           onClick={handleRemoveFile}
           title="Delete file"
           aria-label="Delete file"
-          className="absolute -left-2 -top-2 z-10 h-5 w-5 flex items-center justify-center rounded-[4px] border border-border text-[11px] bg-[#1f1f1f] text-white dark:bg-[#fefcfa] dark:text-black shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto transition-opacity duration-150 hover:opacity-90"
+          className="absolute -left-2 -top-2 z-10 h-5 w-5 flex items-center justify-center rounded-[4px] border border-border-01 text-[11px] bg-background-neutral-inverted-04 text-text-inverted-05 shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto transition-opacity duration-150 hover:opacity-90"
         >
-          <X className="h-4 w-4 dark:text-dark-tremor-background-muted" />
+          <X className="h-4 w-4" />
         </button>
       )}
       <div

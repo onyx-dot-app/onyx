@@ -3,15 +3,8 @@
 module.exports = {
   darkMode: "class",
   content: [
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-
-    // Or if using `src` directory:
     "./src/**/*.{js,ts,jsx,tsx,mdx}",
-
-    // tremor
-    "./node_modules/@tremor/**/*.{js,ts,jsx,tsx}",
+    "./lib/opal/src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     transparent: "transparent",
@@ -222,10 +215,6 @@ module.exports = {
       fontSize: {
         "2xs": "0.625rem",
         "code-sm": "small",
-        "tremor-label": ["0.75rem"],
-        "tremor-default": ["0.875rem", { lineHeight: "1.25rem" }],
-        "tremor-title": ["1.125rem", { lineHeight: "1.75rem" }],
-        "tremor-metric": ["1.875rem", { lineHeight: "2.25rem" }],
       },
       fontWeight: {
         description: "375",
