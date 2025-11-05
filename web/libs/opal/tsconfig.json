@@ -15,10 +15,8 @@
     "noEmit": true,
 
     // KEY: Tell TypeScript where to find node_modules
-    "typeRoots": [
-      "../../web/node_modules/@types"
-    ],
-    "baseUrl": "../../web"
+    "typeRoots": ["../node_modules/@types"],
+    "baseUrl": ".."
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

@@ -35,7 +35,7 @@ Those dependencies will then install inside of `/web/node_modules` and be availa
 ## Structure
 
 ```
-libs/opal/
+/web/libs/opal/
 ├── src/
 │   ├── components/    # React components
 │   └── index.ts       # Main export file
