@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Separator } from "@/components/ui/separator";
 import { useProjectsContext } from "../../projects/ProjectsContext";
@@ -24,9 +24,12 @@ import Text from "@/refresh-components/texts/Text";
 import SvgFolderOpen from "@/icons/folder-open";
 import SvgAddLines from "@/icons/add-lines";
 import SvgFiles from "@/icons/files";
+import SvgEdit from "@/icons/edit";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FileCard } from "../input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
+import { handleEnterPress, useEscapePress } from "@/lib/typingUtils";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 export default function ProjectContextPanel({
   projectTokenCount = 0,
@@ -42,6 +45,10 @@ export default function ProjectContextPanel({
   const open = isOpen(ModalIds.ProjectFilesModal);
   const onClose = () => toggleModal(ModalIds.ProjectFilesModal, false);
   useEscape(onClose, open);
+
+  // Edit project name state
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editingNameValue, setEditingNameValue] = useState("");
   // Convert ProjectFile to MinimalOnyxDocument format for viewing
   const handleOnView = useCallback(
     (file: ProjectFile) => {
@@ -64,6 +71,7 @@ export default function ProjectContextPanel({
     allCurrentProjectFiles,
     beginUpload,
     projects,
+    renameProject,
   } = useProjectsContext();
   const handleUploadFiles = useCallback(
     async (files: File[]) => {
@@ -97,6 +105,46 @@ export default function ProjectContextPanel({
     },
   });
 
+  // Handle project name editing
+  const currentProject = projects.find((p) => p.id === currentProjectId);
+  const projectName = currentProject?.name || "Loading project...";
+
+  const startEditing = useCallback(() => {
+    setEditingNameValue(projectName);
+    setIsEditingName(true);
+  }, [projectName]);
+
+  const cancelEditing = useCallback(() => {
+    setIsEditingName(false);
+    setEditingNameValue("");
+  }, []);
+
+  const submitRename = useCallback(async () => {
+    const newName = editingNameValue.trim();
+    if (!newName || !currentProjectId || newName === projectName) {
+      cancelEditing();
+      return;
+    }
+
+    // Close immediately for instant feedback
+    cancelEditing();
+
+    // Proceed with the rename operation
+    try {
+      await renameProject(currentProjectId, newName);
+    } catch (error) {
+      console.error("Failed to rename project:", error);
+    }
+  }, [
+    editingNameValue,
+    currentProjectId,
+    projectName,
+    cancelEditing,
+    renameProject,
+  ]);
+
+  useEscapePress(cancelEditing, isEditingName);
+
   if (!currentProjectId) return null; // no selection yet
 
   // Detect if there are any non-image files in the displayed files
@@ -108,10 +156,31 @@ export default function ProjectContextPanel({
     <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
       <div className="flex flex-col gap-1 text-text-04">
         <SvgFolderOpen className="h-8 w-8 text-text-04" />
-        <Text headingH2 className="font-heading-h2">
-          {projects.find((p) => p.id === currentProjectId)?.name ||
-            "Loading project..."}
-        </Text>
+        <div className="group flex items-center gap-2">
+          {isEditingName ? (
+            <input
+              value={editingNameValue}
+              onChange={(e) => setEditingNameValue(e.target.value)}
+              onKeyDown={handleEnterPress(submitRename)}
+              onBlur={submitRename}
+              className="bg-transparent outline-none font-heading-h2 text-text-04 w-full"
+              autoFocus
+            />
+          ) : (
+            <>
+              <Text headingH2 className="font-heading-h2">
+                {projectName}
+              </Text>
+              <IconButton
+                icon={SvgEdit}
+                internal
+                onClick={startEditing}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                tooltip="Edit project name"
+              />
+            </>
+          )}
+        </div>
       </div>
 
       <Separator className="my-0" />
