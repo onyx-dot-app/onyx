@@ -248,6 +248,7 @@ class LangflowTool(Tool):
             )
         return prompt_builder
 
+    @staticmethod
     def build_user_message_for_langflow_tool(
         message: HumanMessage,
         tool_name: str,
