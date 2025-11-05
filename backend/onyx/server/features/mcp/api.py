@@ -423,7 +423,8 @@ async def _connect_oauth(
     except Exception:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
-    _ensure_mcp_server_owner_or_admin(mcp_server, user)
+    if is_admin:
+        _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
     if mcp_server.auth_type != MCPAuthenticationType.OAUTH:
         raise HTTPException(
@@ -1126,7 +1127,8 @@ def _list_mcp_tools_by_id(
     except ValueError:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
-    _ensure_mcp_server_owner_or_admin(mcp_server, user)
+    if is_admin:
+        _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
     # Get connection config based on auth type
     # TODO: for now, only the admin that set up a per-user api key server can
@@ -1501,7 +1503,7 @@ def get_mcp_servers_for_admin(
 def get_mcp_server_db_tools(
     server_id: int,
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> ServerToolsResponse:
     """Get existing database tools created for an MCP server"""
     logger.info(f"Getting database tools for MCP server: {server_id}")

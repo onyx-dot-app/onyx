@@ -200,3 +200,23 @@ export async function inviteAdmin2AsAdmin1(page: Page) {
     throw error;
   }
 }
+
+export async function loginWithCredentials(
+  page: Page,
+  email: string,
+  password: string
+) {
+  if (process.env.SKIP_AUTH === "true") {
+    console.log("[loginWithCredentials] Skipping authentication");
+    return;
+  }
+
+  await page.goto("http://localhost:3000/auth/login");
+  const emailInput = page.getByTestId("email");
+  const passwordInput = page.getByTestId("password");
+  await emailInput.waitFor({ state: "visible", timeout: 30000 });
+  await emailInput.fill(email);
+  await passwordInput.fill(password);
+  await page.click('button[type="submit"]');
+  await page.waitForURL(/http:\/\/localhost:3000\/chat.*/, { timeout: 15000 });
+}

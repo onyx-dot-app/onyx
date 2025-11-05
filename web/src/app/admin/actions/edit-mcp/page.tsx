@@ -375,7 +375,10 @@ export default function NewMCPToolPage() {
                               }
                             }}
                           >
-                            <SelectTrigger className="mt-1">
+                            <SelectTrigger
+                              className="mt-1"
+                              data-testid="auth-type-select"
+                            >
                               <SelectValue placeholder="Select authentication type" />
                             </SelectTrigger>
                             <SelectContent>
@@ -487,6 +490,7 @@ export default function NewMCPToolPage() {
                                 ? SvgCheck
                                 : SvgLink
                           }
+                          data-testid="connect-oauth-button"
                         >
                           {checkingOAuthStatus
                             ? "Connecting..."

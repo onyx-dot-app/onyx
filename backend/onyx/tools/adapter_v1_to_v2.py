@@ -99,10 +99,13 @@ async def _tool_run_wrapper(
 
 
 def custom_or_mcp_tool_to_function_tool(tool: Tool) -> FunctionTool:
+    tool_params = tool.tool_definition()["function"]["parameters"]
+    strict_json_schema = "additionalProperties" not in tool_params
     return FunctionTool(
         name=tool.name,
         description=tool.description,
-        params_json_schema=tool.tool_definition()["function"]["parameters"],
+        params_json_schema=tool_params,
+        strict_json_schema=strict_json_schema,
         on_invoke_tool=lambda context, json_string: _tool_run_wrapper(
             context, tool, json_string
         ),

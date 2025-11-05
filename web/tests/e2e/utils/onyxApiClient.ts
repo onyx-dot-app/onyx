@@ -404,4 +404,60 @@ export class OnyxApiClient {
 
     this.log(`Deleted user group: ${groupId}`);
   }
+
+  async setUserRole(
+    email: string,
+    role: "admin" | "curator" | "global_curator" | "basic",
+    explicitOverride = false
+  ): Promise<void> {
+    const response = await this.page.request.patch(
+      `${this.baseUrl}/manage/set-user-role`,
+      {
+        data: {
+          user_email: email,
+          new_role: role,
+          explicit_override: explicitOverride,
+        },
+      }
+    );
+    await this.handleResponse(response, `Failed to set user role for ${email}`);
+    this.log(`Updated role for ${email} to ${role}`);
+  }
+
+  async deleteMcpServer(serverId: number): Promise<boolean> {
+    const response = await this.page.request.delete(
+      `${this.baseUrl}/admin/mcp/server/${serverId}`
+    );
+    const success = await this.handleResponseSoft(
+      response,
+      `Failed to delete MCP server ${serverId}`
+    );
+    if (success) {
+      this.log(`Deleted MCP server ${serverId}`);
+    }
+    return success;
+  }
+
+  async deleteAssistant(assistantId: number): Promise<boolean> {
+    const response = await this.page.request.delete(
+      `${this.baseUrl}/persona/${assistantId}`
+    );
+    const success = await this.handleResponseSoft(
+      response,
+      `Failed to delete assistant ${assistantId}`
+    );
+    if (success) {
+      this.log(`Deleted assistant ${assistantId}`);
+    }
+    return success;
+  }
+
+  async listMcpServers(): Promise<any[]> {
+    const response = await this.get(`/admin/mcp/servers`);
+    const data = await this.handleResponse<{ mcp_servers: any[] }>(
+      response,
+      "Failed to list MCP servers"
+    );
+    return data.mcp_servers;
+  }
 }
