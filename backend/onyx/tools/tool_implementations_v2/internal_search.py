@@ -30,7 +30,7 @@ from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 
 
-class InternalSearchResult(BaseModel):
+class LlmInternalSearchResult(BaseModel):
     """Result from an internal search query"""
 
     document_citation_number: int
@@ -45,7 +45,7 @@ def _internal_search_core(
     run_context: RunContextWrapper[ChatTurnContext],
     queries: list[str],
     search_tool: SearchTool,
-) -> list[InternalSearchResult]:
+) -> list[LlmInternalSearchResult]:
     """Core internal search logic that can be tested with dependency injection"""
     index = run_context.context.current_run_step
     run_context.context.run_dependencies.emitter.emit(
@@ -75,9 +75,9 @@ def _internal_search_core(
 
     def execute_single_query(
         query: str, parallelization_nr: int
-    ) -> list[InternalSearchResult]:
+    ) -> list[LlmInternalSearchResult]:
         """Execute a single query and return the retrieved documents as LlmDocs"""
-        search_results_for_query: list[InternalSearchResult] = []
+        search_results_for_query: list[LlmInternalSearchResult] = []
 
         with get_session_with_current_tenant() as search_db_session:
             for tool_response in search_tool.run(
@@ -105,7 +105,7 @@ def _internal_search_core(
 
                     # Convert InferenceSections to LlmDocs for return value
                     search_results_for_query = [
-                        InternalSearchResult(
+                        LlmInternalSearchResult(
                             document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
                             title=section.center_chunk.semantic_identifier,
                             excerpt=section.combined_content,
@@ -208,5 +208,5 @@ def internal_search(
     retrieved_docs = _internal_search_core(
         run_context, queries, cast(SearchTool, search_pipeline_instance)
     )
-    adapter = TypeAdapter(list[InternalSearchResult])
+    adapter = TypeAdapter(list[LlmInternalSearchResult])
     return adapter.dump_json(retrieved_docs).decode()

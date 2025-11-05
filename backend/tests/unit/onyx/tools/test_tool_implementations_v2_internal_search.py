@@ -18,7 +18,7 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations_v2.internal_search import InternalSearchResult
+from onyx.tools.tool_implementations_v2.internal_search import LlmInternalSearchResult
 from tests.unit.onyx.chat.turn.utils import create_test_inference_chunk
 from tests.unit.onyx.chat.turn.utils import create_test_inference_section
 from tests.unit.onyx.chat.turn.utils import FakeQuery
@@ -186,7 +186,7 @@ def run_internal_search_core_with_dependencies(
     search_pipeline: FakeSearchPipeline,
     session_context_manager: FakeSessionContextManager | None = None,
     redis_client: FakeRedis | None = None,
-) -> list[InternalSearchResult]:
+) -> list[LlmInternalSearchResult]:
     """Helper function to run the real _internal_search_core with injected dependencies"""
     from unittest.mock import patch
     from onyx.tools.tool_implementations_v2.internal_search import _internal_search_core
@@ -298,7 +298,7 @@ def test_internal_search_core_basic_functionality(
     assert isinstance(result, list)
     assert len(result) == 2
     # Verify result contains InternalSearchResult objects
-    assert all(isinstance(doc, InternalSearchResult) for doc in result)
+    assert all(isinstance(doc, LlmInternalSearchResult) for doc in result)
     assert result[0].unique_identifier_to_strip_away == "doc1"
     assert result[0].title == "test_doc_1"
     assert result[0].excerpt == "First test document content"
@@ -431,7 +431,7 @@ def test_internal_search_core_with_multiple_queries(
     # Should have results from all queries
     assert len(result) > 0
     # Verify result contains InternalSearchResult objects
-    assert all(isinstance(doc, InternalSearchResult) for doc in result)
+    assert all(isinstance(doc, LlmInternalSearchResult) for doc in result)
 
     # Verify fetched_documents_cache was populated
     assert len(fake_run_context.context.fetched_documents_cache) > 0

@@ -11,6 +11,9 @@ from onyx.agents.agent_sdk.message_types import FunctionCallOutputMessage
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.models import LlmDoc
 from onyx.chat.turn.models import ChatTurnContext
+from onyx.tools.tool_implementations_v2.internal_search import LlmInternalSearchResult
+from onyx.tools.tool_implementations_v2.web import LlmOpenUrlResult
+from onyx.tools.tool_implementations_v2.web import LlmWebSearchResult
 
 
 class CitationAssignmentResult(BaseModel):
@@ -39,10 +42,25 @@ def assign_citation_numbers_recent_tool_calls(
                 # Type narrow to FunctionCallOutputMessage after checking the 'type' field
                 func_call_output_msg: FunctionCallOutputMessage = message  # type: ignore[assignment]
                 content = func_call_output_msg["output"]
+
+                # Try to decode in order: InternalSearchResult -> OpenUrlResult -> WebSearchResult
+                llm_docs: list[LlmDoc] = []
                 try:
                     raw_list = json.loads(content)
-                    llm_docs = [LlmDoc(**doc) for doc in raw_list]
-                except (json.JSONDecodeError, TypeError, ValidationError):
+                    # Try LlmInternalSearchResult first
+                    try:
+                        llm_docs = [LlmInternalSearchResult(**doc) for doc in raw_list]  # type: ignore[misc]
+                    except (TypeError, ValidationError):
+                        # Try LlmOpenUrlResult next
+                        try:
+                            llm_docs = [LlmOpenUrlResult(**doc) for doc in raw_list]  # type: ignore[misc]
+                        except (TypeError, ValidationError):
+                            # Try LlmWebSearchResult finally
+                            try:
+                                llm_docs = [LlmWebSearchResult(**doc) for doc in raw_list]  # type: ignore[misc]
+                            except (TypeError, ValidationError):
+                                llm_docs = []
+                except (json.JSONDecodeError, TypeError):
                     llm_docs = []
 
                 if llm_docs:
