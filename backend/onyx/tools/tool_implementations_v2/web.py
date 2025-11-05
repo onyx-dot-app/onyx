@@ -76,11 +76,15 @@ def _web_search_core(
             ),
         )
     )
+
+    # Emit a packet in the beginning to communicate queries to the frontend
     run_context.context.run_dependencies.emitter.emit(
         Packet(
             ind=index,
             obj=SearchToolDelta(
-                type="internal_search_tool_delta", queries=queries, documents=[]
+                type="internal_search_tool_delta",
+                queries=queries,
+                documents=[],
             ),
         )
     )
@@ -108,7 +112,29 @@ def _web_search_core(
         if hits:
             all_hits.extend(hits)
 
-    # Convert hits to WebSearchHit objects
+    inference_sections = [
+        dummy_inference_section_from_internet_search_result(r) for r in all_hits
+    ]
+
+    from onyx.agents.agent_search.dr.utils import (
+        convert_inference_sections_to_search_docs,
+    )
+
+    saved_search_docs = convert_inference_sections_to_search_docs(
+        inference_sections, is_internet=True
+    )
+
+    run_context.context.run_dependencies.emitter.emit(
+        Packet(
+            ind=index,
+            obj=SearchToolDelta(
+                type="internal_search_tool_delta",
+                queries=queries,
+                documents=saved_search_docs,
+            ),
+        )
+    )
+
     results = []
     for r in all_hits:
         results.append(
@@ -129,10 +155,6 @@ def _web_search_core(
                     document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
                 )
             )
-    # Create inference sections from search results and add to cited documents
-    inference_sections = [
-        dummy_inference_section_from_internet_search_result(r) for r in all_hits
-    ]
 
     run_context.context.global_iteration_responses.append(
         IterationAnswer(

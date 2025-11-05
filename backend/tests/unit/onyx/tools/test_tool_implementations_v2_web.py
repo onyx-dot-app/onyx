@@ -206,12 +206,33 @@ def test_web_search_core_basic_functionality() -> None:
 
     # Verify emitter events were captured
     emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
-    assert len(emitter.packet_history) == 3
+    assert len(emitter.packet_history) == 4
 
     # Check the types of emitted events
     assert isinstance(emitter.packet_history[0].obj, SearchToolStart)
     assert isinstance(emitter.packet_history[1].obj, SearchToolDelta)
-    assert isinstance(emitter.packet_history[2].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[2].obj, SearchToolDelta)
+    assert isinstance(emitter.packet_history[3].obj, SectionEnd)
+
+    # Verify first SearchToolDelta has queries but empty documents
+    first_search_delta = cast(SearchToolDelta, emitter.packet_history[1].obj)
+    assert first_search_delta.queries == queries
+    assert first_search_delta.documents == []
+
+    # Verify second SearchToolDelta contains SavedSearchDoc objects for favicon display
+    search_tool_delta = cast(SearchToolDelta, emitter.packet_history[2].obj)
+    assert len(search_tool_delta.documents) == 2
+
+    # Verify documents have correct properties for frontend favicon display
+    doc1 = search_tool_delta.documents[0]
+    assert isinstance(doc1, SavedSearchDoc)
+    assert doc1.link == "https://example.com/1"
+    assert (
+        doc1.semantic_identifier == "https://example.com/1"
+    )  # semantic_identifier is the link for web results
+    assert doc1.blurb == "Test Result 1"  # title is stored in blurb
+    assert doc1.source_type == DocumentSource.WEB
+    assert doc1.is_internet is True
 
 
 def test_web_fetch_core_basic_functionality() -> None:
@@ -324,10 +345,12 @@ def test_web_search_core_exception_handling() -> None:
 
     # Verify that even though an exception was raised, we still emitted the initial events
     # and the SectionEnd packet was emitted by the decorator
+    # Note: The first SearchToolDelta (with queries and empty documents) is emitted before the search
+    # The second SearchToolDelta (with documents) is not emitted when an exception occurs during search
     emitter = test_run_context.context.run_dependencies.emitter  # type: ignore[attr-defined]
     assert (
         len(emitter.packet_history) == 3
-    )  # SearchToolStart, SearchToolDelta, and SectionEnd
+    )  # SearchToolStart, first SearchToolDelta, and SectionEnd
 
     # Check the types of emitted events
     assert isinstance(emitter.packet_history[0].obj, SearchToolStart)
@@ -424,19 +447,27 @@ def test_web_search_core_multiple_queries() -> None:
 
     # Verify emitter events were captured
     emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
-    assert len(emitter.packet_history) == 3
+    assert len(emitter.packet_history) == 4
 
     # Check the types of emitted events
     assert isinstance(emitter.packet_history[0].obj, SearchToolStart)
     assert isinstance(emitter.packet_history[1].obj, SearchToolDelta)
-    assert isinstance(emitter.packet_history[2].obj, SectionEnd)
+    assert isinstance(emitter.packet_history[2].obj, SearchToolDelta)
+    assert isinstance(emitter.packet_history[3].obj, SectionEnd)
 
-    # Check that SearchToolDelta contains both queries
-    search_delta = emitter.packet_history[1].obj
-    assert search_delta.queries is not None
-    assert len(search_delta.queries) == 2
-    assert "first query" in search_delta.queries
-    assert "second query" in search_delta.queries
+    # Check that first SearchToolDelta contains both queries (with empty documents)
+    first_search_delta = cast(SearchToolDelta, emitter.packet_history[1].obj)
+    assert first_search_delta.queries is not None
+    assert len(first_search_delta.queries) == 2
+    assert "first query" in first_search_delta.queries
+    assert "second query" in first_search_delta.queries
+    assert first_search_delta.documents == []
+
+    # Check that second SearchToolDelta contains documents
+    second_search_delta = cast(SearchToolDelta, emitter.packet_history[2].obj)
+    assert (
+        len(second_search_delta.documents) == 3
+    )  # 2 from first query + 1 from second query
 
 
 def test_web_fetch_core_exception_handling() -> None:
