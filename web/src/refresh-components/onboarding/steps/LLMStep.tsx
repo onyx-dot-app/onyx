@@ -1,4 +1,4 @@
-import React, { memo, useEffect } from "react";
+import { memo } from "react";
 import SvgCpu from "@/icons/cpu";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
@@ -9,9 +9,7 @@ import { OnboardingActions, OnboardingState, OnboardingStep } from "../types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { PROVIDER_ICON_MAP } from "../constants";
 import LLMConnectionModal from "@/refresh-components/onboarding/components/LLMConnectionModal";
-import KeyValueInput from "@/refresh-components/inputs/InputKeyValue";
 import { cn } from "@/lib/utils";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import SvgCheckCircle from "@/icons/check-circle";
 
 type LLMStepProps = {

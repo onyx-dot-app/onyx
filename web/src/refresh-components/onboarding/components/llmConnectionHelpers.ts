@@ -83,7 +83,6 @@ export type TestApiKeyResult =
   | { ok: true }
   | { ok: false; errorMessage: string };
 
-// Reusable helper to POST to the LLM test endpoint
 const submitLlmTestRequest = async (
   payload: any,
   fallbackErrorMessage: string

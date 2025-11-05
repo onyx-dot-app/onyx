@@ -1,4 +1,5 @@
 import { OnboardingStep } from "./types";
+import type { ReactNode } from "react";
 import SvgSearchMenu from "@/icons/search-menu";
 import SvgGlobe from "@/icons/globe";
 import SvgImage from "@/icons/image";
@@ -13,6 +14,7 @@ import SvgAws from "@/icons/aws";
 import SvgOllama from "@/icons/ollama";
 import SvgOpenai from "@/icons/openai";
 import SvgOpenrouter from "@/icons/openrouter";
+import { LLMProviderName } from "@/app/admin/configuration/llm/interfaces";
 type StepConfig = {
   index: number;
   title: string;
@@ -93,31 +95,45 @@ export const PROVIDER_ICON_MAP: Record<
   string,
   React.FunctionComponent<SvgProps>
 > = {
-  anthropic: SvgClaude,
-  bedrock: SvgAws,
-  azure: AzureIcon,
-  vertex_ai: GeminiIcon,
-  openai: SvgOpenai,
-  ollama_chat: SvgOllama,
-  openrouter: SvgOpenrouter,
+  [LLMProviderName.ANTHROPIC]: SvgClaude,
+  [LLMProviderName.BEDROCK]: SvgAws,
+  [LLMProviderName.AZURE]: AzureIcon,
+  [LLMProviderName.VERTEX_AI]: GeminiIcon,
+  [LLMProviderName.OPENAI]: SvgOpenai,
+  [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
+  [LLMProviderName.OPENROUTER]: SvgOpenrouter,
 };
 
+const InlineExternalLink = ({
+  href,
+  children,
+  className,
+}: {
+  href: string;
+  children: ReactNode;
+  className?: string;
+}) => (
+  <a
+    href={href}
+    target="_blank"
+    rel="noopener noreferrer"
+    className={className ?? "underline"}
+  >
+    {children}
+  </a>
+);
+
 export const MODAL_CONTENT_MAP: Record<string, any> = {
-  openai: {
+  [LLMProviderName.OPENAI]: {
     description: "Connect to OpenAI and set up your chatGPT models.",
     display_name: "OpenAI",
     field_metadata: {
       api_key: (
         <>
           {"Paste your "}
-          <a
-            href="https://platform.openai.com/api-keys"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
+          <InlineExternalLink href="https://platform.openai.com/api-keys">
             API key
-          </a>
+          </InlineExternalLink>
           {" from OpenAI to access your models."}
         </>
       ),
@@ -125,21 +141,16 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for chatGPT.",
     },
   },
-  anthropic: {
+  [LLMProviderName.ANTHROPIC]: {
     description: "Connect to Anthropic and set up your Claude models.",
     display_name: "Anthropic",
     field_metadata: {
       api_key: (
         <>
           {"Paste your "}
-          <a
-            href="https://console.anthropic.com/dashboard"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
+          <InlineExternalLink href="https://console.anthropic.com/dashboard">
             API key
-          </a>
+          </InlineExternalLink>
           {" from Anthropic to access your models."}
         </>
       ),
@@ -147,7 +158,7 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for Claude.",
     },
   },
-  ollama_chat: {
+  [LLMProviderName.OLLAMA_CHAT]: {
     description: "Connect to your Ollama models.",
     display_name: "Ollama",
     field_metadata: {
@@ -155,14 +166,9 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
       OLLAMA_API_KEY: (
         <>
           {"Paste your "}
-          <a
-            href="https://ollama.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
+          <InlineExternalLink href="https://ollama.com">
             API key
-          </a>
+          </InlineExternalLink>
           {" from Ollama Cloud to access your models."}
         </>
       ),
@@ -170,7 +176,7 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for Ollama.",
     },
   },
-  vertex_ai: {
+  [LLMProviderName.VERTEX_AI]: {
     description:
       "Connect to Google Cloud Vertex AI and set up your Gemini models.",
     display_name: "Gemini",
@@ -178,14 +184,9 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
       vertex_credentials: (
         <>
           {"Paste your "}
-          <a
-            href="https://console.cloud.google.com/projectselector2/iam-admin/serviceaccounts?supportedpurview=project"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
+          <InlineExternalLink href="https://console.cloud.google.com/projectselector2/iam-admin/serviceaccounts?supportedpurview=project">
             API key
-          </a>
+          </InlineExternalLink>
           {" from Google Cloud Vertex AI to access your models."}
         </>
       ),
@@ -193,7 +194,7 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for Gemini.",
     },
   },
-  azure: {
+  [LLMProviderName.AZURE]: {
     description:
       "Connect to Microsoft Azure and set up your Azure OpenAI models.",
     display_name: "Azure OpenAI",
@@ -201,14 +202,9 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
       api_key: (
         <>
           {"Paste your "}
-          <a
-            href="https://oai.azure.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
+          <InlineExternalLink href="https://oai.azure.com">
             API key
-          </a>
+          </InlineExternalLink>
           {" from Azure OpenAI to access your models."}
         </>
       ),
@@ -216,21 +212,16 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for Azure OpenAI.",
     },
   },
-  openrouter: {
+  [LLMProviderName.OPENROUTER]: {
     description: "Connect to OpenRouter and set up your OpenRouter models.",
     display_name: "OpenRouter",
     field_metadata: {
       api_key: (
         <>
           {"Paste your "}
-          <a
-            href="https://openrouter.ai/settings/keys"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
+          <InlineExternalLink href="https://openrouter.ai/settings/keys">
             API key
-          </a>
+          </InlineExternalLink>
           {" from OpenRouter to access your models."}
         </>
       ),
@@ -238,21 +229,16 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for OpenRouter.",
     },
   },
-  bedrock: {
+  [LLMProviderName.BEDROCK]: {
     description: "Connect to AWS and set up your Amazon Bedrock models.",
     display_name: "Amazon Bedrock",
     field_metadata: {
       BEDROCK_AUTH_METHOD: (
         <>
           {"See "}
-          <a
-            href="https://docs.onyx.app/admin/ai_models/bedrock#authentication-methods"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
+          <InlineExternalLink href="https://docs.onyx.app/admin/ai_models/bedrock#authentication-methods">
             documentation
-          </a>
+          </InlineExternalLink>
           {" for more instructions."}
         </>
       ),
@@ -289,7 +275,7 @@ export interface ProviderTabConfig {
 }
 
 export const PROVIDER_TAB_CONFIG: Record<string, ProviderTabConfig> = {
-  ollama_chat: {
+  [LLMProviderName.OLLAMA_CHAT]: {
     tabs: [
       {
         id: "self-hosted",
@@ -319,11 +305,11 @@ export const PROVIDER_TAB_CONFIG: Record<string, ProviderTabConfig> = {
 };
 
 export const PROVIDER_SKIP_FIELDS: Record<string, string[]> = {
-  vertex_ai: ["vertex_location"],
+  [LLMProviderName.VERTEX_AI]: ["vertex_location"],
 };
 
 export const HIDE_API_MESSAGE_FIELDS: Record<string, string[]> = {
-  bedrock: ["BEDROCK_AUTH_METHOD", "AWS_REGION_NAME"],
+  [LLMProviderName.BEDROCK]: ["BEDROCK_AUTH_METHOD", "AWS_REGION_NAME"],
 };
 
 // Map Bedrock auth selection to which `custom_config` keys to show

@@ -10,6 +10,7 @@ import { APIFormFieldState } from "@/refresh-components/form/types";
 import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
 
+//This component is responsible to reder fields dynamically for tabs based llm providers
 interface DynamicProviderFieldsProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   fields: string[];
