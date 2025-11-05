@@ -45,7 +45,8 @@ def assign_citation_numbers_recent_tool_calls(
                     updated_citation_number = False
                     for result in tool_call_results:
                         if (
-                            result.document_citation_number
+                            result.unique_identifier_to_strip_away is not None
+                            and result.document_citation_number
                             == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
                         ):
                             updated_citation_number = True
