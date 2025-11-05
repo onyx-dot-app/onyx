@@ -7,8 +7,10 @@ from fastapi_users import schemas
 class UserRole(str, Enum):
     """
     User roles
-    - Basic can't perform any admin actions
-    - Admin can perform all admin actions
+    - Basic can't perform any admin actions, and when ENABLE_PRO_USER_RESTRICTIONS is true,
+      can only use assistant default models
+    - Pro can access full LLM model selection and other pro features
+    - Admin can perform all admin actions and access all features
     - Curator can perform admin actions for
         groups they are curators of
     - Global Curator can perform admin actions
@@ -25,6 +27,7 @@ class UserRole(str, Enum):
     GLOBAL_CURATOR = "global_curator"
     SLACK_USER = "slack_user"
     EXT_PERM_USER = "ext_perm_user"
+    PRO_USER = "pro_user"
 
     def is_web_login(self) -> bool:
         return self not in [

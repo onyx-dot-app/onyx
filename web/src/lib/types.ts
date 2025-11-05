@@ -46,6 +46,7 @@ export enum UserRole {
   GLOBAL_CURATOR = "global_curator",
   EXT_PERM_USER = "ext_perm_user",
   SLACK_USER = "slack_user",
+  PRO_USER = "pro_user",
 }
 
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
@@ -56,6 +57,7 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   [UserRole.LIMITED]: "Limited",
   [UserRole.EXT_PERM_USER]: "External Permissioned User",
   [UserRole.SLACK_USER]: "Slack User",
+  [UserRole.PRO_USER]: "Pro User",
 };
 
 export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
@@ -66,6 +68,8 @@ export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
   [UserRole.CURATOR]: "Curator role must be assigned in the Groups tab",
   [UserRole.SLACK_USER]:
     "This role is automatically assigned to users who only use Onyx via Slack",
+  [UserRole.PRO_USER]:
+    "Pro users have access to model selection and other pro features but no admin privileges",
 };
 
 export interface User {

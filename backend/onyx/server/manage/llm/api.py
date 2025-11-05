@@ -15,6 +15,7 @@ from fastapi import Query
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
@@ -53,6 +54,7 @@ from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from shared_configs.configs import ENABLE_PRO_USER_RESTRICTIONS
 
 logger = setup_logger()
 
@@ -351,6 +353,26 @@ def list_llm_provider_basics(
         logger.debug(
             f"LLMProviderView.from_model took {from_model_duration:.2f} seconds"
         )
+
+        # Filter models based on user role if restrictions are enabled
+        if ENABLE_PRO_USER_RESTRICTIONS and user:
+            user_has_model_access = user.role in [
+                UserRole.ADMIN,
+                UserRole.PRO_USER,
+                UserRole.CURATOR,
+                UserRole.GLOBAL_CURATOR,
+            ]
+
+            if not user_has_model_access:
+                # For basic users, only show the default model from this provider
+                # This makes the dropdown show only one option, effectively locking selection
+                default_model = llm_provider_model.default_model_name
+                full_llm_provider.model_configurations = [
+                    config
+                    for config in full_llm_provider.model_configurations
+                    if config.name == default_model
+                ]
+
         llm_provider_list.append(full_llm_provider)
 
     end_time = datetime.now(timezone.utc)

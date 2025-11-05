@@ -192,4 +192,11 @@ INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH = int(
     os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH") or 10
 )
 
+# Enable pro user restrictions on LLM model selection
+# When enabled, basic users can only use the assistant's default model
+# Pro users and admins have access to all available models
+ENABLE_PRO_USER_RESTRICTIONS = (
+    os.environ.get("ENABLE_PRO_USER_RESTRICTIONS", "").lower() == "true"
+)
+
 ENVIRONMENT = os.environ.get("ENVIRONMENT") or "not_explicitly_set"
