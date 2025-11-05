@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, JSX } from "react";
 import { ChevronDownIcon, IconProps } from "@/components/icons/icons";
 import {
   Tooltip,

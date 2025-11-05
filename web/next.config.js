@@ -28,6 +28,7 @@ const nextConfig = {
     version,
   },
   transpilePackages: ["@onyx/opal"],
+  reactCompiler: true,
   images: {
     // Used to fetch favicons
     remotePatterns: [

@@ -1,3 +1,4 @@
+import { JSX } from "react";
 import * as Yup from "yup";
 
 export type FormBodyBuilder<T extends Yup.AnyObject> = (
