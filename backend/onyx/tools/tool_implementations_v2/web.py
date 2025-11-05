@@ -153,6 +153,7 @@ def _web_search_core(
             queries=queries,
         )
     )
+    run_context.context.should_cite_documents = True
     return results
 
 
