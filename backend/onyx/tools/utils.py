@@ -93,14 +93,10 @@ def get_full_document_by_id(
         # Build access filters if user is provided and filters are enabled
         access_filters = None
         if use_access_filters and user:
-            try:
-                access_filters = build_access_filters_for_user(
-                    user=user,
-                    session=db_session,
-                )
-            except Exception:
-                # Access filter building failed, continue without filters
-                access_filters = None
+            access_filters = build_access_filters_for_user(
+                user=user,
+                session=db_session,
+            )
 
         index_filters = IndexFilters(access_control_list=access_filters)
 
