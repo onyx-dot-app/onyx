@@ -169,7 +169,7 @@ export function FileCard({
     <div
       className={`relative group flex items-center gap-3 border border-border-01 rounded-12 ${
         isProcessing ? "bg-background-neutral-02" : "bg-background-tint-00"
-      } p-1 h-14 w-40 ${
+      } p-1 h-14 w-40 pl-2 ${
         onFileClick && !isProcessing
           ? "cursor-pointer hover:bg-accent-background"
           : ""

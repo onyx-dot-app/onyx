@@ -457,11 +457,13 @@ function AppSidebarInner() {
               {/* Projects */}
               <SidebarSection
                 title="Projects"
+                className="group"
                 action={
                   <IconButton
                     icon={SvgFolderPlus}
                     internal
                     tooltip="New Project"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={() =>
                       toggleModal(ModalIds.CreateProjectModal, true)
                     }
@@ -471,7 +473,7 @@ function AppSidebarInner() {
                 {projects.map((project) => (
                   <ProjectFolderButton key={project.id} project={project} />
                 ))}
-                {newProjectButton}
+                {projects.length === 0 && newProjectButton}
               </SidebarSection>
 
               {/* Recents */}
