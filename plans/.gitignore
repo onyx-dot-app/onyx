@@ -1,1 +1,3 @@
-whuang/
+# Ignore everything in this directory
+*
+!.gitignore
