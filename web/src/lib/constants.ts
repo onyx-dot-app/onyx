@@ -60,9 +60,8 @@ export const SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED =
 export const EE_ENABLED =
   process.env.NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES?.toLowerCase() === "true";
 
-export const CUSTOM_ANALYTICS_ENABLED = process.env.CUSTOM_ANALYTICS_SECRET_KEY
-  ? true
-  : false;
+export const CUSTOM_ANALYTICS_ENABLED =
+  process.env.NEXT_PUBLIC_CUSTOM_ANALYTICS_ENABLED?.toLowerCase() === "true";
 
 export const GTM_ENABLED =
   process.env.NEXT_PUBLIC_GTM_ENABLED?.toLowerCase() === "true";
