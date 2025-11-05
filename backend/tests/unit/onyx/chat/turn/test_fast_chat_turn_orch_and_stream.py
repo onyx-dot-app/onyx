@@ -517,7 +517,6 @@ def test_fast_chat_turn_citation_processing(
     from onyx.server.query_and_chat.streaming_models import MessageStart
     from tests.unit.onyx.chat.turn.utils import create_test_inference_section
     from tests.unit.onyx.chat.turn.utils import create_test_iteration_answer
-    from tests.unit.onyx.chat.turn.utils import create_test_llm_doc
 
     # Create test data using helper functions
     fake_inference_section = create_test_inference_section()
@@ -540,10 +539,17 @@ def test_fast_chat_turn_citation_processing(
     # Set up the chat turn context with citation-related data
     chat_turn_context.global_iteration_responses = [fake_iteration_answer]
     chat_turn_context.tool_calls_processed_by_citation_context_handler = 1
-    chat_turn_context.unordered_fetched_inference_sections = [fake_inference_section]
-    chat_turn_context.ordered_fetched_documents = [
-        create_test_llm_doc(document_citation_number=1)
-    ]
+
+    # Populate fetched_documents_cache with the document we're citing
+    from onyx.chat.turn.models import FetchedDocumentCacheEntry
+
+    chat_turn_context.fetched_documents_cache = {
+        "test-doc-1": FetchedDocumentCacheEntry(
+            inference_section=fake_inference_section,
+            document_citation_number=1,
+        )
+    }
+
     chat_turn_context.citations = [
         CitationInfo(
             citation_num=1,

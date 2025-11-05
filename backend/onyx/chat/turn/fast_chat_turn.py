@@ -19,6 +19,7 @@ from onyx.agents.agent_sdk.monkey_patches import (
 )
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
+from onyx.chat.chat_utils import llm_docs_from_fetched_documents_cache
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.memories import get_memories
 from onyx.chat.models import PromptConfig
@@ -158,9 +159,8 @@ def _run_agent_loop(
             agent_turn_messages, ctx
         )
         agent_turn_messages = list(citation_result.updated_messages)
-        ctx.ordered_fetched_documents.extend(citation_result.new_llm_docs)
         ctx.documents_processed_by_citation_context_handler += (
-            citation_result.num_docs_cited
+            citation_result.new_docs_cited
         )
         ctx.tool_calls_processed_by_citation_context_handler += (
             citation_result.num_tool_calls_cited
@@ -246,8 +246,7 @@ def _fast_chat_turn_core(
         iteration_instructions=ctx.iteration_instructions,
         global_iteration_responses=ctx.global_iteration_responses,
         final_answer=final_answer,
-        unordered_fetched_inference_sections=ctx.unordered_fetched_inference_sections,
-        ordered_fetched_documents=ctx.ordered_fetched_documents,
+        fetched_documents_cache=ctx.fetched_documents_cache,
     )
     dependencies.emitter.emit(
         Packet(ind=ctx.current_run_step, obj=OverallStop(type="stop"))
@@ -284,10 +283,11 @@ def _process_stream(
 ) -> tuple[RunResultStreaming, list["ResponseFunctionToolCall"]]:
     from litellm import ResponseFunctionToolCall
 
-    mapping = map_document_id_order_v2(ctx.ordered_fetched_documents)
-    if ctx.ordered_fetched_documents:
+    llm_docs = llm_docs_from_fetched_documents_cache(ctx.fetched_documents_cache)
+    mapping = map_document_id_order_v2(llm_docs)
+    if llm_docs:
         processor = CitationProcessor(
-            context_docs=ctx.ordered_fetched_documents,
+            context_docs=llm_docs,
             doc_id_to_rank_map=mapping,
             stop_stream=None,
         )
@@ -424,8 +424,11 @@ def _default_packet_translation(
             needs_start = has_had_message_start(packet_history, ctx.current_run_step)
             if needs_start:
                 ctx.current_run_step += 1
+                llm_docs_for_message_start = llm_docs_from_fetched_documents_cache(
+                    ctx.fetched_documents_cache
+                )
                 retrieved_search_docs = saved_search_docs_from_llm_docs(
-                    ctx.ordered_fetched_documents
+                    llm_docs_for_message_start
                 )
                 packets.append(
                     Packet(

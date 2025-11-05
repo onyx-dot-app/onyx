@@ -48,7 +48,7 @@ class LlmWebSearchResult(BaseModel):
     url: str
     title: str
     snippet: str
-    unique_identifier_to_strip_away: str | None
+    unique_identifier_to_strip_away: str | None = None
 
 
 class LlmOpenUrlResult(BaseModel):
@@ -56,7 +56,7 @@ class LlmOpenUrlResult(BaseModel):
 
     document_citation_number: int
     content: str
-    unique_identifier_to_strip_away: str | None
+    unique_identifier_to_strip_away: str | None = None
 
 
 @tool_accounting
@@ -212,12 +212,19 @@ def _open_url_core(
         for doc in docs
     ]
     for doc in docs:
-        run_context.context.fetched_documents_cache[normalize_url(doc.link)] = (
-            FetchedDocumentCacheEntry(
-                inference_section=dummy_inference_section_from_internet_content(doc),
-                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+        if normalize_url(doc.link) not in run_context.context.fetched_documents_cache:
+            run_context.context.fetched_documents_cache[normalize_url(doc.link)] = (
+                FetchedDocumentCacheEntry(
+                    inference_section=dummy_inference_section_from_internet_content(
+                        doc
+                    ),
+                    document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                )
             )
-        )
+        else:
+            run_context.context.fetched_documents_cache[
+                normalize_url(doc.link)
+            ].inference_section = dummy_inference_section_from_internet_content(doc)
     run_context.context.iteration_instructions.append(
         IterationInstructions(
             iteration_nr=index,

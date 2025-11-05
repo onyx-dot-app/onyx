@@ -11,7 +11,6 @@ from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
-from onyx.chat.models import LlmDoc
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -37,7 +36,7 @@ class LlmInternalSearchResult(BaseModel):
     title: str
     excerpt: str
     metadata: dict[str, Any]
-    unique_identifier_to_strip_away: str | None
+    unique_identifier_to_strip_away: str | None = None
 
 
 @tool_accounting
@@ -172,7 +171,7 @@ def _internal_search_core(
     search_results_dict = run_functions_in_parallel(function_calls)
 
     # Aggregate all results from all queries
-    all_retrieved_docs: list[LlmDoc] = []
+    all_retrieved_docs: list[LlmInternalSearchResult] = []
     for result_id in search_results_dict:
         retrieved_docs = search_results_dict[result_id]
         if retrieved_docs:
