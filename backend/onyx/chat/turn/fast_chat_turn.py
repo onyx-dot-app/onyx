@@ -34,9 +34,6 @@ from onyx.chat.turn.context_handler.citation import (
     assign_citation_numbers_recent_tool_calls,
 )
 from onyx.chat.turn.context_handler.reminder import maybe_append_reminder
-from onyx.chat.turn.context_handler.remove_user_messages import (
-    remove_middle_user_messages,
-)
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
 from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
@@ -153,7 +150,9 @@ def _run_agent_loop(
 
         # Apply context handlers in order:
         # 1. Remove all user messages in the middle (previous reminders)
-        agent_turn_messages = remove_middle_user_messages(agent_turn_messages)
+        agent_turn_messages = [
+            msg for msg in agent_turn_messages if msg.get("role") != "user"
+        ]
 
         # 2. Add task prompt reminder
         last_iteration_included_web_search = any(

@@ -103,6 +103,7 @@ def default_build_system_message_v2(
                 tag_handled_prompt += "\n\n## open_url\n"
                 tag_handled_prompt += OPEN_URL_LONG_DESCRIPTION
             else:
+                # TODO: ToolV2 should make this much cleaner
                 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 
                 if tools_to_function_tools([tool]):
@@ -128,12 +129,10 @@ def default_build_system_message(
 ) -> SystemMessage | None:
     # Build system prompt from default behavior and custom instructions
     # for backwards compatibility
-    if prompt_config.custom_instructions:
-        system_prompt = prompt_config.custom_instructions.strip()
-    else:
-        system_prompt = prompt_config.default_behavior_system_prompt.strip()
-
-    system_prompt = system_prompt.strip()
+    system_prompt = (
+        prompt_config.custom_instructions
+        or prompt_config.default_behavior_system_prompt
+    )
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
     # for o-series markdown generation
     if (
