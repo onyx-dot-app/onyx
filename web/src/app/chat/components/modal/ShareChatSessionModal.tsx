@@ -101,12 +101,7 @@ export default function ShareChatSessionModal({
   const { currentAgent } = useAgentsContext();
   const searchParams = useSearchParams();
   const message = searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || "";
-  const { llmProviders } = useChatContext();
-  const llmManager = useLlmManager(
-    llmProviders,
-    chatSession,
-    currentAgent || undefined
-  );
+  const llmManager = useLlmManager(chatSession, currentAgent || undefined);
   const updateCurrentChatSessionSharedStatus = useChatSessionStore(
     (state) => state.updateCurrentChatSessionSharedStatus
   );

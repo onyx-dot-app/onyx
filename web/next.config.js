@@ -60,6 +60,17 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // Cache static assets (images, icons, fonts, etc.) to prevent refetching and re-renders
+        // This helps eliminate icon flickering and improves performance
+        source: "/_next/static/:path*", // Matches static assets served by Next.js
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable", // Cache for 1 year, mark as immutable
+          },
+        ],
+      },
     ];
   },
   async rewrites() {

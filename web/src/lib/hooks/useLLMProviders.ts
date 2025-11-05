@@ -12,7 +12,7 @@ export function useLLMProviders(personaId?: number) {
       ? `/api/llm/persona/${personaId}/providers`
       : "/api/llm/provider";
 
-  const { data, error, mutate } = useSWR<LLMProviderDescriptor[]>(
+  const { data, error, mutate } = useSWR<LLMProviderDescriptor[] | undefined>(
     url,
     errorHandlingFetcher,
     {

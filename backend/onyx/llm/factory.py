@@ -90,7 +90,7 @@ def get_llm_config_for_persona(
         llm_provider = fetch_default_provider(db_session)
         if not llm_provider:
             raise ValueError("No default LLM provider found")
-        model_name = llm_provider.default_model_name
+        model_name: str | None = llm_provider.default_model_name
     else:
         llm_provider = fetch_llm_provider_view(db_session, provider_name)
         if not llm_provider:

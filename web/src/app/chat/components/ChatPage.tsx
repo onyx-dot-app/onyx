@@ -111,14 +111,8 @@ export function ChatPage({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const {
-    chatSessions,
-    ccPairs,
-    tags,
-    documentSets,
-    llmProviders,
-    refreshChatSessions,
-  } = useChatContext();
+  const { chatSessions, ccPairs, tags, documentSets, refreshChatSessions } =
+    useChatContext();
 
   const {
     currentMessageFiles,
@@ -211,18 +205,21 @@ export function ChatPage({
     llmDescriptors,
   } = useOnboardingState();
 
-  // On first render, open onboarding if there are no configured LLM providers.
-  // Intentionally exclude llmProviders from deps to avoid changing the state
-  // when data refreshes.
-  useEffect(() => {
-    setShowOnboarding(llmProviders.length === 0);
-  }, []);
+  const llmManager = useLlmManager(selectedChatSession, liveAssistant);
 
-  const llmManager = useLlmManager(
-    llmProviders,
-    selectedChatSession,
-    liveAssistant
-  );
+  // Track if we've done the initial onboarding check
+  const hasCheckedOnboarding = useRef(false);
+
+  // On first render, open onboarding if there are no configured LLM providers.
+  // Only check once to avoid re-triggering onboarding when data refreshes.
+  useEffect(() => {
+    if (!hasCheckedOnboarding.current) {
+      setShowOnboarding(
+        !llmManager.llmProviders || llmManager.llmProviders.length === 0
+      );
+      hasCheckedOnboarding.current = true;
+    }
+  }, [llmManager.llmProviders]);
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
@@ -930,8 +927,8 @@ export function ChatPage({
                           textAreaRef={textAreaRef}
                           setPresentingDocument={setPresentingDocument}
                           disabled={
-                            llmProviders.length === 0 ||
-                            (llmProviders.length === 0 &&
+                            llmManager.llmProviders?.length === 0 ||
+                            (llmManager.llmProviders?.length === 0 &&
                               !user?.personalization?.name) ||
                             onboardingState.currentStep !==
                               OnboardingStep.Complete
