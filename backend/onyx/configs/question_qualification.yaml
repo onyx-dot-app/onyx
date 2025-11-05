@@ -11,9 +11,8 @@ settings:
   standard_response: "I am sorry, but I cannot answer this question."
 
 # A list of questions that should be blocked by the system.
-# The embeddings for these questions are cached in this file to improve performance.
-# If you modify a question, the new embedding will be generated and cached on the next server startup.
-# If you change the embedding model, all embeddings will be regenerated.
+# The system uses LLM-based semantic matching to compare user questions against this list.
+# Questions are evaluated in real-time using the configured LLM without caching.
 questions:
   # Sample blocked questions - Replace with your organization's specific requirements
   

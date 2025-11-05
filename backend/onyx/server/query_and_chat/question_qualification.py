@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from typing import Any
 
 import yaml
 from langchain_core.output_parsers import PydanticOutputParser
@@ -89,25 +90,33 @@ class QuestionQualificationService:
         # Cache for fast LLM
         self._fast_llm: LLM | None = None
 
-        # Load configuration
-        self._load_config()
+        # Track if config has been loaded
+        self._config_loaded = False
+
+        # Load configuration only if enabled
+        if ENABLE_QUESTION_QUALIFICATION:
+            self._load_config()
 
         # Mark as initialized so subsequent __init__ calls don't reset state
         self._initialized = True
 
     def _load_config(self) -> bool:
         """Load configuration from YAML file."""
+        if self._config_loaded:
+            return True
         try:
             if not self.config_path.exists():
                 logger.warning(
                     f"Question qualification config file not found: {self.config_path}"
                 )
+                self._config_loaded = True
                 return False
 
             with open(self.config_path, "r", encoding="utf-8") as f:
                 config = yaml.safe_load(f)
 
             if not config:
+                self._config_loaded = True
                 return False
 
             # Load settings
@@ -131,8 +140,8 @@ class QuestionQualificationService:
                 elif isinstance(q_config, str):
                     self.questions.append(q_config)
 
-            # Clean up config file if it contains embedding fields
-            if config_modified:
+            # Clean up config file if it contains embedding fields (only when enabled)
+            if config_modified and ENABLE_QUESTION_QUALIFICATION:
                 self._cleanup_config_embeddings(config)
 
             logger.info(
@@ -142,10 +151,12 @@ class QuestionQualificationService:
             logger.info(
                 "Note: Embedding fields in config are ignored - using fast LLM approach"
             )
+            self._config_loaded = True
             return True
 
         except Exception as e:
             logger.error(f"Error loading question qualification config: {e}")
+            self._config_loaded = True  # Mark as loaded to avoid repeated attempts
             return False
 
     def _cleanup_config_embeddings(self, config: dict) -> None:
@@ -207,6 +218,10 @@ class QuestionQualificationService:
             logger.debug("Question qualification disabled by environment variable")
             return QuestionQualificationResult(is_blocked=False, similarity_score=0.0)
 
+        # Lazy-load config if not already loaded
+        if not self._config_loaded:
+            self._load_config()
+
         try:
             logger.info(f"Question qualification: question = {question}")
 
@@ -236,7 +251,8 @@ class QuestionQualificationService:
 
             # Get response using LangChain Pydantic output parser
             response = fast_llm.invoke(
-                prompt, max_tokens=100  # Increased slightly for format instructions
+                prompt,
+                max_tokens=200,  # Increased for structured JSON output with schema
             )
 
             # Parse using LangChain output parser
@@ -302,7 +318,7 @@ class QuestionQualificationService:
             # On error, allow the question through to avoid blocking legitimate queries
             return QuestionQualificationResult(is_blocked=False, similarity_score=0.0)
 
-    def get_stats(self) -> dict[str, any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get statistics about the question qualification service."""
         return {
             "enabled": ENABLE_QUESTION_QUALIFICATION,

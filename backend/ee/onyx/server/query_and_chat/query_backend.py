@@ -254,6 +254,8 @@ def get_answer_with_citation(
                 recency_bias_multiplier=0.0,
             ),
         )
+    except HTTPException:
+        raise  # Re-raise HTTPException to preserve status code (e.g., 403 for blocked queries)
     except Exception as e:
         logger.error(f"Error in get_answer_with_citation: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal server error occurred")
@@ -265,9 +267,15 @@ def stream_answer_with_citation(
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
 ) -> StreamingResponse:
+    # Catch HTTPException before creating StreamingResponse to preserve status code
+    try:
+        answer_stream = get_answer_stream(request, user, db_session)
+    except HTTPException:
+        raise  # Re-raise HTTPException to preserve status code (e.g., 403 for blocked queries)
+
     def stream_generator() -> Generator[str, None, None]:
         try:
-            for packet in get_answer_stream(request, user, db_session):
+            for packet in answer_stream:
                 serialized = get_json_line(packet.model_dump())
                 yield serialized
         except Exception as e:
