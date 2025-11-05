@@ -15,6 +15,7 @@ import { createApiKey, updateApiKey } from "./lib";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import Text from "@/components/ui/text";
 import { APIKey } from "./types";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -227,20 +228,12 @@ export const OnyxApiKeyForm = ({
                   }
                 }}
               />
+              <Text>{values.description}</Text>
 
               <TextFormField
                 name="name"
                 label={t(k.VALIDATOR_NAME_LABEL)}
                 autoCompleteDisabled={true}
-              />
-
-              <TextFormField
-                maxWidth="max-w-lg"
-                name="description"
-                label={t(k.VALIDATOR_DESCRIPTION_LABEL)}
-                placeholder={t(k.VALIDATOR_DESCRIPTION_PLACEHOLDER)}
-                className="[&_input]:placeholder:text-text-muted/50"
-                disabled={true}
               />
 
               {/* LLM Provider Selection */}
