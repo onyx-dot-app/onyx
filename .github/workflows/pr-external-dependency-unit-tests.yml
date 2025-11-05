@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
-      
+
       - name: Discover test directories
         id: set-matrix
         run: |
@@ -45,7 +45,7 @@ jobs:
     needs: discover-test-dirs
     # Use larger runner with more resources for Vespa
     runs-on: [runs-on, runner=16cpu-linux-x64, "run-id=${{ github.run_id }}"]
-    
+
     strategy:
       fail-fast: false
       matrix:
@@ -80,17 +80,6 @@ jobs:
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d minio relational_db cache index
-
-      - name: Wait for services
-        run: |
-          echo "Waiting for services to be ready..."
-          sleep 30
-          
-          # Wait for Vespa specifically
-          echo "Waiting for Vespa to be ready..."
-          timeout 300 bash -c 'until curl -f -s http://localhost:8081/ApplicationStatus > /dev/null 2>&1; do echo "Vespa not ready, waiting..."; sleep 10; done' || echo "Vespa timeout - continuing anyway"
-          
-          echo "Services should be ready now"
 
       - name: Run migrations
         run: |
