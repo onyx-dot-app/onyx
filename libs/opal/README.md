@@ -32,9 +32,6 @@ bun i
 
 Those dependencies will then install inside of `/web/node_modules` and be available to Opal.
 
-Lastly, this library is fully typed with TypeScript.
-Type definitions are automatically generated during the build process.
-
 ## Structure
 
 ```
