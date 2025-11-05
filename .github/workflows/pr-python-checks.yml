@@ -63,7 +63,7 @@ jobs:
         if: ${{ vars.DISABLE_MYPY_CACHE }} != 'true'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
         with:
-          path: .mypy_cache
+          path: backend/.mypy_cache
           key: mypy-${{ runner.os }}-${{ hashFiles('**/*.py', '**/*.pyi', 'mypy.ini', 'pyproject.toml', 'setup.cfg') }}
           restore-keys: |
             mypy-${{ runner.os }}-
