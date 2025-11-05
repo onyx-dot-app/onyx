@@ -4,6 +4,7 @@ import {
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   SERVER_SIDE_ONLY__AUTH_TYPE,
 } from "./lib/constants";
+import { getDomain } from "./lib/redirectSS";
 
 // Authentication cookie name (matches backend: FASTAPI_USERS_AUTH_COOKIE_NAME)
 const FASTAPI_USERS_AUTH_COOKIE_NAME = "fastapiusersauth";
@@ -69,7 +70,7 @@ export async function proxy(request: NextRequest) {
       const authCookie = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME);
 
       if (!authCookie) {
-        const loginUrl = new URL("/auth/login", request.url);
+        const loginUrl = new URL("/auth/login", getDomain(request));
         // Preserve full URL including query params and hash for deep linking
         const fullPath =
           pathname + request.nextUrl.search + request.nextUrl.hash;
