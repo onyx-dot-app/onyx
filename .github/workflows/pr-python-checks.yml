@@ -26,19 +26,24 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Create virtual environment
+        working-directory: ./backend
+        run: uv venv .venv
+
       - name: Install Python dependencies with uv
+        working-directory: ./backend
         run: |
-          uv pip install --system \
-            -r backend/requirements/default.txt \
-            -r backend/requirements/dev.txt \
-            -r backend/requirements/model_server.txt
+          uv pip install \
+            -r requirements/default.txt \
+            -r requirements/dev.txt \
+            -r requirements/model_server.txt
 
       - name: Generate OpenAPI schema
         working-directory: ./backend
         env:
           PYTHONPATH: "."
         run: |
-          python scripts/onyx_openapi_schema.py --filename generated/openapi.json
+          uv run python scripts/onyx_openapi_schema.py --filename generated/openapi.json
 
       - name: Generate OpenAPI Python client
         working-directory: ./backend
@@ -54,16 +59,14 @@ jobs:
             --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
 
       - name: Run MyPy
-        run: |
-          cd backend
-          mypy .
+        working-directory: ./backend
+        run: uv run mypy .
 
       - name: Check import order with reorder-python-imports
+        working-directory: ./backend
         run: |
-          cd backend
-          find ./onyx -name "*.py" | xargs reorder-python-imports --py311-plus
+          find ./onyx -name "*.py" | xargs uv run reorder-python-imports --py311-plus
 
       - name: Check code formatting with Black
-        run: |
-          cd backend
-          black --check .
+        working-directory: ./backend
+        run: uv run black --check .
