@@ -9,6 +9,7 @@ export interface AuthTypeMetadata {
   autoRedirect: boolean;
   requiresVerification: boolean;
   anonymousUserEnabled: boolean | null;
+  passwordMinLength: number;
 }
 
 export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
@@ -21,6 +22,7 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
     auth_type: string;
     requires_verification: boolean;
     anonymous_user_enabled: boolean | null;
+    password_min_length: number;
   } = await res.json();
 
   let authType: AuthType;
@@ -40,6 +42,7 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
       autoRedirect: true,
       requiresVerification: data.requires_verification,
       anonymousUserEnabled: data.anonymous_user_enabled,
+      passwordMinLength: data.password_min_length,
     };
   }
   return {
@@ -47,6 +50,7 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
     autoRedirect: false,
     requiresVerification: data.requires_verification,
     anonymousUserEnabled: data.anonymous_user_enabled,
+    passwordMinLength: data.password_min_length,
   };
 };
 
