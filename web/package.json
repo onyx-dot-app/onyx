@@ -116,6 +116,7 @@
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
     "@types/uuid": "^9.0.8",
+    "babel-plugin-react-compiler": "^1.0.0",
     "chromatic": "^11.25.2",
     "eslint": "^9.39.1",
     "eslint-config-next": "^16.0.1",
