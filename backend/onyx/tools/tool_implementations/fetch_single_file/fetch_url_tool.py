@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.connectors.factory import identify_connector_class
-from onyx.connectors.models import InputType
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import IndexFilters
@@ -463,8 +462,8 @@ class FetchUrlTool(BaseTool):
             )
             if non_federated_source:
                 try:
-                    # For federated sources, use POLL input type (most common for real-time access)
-                    identify_connector_class(non_federated_source, InputType.POLL)
+                    # Check if connector exists for this source
+                    identify_connector_class(non_federated_source)
                     domain_patterns = self._get_domain_patterns_for_source(
                         non_federated_source
                     )
@@ -751,41 +750,10 @@ class FetchUrlTool(BaseTool):
                     completeness=ContextCompleteness.NO_CONTEXT,
                 )
 
-            # Check if content is meaningful
-            content_stripped = content.strip()
-            content_lower = content_stripped.lower()
-            # Check for insufficient content
-            # 1. Too short
-            word_count = len(content_stripped.split())
-            # 2. Common indicators that the page couldn't be accessed properly
-            auth_indicators = [
-                "loading",
-                "please wait",
-                "redirecting",
-                "sign in",
-                "log in",
-                "authenticate",
-            ]
-            has_auth_indicator = any(
-                indicator in content_lower for indicator in auth_indicators
-            )
-            if len(content_stripped) < 100 and (word_count < 5 or has_auth_indicator):
-                return DocumentResult(
-                    title="Unable to access content",
-                    content=f"The page requires authentication or is not yet loaded. Please access it directly at: {url}",
-                    source=DocumentRetrievalType.EXTERNAL,
-                    url=url,
-                    metadata={
-                        "error": "insufficient_content",
-                        "source_type": "web",
-                        "scraped_length": str(len(content_stripped)),
-                    },
-                    completeness=ContextCompleteness.NO_CONTEXT,
-                )
-
             # Extract title from content (first line or first 100 chars)
             title = self._extract_title_from_content(content, url)
 
+            # Return scraped content - let the LLM determine if it's useful
             return DocumentResult(
                 title=title,
                 content=content,
