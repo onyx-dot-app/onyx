@@ -20,7 +20,7 @@ function MyComponent() {
 
 Opal is built in such a way that it *reuses* the `/web/node_modules` directory.
 Therefore, builds don't incur duplicate space-costs (i.e., what would have happened if Opal had its own `node_modules`).
-If you want to add dependencies to Opal, define that dependency inside of `/web/libs/opal/package.json` under `peerDependencies`.
+If you want to add dependencies to Opal, define that dependency inside of `/web/lib/opal/package.json` under `peerDependencies`.
 Then, go to `/web` and run the install:
 
 ```sh
@@ -35,7 +35,7 @@ Those dependencies will then install inside of `/web/node_modules` and be availa
 ## Structure
 
 ```
-/web/libs/opal/
+/web/lib/opal/
 ├── src/
 │   ├── components/    # React components
 │   └── index.ts       # Main export file
