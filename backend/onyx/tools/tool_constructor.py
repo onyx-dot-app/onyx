@@ -117,7 +117,9 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         )
 
     if llm.config.model_provider == "azure" and AZURE_DALLE_API_KEY is not None:
-        azure_image_deployment = AZURE_IMAGE_DEPLOYMENT_NAME or AZURE_DALLE_DEPLOYMENT_NAME
+        azure_image_deployment = (
+            AZURE_IMAGE_DEPLOYMENT_NAME or AZURE_DALLE_DEPLOYMENT_NAME
+        )
         if not azure_image_deployment:
             raise ValueError(
                 "Image generation tool requires an Azure image deployment name"
