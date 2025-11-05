@@ -146,14 +146,15 @@ def process_attachment(
         else:
             if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
                 logger.warning(
-                    f"Skipping {attachment_link} due to size. "
-                    f"size={attachment_size} "
-                    f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD}"
+                    f"Skipping {attachment_link} due to file size. "
+                    f"size={attachment_size} bytes "
+                    f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD} bytes"
                 )
                 return AttachmentProcessingResult(
                     text=None,
                     file_name=None,
-                    error=f"Attachment text too long: {attachment_size} chars",
+                    error=f"Attachment file too large: {attachment_size} bytes "
+                    f"(max: {CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD} bytes)",
                 )
 
         logger.info(
@@ -251,19 +252,29 @@ def convert_attachment_to_content(
       1. Validates attachment type
       2. Extracts content or stores image for later processing
       3. Returns (content_text, stored_file_name) or None if we should skip it
+
+    NOTE: This function gracefully skips problematic attachments (too large, unsupported types, etc.)
+    and returns None. This prevents attachment-specific issues from causing the entire page
+    to fail re-indexing. The page will still be indexed without the problematic attachment.
     """
     media_type = attachment.get("metadata", {}).get("mediaType", "")
     # Quick check for unsupported types:
     if media_type.startswith("video/") or media_type == "application/gliffy+json":
-        logger.warning(
-            f"Skipping unsupported attachment type: '{media_type}' for {attachment['title']}"
+        logger.info(
+            f"Skipping unsupported attachment type '{media_type}' for attachment '{attachment['title']}'. "
+            f"The page will be indexed without this attachment."
         )
         return None
 
     result = process_attachment(confluence_client, attachment, page_id, allow_images)
     if result.error is not None:
-        logger.warning(
-            f"Attachment {attachment['title']} encountered error: {result.error}"
+        # Log at info level since skipped attachments are expected and normal
+        # This prevents attachment-specific issues (too large, corrupted, etc.) from
+        # causing the entire page to be marked as failed, which would trigger expensive
+        # re-indexing of potentially hundreds of thousands of pages.
+        logger.info(
+            f"Skipping attachment '{attachment['title']}' for page '{page_id}'. "
+            f"Reason: {result.error} - The page will be indexed without this attachment."
         )
         return None
 
