@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import Text from "@/components/ui/text";
 import { SearchIcon } from "lucide-react";
-import { useMemo, useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   MCPFormValues,
   MCPTool,
@@ -19,6 +19,7 @@ import { createMCPServer, attachMCPTools } from "@/lib/tools/edit";
 
 const ITEMS_PER_PAGE = 10;
 
+// With React Compiler active, no need for explicit memo/useCallback/useMemo
 export function ToolList({
   values,
   verbRoot,
@@ -27,29 +28,22 @@ export function ToolList({
   oauthConnected,
 }: ToolListProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [listingTools, setListingTools] = useState(false);
+  // Initialize loading state if we have a serverId (will auto-fetch)
+  const [listingTools, setListingTools] = useState(
+    !!(serverId && values.name && values.server_url)
+  );
   const [tools, setTools] = useState<MCPTool[]>([]);
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showToolList, setShowToolList] = useState(false);
   const [currentServerId, setCurrentServerId] = useState<number | undefined>(
     serverId
   );
 
-  // Auto-trigger tool listing when page loads with listing_tools=true query param
-  useEffect(() => {
-    if (
-      searchParams.get("listing_tools") === "true" &&
-      serverId &&
-      values.name.trim() &&
-      values.server_url.trim()
-    ) {
-      // Only auto-trigger for servers that have required form values and a serverId
-      handleListActions(values);
-    }
-  }, [searchParams, serverId, values.name, values.server_url]);
+  // Track active fetch requests to prevent memory leaks
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleListActions = async (values: MCPFormValues) => {
     // Check if OAuth needs connection first
@@ -60,6 +54,15 @@ export function ToolList({
       });
       return;
     }
+
+    // Cancel any pending requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
 
     setListingTools(true);
 
@@ -121,11 +124,8 @@ export function ToolList({
         }
         newServerId = serverId;
       }
-      // Ensure URL reflects the created server and listing state to avoid duplicate creation
-      // and set listing_tools=true so the tool list is shown
-      router.replace(
-        `/admin/actions/edit-mcp?server_id=${newServerId}&listing_tools=true`
-      );
+      // Update URL to reflect the created server
+      router.replace(`/admin/actions/edit-mcp?server_id=${newServerId}`);
 
       // List available tools from the saved server
       const promises: Promise<Response>[] = [
@@ -134,12 +134,14 @@ export function ToolList({
           headers: {
             "Content-Type": "application/json",
           },
+          signal,
         }),
         fetch(`/api/admin/mcp/server/${newServerId}/db-tools`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
           },
+          signal,
         }),
       ];
 
@@ -180,17 +182,23 @@ export function ToolList({
 
       // Pre-populate selected tools from existing database tools
       if (responses[1]?.ok) {
-        const existingToolsData = await responses[1]?.json();
+        const existingToolsData: ToolListResponse = await responses[1]?.json();
         const existingToolNames = new Set<string>(
-          existingToolsData.tools.map((tool: any) => tool.name as string)
+          existingToolsData.tools.map((tool) => tool.name)
         );
         setSelectedTools(existingToolNames);
       } else {
         setSelectedTools(new Set());
       }
 
-      // Tool list is already shown; nothing else to do
+      // Show the tool list now that we have data
+      setShowToolList(true);
     } catch (error) {
+      // Don't show error if request was aborted intentionally
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+
       console.error("Error listing tools:", error);
       setPopup({
         message: "Error listing tools from MCP server",
@@ -200,6 +208,23 @@ export function ToolList({
       setListingTools(false);
     }
   };
+
+  // Auto-fetch tools when component mounts with a serverId
+  useEffect(() => {
+    if (serverId && values.name && values.server_url) {
+      handleListActions(values);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverId]); // Only trigger when serverId changes
+
+  // Cleanup: abort any pending requests when component unmounts
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const handleCreateActions = async (values: MCPFormValues) => {
     if (selectedTools.size === 0) {
@@ -247,23 +272,23 @@ export function ToolList({
   };
 
   // Filter tools based on search term
-  const filteredTools = useMemo(() => {
-    if (!searchTerm) return tools;
+  // React Compiler will automatically memoize this computation
+  let filteredTools = tools;
+  if (searchTerm) {
     const lowerSearchTerm = searchTerm.toLowerCase();
-    return tools.filter(
+    filteredTools = tools.filter(
       (tool) =>
         tool.name.toLowerCase().includes(lowerSearchTerm) ||
         tool.description?.toLowerCase().includes(lowerSearchTerm) ||
         tool.displayName?.toLowerCase().includes(lowerSearchTerm)
     );
-  }, [tools, searchTerm]);
+  }
 
   // Paginate filtered tools
-  const paginatedTools = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    return filteredTools.slice(startIndex, endIndex);
-  }, [filteredTools, currentPage]);
+  // React Compiler will automatically memoize this computation
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedTools = filteredTools.slice(startIndex, endIndex);
 
   const totalPages = Math.ceil(filteredTools.length / ITEMS_PER_PAGE);
 
@@ -313,18 +338,21 @@ export function ToolList({
     }
   };
 
-  return listingTools || searchParams.get("listing_tools") !== "true" ? (
+  // Determine if we should show loading or tool list
+  const isLoadingTools = listingTools;
+
+  return !showToolList ? (
     <div className="flex gap-2">
       <Button
         onClick={() => handleListActions(values)}
         disabled={
-          listingTools ||
+          isLoadingTools ||
           !values.name.trim() ||
           !values.server_url.trim() ||
           (values.auth_type === MCPAuthenticationType.OAUTH && !oauthConnected)
         }
       >
-        {listingTools ? "Listing Actions..." : "List Actions"}
+        {isLoadingTools ? "Listing Actions..." : "List Actions"}
       </Button>
       <Button secondary onClick={() => router.push("/admin/actions")}>
         Cancel
@@ -472,10 +500,7 @@ export function ToolList({
         <Button
           secondary
           onClick={() => {
-            // Remove listing_tools query parameter when going back to form
-            const currentUrl = new URL(window.location.href);
-            currentUrl.searchParams.delete("listing_tools");
-            router.replace(currentUrl.toString());
+            setShowToolList(false);
           }}
         >
           Back
