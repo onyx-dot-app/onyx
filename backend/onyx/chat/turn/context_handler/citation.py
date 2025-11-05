@@ -59,30 +59,31 @@ def assign_citation_numbers_recent_tool_calls(
                 if tool_call_results:
                     updated_citation_number = False
                     for result in tool_call_results:
-                        if (
+                        if not (
                             result.unique_identifier_to_strip_away is not None
                             and result.document_citation_number
                             == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
                         ):
-                            updated_citation_number = True
-                            cached_document = ctx.fetched_documents_cache[
-                                result.unique_identifier_to_strip_away
-                            ]
-                            if (
+                            continue
+                        updated_citation_number = True
+                        cached_document = ctx.fetched_documents_cache[
+                            result.unique_identifier_to_strip_away
+                        ]
+                        if (
+                            cached_document.document_citation_number
+                            == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+                        ):
+                            new_docs_cited += 1
+                            result.document_citation_number = (
+                                docs_fetched_so_far + new_docs_cited
+                            )
+                            cached_document.document_citation_number = (
+                                result.document_citation_number
+                            )
+                        else:
+                            result.document_citation_number = (
                                 cached_document.document_citation_number
-                                == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
-                            ):
-                                new_docs_cited += 1
-                                result.document_citation_number = (
-                                    docs_fetched_so_far + new_docs_cited
-                                )
-                                cached_document.document_citation_number = (
-                                    result.document_citation_number
-                                )
-                            else:
-                                result.document_citation_number = (
-                                    cached_document.document_citation_number
-                                )
+                            )
                     if updated_citation_number:
                         updated_output_message: FunctionCallOutputMessage = {
                             "type": "function_call_output",

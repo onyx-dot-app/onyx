@@ -38,7 +38,6 @@ from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
 from onyx.tools.tool_implementations_v2.tool_result_models import LlmOpenUrlResult
 from onyx.tools.tool_implementations_v2.tool_result_models import LlmWebSearchResult
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
-from onyx.utils.url import normalize_url
 
 
 @tool_accounting
@@ -125,11 +124,11 @@ def _web_search_core(
                 url=r.link,
                 title=r.title,
                 snippet=r.snippet or "",
-                unique_identifier_to_strip_away=normalize_url(r.link),
+                unique_identifier_to_strip_away=r.link,
             )
         )
-        if normalize_url(r.link) not in run_context.context.fetched_documents_cache:
-            run_context.context.fetched_documents_cache[normalize_url(r.link)] = (
+        if r.link not in run_context.context.fetched_documents_cache:
+            run_context.context.fetched_documents_cache[r.link] = (
                 FetchedDocumentCacheEntry(
                     inference_section=dummy_inference_section_from_internet_search_result(
                         r
@@ -212,13 +211,13 @@ def _open_url_core(
         LlmOpenUrlResult(
             document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
             content=truncate_search_result_content(doc.full_content),
-            unique_identifier_to_strip_away=normalize_url(doc.link),
+            unique_identifier_to_strip_away=doc.link,
         )
         for doc in docs
     ]
     for doc in docs:
-        if normalize_url(doc.link) not in run_context.context.fetched_documents_cache:
-            run_context.context.fetched_documents_cache[normalize_url(doc.link)] = (
+        if doc.link not in run_context.context.fetched_documents_cache:
+            run_context.context.fetched_documents_cache[doc.link] = (
                 FetchedDocumentCacheEntry(
                     inference_section=dummy_inference_section_from_internet_content(
                         doc
@@ -227,9 +226,9 @@ def _open_url_core(
                 )
             )
         else:
-            run_context.context.fetched_documents_cache[
-                normalize_url(doc.link)
-            ].inference_section = dummy_inference_section_from_internet_content(doc)
+            run_context.context.fetched_documents_cache[doc.link].inference_section = (
+                dummy_inference_section_from_internet_content(doc)
+            )
     run_context.context.iteration_instructions.append(
         IterationInstructions(
             iteration_nr=index,
