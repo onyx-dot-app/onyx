@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import Text from "@/components/ui/text";
 import { SearchIcon } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   MCPFormValues,
@@ -28,19 +28,13 @@ export function ToolList({
   oauthConnected,
 }: ToolListProps) {
   const router = useRouter();
-  // Initialize loading state if we have a serverId (will auto-fetch)
-  const [listingTools, setListingTools] = useState(
-    !!(serverId && values.name && values.server_url)
-  );
+  const [listingTools, setListingTools] = useState(false);
   const [tools, setTools] = useState<MCPTool[]>([]);
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showToolList, setShowToolList] = useState(false);
-  const [currentServerId, setCurrentServerId] = useState<number | undefined>(
-    serverId
-  );
 
   // Track active fetch requests to prevent memory leaks
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -111,7 +105,6 @@ export function ToolList({
 
         // Update serverId for subsequent operations
         newServerId = serverResult.server_id;
-        setCurrentServerId(newServerId);
       } else {
         // For OAuth servers, use the existing serverId
         if (!serverId) {
@@ -209,22 +202,12 @@ export function ToolList({
     }
   };
 
-  // Auto-fetch tools when component mounts with a serverId
+  // Auto-fetch on mount if we have a serverId
   useEffect(() => {
-    if (serverId && values.name && values.server_url) {
+    if (serverId) {
       handleListActions(values);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverId]); // Only trigger when serverId changes
-
-  // Cleanup: abort any pending requests when component unmounts
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
+  }, []); // Empty deps = run once on mount
 
   const handleCreateActions = async (values: MCPFormValues) => {
     if (selectedTools.size === 0) {
@@ -235,7 +218,7 @@ export function ToolList({
       return;
     }
 
-    if (!currentServerId) {
+    if (!serverId) {
       setPopup({
         message: "Server not created yet. Please list actions first.",
         type: "error",
@@ -246,7 +229,7 @@ export function ToolList({
     setIsSubmitting(true);
 
     const { data, error } = await attachMCPTools({
-      server_id: currentServerId,
+      server_id: serverId,
       selected_tools: Array.from(selectedTools),
     });
 
