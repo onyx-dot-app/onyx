@@ -391,6 +391,9 @@ def test_assign_reused_citation_numbers(
     cached_web_search_document = _create_test_web_search_document(
         unique_identifier_to_strip_away, 1
     )
+    # already processed so these fields should have been stripped away
+    del cached_web_search_document["unique_identifier_to_strip_away"]
+    del cached_web_search_document["type"]
     messages: list[AgentSDKMessage] = [
         SystemMessage(
             role="system",
