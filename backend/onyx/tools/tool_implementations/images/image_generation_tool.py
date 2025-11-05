@@ -375,7 +375,7 @@ class ImageGenerationTool(Tool[None]):
         )
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
-        # Filter out heartbeat responses and find the actual image response
+        # Filter out heartbeat responses and find the actual image response.
         for response in args:
             if response.id == IMAGE_GENERATION_RESPONSE_ID:
                 image_generation_responses = cast(
