@@ -2,7 +2,11 @@
 
 import json
 from collections.abc import Sequence
+from typing import Union
 from uuid import uuid4
+
+from pydantic import TypeAdapter
+from pydantic import ValidationError
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import FunctionCallMessage
@@ -18,10 +22,17 @@ from onyx.chat.turn.context_handler.citation import (
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.chat.turn.models import FetchedDocumentCacheEntry
-from onyx.tools.tool_implementations_v2.internal_search import LlmInternalSearchResult
-from onyx.tools.tool_implementations_v2.web import LlmOpenUrlResult
-from onyx.tools.tool_implementations_v2.web import LlmWebSearchResult
+from onyx.tools.tool_implementations_v2.tool_result_models import (
+    LlmInternalSearchResult,
+)
+from onyx.tools.tool_implementations_v2.tool_result_models import LlmOpenUrlResult
+from onyx.tools.tool_implementations_v2.tool_result_models import LlmWebSearchResult
 from tests.unit.onyx.chat.turn.utils import create_test_inference_section
+
+# TypeAdapter for parsing tool results after stripping (no discriminator needed)
+_stripped_tool_result_adapter = TypeAdapter(
+    list[Union[LlmInternalSearchResult, LlmWebSearchResult, LlmOpenUrlResult]]
+)
 
 
 def _create_test_document(
@@ -68,17 +79,21 @@ def _create_dummy_function_call() -> FunctionCallMessage:
     )
 
 
-# TODO: Is there a better way to do this?
-def _parse_llm_docs_from_messages(
+def _parse_tool_call_result_from_messages(
     messages: Sequence[AgentSDKMessage],
 ) -> list[LlmInternalSearchResult | LlmOpenUrlResult | LlmWebSearchResult]:
-    tool_message_outputs: list[str] = []
+    """Parse LLM documents from messages after citation processing.
+
+    Note: After citation processing, 'type' and 'unique_identifier_to_strip_away'
+    fields are stripped from the documents that were newly processed. Documents from
+    previous tool calls may still have these fields.
+    """
+    results: list[LlmInternalSearchResult | LlmOpenUrlResult | LlmWebSearchResult] = []
+
     for msg in messages:
         if msg.get("type") == "function_call_output":
             func_output_msg: FunctionCallOutputMessage = msg  # type: ignore[assignment]
             output = func_output_msg["output"]
-            tool_message_outputs.append(output)
-
             try:
                 docs = json.loads(output)
                 for doc in docs:
@@ -89,39 +104,26 @@ def _parse_llm_docs_from_messages(
                         )
                         != DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
                     ):
+                        assert "type" not in json.dumps(
+                            doc
+                        ), "type should not be in processed documents"
                         assert "unique_identifier_to_strip_away" not in json.dumps(
                             doc
                         ), "unique_identifier_to_strip_away should not be in processed documents"
+            except (json.JSONDecodeError, AssertionError):
+                raise
             except Exception:
                 pass
 
-    results: list[LlmInternalSearchResult | LlmOpenUrlResult | LlmWebSearchResult] = []
-    for output in tool_message_outputs:
-        try:
-            docs = json.loads(output)
-            for doc in docs:
-                parsed = False
-                try:
-                    results.append(LlmInternalSearchResult(**doc))
-                    parsed = True
-                except Exception:
-                    pass
+            # Parse using pydantic with non-discriminated union
+            # For documents where fields are stripped, pydantic will try each type
+            try:
+                parsed_results = _stripped_tool_result_adapter.validate_json(output)
+                results.extend(parsed_results)
+            except ValidationError:
+                # If parsing fails, skip this tool call output
+                pass
 
-                if not parsed:
-                    try:
-                        results.append(LlmWebSearchResult(**doc))
-                        parsed = True
-                    except Exception:
-                        pass
-
-                if not parsed:
-                    try:
-                        results.append(LlmOpenUrlResult(**doc))
-                        parsed = True
-                    except Exception:
-                        pass
-        except Exception:
-            pass
     return results
 
 
@@ -177,7 +179,7 @@ def test_assign_citation_numbers_basic(
     assert result.new_docs_cited == 2
     assert result.num_tool_calls_cited == 1
 
-    message_llm_docs = _parse_llm_docs_from_messages(result.updated_messages)
+    message_llm_docs = _parse_tool_call_result_from_messages(result.updated_messages)
     assert len(message_llm_docs) == 2
     assert message_llm_docs[0].document_citation_number == 1
     assert message_llm_docs[1].document_citation_number == 2
@@ -215,7 +217,7 @@ def test_assign_citation_numbers_no_relevant_tool_calls(
     result = assign_citation_numbers_recent_tool_calls(messages, context)
     assert result.new_docs_cited == 0
     assert result.num_tool_calls_cited == 0
-    message_llm_docs = _parse_llm_docs_from_messages(result.updated_messages)
+    message_llm_docs = _parse_tool_call_result_from_messages(result.updated_messages)
     assert len(message_llm_docs) == 0
 
 
@@ -292,7 +294,7 @@ def test_assign_citation_numbers_previous_tool_calls(
     result = assign_citation_numbers_recent_tool_calls(messages, context)
     assert result.num_tool_calls_cited == 1
     assert result.new_docs_cited == 1
-    message_llm_docs = _parse_llm_docs_from_messages(result.updated_messages)
+    message_llm_docs = _parse_tool_call_result_from_messages(result.updated_messages)
     assert len(message_llm_docs) == 3
     # In practice, these shouldn't be empty, but we want to make sure we're not interacting
     # with these previous tool call results
@@ -374,7 +376,7 @@ def test_assign_citation_numbers_parallel_tool_calls(
     assert result.num_tool_calls_cited == 2
     # Find the tool message and check citation numbers
     # Pass None to parse all document types (mixed types in parallel tool calls)
-    message_llm_docs = _parse_llm_docs_from_messages(result.updated_messages)
+    message_llm_docs = _parse_tool_call_result_from_messages(result.updated_messages)
 
     assert len(message_llm_docs) == 3
     assert message_llm_docs[0].document_citation_number == 1
@@ -442,7 +444,7 @@ def test_assign_reused_citation_numbers(
     )
     result = assign_citation_numbers_recent_tool_calls(messages, context)
     assert result.new_docs_cited == 0
-    message_llm_docs = _parse_llm_docs_from_messages(result.updated_messages)
+    message_llm_docs = _parse_tool_call_result_from_messages(result.updated_messages)
     assert len(message_llm_docs) == 2
     assert message_llm_docs[0].document_citation_number == 1
     # Reuse document citation number from cached web search document

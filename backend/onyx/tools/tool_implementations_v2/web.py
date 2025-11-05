@@ -2,7 +2,6 @@ from collections.abc import Sequence
 
 from agents import function_tool
 from agents import RunContextWrapper
-from pydantic import BaseModel
 from pydantic import TypeAdapter
 
 from onyx.agents.agent_search.dr.models import IterationAnswer
@@ -36,27 +35,10 @@ from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
+from onyx.tools.tool_implementations_v2.tool_result_models import LlmOpenUrlResult
+from onyx.tools.tool_implementations_v2.tool_result_models import LlmWebSearchResult
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from onyx.utils.url import normalize_url
-
-
-# Simplified response models for web tools
-class LlmWebSearchResult(BaseModel):
-    """Result from a web search query"""
-
-    document_citation_number: int
-    url: str
-    title: str
-    snippet: str
-    unique_identifier_to_strip_away: str | None = None
-
-
-class LlmOpenUrlResult(BaseModel):
-    """Result from opening/fetching a URL"""
-
-    document_citation_number: int
-    content: str
-    unique_identifier_to_strip_away: str | None = None
 
 
 @tool_accounting

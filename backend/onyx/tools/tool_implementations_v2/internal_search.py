@@ -1,9 +1,7 @@
-from typing import Any
 from typing import cast
 
 from agents import function_tool
 from agents import RunContextWrapper
-from pydantic import BaseModel
 from pydantic import TypeAdapter
 
 from onyx.agents.agent_search.dr.models import InferenceSection
@@ -25,18 +23,11 @@ from onyx.tools.tool_implementations.search.search_tool import (
 from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
+from onyx.tools.tool_implementations_v2.tool_result_models import (
+    LlmInternalSearchResult,
+)
 from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
-
-
-class LlmInternalSearchResult(BaseModel):
-    """Result from an internal search query"""
-
-    document_citation_number: int
-    title: str
-    excerpt: str
-    metadata: dict[str, Any]
-    unique_identifier_to_strip_away: str | None = None
 
 
 @tool_accounting

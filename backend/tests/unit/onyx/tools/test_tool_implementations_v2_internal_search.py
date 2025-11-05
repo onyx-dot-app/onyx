@@ -18,7 +18,9 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations_v2.internal_search import LlmInternalSearchResult
+from onyx.tools.tool_implementations_v2.tool_result_models import (
+    LlmInternalSearchResult,
+)
 from tests.unit.onyx.chat.turn.utils import create_test_inference_chunk
 from tests.unit.onyx.chat.turn.utils import create_test_inference_section
 from tests.unit.onyx.chat.turn.utils import FakeQuery

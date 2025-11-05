@@ -2,17 +2,32 @@
 
 import json
 from collections.abc import Sequence
+from typing import Annotated
+from typing import Union
 
 from pydantic import BaseModel
+from pydantic import Field
+from pydantic import TypeAdapter
 from pydantic import ValidationError
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import FunctionCallOutputMessage
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.turn.models import ChatTurnContext
-from onyx.tools.tool_implementations_v2.internal_search import LlmInternalSearchResult
-from onyx.tools.tool_implementations_v2.web import LlmOpenUrlResult
-from onyx.tools.tool_implementations_v2.web import LlmWebSearchResult
+from onyx.tools.tool_implementations_v2.tool_result_models import (
+    LlmInternalSearchResult,
+)
+from onyx.tools.tool_implementations_v2.tool_result_models import LlmOpenUrlResult
+from onyx.tools.tool_implementations_v2.tool_result_models import LlmWebSearchResult
+
+# Create a tagged union type for all tool results
+ToolResult = Annotated[
+    Union[LlmInternalSearchResult, LlmWebSearchResult, LlmOpenUrlResult],
+    Field(discriminator="type"),
+]
+
+# TypeAdapter for parsing tool results
+_tool_result_adapter = TypeAdapter(list[ToolResult])
 
 
 class CitationAssignmentResult(BaseModel):
@@ -76,7 +91,10 @@ def assign_citation_numbers_recent_tool_calls(
                                 [
                                     result.model_dump(
                                         mode="json",
-                                        exclude={"unique_identifier_to_strip_away"},
+                                        exclude={
+                                            "unique_identifier_to_strip_away",
+                                            "type",
+                                        },
                                     )
                                     for result in tool_call_results
                                 ]
@@ -96,39 +114,10 @@ def assign_citation_numbers_recent_tool_calls(
     )
 
 
-# TODO: Is there a better way to do this?
 def _decode_tool_call_result(
     content: str,
 ) -> list[LlmInternalSearchResult | LlmOpenUrlResult | LlmWebSearchResult]:
-    tool_call_results: list[
-        LlmInternalSearchResult | LlmOpenUrlResult | LlmWebSearchResult
-    ] = []
     try:
-        raw_list = json.loads(content)
-        # Parse each document individually to support mixed types in the same list
-        for doc in raw_list:
-            # Try LlmInternalSearchResult first
-            try:
-                tool_call_results.append(LlmInternalSearchResult(**doc))  # type: ignore[misc]
-                continue
-            except (TypeError, ValidationError):
-                pass
-
-            # Try LlmWebSearchResult next
-            try:
-                tool_call_results.append(LlmWebSearchResult(**doc))  # type: ignore[misc]
-                continue
-            except (TypeError, ValidationError):
-                pass
-
-            # Try LlmOpenUrlResult finally
-            try:
-                tool_call_results.append(LlmOpenUrlResult(**doc))  # type: ignore[misc]
-                continue
-            except (TypeError, ValidationError):
-                pass
-
-            # If none of the types match, skip this document
-    except (json.JSONDecodeError, TypeError):
-        tool_call_results = []
-    return tool_call_results
+        return _tool_result_adapter.validate_json(content)
+    except ValidationError:
+        return []
