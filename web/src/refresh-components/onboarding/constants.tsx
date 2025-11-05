@@ -17,7 +17,7 @@ type StepConfig = {
   index: number;
   title: string;
   buttonText: string;
-  icon: React.FunctionComponent<SvgProps> | undefined;
+  iconPercentage: number;
 };
 
 export const STEP_CONFIG: Record<OnboardingStep, StepConfig> = {
@@ -25,25 +25,25 @@ export const STEP_CONFIG: Record<OnboardingStep, StepConfig> = {
     index: 0,
     title: "Let's take a moment to get you set up.",
     buttonText: "Let's Go",
-    icon: SvgStep2,
+    iconPercentage: 10,
   },
   [OnboardingStep.Name]: {
     index: 1,
     title: "Let's take a moment to get you set up.",
     buttonText: "Next",
-    icon: SvgStep2,
+    iconPercentage: 40,
   },
   [OnboardingStep.LlmSetup]: {
     index: 2,
     title: "Almost there! Connect your models to start chatting.",
     buttonText: "Next",
-    icon: SvgStep3,
+    iconPercentage: 70,
   },
   [OnboardingStep.Complete]: {
     index: 3,
     title: "You're all set, review the optional settings or click Finish Setup",
     buttonText: "Finish Setup",
-    icon: undefined,
+    iconPercentage: 100,
   },
 } as const;
 

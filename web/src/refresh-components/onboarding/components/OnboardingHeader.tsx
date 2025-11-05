@@ -8,7 +8,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgX from "@/icons/x";
 import SvgCheckCircle from "@/icons/check-circle";
 import { OnboardingStep } from "../types";
-import router from "next/router";
+import ProgressSteps from "./ProgressSteps";
 
 type OnboardingHeaderProps = {
   state: OnboardingState;
@@ -21,7 +21,8 @@ const OnboardingHeaderInner = ({
   actions: onboardingActions,
   handleHideOnboarding,
 }: OnboardingHeaderProps) => {
-  const StepIcon = STEP_CONFIG[onboardingState.currentStep].icon;
+  const iconPercentage =
+    STEP_CONFIG[onboardingState.currentStep].iconPercentage;
   const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
   const isWelcomeStep = onboardingState.currentStep === OnboardingStep.Welcome;
   const isCompleteStep =
@@ -38,8 +39,8 @@ const OnboardingHeaderInner = ({
   return (
     <div className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01">
       <div className="flex items-center gap-1">
-        {StepIcon ? (
-          <StepIcon className="w-4 h-4 stroke-background-neutral-inverted-00" />
+        {iconPercentage ? (
+          <ProgressSteps value={iconPercentage} />
         ) : (
           <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
         )}
