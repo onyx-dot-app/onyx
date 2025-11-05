@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.connectors.factory import identify_connector_class
-from onyx.connectors.highspot.utils import scrape_url_content
 from onyx.connectors.models import InputType
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import SearchType
@@ -36,6 +35,7 @@ from onyx.tools.models import ToolResponse
 from onyx.tools.utils import get_full_document_by_id
 from onyx.tools.utils import process_chunks_to_document_result
 from onyx.utils.logger import setup_logger
+from onyx.utils.web_scraping import scrape_url_content
 
 logger = setup_logger()
 
