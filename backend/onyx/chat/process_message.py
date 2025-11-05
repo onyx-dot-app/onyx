@@ -374,7 +374,9 @@ def stream_chat_message_objects(
 
                 if qualification_result.is_blocked:
                     logger.info(
-                        f"Question blocked by qualification service: {message_text}"
+                        f"Question blocked by qualification service: "
+                        f"confidence={qualification_result.similarity_score:.3f}, "
+                        f"matched_index={qualification_result.matched_question_index}"
                     )
 
                     # Return error immediately - don't create chat messages
