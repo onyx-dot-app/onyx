@@ -10,9 +10,10 @@ on:
 jobs:
   mypy-check:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}", "extras=s3-cache"]
 
     steps:
+      - uses: runs-on/action@v2
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
