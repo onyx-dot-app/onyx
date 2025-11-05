@@ -1,3 +1,4 @@
+import { JSX } from "react";
 import { UniqueIdentifier } from "@dnd-kit/core";
 
 export interface Row {

@@ -48,9 +48,9 @@ interface MessagesDisplayProps {
   handleResubmitLastMessage: () => void;
   autoScrollEnabled: boolean;
   getContainerHeight: () => string | undefined;
-  lastMessageRef: RefObject<HTMLDivElement>;
-  endPaddingRef: RefObject<HTMLDivElement>;
-  endDivRef: RefObject<HTMLDivElement>;
+  lastMessageRef: RefObject<HTMLDivElement | null>;
+  endPaddingRef: RefObject<HTMLDivElement | null>;
+  endDivRef: RefObject<HTMLDivElement | null>;
   hasPerformedInitialScroll: boolean;
   chatSessionId: string | null;
   enterpriseSettings?: EnterpriseSettings | null;

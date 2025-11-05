@@ -115,12 +115,15 @@ const SelectLabel = React.forwardRef<
 SelectLabel.displayName = SelectPrimitive.Label.displayName;
 
 const SelectItem = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.Item>,
+  React.ComponentRef<typeof SelectPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & {
     hideCheck?: boolean;
     icon?:
       | React.ReactNode
-      | FC<{ size?: number | undefined; className?: string | undefined }>;
+      | ((props: {
+          size?: number | undefined;
+          className?: string | undefined;
+        }) => React.JSX.Element);
     selected?: boolean;
   }
 >(({ className, children, hideCheck, icon, selected, ...props }, ref) => (

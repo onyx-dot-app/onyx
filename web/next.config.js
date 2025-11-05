@@ -24,9 +24,7 @@ const cspHeader = `
 const nextConfig = {
   productionBrowserSourceMaps: false,
   output: "standalone",
-  publicRuntimeConfig: {
-    version,
-  },
+  reactCompiler: true,
   images: {
     // Used to fetch favicons
     remotePatterns: [

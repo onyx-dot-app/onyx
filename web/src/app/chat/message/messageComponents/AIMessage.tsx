@@ -10,7 +10,14 @@ import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import CitedSourcesToggle from "@/app/chat/message/messageComponents/CitedSourcesToggle";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
-import { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  RefObject,
+} from "react";
 import {
   useChatSessionStore,
   useDocumentSidebarVisible,
@@ -401,7 +408,14 @@ export default function AIMessage({
                     <div
                       ref={markdownRef}
                       className="overflow-x-visible max-w-content-max focus:outline-none select-text"
-                      onCopy={(e) => handleCopy(e, markdownRef)}
+                      onCopy={(e) => {
+                        if (markdownRef.current) {
+                          handleCopy(
+                            e,
+                            markdownRef as RefObject<HTMLDivElement>
+                          );
+                        }
+                      }}
                     >
                       {groupedPackets.length === 0 ? (
                         // Show blinking dot when no content yet but message is generating
