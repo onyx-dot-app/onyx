@@ -25,6 +25,7 @@ export function ToolList({
   serverId,
   setPopup,
   oauthConnected,
+  initialDbTools,
 }: ToolListProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -37,6 +38,47 @@ export function ToolList({
   const [currentServerId, setCurrentServerId] = useState<number | undefined>(
     serverId
   );
+  const [hasAppliedInitialTools, setHasAppliedInitialTools] = useState(false);
+  const [autoListTriggered, setAutoListTriggered] = useState(false);
+
+  useEffect(() => {
+    if (!serverId) {
+      setCurrentServerId(undefined);
+      setHasAppliedInitialTools(false);
+      setAutoListTriggered(false);
+      setTools([]);
+      setSelectedTools(new Set());
+      setCurrentPage(1);
+      return;
+    }
+
+    if (currentServerId === serverId) {
+      return;
+    }
+
+    setCurrentServerId(serverId);
+    setHasAppliedInitialTools(false);
+    setAutoListTriggered(false);
+    setTools([]);
+    setSelectedTools(new Set());
+    setCurrentPage(1);
+  }, [serverId, currentServerId]);
+
+  useEffect(() => {
+    if (
+      !hasAppliedInitialTools &&
+      initialDbTools &&
+      initialDbTools.length > 0 &&
+      serverId
+    ) {
+      setTools(initialDbTools);
+      setSelectedTools(new Set(initialDbTools.map((tool) => tool.name)));
+      setCurrentPage(1);
+      setCurrentServerId(serverId);
+      setHasAppliedInitialTools(true);
+      setAutoListTriggered(true);
+    }
+  }, [initialDbTools, hasAppliedInitialTools, serverId]);
 
   const isListingTools = searchParams.get("listing_tools") === "true";
 
@@ -46,12 +88,17 @@ export function ToolList({
       isListingTools &&
       serverId &&
       values.name.trim() &&
-      values.server_url.trim()
+      values.server_url.trim() &&
+      initialDbTools !== null &&
+      initialDbTools !== undefined &&
+      initialDbTools.length === 0 &&
+      !autoListTriggered
     ) {
+      setAutoListTriggered(true);
       // Only auto-trigger for servers that have required form values and a serverId
       handleListActions(values);
     }
-  }, [isListingTools, serverId, values.name, values.server_url]);
+  }, [isListingTools, serverId, values.name, values.server_url, initialDbTools, autoListTriggered]);
 
   const handleListActions = async (values: MCPFormValues) => {
     // Check if OAuth needs connection first
