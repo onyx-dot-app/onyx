@@ -421,10 +421,10 @@ def stream_chat_message_objects(
             raise RuntimeError(
                 "Must specify a set of documents for chat or specify search options"
             )
-
         try:
             llm, fast_llm = get_llms_for_persona(
                 persona=persona,
+                user=user,
                 llm_override=new_msg_req.llm_override or chat_session.llm_override,
                 additional_headers=litellm_additional_headers,
                 long_term_logger=long_term_logger,
@@ -806,6 +806,7 @@ def stream_chat_message_objects(
                 or get_main_llm_from_tuple(
                     get_llms_for_persona(
                         persona=persona,
+                        user=user,
                         llm_override=(
                             new_msg_req.llm_override or chat_session.llm_override
                         ),
