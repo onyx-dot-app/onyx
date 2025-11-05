@@ -17,7 +17,7 @@ from onyx.llm.models import PreviousMessage
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
-from onyx.tools.tool_implementations.resume.minio_requests import minio_get_bytes
+from onyx.file_store.file_store import get_default_file_store
 
 logger = setup_logger()
 
@@ -146,13 +146,19 @@ class LangflowTool(Tool):
                     f"количества файловых нод ({len(self.file_node_ids)}). "
                     "Будет предпринята попытка сопоставления по порядку."
                 )
+            
+            file_store = get_default_file_store(self.db_session)
+            
             # сопоставляем ноды и документы по порядку
             for file_node, doc in zip(self.file_node_ids, self.docs):
                 try:
-                    # 1. получаем байтов файла из MinIO (как в ResumeTool)
-                    # doc.file_id - это ключ (имя) файла в MinIO/FileStore
-                    logger.info(f"Получение файла из MinIO: {doc.file_id} ({doc.name})")
-                    file_content_bytes = minio_get_bytes(doc.file_id)
+                    # 1. получаем байты файла из FileStore
+                    # doc.file_id - это ключ (имя) файла в FileStore (обычно UUID)
+                    logger.info(f"Получение файла из FileStore: {doc.file_id} ({doc.name})")
+                    file_io = file_store.read_file(doc.file_id, mode="b")
+                    file_content_bytes = file_io.read()
+                    file_io.close()
+
                     # 2. загрузка байтов в Langflow
                     langflow_path = self._upload_file_to_langflow(
                         file_content_bytes,
@@ -163,8 +169,8 @@ class LangflowTool(Tool):
                     logger.info(f"Файл {doc.name} сопоставлен с нодой {file_node.file_node_id}: path={langflow_path}")
                 except Exception as e:
                     logger.error(
-                        f"Ошибка при загрузке файла {doc.name} (ID: {doc.file_id}) "
-                        f"для ноды {file_node.file_node_id} в Langflow: {e}"
+                        f"Ошибка при получении файла {doc.name} (ID: {doc.file_id}) "
+                        f"из FileStore или его загрузке в Langflow: {e}"
                     )
                     pass
 
@@ -176,7 +182,23 @@ class LangflowTool(Tool):
         url = self.base_url + f"/api/v1/run/{self.pipeline_id}"
         method = "POST"
         logger.info(f"Отправка запроса в Langflow: URL={url}, Body={json.dumps(request_body, indent=2)}")
-        response = requests.request(method, url, json=request_body, headers=headers)
+
+        try:
+            response = requests.request(method, url, json=request_body, headers=headers, timeout=1200) # 5 минут таймаут
+        except requests.exceptions.Timeout:
+            logger.error(f"Таймаут при обращении к Langflow: {url}")
+            yield ToolResponse(
+                id=LANGFLOW_RESPONSE_SUMMARY_ID,
+                response=LangflowResponseSummary(tool_result="Ошибка: Langflow не ответил вовремя (таймаут 5 минут).", tool_name=self.name),
+            )
+            return
+        except requests.exceptions.RequestException as req_err:
+            logger.error(f"Ошибка соединения при обращении к Langflow: {req_err}")
+            yield ToolResponse(
+                id=LANGFLOW_RESPONSE_SUMMARY_ID,
+                response=LangflowResponseSummary(tool_result=f"Ошибка: Не удалось подключиться к Langflow ({req_err}).", tool_name=self.name),
+            )
+            return
 
         text_response = None
         try:
