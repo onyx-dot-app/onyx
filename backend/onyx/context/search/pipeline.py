@@ -301,7 +301,6 @@ class SearchPipeline:
                     self.document_index.id_based_retrieval(
                         chunk_requests=chunk_requests,
                         filters=IndexFilters(access_control_list=None),
-                        batch_retrieval=True,
                     )
                 )
             )

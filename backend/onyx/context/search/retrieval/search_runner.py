@@ -278,9 +278,7 @@ def doc_index_retrieval(
 
     # Retrieve and return the referenced normal chunks from the large chunks
     retrieved_inference_chunks = document_index.id_based_retrieval(
-        chunk_requests=retrieval_requests,
-        filters=query.filters,
-        batch_retrieval=True,
+        chunk_requests=retrieval_requests, filters=query.filters
     )
 
     # Apply the scores from the large chunks to the chunks referenced

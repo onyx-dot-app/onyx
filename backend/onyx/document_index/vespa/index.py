@@ -42,9 +42,6 @@ from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.interfaces import VespaDocumentUserFields
 from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
-from onyx.document_index.vespa.chunk_retrieval import (
-    parallel_visit_api_retrieval,
-)
 from onyx.document_index.vespa.chunk_retrieval import query_vespa
 from onyx.document_index.vespa.deletion import delete_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import BaseHTTPXClientContext
@@ -904,8 +901,6 @@ class VespaIndex(DocumentIndex):
         self,
         chunk_requests: list[VespaChunkRequest],
         filters: IndexFilters,
-        batch_retrieval: bool = False,
-        get_large_chunks: bool = False,
     ) -> list[InferenceChunkUncleaned]:
         # make sure to use the vespa-afied document IDs
         chunk_requests = [
@@ -919,18 +914,10 @@ class VespaIndex(DocumentIndex):
             for chunk_request in chunk_requests
         ]
 
-        if batch_retrieval:
-            return batch_search_api_retrieval(
-                index_name=self.index_name,
-                chunk_requests=chunk_requests,
-                filters=filters,
-                get_large_chunks=get_large_chunks,
-            )
-        return parallel_visit_api_retrieval(
+        return batch_search_api_retrieval(
             index_name=self.index_name,
             chunk_requests=chunk_requests,
             filters=filters,
-            get_large_chunks=get_large_chunks,
         )
 
     def hybrid_retrieval(
