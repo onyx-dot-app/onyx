@@ -239,7 +239,7 @@ class LangflowTool(Tool):
         else:
             prompt_builder.update_user_prompt(
                 HumanMessage(
-                    content=build_user_message_for_langflow_tool(
+                    content=self.build_user_message_for_langflow_tool(
                         prompt_builder.user_message_and_token_cnt[0],
                         self.name,
                         *tool_responses,
