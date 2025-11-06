@@ -212,10 +212,10 @@ def test_gmail_checkpoint_progression() -> None:
     ]
 
     assert document_ids == [
+        "user2@test.com:t4",
         "user1@test.com:t1",
         "user1@test.com:t2",
         "user1@test.com:t3",
-        "user2@test.com:t4",
     ]
 
     assert mock_thread_to_document.call_count == 4
