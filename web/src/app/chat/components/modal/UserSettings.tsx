@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { getDisplayNameForModel } from "@/lib/hooks";
+import { getDisplayNameForModel, useAuthType } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/users/UserSettings";
 import { usePathname, useRouter } from "next/navigation";
@@ -58,6 +58,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     updateUserThemePreference,
   } = useUser();
   const { llmProviders } = useLLMProviders();
+  const authType = useAuthType();
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
@@ -138,14 +139,14 @@ export function UserSettings({ onClose }: UserSettingsProps) {
       visibleSections.push({ id: "password", label: "Password" });
     }
 
-    // Always show tokens tab
-    visibleSections.push({ id: "tokens", label: "Access Tokens" });
+    if (authType && authType !== "disabled") {
+      visibleSections.push({ id: "tokens", label: "Access Tokens" });
+    }
 
-    // Always show Connectors tab, will be disabled if loading or no connectors
     visibleSections.push({ id: "connectors", label: "Connectors" });
 
     return visibleSections;
-  }, [showPasswordSection]);
+  }, [showPasswordSection, authType]);
 
   useEffect(() => {
     if (!sections.some((section) => section.id === activeSection)) {
