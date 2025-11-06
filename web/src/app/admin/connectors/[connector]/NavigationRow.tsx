@@ -1,7 +1,5 @@
+import { SvgArrowLeft, SvgArrowRight, SvgPlusCircle } from "@onyx/opal";
 import { useFormContext } from "@/components/context/FormContext";
-import SvgArrowLeft from "@/icons/arrow-left";
-import SvgArrowRight from "@/icons/arrow-right";
-import SvgPlusCircle from "@/icons/plus-circle";
 import Button from "@/refresh-components/buttons/Button";
 
 const NavigationRow = ({

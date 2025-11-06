@@ -1,3 +1,4 @@
+import { SvgPlusCircle } from "@onyx/opal";
 import React, { forwardRef } from "react";
 import { Formik, Form, FormikProps, FieldArray, Field } from "formik";
 import * as Yup from "yup";
@@ -20,7 +21,6 @@ import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "../../configuration/llm/constants
 import { getDisplayNameForModel } from "@/lib/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlusCircle from "@/icons/plus-circle";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 // Number of tokens to show cost calculation for

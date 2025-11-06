@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgRefreshCw, SvgTrash } from "@onyx/opal";
 import { ArrayHelpers } from "formik";
 import {
   Tooltip,
@@ -11,9 +12,7 @@ import { useMemo } from "react";
 import { StarterMessage } from "./interfaces";
 import Button from "@/refresh-components/buttons/Button";
 import { TextFormField } from "@/components/Field";
-import SvgTrash from "@/icons/trash";
 import { cn } from "@/lib/utils";
-import SvgRefreshCw from "@/icons/refresh-cw";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_STARTER_MESSAGES } from "@/lib/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";

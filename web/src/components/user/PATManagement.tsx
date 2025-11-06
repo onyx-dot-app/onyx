@@ -1,10 +1,8 @@
 "use client";
 
+import { SvgCheck, SvgCopy, SvgTrash } from "@onyx/opal";
 import { useState, useEffect } from "react";
 import useSWR from "swr";
-import SvgTrash from "@/icons/trash";
-import SvgCopy from "@/icons/copy";
-import SvgCheck from "@/icons/check";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { errorHandlingFetcher } from "@/lib/fetcher";

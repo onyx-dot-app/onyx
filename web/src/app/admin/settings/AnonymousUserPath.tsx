@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgCopy } from "@onyx/opal";
 import useSWR from "swr";
 import { useContext, useState } from "react";
 
@@ -9,7 +10,6 @@ import { ClipboardIcon } from "@/components/icons/icons";
 import { Input } from "@/components/ui/input";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import SvgCopy from "@/icons/copy";
 
 export function AnonymousUserPath({
   setPopup,

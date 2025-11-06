@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgDownloadCloud } from "@onyx/opal";
 import { useState, useEffect } from "react";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { FiDownload } from "react-icons/fi";
@@ -16,7 +17,6 @@ import Button from "@/refresh-components/buttons/Button";
 import { Card } from "@/components/ui/card";
 import Text from "@/components/ui/text";
 import { Spinner } from "@/components/Spinner";
-import SvgDownloadCloud from "@/icons/download-cloud";
 
 function Main() {
   const [categories, setCategories] = useState<string[]>([]);

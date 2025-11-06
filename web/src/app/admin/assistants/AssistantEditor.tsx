@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgEditBig, SvgFiles, SvgTrash } from "@onyx/opal";
 import React, { JSX } from "react";
 import { Option } from "@/components/Dropdown";
 import { generateRandomIconShape } from "@/lib/assistantIconUtils";
@@ -119,9 +120,6 @@ import {
 } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import SvgTrash from "@/icons/trash";
-import SvgEditBig from "@/icons/edit-big";
-import SvgFiles from "@/icons/files";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";

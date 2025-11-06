@@ -1,11 +1,13 @@
+import {
+  SvgCpu,
+  SvgGlobe,
+  SvgImage,
+  SvgProps,
+  SvgSearch,
+  SvgServer,
+  SvgUser,
+} from "@onyx/opal";
 import { JSX } from "react";
-import { SvgProps } from "@/icons";
-import SvgCpu from "@/icons/cpu";
-import SvgGlobe from "@/icons/globe";
-import SvgImage from "@/icons/image";
-import SvgSearch from "@/icons/search";
-import SvgServer from "@/icons/server";
-import SvgUser from "@/icons/user";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 
 // Helper functions to identify specific tools

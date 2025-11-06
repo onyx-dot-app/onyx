@@ -1,12 +1,10 @@
+import { SvgCheckCircle, SvgFold, SvgX } from "@onyx/opal";
 import React, { memo } from "react";
 import { STEP_CONFIG } from "../constants";
 import { OnboardingActions, OnboardingState } from "../types";
 import Text from "@/refresh-components/texts/Text";
-import SvgFold from "@/icons/fold";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-import SvgCheckCircle from "@/icons/check-circle";
 import { OnboardingStep } from "../types";
 import router from "next/router";
 

@@ -1,3 +1,4 @@
+import { SvgCopy, SvgShare } from "@onyx/opal";
 import { useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import { Callout } from "@/components/ui/callout";
@@ -15,8 +16,6 @@ import { useSearchParams } from "next/navigation";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useChatSessionStore } from "@/app/chat/stores/useChatSessionStore";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
-import SvgShare from "@/icons/share";
-import SvgCopy from "@/icons/copy";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { copyAll } from "@/app/chat/message/copyingUtils";
 

@@ -1,4 +1,4 @@
-import SvgUser from "@/icons/user";
+import { SvgUser } from "@onyx/opal";
 import React, { useRef, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";

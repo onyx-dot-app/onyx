@@ -1,5 +1,5 @@
 import React from "react";
-import { IconProps } from "@/icons";
+import { IconProps } from "@/icons/types";
 
 const SvgFolderOpen = React.forwardRef<SVGSVGElement, IconProps>(
   ({ size = 32, color = "currentColor", title, className, ...props }, ref) => (

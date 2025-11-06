@@ -1,3 +1,4 @@
+import { SvgRefreshCw } from "@onyx/opal";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Popover,
@@ -11,7 +12,6 @@ import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/components/user/UserProvider";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-import SvgRefreshCw from "@/icons/refresh-cw";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";

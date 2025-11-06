@@ -1,12 +1,10 @@
 "use client";
 
+import { SvgChevronDownSmall, SvgProps, SvgX } from "@onyx/opal";
 import React, { useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn, noProp } from "@/lib/utils";
-import { SvgProps } from "@/icons";
-import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import IconButton from "./IconButton";
-import SvgX from "@/icons/x";
 
 const buttonClasses = (transient?: boolean) =>
   ({

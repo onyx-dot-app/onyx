@@ -1,7 +1,4 @@
-import SvgSearch from "@/icons/search";
-import SvgGlobe from "@/icons/globe";
-import SvgImage from "@/icons/image";
-import { SvgProps } from "@/icons";
+import { SvgGlobe, SvgImage, SvgProps, SvgSearch } from "@onyx/opal";
 
 // Tool names as referenced by tool results / tool calls
 export const SEARCH_TOOL_NAME = "run_search";

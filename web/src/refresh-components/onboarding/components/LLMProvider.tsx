@@ -1,18 +1,20 @@
+import {
+  SvgArrowExchange,
+  SvgCheckCircle,
+  SvgProps,
+  SvgServer,
+  SvgSettings,
+} from "@onyx/opal";
 import React, { memo, useCallback, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
-import { SvgProps } from "@/icons";
-import SvgArrowExchange from "@/icons/arrow-exchange";
 import Truncated from "@/refresh-components/texts/Truncated";
-import SvgServer from "@/icons/server";
 import {
   useChatModal,
   ModalIds,
 } from "@/refresh-components/contexts/ChatModalContext";
 import LLMConnectionIcons from "@/refresh-components/onboarding/components/LLMConnectionIcons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import SvgSettings from "@/icons/settings";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgCheckCircle from "@/icons/check-circle";
 import { OnboardingActions, OnboardingState } from "../types";
 import { cn } from "@/lib/utils";
 

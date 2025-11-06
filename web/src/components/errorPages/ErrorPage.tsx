@@ -1,6 +1,6 @@
+import { SvgAlertCircle } from "@onyx/opal";
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import Text from "@/refresh-components/texts/Text";
-import SvgAlertCircle from "@/icons/alert-circle";
 
 export default function Error() {
   return (

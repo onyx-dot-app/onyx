@@ -1,3 +1,4 @@
+import { SvgUsers } from "@onyx/opal";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import React, { useState, useEffect } from "react";
 import { FormikProps, FieldArray, ArrayHelpers, ErrorMessage } from "formik";
@@ -7,7 +8,6 @@ import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import { BooleanFormField } from "@/components/Field";
 import { useUser } from "./user/UserProvider";
-import SvgUsers from "@/icons/users";
 import { cn } from "@/lib/utils";
 
 export type IsPublicGroupSelectorFormType = {

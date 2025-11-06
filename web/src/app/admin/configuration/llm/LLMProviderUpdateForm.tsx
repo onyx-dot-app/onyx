@@ -1,3 +1,4 @@
+import { SvgTrash } from "@onyx/opal";
 import ReactMarkdown from "react-markdown";
 import { LoadingAnimation } from "@/components/Loading";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
@@ -25,7 +26,6 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
-import SvgTrash from "@/icons/trash";
 
 function AutoFetchModelsOnEdit({
   llmProviderDescriptor,

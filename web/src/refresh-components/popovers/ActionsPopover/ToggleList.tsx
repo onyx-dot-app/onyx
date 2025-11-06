@@ -1,15 +1,12 @@
 "use client";
 
+import { SvgChevronLeft, SvgPlug, SvgProps, SvgUnplug } from "@onyx/opal";
 import React, { useMemo, useState } from "react";
 import { Toggle } from "@/components/ui/toggle";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgChevronLeft from "@/icons/chevron-left";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import SvgPlug from "@/icons/plug";
-import SvgUnplug from "@/icons/unplug";
 import { PopoverMenu } from "@/components/ui/popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { SvgProps } from "@/icons";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 export interface ToggleListItem {

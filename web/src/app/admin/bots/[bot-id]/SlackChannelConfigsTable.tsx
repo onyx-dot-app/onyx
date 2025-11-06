@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgSettings, SvgTrash } from "@onyx/opal";
 import { PageSelector } from "@/components/PageSelector";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { EditIcon, TrashIcon } from "@/components/icons/icons";
@@ -17,10 +18,8 @@ import { useState } from "react";
 import { deleteSlackChannelConfig, isPersonaASlackBotPersona } from "./lib";
 import { Card } from "@/components/ui/card";
 import Button from "@/refresh-components/buttons/Button";
-import SvgSettings from "@/icons/settings";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgTrash from "@/icons/trash";
 
 const numToDisplay = 50;
 

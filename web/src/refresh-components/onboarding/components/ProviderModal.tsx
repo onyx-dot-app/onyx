@@ -1,6 +1,6 @@
+import { SvgLoader, SvgProps, SvgX } from "@onyx/opal";
 import React, { useRef } from "react";
 import Text from "@/refresh-components/texts/Text";
-import SvgX from "@/icons/x";
 import {
   ModalIds,
   useChatModal,
@@ -8,9 +8,7 @@ import {
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
-import { SvgProps } from "@/icons";
 import CoreModal from "@/refresh-components/modals/CoreModal";
-import SvgLoader from "@/icons/loader";
 
 interface ProviderModalProps {
   // Modal sizes

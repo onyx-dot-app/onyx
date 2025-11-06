@@ -1,10 +1,9 @@
 "use client";
 
+import { SvgChevronDownSmall, SvgProps } from "@onyx/opal";
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { SvgProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
-import SvgChevronDownSmall from "@/icons/chevron-down-small";
 
 const MARGIN = 5;
 

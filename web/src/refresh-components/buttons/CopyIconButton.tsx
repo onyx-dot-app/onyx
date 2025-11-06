@@ -1,10 +1,8 @@
 "use client";
 
+import { SvgAlertTriangle, SvgCheck, SvgCopy } from "@onyx/opal";
 import { useEffect, useRef, useState } from "react";
 import IconButton, { IconButtonProps } from "./IconButton";
-import SvgCopy from "@/icons/copy";
-import SvgCheck from "@/icons/check";
-import SvgAlertTriangle from "@/icons/alert-triangle";
 
 type CopyState = "idle" | "copied" | "error";
 

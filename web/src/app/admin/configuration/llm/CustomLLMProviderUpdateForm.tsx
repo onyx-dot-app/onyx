@@ -1,3 +1,4 @@
+import { SvgTrash, SvgX } from "@onyx/opal";
 import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/components/ui/text";
 import { Separator } from "@/components/ui/separator";
@@ -23,10 +24,8 @@ import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { ModelConfigurationField } from "./ModelConfigurationField";
-import SvgTrash from "@/icons/trash";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
 
 function customConfigProcessing(customConfigsList: [string, string][]) {
   const customConfig: { [key: string]: string } = {};

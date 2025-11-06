@@ -1,3 +1,4 @@
+import { SvgExternalLink, SvgTrash, SvgXOctagon } from "@onyx/opal";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getDisplayNameForModel, useAuthType } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
@@ -25,15 +26,12 @@ import { deleteAllChatSessions } from "@/app/chat/services/lib";
 import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
-import SvgTrash from "@/icons/trash";
-import SvgExternalLink from "@/icons/external-link";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { useUserPersonalization } from "@/lib/hooks/useUserPersonalization";
 import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import Text from "@/refresh-components/texts/Text";
-import SvgXOctagon from "@/icons/x-octagon";
 import { PATManagement } from "@/components/user/PATManagement";
 
 type SettingsSection =

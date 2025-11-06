@@ -1,3 +1,4 @@
+import { SvgArrowUp, SvgHourglass, SvgPlusCircle, SvgStop } from "@onyx/opal";
 import React, {
   useCallback,
   useContext,
@@ -27,13 +28,9 @@ import {
   UserFileStatus,
 } from "@/app/chat/projects/projectsService";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgHourglass from "@/icons/hourglass";
-import SvgArrowUp from "@/icons/arrow-up";
-import SvgStop from "@/icons/stop";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
-import SvgPlusCircle from "@/icons/plus-circle";
 import {
   getIconForAction,
   hasSearchToolsAvailable,

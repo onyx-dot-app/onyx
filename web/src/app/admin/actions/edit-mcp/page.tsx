@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgCheck, SvgExternalLink, SvgLink } from "@onyx/opal";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Formik, Form } from "formik";
@@ -39,9 +40,6 @@ import {
 } from "@/components/admin/actions/interfaces";
 import { ToolList } from "@/components/admin/actions/ToolList";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import SvgCheck from "@/icons/check";
-import SvgExternalLink from "@/icons/external-link";
-import SvgLink from "@/icons/link";
 
 const validationSchema = Yup.object().shape({
   name: Yup.string().required("Name is required"),

@@ -1,8 +1,8 @@
 "use client";
 
+import { SvgFolderPlus } from "@onyx/opal";
 import { useRef } from "react";
 import Button from "@/refresh-components/buttons/Button";
-import SvgFolderPlus from "@/icons/folder-plus";
 import Modal from "@/refresh-components/modals/Modal";
 import {
   ModalIds,

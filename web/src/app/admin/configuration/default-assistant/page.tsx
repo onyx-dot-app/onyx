@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgOnyxLogo } from "@onyx/opal";
 import { useState, useEffect } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useRouter } from "next/navigation";
@@ -8,7 +9,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/refresh-components/texts/Text";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import OnyxLogo from "@/icons/onyx-logo";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { Switch } from "@/components/ui/switch";
@@ -305,7 +305,11 @@ export default function Page() {
       <AdminPageTitle
         title="Default Assistant"
         icon={
-          <OnyxLogo width={32} height={32} className="my-auto stroke-text-04" />
+          <SvgOnyxLogo
+            width={32}
+            height={32}
+            className="my-auto stroke-text-04"
+          />
         }
       />
       <DefaultAssistantConfig />

@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgAddLines } from "@onyx/opal";
 import { useEffect, useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import Modal from "@/refresh-components/modals/Modal";
@@ -9,7 +10,6 @@ import {
 } from "@/refresh-components/contexts/ChatModalContext";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { useKeyPress } from "@/hooks/useKeyPress";
-import SvgAddLines from "@/icons/add-lines";
 import { Textarea } from "@/components/ui/textarea";
 
 export default function AddInstructionModal() {

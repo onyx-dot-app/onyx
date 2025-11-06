@@ -1,10 +1,10 @@
 "use client";
 
+import { SvgCheck } from "@onyx/opal";
 import * as React from "react";
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
 
 import { cn } from "@/lib/utils";
-import SvgCheck from "@/icons/check";
 
 const Checkbox = React.forwardRef<
   React.ElementRef<typeof CheckboxPrimitive.Root>,

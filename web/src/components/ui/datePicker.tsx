@@ -1,3 +1,4 @@
+import { SvgCalendar } from "@onyx/opal";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "./text";
 import { Calendar } from "./calendar";
@@ -10,7 +11,6 @@ import {
   SelectValue,
 } from "./select";
 import { useState } from "react";
-import SvgCalendar from "@/icons/calendar";
 
 export interface DatePickerProps {
   selectedDate: Date | null;

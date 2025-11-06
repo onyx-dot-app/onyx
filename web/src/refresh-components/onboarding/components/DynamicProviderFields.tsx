@@ -1,3 +1,4 @@
+import { SvgRefreshCw } from "@onyx/opal";
 import React from "react";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { FormikField } from "@/refresh-components/form/FormikField";
@@ -7,7 +8,6 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { MODAL_CONTENT_MAP } from "../constants";
 import { APIFormFieldState } from "@/refresh-components/form/types";
-import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
 
 interface DynamicProviderFieldsProps {

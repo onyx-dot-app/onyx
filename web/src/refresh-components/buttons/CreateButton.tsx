@@ -1,7 +1,7 @@
 "use client";
 
+import { SvgPlusCircle } from "@onyx/opal";
 import Button, { ButtonProps } from "@/refresh-components/buttons/Button";
-import SvgPlusCircle from "@/icons/plus-circle";
 
 export default function CreateButton({
   children,

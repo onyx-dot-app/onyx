@@ -1,7 +1,6 @@
+import { SvgProps, SvgX } from "@onyx/opal";
 import React from "react";
-import { SvgProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
-import SvgX from "@/icons/x";
 import CoreModal from "@/refresh-components/modals/CoreModal";
 import { useEscape } from "@/hooks/useKeyPress";
 import IconButton from "@/refresh-components/buttons/IconButton";

@@ -1,15 +1,12 @@
 "use client";
 
+import { SvgFileText, SvgImage, SvgProps, SvgX } from "@onyx/opal";
 import React, { useMemo, useRef, useState, useEffect } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";
-import SvgX from "@/icons/x";
-import { SvgProps } from "@/icons";
-import SvgFileText from "@/icons/file-text";
-import SvgImage from "@/icons/image";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/app/chat/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";

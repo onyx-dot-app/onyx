@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgX } from "@onyx/opal";
 import { ArrayHelpers, FieldArray, FormikProps, useField } from "formik";
 import { ModelConfiguration } from "./interfaces";
 import {
@@ -11,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import { useEffect, useState } from "react";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
 
 function ModelConfigurationRow({
   name,

@@ -1,7 +1,6 @@
+import { SvgChevronLeft, SvgChevronRight } from "@onyx/opal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
-import SvgChevronLeft from "@/icons/chevron-left";
-import SvgChevronRight from "@/icons/chevron-right";
 
 const DISABLED_MESSAGE = "Wait for agent message to complete";
 

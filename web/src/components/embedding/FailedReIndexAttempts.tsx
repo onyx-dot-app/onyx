@@ -1,3 +1,4 @@
+import { SvgTrash } from "@onyx/opal";
 import { buildCCPairInfoUrl } from "@/app/admin/connector/[ccPairId]/lib";
 import { PageSelector } from "@/components/PageSelector";
 import { IndexAttemptStatus } from "@/components/Status";
@@ -18,7 +19,6 @@ import { useState } from "react";
 import { FiLink, FiMaximize2, FiTrash } from "react-icons/fi";
 import { mutate } from "swr";
 import { PopupSpec } from "../admin/connectors/Popup";
-import SvgTrash from "@/icons/trash";
 
 export function FailedReIndexAttempts({
   failedIndexingStatuses,

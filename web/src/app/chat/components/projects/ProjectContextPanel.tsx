@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgAddLines, SvgFiles, SvgFolderOpen } from "@onyx/opal";
 import React, { useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { Separator } from "@/components/ui/separator";
@@ -18,9 +19,6 @@ import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
 import { useEscape } from "@/hooks/useKeyPress";
 import CoreModal from "@/refresh-components/modals/CoreModal";
 import Text from "@/refresh-components/texts/Text";
-import SvgFolderOpen from "@/icons/folder-open";
-import SvgAddLines from "@/icons/add-lines";
-import SvgFiles from "@/icons/files";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FileCard } from "../input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";

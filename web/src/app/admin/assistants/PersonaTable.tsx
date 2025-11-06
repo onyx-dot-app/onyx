@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgAlertCircle, SvgTrash } from "@onyx/opal";
 import Text from "@/refresh-components/texts/Text";
 import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
@@ -17,9 +18,7 @@ import {
 import { FiEdit2 } from "react-icons/fi";
 import { useUser } from "@/components/user/UserProvider";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgTrash from "@/icons/trash";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
-import SvgAlertCircle from "@/icons/alert-circle";
 import Button from "@/refresh-components/buttons/Button";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {

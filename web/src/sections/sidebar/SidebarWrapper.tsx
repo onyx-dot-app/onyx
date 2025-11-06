@@ -1,7 +1,7 @@
+import { SvgSidebar } from "@onyx/opal";
 import React, { Dispatch, SetStateAction, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgSidebar from "@/icons/sidebar";
 import Logo from "@/refresh-components/Logo";
 
 interface LogoSectionProps {

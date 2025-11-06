@@ -1,8 +1,8 @@
 "use client";
 
+import { SvgProps } from "@onyx/opal";
 import React from "react";
 import Link from "next/link";
-import { SvgProps } from "@/icons";
 import { cn } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
 

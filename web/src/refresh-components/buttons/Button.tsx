@@ -1,10 +1,10 @@
 "use client";
 
+import { SvgProps } from "@onyx/opal";
 import React, { useMemo } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { SvgProps } from "@/icons";
 
 const variantClasses = (transient?: boolean) =>
   ({

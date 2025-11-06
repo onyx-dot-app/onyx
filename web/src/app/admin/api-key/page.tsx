@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgEdit, SvgRefreshCw } from "@onyx/opal";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { KeyIcon } from "@/components/icons/icons";
@@ -29,8 +30,6 @@ import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
 import { APIKey } from "./types";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
-import SvgRefreshCw from "@/icons/refresh-cw";
-import SvgEdit from "@/icons/edit";
 
 const API_KEY_TEXT = `API Keys allow you to access Onyx APIs programmatically. Click the button below to generate a new API Key.`;
 

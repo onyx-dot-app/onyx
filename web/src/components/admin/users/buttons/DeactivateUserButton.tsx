@@ -1,9 +1,9 @@
+import { SvgXCircle } from "@onyx/opal";
 import { type User } from "@/lib/types";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import Button from "@/refresh-components/buttons/Button";
 import useSWRMutation from "swr/mutation";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
-import SvgXCircle from "@/icons/x-circle";
 
 const DeactivateUserButton = ({
   user,

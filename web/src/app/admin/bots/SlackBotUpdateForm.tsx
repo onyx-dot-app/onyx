@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgChevronDownSmall, SvgTrash } from "@onyx/opal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SlackBot, ValidSources } from "@/lib/types";
 import { useRouter } from "next/navigation";
@@ -12,8 +13,6 @@ import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisp
 import { deleteSlackBot } from "./new/lib";
 import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
 import Button from "@/refresh-components/buttons/Button";
-import SvgTrash from "@/icons/trash";
-import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import { cn } from "@/lib/utils";
 
 export const ExistingSlackBotForm = ({

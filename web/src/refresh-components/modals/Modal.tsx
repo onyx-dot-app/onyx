@@ -1,13 +1,12 @@
+import { SvgProps, SvgX } from "@onyx/opal";
 import React, { useRef } from "react";
 import Text from "@/refresh-components/texts/Text";
-import SvgX from "@/icons/x";
 import {
   ModalIds,
   useChatModal,
 } from "@/refresh-components/contexts/ChatModalContext";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn } from "@/lib/utils";
-import { SvgProps } from "@/icons";
 import CoreModal from "@/refresh-components/modals/CoreModal";
 
 interface ModalProps {

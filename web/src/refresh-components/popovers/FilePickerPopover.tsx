@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  SvgExternalLink,
+  SvgFileText,
+  SvgFiles,
+  SvgLoader,
+  SvgMoreHorizontal,
+  SvgPaperclip,
+} from "@onyx/opal";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Popover,
@@ -15,17 +23,11 @@ import {
   UserFileStatus,
 } from "@/app/chat/projects/projectsService";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import SvgPaperclip from "@/icons/paperclip";
-import SvgFiles from "@/icons/files";
-import MoreHorizontal from "@/icons/more-horizontal";
-import SvgFileText from "@/icons/file-text";
-import SvgExternalLink from "@/icons/external-link";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
-import SvgLoader from "@/icons/loader";
 
 const getFileExtension = (fileName: string): string => {
   const idx = fileName.lastIndexOf(".");
@@ -156,7 +158,7 @@ function FilePickerPopoverContents({
         // Rest of the files
         shouldShowMoreFilesButton && (
           <LineItem
-            icon={MoreHorizontal}
+            icon={SvgMoreHorizontal}
             onClick={() => setShowRecentFiles(true)}
           >
             All Recent Files

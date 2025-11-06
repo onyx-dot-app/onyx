@@ -1,6 +1,4 @@
-import SvgCheck from "@/icons/check";
-import SvgCode from "@/icons/code";
-import SvgCopy from "@/icons/copy";
+import { SvgCheck, SvgCode, SvgCopy } from "@onyx/opal";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import React, { useState, ReactNode, useCallback, useMemo, memo } from "react";

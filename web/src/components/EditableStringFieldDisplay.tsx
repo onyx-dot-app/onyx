@@ -1,11 +1,10 @@
+import { SvgCheck, SvgX } from "@onyx/opal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { EditIcon } from "@/components/icons/icons";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgCheck from "@/icons/check";
-import SvgX from "@/icons/x";
 
 interface EditableStringFieldDisplayProps {
   value: string;

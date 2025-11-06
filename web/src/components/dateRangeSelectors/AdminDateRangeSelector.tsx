@@ -1,3 +1,4 @@
+import { SvgCalendar } from "@onyx/opal";
 import React, { memo, useState } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -9,7 +10,6 @@ import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getXDaysAgo } from "./dateUtils";
-import SvgCalendar from "@/icons/calendar";
 
 export const THIRTY_DAYS = "30d";
 

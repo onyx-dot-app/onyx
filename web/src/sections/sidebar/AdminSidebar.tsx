@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgOnyxLogo } from "@onyx/opal";
 import React from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
@@ -35,7 +36,6 @@ import {
   DocumentIcon2,
   BrainIcon,
 } from "@/components/icons/icons";
-import OnyxLogo from "@/icons/onyx-logo";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
@@ -157,7 +157,7 @@ const collections = (
           items: [
             {
               name: "Default Assistant",
-              icon: OnyxLogo,
+              icon: SvgOnyxLogo,
               link: "/admin/configuration/default-assistant",
             },
             {
