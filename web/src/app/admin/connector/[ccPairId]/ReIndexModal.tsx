@@ -5,7 +5,7 @@ import { useState } from "react";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { triggerIndexing } from "./lib";
 import { Modal } from "@/components/Modal";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/texts/Text";
 import { Separator } from "@/components/ui/separator";
 
 // Hook to handle re-indexing functionality
