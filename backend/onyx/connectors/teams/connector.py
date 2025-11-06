@@ -105,12 +105,13 @@ class TeamsConnector(
         if self.graph_client is None:
             raise ConnectorMissingCredentialError("Teams credentials not loaded.")
 
+        # Determine timeout based on special characters
+        has_special_chars = _has_odata_incompatible_chars(self.requested_team_list)
+        timeout = 30 if has_special_chars else 10
+
         try:
             # Minimal call to confirm we can retrieve Teams
             # Use longer timeout if team names have special characters (requires client-side filtering)
-            has_special_chars = _has_odata_incompatible_chars(self.requested_team_list)
-            timeout = 30 if has_special_chars else 10
-
             logger.info(
                 f"Requested team count: {len(self.requested_team_list) if self.requested_team_list else 0}, "
                 f"Has special chars: {has_special_chars}, "
@@ -437,7 +438,9 @@ def _collect_all_teams(
 
     # Check if team names have special characters that break OData filters
     has_special_chars = _has_odata_incompatible_chars(requested)
-    if has_special_chars:
+    if (
+        has_special_chars and requested
+    ):  # requested must exist if has_special_chars is True
         logger.info(
             f"Team name(s) contain special characters (&, (, or )) which are not supported "
             f"in OData string literals. Fetching all teams and using client-side filtering. "
