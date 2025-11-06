@@ -19,13 +19,13 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
     <div
       className={cn(
         "flex flex-row items-center px-4 py-1 flex-shrink-0 gap-4 min-h-[2.5rem]",
-        folded ? "justify-center" : "justify-between"
+        folded ? "justify-start" : "justify-between"
       )}
     >
       {folded === undefined ? (
         logo()
       ) : folded ? (
-        <div className="h-[2rem] flex flex-col justify-center items-center">
+        <div className="h-[2rem] flex flex-col justify-center items-start">
           {logo("visible group-hover/SidebarWrapper:hidden")}
           <IconButton
             icon={SvgSidebar}
