@@ -467,10 +467,18 @@ export const connectorConfigs: Record<
         optional: true,
         default: "",
         isTextArea: true,
+        visibleCondition: (values, currentCredential) =>
+          !currentCredential?.credential_json?.google_tokens,
+      },
+      {
+        type: "checkbox",
+        label: "Hide domain link-only files?",
+        description:
+          "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access.",
+        name: "exclude_domain_link_only",
+        default: false,
       },
     ],
-    advancedValuesVisibleCondition: (values, currentCredential) =>
-      !currentCredential?.credential_json?.google_tokens,
   },
   gmail: {
     description: "Configure Gmail connector",
