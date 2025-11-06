@@ -12,7 +12,7 @@ from typing_extensions import override
 
 from onyx.chat.chat_utils import combine_message_chain
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.configs.app_configs import AZURE_DALLE_API_KEY
+from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.db.llm import fetch_existing_llm_providers
@@ -127,7 +127,7 @@ class ImageGenerationTool(Tool[None]):
             providers = fetch_existing_llm_providers(db_session)
             return any(
                 (provider.provider == "openai" and provider.api_key is not None)
-                or (provider.provider == "azure" and AZURE_DALLE_API_KEY is not None)
+                or (provider.provider == "azure" and AZURE_IMAGE_API_KEY is not None)
                 for provider in providers
             )
         except Exception:
@@ -225,12 +225,12 @@ class ImageGenerationTool(Tool[None]):
         from litellm import image_generation  # type: ignore
 
         if shape == ImageShape.LANDSCAPE:
-            if self.model == "gpt-image-1":
+            if "gpt-image-1" in self.model:
                 size = "1536x1024"
             else:
                 size = "1792x1024"
         elif shape == ImageShape.PORTRAIT:
-            if self.model == "gpt-image-1":
+            if "gpt-image-1" in self.model:
                 size = "1024x1536"
             else:
                 size = "1024x1792"
@@ -245,7 +245,7 @@ class ImageGenerationTool(Tool[None]):
                 api_base=self.api_base or None,
                 api_version=self.api_version or None,
                 # response_format parameter is not supported for gpt-image-1
-                response_format=None if self.model == "gpt-image-1" else "b64_json",
+                response_format=None if "gpt-image-1" in self.model else "b64_json",
                 size=size,
                 n=1,
             )
