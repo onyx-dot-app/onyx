@@ -992,6 +992,8 @@ export function AssistantEditor({
                             <div className="flex items-center">
                               <SimpleTooltip
                                 tooltip="To use Knowledge, you need to have at least one Connector configured. You can still upload user files to the agent below."
+                                side="top"
+                                align="center"
                                 disabled={connectorsExist}
                               >
                                 <div
