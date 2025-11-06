@@ -1,6 +1,5 @@
 import copy
 import os
-import time
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
@@ -109,7 +108,6 @@ class TeamsConnector(
         try:
             # Minimal call to confirm we can retrieve Teams
             # Use longer timeout if team names have special characters (requires client-side filtering)
-            # Note: Client-side filtering fetches all teams, which takes longer than server-side OData filtering
             has_special_chars = _has_odata_incompatible_chars(self.requested_team_list)
             timeout = 30 if has_special_chars else 10
 
@@ -121,7 +119,6 @@ class TeamsConnector(
             )
 
         except TimeoutError as e:
-            # Provide specific guidance for timeout errors
             if has_special_chars:
                 raise ConnectorValidationError(
                     f"Timeout while fetching Teams (waited {timeout}s). "
@@ -320,11 +317,7 @@ def _has_odata_incompatible_chars(team_names: list[str] | None) -> bool:
     """
     if not team_names:
         return False
-    return any(
-        char in name
-        for name in team_names
-        for char in ['&', '(', ')']
-    )
+    return any(char in name for name in team_names for char in ["&", "(", ")"])
 
 
 def _construct_semantic_identifier(channel: Channel, top_message: Message) -> str:
@@ -429,8 +422,6 @@ def _collect_all_teams(
     graph_client: GraphClient,
     requested: list[str] | None = None,
 ) -> list[Team]:
-    start_time = time.time()
-    
     teams: list[Team] = []
     next_url: str | None = None
 
@@ -445,7 +436,9 @@ def _collect_all_teams(
 
     # Build OData filter for requested teams (only if we didn't already return from raw HTTP above)
     filter = None
-    use_filter = bool(requested) and not has_special_chars  # Skip OData for special chars (fallback to client-side)
+    use_filter = (
+        bool(requested) and not has_special_chars
+    )  # Skip OData for special chars (fallback to client-side)
     if use_filter and requested:
         filter_parts = []
         for name in requested:
@@ -505,13 +498,6 @@ def _collect_all_teams(
 
         next_url = team_collection._next_request_url
 
-    elapsed = time.time() - start_time
-    logger.info(
-        f"Collected {len(teams)} teams in {elapsed:.2f}s "
-        f"(requested={len(requested) if requested else 'all'}, "
-        f"special_chars={has_special_chars}, "
-        f"server_filter={use_filter})"
-    )
     return teams
 
 

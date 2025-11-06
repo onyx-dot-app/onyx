@@ -74,4 +74,3 @@ def test_single_quote_escaping() -> None:
     assert (
         filter_arg == expected_filter
     ), f"Expected: {expected_filter}, Got: {filter_arg}"
-
