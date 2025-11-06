@@ -33,6 +33,7 @@ function SortableItem({ id, children }: SortableItemProps) {
       {...attributes}
       {...listeners}
       className="flex items-center group"
+      suppressHydrationWarning
     >
       {children}
     </div>
