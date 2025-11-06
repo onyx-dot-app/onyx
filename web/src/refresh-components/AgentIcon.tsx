@@ -93,7 +93,7 @@ export default function AgentIcon({ agent, size = 24 }: AgentIconProps) {
     agent.id === 0 && settings?.enterpriseSettings?.use_custom_logo === true;
 
   return (
-    <SimpleTooltip tooltip={agent.description}>
+    <SimpleTooltip tooltip={agent.description} side="top">
       <div className="text-text-04">
         {agent.id === -3 ? (
           <ArtAsistantIcon size={size} />
