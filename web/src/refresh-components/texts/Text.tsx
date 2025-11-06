@@ -38,6 +38,10 @@ const colors = {
   text03: "text-text-03",
   text02: "text-text-02",
   text01: "text-text-01",
+  textLight03: "text-text-light-03",
+  textLight05: "text-text-light-05",
+  textDark03: "text-text-dark-03",
+  textDark05: "text-text-dark-05",
 
   inverted: {
     text05: "text-text-inverted-05",
@@ -45,6 +49,10 @@ const colors = {
     text03: "text-text-inverted-03",
     text02: "text-text-inverted-02",
     text01: "text-text-inverted-01",
+    textLight03: "text-text-light-03",
+    textLight05: "text-text-light-05",
+    textDark03: "text-text-dark-03",
+    textDark05: "text-text-dark-05",
   },
 };
 
@@ -78,6 +86,10 @@ export interface TextProps extends HTMLAttributes<HTMLParagraphElement> {
   text02?: boolean;
   text01?: boolean;
   inverted?: boolean;
+  textLight03?: boolean;
+  textLight05?: boolean;
+  textDark03?: boolean;
+  textDark05?: boolean;
 }
 
 export default function Text({
@@ -106,6 +118,10 @@ export default function Text({
   text02,
   text01,
   inverted,
+  textLight03,
+  textLight05,
+  textDark03,
+  textDark05,
   children,
   className,
   ...rest
@@ -158,7 +174,15 @@ export default function Text({
           ? "text04"
           : text05
             ? "text05"
-            : "text05";
+            : textLight03
+              ? "textLight03"
+              : textLight05
+                ? "textLight05"
+                : textDark03
+                  ? "textDark03"
+                  : textDark05
+                    ? "textDark05"
+                    : "text05";
 
   return (
     <p
