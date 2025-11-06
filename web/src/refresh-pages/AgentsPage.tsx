@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  SvgActions,
+  SvgCheck,
+  SvgOnyxOctagon,
+  SvgPlus,
+  SvgUser,
+} from "@onyx/opal";
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import AgentCard from "@/refresh-components/AgentCard";
 import { useUser } from "@/components/user/UserProvider";
@@ -9,14 +16,10 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PageHeader from "@/refresh-components/page-components/PageHeader";
-import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import PageWrapper from "@/refresh-components/page-components/PageWrapper";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import SvgUser from "@/icons/user";
-import SvgCheck from "@/icons/check";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
-import SvgActions from "@/icons/actions";
 import {
   Popover,
   PopoverContent,
@@ -25,7 +28,6 @@ import {
 } from "@/components/ui/popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlus from "@/icons/plus";
 import {
   SEARCH_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,

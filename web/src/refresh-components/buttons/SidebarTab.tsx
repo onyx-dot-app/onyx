@@ -1,7 +1,7 @@
 "use client";
 
+import { SvgProps } from "@onyx/opal";
 import React from "react";
-import { SvgProps } from "@/icons";
 import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";

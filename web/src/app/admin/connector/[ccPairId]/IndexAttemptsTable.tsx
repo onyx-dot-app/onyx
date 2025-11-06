@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgClock } from "@onyx/opal";
 import { useState } from "react";
 import {
   Table,
@@ -20,7 +21,6 @@ import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { InfoIcon } from "@/components/icons/icons";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import SvgClock from "@/icons/clock";
 
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;

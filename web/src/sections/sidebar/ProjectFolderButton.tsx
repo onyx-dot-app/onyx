@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  SvgEdit,
+  SvgFolder,
+  SvgFolderOpen,
+  SvgMoreHorizontal,
+  SvgProps,
+  SvgTrash,
+} from "@onyx/opal";
 import React, { useState, memo } from "react";
 import {
   Project,
@@ -7,15 +15,12 @@ import {
 } from "@/app/chat/projects/ProjectsContext";
 import { useDroppable } from "@dnd-kit/core";
 import MenuButton from "@/refresh-components/buttons/MenuButton";
-import SvgFolder from "@/icons/folder";
-import SvgEdit from "@/icons/edit";
 import {
   Popover,
   PopoverContent,
   PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import SvgTrash from "@/icons/trash";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
 import Button from "@/refresh-components/buttons/Button";
 import ChatButton from "@/sections/sidebar/ChatButton";
@@ -24,12 +29,9 @@ import { cn, noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "./constants";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import ButtonRenaming from "./ButtonRenaming";
-import { SvgProps } from "@/icons";
 import { useActiveSidebarTab } from "@/lib/hooks";
-import SvgFolderOpen from "@/icons/folder-open";
 
 interface ProjectFolderProps {
   project: Project;

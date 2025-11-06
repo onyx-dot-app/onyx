@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgEdit } from "@onyx/opal";
 import React, { useEffect, useRef, useState } from "react";
 import { ChatFileType, FileDescriptor } from "@/app/chat/interfaces";
 import Attachment from "@/refresh-components/Attachment";
@@ -11,7 +12,6 @@ import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import SvgEdit from "@/icons/edit";
 import Button from "@/refresh-components/buttons/Button";
 import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
 

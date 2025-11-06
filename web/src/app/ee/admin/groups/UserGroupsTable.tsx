@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgEdit } from "@onyx/opal";
 import {
   Table,
   TableHead,
@@ -20,7 +21,6 @@ import Link from "next/link";
 import { DeleteButton } from "@/components/DeleteButton";
 import { TableHeader } from "@/components/ui/table";
 import Button from "@/refresh-components/buttons/Button";
-import SvgEdit from "@/icons/edit";
 
 const MAX_USERS_TO_DISPLAY = 6;
 

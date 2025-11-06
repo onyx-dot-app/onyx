@@ -1,5 +1,5 @@
+import { SvgProps } from "@onyx/opal";
 import { ReactNode } from "react";
-import { SvgProps } from "@/icons";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 

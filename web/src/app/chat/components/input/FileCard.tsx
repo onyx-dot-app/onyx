@@ -1,11 +1,11 @@
 "use client";
 
+import { SvgFileText } from "@onyx/opal";
 import React, { useMemo } from "react";
 import { Loader2, X } from "lucide-react";
 import type { ProjectFile } from "../../projects/projectsService";
 import { UserFileStatus } from "../../projects/projectsService";
 import Text from "@/refresh-components/texts/Text";
-import SvgFileText from "@/icons/file-text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { cn, isImageFile } from "@/lib/utils";
 

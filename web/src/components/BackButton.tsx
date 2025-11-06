@@ -1,6 +1,6 @@
 "use client";
 
-import SvgArrowLeft from "@/icons/arrow-left";
+import { SvgArrowLeft } from "@onyx/opal";
 import Button from "@/refresh-components/buttons/Button";
 import { useRouter } from "next/navigation";
 

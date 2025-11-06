@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgDownloadCloud } from "@onyx/opal";
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +25,6 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
-import SvgDownloadCloud from "@/icons/download-cloud";
 
 interface CountDisplayProps {
   label: string;

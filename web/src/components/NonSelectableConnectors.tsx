@@ -1,9 +1,9 @@
+import { SvgLock } from "@onyx/opal";
 import React from "react";
 import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { Label } from "@/components/ui/label";
 import Text from "@/refresh-components/texts/Text";
-import SvgLock from "@/icons/lock";
 
 interface NonSelectableConnectorsProps {
   connectors: ConnectorStatus<any, any>[];

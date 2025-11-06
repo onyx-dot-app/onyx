@@ -1,3 +1,4 @@
+import { SvgMoreHorizontal, SvgX } from "@onyx/opal";
 import React, { useState, useEffect, useCallback } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
 import Button from "@/refresh-components/buttons/Button";
@@ -21,8 +22,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SourceChip } from "../components/input/ChatInputBar";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
 
 export default function InputPrompts() {
   const [inputPrompts, setInputPrompts] = useState<InputPrompt[]>([]);

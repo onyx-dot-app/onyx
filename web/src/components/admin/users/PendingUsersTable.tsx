@@ -1,3 +1,4 @@
+import { SvgCheck } from "@onyx/opal";
 import { useState } from "react";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
@@ -16,7 +17,6 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { FetchError } from "@/lib/fetcher";
 import { CheckIcon } from "lucide-react";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import SvgCheck from "@/icons/check";
 
 const USERS_PER_PAGE = 10;
 

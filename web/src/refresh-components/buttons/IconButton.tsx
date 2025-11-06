@@ -1,7 +1,7 @@
 "use client";
 
+import { SvgProps } from "@onyx/opal";
 import React, { useMemo } from "react";
-import { SvgProps } from "@/icons";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,

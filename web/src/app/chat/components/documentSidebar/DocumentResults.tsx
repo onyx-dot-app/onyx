@@ -1,3 +1,4 @@
+import { SvgArrowWallRight, SvgSearchMenu } from "@onyx/opal";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { ChatDocumentDisplay } from "@/app/chat/components/documentSidebar/ChatDocumentDisplay";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
@@ -9,8 +10,6 @@ import {
 } from "@/app/chat/stores/useChatSessionStore";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgSearchMenu from "@/icons/search-menu";
-import SvgArrowWallRight from "@/icons/arrow-wall-right";
 import { Separator } from "@radix-ui/react-separator";
 
 // Build an OnyxDocument from basic file info

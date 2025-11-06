@@ -1,7 +1,7 @@
 "use client";
 
+import { SvgImage, SvgLightbulbSimple, SvgProps } from "@onyx/opal";
 import React from "react";
-import { SvgProps } from "@/icons";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
   ART_ASSISTANT_ID,
@@ -9,9 +9,7 @@ import {
   GENERAL_ASSISTANT_ID,
   IMAGE_ASSISTANT_ID,
 } from "@/lib/constants";
-import SvgLightbulbSimple from "@/icons/lightbulb-simple";
 import { OnyxIcon } from "@/components/icons/icons";
-import SvgImage from "@/icons/image";
 import { generateIdenticon } from "@/refresh-components/AgentIcon";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { cn } from "@/lib/utils";

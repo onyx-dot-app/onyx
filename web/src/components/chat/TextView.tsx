@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgDownloadCloud, SvgX, SvgZoomIn, SvgZoomOut } from "@onyx/opal";
 import { useState, useEffect, useCallback } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import {
@@ -20,10 +21,6 @@ import { Download, XIcon, ZoomIn, ZoomOut } from "lucide-react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-import SvgDownloadCloud from "@/icons/download-cloud";
-import SvgZoomIn from "@/icons/zoom-in";
-import SvgZoomOut from "@/icons/zoom-out";
 
 export interface TextViewProps {
   presentingDocument: MinimalOnyxDocument;

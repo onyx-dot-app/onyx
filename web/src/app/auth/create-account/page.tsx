@@ -1,7 +1,7 @@
 "use client";
 
+import { SvgImport } from "@onyx/opal";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import SvgImport from "@/icons/import";
 import { REGISTRATION_URL } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
 import Link from "next/link";

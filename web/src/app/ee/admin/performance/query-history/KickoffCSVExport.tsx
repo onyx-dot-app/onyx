@@ -1,3 +1,4 @@
+import { SvgLoader, SvgPlayCircle } from "@onyx/opal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import Button from "@/refresh-components/buttons/Button";
 import { useRef, useState } from "react";
@@ -15,9 +16,7 @@ import {
   SpinnerStatus,
   StartQueryHistoryExportResponse,
 } from "./types";
-import SvgLoader from "@/icons/loader";
 import { cn } from "@/lib/utils";
-import SvgPlayCircle from "@/icons/play-circle";
 
 export default function KickoffCSVExport({
   dateRange,

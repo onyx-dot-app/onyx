@@ -1,3 +1,4 @@
+import { SvgPlusCircle } from "@onyx/opal";
 import React, { useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import { ValidSources, AccessType } from "@/lib/types";
@@ -23,7 +24,6 @@ import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "./CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
-import SvgPlusCircle from "@/icons/plus-circle";
 
 const CreateButton = ({
   onClick,

@@ -1,3 +1,4 @@
+import { SvgSettings } from "@onyx/opal";
 import React from "react";
 import {
   Table,
@@ -40,7 +41,6 @@ import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgSettings from "@/icons/settings";
 
 function isFederatedConnectorStatus(
   status: ConnectorIndexingStatusLite | FederatedConnectorStatus

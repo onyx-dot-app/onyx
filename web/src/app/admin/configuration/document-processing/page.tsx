@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgLock } from "@onyx/opal";
 import { useState } from "react";
 import CardSection from "@/components/admin/CardSection";
 import Button from "@/refresh-components/buttons/Button";
@@ -9,7 +10,6 @@ import useSWR from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import Text from "@/refresh-components/texts/Text";
-import SvgLock from "@/icons/lock";
 import { cn } from "@/lib/utils";
 
 function Main() {

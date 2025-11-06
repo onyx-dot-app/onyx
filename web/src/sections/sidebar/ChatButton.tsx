@@ -1,15 +1,20 @@
 "use client";
 
+import {
+  SvgChevronLeft,
+  SvgEdit,
+  SvgFolder,
+  SvgFolderIn,
+  SvgMoreHorizontal,
+  SvgShare,
+  SvgTrash,
+} from "@onyx/opal";
 import React, { useState, memo, useMemo, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { ChatSession } from "@/app/chat/interfaces";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
-import SvgTrash from "@/icons/trash";
-import SvgShare from "@/icons/share";
-import SvgEdit from "@/icons/edit";
 import Button from "@/refresh-components/buttons/Button";
 import { cn, noProp } from "@/lib/utils";
 import {
@@ -24,9 +29,6 @@ import {
   removeChatSessionFromProject,
 } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import SvgFolderIn from "@/icons/folder-in";
-import SvgFolder from "@/icons/folder";
-import SvgChevronLeft from "@/icons/chevron-left";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";

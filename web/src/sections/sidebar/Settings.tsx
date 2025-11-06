@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgBell, SvgLogOut, SvgUser, SvgX } from "@onyx/opal";
 import React, { useState } from "react";
 import { ANONYMOUS_USER_NAME, LOGOUT_DISABLED } from "@/lib/constants";
 import { Notification } from "@/app/admin/settings/interfaces";
@@ -16,11 +17,7 @@ import {
   PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import SvgLogOut from "@/icons/log-out";
-import SvgBell from "@/icons/bell";
-import SvgX from "@/icons/x";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import SvgUser from "@/icons/user";
 import { cn } from "@/lib/utils";
 import { useModalContext } from "@/components/context/ModalContext";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";

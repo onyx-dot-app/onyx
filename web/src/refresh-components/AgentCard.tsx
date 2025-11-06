@@ -1,28 +1,30 @@
 "use client";
 
+import {
+  SvgActions,
+  SvgBarChart,
+  SvgBubbleText,
+  SvgEdit,
+  SvgPin,
+  SvgPinned,
+  SvgProps,
+  SvgUser,
+} from "@onyx/opal";
 import React, { useMemo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import AgentIcon from "@/refresh-components/AgentIcon";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import SvgBubbleText from "@/icons/bubble-text";
 import { Card } from "@/components/ui/card";
 import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgPin from "@/icons/pin";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { SvgProps } from "@/icons";
-import SvgUser from "@/icons/user";
-import SvgActions from "@/icons/actions";
 import { useAgentsContext } from "./contexts/AgentsContext";
 import { cn, noProp } from "@/lib/utils";
-import SvgEdit from "@/icons/edit";
 import { useRouter } from "next/navigation";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
 import { useUser } from "@/components/user/UserProvider";
-import SvgBarChart from "@/icons/bar-chart";
-import SvgPinned from "@/icons/pinned";
 
 interface IconLabelProps {
   icon: React.FunctionComponent<SvgProps>;

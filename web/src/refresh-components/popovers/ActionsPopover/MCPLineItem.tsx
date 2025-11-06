@@ -1,22 +1,24 @@
 "use client";
 
+import {
+  SvgCheck,
+  SvgChevronRight,
+  SvgKey,
+  SvgLock,
+  SvgProps,
+  SvgServer,
+} from "@onyx/opal";
 import React from "react";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
-import SvgKey from "@/icons/key";
-import SvgLock from "@/icons/lock";
-import SvgCheck from "@/icons/check";
-import SvgServer from "@/icons/server";
-import SvgChevronRight from "@/icons/chevron-right";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { cn, noProp } from "@/lib/utils";
-import { SvgProps } from "@/icons";
 
 export interface MCPServer {
   id: number;

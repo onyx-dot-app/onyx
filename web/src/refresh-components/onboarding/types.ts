@@ -1,4 +1,4 @@
-import { SvgProps } from "@/icons";
+import { SvgProps } from "@onyx/opal";
 
 export enum OnboardingStep {
   Welcome = "welcome",

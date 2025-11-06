@@ -1,10 +1,10 @@
+import { SvgX } from "@onyx/opal";
 import { useRef, useState } from "react";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import { FiLoader, FiFileText } from "react-icons/fi";
 import { InputBarPreviewImage } from "./images/InputBarPreviewImage";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
 
 export interface InputBarPreviewImageProviderProps {
   file: FileDescriptor;

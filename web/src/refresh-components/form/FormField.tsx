@@ -1,3 +1,4 @@
+import { SvgCheckCircle, SvgLoader, SvgXOctagon } from "@onyx/opal";
 import { cn } from "@/lib/utils";
 import { FieldContext } from "./FieldContext";
 import {
@@ -13,10 +14,6 @@ import React, { useId, useMemo } from "react";
 import { useFieldContext } from "./FieldContext";
 import { Slot } from "@radix-ui/react-slot";
 import Text from "../texts/Text";
-import SvgCheckCircle from "@/icons/check-circle";
-
-import SvgXOctagon from "@/icons/x-octagon";
-import SvgLoader from "@/icons/loader";
 
 const iconMap = {
   error: <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />,

@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgLock } from "@onyx/opal";
 import { useState } from "react";
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import { fetchCustomerPortal } from "@/lib/billing/utils";
@@ -9,7 +10,6 @@ import { logout } from "@/lib/user";
 import { loadStripe } from "@stripe/stripe-js";
 import { NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
-import SvgLock from "@/icons/lock";
 
 const fetchResubscriptionSession = async () => {
   const response = await fetch("/api/tenants/create-subscription-session", {

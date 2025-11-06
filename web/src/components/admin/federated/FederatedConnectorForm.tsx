@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgLoader, SvgSettings } from "@onyx/opal";
 import { useState, useEffect } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import {
@@ -33,8 +34,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import SvgLoader from "@/icons/loader";
-import SvgSettings from "@/icons/settings";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 

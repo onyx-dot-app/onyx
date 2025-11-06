@@ -1,3 +1,4 @@
+import { SvgChevronDownSmall } from "@onyx/opal";
 import { useState, useMemo, useEffect, JSX } from "react";
 import {
   FiCheckCircle,
@@ -12,7 +13,6 @@ import { isToolPacket } from "../../services/packetUtils";
 import { useToolDisplayTiming } from "./hooks/useToolDisplayTiming";
 import { STANDARD_TEXT_COLOR } from "./constants";
 import Text from "@/refresh-components/texts/Text";
-import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import { cn } from "@/lib/utils";
 
 // Shared component for expanded tool rendering

@@ -68,6 +68,7 @@
  * ```
  */
 
+import { SvgMinusCircle, SvgPlusCircle, SvgXOctagon } from "@onyx/opal";
 import React, {
   useCallback,
   useContext,
@@ -77,11 +78,8 @@ import React, {
 } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
-import SvgMinusCircle from "@/icons/minus-circle";
-import SvgXOctagon from "@/icons/x-octagon";
 import IconButton from "../buttons/IconButton";
 import Button from "../buttons/Button";
-import SvgPlusCircle from "@/icons/plus-circle";
 import Text from "../texts/Text";
 import { FieldContext } from "../form/FieldContext";
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgArrowLeft, SvgArrowRight } from "@onyx/opal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { EmbeddingModelSelection } from "../EmbeddingModelSelectionForm";
@@ -43,8 +44,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import SvgArrowLeft from "@/icons/arrow-left";
-import SvgArrowRight from "@/icons/arrow-right";
 
 enum ReindexType {
   REINDEX = "reindex",

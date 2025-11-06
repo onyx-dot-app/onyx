@@ -1,8 +1,7 @@
+import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@onyx/opal";
 import React, { memo, useEffect } from "react";
-import SvgCpu from "@/icons/cpu";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
-import SvgExternalLink from "@/icons/external-link";
 import { Separator } from "@/components/ui/separator";
 import LLMProvider from "../components/LLMProvider";
 import { OnboardingActions, OnboardingState, OnboardingStep } from "../types";
@@ -12,7 +11,6 @@ import LLMConnectionModal from "@/refresh-components/onboarding/components/LLMCo
 import KeyValueInput from "@/refresh-components/inputs/InputKeyValue";
 import { cn } from "@/lib/utils";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-import SvgCheckCircle from "@/icons/check-circle";
 
 type LLMStepProps = {
   state: OnboardingState;

@@ -1,8 +1,8 @@
+import { SvgTrash } from "@onyx/opal";
 import React from "react";
 import NumberInput from "./ConnectorInput/NumberInput";
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-import SvgTrash from "@/icons/trash";
 
 export default function AdvancedFormPage() {
   return (

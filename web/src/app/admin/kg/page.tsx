@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgSettings } from "@onyx/opal";
 import CardSection from "@/components/admin/CardSection";
 import { AdminPageTitle } from "@/components/admin/Title";
 import {
@@ -29,7 +30,6 @@ import { redirect } from "next/navigation";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import KGEntityTypes from "@/app/admin/kg/KGEntityTypes";
 import Text from "@/refresh-components/texts/Text";
-import SvgSettings from "@/icons/settings";
 import { cn } from "@/lib/utils";
 
 function createDomainField(

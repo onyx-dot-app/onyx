@@ -1,4 +1,4 @@
-import SvgTrash from "@/icons/trash";
+import { SvgTrash } from "@onyx/opal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 
 export interface DeleteButtonProps {

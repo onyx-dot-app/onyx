@@ -1,7 +1,6 @@
-import SvgFileText from "@/icons/file-text";
+import { SvgFileText, SvgMaximize2 } from "@onyx/opal";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgMaximize2 from "@/icons/maximize-2";
 
 export interface AttachmentsProps {
   fileName: string;

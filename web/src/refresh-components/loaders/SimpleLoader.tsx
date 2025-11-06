@@ -1,5 +1,4 @@
-import { SvgProps } from "@/icons";
-import SvgLoader from "@/icons/loader";
+import { SvgLoader, SvgProps } from "@onyx/opal";
 import { cn } from "@/lib/utils";
 
 export default function SimpleLoader({ className }: SvgProps) {

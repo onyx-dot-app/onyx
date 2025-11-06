@@ -1,12 +1,11 @@
 "use client";
 
+import { SvgEye, SvgEyeClosed } from "@onyx/opal";
 import React, { useState } from "react";
 import InputTypeIn, {
   InputTypeInProps,
 } from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgEye from "@/icons/eye";
-import SvgEyeClosed from "@/icons/eye-closed";
 import { noProp } from "@/lib/utils";
 
 export interface PasswordInputTypeInProps

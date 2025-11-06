@@ -1,3 +1,4 @@
+import { SvgAlertCircle, SvgRefreshCw } from "@onyx/opal";
 import React from "react";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
@@ -12,9 +13,7 @@ import {
   BEDROCK_AUTH_FIELDS,
   HIDE_API_MESSAGE_FIELDS,
 } from "../constants";
-import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/texts/Text";
 
 type Props = {

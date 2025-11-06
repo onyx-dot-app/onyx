@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgThumbsDown, SvgThumbsUp } from "@onyx/opal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FeedbackType } from "@/app/chat/interfaces";
 import Modal from "@/refresh-components/modals/Modal";
@@ -8,8 +9,6 @@ import {
   ModalIds,
   useChatModal,
 } from "@/refresh-components/contexts/ChatModalContext";
-import SvgThumbsUp from "@/icons/thumbs-up";
-import SvgThumbsDown from "@/icons/thumbs-down";
 import Button from "@/refresh-components/buttons/Button";
 import FieldInput from "@/refresh-components/inputs/FieldInput";
 import LineItem from "@/refresh-components/buttons/LineItem";

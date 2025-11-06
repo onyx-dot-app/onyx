@@ -1,3 +1,4 @@
+import { SvgThumbsDown, SvgThumbsUp } from "@onyx/opal";
 import {
   Packet,
   PacketType,
@@ -39,8 +40,6 @@ import { RendererComponent } from "@/app/chat/message/messageComponents/renderMe
 import AgentIcon from "@/refresh-components/AgentIcon";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import SvgThumbsUp from "@/icons/thumbs-up";
-import SvgThumbsDown from "@/icons/thumbs-down";
 import {
   ModalIds,
   useChatModal,

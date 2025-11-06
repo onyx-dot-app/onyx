@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@onyx/opal";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import React, { useState, useEffect } from "react";
 import {
@@ -20,20 +21,16 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useUser } from "@/components/user/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
-import SvgChevronRight from "@/icons/chevron-right";
-import SvgKey from "@/icons/key";
 import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgSliders from "@/icons/sliders";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import SvgActions from "@/icons/actions";
 import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionLineItem";
 import MCPLineItem, {
   MCPServer,

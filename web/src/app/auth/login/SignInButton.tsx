@@ -1,8 +1,8 @@
+import { SvgProps } from "@onyx/opal";
 import Button from "@/refresh-components/buttons/Button";
 import { AuthType } from "@/lib/constants";
 import Link from "next/link";
 import { FcGoogle } from "react-icons/fc";
-import { SvgProps } from "@/icons";
 
 interface SignInButtonProps {
   authorizeUrl: string;

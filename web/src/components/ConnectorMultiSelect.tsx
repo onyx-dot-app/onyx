@@ -1,3 +1,4 @@
+import { SvgX } from "@onyx/opal";
 import React, { useState, useRef, useEffect } from "react";
 import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
@@ -6,7 +7,6 @@ import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
 
 interface ConnectorMultiSelectProps {
   name: string;

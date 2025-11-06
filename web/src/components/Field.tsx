@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgEye, SvgEyeClosed } from "@onyx/opal";
 import {
   ArrayHelpers,
   ErrorMessage,
@@ -46,9 +47,6 @@ import {
 } from "@/lib/connectors/fileTypes";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-
-import SvgEye from "@/icons/eye";
-import SvgEyeClosed from "@/icons/eye-closed";
 
 export function SectionHeader({
   children,

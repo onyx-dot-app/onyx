@@ -1,17 +1,16 @@
 "use client";
 
+import { SvgPin, SvgX } from "@onyx/opal";
 import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppRouter } from "@/hooks/appNavigation";
-import SvgPin from "@/icons/pin";
 import { cn, noProp } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { getAgentIcon } from "@/sections/sidebar/utils";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import SvgX from "@/icons/x";
 import { useActiveSidebarTab } from "@/lib/hooks";
 
 interface SortableItemProps {

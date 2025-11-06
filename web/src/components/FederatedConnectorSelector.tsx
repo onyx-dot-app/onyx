@@ -1,3 +1,4 @@
+import { SvgSettings, SvgX } from "@onyx/opal";
 import React, { useState, useRef, useEffect } from "react";
 import {
   FederatedConnectorDetail,
@@ -6,8 +7,6 @@ import {
   ValidSources,
 } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
-import SvgX from "@/icons/x";
-import SvgSettings from "@/icons/settings";
 import { Label } from "@/components/ui/label";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";

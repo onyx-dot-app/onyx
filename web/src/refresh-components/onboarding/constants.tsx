@@ -1,18 +1,20 @@
+import {
+  SvgAws,
+  SvgClaude,
+  SvgGlobe,
+  SvgImage,
+  SvgOllama,
+  SvgOpenai,
+  SvgOpenrouter,
+  SvgProps,
+  SvgSearchMenu,
+  SvgStep2,
+  SvgStep3,
+  SvgUsers,
+} from "@onyx/opal";
 import { OnboardingStep } from "./types";
-import SvgSearchMenu from "@/icons/search-menu";
-import SvgGlobe from "@/icons/globe";
-import SvgImage from "@/icons/image";
-import SvgUsers from "@/icons/users";
-import SvgStep2 from "@/icons/step2";
-import SvgStep3 from "@/icons/step3";
 import { FinalStepItemProps } from "./types";
-import { SvgProps } from "@/icons";
 import { AzureIcon, GeminiIcon } from "@/components/icons/icons";
-import SvgClaude from "@/icons/claude";
-import SvgAws from "@/icons/aws";
-import SvgOllama from "@/icons/ollama";
-import SvgOpenai from "@/icons/openai";
-import SvgOpenrouter from "@/icons/openrouter";
 type StepConfig = {
   index: number;
   title: string;

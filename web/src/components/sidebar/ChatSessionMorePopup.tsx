@@ -1,5 +1,6 @@
 "use client";
 
+import { SvgFolder, SvgFolderIn, SvgShare, SvgTrash } from "@onyx/opal";
 import { ChatSession } from "@/app/chat/interfaces";
 import { deleteChatSession } from "@/app/chat/services/lib";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -19,10 +20,6 @@ import { useCallback, useState, useMemo } from "react";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 // PopoverMenu already imported above
 import MenuButton from "@/refresh-components/buttons/MenuButton";
-import SvgShare from "@/icons/share";
-import SvgFolderIn from "@/icons/folder-in";
-import SvgTrash from "@/icons/trash";
-import SvgFolder from "@/icons/folder";
 import { cn, noProp } from "@/lib/utils";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
 import Button from "@/refresh-components/buttons/Button";

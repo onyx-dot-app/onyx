@@ -1,11 +1,10 @@
 "use client";
 
+import { SvgSearch, SvgX } from "@onyx/opal";
 import React, { useEffect, useRef, useState } from "react";
 import { cn, noProp } from "@/lib/utils";
 import { useBoundingBox } from "@/hooks/useBoundingBox";
-import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgSearch from "@/icons/search";
 
 const divClasses = (active?: boolean, hovered?: boolean, isError?: boolean) =>
   ({
