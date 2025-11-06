@@ -542,7 +542,6 @@ export function FederatedConnectorForm({
                 onClick={handleValidateCredentials}
                 disabled={isValidating || !formState.schema}
                 className="flex ml-auto"
-                leftIcon={isValidating ? SimpleTooltip : undefined}
               >
                 {isValidating ? "Validating..." : "Validate"}
               </Button>

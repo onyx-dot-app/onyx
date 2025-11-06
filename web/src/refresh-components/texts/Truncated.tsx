@@ -89,7 +89,9 @@ export default function Truncated({
             ref={visibleRef}
             className="flex-grow overflow-hidden text-left w-full"
           >
-            <TooltipTrigger asChild>{text}</TooltipTrigger>
+            <TooltipTrigger asChild>
+              <div>{text}</div>
+            </TooltipTrigger>
           </div>
 
           {showTooltip && (
