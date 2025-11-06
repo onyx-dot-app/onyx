@@ -80,21 +80,13 @@ export default function LineItem({
             />
           </div>
         )}
-        {typeof children === "string" ? (
-          <Truncated
-            mainUiMuted
-            text04
-            className={cn(
-              "text-left w-full",
-              textClassNames[variant]
-              // strikethrough && "decoration-text-04"
-            )}
-          >
-            {children}
-          </Truncated>
-        ) : (
-          children
-        )}
+        <Truncated
+          mainUiMuted
+          text04
+          className={cn("text-left w-full", textClassNames[variant])}
+        >
+          {children}
+        </Truncated>
         {rightChildren}
       </div>
       {description && (
