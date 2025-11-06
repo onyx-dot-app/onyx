@@ -74,15 +74,6 @@ export default function Truncated({
 
   return (
     <>
-      {/* Hide offscreen to measure full text width */}
-      <div
-        ref={hiddenRef}
-        className="fixed left-[-9999px] top-[0rem] whitespace-nowrap pointer-events-none opacity-0"
-        aria-hidden="true"
-      >
-        {text}
-      </div>
-
       <TooltipProvider>
         <Tooltip>
           <div
@@ -105,6 +96,27 @@ export default function Truncated({
           )}
         </Tooltip>
       </TooltipProvider>
+
+      {/*
+        Hide offscreen to measure full text width
+
+        # Note
+
+        The placement of this `div` *after* the above `TooltipProvider` is *VERY* important to our tests!
+        If the bottom `div` were placed first, any tests that try locating the string that the `Truncated` component is trying to render would find the bottom div first.
+        This can break expectations (since it's supposed to be hidden in the first place).
+
+        All in all, keep the below `div` *below* the above `OooltipProvider`.
+
+        - @raunakab
+      */}
+      <div
+        ref={hiddenRef}
+        className="fixed left-[-9999px] top-[0rem] whitespace-nowrap pointer-events-none opacity-0"
+        aria-hidden="true"
+      >
+        {text}
+      </div>
     </>
   );
 }
