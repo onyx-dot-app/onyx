@@ -20,7 +20,7 @@ interface ChatInputBarProps {
   files: FileDescriptor[];
   setFiles: (files: FileDescriptor[]) => void;
   handleFileUpload: (files: File[]) => void;
-  textAreaRef: React.RefObject<HTMLTextAreaElement>;
+  textAreaRef: React.RefObject<HTMLTextAreaElement | null>;
   filterManager?: FilterManager;
   existingSources: string[];
   availableDocumentSets: { name: string }[];

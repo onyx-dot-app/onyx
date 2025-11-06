@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, JSX } from "react";
 import { CompactDocumentCard, CompactQuestionCard } from "../DocumentDisplay";
 import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import {

@@ -19,7 +19,7 @@ from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
 from onyx.chat.chat_utils import process_kg_commands
-from onyx.chat.memories import make_memories_callback
+from onyx.chat.memories import get_memories
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ChatBasicResponse
@@ -35,7 +35,7 @@ from onyx.chat.models import UserKnowledgeFilePacket
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import (
-    default_build_system_message_for_default_assistant_v2,
+    default_build_system_message_v2,
 )
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.chat.turn import fast_chat_turn
@@ -654,10 +654,11 @@ def stream_chat_message_objects(
         prompt_override = new_msg_req.prompt_override or chat_session.prompt_override
         if new_msg_req.persona_override_config:
             prompt_config = PromptConfig(
-                system_prompt=new_msg_req.persona_override_config.prompts[
+                default_behavior_system_prompt=new_msg_req.persona_override_config.prompts[
                     0
                 ].system_prompt,
-                task_prompt=new_msg_req.persona_override_config.prompts[0].task_prompt,
+                custom_instructions=None,
+                reminder=new_msg_req.persona_override_config.prompts[0].task_prompt,
                 datetime_aware=new_msg_req.persona_override_config.prompts[
                     0
                 ].datetime_aware,
@@ -666,10 +667,11 @@ def stream_chat_message_objects(
             # Apply prompt override on top of persona-embedded prompt
             prompt_config = PromptConfig.from_model(
                 persona,
+                db_session=db_session,
                 prompt_override=prompt_override,
             )
         else:
-            prompt_config = PromptConfig.from_model(persona)
+            prompt_config = PromptConfig.from_model(persona, db_session=db_session)
 
         # Retrieve project-specific instructions if this chat session is associated with a project.
         project_instructions: str | None = (
@@ -772,13 +774,11 @@ def stream_chat_message_objects(
             prompt_config=prompt_config,
             files=latest_query_files,
         )
-        mem_callback = make_memories_callback(user, db_session)
+        memories = get_memories(user, db_session)
         system_message = (
-            default_build_system_message_for_default_assistant_v2(
-                prompt_config, llm.config, mem_callback, tools
-            )
+            default_build_system_message_v2(prompt_config, llm.config, memories, tools)
             if not simple_agent_framework_disabled and persona.is_default_persona
-            else default_build_system_message(prompt_config, llm.config, mem_callback)
+            else default_build_system_message(prompt_config, llm.config, memories)
         )
         prompt_builder = AnswerPromptBuilder(
             user_message=prompt_user_message,
@@ -841,6 +841,7 @@ def stream_chat_message_objects(
                 prompt_config,
                 llm_model,
                 model_settings,
+                user,
             )
         else:
             from onyx.chat.packet_proccessing import process_streamed_packets
@@ -895,6 +896,7 @@ def _fast_message_stream(
     prompt_config: PromptConfig,
     llm_model: Model,
     model_settings: ModelSettings,
+    user_or_none: User | None,
 ) -> Generator[Packet, None, None]:
     # TODO: clean up this jank
     is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
@@ -913,6 +915,8 @@ def _fast_message_stream(
             db_session=db_session,
             redis_client=redis_client,
             emitter=emitter,
+            user_or_none=user_or_none,
+            prompt_config=prompt_config,
         ),
         chat_session_id=chat_session_id,
         message_id=reserved_message_id,

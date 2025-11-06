@@ -90,6 +90,10 @@ nltk.download('stopwords', quiet=True); \
 nltk.download('punkt_tab', quiet=True);"
 # nltk.download('wordnet', quiet=True); introduce this back if lemmatization is needed
 
+# Pre-downloading tiktoken for setups with limited egress
+RUN python -c "import tiktoken; \
+tiktoken.get_encoding('cl100k_base')"
+
 # Set up application files
 WORKDIR /app
 

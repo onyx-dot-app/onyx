@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
-import { useState, useEffect, memo } from "react";
+import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
 import { Checkbox } from "@/components/ui/checkbox";
 

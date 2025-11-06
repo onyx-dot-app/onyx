@@ -748,7 +748,8 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
                 "this model may or may not support image input."
             )
             return False
-        return model_obj.get("supports_vision", False)
+        # The or False here is because sometimes the dict contains the key but the value is None
+        return model_obj.get("supports_vision", False) or False
     except Exception:
         logger.exception(
             f"Failed to get model object for {model_provider}/{model_name}"

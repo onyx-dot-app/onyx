@@ -51,7 +51,7 @@ const EE_ROUTES = [
   "/admin/billing",
 ];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)

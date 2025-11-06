@@ -59,7 +59,7 @@ runs:
   steps:
     - name: Build and push Docker image (Attempt 1 of 3)
       id: buildx1
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
       continue-on-error: true
       with:
         context: ${{ inputs.context }}
@@ -86,7 +86,7 @@ runs:
     - name: Build and push Docker image (Attempt 2 of 3)
       id: buildx2
       if: steps.buildx1.outcome != 'success'
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
       with:
         context: ${{ inputs.context }}
         file: ${{ inputs.file }}
@@ -112,7 +112,7 @@ runs:
     - name: Build and push Docker image (Attempt 3 of 3)
       id: buildx3
       if: steps.buildx1.outcome != 'success' && steps.buildx2.outcome != 'success'
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
       with:
         context: ${{ inputs.context }}
         file: ${{ inputs.file }}

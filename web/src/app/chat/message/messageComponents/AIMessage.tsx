@@ -10,7 +10,14 @@ import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import CitedSourcesToggle from "@/app/chat/message/messageComponents/CitedSourcesToggle";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
-import { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  RefObject,
+} from "react";
 import {
   useChatSessionStore,
   useDocumentSidebarVisible,
@@ -166,6 +173,9 @@ export default function AIMessage({
   const finalAnswerComingRef = useRef<boolean>(isFinalAnswerComing(rawPackets));
   const displayCompleteRef = useRef<boolean>(isStreamingComplete(rawPackets));
   const stopPacketSeenRef = useRef<boolean>(isStreamingComplete(rawPackets));
+  // Track indices for graceful SECTION_END injection
+  const seenIndicesRef = useRef<Set<number>>(new Set());
+  const indicesWithSectionEndRef = useRef<Set<number>>(new Set());
 
   // Reset incremental state when switching messages or when stream resets
   const resetState = () => {
@@ -178,6 +188,8 @@ export default function AIMessage({
     finalAnswerComingRef.current = isFinalAnswerComing(rawPackets);
     displayCompleteRef.current = isStreamingComplete(rawPackets);
     stopPacketSeenRef.current = isStreamingComplete(rawPackets);
+    seenIndicesRef.current = new Set();
+    indicesWithSectionEndRef.current = new Set();
   };
   useEffect(() => {
     resetState();
@@ -188,11 +200,64 @@ export default function AIMessage({
     resetState();
   }
 
+  // Helper function to check if a packet group has meaningful content
+  const hasContentPackets = (packets: Packet[]): boolean => {
+    const contentPacketTypes = [
+      PacketType.MESSAGE_START,
+      PacketType.SEARCH_TOOL_START,
+      PacketType.IMAGE_GENERATION_TOOL_START,
+      PacketType.CUSTOM_TOOL_START,
+      PacketType.FETCH_TOOL_START,
+      PacketType.REASONING_START,
+    ];
+    return packets.some((packet) =>
+      contentPacketTypes.includes(packet.obj.type as PacketType)
+    );
+  };
+
+  // Helper function to inject synthetic SECTION_END packet
+  const injectSectionEnd = (ind: number) => {
+    if (indicesWithSectionEndRef.current.has(ind)) {
+      return; // Already has SECTION_END
+    }
+
+    const syntheticPacket: Packet = {
+      ind,
+      obj: { type: PacketType.SECTION_END },
+    };
+
+    const existingGroup = groupedPacketsMapRef.current.get(ind);
+    if (existingGroup) {
+      existingGroup.push(syntheticPacket);
+    }
+    indicesWithSectionEndRef.current.add(ind);
+  };
+
   // Process only the new packets synchronously for this render
   if (rawPackets.length > lastProcessedIndexRef.current) {
     for (let i = lastProcessedIndexRef.current; i < rawPackets.length; i++) {
       const packet = rawPackets[i];
       if (!packet) continue;
+
+      const currentInd = packet.ind;
+      const isNewIndex = !seenIndicesRef.current.has(currentInd);
+
+      // If we see a new index, inject SECTION_END for previous tool indices
+      if (isNewIndex && seenIndicesRef.current.size > 0) {
+        Array.from(seenIndicesRef.current).forEach((prevInd) => {
+          if (!indicesWithSectionEndRef.current.has(prevInd)) {
+            injectSectionEnd(prevInd);
+          }
+        });
+      }
+
+      // Track this index
+      seenIndicesRef.current.add(currentInd);
+
+      // Track SECTION_END packets
+      if (packet.obj.type === PacketType.SECTION_END) {
+        indicesWithSectionEndRef.current.add(currentInd);
+      }
 
       // Grouping by ind
       const existingGroup = groupedPacketsMapRef.current.get(packet.ind);
@@ -242,6 +307,12 @@ export default function AIMessage({
 
       if (packet.obj.type === PacketType.STOP && !stopPacketSeenRef.current) {
         setStopPacketSeen(true);
+        // Inject SECTION_END for all indices that don't have one
+        Array.from(seenIndicesRef.current).forEach((ind) => {
+          if (!indicesWithSectionEndRef.current.has(ind)) {
+            injectSectionEnd(ind);
+          }
+        });
       }
 
       // handles case where we get a Message packet from Claude, and then tool
@@ -258,10 +329,12 @@ export default function AIMessage({
 
     // Rebuild the grouped packets array sorted by ind
     // Clone packet arrays to ensure referential changes so downstream memo hooks update
+    // Filter out empty groups (groups with only SECTION_END and no content)
     groupedPacketsRef.current = Array.from(
       groupedPacketsMapRef.current.entries()
     )
       .map(([ind, packets]) => ({ ind, packets: [...packets] }))
+      .filter(({ packets }) => hasContentPackets(packets))
       .sort((a, b) => a.ind - b.ind);
 
     lastProcessedIndexRef.current = rawPackets.length;
@@ -279,19 +352,6 @@ export default function AIMessage({
   const updateCurrentSelectedNodeForDocDisplay = useChatSessionStore(
     (state) => state.updateCurrentSelectedNodeForDocDisplay
   );
-  // Calculate unique source count
-  const _uniqueSourceCount = useMemo(() => {
-    const uniqueDocIds = new Set<string>();
-    for (const citation of citations) {
-      if (citation.document_id) {
-        uniqueDocIds.add(citation.document_id);
-      }
-    }
-    documentMap.forEach((_, docId) => {
-      uniqueDocIds.add(docId);
-    });
-    return uniqueDocIds.size;
-  }, [citations.length, documentMap.size]);
 
   // Message switching logic
   const {
@@ -325,7 +385,14 @@ export default function AIMessage({
                     <div
                       ref={markdownRef}
                       className="overflow-x-visible max-w-content-max focus:outline-none select-text"
-                      onCopy={(e) => handleCopy(e, markdownRef)}
+                      onCopy={(e) => {
+                        if (markdownRef.current) {
+                          handleCopy(
+                            e,
+                            markdownRef as RefObject<HTMLDivElement>
+                          );
+                        }
+                      }}
                     >
                       {groupedPackets.length === 0 ? (
                         // Show blinking dot when no content yet but message is generating
