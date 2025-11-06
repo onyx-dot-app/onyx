@@ -431,7 +431,7 @@ def _collect_all_teams(
         logger.info(
             f"Team name(s) contain special characters (&, (, or )) which are not supported "
             f"in OData string literals. Fetching all teams and using client-side filtering. "
-            f"Teams: {requested}"
+            f"Count: {len(requested)}"
         )
 
     # Build OData filter for requested teams (only if we didn't already return from raw HTTP above)
