@@ -35,12 +35,12 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
   }, []);
 
   return (
-    <div className="loading-animation flex">
-      <div className={"mx-auto flex" + size ? ` ${size}` : ""}>
+    <span className="loading-animation inline-flex">
+      <span className={`mx-auto inline-flex${size ? ` ${size}` : ""}`}>
         {text === undefined ? "Thinking" : text}
         <span className="dots">{dots}</span>
-      </div>
-    </div>
+      </span>
+    </span>
   );
 };
 
