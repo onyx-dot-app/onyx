@@ -245,6 +245,11 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  testrail: {
+    description: "Configure TestRail connector",
+    values: [],
+    advanced_values: [],
+  },
   gitlab: {
     description: "Configure GitLab connector",
     values: [
