@@ -1,4 +1,4 @@
-"""API key authentication middleware for MCP server."""
+"""PAT authentication middleware for MCP server."""
 
 from collections.abc import Awaitable
 from collections.abc import Callable
@@ -8,10 +8,10 @@ from fastapi import Request
 from fastapi import Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from onyx.auth.api_key import extract_tenant_from_api_key_header
-from onyx.auth.api_key import get_hashed_api_key_from_request
-from onyx.db.api_key import fetch_user_for_api_key
+from onyx.auth.pat import get_hashed_pat_from_request
+from onyx.auth.utils import extract_tenant_from_auth_header
 from onyx.db.engine.async_sql_engine import get_async_session
+from onyx.db.pat import fetch_user_for_pat
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -20,7 +20,7 @@ logger = setup_logger()
 
 
 class MCPAuthMiddleware(BaseHTTPMiddleware):
-    """Validates API key from Authorization header and sets tenant context."""
+    """Validates PAT from Authorization header and sets tenant context."""
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -28,24 +28,24 @@ class MCPAuthMiddleware(BaseHTTPMiddleware):
         if request.url.path == "/health":
             return await call_next(request)
 
-        hashed_api_key = get_hashed_api_key_from_request(request)
-        if not hashed_api_key:
-            logger.warning("MCP request missing API key")
-            raise HTTPException(status_code=401, detail="Missing API key")
+        hashed_pat = get_hashed_pat_from_request(request)
+        if not hashed_pat:
+            logger.warning("MCP request missing PAT")
+            raise HTTPException(status_code=401, detail="Missing Personal Access Token")
 
         async for db_session in get_async_session():
-            user = await fetch_user_for_api_key(hashed_api_key, db_session)
+            user = await fetch_user_for_pat(hashed_pat, db_session)
             break
 
         if user is None:
-            logger.warning(f"Invalid API key: {hashed_api_key[:8]}...")
-            raise HTTPException(status_code=401, detail="Invalid API key")
+            logger.warning(f"Invalid PAT: {hashed_pat[:8]}...")
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
 
         if MULTI_TENANT:
-            tenant_id = extract_tenant_from_api_key_header(request)
+            tenant_id = extract_tenant_from_auth_header(request)
             if not tenant_id:
-                logger.error("Multi-tenant enabled but no tenant in API key")
-                raise HTTPException(status_code=401, detail="Invalid API key format")
+                logger.error("Multi-tenant enabled but no tenant in PAT")
+                raise HTTPException(status_code=401, detail="Invalid token format")
 
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
             try:

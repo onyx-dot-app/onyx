@@ -28,7 +28,7 @@ def create_mcp_fastapi_app() -> FastAPI:
 
         SqlEngine.set_app_name(f"{POSTGRES_WEB_APP_NAME}_mcp_server")
         SqlEngine.init_engine(
-            pool_size=1,  # Phase 1: minimal (only API key validation)
+            pool_size=1,  # Phase 1: minimal (only PAT validation)
             max_overflow=3,  # Can grow to 5 connections under load
         )
         logger.info("Database connection pool initialized")
@@ -41,7 +41,7 @@ def create_mcp_fastapi_app() -> FastAPI:
 
     app = FastAPI(
         title="Onyx MCP Server",
-        description="HTTP POST transport with API key auth",
+        description="HTTP POST transport with PAT auth",
         version="1.0.0",
         lifespan=combined_lifespan,
     )
