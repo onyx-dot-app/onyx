@@ -218,6 +218,8 @@ def build_vespa_filters(
 def build_vespa_id_based_retrieval_yql(
     chunk_request: VespaChunkRequest,
 ) -> str:
+    # Small optimization unnecessary right now since large chunks aren't typically on
+    # but we could drop those in the query
     id_based_retrieval_yql_section = (
         f'({DOCUMENT_ID} contains "{chunk_request.document_id}"'
     )

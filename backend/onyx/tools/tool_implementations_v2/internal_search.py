@@ -3,6 +3,8 @@ from typing import cast
 
 from agents import function_tool
 from agents import RunContextWrapper
+from backend.onyx.agents.search_agent.build_context import get_search_agent_documents
+from backend.onyx.configs.chat_configs import FEAT_FLAG_FANCY_SEARCH
 
 from onyx.agents.agent_search.dr.models import InferenceSection
 from onyx.agents.agent_search.dr.models import IterationAnswer
@@ -175,6 +177,12 @@ def internal_search(
     )
     if search_pipeline_instance is None:
         raise ValueError("Search tool not found")
+
+    if FEAT_FLAG_FANCY_SEARCH:
+        get_search_agent_documents(run_context.context)
+        return json.dumps(
+            [{"search_results": "fancy search result"} for query in queries]
+        )
 
     # Call the core function
     retrieved_docs = _internal_search_core(
