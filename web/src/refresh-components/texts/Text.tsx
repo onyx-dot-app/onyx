@@ -78,6 +78,9 @@ export interface TextProps extends HTMLAttributes<HTMLParagraphElement> {
   text02?: boolean;
   text01?: boolean;
   inverted?: boolean;
+
+  // Element type override
+  as?: "p" | "span" | "div";
 }
 
 export default function Text({
@@ -108,6 +111,7 @@ export default function Text({
   inverted,
   children,
   className,
+  as,
   ...rest
 }: TextProps) {
   const font = headingH1
@@ -160,9 +164,7 @@ export default function Text({
             ? "text05"
             : "text05";
 
-  // Figure styles are typically used inline, so render as <span> instead of <p>
-  const isInline = figureSmallLabel || figureSmallValue || figureKeystroke;
-  const Tag = isInline ? "span" : "p";
+  const Tag = as ?? (font.startsWith("figure") ? "span" : "p");
 
   return (
     <Tag
