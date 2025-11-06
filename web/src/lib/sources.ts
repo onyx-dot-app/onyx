@@ -271,6 +271,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.TicketingAndTaskManagement,
     docs: "https://docs.onyx.app/admin/connectors/official/productboard",
   },
+  testrail: {
+    icon: GlobeIcon,
+    displayName: "TestRail",
+    category: SourceCategory.TicketingAndTaskManagement,
+  },
 
   // Messaging
   slack: slackMetadata,
