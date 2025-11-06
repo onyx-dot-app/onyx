@@ -11,7 +11,14 @@ jobs:
       - name: Check PR body for Linear link or override
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
+          # Skip check for dependabot PRs
+          if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
+            echo "PR is from dependabot. Skipping Linear check."
+            exit 0
+          fi
+
           # Looking for "https://linear.app" in the body
           if echo "$PR_BODY" | grep -qE "https://linear\.app"; then
             echo "Found a Linear link. Check passed."
