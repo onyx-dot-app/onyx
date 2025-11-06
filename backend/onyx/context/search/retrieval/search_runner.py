@@ -2,6 +2,7 @@ import string
 from collections.abc import Callable
 from uuid import UUID
 
+from backend.onyx.configs.chat_configs import NUM_RETURNED_HITS
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
@@ -10,12 +11,10 @@ from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import MAX_METRICS_CONTENT
 from onyx.context.search.models import RetrievalMetricsContainer
 from onyx.context.search.models import SearchQuery
-from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
 from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA
 from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA_KEYWORD
 from onyx.context.search.utils import get_query_embedding
@@ -24,6 +23,7 @@ from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.document_index.vespa.index import cleanup_chunks
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
 )
@@ -44,9 +44,9 @@ logger = setup_logger()
 
 
 def _dedupe_chunks(
-    chunks: list[InferenceChunkUncleaned],
-) -> list[InferenceChunkUncleaned]:
-    used_chunks: dict[tuple[str, int], InferenceChunkUncleaned] = {}
+    chunks: list[InferenceChunk],
+) -> list[InferenceChunk]:
+    used_chunks: dict[tuple[str, int], InferenceChunk] = {}
     for chunk in chunks:
         key = (chunk.document_id, chunk.chunk_id)
         if key not in used_chunks:
@@ -138,17 +138,15 @@ def doc_index_retrieval(
     keyword_embeddings_thread: TimeoutThread[list[Embedding]] | None = None
     semantic_embeddings_thread: TimeoutThread[list[Embedding]] | None = None
     top_base_chunks_standard_ranking_thread: (
-        TimeoutThread[list[InferenceChunkUncleaned]] | None
+        TimeoutThread[list[InferenceChunk]] | None
     ) = None
 
-    top_semantic_chunks_thread: TimeoutThread[list[InferenceChunkUncleaned]] | None = (
-        None
-    )
+    top_semantic_chunks_thread: TimeoutThread[list[InferenceChunk]] | None = None
 
     keyword_embeddings: list[Embedding] | None = None
     semantic_embeddings: list[Embedding] | None = None
 
-    top_semantic_chunks: list[InferenceChunkUncleaned] | None = None
+    top_semantic_chunks: list[InferenceChunk] | None = None
 
     # original retrieveal method
     top_base_chunks_standard_ranking_thread = run_in_background(
@@ -252,7 +250,7 @@ def doc_index_retrieval(
     logger.info(f"Overall number of top initial retrieval chunks: {len(top_chunks)}")
 
     retrieval_requests: list[VespaChunkRequest] = []
-    normal_chunks: list[InferenceChunkUncleaned] = []
+    normal_chunks: list[InferenceChunk] = []
     referenced_chunk_scores: dict[tuple[str, int], float] = {}
     for chunk in top_chunks:
         if chunk.large_chunk_reference_ids:
@@ -275,7 +273,7 @@ def doc_index_retrieval(
 
     # If there are no large chunks, just return the normal chunks
     if not retrieval_requests:
-        return cleanup_chunks(normal_chunks)
+        return normal_chunks
 
     # Retrieve and return the referenced normal chunks from the large chunks
     retrieved_inference_chunks = document_index.id_based_retrieval(
@@ -299,7 +297,7 @@ def doc_index_retrieval(
     for reference in referenced_chunk_scores.keys():
         logger.error(f"Chunk {reference} not found in retrieved chunks")
 
-    unique_chunks: dict[tuple[str, int], InferenceChunkUncleaned] = {
+    unique_chunks: dict[tuple[str, int], InferenceChunk] = {
         (chunk.document_id, chunk.chunk_id): chunk for chunk in normal_chunks
     }
 
@@ -315,7 +313,7 @@ def doc_index_retrieval(
     # Deduplicate the chunks
     deduped_chunks = list(unique_chunks.values())
     deduped_chunks.sort(key=lambda chunk: chunk.score or 0, reverse=True)
-    return cleanup_chunks(deduped_chunks)
+    return deduped_chunks
 
 
 def _simplify_text(text: str) -> str:
@@ -440,9 +438,9 @@ def _embed_and_search(
         query_embedding=query_embedding,
         final_keywords=query_request.query_keywords,
         filters=query_request.filters,
-        hybrid_alpha=query_request.hybrid_alpha,
+        hybrid_alpha=query_request.hybrid_alpha or HYBRID_ALPHA,
         time_decay_multiplier=query_request.recency_bias_multiplier,
-        num_to_retrieve=query_request.limit,
+        num_to_retrieve=query_request.limit or NUM_RETURNED_HITS,
         # Hardcoded to this for now
         ranking_profile_type=QueryExpansionType.SEMANTIC,
         offset=query_request.offset,

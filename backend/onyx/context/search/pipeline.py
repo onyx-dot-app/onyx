@@ -5,13 +5,6 @@ from datetime import datetime
 from typing import cast
 from uuid import UUID
 
-from backend.onyx.context.search.preprocessing.access_filters import (
-    build_access_filters_for_user,
-)
-from backend.onyx.secondary_llm_flows.source_filter import extract_source_filter
-from backend.onyx.secondary_llm_flows.time_filter import extract_time_filter
-from backend.shared_configs.configs import MULTI_TENANT
-from backend.shared_configs.contextvars import get_current_tenant_id
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import ContextualPruningConfig
@@ -35,8 +28,10 @@ from onyx.context.search.models import RerankMetricsContainer
 from onyx.context.search.models import RetrievalMetricsContainer
 from onyx.context.search.models import SearchQuery
 from onyx.context.search.models import SearchRequest
-from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
 from onyx.context.search.postprocessing.postprocessing import search_postprocessing
+from onyx.context.search.preprocessing.access_filters import (
+    build_access_filters_for_user,
+)
 from onyx.context.search.preprocessing.preprocessing import retrieval_preprocessing
 from onyx.context.search.retrieval.search_runner import retrieve_chunks
 from onyx.context.search.retrieval.search_runner import search_chunks
@@ -51,11 +46,15 @@ from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.llm.interfaces import LLM
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.agentic_evaluation import evaluate_inference_section
+from onyx.secondary_llm_flows.source_filter import extract_source_filter
+from onyx.secondary_llm_flows.time_filter import extract_time_filter
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from onyx.utils.timing import log_function_time
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -79,7 +78,11 @@ def _build_index_filters(
 
     base_filters = user_provided_filters or BaseFilters()
 
-    if user_provided_filters.document_set is None and persona_document_sets is not None:
+    if (
+        user_provided_filters
+        and user_provided_filters.document_set is None
+        and persona_document_sets is not None
+    ):
         base_filters.document_set = persona_document_sets
 
     time_filter = base_filters.time_cutoff or persona_time_cutoff
@@ -152,11 +155,11 @@ def chunk_search_pipeline(
     slack_context: SlackContext | None = None,
 ) -> list[InferenceChunk]:
     user_uploaded_persona_files: list[UUID] = [
-        user_file.id for user_file in persona.user_uploaded_person_files
+        user_file.id for user_file in persona.user_files
     ]
 
     filters = _build_index_filters(
-        user_provided_filters=chunk_search_request.filters,
+        user_provided_filters=chunk_search_request.user_selected_filters,
         user=user,
         project_id=chunk_search_request.project_id,
         user_file_ids=user_uploaded_persona_files,
@@ -367,11 +370,9 @@ class SearchPipeline:
                     )
 
             inference_chunks.extend(
-                cleanup_chunks(
-                    self.document_index.id_based_retrieval(
-                        chunk_requests=chunk_requests,
-                        filters=IndexFilters(access_control_list=None),
-                    )
+                self.document_index.id_based_retrieval(
+                    chunk_requests=chunk_requests,
+                    filters=IndexFilters(access_control_list=None),
                 )
             )
 
@@ -441,12 +442,10 @@ class SearchPipeline:
 
         if chunk_requests:
             inference_chunks.extend(
-                cleanup_chunks(
-                    self.document_index.id_based_retrieval(
-                        chunk_requests=chunk_requests,
-                        filters=IndexFilters(access_control_list=None),
-                        batch_retrieval=True,
-                    )
+                self.document_index.id_based_retrieval(
+                    chunk_requests=chunk_requests,
+                    filters=IndexFilters(access_control_list=None),
+                    batch_retrieval=True,
                 )
             )
 
