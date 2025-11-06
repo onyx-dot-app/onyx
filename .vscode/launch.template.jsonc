@@ -20,6 +20,7 @@
         "Web Server",
         "Model Server",
         "API Server",
+        "MCP Server",
         "Slack Bot",
         "Celery primary",
         "Celery light",
@@ -151,6 +152,27 @@
         "group": "2"
       },
       "consoleTitle": "Slack Bot Console"
+    },
+    {
+      "name": "MCP Server",
+      "consoleName": "MCP Server",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "MCP_SERVER_ENABLED": "true",
+        "MCP_SERVER_PORT": "8090",
+        "MCP_SERVER_CORS_ORIGINS": "http://localhost:*",
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1"
+      },
+      "args": ["onyx.mcp_server.api:mcp_app", "--reload", "--port", "8090"],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "MCP Server Console"
     },
     {
       "name": "Celery primary",
