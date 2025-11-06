@@ -474,7 +474,7 @@ export const connectorConfigs: Record<
         type: "checkbox",
         label: "Hide domain link-only files?",
         description:
-          "When enabled, Onyx skips files that are shared with your entire domain but require the link to access.",
+          "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access.",
         name: "exclude_domain_link_only",
         default: false,
       },

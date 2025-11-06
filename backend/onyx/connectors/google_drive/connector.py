@@ -41,9 +41,7 @@ from onyx.connectors.google_drive.file_retrieval import (
 )
 from onyx.connectors.google_drive.file_retrieval import get_files_in_shared_drive
 from onyx.connectors.google_drive.file_retrieval import get_root_folder_id
-from onyx.connectors.google_drive.file_retrieval import (
-    has_domain_link_only_permission,
-)
+from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
 from onyx.connectors.google_drive.models import DriveRetrievalStage
 from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
 from onyx.connectors.google_drive.models import GoogleDriveFileType
@@ -1177,7 +1175,7 @@ class GoogleDriveConnector(
                 start=start,
                 end=end,
             ):
-                if self.exclude_domain_link_only and has_domain_link_only_permission(
+                if self.exclude_domain_link_only and has_link_only_permission(
                     retrieved_file.drive_file
                 ):
                     continue
@@ -1285,7 +1283,7 @@ class GoogleDriveConnector(
         ):
             if file.error is not None:
                 raise file.error
-            if self.exclude_domain_link_only and has_domain_link_only_permission(
+            if self.exclude_domain_link_only and has_link_only_permission(
                 file.drive_file
             ):
                 continue

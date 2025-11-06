@@ -69,14 +69,17 @@ def generate_time_range_filter(
     return time_range_filter
 
 
-def has_domain_link_only_permission(file: GoogleDriveFileType) -> bool:
+LINK_ONLY_PERMISSION_TYPES = {"domain", "anyone"}
+
+
+def has_link_only_permission(file: GoogleDriveFileType) -> bool:
     """
-    Return True if any domain-wide permission requires link access
-    (allowFileDiscovery is explicitly false).
+    Return True if any permission requires a direct link to access
+    (allowFileDiscovery is explicitly false for supported types).
     """
     permissions = file.get("permissions") or []
     for permission in permissions:
-        if permission.get("type") != "domain":
+        if permission.get("type") not in LINK_ONLY_PERMISSION_TYPES:
             continue
         if permission.get("allowFileDiscovery") is False:
             return True
