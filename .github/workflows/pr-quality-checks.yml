@@ -10,7 +10,7 @@ on:
 jobs:
   quality-checks:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=8cpu-linux-x64,"run-id=${{ github.run_id }}"]
+    runs-on: [runs-on,runner=8cpu-linux-x64,"run-id=${{ github.run_id }}","env=staging"]
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
         with:
