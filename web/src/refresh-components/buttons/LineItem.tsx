@@ -27,7 +27,7 @@ export interface LineItemProps
 
   icon?: React.FunctionComponent<SvgProps>;
   description?: string;
-  children?: string | React.ReactNode;
+  children?: string;
   rightChildren?: React.ReactNode;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
   href?: string;
@@ -40,6 +40,7 @@ export default function LineItem({
 
   icon: Icon,
   description,
+  className,
   children,
   rightChildren,
   onClick,
@@ -50,7 +51,8 @@ export default function LineItem({
       type="button"
       className={cn(
         "flex flex-col w-full justify-center items-start p-2 rounded-08 group/LineItem",
-        buttonClassNames(heavyForced)
+        buttonClassNames(heavyForced),
+        className
       )}
       onClick={onClick}
     >

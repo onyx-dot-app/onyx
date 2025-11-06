@@ -55,14 +55,9 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const { user } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
-  const [hovered, setHovered] = React.useState(false);
 
   return (
-    <Card
-      className="group/AgentCard"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
+    <Card className="group/AgentCard">
       <button
         className="flex flex-col w-full text-left"
         onClick={() => route({ agentId: agent.id })}
@@ -106,7 +101,6 @@ export default function AgentCard({ agent }: AgentCardProps) {
                 tertiary
                 onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
                 tooltip={pinned ? "Unpin from Sidebar" : "Pin to Sidebar"}
-                transient={hovered && pinned}
                 className={cn(!pinned && "hidden group-hover/AgentCard:flex")}
               />
             </div>
