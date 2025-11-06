@@ -81,7 +81,7 @@ def ensure_mcp_server_exists() -> None:
         )
 
 
-def test_mcp_no_auth_flow(
+def test_mcp_client_no_auth_flow(
     mcp_no_auth_server: None,
     reset: None,
     admin_user: DATestUser,
