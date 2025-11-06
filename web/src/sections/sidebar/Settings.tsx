@@ -175,12 +175,11 @@ export default function Settings({ folded }: SettingsProps) {
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {
-      // Prefetch all user settings data when popover opens for instant modal display
+      // Prefetch user settings data when popover opens for instant modal display
       preload("/api/user/pats", errorHandlingFetcher);
       preload("/api/federated/oauth-status", errorHandlingFetcher);
       preload("/api/manage/connector-status", errorHandlingFetcher);
       preload("/api/llm/provider", errorHandlingFetcher);
-      preload("/api/notifications", errorHandlingFetcher);
       setPopupState("Settings");
     } else {
       setPopupState(undefined);
