@@ -25,6 +25,7 @@ interface FormContextType {
 
 const FormContext = createContext<FormContextType | undefined>(undefined);
 
+// TODO: deprecate this
 export const FormProvider: React.FC<{
   children: ReactNode;
   connector: ValidSources;
@@ -68,14 +69,21 @@ export const FormProvider: React.FC<{
     } else if (newUrl !== pathname) {
       router.push(newUrl);
     }
-  }, [formStep, router, pathname]);
+  }, [
+    formStep,
+    router,
+    pathname,
+    // must convert to string to avoid infinite re-renders, since as of React 19,
+    // searchParams will be a "different" object each time, and will cause an infinite loop.
+    searchParams?.toString(),
+  ]);
 
   useEffect(() => {
     const stepFromUrl = parseInt(searchParams?.get("step") || "0", 10);
     if (stepFromUrl !== formStep) {
       setFormStep(stepFromUrl);
     }
-  }, [searchParams]);
+  }, [searchParams?.toString()]);
 
   const contextValue: FormContextType = {
     formStep,
