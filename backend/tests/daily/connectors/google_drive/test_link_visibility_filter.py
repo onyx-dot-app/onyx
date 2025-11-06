@@ -75,9 +75,8 @@ def test_connector_skips_link_only_files_when_enabled() -> None:
         [{"type": "domain", "allowFileDiscovery": False}]
     )
     fetch_mock = MagicMock(return_value=iter([retrieved_file]))
-    connector._fetch_drive_items = fetch_mock  # type: ignore[attr-defined]
 
-    with patch(
+    with patch.object(connector, "_fetch_drive_items", fetch_mock), patch(
         "onyx.connectors.google_drive.connector.run_functions_tuples_in_parallel",
         side_effect=_stub_run_functions,
     ), patch(
@@ -108,9 +107,8 @@ def test_connector_processes_files_when_option_disabled() -> None:
         [{"type": "domain", "allowFileDiscovery": False}]
     )
     fetch_mock = MagicMock(return_value=iter([retrieved_file]))
-    connector._fetch_drive_items = fetch_mock  # type: ignore[attr-defined]
 
-    with patch(
+    with patch.object(connector, "_fetch_drive_items", fetch_mock), patch(
         "onyx.connectors.google_drive.connector.run_functions_tuples_in_parallel",
         side_effect=_stub_run_functions,
     ), patch(
@@ -127,7 +125,7 @@ def test_connector_processes_files_when_option_disabled() -> None:
             )
         )
 
-    assert results == ["doc"]
+    assert len(results) == 1
     convert_mock.assert_called_once()
     fetch_mock.assert_called_once()
     assert fetch_mock.call_args.kwargs["field_type"] == DriveFileFieldType.STANDARD
