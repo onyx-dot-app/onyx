@@ -169,7 +169,6 @@ export default function AIMessage({
   // Track indices for graceful SECTION_END injection
   const seenIndicesRef = useRef<Set<number>>(new Set());
   const indicesWithSectionEndRef = useRef<Set<number>>(new Set());
-  const toolIndicesRef = useRef<Set<number>>(new Set());
 
   // Reset incremental state when switching messages or when stream resets
   const resetState = () => {
@@ -184,7 +183,6 @@ export default function AIMessage({
     stopPacketSeenRef.current = isStreamingComplete(rawPackets);
     seenIndicesRef.current = new Set();
     indicesWithSectionEndRef.current = new Set();
-    toolIndicesRef.current = new Set();
   };
   useEffect(() => {
     resetState();
@@ -240,10 +238,7 @@ export default function AIMessage({
       // If we see a new index, inject SECTION_END for previous tool indices
       if (isNewIndex && seenIndicesRef.current.size > 0) {
         Array.from(seenIndicesRef.current).forEach((prevInd) => {
-          if (
-            toolIndicesRef.current.has(prevInd) &&
-            !indicesWithSectionEndRef.current.has(prevInd)
-          ) {
+          if (!indicesWithSectionEndRef.current.has(prevInd)) {
             injectSectionEnd(prevInd);
           }
         });
@@ -251,11 +246,6 @@ export default function AIMessage({
 
       // Track this index
       seenIndicesRef.current.add(currentInd);
-
-      // Track if this is a tool packet
-      if (isToolPacket(packet, false)) {
-        toolIndicesRef.current.add(currentInd);
-      }
 
       // Track SECTION_END packets
       if (packet.obj.type === PacketType.SECTION_END) {
@@ -310,10 +300,10 @@ export default function AIMessage({
 
       if (packet.obj.type === PacketType.STOP && !stopPacketSeenRef.current) {
         setStopPacketSeen(true);
-        // Inject SECTION_END for all tool indices that don't have one
-        Array.from(toolIndicesRef.current).forEach((toolInd) => {
-          if (!indicesWithSectionEndRef.current.has(toolInd)) {
-            injectSectionEnd(toolInd);
+        // Inject SECTION_END for all indices that don't have one
+        Array.from(seenIndicesRef.current).forEach((ind) => {
+          if (!indicesWithSectionEndRef.current.has(ind)) {
+            injectSectionEnd(ind);
           }
         });
       }
@@ -355,19 +345,6 @@ export default function AIMessage({
   const updateCurrentSelectedNodeForDocDisplay = useChatSessionStore(
     (state) => state.updateCurrentSelectedNodeForDocDisplay
   );
-  // Calculate unique source count
-  const _uniqueSourceCount = useMemo(() => {
-    const uniqueDocIds = new Set<string>();
-    for (const citation of citations) {
-      if (citation.document_id) {
-        uniqueDocIds.add(citation.document_id);
-      }
-    }
-    documentMap.forEach((_, docId) => {
-      uniqueDocIds.add(docId);
-    });
-    return uniqueDocIds.size;
-  }, [citations.length, documentMap.size]);
 
   // Message switching logic
   const {
