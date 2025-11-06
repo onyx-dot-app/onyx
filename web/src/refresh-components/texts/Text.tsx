@@ -160,8 +160,12 @@ export default function Text({
             ? "text05"
             : "text05";
 
+  // Figure styles are typically used inline, so render as <span> instead of <p>
+  const isInline = figureSmallLabel || figureSmallValue || figureKeystroke;
+  const Tag = isInline ? "span" : "p";
+
   return (
-    <p
+    <Tag
       {...rest}
       className={cn(
         fonts[font],
@@ -171,6 +175,6 @@ export default function Text({
       )}
     >
       {children}
-    </p>
+    </Tag>
   );
 }
