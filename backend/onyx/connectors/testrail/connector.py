@@ -6,6 +6,7 @@ import html as html_lib
 from typing import Any, ClassVar, Iterator, Optional
 
 import requests
+from bs4 import BeautifulSoup
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
@@ -20,7 +21,13 @@ from onyx.connectors.models import (
     Document,
     TextSection,
 )
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
 from onyx.utils.logger import setup_logger
+from onyx.file_processing.html_utils import format_document_soup
 
 
 logger = setup_logger()
@@ -57,21 +64,19 @@ class TestRailConnector(LoadConnector, PollConnector):
     def _sanitize_rich_text(value: Any) -> str:
         if value is None:
             return ""
-        text = str(value)
-        # Replace common HTML breaks with newlines (case-insensitive)
-        text = re.sub(r"(?i)<br\s*/?>", "\n", text)
-        text = re.sub(r"(?i)</p>", "\n", text)
-        text = re.sub(r"(?i)</div>", "\n", text)
-        # Remove <img ...> entirely (avoid base64/data URIs)
-        text = re.sub(r"(?is)<img[^>]*>", "", text)
-        # Remove explicit data:image URIs if present anywhere
-        text = re.sub(r"data:image/[^\"' )]+;base64,[A-Za-z0-9+/=]+", "[image removed]", text)
-        # Strip remaining HTML tags
-        text = re.sub(r"<[^>]+>", "", text)
-        # Unescape HTML entities
-        text = html_lib.unescape(text)
-        # Normalize whitespace
-        return re.sub(r"\s+", " ", text).strip()
+        html = str(value)
+        # Replace explicit data:image URIs with a marker to avoid huge inlined payloads
+        html = re.sub(
+            r"data:image/[^\"' )]+;base64,[A-Za-z0-9+/=]+", "[image removed]", html
+        )
+        soup = BeautifulSoup(html, "html.parser")
+        # Drop <img> tags entirely
+        for img in soup.find_all("img"):
+            img.decompose()
+        # Use shared formatter to produce clean, structured text
+        text = format_document_soup(soup)
+        # Unescape any remaining HTML entities just in case
+        return html_lib.unescape(text)
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         # Expected keys from UI credential JSON
@@ -82,12 +87,7 @@ class TestRailConnector(LoadConnector, PollConnector):
 
     def validate_connector_settings(self) -> None:
         """Lightweight validation to surface common misconfigurations early."""
-        try:
-            projects = self._list_projects()
-        except Exception as e:
-            raise ConnectorMissingCredentialError(
-                f"TestRail credentials or base URL invalid: {e}"
-            )
+        projects = self._list_projects()
         if not projects:
             logger.warning("TestRail: no projects visible to this credential.")
 
@@ -98,9 +98,33 @@ class TestRailConnector(LoadConnector, PollConnector):
 
         # TestRail API base is typically /index.php?/api/v2/<endpoint>
         url = f"{self.base_url}/index.php?/api/v2/{endpoint}"
-        response = requests.get(url, auth=(self.username, self.api_key), params=params)
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = requests.get(
+                url,
+                auth=(self.username, self.api_key),
+                params=params,
+            )
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if getattr(e, "response", None) else None
+            if status == 401:
+                raise CredentialExpiredError(
+                    "Invalid or expired TestRail credentials (HTTP 401)."
+                ) from e
+            if status == 403:
+                raise InsufficientPermissionsError(
+                    "Insufficient permissions to access TestRail resources (HTTP 403)."
+                ) from e
+            raise UnexpectedValidationError(
+                f"Unexpected TestRail HTTP error (status={status})."
+            ) from e
+        except requests.exceptions.RequestException as e:
+            raise UnexpectedValidationError(f"TestRail request failed: {e}") from e
+
+        try:
+            return response.json()
+        except ValueError as e:
+            raise UnexpectedValidationError("Invalid JSON returned by TestRail API") from e
 
     def _list_projects(self) -> list[dict[str, Any]]:
         projects = self._api_get("get_projects")
@@ -332,14 +356,12 @@ if __name__ == "__main__":
     #   TESTRAIL_USERNAME=you@example.com
     #   TESTRAIL_API_KEY=your_api_key_or_password
     #   TESTRAIL_PROJECT_ID=123            (optional)
-    #   TESTRAIL_SUITE_ID=456              (optional)
     import os
 
     base = os.environ.get("TESTRAIL_BASE_URL", "").strip()
     user = os.environ.get("TESTRAIL_USERNAME", "").strip()
     key = os.environ.get("TESTRAIL_API_KEY", "").strip()
     project_id = os.environ.get("TESTRAIL_PROJECT_ID")
-    suite_id = os.environ.get("TESTRAIL_SUITE_ID")
 
     cred = {
         "testrail_base_url": base,
