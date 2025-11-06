@@ -21,12 +21,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FiInfo, FiX } from "react-icons/fi";
-import {
-  TooltipProvider,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState, useEffect, memo, JSX } from "react";
@@ -49,6 +43,7 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 import SvgEye from "@/icons/eye";
 import SvgEyeClosed from "@/icons/eye-closed";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 export function SectionHeader({
   children,
@@ -149,22 +144,11 @@ export function ExplanationText({
   );
 }
 
-export function ToolTipDetails({
-  children,
-}: {
-  children: string | JSX.Element;
-}) {
+export function ToolTipDetails({ children }: { children: string }) {
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger type="button">
-          <FiInfo size={12} />
-        </TooltipTrigger>
-        <TooltipContent side="top" align="center">
-          <Text inverted>{children}</Text>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <SimpleTooltip tooltip={children} side="top" align="center">
+      <FiInfo size={12} />
+    </SimpleTooltip>
   );
 }
 
@@ -726,32 +710,28 @@ export const BooleanFormField = memo(function BooleanFormField({
   return (
     <div>
       <div className="flex items-center text-sm">
-        <TooltipProvider>
-          <Tooltip>
-            <FastField name={name} type="checkbox">
-              {({ field, form }: any) => (
-                <TooltipTrigger asChild>
-                  <Checkbox
-                    id={checkboxId}
-                    className={`
-                      ${disabled ? "opacity-50" : ""}
-                      ${removeIndent ? "mr-2" : "mx-3"}`}
-                    checked={Boolean(field.value)}
-                    onCheckedChange={(checked) => {
-                      if (!disabled) form.setFieldValue(name, checked === true);
-                      if (onChange) onChange(checked === true);
-                    }}
-                  />
-                </TooltipTrigger>
-              )}
-            </FastField>
-            {disabled && disabledTooltip && (
-              <TooltipContent side="top" align="center">
-                <Text inverted>{disabledTooltip}</Text>
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
+        <FastField name={name} type="checkbox">
+          {({ field, form }: any) => (
+            <SimpleTooltip
+              // This may seem confusing, but we only want to show the `disabledTooltip` if and only if the `BooleanFormField` is disabled.
+              // If it disabled, then we "enable" the showing of the tooltip. Thus, `disabled={!disabled}` is not a mistake.
+              disabled={!disabled}
+              tooltip={disabledTooltip}
+            >
+              <Checkbox
+                id={checkboxId}
+                className={`
+                     ${disabled ? "opacity-50" : ""}
+                     ${removeIndent ? "mr-2" : "mx-3"}`}
+                checked={Boolean(field.value)}
+                onCheckedChange={(checked) => {
+                  if (!disabled) form.setFieldValue(name, checked === true);
+                  if (onChange) onChange(checked === true);
+                }}
+              />
+            </SimpleTooltip>
+          )}
+        </FastField>
         {!noLabel && (
           <div>
             <div className="flex items-center gap-x-2">
