@@ -48,7 +48,8 @@ const colors = {
   },
 };
 
-export interface TextProps extends HTMLAttributes<HTMLParagraphElement> {
+export interface TextProps
+  extends Omit<HTMLAttributes<HTMLParagraphElement>, "as"> {
   nowrap?: boolean;
 
   // Fonts
@@ -164,7 +165,7 @@ export default function Text({
             ? "text05"
             : "text05";
 
-  const Tag = as ?? (font.startsWith("figure") ? "span" : "p");
+  const Tag = as ?? "p";
 
   return (
     <Tag
