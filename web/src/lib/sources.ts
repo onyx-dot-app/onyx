@@ -47,6 +47,7 @@ import {
   GitbookIcon,
   HighspotIcon,
   EmailIcon,
+  TestRailIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
@@ -272,7 +273,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: "https://docs.onyx.app/admin/connectors/official/productboard",
   },
   testrail: {
-    icon: GlobeIcon,
+    icon: TestRailIcon,
     displayName: "TestRail",
     category: SourceCategory.TicketingAndTaskManagement,
   },

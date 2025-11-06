@@ -98,6 +98,7 @@ import xenforoIcon from "../../../public/Xenforo.svg";
 import zAIIcon from "../../../public/Z_AI.png";
 import zendeskIcon from "../../../public/Zendesk.svg";
 import zulipIcon from "../../../public/Zulip.png";
+import testrailSVG from "../../../public/Testrail.svg";
 
 import gitlabIcon from "../../../public/Gitlab.png";
 import gmailIcon from "../../../public/Gmail.png";
@@ -2890,6 +2891,7 @@ export const NomicIcon = createLogoIcon(nomicSVG);
 export const NotionIcon = createLogoIcon(notionIcon, { monochromatic: true });
 export const OCIStorageIcon = createLogoIcon(OCIStorageSVG);
 export const OllamaIcon = createLogoIcon(ollamaIcon);
+export const TestRailIcon = createLogoIcon(testrailSVG);
 export const OpenAIISVG = ({
   size = 16,
   className = defaultTailwindCSS,
