@@ -111,11 +111,21 @@ class TeamsConnector(
             has_special_chars = _has_odata_incompatible_chars(self.requested_team_list)
             timeout = 30 if has_special_chars else 10
 
+            logger.info(
+                f"Requested team count: {len(self.requested_team_list) if self.requested_team_list else 0}, "
+                f"Has special chars: {has_special_chars}, "
+                f"Timeout: {timeout}s"
+            )
+
             found_teams = run_with_timeout(
                 timeout=timeout,
                 func=_collect_all_teams,
                 graph_client=self.graph_client,
                 requested=self.requested_team_list,
+            )
+
+            logger.info(
+                f"Teams validation successful - " f"Found {len(found_teams)} team(s)"
             )
 
         except TimeoutError as e:
@@ -310,9 +320,9 @@ class TeamsConnector(
 
 def _has_odata_incompatible_chars(team_names: list[str] | None) -> bool:
     """Check if any team name contains characters that break OData filters.
-    
-    The &, (, and ) characters are not allowed in OData string literals and are 
-    reserved characters in OData syntax. Server-side filtering is not possible for 
+
+    The &, (, and ) characters are not allowed in OData string literals and are
+    reserved characters in OData syntax. Server-side filtering is not possible for
     team names containing these characters.
     """
     if not team_names:
