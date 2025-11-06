@@ -1,15 +1,9 @@
-// Utils
-export { cn } from "@/utils";
+/* Components */
 
-// Components - Text
-export { default as Text } from "@/components/texts/Text";
-export type { TextProps } from "@/components/texts/Text";
+/* Hooks */
 
-// Components - Buttons
-export { default as Button } from "@/components/buttons/Button";
-export type { ButtonProps, SvgProps } from "@/components/buttons/Button";
-
-// Icons (110 icons with Svg prefix)
+/* Icons */
+export * from "@/icons/types";
 export { default as SvgActions } from "@/icons/actions";
 export { default as SvgActivity } from "@/icons/activity";
 export { default as SvgAddLines } from "@/icons/add-lines";
@@ -120,9 +114,5 @@ export { default as SvgX } from "@/icons/x";
 export { default as SvgZoomIn } from "@/icons/zoom-in";
 export { default as SvgZoomOut } from "@/icons/zoom-out";
 
-// Icon types
-export * from "@/icons/types";
-
-// Hooks will be added in next phase
-// Example:
-// export { useClickOutside } from "@/hooks/useClickOutside";
+/* Utils */
+export { cn } from "@/utils";
