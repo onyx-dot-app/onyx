@@ -49,7 +49,6 @@ export default function LineItem({
   rightChildren,
   onClick,
   href,
-  className,
   ...props
 }: LineItemProps) {
   const variant = main
