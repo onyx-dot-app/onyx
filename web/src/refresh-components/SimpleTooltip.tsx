@@ -41,7 +41,7 @@ export default function SimpleTooltip({
           // Doesn't work for some reason.
           // disabled={disabled}
         >
-          {children}
+          <div>{children}</div>
         </TooltipTrigger>
         {!disabled && (
           <TooltipContent side={side} {...rest}>
