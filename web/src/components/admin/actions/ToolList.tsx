@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import Text from "@/components/ui/text";
 import { SearchIcon } from "lucide-react";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   MCPFormValues,
@@ -38,18 +38,24 @@ export function ToolList({
     serverId
   );
 
+  // Track if we've already auto-listed tools to prevent infinite loops
+  const hasAutoListedRef = useRef(false);
+  const listingToolsParam = searchParams.get("listing_tools") === "true";
+
   // Auto-trigger tool listing when page loads with listing_tools=true query param
   useEffect(() => {
     if (
-      searchParams.get("listing_tools") === "true" &&
+      listingToolsParam &&
       serverId &&
       values.name.trim() &&
-      values.server_url.trim()
+      values.server_url.trim() &&
+      !hasAutoListedRef.current
     ) {
       // Only auto-trigger for servers that have required form values and a serverId
+      hasAutoListedRef.current = true;
       handleListActions(values);
     }
-  }, [searchParams, serverId, values.name, values.server_url]);
+  }, [listingToolsParam, serverId]);
 
   const handleListActions = async (values: MCPFormValues) => {
     // Check if OAuth needs connection first

@@ -68,7 +68,7 @@ export const FormProvider: React.FC<{
     } else if (newUrl !== pathname) {
       router.push(newUrl);
     }
-  }, [formStep, router, pathname, searchParams]);
+  }, [formStep, router, pathname]);
 
   useEffect(() => {
     const stepFromUrl = parseInt(searchParams?.get("step") || "0", 10);
