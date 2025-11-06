@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.context.search.enums import SearchType
+from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -323,6 +324,7 @@ def _simplify_text(text: str) -> str:
     ).lower()
 
 
+# TODO delete this
 def retrieve_chunks(
     query: SearchQuery,
     user_id: UUID | None,
@@ -422,6 +424,80 @@ def retrieve_chunks(
                 search_type=query.search_type, metrics=chunk_metrics
             )
         )
+
+    return top_chunks
+
+
+def _embed_and_search(
+    query_request: ChunkIndexRequest,
+    document_index: DocumentIndex,
+    db_session: Session,
+) -> list[InferenceChunk]:
+    query_embedding = get_query_embedding(query_request.query, db_session)
+
+    return document_index.hybrid_retrieval(
+        query=query_request.query,
+        query_embedding=query_embedding,
+        final_keywords=query_request.query_keywords,
+        filters=query_request.filters,
+        hybrid_alpha=query_request.hybrid_alpha,
+        time_decay_multiplier=query_request.recency_bias_multiplier,
+        num_to_retrieve=query_request.limit,
+        # Hardcoded to this for now
+        ranking_profile_type=QueryExpansionType.SEMANTIC,
+        offset=query_request.offset,
+    )
+
+
+def search_chunks(
+    query_request: ChunkIndexRequest,
+    user_id: UUID | None,
+    document_index: DocumentIndex,
+    db_session: Session,
+    slack_context: SlackContext | None = None,
+) -> list[InferenceChunk]:
+    run_queries: list[tuple[Callable, tuple]] = []
+
+    source_filters = set(query_request.filters.source_type)
+
+    # Federated retrieval
+    federated_retrieval_infos = get_federated_retrieval_functions(
+        db_session=db_session,
+        user_id=user_id,
+        source_types=source_filters,
+        document_set_names=query_request.filters.document_set,
+        slack_context=slack_context,
+    )
+
+    federated_sources = set(
+        federated_retrieval_info.source.to_non_federated_source()
+        for federated_retrieval_info in federated_retrieval_infos
+    )
+    for federated_retrieval_info in federated_retrieval_infos:
+        run_queries.append(
+            (federated_retrieval_info.retrieval_function, (query_request,))
+        )
+
+    # Don't run normal hybrid search if there are no indexed sources to
+    # search over
+    normal_search_enabled = (source_filters is None) or (
+        len(set(source_filters) - federated_sources) > 0
+    )
+
+    if normal_search_enabled:
+        run_queries.append(
+            (_embed_and_search, (query_request, document_index, db_session))
+        )
+
+    parallel_search_results = run_functions_tuples_in_parallel(run_queries)
+    top_chunks = combine_retrieval_results(parallel_search_results)
+
+    if not top_chunks:
+        logger.debug(
+            f"Hybrid search returned no results for query: {query_request.query}"
+            f"with filters: {query_request.filters}"
+        )
+        return []
 
     return top_chunks
 

@@ -152,6 +152,38 @@ class ChunkContext(BaseModel):
         return value
 
 
+class BasicChunkRequest(BaseModel):
+    query: str
+
+    # In case the caller wants to override the weighting between semantic and keyword search.
+    hybrid_alpha: float | None = None
+
+    # In case some queries favor recency more than other queries.
+    recency_bias_multiplier: float = 1.0
+
+    # Sometimes we may want to extract specific keywords from a more semantic query for
+    # a better keyword search.
+    query_keywords: list[str] | None = None
+
+    # TODO: Currently this is never set
+    limit: int | None = None
+    offset: int | None = None
+
+
+class ChunkSearchRequest(BasicChunkRequest):
+    # Final filters are calculated from these
+    user_selected_filters: BaseFilters | None = None
+    project_id: int | None = None
+
+    # Use with caution!
+    bypass_acl: bool = False
+
+
+class ChunkIndexRequest(BasicChunkRequest):
+    # Calculated final filters
+    filters: IndexFilters
+
+
 class SearchRequest(ChunkContext):
     query: str
 

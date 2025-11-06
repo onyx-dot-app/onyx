@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import MAX_FEDERATED_CHUNKS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
+from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import SearchQuery
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
 )
@@ -27,7 +27,7 @@ logger = setup_logger()
 class FederatedRetrievalInfo(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    retrieval_function: Callable[[SearchQuery], list[InferenceChunk]]
+    retrieval_function: Callable[[ChunkIndexRequest], list[InferenceChunk]]
     source: FederatedConnectorSource
 
 
