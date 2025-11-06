@@ -19,6 +19,7 @@ from onyx.agents.agent_sdk.monkey_patches import (
 )
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.agents.agent_search.dr.enums import ResearchType
+from onyx.chat.chat_utils import llm_docs_from_fetched_documents_cache
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.memories import get_memories
 from onyx.chat.models import PromptConfig
@@ -33,11 +34,12 @@ from onyx.chat.stream_processing.utils import map_document_id_order_v2
 from onyx.chat.turn.context_handler.citation import (
     assign_citation_numbers_recent_tool_calls,
 )
-from onyx.chat.turn.context_handler.task_prompt import update_task_prompt
+from onyx.chat.turn.context_handler.reminder import maybe_append_reminder
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
 from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
+from onyx.chat.turn.prompts.custom_instruction import build_custom_instructions
 from onyx.chat.turn.save_turn import extract_final_answer_from_packets
 from onyx.chat.turn.save_turn import save_turn
 from onyx.server.query_and_chat.streaming_models import CitationDelta
@@ -77,9 +79,6 @@ def _run_agent_loop(
     from onyx.llm.litellm_singleton.config import initialize_litellm
 
     initialize_litellm()
-    # Split messages into three parts for clear tracking
-    # TODO: Think about terminal tool calls like image gen
-    # in multi turn conversations
     chat_history = messages[1:-1]
     current_user_message = cast(UserMessage, messages[-1])
     agent_turn_messages: list[AgentSDKMessage] = []
@@ -91,6 +90,9 @@ def _run_agent_loop(
             dependencies.tools if iteration_count < MAX_ITERATIONS else []
         )
         memories = get_memories(dependencies.user_or_none, dependencies.db_session)
+        # TODO: The system is rather prompt-cache efficient except for rebuilding the system prompt.
+        # The biggest offender is when we hit max iterations and then all the tool calls cannot
+        # be cached anymore since the system message will be differ in that it will have no tools.
         langchain_system_message = default_build_system_message_v2(
             dependencies.prompt_config,
             dependencies.llm.config,
@@ -106,7 +108,13 @@ def _run_agent_loop(
                 )
             ],
         )
-        previous_messages = [new_system_prompt] + chat_history + [current_user_message]
+        custom_instructions = build_custom_instructions(prompt_config)
+        previous_messages = (
+            [new_system_prompt]
+            + chat_history
+            + custom_instructions
+            + [current_user_message]
+        )
         current_messages = previous_messages + agent_turn_messages
 
         if not available_tools:
@@ -141,26 +149,30 @@ def _run_agent_loop(
             for msg in all_messages_after_stream[len(previous_messages) :]
         ]
 
+        # Apply context handlers in order:
+        # 1. Remove all user messages in the middle (previous reminders)
+        agent_turn_messages = [
+            msg for msg in agent_turn_messages if msg.get("role") != "user"
+        ]
+
+        # 2. Add task prompt reminder
         last_iteration_included_web_search = any(
             tool_call.name == "web_search" for tool_call in tool_call_events
         )
-
-        agent_turn_messages = list(
-            update_task_prompt(
-                current_user_message,
-                agent_turn_messages,
-                prompt_config,
-                ctx.should_cite_documents,
-                last_iteration_included_web_search,
-            )
+        agent_turn_messages = maybe_append_reminder(
+            agent_turn_messages,
+            prompt_config,
+            ctx.should_cite_documents,
+            last_iteration_included_web_search,
         )
+
+        # 3. Assign citation numbers to tool call outputs
         citation_result = assign_citation_numbers_recent_tool_calls(
             agent_turn_messages, ctx
         )
         agent_turn_messages = list(citation_result.updated_messages)
-        ctx.ordered_fetched_documents.extend(citation_result.new_llm_docs)
         ctx.documents_processed_by_citation_context_handler += (
-            citation_result.num_docs_cited
+            citation_result.new_docs_cited
         )
         ctx.tool_calls_processed_by_citation_context_handler += (
             citation_result.num_tool_calls_cited
@@ -246,8 +258,7 @@ def _fast_chat_turn_core(
         iteration_instructions=ctx.iteration_instructions,
         global_iteration_responses=ctx.global_iteration_responses,
         final_answer=final_answer,
-        unordered_fetched_inference_sections=ctx.unordered_fetched_inference_sections,
-        ordered_fetched_documents=ctx.ordered_fetched_documents,
+        fetched_documents_cache=ctx.fetched_documents_cache,
     )
     dependencies.emitter.emit(
         Packet(ind=ctx.current_run_step, obj=OverallStop(type="stop"))
@@ -284,10 +295,11 @@ def _process_stream(
 ) -> tuple[RunResultStreaming, list["ResponseFunctionToolCall"]]:
     from litellm import ResponseFunctionToolCall
 
-    mapping = map_document_id_order_v2(ctx.ordered_fetched_documents)
-    if ctx.ordered_fetched_documents:
+    llm_docs = llm_docs_from_fetched_documents_cache(ctx.fetched_documents_cache)
+    mapping = map_document_id_order_v2(llm_docs)
+    if llm_docs:
         processor = CitationProcessor(
-            context_docs=ctx.ordered_fetched_documents,
+            context_docs=llm_docs,
             doc_id_to_rank_map=mapping,
             stop_stream=None,
         )
@@ -424,8 +436,11 @@ def _default_packet_translation(
             needs_start = has_had_message_start(packet_history, ctx.current_run_step)
             if needs_start:
                 ctx.current_run_step += 1
+                llm_docs_for_message_start = llm_docs_from_fetched_documents_cache(
+                    ctx.fetched_documents_cache
+                )
                 retrieved_search_docs = saved_search_docs_from_llm_docs(
-                    ctx.ordered_fetched_documents
+                    llm_docs_for_message_start
                 )
                 packets.append(
                     Packet(

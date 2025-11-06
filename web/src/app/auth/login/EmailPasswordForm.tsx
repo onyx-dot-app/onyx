@@ -35,7 +35,8 @@ export default function EmailPasswordForm({
   defaultEmail,
   isJoin = false,
 }: EmailPasswordFormProps) {
-  const { user } = useUser();
+  const { user, authTypeMetadata } = useUser();
+  const passwordMinLength = authTypeMetadata?.passwordMinLength ?? 8;
   const { popup, setPopup } = usePopup();
   const [isWorking, setIsWorking] = useState<boolean>(false);
   const [apiStatus, setApiStatus] = useState<APIFormFieldState>("loading");
@@ -75,7 +76,10 @@ export default function EmailPasswordForm({
             .required()
             .transform((value) => value.toLowerCase()),
           password: Yup.string()
-            .min(8, "Password must be at least 8 characters")
+            .min(
+              passwordMinLength,
+              `Password must be at least ${passwordMinLength} characters`
+            )
             .required(),
         })}
         onSubmit={async (values: { email: string; password: string }) => {
@@ -223,9 +227,9 @@ export default function EmailPasswordForm({
                     {isSignup && !showApiMessage && (
                       <FormField.Message
                         messages={{
-                          idle: "Password must be at least 8 characters",
+                          idle: `Password must be at least ${passwordMinLength} characters`,
                           error: meta.error,
-                          success: "Password must be at least 8 characters",
+                          success: `Password must be at least ${passwordMinLength} characters`,
                         }}
                       />
                     )}

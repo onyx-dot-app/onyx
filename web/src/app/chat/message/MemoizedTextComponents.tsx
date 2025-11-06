@@ -4,7 +4,7 @@ import {
   DocumentCardProps,
 } from "@/components/search/results/Citation";
 import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
-import React, { memo } from "react";
+import React, { memo, JSX } from "react";
 import isEqual from "lodash/isEqual";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";

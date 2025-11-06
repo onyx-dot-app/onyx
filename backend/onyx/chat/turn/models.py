@@ -13,13 +13,13 @@ from agents import LocalShellTool
 from agents import Model
 from agents import ModelSettings
 from agents import WebSearchTool
+from pydantic import BaseModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
-from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
 from onyx.chat.turn.infra.emitter import Emitter
 from onyx.context.search.models import InferenceSection
@@ -55,6 +55,11 @@ class ChatTurnDependencies:
     prompt_config: PromptConfig
 
 
+class FetchedDocumentCacheEntry(BaseModel):
+    inference_section: InferenceSection
+    document_citation_number: int
+
+
 @dataclass
 class ChatTurnContext:
     """Context class to hold search tool and other dependencies"""
@@ -73,10 +78,9 @@ class ChatTurnContext:
     should_cite_documents: bool = False
     documents_processed_by_citation_context_handler: int = 0
     tool_calls_processed_by_citation_context_handler: int = 0
-    unordered_fetched_inference_sections: list[InferenceSection] = dataclasses.field(
-        default_factory=list
+    fetched_documents_cache: dict[str, FetchedDocumentCacheEntry] = dataclasses.field(
+        default_factory=dict
     )
-    ordered_fetched_documents: list[LlmDoc] = dataclasses.field(default_factory=list)
     citations: list[CitationInfo] = dataclasses.field(default_factory=list)
 
     # Used to ignore packets that are streamed back by Agents SDK, but should

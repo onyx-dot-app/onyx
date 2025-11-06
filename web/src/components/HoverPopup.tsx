@@ -1,3 +1,5 @@
+import { JSX } from "react";
+
 interface HoverPopupProps {
   mainContent: string | JSX.Element;
   popupContent: string | JSX.Element;

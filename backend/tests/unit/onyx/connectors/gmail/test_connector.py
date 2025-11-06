@@ -1,12 +1,23 @@
 import datetime
 import json
 import os
+from typing import Any
+from typing import cast
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.gmail.connector import _build_time_range_query
+from onyx.connectors.gmail.connector import GmailCheckpoint
+from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.gmail.connector import thread_to_document
 from onyx.connectors.models import Document
+from onyx.connectors.models import TextSection
+from tests.unit.onyx.connectors.utils import (
+    load_everything_from_checkpoint_connector_from_checkpoint,
+)
 
 
 def test_thread_to_document() -> None:
@@ -63,3 +74,153 @@ def test_time_str_to_utc() -> None:
     }
     for strptime, expected_datetime in str_to_dt.items():
         assert time_str_to_utc(strptime) == expected_datetime
+
+
+def test_gmail_checkpoint_progression() -> None:
+    connector = GmailConnector()
+    connector._creds = MagicMock()
+    connector._primary_admin_email = "admin@test.com"
+
+    user_emails = ["user1@test.com", "user2@test.com"]
+
+    thread_list_responses: dict[str, dict[str | None, dict[str, Any]]] = {
+        "user1@test.com": {
+            None: {
+                "threads": [{"id": "t1"}, {"id": "t2"}],
+                "nextPageToken": "token-user1-page2",
+            },
+            "token-user1-page2": {
+                "threads": [{"id": "t3"}],
+                "nextPageToken": None,
+            },
+        },
+        "user2@test.com": {
+            None: {
+                "threads": [{"id": "t4"}],
+                "nextPageToken": None,
+            }
+        },
+    }
+
+    full_thread_responses = {
+        "user1@test.com": {
+            "t1": {"id": "t1"},
+            "t2": {"id": "t2"},
+            "t3": {"id": "t3"},
+        },
+        "user2@test.com": {
+            "t4": {"id": "t4"},
+        },
+    }
+
+    class MockRequest:
+        def __init__(self, response: dict[str, Any]):
+            self._response = response
+
+        def execute(self) -> dict[str, Any]:
+            return self._response
+
+    class MockThreadsResource:
+        def __init__(self, user_email: str) -> None:
+            self._user_email = user_email
+
+        def list(
+            self,
+            *,
+            userId: str,
+            fields: str,
+            q: str | None = None,
+            pageToken: str | None = None,
+            **_: object,
+        ) -> MockRequest:
+            assert userId == self._user_email
+            assert "nextPageToken" in fields
+            responses = thread_list_responses[self._user_email]
+            key = pageToken or None
+            return MockRequest(responses[key])
+
+        def get(
+            self,
+            *,
+            userId: str,
+            id: str,
+            fields: str,
+            **_: object,
+        ) -> MockRequest:
+            assert userId == self._user_email
+            assert "messages" in fields or "payload" in fields
+            return MockRequest(full_thread_responses[self._user_email][id])
+
+    class MockUsersResource:
+        def __init__(self, user_email: str) -> None:
+            self._user_email = user_email
+
+        def threads(self) -> MockThreadsResource:
+            return MockThreadsResource(self._user_email)
+
+    class MockGmailService:
+        def __init__(self, user_email: str) -> None:
+            self._user_email = user_email
+
+        def users(self) -> MockUsersResource:
+            return MockUsersResource(self._user_email)
+
+    def fake_get_gmail_service(_: object, user_email: str) -> MockGmailService:
+        return MockGmailService(user_email)
+
+    def fake_thread_to_document(
+        full_thread: dict[str, object], user_email: str
+    ) -> Document:
+        thread_id = cast(str, full_thread["id"])
+        return Document(
+            id=f"{user_email}:{thread_id}",
+            semantic_identifier=f"Thread {thread_id}",
+            sections=[TextSection(text=f"Body {thread_id}")],
+            source=DocumentSource.GMAIL,
+            metadata={},
+            external_access=ExternalAccess(
+                external_user_emails={user_email},
+                external_user_group_ids=set(),
+                is_public=False,
+            ),
+        )
+
+    checkpoint = connector.build_dummy_checkpoint()
+    assert isinstance(checkpoint, GmailCheckpoint)
+
+    with patch.object(GmailConnector, "_get_all_user_emails", return_value=user_emails):
+        with patch(
+            "onyx.connectors.gmail.connector.get_gmail_service",
+            side_effect=fake_get_gmail_service,
+        ):
+            with patch(
+                "onyx.connectors.gmail.connector.thread_to_document",
+                side_effect=fake_thread_to_document,
+            ) as mock_thread_to_document:
+                outputs = load_everything_from_checkpoint_connector_from_checkpoint(
+                    connector=connector,
+                    start=0,
+                    end=1_000,
+                    checkpoint=checkpoint,
+                )
+
+    document_ids = [
+        item.id
+        for output in outputs
+        for item in output.items
+        if isinstance(item, Document)
+    ]
+
+    assert document_ids == [
+        "user2@test.com:t4",
+        "user1@test.com:t1",
+        "user1@test.com:t2",
+        "user1@test.com:t3",
+    ]
+
+    assert mock_thread_to_document.call_count == 4
+
+    final_checkpoint = outputs[-1].next_checkpoint
+    assert isinstance(final_checkpoint, GmailCheckpoint)
+    assert final_checkpoint.has_more is False
+    assert final_checkpoint.user_emails == []

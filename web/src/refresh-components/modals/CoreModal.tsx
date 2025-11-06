@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { MODAL_ROOT_ID } from "@/lib/constants";
-import { cn } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
 
 interface CoreModalProps {
   onClickOutside?: () => void;
@@ -14,7 +14,7 @@ export default function CoreModal({
   className,
   children,
 }: CoreModalProps) {
-  const insideModal = React.useRef(false);
+  const mouseDownOutside = React.useRef(false);
   const modalRef = React.useRef<HTMLDivElement>(null);
 
   // Focus this `CoreModal` component when it mounts.
@@ -35,7 +35,11 @@ export default function CoreModal({
   const modalContent = (
     <div
       className="fixed inset-0 z-[2000] flex items-center justify-center bg-mask-03 backdrop-blur-03"
-      onClick={() => (insideModal.current ? undefined : onClickOutside?.())}
+      onMouseDown={() => (mouseDownOutside.current = true)}
+      onClick={() => {
+        if (mouseDownOutside.current) onClickOutside?.();
+        mouseDownOutside.current = false;
+      }}
     >
       <div
         ref={modalRef}
@@ -43,9 +47,9 @@ export default function CoreModal({
           "z-10 rounded-16 flex border shadow-2xl flex-col bg-background-tint-00 overflow-hidden",
           className
         )}
-        onMouseOver={() => (insideModal.current = true)}
-        onMouseEnter={() => (insideModal.current = true)}
-        onMouseLeave={() => (insideModal.current = false)}
+        onMouseDown={noProp(() => {
+          mouseDownOutside.current = false;
+        })}
         tabIndex={-1}
       >
         {children}
