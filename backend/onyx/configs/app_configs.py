@@ -794,21 +794,19 @@ ENTERPRISE_EDITION_ENABLED = (
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
 )
 
-
 # Azure Image Configurations
-def _get_image_env(primary: str, legacy: str) -> str | None:
-    """Fetch image env vars, falling back to legacy DALL-E names."""
-    return os.environ.get(primary) or os.environ.get(legacy)
-
-
-AZURE_IMAGE_API_VERSION = _get_image_env(
-    "AZURE_IMAGE_API_VERSION", "AZURE_DALLE_API_VERSION"
+AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION") or os.environ.get(
+    "AZURE_DALLE_API_VERSION"
 )
-AZURE_IMAGE_API_KEY = _get_image_env("AZURE_IMAGE_API_KEY", "AZURE_DALLE_API_KEY")
-AZURE_IMAGE_API_BASE = _get_image_env("AZURE_IMAGE_API_BASE", "AZURE_DALLE_API_BASE")
-AZURE_IMAGE_DEPLOYMENT_NAME = _get_image_env(
-    "AZURE_IMAGE_DEPLOYMENT_NAME", "AZURE_DALLE_DEPLOYMENT_NAME"
+AZURE_IMAGE_API_KEY = os.environ.get("AZURE_IMAGE_API_KEY") or os.environ.get(
+    "AZURE_DALLE_API_KEY"
 )
+AZURE_IMAGE_API_BASE = os.environ.get("AZURE_IMAGE_API_BASE") or os.environ.get(
+    "AZURE_DALLE_API_BASE"
+)
+AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get(
+    "AZURE_IMAGE_DEPLOYMENT_NAME"
+) or os.environ.get("AZURE_DALLE_DEPLOYMENT_NAME")
 
 # configurable image model
 IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
