@@ -246,9 +246,12 @@ function FederatedConnectorRow({
       )}
       <TableCell>N/A</TableCell>
       <TableCell>
-        <SimpleTooltip tooltip="Manage Federated Connector">
-          <IconButton icon={SvgSettings} tertiary />
-        </SimpleTooltip>
+          <IconButton 
+            icon={SvgSettings} 
+            tertiary 
+            onClick={handleManageClick}
+            tooltip="Manage Federated Connector"
+          />
       </TableCell>
     </TableRow>
   );
