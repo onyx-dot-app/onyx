@@ -60,7 +60,7 @@ jobs:
             --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
 
       - name: Cache mypy cache
-        if: vars.DISABLE_MYPY_CACHE != 'true'
+        if: ${{ vars.DISABLE_MYPY_CACHE != 'true' }}
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
         with:
           path: backend/.mypy_cache
