@@ -88,7 +88,6 @@ def get_chunk_info(
     inference_chunks = document_index.id_based_retrieval(
         chunk_requests=[chunk_request],
         filters=IndexFilters(access_control_list=user_acl_filters),
-        batch_retrieval=True,
     )
 
     if not inference_chunks:

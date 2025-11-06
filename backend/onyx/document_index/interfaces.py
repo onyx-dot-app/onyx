@@ -323,7 +323,6 @@ class IdRetrievalCapable(abc.ABC):
         self,
         chunk_requests: list[VespaChunkRequest],
         filters: IndexFilters,
-        batch_retrieval: bool = False,
     ) -> list[InferenceChunkUncleaned]:
         """
         Fetch chunk(s) based on document id
@@ -336,7 +335,6 @@ class IdRetrievalCapable(abc.ABC):
         Parameters:
         - chunk_requests: requests containing the document id and the chunk range to retrieve
         - filters: Filters to apply to retrieval
-        - batch_retrieval: If True, perform a batch retrieval
 
         Returns:
             list of chunks for the document id or the specific chunk by the specified chunk index

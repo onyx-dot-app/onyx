@@ -84,7 +84,6 @@ def main() -> None:
                                 VespaChunkRequest(document_id=doc_id, max_chunk_ind=2)
                             ],
                             filters=IndexFilters(access_control_list=None),
-                            batch_retrieval=True,
                         )
                         if not chunks:
                             print(f"Document {doc_id} not found in Vespa")

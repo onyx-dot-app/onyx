@@ -47,7 +47,6 @@ def get_document_vespa_contents(
             "secondary_owners",
             "source_type",
         ],
-        get_large_chunks=False,
     )
 
     # Convert Vespa chunks to KGChunks
