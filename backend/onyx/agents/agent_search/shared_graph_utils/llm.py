@@ -76,7 +76,7 @@ def stream_llm_answer(
     else:
         citation_processor = None
 
-    for message in llm.stream(
+    for message in llm.stream_langchain(
         prompt,
         timeout_override=timeout_override,
         max_tokens=max_tokens,
@@ -156,7 +156,7 @@ def invoke_llm_json(
     ) and supports_response_schema(llm.config.model_name, llm.config.model_provider)
 
     response_content = str(
-        llm.invoke(
+        llm.invoke_langchain(
             prompt,
             tools=tools,
             tool_choice=tool_choice,
@@ -224,7 +224,7 @@ def get_answer_from_llm(
     else:
         llm_response = run_with_timeout(
             timeout,
-            llm.invoke,
+            llm.invoke_langchain,
             prompt=msg,
             timeout_override=timeout_override,
             max_tokens=max_tokens,

@@ -179,7 +179,9 @@ class ImageGenerationTool(Tool[None]):
             chat_history=history_str,
             final_query=query,
         )
-        use_image_generation_tool_output = message_to_string(llm.invoke(prompt))
+        use_image_generation_tool_output = message_to_string(
+            llm.invoke_langchain(prompt)
+        )
 
         logger.debug(
             f"Evaluated if should use ImageGenerationTool: {use_image_generation_tool_output}"

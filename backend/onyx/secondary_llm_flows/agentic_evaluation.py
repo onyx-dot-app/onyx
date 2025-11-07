@@ -59,7 +59,7 @@ def evaluate_inference_section(
     )
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
     try:
-        model_output = message_to_string(llm.invoke(filled_llm_prompt))
+        model_output = message_to_string(llm.invoke_langchain(filled_llm_prompt))
 
         # Search for the "Useful Analysis" section in the model output
         # This regex looks for "2. Useful Analysis" (case-insensitive) followed by an optional colon,

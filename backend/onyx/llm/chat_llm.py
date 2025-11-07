@@ -545,7 +545,7 @@ class DefaultMultiLLM(LLM):
             self.log_model_configs()
 
         if DISABLE_LITELLM_STREAMING:
-            yield self.invoke(
+            yield self.invoke_langchain(
                 prompt,
                 tools,
                 tool_choice,

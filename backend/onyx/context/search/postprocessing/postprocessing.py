@@ -101,7 +101,7 @@ def update_image_sections_with_query(
                 ),
             ]
 
-            raw_response = llm.invoke(messages)
+            raw_response = llm.invoke_langchain(messages)
 
             answer_text = message_to_string(raw_response).strip()
             return (

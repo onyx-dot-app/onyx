@@ -426,7 +426,7 @@ def test_llm(llm: LLM) -> str | None:
     error_msg = None
     for _ in range(2):
         try:
-            llm.invoke("Do not respond")
+            llm.invoke_langchain("Do not respond")
             return None
         except Exception as e:
             error_msg = str(e)

@@ -680,7 +680,7 @@ def clarifier(
 
             @traced(name="clarifier stream and process", type="llm")
             def stream_and_process() -> BasicSearchProcessedStreamResults:
-                stream = graph_config.tooling.primary_llm.stream(
+                stream = graph_config.tooling.primary_llm.stream_langchain(
                     prompt=create_question_prompt(
                         cast(str, system_prompt_to_use),
                         cast(str, user_prompt_to_use),

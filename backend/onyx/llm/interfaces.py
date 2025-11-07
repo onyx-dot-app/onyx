@@ -96,6 +96,18 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+    ) -> None:
+        pass
+
+    @traced(name="invoke llm", type="llm")
+    def invoke_langchain(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> BaseMessage:
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
@@ -122,6 +134,17 @@ class LLM(abc.ABC):
         raise NotImplementedError
 
     def stream(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> None:
+        pass
+
+    def stream_langchain(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,

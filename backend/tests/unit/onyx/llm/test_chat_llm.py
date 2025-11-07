@@ -115,7 +115,7 @@ def test_multiple_tool_calls(default_multi_llm: DefaultMultiLLM) -> None:
         ]
 
         # Call the _invoke_implementation method
-        result = default_multi_llm.invoke(messages, tools)
+        result = default_multi_llm.invoke_langchain(messages, tools)
 
         # Assert that the result is an AIMessage
         assert isinstance(result, AIMessage)
@@ -260,7 +260,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: DefaultMultiLLM) -> No
         ]
 
         # Call the stream method
-        stream_result = list(default_multi_llm.stream(messages, tools))
+        stream_result = list(default_multi_llm.stream_langchain(messages, tools))
 
         # Assert that we received the correct number of chunks
         assert len(stream_result) == 3

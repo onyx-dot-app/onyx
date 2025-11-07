@@ -202,7 +202,7 @@ def analyze(
         llm_response = run_with_timeout(
             KG_STRATEGY_GENERATION_TIMEOUT,
             # fast_llm.invoke,
-            primary_llm.invoke,
+            primary_llm.invoke_langchain,
             prompt=msg,
             timeout_override=5,
             max_tokens=100,
