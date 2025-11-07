@@ -2,10 +2,10 @@ import string
 from collections.abc import Callable
 from uuid import UUID
 
-from backend.onyx.configs.chat_configs import NUM_RETURNED_HITS
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
+from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import ChunkMetric
@@ -23,7 +23,6 @@ from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import VespaChunkRequest
-from onyx.document_index.vespa.index import cleanup_chunks
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
 )
@@ -346,7 +345,7 @@ def retrieve_chunks(
     federated_retrieval_infos = get_federated_retrieval_functions(
         db_session,
         user_id,
-        query.filters.source_type,
+        set(query.filters.source_type) if query.filters.source_type else None,
         query.filters.document_set,
         slack_context,
     )
@@ -443,7 +442,7 @@ def _embed_and_search(
         num_to_retrieve=query_request.limit or NUM_RETURNED_HITS,
         # Hardcoded to this for now
         ranking_profile_type=QueryExpansionType.SEMANTIC,
-        offset=query_request.offset,
+        offset=query_request.offset or 0,
     )
 
 
@@ -456,7 +455,11 @@ def search_chunks(
 ) -> list[InferenceChunk]:
     run_queries: list[tuple[Callable, tuple]] = []
 
-    source_filters = set(query_request.filters.source_type)
+    source_filters = (
+        set(query_request.filters.source_type)
+        if query_request.filters.source_type
+        else None
+    )
 
     # Federated retrieval
     federated_retrieval_infos = get_federated_retrieval_functions(
@@ -519,13 +522,12 @@ def inference_sections_from_ids(
         filters=filters,
     )
 
-    cleaned_chunks = cleanup_chunks(retrieved_chunks)
-    if not cleaned_chunks:
+    if not retrieved_chunks:
         return []
 
     # Group chunks by document ID
     chunks_by_doc_id: dict[str, list[InferenceChunk]] = {}
-    for chunk in cleaned_chunks:
+    for chunk in retrieved_chunks:
         chunks_by_doc_id.setdefault(chunk.document_id, []).append(chunk)
 
     inference_sections = [

@@ -34,7 +34,7 @@ class FederatedRetrievalInfo(BaseModel):
 def get_federated_retrieval_functions(
     db_session: Session,
     user_id: UUID | None,
-    source_types: list[DocumentSource] | None,
+    source_types: set[DocumentSource] | None,
     document_set_names: list[str] | None,
     slack_context: SlackContext | None = None,
 ) -> list[FederatedRetrievalInfo]:
