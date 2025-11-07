@@ -17,6 +17,7 @@ import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/texts/Text";
+import { cn, noProp } from "@/lib/utils";
 
 type Props = {
   llmDescriptor: WellKnownLLMProviderDescriptor;
@@ -366,15 +367,20 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                   canFetchModels ? (
                     <IconButton
                       internal
-                      icon={SvgRefreshCw}
-                      onClick={(e) => {
+                      icon={({ className }) => (
+                        <SvgRefreshCw
+                          className={cn(
+                            className,
+                            isFetchingModels && "animate-spin"
+                          )}
+                        />
+                      )}
+                      onClick={noProp((e) => {
                         e.preventDefault();
-                        e.stopPropagation();
                         onFetchModels?.();
-                      }}
+                      })}
                       tooltip="Fetch available models"
                       disabled={disabled || isFetchingModels}
-                      className={isFetchingModels ? "animate-spin" : ""}
                     />
                   ) : undefined
                 }

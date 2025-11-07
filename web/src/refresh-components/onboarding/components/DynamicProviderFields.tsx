@@ -9,6 +9,7 @@ import { MODAL_CONTENT_MAP } from "../constants";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { cn, noProp } from "@/lib/utils";
 
 interface DynamicProviderFieldsProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
@@ -218,15 +219,20 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                     canFetchModels ? (
                       <IconButton
                         internal
-                        icon={SvgRefreshCw}
-                        onClick={(e) => {
+                        icon={({ className }) => (
+                          <SvgRefreshCw
+                            className={cn(
+                              className,
+                              isFetchingModels && "animate-spin"
+                            )}
+                          />
+                        )}
+                        onClick={noProp((e) => {
                           e.preventDefault();
-                          e.stopPropagation();
                           onFetchModels?.();
-                        }}
+                        })}
                         tooltip="Fetch available models"
                         disabled={disabled || isFetchingModels}
-                        className={isFetchingModels ? "animate-spin" : ""}
                       />
                     ) : undefined
                   }
