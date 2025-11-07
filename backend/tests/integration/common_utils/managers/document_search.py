@@ -1,9 +1,6 @@
 import requests
 
 from ee.onyx.server.query_and_chat.models import DocumentSearchRequest
-from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.enums import SearchType
-from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDocWithContent
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
@@ -14,14 +11,10 @@ class DocumentSearchManager:
     @staticmethod
     def search_documents(
         query: str,
-        search_type: SearchType = SearchType.KEYWORD,
         user_performing_action: DATestUser | None = None,
     ) -> list[str]:
         search_request = DocumentSearchRequest(
-            message=query,
-            search_type=search_type,
-            retrieval_options=RetrievalDetails(),
-            evaluation_type=LLMEvaluationType.SKIP,
+            query=query,
         )
         result = requests.post(
             url=f"{API_SERVER_URL}/query/document-search",

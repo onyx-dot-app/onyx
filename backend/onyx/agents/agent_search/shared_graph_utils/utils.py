@@ -39,7 +39,6 @@ from onyx.configs.agent_configs import AGENT_TIMEOUT_LLM_HISTORY_SUMMARY_GENERAT
 from onyx.configs.constants import DISPATCH_SEP_CHAR
 from onyx.configs.constants import FORMAT_DOCS_SEPARATOR
 from onyx.context.search.models import InferenceSection
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.persona import Persona
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
@@ -57,7 +56,6 @@ from onyx.prompts.agent_search import (
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
-from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -234,21 +232,12 @@ def retrieve_search_docs(
     retrieved_docs: list[InferenceSection] = []
 
     # new db session to avoid concurrency issues
-    with get_session_with_current_tenant() as db_session:
-        for tool_response in search_tool.run(
-            query=question,
-            override_kwargs=SearchToolOverrideKwargs(
-                force_no_rerank=True,
-                alternate_db_session=db_session,
-                retrieved_sections_callback=None,
-                skip_query_analysis=False,
-            ),
-        ):
-            # get retrieved docs to send to the rest of the graph
-            if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:
-                response = cast(SearchResponseSummary, tool_response.response)
-                retrieved_docs = response.top_sections
-                break
+    for tool_response in search_tool.run(query=question):
+        # get retrieved docs to send to the rest of the graph
+        if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:
+            response = cast(SearchResponseSummary, tool_response.response)
+            retrieved_docs = response.top_sections
+            break
 
     return retrieved_docs
 

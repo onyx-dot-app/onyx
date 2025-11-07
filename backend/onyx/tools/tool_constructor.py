@@ -1,6 +1,8 @@
 from typing import cast
 from uuid import UUID
 
+from backend.onyx.db.search_settings import get_current_search_settings
+from backend.onyx.document_index.factory import get_default_document_index
 from pydantic import BaseModel
 from pydantic import Field
 from sqlalchemy.orm import Session
@@ -17,7 +19,6 @@ from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
@@ -231,30 +232,24 @@ def construct_tools(
                 if not search_tool_config:
                     search_tool_config = SearchToolConfig()
 
+                user_id = user.id if user else None
+                search_settings = get_current_search_settings(db_session)
+                document_index = get_default_document_index(search_settings, user_id)
+
                 search_tool = SearchTool(
                     tool_id=db_tool_model.id,
                     db_session=db_session,
                     user=user,
                     persona=persona,
-                    retrieval_options=search_tool_config.retrieval_options,
-                    prompt_config=prompt_config,
                     llm=llm,
                     fast_llm=fast_llm,
-                    document_pruning_config=search_tool_config.document_pruning_config,
-                    answer_style_config=search_tool_config.answer_style_config,
-                    selected_sections=search_tool_config.selected_sections,
-                    chunks_above=search_tool_config.chunks_above,
-                    chunks_below=search_tool_config.chunks_below,
-                    full_doc=search_tool_config.full_doc,
-                    evaluation_type=(
-                        LLMEvaluationType.BASIC
-                        if persona.llm_relevance_filter
-                        else LLMEvaluationType.SKIP
-                    ),
-                    rerank_settings=search_tool_config.rerank_settings,
-                    bypass_acl=search_tool_config.bypass_acl,
-                    slack_context=slack_context,  # Pass the Slack context
+                    document_index=document_index,
+                    user_selected_filters=search_tool_config.retrieval_options.filters,
+                    project_id=None,  # TODO
+                    bypass_acl=False,
+                    slack_context=slack_context,
                 )
+
                 tool_dict[db_tool_model.id] = [search_tool]
 
             # Handle Image Generation Tool

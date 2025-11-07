@@ -129,13 +129,96 @@ def _build_index_filters(
         tags=base_filters.tags,
         access_control_list=user_acl_filters,
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
-        kg_entities=base_filters.kg_entities,
-        kg_relationships=base_filters.kg_relationships,
-        kg_terms=base_filters.kg_terms,
-        kg_sources=base_filters.kg_sources,
-        kg_chunk_id_zero_only=base_filters.kg_chunk_id_zero_only,
     )
     return final_filters
+
+
+def merge_individual_chunks(
+    chunks: list[InferenceChunk],
+) -> list[InferenceSection]:
+    """Merge adjacent chunks from the same document into sections.
+
+    Chunks are considered adjacent if their chunk_ids differ by 1 and they
+    are from the same document. The section maintains the position of the
+    first chunk in the original list.
+    """
+    if not chunks:
+        return []
+
+    # Group chunks by document_id
+    doc_chunks: dict[str, list[InferenceChunk]] = defaultdict(list)
+    for chunk in chunks:
+        doc_chunks[chunk.document_id].append(chunk)
+
+    # For each document, sort chunks by chunk_id to identify adjacent chunks
+    for doc_id in doc_chunks:
+        doc_chunks[doc_id].sort(key=lambda c: c.chunk_id)
+
+    # Create a mapping from (document_id, chunk_id) to the section it belongs to
+    # This helps us maintain the original order
+    chunk_to_section: dict[tuple[str, int], InferenceSection] = {}
+
+    # Process each document's chunks
+    for doc_id, doc_chunk_list in doc_chunks.items():
+        if not doc_chunk_list:
+            continue
+
+        # Group adjacent chunks into sections
+        current_section_chunks = [doc_chunk_list[0]]
+
+        for i in range(1, len(doc_chunk_list)):
+            prev_chunk = doc_chunk_list[i - 1]
+            curr_chunk = doc_chunk_list[i]
+
+            # Check if chunks are adjacent (chunk_id difference is 1)
+            if curr_chunk.chunk_id == prev_chunk.chunk_id + 1:
+                # Add to current section
+                current_section_chunks.append(curr_chunk)
+            else:
+                # Create section from previous chunks
+                center_chunk = current_section_chunks[0]
+                section = inference_section_from_chunks(
+                    center_chunk=center_chunk,
+                    chunks=current_section_chunks.copy(),
+                )
+                if section:
+                    for chunk in current_section_chunks:
+                        chunk_to_section[(chunk.document_id, chunk.chunk_id)] = section
+
+                # Start new section
+                current_section_chunks = [curr_chunk]
+
+        # Create section for the last group
+        if current_section_chunks:
+            center_chunk = current_section_chunks[0]
+            section = inference_section_from_chunks(
+                center_chunk=center_chunk,
+                chunks=current_section_chunks.copy(),
+            )
+            if section:
+                for chunk in current_section_chunks:
+                    chunk_to_section[(chunk.document_id, chunk.chunk_id)] = section
+
+    # Build result list maintaining original order
+    seen_sections: set[InferenceSection] = set()
+    result: list[InferenceSection] = []
+
+    for chunk in chunks:
+        section = chunk_to_section.get((chunk.document_id, chunk.chunk_id))
+        if section:
+            if section not in seen_sections:
+                seen_sections.add(section)
+                result.append(section)
+        else:
+            # Chunk wasn't part of any merged section, create a single-chunk section
+            single_section = inference_section_from_chunks(
+                center_chunk=chunk,
+                chunks=[chunk],
+            )
+            if single_section:
+                result.append(single_section)
+
+    return result
 
 
 def search_pipeline(
@@ -200,7 +283,18 @@ def search_pipeline(
         slack_context=slack_context,
     )
 
-    return retrieved_chunks
+    # For some specific connectors like Salesforce, a user that has access to an object doesn't mean
+    # that they have access to all of the fields of the object.
+    censored_chunks: list[InferenceChunk] = fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.post_query_censoring",
+        "_post_query_chunk_censoring",
+        retrieved_chunks,
+    )(
+        chunks=retrieved_chunks,
+        user=user,
+    )
+
+    return censored_chunks
 
 
 class SearchPipeline:

@@ -116,6 +116,17 @@ def inference_section_from_chunks(
     )
 
 
+# If it should be a real section, don't use this one
+def inference_section_from_single_chunk(
+    chunk: InferenceChunk,
+) -> InferenceSection:
+    return InferenceSection(
+        center_chunk=chunk,
+        chunks=[chunk],
+        combined_content=chunk.content,
+    )
+
+
 def remove_stop_words_and_punctuation(keywords: list[str]) -> list[str]:
     from nltk.corpus import stopwords  # type:ignore
     from nltk.tokenize import word_tokenize  # type:ignore

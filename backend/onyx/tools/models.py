@@ -1,18 +1,11 @@
-from collections.abc import Callable
-from datetime import datetime
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import model_validator
-from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import QueryExpansions
-from shared_configs.model_server_models import Embedding
 
 
 class ToolResponse(BaseModel):
@@ -66,24 +59,8 @@ class SearchQueryInfo(BaseModel):
 
 # None indicates that the default value should be used
 class SearchToolOverrideKwargs(BaseModel):
+    # This is needed because the LLM won't be able to do a really detailed semantic query well
     original_query: str | None = None
-    force_no_rerank: bool | None = None
-    alternate_db_session: Session | None = None
-    retrieved_sections_callback: Callable[[list[InferenceSection]], None] | None = None
-    skip_query_analysis: bool | None = None
-    precomputed_query_embedding: Embedding | None = None
-    precomputed_is_keyword: bool | None = None
-    precomputed_keywords: list[str] | None = None
-    user_file_ids: list[UUID] | None = None
-    project_id: int | None = None
-    document_sources: list[DocumentSource] | None = None
-    time_cutoff: datetime | None = None
-    expanded_queries: QueryExpansions | None = None
-    kg_entities: list[str] | None = None
-    kg_relationships: list[str] | None = None
-    kg_terms: list[str] | None = None
-    kg_sources: list[str] | None = None
-    kg_chunk_id_zero_only: bool | None = False
 
     class Config:
         arbitrary_types_allowed = True

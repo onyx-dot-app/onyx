@@ -17,17 +17,12 @@ from onyx.agents.agent_search.shared_graph_utils.llm import get_answer_from_llm
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import relevance_from_docs
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.configs.kg_configs import KG_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION
-from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_EXAMPLES_PROMPT
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_OVERALL_ANSWER_PROMPT
-from onyx.tools.tool_implementations.search.search_tool import IndexFilters
-from onyx.tools.tool_implementations.search.search_tool import SearchQueryInfo
-from onyx.tools.tool_implementations.search.search_tool import yield_search_responses
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -98,31 +93,10 @@ def generate_answer(
         max_docs=KG_RESEARCH_NUM_RETRIEVED_DOCS,
     )
 
-    relevance_list = relevance_from_docs(
-        answer_generation_documents.streaming_documents
-    )
-
     assert graph_config.tooling.search_tool is not None
 
     with get_session_with_current_tenant() as graph_db_session:
-        user_acl = list(get_acl_for_user(user, graph_db_session))
-
-    for tool_response in yield_search_responses(
-        query=question,
-        get_retrieved_sections=lambda: answer_generation_documents.context_documents,
-        get_final_context_sections=lambda: answer_generation_documents.context_documents,
-        search_query_info=SearchQueryInfo(
-            predicted_search=SearchType.KEYWORD,
-            # acl here is empty, because the searach alrady happened and
-            # we are streaming out the results.
-            final_filters=IndexFilters(access_control_list=user_acl),
-            recency_bias_multiplier=1.0,
-        ),
-        get_section_relevance=lambda: relevance_list,
-        search_tool=graph_config.tooling.search_tool,
-    ):
-        # original document streaming
-        pass
+        list(get_acl_for_user(user, graph_db_session))
 
     # continue with the answer generation
 
