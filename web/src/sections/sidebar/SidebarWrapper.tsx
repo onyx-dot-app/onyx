@@ -26,8 +26,6 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
     [setFolded]
   );
 
-  if (folded === undefined) return logo();
-
   return (
     <div
       className={cn(
@@ -35,7 +33,9 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
         folded ? "justify-start" : "justify-between"
       )}
     >
-      {folded ? (
+      {folded === undefined ? (
+        logo()
+      ) : folded ? (
         <>
           <div className="group-hover/SidebarWrapper:hidden">{logo()}</div>
           <div className="w-full justify-center hidden group-hover/SidebarWrapper:flex">
