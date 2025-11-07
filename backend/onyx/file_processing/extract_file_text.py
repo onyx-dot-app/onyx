@@ -180,40 +180,6 @@ def to_bytesio(stream: IO[bytes]) -> BytesIO:
     return BytesIO(data)
 
 
-def _has_pdf_header(sample: bytes) -> bool:
-    whitespace_chars = b"\x00\x09\x0a\x0c\x0d\x20"
-    return sample.lstrip(whitespace_chars).startswith(b"%PDF")
-
-
-PDF_EOF_SCAN_WINDOW = 8192
-
-
-def _has_pdf_eof_marker(file: IO[Any]) -> bool:
-    """
-    Returns True if the underlying stream appears to contain the PDF %%EOF marker.
-    Falls back to True if the stream is not seekable, since we cannot verify.
-    """
-    seekable = getattr(file, "seekable", None)
-    if callable(seekable) and not seekable():
-        return True
-
-    current_pos = file.tell()
-    try:
-        file.seek(0, os.SEEK_END)
-        file_size = file.tell()
-        if file_size <= 0:
-            return False
-        read_size = min(file_size, PDF_EOF_SCAN_WINDOW)
-        file.seek(file_size - read_size)
-        tail = file.read(read_size)
-        return b"%%EOF" in tail
-    except OSError:
-        # Some file-like objects may not fully support SEEK_END; err on the side of True.
-        return True
-    finally:
-        file.seek(current_pos)
-
-
 def _safe_get_unstructured_api_key() -> str | None:
     try:
         return get_unstructured_api_key()
@@ -315,65 +281,20 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
     return text
 
 
-def _attempt_plaintext_fallback(
-    file: IO[Any],
-) -> tuple[str, dict[str, Any]] | None:
-    """
-    Try interpreting the file-like object as plain text. Returns decoded text and
-    metadata if the content appears textual, otherwise None.
-    """
-    try:
-        encoding = detect_encoding(file)
-        file.seek(0)
-        decoded_text, metadata = read_text_file(
-            file,
-            encoding=encoding,
-            ignore_onyx_metadata=False,
-        )
-        if looks_like_text(decoded_text):
-            return decoded_text, metadata
-    except Exception as exc:
-        logger.debug("Plain-text fallback failed: %s", exc)
-    finally:
-        file.seek(0)
-    return None
-
-
 def read_pdf_file(
     file: IO[Any],
     pdf_pass: str | None = None,
     extract_images: bool = False,
     image_callback: Callable[[bytes, str], None] | None = None,
-    allow_text_fallback: bool = True,
 ) -> tuple[str, dict[str, Any], Sequence[tuple[bytes, str]]]:
     """
     Returns the text, basic PDF metadata, and optionally extracted images.
-    When allow_text_fallback is True, attempts to decode the stream as plain text
-    if the payload does not look like a PDF or fails to yield usable text.
     """
     from pypdf import PdfReader
     from pypdf.errors import PdfStreamError
 
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
-
-    def _fallback_response() -> tuple[str, dict[str, Any], Sequence[tuple[bytes, str]]]:
-        if allow_text_fallback:
-            fallback = _attempt_plaintext_fallback(file)
-            if fallback is not None:
-                fallback_text, fallback_metadata = fallback
-                return fallback_text, fallback_metadata, []
-        return "", {}, []
-
-    file.seek(0)
-    header_sample = file.read(16)
-    file.seek(0)
-    if not _has_pdf_header(header_sample):
-        logger.warning("Skipping PDF extraction; missing PDF header.")
-        return _fallback_response()
-    if not _has_pdf_eof_marker(file):
-        logger.warning("Skipping PDF extraction; missing %%EOF marker.")
-        return _fallback_response()
     try:
         pdf_reader = PdfReader(file)
 
@@ -385,10 +306,10 @@ def read_pdf_file(
                 logger.error("Unable to decrypt pdf")
 
             if not decrypt_success:
-                return _fallback_response()
+                return "", metadata, []
         elif pdf_reader.is_encrypted:
             logger.warning("No Password for an encrypted PDF, returning empty text.")
-            return _fallback_response()
+            return "", metadata, []
 
         # Basic PDF metadata
         if pdf_reader.metadata is not None:
@@ -421,21 +342,14 @@ def read_pdf_file(
                     else:
                         extracted_images.append((img_bytes, image_name))
 
-        if text and looks_like_text(text):
-            return text, metadata, extracted_images
-        logger.warning(
-            "PDF text extraction yielded no readable content; attempting fallback."
-        )
-        return _fallback_response()
+        return text, metadata, extracted_images
 
     except PdfStreamError:
         logger.exception("Invalid PDF file")
     except Exception:
         logger.exception("Failed to read PDF")
-    finally:
-        file.seek(0)
 
-    return _fallback_response()
+    return "", metadata, []
 
 
 def extract_docx_images(docx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
