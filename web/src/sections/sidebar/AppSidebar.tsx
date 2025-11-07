@@ -463,7 +463,7 @@ function AppSidebarInner() {
                     icon={SvgFolderPlus}
                     internal
                     tooltip="New Project"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                     onClick={() =>
                       toggleModal(ModalIds.CreateProjectModal, true)
                     }

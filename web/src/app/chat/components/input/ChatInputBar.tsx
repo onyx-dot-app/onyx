@@ -617,7 +617,9 @@ function ChatInputBarInner({
             <IconButton
               id="onyx-chat-input-send-button"
               icon={chatState === "input" ? SvgArrowUp : SvgStop}
-              disabled={chatState === "input" && !message && hasUploadingFiles}
+              disabled={
+                (chatState === "input" && !message) || hasUploadingFiles
+              }
               onClick={() => {
                 if (chatState == "streaming") {
                   stopGenerating();

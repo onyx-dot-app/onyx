@@ -28,7 +28,7 @@ import SvgEdit from "@/icons/edit";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FileCard } from "../input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
-import { handleEnterPress, useEscapePress } from "@/lib/typingUtils";
+import { useEscapePress } from "@/lib/typingUtils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { FileCardSkeleton } from "@/app/chat/components/input/FileCard";
 
@@ -163,7 +163,11 @@ export default function ProjectContextPanel({
             <input
               value={editingNameValue}
               onChange={(e) => setEditingNameValue(e.target.value)}
-              onKeyDown={handleEnterPress(submitRename)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
               onBlur={submitRename}
               className="bg-transparent outline-none font-heading-h2 text-text-04 w-full"
               autoFocus
@@ -177,7 +181,7 @@ export default function ProjectContextPanel({
                 icon={SvgEdit}
                 internal
                 onClick={startEditing}
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                 tooltip="Edit project name"
               />
             </>

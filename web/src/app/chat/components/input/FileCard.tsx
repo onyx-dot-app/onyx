@@ -222,5 +222,5 @@ export function FileCard({
 
 // Skeleton loading component for file cards
 export const FileCardSkeleton = () => (
-  <div className="w-40 h-12 rounded-xl bg-background-tint-02 animate-pulse" />
+  <div className="w-40 h-14 rounded-12 bg-background-tint-02 animate-pulse" />
 );
