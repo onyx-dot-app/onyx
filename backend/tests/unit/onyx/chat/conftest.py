@@ -3,14 +3,12 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
-from langchain_core.messages import SystemMessage
 
 from onyx.chat.chat_utils import llm_doc_from_inference_section
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
-from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
@@ -157,9 +155,4 @@ def mock_search_tool(mock_search_results: list[LlmDoc]) -> MagicMock:
             },
         },
     }
-    mock_post_search_tool_prompt_builder = MagicMock(spec=AnswerPromptBuilder)
-    mock_post_search_tool_prompt_builder.build.return_value = [
-        SystemMessage(content="Updated system prompt"),
-    ]
-    mock_tool.build_next_prompt.return_value = mock_post_search_tool_prompt_builder
     return mock_tool

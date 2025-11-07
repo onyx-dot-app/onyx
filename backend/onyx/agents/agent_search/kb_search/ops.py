@@ -5,6 +5,7 @@ from onyx.chat.models import LlmDoc
 from onyx.configs.constants import DocumentSource
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.context.search.models import InferenceSection
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
@@ -27,7 +28,10 @@ def research(
 
     retrieved_docs: list[LlmDoc] | list[InferenceSection] = []
 
-    for tool_response in search_tool.run(query=question):
+    for tool_response in search_tool.run(
+        query=question,
+        override_kwargs=SearchToolOverrideKwargs(original_query=question),
+    ):
         if inference_sections_only and tool_response.id == "search_response_summary":
             retrieved_docs = tool_response.response.top_sections[
                 :KG_RESEARCH_NUM_RETRIEVED_DOCS

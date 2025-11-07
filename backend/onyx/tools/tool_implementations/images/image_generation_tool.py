@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.chat_utils import combine_message_chain
-from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
@@ -20,14 +19,9 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import message_to_string
-from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.constants import GENERAL_SEP_PAT
-from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
-from onyx.tools.tool_implementations.images.prompt import (
-    build_image_generation_user_prompt,
-)
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -379,45 +373,3 @@ class ImageGenerationTool(Tool[None]):
                 ]
 
         raise ValueError("No image generation response found")
-
-    def build_next_prompt(
-        self,
-        prompt_builder: AnswerPromptBuilder,
-        tool_call_summary: ToolCallSummary,
-        tool_responses: list[ToolResponse],
-        using_tool_calling_llm: bool,
-    ) -> AnswerPromptBuilder:
-        img_generation_response = cast(
-            list[ImageGenerationResponse] | None,
-            next(
-                (
-                    response.response
-                    for response in tool_responses
-                    if response.id == IMAGE_GENERATION_RESPONSE_ID
-                ),
-                None,
-            ),
-        )
-        if img_generation_response is None:
-            raise ValueError("No image generation response found")
-
-        b64_imgs = [img.image_data for img in img_generation_response]
-
-        user_prompt = build_image_generation_user_prompt(
-            query=prompt_builder.get_user_message_content(),
-            supports_image_input=model_supports_image_input(
-                prompt_builder.llm_config.model_name,
-                prompt_builder.llm_config.model_provider,
-            ),
-            prompts=[
-                prompt
-                for response in img_generation_response
-                for prompt in response.revised_prompt
-            ],
-            img_urls=[],
-            b64_imgs=b64_imgs,
-        )
-
-        prompt_builder.update_user_prompt(user_prompt)
-
-        return prompt_builder

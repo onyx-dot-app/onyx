@@ -145,6 +145,12 @@ def merge_individual_chunks(
     if not chunks:
         return []
 
+    # Create a mapping from (document_id, chunk_id) to original index
+    # This helps us find the chunk that appears first in the original list
+    chunk_to_original_index: dict[tuple[str, int], int] = {}
+    for idx, chunk in enumerate(chunks):
+        chunk_to_original_index[(chunk.document_id, chunk.chunk_id)] = idx
+
     # Group chunks by document_id
     doc_chunks: dict[str, list[InferenceChunk]] = defaultdict(list)
     for chunk in chunks:
@@ -176,7 +182,13 @@ def merge_individual_chunks(
                 current_section_chunks.append(curr_chunk)
             else:
                 # Create section from previous chunks
-                center_chunk = current_section_chunks[0]
+                # Find the chunk that appears first in the original list
+                center_chunk = min(
+                    current_section_chunks,
+                    key=lambda c: chunk_to_original_index.get(
+                        (c.document_id, c.chunk_id), float("inf")
+                    ),
+                )
                 section = inference_section_from_chunks(
                     center_chunk=center_chunk,
                     chunks=current_section_chunks.copy(),
@@ -190,7 +202,13 @@ def merge_individual_chunks(
 
         # Create section for the last group
         if current_section_chunks:
-            center_chunk = current_section_chunks[0]
+            # Find the chunk that appears first in the original list
+            center_chunk = min(
+                current_section_chunks,
+                key=lambda c: chunk_to_original_index.get(
+                    (c.document_id, c.chunk_id), float("inf")
+                ),
+            )
             section = inference_section_from_chunks(
                 center_chunk=center_chunk,
                 chunks=current_section_chunks.copy(),
@@ -200,14 +218,19 @@ def merge_individual_chunks(
                     chunk_to_section[(chunk.document_id, chunk.chunk_id)] = section
 
     # Build result list maintaining original order
-    seen_sections: set[InferenceSection] = set()
+    # Use (document_id, chunk_id) of center_chunk as unique identifier for sections
+    seen_section_ids: set[tuple[str, int]] = set()
     result: list[InferenceSection] = []
 
     for chunk in chunks:
         section = chunk_to_section.get((chunk.document_id, chunk.chunk_id))
         if section:
-            if section not in seen_sections:
-                seen_sections.add(section)
+            section_id = (
+                section.center_chunk.document_id,
+                section.center_chunk.chunk_id,
+            )
+            if section_id not in seen_section_ids:
+                seen_section_ids.add(section_id)
                 result.append(section)
         else:
             # Chunk wasn't part of any merged section, create a single-chunk section
@@ -216,7 +239,13 @@ def merge_individual_chunks(
                 chunks=[chunk],
             )
             if single_section:
-                result.append(single_section)
+                single_section_id = (
+                    single_section.center_chunk.document_id,
+                    single_section.center_chunk.chunk_id,
+                )
+                if single_section_id not in seen_section_ids:
+                    seen_section_ids.add(single_section_id)
+                    result.append(single_section)
 
     return result
 

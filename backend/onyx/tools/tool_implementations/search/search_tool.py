@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.chat_utils import llm_doc_from_inference_section
 from onyx.chat.models import LlmDoc
-from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkSearchRequest
 from onyx.context.search.models import InferenceSection
@@ -25,14 +24,10 @@ from onyx.llm.models import PreviousMessage
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.choose_search import check_if_need_search
 from onyx.secondary_llm_flows.query_expansion import history_based_query_rephrase
-from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_utils import llm_doc_to_dict
-from onyx.tools.tool_implementations.search_like_tool_utils import (
-    build_next_prompt_for_search_like_tool,
-)
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
@@ -245,22 +240,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # subfields that are not serializable by default (datetime)
         # this forces pydantic to make them JSON serializable for us
         return [json.loads(doc.model_dump_json()) for doc in final_docs]
-
-    def build_next_prompt(
-        self,
-        prompt_builder: AnswerPromptBuilder,
-        tool_call_summary: ToolCallSummary,
-        tool_responses: list[ToolResponse],
-        using_tool_calling_llm: bool,
-    ) -> AnswerPromptBuilder:
-        return build_next_prompt_for_search_like_tool(
-            prompt_builder=prompt_builder,
-            tool_call_summary=tool_call_summary,
-            tool_responses=tool_responses,
-            using_tool_calling_llm=using_tool_calling_llm,
-            answer_style_config=self.answer_style_config,
-            prompt_config=self.prompt_config,
-        )
 
 
 T = TypeVar("T")

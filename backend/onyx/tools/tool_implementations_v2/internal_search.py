@@ -15,6 +15,7 @@ from onyx.db.tools import get_tool_by_name
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -67,7 +68,9 @@ def _internal_search_core(
         """Execute a single query and return the retrieved documents as LlmDocs"""
         search_results_for_query: list[LlmInternalSearchResult] = []
 
-        for tool_response in search_tool.run(query=query):
+        for tool_response in search_tool.run(
+            query=query, override_kwargs=SearchToolOverrideKwargs(original_query=query)
+        ):
             if not is_connected(
                 run_context.context.chat_session_id,
                 run_context.context.run_dependencies.redis_client,

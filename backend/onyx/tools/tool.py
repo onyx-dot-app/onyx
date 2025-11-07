@@ -12,8 +12,6 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
     from onyx.llm.interfaces import LLM
     from onyx.llm.models import PreviousMessage
-    from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-    from onyx.tools.message import ToolCallSummary
     from onyx.tools.models import ToolResponse
 
 
@@ -98,17 +96,4 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
         This is the "final summary" result of the tool.
         It is the result that will be stored in the database.
         """
-        raise NotImplementedError
-
-    """Some tools may want to modify the prompt based on the tool call summary and tool responses.
-    Default behavior is to continue with just the raw tool call request/result passed to the LLM."""
-
-    @abc.abstractmethod
-    def build_next_prompt(
-        self,
-        prompt_builder: "AnswerPromptBuilder",
-        tool_call_summary: "ToolCallSummary",
-        tool_responses: list["ToolResponse"],
-        using_tool_calling_llm: bool,
-    ) -> "AnswerPromptBuilder":
         raise NotImplementedError

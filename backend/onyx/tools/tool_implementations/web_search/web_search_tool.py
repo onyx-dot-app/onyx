@@ -4,12 +4,10 @@ from typing import Any
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.configs.chat_configs import SERPER_API_KEY
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
-from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
@@ -92,13 +90,4 @@ class WebSearchTool(Tool[None]):
         raise ValueError(_GENERIC_ERROR_MESSAGE)
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
-        raise ValueError(_GENERIC_ERROR_MESSAGE)
-
-    def build_next_prompt(
-        self,
-        prompt_builder: AnswerPromptBuilder,
-        tool_call_summary: ToolCallSummary,
-        tool_responses: list[ToolResponse],
-        using_tool_calling_llm: bool,
-    ) -> AnswerPromptBuilder:
         raise ValueError(_GENERIC_ERROR_MESSAGE)

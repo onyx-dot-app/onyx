@@ -3,6 +3,7 @@ from typing import cast
 
 from onyx.chat.models import LlmDoc
 from onyx.configs.constants import DocumentSource
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
@@ -19,7 +20,10 @@ def research(
 
     retrieved_docs: list[LlmDoc] = []
 
-    for tool_response in search_tool.run(query=question):
+    for tool_response in search_tool.run(
+        query=question,
+        override_kwargs=SearchToolOverrideKwargs(original_query=question),
+    ):
         # get retrieved docs to send to the rest of the graph
         if tool_response.id == FINAL_CONTEXT_DOCUMENTS_ID:
             retrieved_docs = cast(list[LlmDoc], tool_response.response)[:10]

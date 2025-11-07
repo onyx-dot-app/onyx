@@ -6,14 +6,12 @@ from typing import cast
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 
-from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.base_tool import BaseTool
-from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
 from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
@@ -272,21 +270,3 @@ Return ONLY a valid JSON object with the extracted arguments. If no arguments ar
         """Return the final result for storage in the database"""
         response = cast(CustomToolCallSummary, args[0].response)
         return response.tool_result
-
-    def build_next_prompt(
-        self,
-        prompt_builder: AnswerPromptBuilder,
-        tool_call_summary: ToolCallSummary,
-        tool_responses: list[ToolResponse],
-        using_tool_calling_llm: bool,
-    ) -> AnswerPromptBuilder:
-        """Build the next prompt with MCP tool results"""
-
-        # For now, use the default behavior from BaseTool
-        # Future versions could add MCP-specific prompt building
-        return super().build_next_prompt(
-            prompt_builder,
-            tool_call_summary,
-            tool_responses,
-            using_tool_calling_llm,
-        )

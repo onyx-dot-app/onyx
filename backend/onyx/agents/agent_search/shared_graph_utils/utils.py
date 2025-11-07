@@ -56,6 +56,7 @@ from onyx.prompts.agent_search import (
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -232,7 +233,10 @@ def retrieve_search_docs(
     retrieved_docs: list[InferenceSection] = []
 
     # new db session to avoid concurrency issues
-    for tool_response in search_tool.run(query=question):
+    for tool_response in search_tool.run(
+        query=question,
+        override_kwargs=SearchToolOverrideKwargs(original_query=question),
+    ):
         # get retrieved docs to send to the rest of the graph
         if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:
             response = cast(SearchResponseSummary, tool_response.response)

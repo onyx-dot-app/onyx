@@ -1,8 +1,6 @@
 from typing import cast
 from uuid import UUID
 
-from backend.onyx.db.search_settings import get_current_search_settings
-from backend.onyx.document_index.factory import get_default_document_index
 from pydantic import BaseModel
 from pydantic import Field
 from sqlalchemy.orm import Session
@@ -33,6 +31,8 @@ from onyx.db.mcp import get_user_connection_config
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.oauth_config import get_oauth_config
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -232,9 +232,8 @@ def construct_tools(
                 if not search_tool_config:
                     search_tool_config = SearchToolConfig()
 
-                user_id = user.id if user else None
                 search_settings = get_current_search_settings(db_session)
-                document_index = get_default_document_index(search_settings, user_id)
+                document_index = get_default_document_index(search_settings, None)
 
                 search_tool = SearchTool(
                     tool_id=db_tool_model.id,

@@ -130,15 +130,10 @@ class ToolResponseHandler:
         ):
             return None
 
-        tool_runner = self.tool_runner
-        new_prompt_builder = tool_runner.tool.build_next_prompt(
-            prompt_builder=current_llm_call.prompt_builder,
-            tool_call_summary=self.tool_call_summary,
-            tool_responses=self.tool_responses,
-            using_tool_calling_llm=current_llm_call.using_tool_calling_llm,
-        )
+        # TODO the tool doesn't update the history anymore,
+        # this handling should be cleaned up
         return LLMCall(
-            prompt_builder=new_prompt_builder,
+            prompt_builder=current_llm_call.prompt_builder,
             tools=[],  # for now, only allow one tool call per response
             force_use_tool=ForceUseTool(
                 force_use=False,
