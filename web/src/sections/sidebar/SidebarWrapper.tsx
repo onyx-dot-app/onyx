@@ -1,4 +1,4 @@
-import React, { Dispatch, SetStateAction, useCallback } from "react";
+import React, { Dispatch, SetStateAction, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSidebar from "@/icons/sidebar";
@@ -14,6 +14,17 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
     (className?: string) => <Logo folded={folded} className={className} />,
     [folded]
   );
+  const closeButton = useMemo(
+    () => (
+      <IconButton
+        icon={SvgSidebar}
+        tertiary
+        tooltip="Close Sidebar"
+        onClick={() => setFolded?.(true)}
+      />
+    ),
+    [setFolded]
+  );
 
   if (folded === undefined) return logo();
 
@@ -24,15 +35,18 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
         folded ? "justify-start" : "justify-between"
       )}
     >
-      {logo()}
-      {!folded && (
-        <IconButton
-          icon={SvgSidebar}
-          tertiary
-          tooltip="Close Sidebar"
-          onClick={() => setFolded?.(true)}
-          className={cn(folded && "hidden")}
-        />
+      {folded ? (
+        <>
+          <div className="group-hover/SidebarWrapper:hidden">{logo()}</div>
+          <div className="w-full justify-center hidden group-hover/SidebarWrapper:flex">
+            {closeButton}
+          </div>
+        </>
+      ) : (
+        <>
+          {logo()}
+          {closeButton}
+        </>
       )}
     </div>
   );
