@@ -10,7 +10,6 @@ from fastapi.responses import JSONResponse
 from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.mcp_server.middleware import MCPAuthMiddleware
 from onyx.mcp_server.server import mcp_server
 from onyx.utils.logger import setup_logger
 
@@ -50,7 +49,7 @@ def create_mcp_fastapi_app() -> FastAPI:
     async def health_check() -> JSONResponse:
         return JSONResponse({"status": "healthy", "service": "mcp_server"})
 
-    app.add_middleware(MCPAuthMiddleware)
+    # Authentication is handled by FastMCP's OnyxPATVerifier (see server.py)
 
     if MCP_SERVER_CORS_ORIGINS:
         logger.info(f"CORS origins: {MCP_SERVER_CORS_ORIGINS}")
