@@ -85,7 +85,6 @@ export default function SidebarTab({
       className={cn(
         "flex flex-row justify-start items-start p-1.5 gap-1 rounded-08 cursor-pointer group/SidebarTab w-full select-none",
         backgroundClasses(active)[variant],
-        // active ? "bg-background-tint-00" : "bg-transparent",
         className
       )}
       onClick={onClick}
