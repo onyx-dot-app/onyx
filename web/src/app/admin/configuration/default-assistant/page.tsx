@@ -233,7 +233,7 @@ function DefaultAssistantConfig() {
                 <ToolToggle
                   key={tool.id}
                   tool={tool}
-                  enabled={enabledTools.has(tool.id)}
+                  enabled={enabledTools.has(tool.id) && tool.is_available}
                   onToggle={() => handleToggleTool(tool.id)}
                   disabled={savingTools.has(tool.id)}
                 />
