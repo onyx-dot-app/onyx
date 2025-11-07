@@ -15,36 +15,24 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
     [folded]
   );
 
+  if (folded === undefined) return logo();
+
   return (
     <div
       className={cn(
-        "flex flex-row items-center px-4 py-1 flex-shrink-0 gap-4 min-h-[2.5rem]",
+        "flex flex-row items-center py-1 gap-1 min-h-[2.5rem] px-[15px]",
         folded ? "justify-start" : "justify-between"
       )}
     >
-      {folded === undefined ? (
-        logo()
-      ) : folded ? (
-        <div className="h-[2rem] flex flex-col justify-center items-start">
-          {logo("visible group-hover/SidebarWrapper:hidden")}
-          <IconButton
-            icon={SvgSidebar}
-            tertiary
-            tooltip="Close Sidebar"
-            onClick={() => setFolded?.(false)}
-            className="hidden group-hover/SidebarWrapper:flex"
-          />
-        </div>
-      ) : (
-        <>
-          {logo()}
-          <IconButton
-            icon={SvgSidebar}
-            tertiary
-            tooltip="Close Sidebar"
-            onClick={() => setFolded?.(true)}
-          />
-        </>
+      {logo()}
+      {!folded && (
+        <IconButton
+          icon={SvgSidebar}
+          tertiary
+          tooltip="Close Sidebar"
+          onClick={() => setFolded?.(true)}
+          className={cn(folded && "hidden")}
+        />
       )}
     </div>
   );
