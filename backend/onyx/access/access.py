@@ -93,7 +93,9 @@ def get_access_for_documents(
     versioned_get_access_for_documents_fn = fetch_versioned_implementation(
         "onyx.access.access", "_get_access_for_documents"
     )
-    return versioned_get_access_for_documents_fn(document_ids, db_session)  # type: ignore
+    return versioned_get_access_for_documents_fn(
+        document_ids, db_session
+    )  # type: ignore
 
 
 def _get_acl_for_user(user: User | None, db_session: Session) -> set[str]:
