@@ -1,4 +1,4 @@
-import React, { Dispatch, SetStateAction, useCallback, useMemo } from "react";
+import React, { Dispatch, SetStateAction, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSidebar from "@/icons/sidebar";
@@ -14,13 +14,13 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
     (className?: string) => <Logo folded={folded} className={className} />,
     [folded]
   );
-  const closeButton = useMemo(
-    () => (
+  const closeButton = useCallback(
+    (shouldFold: boolean) => (
       <IconButton
         icon={SvgSidebar}
         tertiary
         tooltip="Close Sidebar"
-        onClick={() => setFolded?.(true)}
+        onClick={() => setFolded?.(shouldFold)}
       />
     ),
     [setFolded]
@@ -39,13 +39,13 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
         <>
           <div className="group-hover/SidebarWrapper:hidden">{logo()}</div>
           <div className="w-full justify-center hidden group-hover/SidebarWrapper:flex">
-            {closeButton}
+            {closeButton(false)}
           </div>
         </>
       ) : (
         <>
           {logo()}
-          {closeButton}
+          {closeButton(true)}
         </>
       )}
     </div>
