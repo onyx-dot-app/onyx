@@ -5,6 +5,7 @@ import { ChatProvider } from "@/refresh-components/contexts/ChatContext";
 import { ProjectsProvider } from "./projects/ProjectsContext";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
 import { ChatModalProvider } from "@/refresh-components/contexts/ChatModalContext";
+import AppLayout from "@/refresh-components/layouts/AppLayout";
 
 export default async function Layout({
   children,
@@ -43,7 +44,7 @@ export default async function Layout({
   } = data;
 
   return (
-    <>
+    <AppLayout>
       <ChatProvider
         proSearchToggled={proSearchToggled}
         inputPrompts={inputPrompts}
@@ -69,6 +70,6 @@ export default async function Layout({
           </ProjectsProvider>
         </ChatModalProvider>
       </ChatProvider>
-    </>
+    </AppLayout>
   );
 }
