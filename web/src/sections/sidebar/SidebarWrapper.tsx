@@ -29,7 +29,7 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
   return (
     <div
       className={cn(
-        "flex flex-row items-center py-1 gap-1 min-h-[3.5rem] px-[15px]",
+        "flex flex-row items-center py-1 gap-1 min-h-[3.5rem] px-3.5",
         folded ? "justify-start" : "justify-between"
       )}
     >
@@ -70,7 +70,7 @@ export default function SidebarWrapper({
       <div
         className={cn(
           "h-screen flex flex-col bg-background-tint-02 py-2 gap-4 group/SidebarWrapper transition-width duration-200 ease-in-out",
-          folded ? "w-[3.4rem]" : "w-[15rem]"
+          folded ? "w-[3.25rem]" : "w-[15rem]"
         )}
       >
         <LogoSection folded={folded} setFolded={setFolded} />
