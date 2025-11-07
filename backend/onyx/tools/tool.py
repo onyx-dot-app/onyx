@@ -27,6 +27,7 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
     @property
     @abc.abstractmethod
     def name(self) -> str:
+        """Should be the name of the tool passed to the LLM as the json field"""
         raise NotImplementedError
 
     @property
@@ -37,14 +38,8 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
     @property
     @abc.abstractmethod
     def display_name(self) -> str:
+        """Should be the name of the tool displayed to the user"""
         raise NotImplementedError
-
-    # Added to make tools work better with LLMs in prompts. Should be unique
-    # TODO: looks at ways how to best ensure uniqueness.
-    # TODO: extra review regarding coding style
-    @property
-    def llm_name(self) -> str:
-        return self.display_name
 
     @classmethod
     def is_available(cls, db_session: "Session") -> bool:
@@ -97,3 +92,11 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
         It is the result that will be stored in the database.
         """
         raise NotImplementedError
+
+    # TODO
+    # @abc.abstractmethod
+    # def llm_facing_result(self, *args: "ToolResponse") -> JSON_ro:
+    #     """
+    #     This is what the LLM should see as the result of the tool call.
+    #     """
+    #     raise NotImplementedError
