@@ -14,6 +14,7 @@ from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.search_settings import get_current_search_settings
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.enums import EmbedTextType
@@ -161,5 +162,6 @@ def get_query_embeddings(queries: list[str], db_session: Session) -> list[Embedd
     return query_embedding
 
 
+@log_function_time(print_only=True, debug_only=True)
 def get_query_embedding(query: str, db_session: Session) -> Embedding:
     return get_query_embeddings([query], db_session)[0]

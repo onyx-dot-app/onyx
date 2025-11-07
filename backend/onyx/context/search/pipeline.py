@@ -250,6 +250,7 @@ def merge_individual_chunks(
     return result
 
 
+@log_function_time(print_only=True, debug_only=True)
 def search_pipeline(
     # Query and settings
     chunk_search_request: ChunkSearchRequest,

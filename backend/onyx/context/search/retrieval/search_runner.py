@@ -432,7 +432,7 @@ def _embed_and_search(
 ) -> list[InferenceChunk]:
     query_embedding = get_query_embedding(query_request.query, db_session)
 
-    return document_index.hybrid_retrieval(
+    top_chunks = document_index.hybrid_retrieval(
         query=query_request.query,
         query_embedding=query_embedding,
         final_keywords=query_request.query_keywords,
@@ -444,6 +444,8 @@ def _embed_and_search(
         ranking_profile_type=QueryExpansionType.SEMANTIC,
         offset=query_request.offset or 0,
     )
+
+    return top_chunks
 
 
 def search_chunks(
@@ -491,6 +493,7 @@ def search_chunks(
         )
 
     parallel_search_results = run_functions_tuples_in_parallel(run_queries)
+    # TODO revisit this one, does this make sense?
     top_chunks = combine_retrieval_results(parallel_search_results)
 
     if not top_chunks:

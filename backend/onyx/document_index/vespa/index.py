@@ -81,6 +81,7 @@ from onyx.key_value_store.factory import get_shared_kv_store
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
 
@@ -985,6 +986,7 @@ class VespaIndex(DocumentIndex):
             )
         )
 
+    @log_function_time(print_only=True, debug_only=True)
     def hybrid_retrieval(
         self,
         query: str,

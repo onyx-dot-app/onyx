@@ -6,6 +6,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import sessionmaker
 
 from onyx.chat.chat_utils import llm_doc_from_inference_section
 from onyx.chat.models import LlmDoc
@@ -97,10 +98,26 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.user_selected_filters = user_selected_filters
         self.project_id = project_id
         self.bypass_acl = bypass_acl
-        self.db_session = db_session
         self.slack_context = slack_context
 
+        # Store session factory instead of session for thread-safety
+        # When tools are called in parallel, each thread needs its own session
+        self._session_bind = db_session.get_bind()
+        self._session_factory = sessionmaker(bind=self._session_bind)
+
         self._id = tool_id
+
+    def _get_thread_safe_session(self) -> Session:
+        """Create a new database session for the current thread.
+
+        This ensures thread-safety when the search tool is called in parallel.
+        Each parallel execution gets its own isolated database session with
+        its own transaction scope.
+
+        Returns:
+            A new SQLAlchemy Session instance
+        """
+        return self._session_factory()
 
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
@@ -187,49 +204,58 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     def run(
         self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
     ) -> Generator[ToolResponse, None, None]:
-        query = cast(str, llm_kwargs[QUERY_FIELD])
-        if not override_kwargs:
-            raise RuntimeError("No override kwargs provided for search tool")
+        # Create a new thread-safe session for this execution
+        # This prevents transaction conflicts when multiple search tools run in parallel
+        db_session = self._get_thread_safe_session()
+        try:
+            query = cast(str, llm_kwargs[QUERY_FIELD])
+            if not override_kwargs:
+                raise RuntimeError("No override kwargs provided for search tool")
 
-        # TODO this should be also passed in the history up to this point.
+            # TODO this should be also passed in the history up to this point.
 
-        # TODO use the original query.
-        override_kwargs.original_query
+            # TODO use the original query.
+            override_kwargs.original_query
 
-        # TODO yield something here so the UI knows what the queries are ASAP so it can render it
+            # TODO yield something here so the UI knows what the queries are ASAP so it can render it
 
-        # If needed, hybrid alpha, recency bias, etc. can be added here.
-        top_chunks = search_pipeline(
-            db_session=self.db_session,
-            # TODO optimize this with different set of keywords potentially
-            chunk_search_request=ChunkSearchRequest(
-                query=query,
-                user_selected_filters=self.user_selected_filters,
-                bypass_acl=self.bypass_acl,
-            ),
-            project_id=self.project_id,
-            document_index=self.document_index,
-            user=self.user,
-            persona=self.persona,
-        )
+            # If needed, hybrid alpha, recency bias, etc. can be added here.
+            top_chunks = search_pipeline(
+                db_session=db_session,
+                # TODO optimize this with different set of keywords potentially
+                chunk_search_request=ChunkSearchRequest(
+                    query=query,
+                    user_selected_filters=self.user_selected_filters,
+                    bypass_acl=self.bypass_acl,
+                ),
+                project_id=self.project_id,
+                document_index=self.document_index,
+                user=self.user,
+                persona=self.persona,
+            )
 
-        top_sections = merge_individual_chunks(top_chunks)
+            top_sections = merge_individual_chunks(top_chunks)
 
-        # TODO these are redundant, need to clean it up
-        yield ToolResponse(
-            id=SEARCH_RESPONSE_SUMMARY_ID,
-            response=SearchResponseSummary(
-                final_query=query,
-                top_sections=top_sections,
-            ),
-        )
+            # TODO these are redundant, need to clean it up
+            yield ToolResponse(
+                id=SEARCH_RESPONSE_SUMMARY_ID,
+                response=SearchResponseSummary(
+                    final_query=query,
+                    top_sections=top_sections,
+                ),
+            )
 
-        llm_docs = [llm_doc_from_inference_section(section) for section in top_sections]
+            llm_docs = [
+                llm_doc_from_inference_section(section) for section in top_sections
+            ]
 
-        yield ToolResponse(
-            id=FINAL_CONTEXT_DOCUMENTS_ID,
-            response=llm_docs,
-        )
+            yield ToolResponse(
+                id=FINAL_CONTEXT_DOCUMENTS_ID,
+                response=llm_docs,
+            )
+        finally:
+            # Always close the session to release database connections
+            db_session.close()
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
         final_docs = cast(
