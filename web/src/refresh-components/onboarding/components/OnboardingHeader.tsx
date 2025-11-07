@@ -38,7 +38,7 @@ const OnboardingHeaderInner = ({
   return (
     <div className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01">
       <div className="flex items-center gap-1">
-        {iconPercentage ? (
+        {iconPercentage != null ? (
           <ProgressSteps value={iconPercentage} />
         ) : (
           <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
