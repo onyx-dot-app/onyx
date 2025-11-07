@@ -153,6 +153,8 @@ def search_pipeline(
     llm: LLM | None = None,
     # Needed for federated Slack search
     slack_context: SlackContext | None = None,
+    # If a project ID is provided, it will be exclusively scoped to that project
+    project_id: int | None = None,
 ) -> list[InferenceChunk]:
     user_uploaded_persona_files: list[UUID] | None = (
         [user_file.id for user_file in persona.user_files] if persona else None
@@ -170,7 +172,7 @@ def search_pipeline(
     filters = _build_index_filters(
         user_provided_filters=chunk_search_request.user_selected_filters,
         user=user,
-        project_id=chunk_search_request.project_id,
+        project_id=project_id,
         user_file_ids=user_uploaded_persona_files,
         persona_document_sets=persona_document_sets,
         persona_time_cutoff=persona_time_cutoff,

@@ -62,7 +62,6 @@ def _translate_search_request(
         limit=search_request.limit,
         offset=search_request.offset,
         user_selected_filters=search_request.user_selected_filters,
-        project_id=search_request.project_id,
         # No bypass_acl, not allowed for this endpoint
     )
 

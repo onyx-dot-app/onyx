@@ -173,12 +173,13 @@ class BasicChunkRequest(BaseModel):
 class ChunkSearchRequest(BasicChunkRequest):
     # Final filters are calculated from these
     user_selected_filters: BaseFilters | None = None
-    project_id: int | None = None
 
     # Use with caution!
     bypass_acl: bool = False
 
 
+# From the Chat Session we know what project (if any) this search should include
+# From the user uploads and persona uploaded files, we know which of those to include
 class ChunkIndexRequest(BasicChunkRequest):
     # Calculated final filters
     filters: IndexFilters

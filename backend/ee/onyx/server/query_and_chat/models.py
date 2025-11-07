@@ -32,7 +32,6 @@ class StandardAnswerResponse(BaseModel):
 
 class DocumentSearchRequest(BasicChunkRequest):
     user_selected_filters: BaseFilters | None = None
-    project_id: int | None = None
 
 
 class DocumentSearchResponse(BaseModel):
