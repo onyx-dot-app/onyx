@@ -24,6 +24,10 @@ const cspHeader = `
 const nextConfig = {
   productionBrowserSourceMaps: false,
   output: "standalone",
+  publicRuntimeConfig: {
+    version,
+  },
+  transpilePackages: ["@onyx/opal"],
   reactCompiler: true,
   images: {
     // Used to fetch favicons

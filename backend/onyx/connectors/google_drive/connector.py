@@ -41,6 +41,7 @@ from onyx.connectors.google_drive.file_retrieval import (
 )
 from onyx.connectors.google_drive.file_retrieval import get_files_in_shared_drive
 from onyx.connectors.google_drive.file_retrieval import get_root_folder_id
+from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
 from onyx.connectors.google_drive.models import DriveRetrievalStage
 from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
 from onyx.connectors.google_drive.models import GoogleDriveFileType
@@ -164,6 +165,7 @@ class GoogleDriveConnector(
         my_drive_emails: str | None = None,
         shared_folder_urls: str | None = None,
         specific_user_emails: str | None = None,
+        exclude_domain_link_only: bool = False,
         batch_size: int = INDEX_BATCH_SIZE,
         # OLD PARAMETERS
         folder_paths: list[str] | None = None,
@@ -232,6 +234,7 @@ class GoogleDriveConnector(
         self._specific_user_emails = _extract_str_list_from_comma_str(
             specific_user_emails
         )
+        self.exclude_domain_link_only = exclude_domain_link_only
 
         self._primary_admin_email: str | None = None
 
@@ -1106,7 +1109,7 @@ class GoogleDriveConnector(
         """
         field_type = (
             DriveFileFieldType.WITH_PERMISSIONS
-            if include_permissions
+            if include_permissions or self.exclude_domain_link_only
             else DriveFileFieldType.STANDARD
         )
 
@@ -1172,6 +1175,10 @@ class GoogleDriveConnector(
                 start=start,
                 end=end,
             ):
+                if self.exclude_domain_link_only and has_link_only_permission(
+                    retrieved_file.drive_file
+                ):
+                    continue
                 if retrieved_file.error is None:
                     files_batch.append(retrieved_file)
                     continue
@@ -1276,6 +1283,10 @@ class GoogleDriveConnector(
         ):
             if file.error is not None:
                 raise file.error
+            if self.exclude_domain_link_only and has_link_only_permission(
+                file.drive_file
+            ):
+                continue
             if doc := build_slim_document(
                 self.creds,
                 file.drive_file,

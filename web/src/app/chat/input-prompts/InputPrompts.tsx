@@ -7,12 +7,7 @@ import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { BackButton } from "@/components/BackButton";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -297,21 +292,15 @@ const PromptCard: React.FC<PromptCardProps> = ({
         </>
       ) : (
         <>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="mb-2  flex gap-x-2 ">
-                  <p className="font-semibold">{prompt.prompt}</p>
-                  {isPromptPublic(prompt) && <SourceChip title="Built-in" />}
-                </div>
-              </TooltipTrigger>
-              {isPromptPublic(prompt) && (
-                <TooltipContent>
-                  <p>This is a built-in prompt and cannot be edited</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+          <SimpleTooltip
+            tooltip="This is a built-in prompt and cannot be edited"
+            disabled={!isPromptPublic(prompt)}
+          >
+            <div className="mb-2  flex gap-x-2 ">
+              <p className="font-semibold">{prompt.prompt}</p>
+              {isPromptPublic(prompt) && <SourceChip title="Built-in" />}
+            </div>
+          </SimpleTooltip>
           <div className="whitespace-pre-wrap">{prompt.content}</div>
           <div className="absolute top-2 right-2">
             <DropdownMenu>
