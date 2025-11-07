@@ -840,12 +840,10 @@ auth:
     secretKeys:
       OAUTH_CLIENT_ID: "oauth_client_id"
       OAUTH_CLIENT_SECRET: "oauth_client_secret"
-      OAUTH_COOKIE_SECRET: "oauth_cookie_secret"
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
     values:
       oauth_client_id: ""
       oauth_client_secret: ""
-      oauth_cookie_secret: ""
   smtp:
     # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
     enabled: false

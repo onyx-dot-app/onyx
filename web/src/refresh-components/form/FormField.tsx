@@ -101,7 +101,7 @@ export const FormFieldControl: React.FC<ControlProps> = ({
   if (React.isValidElement(children)) {
     return React.cloneElement(children, {
       ...ariaAttributes,
-      ...children.props,
+      ...(children.props as any),
     });
   }
 

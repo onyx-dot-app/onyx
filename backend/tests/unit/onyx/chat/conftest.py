@@ -35,8 +35,9 @@ def answer_style_config() -> AnswerStyleConfig:
 @pytest.fixture
 def prompt_config() -> PromptConfig:
     return PromptConfig(
-        system_prompt="System prompt",
-        task_prompt="Task prompt",
+        default_behavior_system_prompt="You are a helpful assistant.",
+        custom_instructions="System prompt",
+        reminder="Task prompt",
         datetime_aware=False,
     )
 

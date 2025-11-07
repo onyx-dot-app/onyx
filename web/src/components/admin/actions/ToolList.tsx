@@ -38,10 +38,12 @@ export function ToolList({
     serverId
   );
 
+  const isListingTools = searchParams.get("listing_tools") === "true";
+
   // Auto-trigger tool listing when page loads with listing_tools=true query param
   useEffect(() => {
     if (
-      searchParams.get("listing_tools") === "true" &&
+      isListingTools &&
       serverId &&
       values.name.trim() &&
       values.server_url.trim()
@@ -49,7 +51,7 @@ export function ToolList({
       // Only auto-trigger for servers that have required form values and a serverId
       handleListActions(values);
     }
-  }, [searchParams, serverId, values.name, values.server_url]);
+  }, [isListingTools, serverId, values.name, values.server_url]);
 
   const handleListActions = async (values: MCPFormValues) => {
     // Check if OAuth needs connection first

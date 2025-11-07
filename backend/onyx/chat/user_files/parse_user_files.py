@@ -98,6 +98,7 @@ def parse_user_files(
     # Calculate available tokens for documents based on prompt, user input, etc.
     available_tokens = compute_max_document_tokens_for_persona(
         persona=persona,
+        db_session=db_session,
         actual_user_input=actual_user_input,
     )
     uploaded_context_cap = int(available_tokens * 0.5)

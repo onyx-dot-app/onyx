@@ -262,6 +262,7 @@ class FakeModel(StreamableFakeModel):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._output_schema: AgentOutputSchemaBase | None = None
+        self.input_history: list[str | list] = []
 
     async def get_response(
         self,
@@ -308,6 +309,8 @@ class FakeModel(StreamableFakeModel):
         prompt: Any = None,
     ) -> AsyncIterator[object]:
         """Override streaming to handle structured output."""
+        # Update this history for testing purposes
+        self.input_history.append(input)
         # Store output_schema for streaming
         self._output_schema = output_schema
 
@@ -627,8 +630,9 @@ def chat_turn_dependencies(
 
     emitter = get_default_emitter()
     prompt_config = PromptConfig(
-        system_prompt="You are a helpful assistant.",
-        task_prompt="Answer the user's question.",
+        default_behavior_system_prompt="You are a helpful assistant.",
+        reminder="Answer the user's question.",
+        custom_instructions="",
         datetime_aware=False,
     )
     return ChatTurnDependencies(
