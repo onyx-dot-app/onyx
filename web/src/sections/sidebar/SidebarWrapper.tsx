@@ -29,7 +29,7 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
   return (
     <div
       className={cn(
-        "flex flex-row items-center py-1 gap-1 min-h-[2.5rem] px-[15px]",
+        "flex flex-row items-center py-1 gap-1 min-h-[3.5rem] px-[15px]",
         folded ? "justify-start" : "justify-between"
       )}
     >
