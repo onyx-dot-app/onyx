@@ -5,8 +5,8 @@ import OverflowDiv from "@/refresh-components/OverflowDiv";
 
 export interface SidebarBodyProps {
   actionButton?: React.ReactNode;
-  children: React.ReactNode;
-  footer: React.ReactNode;
+  children?: React.ReactNode;
+  footer?: React.ReactNode;
 }
 
 export default function SidebarBody({

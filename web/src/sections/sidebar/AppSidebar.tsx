@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, memo, useMemo, useState } from "react";
+import { useCallback, memo, useMemo, useState } from "react";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
@@ -417,26 +417,14 @@ function AppSidebarInner() {
       )}
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
-        {folded ? (
-          <div
-            key="folded"
-            className="animate-in fade-in duration-200 flex flex-col min-h-0 h-full"
-          >
-            <SidebarBody footer={settingsButton}>
-              {newSessionButton}
+        <SidebarBody footer={settingsButton} actionButton={newSessionButton}>
+          {folded ? (
+            <>
               {moreAgentsButton}
               {newProjectButton}
-            </SidebarBody>
-          </div>
-        ) : (
-          <div
-            key="unfolded"
-            className="animate-in fade-in duration-200 flex flex-col min-h-0 h-full"
-          >
-            <SidebarBody
-              actionButton={newSessionButton}
-              footer={settingsButton}
-            >
+            </>
+          ) : (
+            <>
               {/* Agents */}
               <DndContext
                 sensors={sensors}
@@ -489,9 +477,9 @@ function AppSidebarInner() {
                 {/* Recents */}
                 <RecentsSection chatSessions={chatSessions} />
               </DndContext>
-            </SidebarBody>
-          </div>
-        )}
+            </>
+          )}
+        </SidebarBody>
       </SidebarWrapper>
     </>
   );
