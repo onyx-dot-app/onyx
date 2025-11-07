@@ -1,4 +1,4 @@
-"""FastAPI wrapper for MCP server."""
+"""MCP server with FastAPI wrapper."""
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -6,14 +6,32 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastmcp import FastMCP
 
 from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
+from onyx.configs.app_configs import MCP_SERVER_NAME
+from onyx.configs.app_configs import MCP_SERVER_VERSION
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.mcp_server.server import mcp_server
+from onyx.mcp_server.auth import OnyxPATVerifier
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Create FastMCP server instance with PAT authentication
+logger.info(f"Creating MCP server: {MCP_SERVER_NAME} v{MCP_SERVER_VERSION}")
+
+mcp_server = FastMCP(
+    name=MCP_SERVER_NAME,
+    version=MCP_SERVER_VERSION,
+    auth=OnyxPATVerifier(),
+)
+
+# Import tools AFTER mcp_server is created to avoid circular import
+# Tools register themselves via @mcp_server.tool() decorator
+from onyx.mcp_server.tools import search  # noqa: E402, F401
+
+logger.info("MCP server instance created")
 
 
 def create_mcp_fastapi_app() -> FastAPI:
@@ -49,7 +67,7 @@ def create_mcp_fastapi_app() -> FastAPI:
     async def health_check() -> JSONResponse:
         return JSONResponse({"status": "healthy", "service": "mcp_server"})
 
-    # Authentication is handled by FastMCP's OnyxPATVerifier (see server.py)
+    # Authentication is handled by FastMCP's OnyxPATVerifier (see auth.py)
 
     if MCP_SERVER_CORS_ORIGINS:
         logger.info(f"CORS origins: {MCP_SERVER_CORS_ORIGINS}")
