@@ -53,17 +53,6 @@ ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
 
 
-def _looks_like_text(content: str) -> bool:
-    """Heuristic to flag binary-like output."""
-    if not content.strip():
-        return False
-    allowed_controls = {"\n", "\r", "\t"}
-    for char in content:
-        if ord(char) < 32 and char not in allowed_controls:
-            return False
-    return True
-
-
 def _unwrap_nested_exception(error: Exception) -> Exception:
     """
     Traverse common exception wrappers to surface the underlying LiteLLM error.
@@ -201,10 +190,9 @@ def _build_content(
 ) -> str:
     """Applies all non-image files."""
     from onyx.file_processing.extract_file_text import (
-        detect_encoding,
         extract_text_and_images,
         is_text_file,
-        read_text_file,
+        looks_like_text,
     )
     from onyx.file_processing.file_validation import TEXT_MIME_TYPE
 
@@ -233,46 +221,30 @@ def _build_content(
                 final_message_with_files += f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
                 continue
 
-            file_content = ""
             file_buffer.seek(0)
-
             try:
-                encoding = detect_encoding(file_buffer)
-                file_buffer.seek(0)
-                decoded_text, _ = read_text_file(
+                extraction = extract_text_and_images(
                     file_buffer,
-                    encoding=encoding,
-                    ignore_onyx_metadata=False,
+                    file.filename or str(file.file_id),
+                    content_type=(
+                        TEXT_MIME_TYPE
+                        if file.file_type == ChatFileType.PLAIN_TEXT
+                        else None
+                    ),
                 )
-                if _looks_like_text(decoded_text):
-                    file_content = decoded_text
-            except Exception as e:
-                logger.debug("Failed to read as text file: %s", e)
-                file_content = ""
-
-            if not file_content.strip():
-                file_buffer.seek(0)
-                try:
-                    extraction = extract_text_and_images(
-                        file_buffer,
-                        file.filename or str(file.file_id),
-                        content_type=(
-                            TEXT_MIME_TYPE
-                            if file.file_type == ChatFileType.PLAIN_TEXT
-                            else None
-                        ),
-                    )
-                    extracted_text = extraction.text_content
-                    if _looks_like_text(extracted_text):
-                        file_content = extracted_text
-                except Exception as e:
-                    logger.warning(
-                        "Failed to extract content from file %s (%s): %s",
-                        file.filename or file.file_id,
-                        file.file_type,
-                        e,
-                    )
+                extracted_text = extraction.text_content
+                if looks_like_text(extracted_text):
+                    file_content = extracted_text
+                else:
                     file_content = ""
+            except Exception as e:
+                logger.warning(
+                    "Failed to extract content from file %s (%s): %s",
+                    file.filename or file.file_id,
+                    file.file_type,
+                    e,
+                )
+                file_content = ""
 
             if not file_content.strip():
                 file_content = f"[Binary file content - {file.file_type} format]"
