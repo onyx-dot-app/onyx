@@ -1,14 +1,15 @@
 import { useEffect, RefObject } from "react";
 
 /**
- * A generic hook that detects clicks outside of a referenced element.
+ * A generic hook that detects clicks outside of referenced element(s).
  *
- * @param ref - A ref to the element to monitor for outside clicks
+ * @param ref - A ref or array of refs to monitor for outside clicks
  * @param callback - Function to call when a click outside is detected
  * @param enabled - Whether the hook is enabled. Defaults to true.
  *
  * @example
  * ```tsx
+ * // Single ref example
  * const MyComponent = () => {
  *   const ref = useRef<HTMLDivElement>(null);
  *   const [isOpen, setIsOpen] = useState(false);
@@ -25,6 +26,7 @@ import { useEffect, RefObject } from "react";
  *
  * @example
  * ```tsx
+ * // Single ref example with dropdown
  * const Dropdown = () => {
  *   const dropdownRef = useRef<HTMLDivElement>(null);
  *   const [isOpen, setIsOpen] = useState(false);
@@ -38,22 +40,54 @@ import { useEffect, RefObject } from "react";
  *   );
  * };
  * ```
+ *
+ * @example
+ * ```tsx
+ * // Multiple refs example - useful for combobox/dropdown with separate input and menu
+ * const ComboBox = () => {
+ *   const inputRef = useRef<HTMLInputElement>(null);
+ *   const dropdownRef = useRef<HTMLDivElement>(null);
+ *   const [isOpen, setIsOpen] = useState(false);
+ *
+ *   // Close dropdown only if click is outside BOTH input and dropdown
+ *   useClickOutside([inputRef, dropdownRef], () => setIsOpen(false), isOpen);
+ *
+ *   return (
+ *     <div>
+ *       <input ref={inputRef} onClick={() => setIsOpen(true)} />
+ *       {isOpen && (
+ *         <div ref={dropdownRef}>
+ *           <div>Option 1</div>
+ *           <div>Option 2</div>
+ *         </div>
+ *       )}
+ *     </div>
+ *   );
+ * };
+ * ```
  */
 export function useClickOutside<T extends HTMLElement>(
-  ref: RefObject<T> | null,
+  ref: RefObject<T> | RefObject<T>[] | null,
   callback: () => void,
   enabled: boolean = true
 ): void {
   useEffect(() => {
-    if (!enabled || !ref?.current) {
+    if (!enabled) {
       return;
     }
 
     const handleClickOutside = (event: Event) => {
       const target = event.target as Node;
 
-      // Check if click is outside the main ref
-      if (ref.current && !ref.current.contains(target)) {
+      // Normalize to array for consistent handling
+      const refs = Array.isArray(ref) ? ref : [ref];
+
+      // Check if click is outside all provided refs
+      const isOutside = refs.every(
+        (r) => !r?.current || !r.current.contains(target)
+      );
+
+      if (isOutside) {
         callback();
       }
     };

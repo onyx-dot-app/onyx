@@ -3,13 +3,7 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { OptionsList } from "./OptionsList";
 import { ComboBoxOption } from "../types";
-
-interface DropdownPosition {
-  top: number;
-  left: number;
-  width: number;
-  flipped: boolean;
-}
+import { DropdownPosition } from "@/hooks/useDropdownPosition";
 
 interface ComboBoxDropdownProps {
   isOpen: boolean;
@@ -99,7 +93,9 @@ export const ComboBoxDropdown = forwardRef<
         style={{
           top: `${dropdownPosition.top}px`,
           left: `${dropdownPosition.left}px`,
-          width: `${dropdownPosition.width}px`,
+          ...(dropdownPosition.width && {
+            width: `${dropdownPosition.width}px`,
+          }),
         }}
       >
         <OptionsList

@@ -76,23 +76,23 @@
  */
 
 import React, { useCallback, useContext, useMemo, useRef, useId } from "react";
-import { cn } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
 import InputTypeIn from "../InputTypeIn";
 import { FieldContext } from "../../form/FieldContext";
 import SvgChevronDown from "@/icons/chevron-down";
 import SvgChevronUp from "@/icons/chevron-up";
-import SvgXOctagon from "@/icons/x-octagon";
 import Text from "../../texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { FieldMessage } from "../../messages/FieldMessage";
 
 // Hooks
 import {
   useComboBoxState,
-  useDropdownPosition,
   useComboBoxKeyboard,
   useOptionFiltering,
-  useClickOutside,
 } from "./hooks";
+import { useClickOutside } from "@/hooks/useClickOutside";
+import { useDropdownPosition } from "@/hooks/useDropdownPosition";
 import { useValidation } from "./utils/validation";
 import { buildAriaAttributes } from "./utils/aria";
 
@@ -241,14 +241,14 @@ const InputComboBox = ({
   });
 
   // Click Outside Hook
-  useClickOutside({
-    isOpen,
-    refs: [inputRef, dropdownRef],
-    onClickOutside: useCallback(() => {
+  useClickOutside(
+    [inputRef, dropdownRef],
+    useCallback(() => {
       setIsOpen(false);
       setIsKeyboardNav(false);
     }, [setIsOpen, setIsKeyboardNav]),
-  });
+    isOpen
+  );
 
   const handleFocus = useCallback(() => {
     if (hasOptions) {
@@ -328,10 +328,7 @@ const InputComboBox = ({
               {hasOptions && (
                 <IconButton
                   internal
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleDropdown();
-                  }}
+                  onClick={noProp(toggleDropdown)}
                   disabled={disabled}
                   icon={isOpen ? SvgChevronUp : SvgChevronDown}
                   aria-label={isOpen ? "Close dropdown" : "Open dropdown"}
@@ -375,20 +372,15 @@ const InputComboBox = ({
 
       {/* Error message - only show internal error messages when not using external isError */}
       {!isValid && errorMessage && externalIsError === undefined && (
-        <div className="flex flex-row items-center gap-x-0.5 ml-0.5 mt-1">
-          <div className="w-4 h-4 flex items-center justify-center">
-            <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />
-          </div>
-          <Text
+        <FieldMessage variant="error" className="ml-0.5 mt-1">
+          <FieldMessage.Content
             id={`${fieldId}-error`}
-            text03
-            secondaryBody
-            className="ml-0.5"
             role="alert"
+            className="ml-0.5"
           >
             {errorMessage}
-          </Text>
-        </div>
+          </FieldMessage.Content>
+        </FieldMessage>
       )}
     </div>
   );
