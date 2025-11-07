@@ -1,5 +1,6 @@
 # editors
-.vscode
+.vscode/.env
+.vscode/launch.json
 .zed
 
 # macos

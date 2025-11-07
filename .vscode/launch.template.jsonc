@@ -107,7 +107,7 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
-      "args": ["model_server.main:app", "--reload", "--port", "9000"],
+      "args": ["model_server.main:app", "--reload", "--port", "${MODEL_SERVER_PORT}"],
       "presentation": {
         "group": "2"
       },
@@ -126,7 +126,7 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
-      "args": ["onyx.main:app", "--reload", "--port", "8080"],
+      "args": ["onyx.main:app", "--reload", "--port", "${APP_PORT}"],
       "presentation": {
         "group": "2"
       },
@@ -472,16 +472,16 @@
       }
     },
     {
-      "name": "Clear and Restart External Volumes and Containers",
+      "name": "Start Worktree Containers",
       "type": "node",
       "request": "launch",
-      "runtimeExecutable": "bash",
+      "runtimeExecutable": "python3",
       "runtimeArgs": [
-        "${workspaceFolder}/backend/scripts/restart_containers.sh"
+        "${workspaceFolder}/scripts/start_containers.py"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
-      "stopOnEntry": true,
+      "envFile": "${workspaceFolder}/.vscode/.env",
       "presentation": {
         "group": "3"
       }
@@ -579,7 +579,7 @@
       "name": "Debug React Web App in Chrome",
       "type": "chrome",
       "request": "launch",
-      "url": "http://localhost:3000",
+      "url": "http://localhost:${PORT}",
       "webRoot": "${workspaceFolder}/web"
     }
   ]

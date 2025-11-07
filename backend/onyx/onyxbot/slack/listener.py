@@ -163,8 +163,9 @@ class SlackbotHandler:
 
         # Start the Prometheus metrics server
         logger.info("Starting Prometheus metrics server")
-        start_http_server(8000)
-        logger.info("Prometheus metrics server started")
+        metrics_port = int(os.environ.get("SLACK_BOT_METRICS_PORT", "8000"))
+        start_http_server(metrics_port)
+        logger.info(f"Prometheus metrics server started on port {metrics_port}")
 
         # Start background threads
         logger.info("Starting background threads")
