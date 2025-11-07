@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.onyxbot.slack.handlers.handle_standard_answers import (
     oneoff_standard_answers,
 )
+from ee.onyx.server.query_and_chat.models import DocumentSearchRequest
 from ee.onyx.server.query_and_chat.models import OneShotQARequest
 from ee.onyx.server.query_and_chat.models import OneShotQAResponse
 from ee.onyx.server.query_and_chat.models import StandardAnswerRequest
@@ -24,11 +25,16 @@ from onyx.chat.models import QADocsResponse
 from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
-from onyx.context.search.models import SavedSearchDocWithContent
+from onyx.context.search.models import ChunkSearchRequest
+from onyx.context.search.models import InferenceChunk
+from onyx.context.search.pipeline import search_pipeline
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.factory import get_default_document_index
+from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.natural_language_processing.utils import get_tokenizer
@@ -42,92 +48,54 @@ basic_router = APIRouter(prefix="/query")
 
 
 class DocumentSearchResponse(BaseModel):
-    top_documents: list[SavedSearchDocWithContent]
-    llm_indices: list[int]
+    top_chunks: list[InferenceChunk]
 
 
-# @basic_router.post("/document-search")
-# def handle_search_request(
-#     search_request: DocumentSearchRequest,
-#     user: User | None = Depends(current_user),
-#     db_session: Session = Depends(get_session),
-# ) -> DocumentSearchResponse:
-#     """Simple search endpoint, does not create a new message or records in the DB"""
-#     query = search_request.message
-#     logger.notice(f"Received document search query: {query}")
+def _translate_search_request(
+    search_request: DocumentSearchRequest,
+) -> ChunkSearchRequest:
+    return ChunkSearchRequest(
+        query=search_request.query,
+        hybrid_alpha=search_request.hybrid_alpha,
+        recency_bias_multiplier=search_request.recency_bias_multiplier,
+        query_keywords=search_request.query_keywords,
+        limit=search_request.limit,
+        offset=search_request.offset,
+        user_selected_filters=search_request.user_selected_filters,
+        project_id=search_request.project_id,
+        # No bypass_acl, not allowed for this endpoint
+    )
 
-#     llm, fast_llm = get_default_llms()
 
-#     search_pipeline = SearchPipeline(
-#         search_request=SearchRequest(
-#             query=query,
-#             search_type=search_request.search_type,
-#             human_selected_filters=search_request.retrieval_options.filters,
-#             enable_auto_detect_filters=search_request.retrieval_options.enable_auto_detect_filters,
-#             persona=None,  # For simplicity, default settings should be good for this search
-#             offset=search_request.retrieval_options.offset,
-#             limit=search_request.retrieval_options.limit,
-#             rerank_settings=search_request.rerank_settings,
-#             evaluation_type=search_request.evaluation_type,
-#             chunks_above=search_request.chunks_above,
-#             chunks_below=search_request.chunks_below,
-#             full_doc=search_request.full_doc,
-#         ),
-#         user=user,
-#         llm=llm,
-#         fast_llm=fast_llm,
-#         skip_query_analysis=False,
-#         db_session=db_session,
-#         bypass_acl=False,
-#     )
-#     top_sections = search_pipeline.reranked_sections
-#     relevance_sections = search_pipeline.section_relevance
-#     top_docs = [
-#         SavedSearchDocWithContent(
-#             document_id=section.center_chunk.document_id,
-#             chunk_ind=section.center_chunk.chunk_id,
-#             content=section.center_chunk.content,
-#             semantic_identifier=section.center_chunk.semantic_identifier or "Unknown",
-#             link=(
-#                 section.center_chunk.source_links.get(0)
-#                 if section.center_chunk.source_links
-#                 else None
-#             ),
-#             blurb=section.center_chunk.blurb,
-#             source_type=section.center_chunk.source_type,
-#             boost=section.center_chunk.boost,
-#             hidden=section.center_chunk.hidden,
-#             metadata=section.center_chunk.metadata,
-#             score=section.center_chunk.score or 0.0,
-#             match_highlights=section.center_chunk.match_highlights,
-#             updated_at=section.center_chunk.updated_at,
-#             primary_owners=section.center_chunk.primary_owners,
-#             secondary_owners=section.center_chunk.secondary_owners,
-#             is_internet=False,
-#             db_doc_id=0,
-#         )
-#         for section in top_sections
-#     ]
+@basic_router.post("/document-search")
+def handle_search_request(
+    search_request: DocumentSearchRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> DocumentSearchResponse:
+    """Simple search endpoint, does not create a new message or records in the DB"""
+    query = search_request.query
+    logger.notice(f"Received document search query: {query}")
 
-#     # Deduping happens at the last step to avoid harming quality by dropping content early on
-#     deduped_docs = top_docs
-#     dropped_inds = None
+    llm, _ = get_default_llms()
 
-#     if search_request.retrieval_options.dedupe_docs:
-#         deduped_docs, dropped_inds = dedupe_documents(top_docs)
+    search_settings = get_current_search_settings(db_session)
+    document_index = get_default_document_index(
+        search_settings=search_settings,
+        secondary_search_settings=None,
+    )
 
-#     llm_indices = relevant_sections_to_indices(
-#         relevance_sections=relevance_sections, items=deduped_docs
-#     )
+    retrieved_chunks = search_pipeline(
+        chunk_search_request=_translate_search_request(search_request),
+        document_index=document_index,
+        user=user,
+        persona=None,
+        db_session=db_session,
+        auto_detect_filters=False,
+        llm=llm,
+    )
 
-#     if dropped_inds:
-#         llm_indices = drop_llm_indices(
-#             llm_indices=llm_indices,
-#             search_docs=deduped_docs,
-#             dropped_indices=dropped_inds,
-#         )
-
-#     return DocumentSearchResponse(top_documents=deduped_docs, llm_indices=llm_indices)
+    return DocumentSearchResponse(top_chunks=retrieved_chunks)
 
 
 def get_answer_stream(

@@ -138,7 +138,7 @@ def _build_index_filters(
     return final_filters
 
 
-def chunk_search_pipeline(
+def search_pipeline(
     # Query and settings
     chunk_search_request: ChunkSearchRequest,
     # Document index to search over
@@ -147,26 +147,33 @@ def chunk_search_pipeline(
     # Used for ACLs and federated search
     user: User | None,
     # Used for default filters and settings
-    persona: Persona,
+    persona: Persona | None,
     db_session: Session,
     auto_detect_filters: bool = False,
     llm: LLM | None = None,
     # Needed for federated Slack search
     slack_context: SlackContext | None = None,
 ) -> list[InferenceChunk]:
-    user_uploaded_persona_files: list[UUID] = [
-        user_file.id for user_file in persona.user_files
-    ]
+    user_uploaded_persona_files: list[UUID] | None = (
+        [user_file.id for user_file in persona.user_files] if persona else None
+    )
+
+    persona_document_sets: list[str] | None = (
+        [persona_document_set.name for persona_document_set in persona.document_sets]
+        if persona
+        else None
+    )
+    persona_time_cutoff: datetime | None = (
+        persona.search_start_date if persona else None
+    )
 
     filters = _build_index_filters(
         user_provided_filters=chunk_search_request.user_selected_filters,
         user=user,
         project_id=chunk_search_request.project_id,
         user_file_ids=user_uploaded_persona_files,
-        persona_document_sets=[
-            persona_document_set.name for persona_document_set in persona.document_sets
-        ],
-        persona_time_cutoff=persona.search_start_date,
+        persona_document_sets=persona_document_sets,
+        persona_time_cutoff=persona_time_cutoff,
         db_session=db_session,
         auto_detect_filters=auto_detect_filters,
         query=chunk_search_request.query,
