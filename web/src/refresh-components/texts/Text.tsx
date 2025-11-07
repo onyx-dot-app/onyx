@@ -91,8 +91,8 @@ export interface TextProps
   textLight05?: boolean;
   textDark03?: boolean;
   textDark05?: boolean;
-    
-  // Element type override
+
+  // Tag type override
   as?: "p" | "span" | "div";
 }
 
