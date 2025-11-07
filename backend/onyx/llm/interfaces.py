@@ -112,7 +112,7 @@ class LLM(abc.ABC):
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
         # implementation
-        return self._invoke_implementation(
+        return self._invoke_implementation_langchain(
             prompt,
             tools,
             tool_choice,
@@ -122,7 +122,7 @@ class LLM(abc.ABC):
         )
 
     @abc.abstractmethod
-    def _invoke_implementation(
+    def _invoke_implementation_langchain(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -156,7 +156,7 @@ class LLM(abc.ABC):
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
         # implementation
-        messages = self._stream_implementation(
+        messages = self._stream_implementation_langchain(
             prompt,
             tools,
             tool_choice,
@@ -175,7 +175,7 @@ class LLM(abc.ABC):
             logger.debug(f"Model Tokens: {tokens}")
 
     @abc.abstractmethod
-    def _stream_implementation(
+    def _stream_implementation_langchain(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
