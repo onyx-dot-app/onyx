@@ -112,6 +112,7 @@ def default_build_system_message_v2(
                     )
                     tag_handled_prompt += tool.description
 
+    tag_handled_prompt += "\n# Reminders"
     if should_cite_documents:
         from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
 

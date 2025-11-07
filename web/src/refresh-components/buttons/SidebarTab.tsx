@@ -112,6 +112,7 @@ export default function SidebarTab({
             <Truncated
               className={cn(textClasses(active)[variant])}
               side="right"
+              sideOffset={40}
             >
               {children}
             </Truncated>

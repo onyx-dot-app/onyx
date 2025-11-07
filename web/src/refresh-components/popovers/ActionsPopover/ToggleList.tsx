@@ -80,7 +80,6 @@ export default function ToggleList({
         <LineItem
           key="enable-disable-all"
           icon={allDisabled ? SvgPlug : SvgUnplug}
-          type="button"
           onClick={allDisabled ? onEnableAll : onDisableAll}
         >
           {allDisabled ? "Enable All" : "Disable All"}

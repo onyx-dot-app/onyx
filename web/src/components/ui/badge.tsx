@@ -1,11 +1,6 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
@@ -108,20 +103,7 @@ function Badge({
     </div>
   );
 
-  if (tooltip) {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>{BadgeContent}</TooltipTrigger>
-          <TooltipContent>
-            <p>{tooltip}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  return BadgeContent;
+  return <SimpleTooltip tooltip={tooltip}>{BadgeContent}</SimpleTooltip>;
 }
 
 export { Badge, badgeVariants };

@@ -10,9 +10,10 @@ on:
 jobs:
   mypy-check:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}", "extras=s3-cache"]
 
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
@@ -57,6 +58,15 @@ jobs:
             --package-name onyx_openapi_client \
             --skip-validate-spec \
             --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
+
+      - name: Cache mypy cache
+        if: ${{ vars.DISABLE_MYPY_CACHE != 'true' }}
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
+        with:
+          path: backend/.mypy_cache
+          key: mypy-${{ runner.os }}-${{ hashFiles('**/*.py', '**/*.pyi', 'backend/pyproject.toml') }}
+          restore-keys: |
+            mypy-${{ runner.os }}-
 
       - name: Run MyPy
         working-directory: ./backend

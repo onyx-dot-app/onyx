@@ -37,12 +37,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import SvgArrowLeft from "@/icons/arrow-left";
 import SvgArrowRight from "@/icons/arrow-right";
 
@@ -291,40 +286,20 @@ export default function EmbeddingForm() {
                     setReindexType(ReindexType.REINDEX);
                   }}
                 >
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger className="w-full text-left">
-                        (Recommended) Re-index
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>
-                          Re-runs all connectors in the background before
-                          switching over. Takes longer but ensures no
-                          degredation of search during the switch.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <SimpleTooltip tooltip="Re-runs all connectors in the background before switching over. Takes longer but ensures no degredation of search during the switch.">
+                    <span className="w-full text-left">
+                      (Recommended) Re-index
+                    </span>
+                  </SimpleTooltip>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
                     setReindexType(ReindexType.INSTANT);
                   }}
                 >
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger className="w-full text-left">
-                        Instant Switch
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>
-                          Immediately switches to new settings without
-                          re-indexing. Searches will be degraded until the
-                          re-indexing is complete.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <SimpleTooltip tooltip="Immediately switches to new settings without re-indexing. Searches will be degraded until the re-indexing is complete.">
+                    <span className="w-full text-left">Instant Switch</span>
+                  </SimpleTooltip>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

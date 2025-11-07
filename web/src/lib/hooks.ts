@@ -42,6 +42,16 @@ import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib
 import { usePathname, useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 
+export function useIsMounted() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return mounted;
+}
+
 type ActiveSidebarTab =
   | { type: "agent" | "project" | "chat"; id: string }
   | "new-session"

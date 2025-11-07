@@ -1,6 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useSWRConfig } from "swr";
-import { getDisplayNameForModel } from "@/lib/hooks";
+import { getDisplayNameForModel, useAuthType } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/users/UserSettings";
 import { usePathname, useRouter } from "next/navigation";
@@ -36,7 +35,6 @@ import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import Text from "@/refresh-components/texts/Text";
 import SvgXOctagon from "@/icons/x-octagon";
 import { PATManagement } from "@/components/user/PATManagement";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 
 type SettingsSection =
   | "settings"
@@ -60,6 +58,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     updateUserThemePreference,
   } = useUser();
   const { llmProviders } = useLLMProviders();
+  const authType = useAuthType();
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
@@ -79,13 +78,6 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState<number | null>(null);
   const { popup, setPopup } = usePopup();
-  const { mutate: globalMutate } = useSWRConfig();
-
-  // Prefetch tokens when modal opens for instant display
-  useEffect(() => {
-    // Prefetch into SWR cache so PATManagement component has instant data
-    globalMutate("/api/user/pats", errorHandlingFetcher("/api/user/pats"));
-  }, []); // Only run once on mount
 
   // Fetch federated-connector info so the modal can list/refresh them
   const {
@@ -147,14 +139,14 @@ export function UserSettings({ onClose }: UserSettingsProps) {
       visibleSections.push({ id: "password", label: "Password" });
     }
 
-    // Always show tokens tab
-    visibleSections.push({ id: "tokens", label: "Access Tokens" });
+    if (authType && authType !== "disabled") {
+      visibleSections.push({ id: "tokens", label: "Access Tokens" });
+    }
 
-    // Always show Connectors tab, will be disabled if loading or no connectors
     visibleSections.push({ id: "connectors", label: "Connectors" });
 
     return visibleSections;
-  }, [showPasswordSection]);
+  }, [showPasswordSection, authType]);
 
   useEffect(() => {
     if (!sections.some((section) => section.id === activeSection)) {

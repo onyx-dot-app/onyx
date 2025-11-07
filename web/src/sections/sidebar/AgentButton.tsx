@@ -12,7 +12,7 @@ import { getAgentIcon } from "@/sections/sidebar/utils";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import SvgX from "@/icons/x";
-import { useActiveSidebarTab } from "@/lib/hooks";
+import { useActiveSidebarTab, useIsMounted } from "@/lib/hooks";
 
 interface SortableItemProps {
   id: number;
@@ -20,8 +20,13 @@ interface SortableItemProps {
 }
 
 function SortableItem({ id, children }: SortableItemProps) {
+  const isMounted = useIsMounted();
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useSortable({ id });
+
+  if (!isMounted) {
+    return <div className="flex items-center group">{children}</div>;
+  }
 
   return (
     <div

@@ -286,10 +286,10 @@ class PromptConfig(BaseModel):
         db_session: Session,
         prompt_override: PromptOverride | None = None,
     ) -> "PromptConfig":
-        from onyx.db.persona import get_default_persona
+        from onyx.db.persona import get_default_behavior_persona
 
         # Get the default persona's system prompt
-        default_persona = get_default_persona(db_session)
+        default_persona = get_default_behavior_persona(db_session)
         default_behavior_system_prompt = (
             default_persona.system_prompt
             if default_persona and default_persona.system_prompt

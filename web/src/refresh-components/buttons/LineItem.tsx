@@ -12,47 +12,62 @@ const buttonClassNames = (heavyForced?: boolean) =>
     ? ["bg-action-link-01", "hover:bg-background-tint-02"]
     : ["bg-transparent", "hover:bg-background-tint-02"];
 
-const textClassNames = (forced?: boolean) =>
-  forced ? ["text-action-link-05"] : ["text-text-04"];
+const textClassNames = {
+  main: ["text-text-04"],
+  forced: ["text-action-link-05"],
+  strikeThrough: ["text-text-02", "line-through decoration-2"],
+};
 
 const iconClassNames = (forced?: boolean) =>
   forced ? ["stroke-action-link-05"] : ["stroke-text-03"];
 
-export interface LineItemProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface LineItemProps extends React.HTMLAttributes<HTMLDivElement> {
   // Button variants
+  main?: boolean;
   forced?: boolean;
   heavyForced?: boolean;
   strikethrough?: boolean;
 
   icon?: React.FunctionComponent<SvgProps>;
   description?: string;
-  children?: string | React.ReactNode;
+  children?: string;
   rightChildren?: React.ReactNode;
-  onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
   href?: string;
 }
 
 export default function LineItem({
+  main,
   forced,
   heavyForced,
   strikethrough,
 
   icon: Icon,
   description,
+  className,
   children,
   rightChildren,
   onClick,
   href,
+  ...props
 }: LineItemProps) {
+  const variant = main
+    ? "main"
+    : strikethrough
+      ? "strikeThrough"
+      : forced || heavyForced
+        ? "forced"
+        : "main";
+
   const content = (
-    <button
-      type="button"
+    <div
       className={cn(
-        "flex flex-col w-full justify-center items-start p-2 rounded-08 group/LineItem",
-        buttonClassNames(heavyForced)
+        "flex flex-col w-full justify-center items-start p-2 rounded-08 group/LineItem cursor-pointer",
+        buttonClassNames(heavyForced),
+        className
       )}
       onClick={onClick}
+      {...props}
     >
       <div className="flex flex-row items-center justify-start w-full gap-2">
         {Icon && (
@@ -65,21 +80,13 @@ export default function LineItem({
             />
           </div>
         )}
-        {typeof children === "string" ? (
-          <Truncated
-            mainUiMuted
-            text04
-            className={cn(
-              "text-left w-full",
-              textClassNames(forced || heavyForced),
-              strikethrough && "line-through decoration-[1.5px]"
-            )}
-          >
-            {children}
-          </Truncated>
-        ) : (
-          children
-        )}
+        <Truncated
+          mainUiMuted
+          text04
+          className={cn("text-left w-full", textClassNames[variant])}
+        >
+          {children}
+        </Truncated>
         {rightChildren}
       </div>
       {description && (
@@ -96,7 +103,7 @@ export default function LineItem({
           </Text>
         </div>
       )}
-    </button>
+    </div>
   );
 
   if (!href) return content;

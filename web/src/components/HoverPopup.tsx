@@ -1,4 +1,10 @@
 import { JSX } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface HoverPopupProps {
   mainContent: string | JSX.Element;
@@ -7,13 +13,6 @@ interface HoverPopupProps {
   direction?: "left" | "left-top" | "bottom" | "top";
   style?: "basic" | "dark";
 }
-
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 export const HoverPopup = ({
   mainContent,

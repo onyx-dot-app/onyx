@@ -1,7 +1,7 @@
 "use client";
 
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Popover,
   PopoverContent,

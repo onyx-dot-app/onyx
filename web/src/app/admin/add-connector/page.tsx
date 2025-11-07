@@ -118,17 +118,17 @@ function SourceTileTooltipWrapper({
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-sm">
           {existingFederatedConnector && !hasExistingSlackCredentials ? (
-            <Text inverted secondaryBody>
+            <Text textLight05 secondaryBody>
               <strong>Federated connector already configured.</strong> Click to
               edit the existing connector.
             </Text>
           ) : hasExistingSlackCredentials ? (
-            <Text inverted secondaryBody>
+            <Text textLight05 secondaryBody>
               <strong>Existing Slack credentials found.</strong> Click to manage
               the traditional Slack connector.
             </Text>
           ) : sourceMetadata.federated ? (
-            <Text inverted secondaryBody>
+            <Text textLight05 secondaryBody>
               {sourceMetadata.federatedTooltip ? (
                 sourceMetadata.federatedTooltip
               ) : (

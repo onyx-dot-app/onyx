@@ -63,8 +63,8 @@ export default function AgentCard({ agent }: AgentCardProps) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <button
-        className="flex flex-col w-full text-left"
+      <div
+        className="flex flex-col w-full text-left cursor-pointer"
         onClick={() => route({ agentId: agent.id })}
       >
         {/* Main Body */}
@@ -145,7 +145,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             </Button>
           </div>
         </div>
-      </button>
+      </div>
     </Card>
   );
 }

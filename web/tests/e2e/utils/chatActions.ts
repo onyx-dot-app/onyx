@@ -55,10 +55,13 @@ export async function verifyCurrentModel(page: Page, modelName: string) {
 // Start of Selection
 export async function switchModel(page: Page, modelName: string) {
   await page.getByTestId("ChatInputBar/llm-popover-trigger").click();
-  // Target the button inside the popover content specifically
+  // Target the LineItem (now a <div>) inside the popover content specifically
+  // LineItem changed from <button> to <div> to fix hydration errors
   await page
     .locator('[role="dialog"]')
-    .getByRole("button", { name: new RegExp(`${modelName}$`, "i") })
+    .locator("div.cursor-pointer")
+    .filter({ hasText: new RegExp(`${modelName}$`, "i") })
+    .first()
     .click();
 }
 

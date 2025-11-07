@@ -26,12 +26,7 @@ import {
 import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
 import { FiSettings } from "react-icons/fi";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+
 import { Badge } from "@/components/ui/badge";
 import SvgLoader from "@/icons/loader";
 import SvgSettings from "@/icons/settings";
@@ -476,19 +471,15 @@ export function FederatedConnectorForm({
             <Badge variant="outline" className="text-xs">
               Federated
             </Badge>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="cursor-help" size={16} />
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-sm">
-                  <p className="text-xs">
-                    {sourceMetadata.federatedTooltip ||
-                      "This is a federated connector. It will result in greater latency and lower search quality compared to regular connectors."}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <SimpleTooltip
+              tooltip={
+                sourceMetadata.federatedTooltip ||
+                "This is a federated connector. It will result in greater latency and lower search quality compared to regular connectors."
+              }
+              side="bottom"
+            >
+              <Info className="cursor-help" size={16} />
+            </SimpleTooltip>
           </div>
         </div>
 
@@ -551,7 +542,6 @@ export function FederatedConnectorForm({
                 onClick={handleValidateCredentials}
                 disabled={isValidating || !formState.schema}
                 className="flex ml-auto"
-                leftIcon={isValidating ? SimpleTooltip : undefined}
               >
                 {isValidating ? "Validating..." : "Validate"}
               </Button>

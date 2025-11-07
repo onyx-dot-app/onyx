@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { ANONYMOUS_USER_NAME, LOGOUT_DISABLED } from "@/lib/constants";
 import { Notification } from "@/app/admin/settings/interfaces";
-import useSWR from "swr";
+import useSWR, { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import { useUser } from "@/components/user/UserProvider";
@@ -173,13 +173,21 @@ export default function Settings({ folded }: SettingsProps) {
 
   const displayName = getDisplayName(user?.email, user?.personalization?.name);
 
+  const handlePopoverOpen = (state: boolean) => {
+    if (state) {
+      // Prefetch user settings data when popover opens for instant modal display
+      preload("/api/user/pats", errorHandlingFetcher);
+      preload("/api/federated/oauth-status", errorHandlingFetcher);
+      preload("/api/manage/connector-status", errorHandlingFetcher);
+      preload("/api/llm/provider", errorHandlingFetcher);
+      setPopupState("Settings");
+    } else {
+      setPopupState(undefined);
+    }
+  };
+
   return (
-    <Popover
-      open={!!popupState}
-      onOpenChange={(state) =>
-        state ? setPopupState("Settings") : setPopupState(undefined)
-      }
-    >
+    <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
       <PopoverTrigger asChild>
         <div id="onyx-user-dropdown">
           <SidebarTab
