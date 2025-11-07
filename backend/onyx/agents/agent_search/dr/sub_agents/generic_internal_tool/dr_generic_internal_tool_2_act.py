@@ -125,7 +125,7 @@ def generic_internal_tool_act(
     return BranchUpdate(
         branch_iteration_responses=[
             IterationAnswer(
-                tool=generic_internal_tool.llm_name,
+                tool=generic_internal_tool.name,
                 tool_id=generic_internal_tool_info.tool_id,
                 iteration_nr=iteration_nr,
                 parallelization_nr=parallelization_nr,

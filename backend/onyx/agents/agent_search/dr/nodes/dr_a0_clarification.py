@@ -167,7 +167,7 @@ def _get_available_tools(
 
         tool_info = OrchestratorTool(
             tool_id=tool.id,
-            name=tool.llm_name,
+            name=tool.name,
             llm_path=llm_path,
             path=path,
             description=description,
@@ -177,7 +177,7 @@ def _get_available_tools(
         )
 
         # TODO: handle custom tools with same name as other tools (e.g., CLOSER)
-        available_tools[tool.llm_name] = tool_info
+        available_tools[tool.name] = tool_info
 
     available_tool_paths = [tool.path for tool in available_tools.values()]
 

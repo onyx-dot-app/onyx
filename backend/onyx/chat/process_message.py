@@ -51,18 +51,12 @@ from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
 from onyx.context.search.enums import OptionalSearchSetting
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.retrieval.search_runner import (
-    inference_sections_from_ids,
-)
 from onyx.db.chat import attach_files_to_chat_message
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_message
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_db_search_doc_by_id
-from onyx.db.chat import get_doc_query_identifiers_from_model
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -374,6 +368,7 @@ def stream_chat_message_objects(
         reference_doc_ids = new_msg_req.search_doc_ids
         retrieval_options = new_msg_req.retrieval_options
         new_msg_req.alternate_assistant_id
+        user_selected_filters = retrieval_options.filters if retrieval_options else None
 
         # permanent "log" store, used primarily for debugging
         long_term_logger = LongTermLogger(
@@ -443,7 +438,7 @@ def stream_chat_message_objects(
         )
 
         search_settings = get_current_search_settings(db_session)
-        document_index = get_default_document_index(search_settings, None)
+        get_default_document_index(search_settings, None)
 
         # Every chat Session begins with an empty root message
         root_message = get_or_create_root_message(
@@ -587,23 +582,7 @@ def stream_chat_message_objects(
         )
 
         selected_db_search_docs = None
-        selected_sections: list[InferenceSection] | None = None
         if reference_doc_ids:
-            identifier_tuples = get_doc_query_identifiers_from_model(
-                search_doc_ids=reference_doc_ids,
-                chat_session=chat_session,
-                user_id=user_id,
-                db_session=db_session,
-                enforce_chat_session_id_for_search_docs=enforce_chat_session_id_for_search_docs,
-            )
-
-            # Generates full documents currently
-            # May extend to use sections instead in the future
-            selected_sections = inference_sections_from_ids(
-                doc_identifiers=identifier_tuples,
-                document_index=document_index,
-            )
-
             # Add a maximum context size in the case of user-selected docs to prevent
             # slight inaccuracies in context window size pruning from causing
             # the entire query to fail
@@ -711,15 +690,8 @@ def stream_chat_message_objects(
                 )
             ),
             search_tool_config=SearchToolConfig(
-                answer_style_config=answer_style_config,
-                document_pruning_config=document_pruning_config,
-                retrieval_options=retrieval_options or RetrievalDetails(),
-                rerank_settings=new_msg_req.rerank_settings,
-                selected_sections=selected_sections,
-                chunks_above=new_msg_req.chunks_above,
-                chunks_below=new_msg_req.chunks_below,
-                full_doc=new_msg_req.full_doc,
-                latest_query_files=latest_query_files,
+                user_selected_filters=user_selected_filters,
+                project_id=chat_session.project_id,
                 bypass_acl=bypass_acl,
             ),
             internet_search_tool_config=WebSearchToolConfig(
