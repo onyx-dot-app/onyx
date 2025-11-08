@@ -935,8 +935,8 @@ def _fast_message_stream(
 ) -> Generator[Packet, None, None]:
     # TODO: clean up this jank
     is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
-    prompt_builder = getattr(answer.graph_inputs, "prompt_builder", None)
-    primary_llm = getattr(answer.graph_tooling, "primary_llm", None)
+    prompt_builder = answer.graph_inputs.prompt_builder
+    primary_llm = answer.graph_tooling.primary_llm
     if prompt_builder and primary_llm:
         _reserve_prompt_tokens_for_agent_overhead(
             prompt_builder, primary_llm, tools, prompt_config
