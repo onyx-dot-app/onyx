@@ -83,7 +83,7 @@ class MCPTool(BaseTool):
             },
         }
 
-    def build_tool_message_content(
+    def get_llm_tool_response(
         self, *args: ToolResponse
     ) -> str | list[str | dict[str, Any]]:
         """Build message content from tool response"""

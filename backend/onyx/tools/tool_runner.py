@@ -41,7 +41,7 @@ class ToolRunner(Generic[R]):
 
     def tool_message_content(self) -> str | list[str | dict[str, Any]]:
         tool_responses = list(self.tool_responses())
-        return self.tool.build_tool_message_content(*tool_responses)
+        return self.tool.get_llm_tool_response(*tool_responses)
 
     def tool_final_result(self) -> ToolCallFinalResult:
         return ToolCallFinalResult(

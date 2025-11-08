@@ -152,25 +152,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             },
         }
 
-    def build_tool_message_content(
-        self, *args: ToolResponse
-    ) -> str | list[str | dict[str, Any]]:
-        final_context_docs_response = next(
-            response for response in args if response.id == FINAL_CONTEXT_DOCUMENTS_ID
-        )
-        final_context_docs = cast(list[LlmDoc], final_context_docs_response.response)
-
-        return json.dumps(
-            {
-                "search_results": [
-                    llm_doc_to_dict(doc, ind)
-                    for ind, doc in enumerate(final_context_docs)
-                ]
-            }
-        )
-
-    """Actual tool execution"""
-
     def run(
         self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
     ) -> Generator[ToolResponse, None, None]:
@@ -237,6 +218,23 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # subfields that are not serializable by default (datetime)
         # this forces pydantic to make them JSON serializable for us
         return [json.loads(doc.model_dump_json()) for doc in final_docs]
+
+    def get_llm_tool_response(
+        self, *args: ToolResponse
+    ) -> str | list[str | dict[str, Any]]:
+        final_context_docs_response = next(
+            response for response in args if response.id == FINAL_CONTEXT_DOCUMENTS_ID
+        )
+        final_context_docs = cast(list[LlmDoc], final_context_docs_response.response)
+
+        return json.dumps(
+            {
+                "search_results": [
+                    llm_doc_to_dict(doc, ind)
+                    for ind, doc in enumerate(final_context_docs)
+                ]
+            }
+        )
 
 
 T = TypeVar("T")

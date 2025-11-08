@@ -106,7 +106,7 @@ class CustomTool(BaseTool):
     def tool_definition(self) -> dict:
         return self._tool_definition
 
-    def build_tool_message_content(
+    def get_llm_tool_response(
         self, *args: ToolResponse
     ) -> str | list[str | dict[str, Any]]:
         response = cast(CustomToolCallSummary, args[0].response)

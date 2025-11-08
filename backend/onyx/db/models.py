@@ -3924,3 +3924,153 @@ class ExternalGroupPermissionSyncAttempt(Base):
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+
+# Proposal
+###############
+
+
+class ChatMessageProposal(Base):
+    """Note, the first message in a chain has no contents, it's a workaround to allow edits
+    on the first message of a session, an empty root node basically
+
+    Since every user message is followed by a LLM response, chat messages generally come in pairs.
+    Keeping them as separate messages however for future Agentification extensions
+    Fields will be largely duplicated in the pair.
+    """
+
+    __tablename__ = "chat_message"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Where is this message located
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id")
+    )
+
+    # Parent message pointer for the tree structure, nullable because the first message is
+    # an empty root node to allow edits on the first message of a session.
+    parent_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id"), nullable=True
+    )
+    # This only maps to the latest because only that message chain is needed.
+    # It can be updated as needed to trace other branches.
+    latest_child_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id"), nullable=True
+    )
+
+    # What does this message contain
+    reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
+    message: Mapped[str] = mapped_column(Text)
+    token_count: Mapped[int] = mapped_column(Integer)
+    message_type: Mapped[MessageType] = mapped_column(
+        Enum(MessageType, native_enum=False)
+    )
+    # Files attached to the message, when parsed into history, it becomes a separate message
+    files: Mapped[list[FileDescriptor] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
+    # Metadata
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    time_sent: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships
+    chat_session: Mapped[ChatSession] = relationship("ChatSession")
+
+    chat_message_feedbacks: Mapped[list["ChatMessageFeedback"]] = relationship(
+        "ChatMessageFeedback",
+        back_populates="chat_message",
+    )
+
+    document_feedbacks: Mapped[list["DocumentRetrievalFeedback"]] = relationship(
+        "DocumentRetrievalFeedback",
+        back_populates="chat_message",
+    )
+
+    parent_message: Mapped["ChatMessageProposal | None"] = relationship(
+        "ChatMessageProposal",
+        foreign_keys=[parent_message_id],
+        remote_side="ChatMessageProposal.id",
+    )
+
+    latest_child_message: Mapped["ChatMessageProposal | None"] = relationship(
+        "ChatMessageProposal",
+        foreign_keys=[latest_child_message_id],
+        remote_side="ChatMessageProposal.id",
+    )
+
+    # Chat messages only need to know their immediate tool call children
+    # If there are nested tool calls, they are stored in the tool_call_children relationship.
+    tool_calls: Mapped[list["ToolCall"] | None] = relationship(
+        "ToolCall",
+        back_populates="chat_message",
+    )
+
+
+# This should be migrated from the ResearchAgentIteration?
+class ToolCallProposal(Base):
+    """Represents a Tool Call and Tool Response"""
+
+    __tablename__ = "tool_call"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id")
+    )
+
+    # If this is not None, it's a top level tool call from the user message
+    # If this is None, it's a lower level call from another tool/agent
+    parent_chat_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id"), nullable=True
+    )
+    # If this is not None, this tool call is a child of another tool call
+    parent_tool_call_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tool_call.id"), nullable=True
+    )
+    # The tools with the same turn number (and parent) were called in parallel
+    # Ones with different turn numbers (and same parent) were called sequentially
+    turn_number: Mapped[int] = mapped_column(Integer)
+    # The depth of the tool call in the tree structure
+    # 0 for top level tool calls (like web search or calling the Research Agent in Deep Research)
+    # 1 for tool calls from other tool calls (like the search tool calls from the Research Agent)
+    depth: Mapped[int] = mapped_column(Integer)
+
+    # Not a FK because we want to be able to delete the tool without deleting
+    # this entry
+    tool_id: Mapped[int] = mapped_column(Integer())
+    # This is needed because LLMs expect the tool call and the response to have matching IDs
+    # This is better than just regenerating one randomly
+    tool_call_id: Mapped[int] = mapped_column(Integer())
+    # Preceeding reasoning tokens for this tool call, not included in the history
+    reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # For "Agents" like the Research Agent for Deep Research -
+    # the argument and final report are stored as the argument and response.
+    tool_call_arguments: Mapped[dict[str, JSON_ro]] = mapped_column(postgresql.JSONB())
+    tool_call_response: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
+    # This just counts the number of tokens in the arg because it's all that's kept for the history
+    # Only the top level tools (the ones with a parent_chat_message_id) have token counts that are counted
+    # towards the session total.
+    tool_call_tokens: Mapped[int] = mapped_column(Integer())
+
+    # Relationships
+    chat_session: Mapped[ChatSession] = relationship("ChatSession")
+
+    parent_chat_message: Mapped["ChatMessageProposal | None"] = relationship(
+        "ChatMessageProposal",
+        foreign_keys=[parent_chat_message_id],
+        remote_side="ChatMessageProposal.id",
+    )
+    parent_tool_call: Mapped["ToolCallProposal | None"] = relationship(
+        "ToolCallProposal",
+        foreign_keys=[parent_tool_call_id],
+        remote_side="ToolCallProposal.id",
+    )
+    tool_call_children: Mapped[list["ToolCallProposal"]] = relationship(
+        "ToolCallProposal",
+        foreign_keys=[parent_tool_call_id],
+        back_populates="parent_tool_call",
+    )

@@ -65,7 +65,7 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def build_tool_message_content(
+    def get_llm_tool_response(
         self, *args: "ToolResponse"
     ) -> str | list[str | dict[str, Any]]:
         """
@@ -79,6 +79,6 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
         """
         This is the output of the tool which needs to be stored in the database.
         It will typically contain more information than what is passed back to the LLM
-        via the build_tool_message_content method.
+        via the get_llm_tool_response method.
         """
         raise NotImplementedError

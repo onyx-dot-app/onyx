@@ -150,7 +150,7 @@ class ImageGenerationTool(Tool[None]):
             },
         }
 
-    def build_tool_message_content(
+    def get_llm_tool_response(
         self, *args: ToolResponse
     ) -> str | list[str | dict[str, Any]]:
         # Filter out heartbeat responses and find the actual image response
