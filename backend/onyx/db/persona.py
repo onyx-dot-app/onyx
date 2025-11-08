@@ -38,6 +38,7 @@ from onyx.db.models import UserFolder
 from onyx.db.models import UserGroup
 from onyx.db.models import Validator
 from onyx.db import crud_validator
+from onyx.db.models import LangflowFileNode
 from onyx.db.notification import create_notification
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -258,6 +259,7 @@ def create_update_persona(
             pipeline_id=create_persona_request.pipeline_id,
             template_file=create_persona_request.template_file,
             validator_ids=create_persona_request.validator_ids,
+            langflow_file_nodes=create_persona_request.langflow_file_nodes,
         )
 
         versioned_make_persona_private = fetch_versioned_implementation(
@@ -455,6 +457,7 @@ def upsert_persona(
     pipeline_id: str | None = None,
     template_file: bytes | None = None,
     validator_ids: list[int] | None = None,
+    langflow_file_nodes: list[dict] | None = None,
 ) -> Persona:
     """
     NOTE: This operation cannot update persona configuration options that
@@ -620,6 +623,17 @@ def upsert_persona(
             existing_persona.user_folders.clear()
             existing_persona.user_folders = user_folders or []
 
+        if langflow_file_nodes is not None:
+                    # Удаляем старые связи
+                    db_session.query(LangflowFileNode).filter(
+                        LangflowFileNode.persona_id == existing_persona.id
+                    ).delete(synchronize_session=False)
+                    # Добавляем новые
+                    existing_persona.langflow_file_nodes = [
+                        LangflowFileNode(file_node_id=node["file_node_id"])
+                        for node in langflow_file_nodes
+                    ]
+
         # Если передали validator_ids:
         # - удаляем старые связи ассистента с валидаторами, то есть отвязываем их;
         # - далее устанавливаем новые связи.
@@ -681,6 +695,10 @@ def upsert_persona(
             pipeline_id=pipeline_id,
             template_file=template_file,
             validators=validators or [],
+            langflow_file_nodes=[
+                LangflowFileNode(file_node_id=node["file_node_id"])
+                for node in langflow_file_nodes
+            ] if langflow_file_nodes else [],
         )
         db_session.add(new_persona)
         persona = new_persona

@@ -94,6 +94,7 @@ class PersonaUpsertRequest(BaseModel):
     user_file_ids: list[int] | None = None
     user_folder_ids: list[int] | None = None
     validator_ids: list[int] | None = None
+    langflow_file_nodes: list[dict] | None = None
 
 
 class PersonaSnapshot(BaseModel):
