@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -13,6 +14,34 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import QueryExpansions
 from shared_configs.model_server_models import Embedding
+
+
+class DocumentRetrievalType(str, Enum):
+    INTERNAL = "internal"
+    EXTERNAL = "external"
+    FEDERATED = "federated"
+
+
+class ContextCompleteness(str, Enum):
+    """
+    Indicates the completeness of the retrieved document content.
+
+    - FULL_CONTEXT: Successfully retrieved complete document content
+    - PARTIAL_CONTEXT: Retrieved partial content (e.g., single chunk, incomplete scraping)
+    - NO_CONTEXT: Failed to retrieve content (errors, authentication required, etc.)
+    """
+
+    FULL_CONTEXT = "full_context"
+    PARTIAL_CONTEXT = "partial_context"
+    NO_CONTEXT = "no_context"
+
+    def to_sort_value(self) -> int:
+        """Convert to sortable integer for ranking (higher is better)"""
+        return {
+            ContextCompleteness.FULL_CONTEXT: 100,
+            ContextCompleteness.PARTIAL_CONTEXT: 50,
+            ContextCompleteness.NO_CONTEXT: 0,
+        }[self]
 
 
 class ToolResponse(BaseModel):
@@ -87,6 +116,20 @@ class SearchToolOverrideKwargs(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+
+class DocumentResult(BaseModel):
+    """Result from fetching a single document"""
+
+    title: str
+    content: str
+    source: DocumentRetrievalType
+    url: str | None = None
+    metadata: dict[str, str] = {}
+    completeness: ContextCompleteness
+    relevance_score: int | None = (
+        None  # 0-100 score indicating match quality (optional)
+    )
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"
