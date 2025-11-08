@@ -1485,6 +1485,8 @@ export function AssistantEditor({
                                           >
                                             <div className="flex-grow">
                                               <TextFormField
+                                                label="" // <--- ДОБАВЛЕНО: Удовлетворяет требование типа
+                                                removeLabel={true} // <--- ДОБАВЛЕНО: Скрывает пустой label
                                                 name={`langflow_file_nodes.${index}.file_node_id`}
                                                 placeholder="e.g., File-XYZ"
                                               />
