@@ -13,7 +13,7 @@ export default function LoginText() {
         {(settings && settings?.enterpriseSettings?.application_name) || "Onyx"}
       </Text>
       <Text text03 mainUiMuted>
-        Your open source AI platform for work
+        Geautomatiseerd Fiscaal Dossiersysteem
       </Text>
     </div>
   );
