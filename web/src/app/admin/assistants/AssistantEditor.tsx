@@ -1423,8 +1423,8 @@ export function AssistantEditor({
                       <>
                         <BooleanFormField
                           name={`enabled_tools_map.${docGeneratorTool.id}`}
-                          label={t(k.DOC_GENERATOR_LABEL)} // Assuming a specific key; adjust if needed
-                          subtext={t(k.DOC_GENERATOR_SUBTEXT)} // Assuming a specific key; adjust if needed
+                          label={t(k.DOC_GENERATOR_LABEL)} 
+                          subtext={t(k.DOC_GENERATOR_SUBTEXT)}
                           onChange={() => {
                             toggleToolInValues(docGeneratorTool.id);
                           }}
