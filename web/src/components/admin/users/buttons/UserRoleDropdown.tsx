@@ -89,7 +89,10 @@ const UserRoleDropdown = ({
               // Always show the current role
               const isCurrentRole = user.role === role;
 
-              return isNotVisibleRole && !isCurrentRole ? null : (
+              // PRO_USER should always be visible for admins to assign
+              const isProUser = role === UserRole.PRO_USER;
+
+              return isNotVisibleRole && !isCurrentRole && !isProUser ? null : (
                 <SelectItem
                   key={role}
                   onClick={() => {
