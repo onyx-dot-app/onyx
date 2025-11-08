@@ -1,6 +1,7 @@
 """Strongly typed message structures for Agent SDK messages."""
 
 from typing import Literal
+from typing import NotRequired
 
 from typing_extensions import TypedDict
 
@@ -53,7 +54,7 @@ class AssistantMessageWithContent(TypedDict):
     role: Literal["assistant"]
     content: list[
         InputTextContent | OutputTextContent
-    ]  # Assistant messages can receive output_text from agents SDK, but we convert to input_text
+    ]  # Assistant messages use output_text for responses API compatibility
 
 
 class AssistantMessageWithToolCalls(TypedDict):
@@ -66,7 +67,7 @@ class AssistantMessageDuringAgentRun(TypedDict):
     id: str
     content: (
         list[InputTextContent | OutputTextContent] | list[ToolCall]
-    )  # Assistant runtime messages can receive output_text from agents SDK, but we convert to input_text
+    )  # Assistant runtime messages receive output_text from agents SDK for responses API compatibility
     status: Literal["completed", "failed", "in_progress"]
     type: Literal["message"]
 
@@ -81,7 +82,7 @@ class FunctionCallMessage(TypedDict):
     """Agent SDK function call message format."""
 
     type: Literal["function_call"]
-    id: str
+    id: NotRequired[str]
     call_id: str
     name: str
     arguments: str

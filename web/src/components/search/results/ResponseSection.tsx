@@ -1,5 +1,5 @@
 import { AlertIcon, TriangleAlertIcon } from "@/components/icons/icons";
-import { useState } from "react";
+import { useState, JSX } from "react";
 
 export type StatusOptions = "in-progress" | "failed" | "warning" | "success";
 

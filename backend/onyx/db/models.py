@@ -30,6 +30,7 @@ from sqlalchemy import Integer
 from sqlalchemy import Sequence
 from sqlalchemy import String
 from sqlalchemy import Text
+from sqlalchemy import text
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine.interfaces import Dialect
@@ -318,6 +319,45 @@ class ApiKey(Base):
 
     # Add this relationship to access the User object via user_id
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+
+
+class PersonalAccessToken(Base):
+    __tablename__ = "personal_access_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)  # User-provided label
+    hashed_token: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False
+    )  # SHA256 = 64 hex chars
+    token_display: Mapped[str] = mapped_column(String, nullable=False)
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )  # NULL = no expiration. Revocation sets this to NOW() for immediate expiry.
+
+    # Audit fields
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_used_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_revoked: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )  # True if user explicitly revoked (vs naturally expired)
+
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+
+    # Indexes for performance
+    __table_args__ = (
+        Index(
+            "ix_pat_user_created", user_id, created_at.desc()
+        ),  # Fast user token listing
+    )
 
 
 class Notification(Base):

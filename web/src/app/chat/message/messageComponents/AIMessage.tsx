@@ -10,13 +10,20 @@ import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import CitedSourcesToggle from "@/app/chat/message/messageComponents/CitedSourcesToggle";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
-import { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  RefObject,
+} from "react";
 import {
   useChatSessionStore,
   useDocumentSidebarVisible,
   useSelectedNodeForDocDisplay,
 } from "@/app/chat/stores/useChatSessionStore";
-import { copyAll, handleCopy } from "@/app/chat/message/copyingUtils";
+import { handleCopy } from "@/app/chat/message/copyingUtils";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import {
@@ -31,8 +38,7 @@ import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRen
 import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
 import AgentIcon from "@/refresh-components/AgentIcon";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgCopy from "@/icons/copy";
-import SvgCheck from "@/icons/check";
+import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import SvgThumbsUp from "@/icons/thumbs-up";
 import SvgThumbsDown from "@/icons/thumbs-down";
 import {
@@ -65,10 +71,32 @@ export default function AIMessage({
   onMessageSelection,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
-  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { toggleModal } = useChatModal();
-  const [copied, setCopied] = useState(false);
+  const { toggleModal, isOpen, getModalData } = useChatModal();
+
+  // Helper to check if feedback button should be in transient state
+  const isFeedbackTransient = useCallback(
+    (feedbackType: "like" | "dislike") => {
+      const hasCurrentFeedback = currentFeedback === feedbackType;
+      const modalOpen = isOpen(ModalIds.FeedbackModal);
+
+      if (!modalOpen) {
+        return hasCurrentFeedback;
+      }
+
+      const modalData = getModalData<{
+        feedbackType: string;
+        messageId: number;
+      }>();
+      const isModalForThisFeedback = modalData?.feedbackType === feedbackType;
+      const isModalForThisMessage = modalData?.messageId === messageId;
+
+      return (
+        hasCurrentFeedback || (isModalForThisFeedback && isModalForThisMessage)
+      );
+    },
+    [currentFeedback, isOpen, getModalData, messageId]
+  );
 
   // Handler for feedback button clicks with toggle logic
   const handleFeedbackClick = useCallback(
@@ -83,7 +111,8 @@ export default function AIMessage({
         // Clicking same button - remove feedback
         await chatState.handleFeedbackChange(null);
       } else if (clickedFeedback === "like") {
-        // Clicking like - check if we need modal for positive feedback
+        // Clicking like (will automatically clear dislike if it was active)
+        // Check if we need modal for positive feedback
         const predefinedOptions =
           process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS;
         if (predefinedOptions && predefinedOptions.trim()) {
@@ -94,11 +123,12 @@ export default function AIMessage({
             handleFeedbackChange: chatState.handleFeedbackChange,
           });
         } else {
-          // No modal needed - just submit like
+          // No modal needed - just submit like (this replaces any existing feedback)
           await chatState.handleFeedbackChange("like");
         }
       } else {
-        // Clicking dislike - always open modal
+        // Clicking dislike (will automatically clear like if it was active)
+        // Always open modal for dislike
         toggleModal(ModalIds.FeedbackModal, true, {
           feedbackType: "dislike",
           messageId,
@@ -143,6 +173,9 @@ export default function AIMessage({
   const finalAnswerComingRef = useRef<boolean>(isFinalAnswerComing(rawPackets));
   const displayCompleteRef = useRef<boolean>(isStreamingComplete(rawPackets));
   const stopPacketSeenRef = useRef<boolean>(isStreamingComplete(rawPackets));
+  // Track indices for graceful SECTION_END injection
+  const seenIndicesRef = useRef<Set<number>>(new Set());
+  const indicesWithSectionEndRef = useRef<Set<number>>(new Set());
 
   // Reset incremental state when switching messages or when stream resets
   const resetState = () => {
@@ -155,19 +188,11 @@ export default function AIMessage({
     finalAnswerComingRef.current = isFinalAnswerComing(rawPackets);
     displayCompleteRef.current = isStreamingComplete(rawPackets);
     stopPacketSeenRef.current = isStreamingComplete(rawPackets);
+    seenIndicesRef.current = new Set();
+    indicesWithSectionEndRef.current = new Set();
   };
   useEffect(() => {
     resetState();
-  }, [nodeId]);
-
-  // Clean up copy timeout on unmount or when switching messages
-  useEffect(() => {
-    setCopied(false);
-    return () => {
-      if (copyTimeoutRef.current) {
-        clearTimeout(copyTimeoutRef.current);
-      }
-    };
   }, [nodeId]);
 
   // If the upstream replaces packets with a shorter list (reset), clear state
@@ -175,11 +200,64 @@ export default function AIMessage({
     resetState();
   }
 
+  // Helper function to check if a packet group has meaningful content
+  const hasContentPackets = (packets: Packet[]): boolean => {
+    const contentPacketTypes = [
+      PacketType.MESSAGE_START,
+      PacketType.SEARCH_TOOL_START,
+      PacketType.IMAGE_GENERATION_TOOL_START,
+      PacketType.CUSTOM_TOOL_START,
+      PacketType.FETCH_TOOL_START,
+      PacketType.REASONING_START,
+    ];
+    return packets.some((packet) =>
+      contentPacketTypes.includes(packet.obj.type as PacketType)
+    );
+  };
+
+  // Helper function to inject synthetic SECTION_END packet
+  const injectSectionEnd = (ind: number) => {
+    if (indicesWithSectionEndRef.current.has(ind)) {
+      return; // Already has SECTION_END
+    }
+
+    const syntheticPacket: Packet = {
+      ind,
+      obj: { type: PacketType.SECTION_END },
+    };
+
+    const existingGroup = groupedPacketsMapRef.current.get(ind);
+    if (existingGroup) {
+      existingGroup.push(syntheticPacket);
+    }
+    indicesWithSectionEndRef.current.add(ind);
+  };
+
   // Process only the new packets synchronously for this render
   if (rawPackets.length > lastProcessedIndexRef.current) {
     for (let i = lastProcessedIndexRef.current; i < rawPackets.length; i++) {
       const packet = rawPackets[i];
       if (!packet) continue;
+
+      const currentInd = packet.ind;
+      const isNewIndex = !seenIndicesRef.current.has(currentInd);
+
+      // If we see a new index, inject SECTION_END for previous tool indices
+      if (isNewIndex && seenIndicesRef.current.size > 0) {
+        Array.from(seenIndicesRef.current).forEach((prevInd) => {
+          if (!indicesWithSectionEndRef.current.has(prevInd)) {
+            injectSectionEnd(prevInd);
+          }
+        });
+      }
+
+      // Track this index
+      seenIndicesRef.current.add(currentInd);
+
+      // Track SECTION_END packets
+      if (packet.obj.type === PacketType.SECTION_END) {
+        indicesWithSectionEndRef.current.add(currentInd);
+      }
 
       // Grouping by ind
       const existingGroup = groupedPacketsMapRef.current.get(packet.ind);
@@ -229,6 +307,12 @@ export default function AIMessage({
 
       if (packet.obj.type === PacketType.STOP && !stopPacketSeenRef.current) {
         setStopPacketSeen(true);
+        // Inject SECTION_END for all indices that don't have one
+        Array.from(seenIndicesRef.current).forEach((ind) => {
+          if (!indicesWithSectionEndRef.current.has(ind)) {
+            injectSectionEnd(ind);
+          }
+        });
       }
 
       // handles case where we get a Message packet from Claude, and then tool
@@ -245,10 +329,12 @@ export default function AIMessage({
 
     // Rebuild the grouped packets array sorted by ind
     // Clone packet arrays to ensure referential changes so downstream memo hooks update
+    // Filter out empty groups (groups with only SECTION_END and no content)
     groupedPacketsRef.current = Array.from(
       groupedPacketsMapRef.current.entries()
     )
       .map(([ind, packets]) => ({ ind, packets: [...packets] }))
+      .filter(({ packets }) => hasContentPackets(packets))
       .sort((a, b) => a.ind - b.ind);
 
     lastProcessedIndexRef.current = rawPackets.length;
@@ -266,19 +352,6 @@ export default function AIMessage({
   const updateCurrentSelectedNodeForDocDisplay = useChatSessionStore(
     (state) => state.updateCurrentSelectedNodeForDocDisplay
   );
-  // Calculate unique source count
-  const _uniqueSourceCount = useMemo(() => {
-    const uniqueDocIds = new Set<string>();
-    for (const citation of citations) {
-      if (citation.document_id) {
-        uniqueDocIds.add(citation.document_id);
-      }
-    }
-    documentMap.forEach((_, docId) => {
-      uniqueDocIds.add(docId);
-    });
-    return uniqueDocIds.size;
-  }, [citations.length, documentMap.size]);
 
   // Message switching logic
   const {
@@ -312,7 +385,14 @@ export default function AIMessage({
                     <div
                       ref={markdownRef}
                       className="overflow-x-visible max-w-content-max focus:outline-none select-text"
-                      onCopy={(e) => handleCopy(e, markdownRef)}
+                      onCopy={(e) => {
+                        if (markdownRef.current) {
+                          handleCopy(
+                            e,
+                            markdownRef as RefObject<HTMLDivElement>
+                          );
+                        }
+                      }}
                     >
                       {groupedPackets.length === 0 ? (
                         // Show blinking dot when no content yet but message is generating
@@ -419,27 +499,16 @@ export default function AIMessage({
                             </div>
                           )}
 
-                          <IconButton
-                            icon={copied ? SvgCheck : SvgCopy}
-                            onClick={() => {
-                              copyAll(getTextContent(rawPackets));
-                              setCopied(true);
-                              if (copyTimeoutRef.current) {
-                                clearTimeout(copyTimeoutRef.current);
-                              }
-                              copyTimeoutRef.current = setTimeout(() => {
-                                setCopied(false);
-                              }, 3000);
-                            }}
+                          <CopyIconButton
+                            getCopyText={() => getTextContent(rawPackets)}
                             tertiary
-                            tooltip={copied ? "Copied!" : "Copy"}
                             data-testid="AIMessage/copy-button"
                           />
                           <IconButton
                             icon={SvgThumbsUp}
                             onClick={() => handleFeedbackClick("like")}
                             tertiary
-                            transient={currentFeedback === "like"}
+                            transient={isFeedbackTransient("like")}
                             tooltip={
                               currentFeedback === "like"
                                 ? "Remove Like"
@@ -451,7 +520,7 @@ export default function AIMessage({
                             icon={SvgThumbsDown}
                             onClick={() => handleFeedbackClick("dislike")}
                             tertiary
-                            transient={currentFeedback === "dislike"}
+                            transient={isFeedbackTransient("dislike")}
                             tooltip={
                               currentFeedback === "dislike"
                                 ? "Remove Dislike"

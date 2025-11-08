@@ -72,27 +72,15 @@ class SearchResponseSummary(SearchQueryInfo):
 
 
 SEARCH_TOOL_DESCRIPTION = """
-Runs a semantic search over the user's knowledge base.
-
-## Decision boundary
-- MUST call this tool if the user's query requires internal information, like
-if it references "we" or "us" or "our" or "internal" or if it references
-the organization the user works for.
-- MUST call this tool if the user's query sounds like the name of a specific internal document,
-like some keyword that could be a document name.
-- The default behavior is to use this tool. \
-The only scenario where you should not use this tool is if:
-- There is sufficient information in chat history to FULLY and ACCURATELY answer the query AND \
-additional information or details would provide little or no value.
-- The query is some form of request that does not require additional information to handle.
-
-HINT: if you are unfamiliar with the user input OR think the user input is a typo, use this tool.
-
-## Usage hints
-- Expand the users's query into a broader list of queries.
-- Batch a list of natural-language queries per call.
-- Generally try searching with some semantic queries and some keyword queries
-to give the hybrid search the best chance of finding relevant results.
+Use the `internal_search` tool to search connected applications for information. Use `internal_search` when:
+- Internal information: any time where there may be some information stored in internal applications that could help better \
+answer the query.
+- Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, \
+team, process, etc.
+- Keyword Queries: queries that are heavily keyword based are often internal document search queries.
+- Ambiguity: questions about something that is not widely known or understood.
+Between internal and web search, think about if the user's query is likely better answered by team internal sources or online \
+web pages. If very ambiguious, prioritize internal search or call both tools.
 """
 
 

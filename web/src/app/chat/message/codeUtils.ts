@@ -43,7 +43,7 @@ export function extractCodeText(
       if (!node) return "";
 
       if (React.isValidElement(node)) {
-        const children = node.props.children;
+        const children = (node.props as any).children;
         if (Array.isArray(children)) {
           return children.map(extractTextFromReactNode).join("");
         }

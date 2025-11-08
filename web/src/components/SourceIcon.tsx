@@ -11,5 +11,6 @@ export interface SourceIconProps {
 export function SourceIcon({ sourceType, iconSize }: SourceIconProps) {
   return getSourceMetadata(sourceType).icon({
     size: iconSize,
+    className: "text-text-04",
   });
 }

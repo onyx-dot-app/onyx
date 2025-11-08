@@ -1,3 +1,4 @@
+import { JSX } from "react";
 import { SvgProps } from "@/icons";
 import SvgCpu from "@/icons/cpu";
 import SvgGlobe from "@/icons/globe";

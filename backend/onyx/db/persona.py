@@ -45,6 +45,13 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
 
+DEFAULT_BEHAVIOR_PERSONA_ID = 0
+
+
+def get_default_behavior_persona(db_session: Session) -> Persona | None:
+    stmt = select(Persona).where(Persona.id == DEFAULT_BEHAVIOR_PERSONA_ID)
+    return db_session.scalars(stmt).first()
+
 
 class PersonaLoadType(Enum):
     NONE = "none"

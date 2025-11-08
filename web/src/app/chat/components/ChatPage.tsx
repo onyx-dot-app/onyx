@@ -18,7 +18,6 @@ import {
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
-import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { FeedbackModal } from "@/app/chat/components/modal/FeedbackModal";
 import { FiArrowDown } from "react-icons/fi";
@@ -31,7 +30,6 @@ import { ChatPopup } from "@/app/chat/components/ChatPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { useUser } from "@/components/user/UserProvider";
-import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import TextView from "@/components/chat/TextView";
@@ -40,7 +38,7 @@ import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
+import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import { ChatSearchModal } from "@/app/chat/chat_search/ChatSearchModal";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useScreenSize } from "@/hooks/useScreenSize";
@@ -79,7 +77,9 @@ import {
 import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSessionList";
 import { cn } from "@/lib/utils";
 import { Suggestions } from "@/sections/Suggestions";
-import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
+import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
+import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
+import { OnboardingStep } from "@/refresh-components/onboarding/types";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 interface ChatPageProps {
@@ -117,7 +117,6 @@ export function ChatPage({
     tags,
     documentSets,
     llmProviders,
-    shouldShowWelcomeModal,
     refreshChatSessions,
   } = useChatContext();
 
@@ -143,16 +142,8 @@ export function ChatPage({
 
   const { agents: availableAssistants } = useAgentsContext();
 
-  const [showApiKeyModal, setShowApiKeyModal] = useState(
-    !shouldShowWelcomeModal
-  );
-
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
-  const {
-    connectors: federatedConnectorOAuthStatus,
-    refetch: refetchFederatedConnectors,
-  } = useFederatedOAuthStatus();
 
   const { user, isAdmin } = useUser();
   const existingChatIdRaw = searchParams?.get("chatId");
@@ -211,6 +202,21 @@ export function ChatPage({
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Initialize onboarding state
+  const {
+    state: onboardingState,
+    actions: onboardingActions,
+    llmDescriptors,
+  } = useOnboardingState();
+
+  // On first render, open onboarding if there are no configured LLM providers.
+  // Intentionally exclude llmProviders from deps to avoid changing the state
+  // when data refreshes.
+  useEffect(() => {
+    setShowOnboarding(llmProviders.length === 0);
+  }, []);
 
   const llmManager = useLlmManager(
     llmProviders,
@@ -615,16 +621,13 @@ export function ChatPage({
     );
   }, []);
 
-  const handleShowApiKeyModal = useCallback(() => {
-    setShowApiKeyModal(true);
-  }, []);
-
   const handleChatInputSubmit = useCallback(() => {
     onSubmit({
       message: message,
       currentMessageFiles: currentMessageFiles,
       useAgentSearch: deepResearchEnabled,
     });
+    setShowOnboarding(false);
   }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
 
   // Memoized callbacks for DocumentResults
@@ -739,14 +742,7 @@ export function ChatPage({
     <>
       <HealthCheckBanner />
 
-      {showApiKeyModal && !shouldShowWelcomeModal && (
-        <ApiKeyModal
-          hide={() => setShowApiKeyModal(false)}
-          setPopup={setPopup}
-        />
-      )}
-
-      {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
+      {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit.
       Only used in the EE version of the app. */}
       {popup}
 
@@ -767,7 +763,7 @@ export function ChatPage({
             title="Sources"
           >
             {/* IMPORTANT: this is a memoized component, and it's very important
-            for performance reasons that this stays true. MAKE SURE that all function 
+            for performance reasons that this stays true. MAKE SURE that all function
             props are wrapped in useCallback. */}
             <DocumentResults
               setPresentingDocument={setPresentingDocument}
@@ -896,10 +892,19 @@ export function ChatPage({
                           />
                         )}
 
-                        <UnconfiguredLlmProviderText
-                          showConfigureAPIKey={handleShowApiKeyModal}
-                        />
-
+                        {(showOnboarding ||
+                          (user?.role !== UserRole.ADMIN &&
+                            !user?.personalization?.name)) &&
+                          currentProjectId === null && (
+                            <OnboardingFlow
+                              handleHideOnboarding={() =>
+                                setShowOnboarding(false)
+                              }
+                              state={onboardingState}
+                              actions={onboardingActions}
+                              llmDescriptors={llmDescriptors}
+                            />
+                          )}
                         <ChatInputBar
                           deepResearchEnabled={deepResearchEnabled}
                           toggleDeepResearch={toggleDeepResearch}
@@ -924,6 +929,13 @@ export function ChatPage({
                           handleFileUpload={handleMessageSpecificFileUpload}
                           textAreaRef={textAreaRef}
                           setPresentingDocument={setPresentingDocument}
+                          disabled={
+                            llmProviders.length === 0 ||
+                            (llmProviders.length === 0 &&
+                              !user?.personalization?.name) ||
+                            onboardingState.currentStep !==
+                              OnboardingStep.Complete
+                          }
                         />
                       </div>
 
@@ -939,29 +951,6 @@ export function ChatPage({
                         showCenteredHero && (
                           <div className="mt-6 row-start-3 max-w-[50rem]">
                             <Suggestions onSubmit={onSubmit} />
-                          </div>
-                        )}
-                      {enterpriseSettings &&
-                        enterpriseSettings.custom_lower_disclaimer_content && (
-                          <div className="mobile:hidden mt-4 flex items-center justify-center relative w-[95%] mx-auto">
-                            <div className="text-sm text-text-500 max-w-searchbar-max px-4 text-center">
-                              <MinimalMarkdown
-                                content={
-                                  enterpriseSettings.custom_lower_disclaimer_content
-                                }
-                              />
-                            </div>
-                          </div>
-                        )}
-                      {enterpriseSettings &&
-                        enterpriseSettings.use_custom_logotype && (
-                          <div className="hidden lg:block absolute right-0 bottom-0">
-                            <img
-                              src="/api/enterprise-settings/logotype"
-                              alt="logotype"
-                              style={{ objectFit: "contain" }}
-                              className="w-fit h-8"
-                            />
                           </div>
                         )}
                     </div>

@@ -2,7 +2,7 @@ import "@testing-library/jest-dom";
 import { TextEncoder, TextDecoder } from "util";
 
 // Polyfill TextEncoder/TextDecoder (required for some libraries)
-global.TextEncoder = TextEncoder;
+global.TextEncoder = TextEncoder as any;
 global.TextDecoder = TextDecoder as any;
 
 // Only set up browser-specific mocks if we're in a jsdom environment

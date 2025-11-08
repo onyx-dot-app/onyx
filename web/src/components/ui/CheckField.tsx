@@ -5,13 +5,7 @@ import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
 import { Check } from "lucide-react";
 import { useField } from "formik";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import Text from "@/refresh-components/texts/Text";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 interface CheckFieldProps {
   name: string;
@@ -96,16 +90,9 @@ export const CheckFormField: React.FC<CheckFieldProps> = ({
     </div>
   );
 
-  return tooltip ? (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>{checkboxContent}</TooltipTrigger>
-        <TooltipContent side="top" align="center" sideOffset={25}>
-          <Text inverted>{tooltip}</Text>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  ) : (
-    checkboxContent
+  return (
+    <SimpleTooltip tooltip={tooltip} side="top" sideOffset={25}>
+      {checkboxContent}
+    </SimpleTooltip>
   );
 };

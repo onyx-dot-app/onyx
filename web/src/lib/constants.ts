@@ -12,6 +12,11 @@ export const SUB_HEADER = "h-12";
 
 export const INTERNAL_URL = process.env.INTERNAL_URL || "http://127.0.0.1:8080";
 
+// NOTE: this should ONLY be used on the server-side (including middleware).
+// The AUTH_TYPE environment variable is set in the backend and shared with Next.js
+export const SERVER_SIDE_ONLY__AUTH_TYPE = (process.env.AUTH_TYPE ||
+  "disabled") as AuthType;
+
 export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
   process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED?.toLowerCase() ===
   "true";
