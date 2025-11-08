@@ -44,32 +44,30 @@ export default async function Layout({
   } = data;
 
   return (
-    <AppLayout>
-      <ChatProvider
-        proSearchToggled={proSearchToggled}
-        inputPrompts={inputPrompts}
-        chatSessions={chatSessions}
-        sidebarInitiallyVisible={sidebarInitiallyVisible}
-        availableSources={availableSources}
-        ccPairs={ccPairs}
-        documentSets={documentSets}
-        tags={tags}
-        availableDocumentSets={documentSets}
-        availableTags={tags}
-        llmProviders={llmProviders}
-        availableTools={availableTools}
-        shouldShowWelcomeModal={shouldShowWelcomeModal}
-        defaultAssistantId={defaultAssistantId}
-      >
-        <ChatModalProvider>
-          <ProjectsProvider initialProjects={projects}>
-            <div className="flex flex-row w-full h-full">
-              <AppSidebar />
-              {children}
-            </div>
-          </ProjectsProvider>
-        </ChatModalProvider>
-      </ChatProvider>
-    </AppLayout>
+    <ChatProvider
+      proSearchToggled={proSearchToggled}
+      inputPrompts={inputPrompts}
+      chatSessions={chatSessions}
+      sidebarInitiallyVisible={sidebarInitiallyVisible}
+      availableSources={availableSources}
+      ccPairs={ccPairs}
+      documentSets={documentSets}
+      tags={tags}
+      availableDocumentSets={documentSets}
+      availableTags={tags}
+      llmProviders={llmProviders}
+      availableTools={availableTools}
+      shouldShowWelcomeModal={shouldShowWelcomeModal}
+      defaultAssistantId={defaultAssistantId}
+    >
+      <ChatModalProvider>
+        <ProjectsProvider initialProjects={projects}>
+          <div className="flex flex-row w-full h-full">
+            <AppSidebar />
+            <AppLayout>{children}</AppLayout>
+          </div>
+        </ProjectsProvider>
+      </ChatModalProvider>
+    </ChatProvider>
   );
 }
