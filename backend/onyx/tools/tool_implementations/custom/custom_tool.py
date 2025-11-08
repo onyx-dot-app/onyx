@@ -10,33 +10,16 @@ from typing import Dict
 from typing import List
 
 import requests
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 from requests import JSONDecodeError
 
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import PreviousMessage
 from onyx.tools.base_tool import BaseTool
 from onyx.tools.models import CHAT_SESSION_ID_PLACEHOLDER
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import MESSAGE_ID_PLACEHOLDER
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import (
-    SHOULD_USE_CUSTOM_TOOL_SYSTEM_PROMPT,
-)
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import (
-    SHOULD_USE_CUSTOM_TOOL_USER_PROMPT,
-)
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import (
-    TOOL_ARG_SYSTEM_PROMPT,
-)
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import (
-    TOOL_ARG_USER_PROMPT,
-)
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import USE_TOOL
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
@@ -134,71 +117,6 @@ class CustomTool(BaseTool):
 
         # For JSON or other responses, return as-is
         return json.dumps(response.tool_result)
-
-    """For LLMs which do NOT support explicit tool calling"""
-
-    def get_args_for_non_tool_calling_llm(
-        self,
-        query: str,
-        history: list[PreviousMessage],
-        llm: LLM,
-        force_run: bool = False,
-    ) -> dict[str, Any] | None:
-        if not force_run:
-            should_use_result = llm.invoke(
-                [
-                    SystemMessage(content=SHOULD_USE_CUSTOM_TOOL_SYSTEM_PROMPT),
-                    HumanMessage(
-                        content=SHOULD_USE_CUSTOM_TOOL_USER_PROMPT.format(
-                            history=history,
-                            query=query,
-                            tool_name=self.name,
-                            tool_description=self.description,
-                        )
-                    ),
-                ]
-            )
-            if cast(str, should_use_result.content).strip() != USE_TOOL:
-                return None
-
-        args_result = llm.invoke(
-            [
-                SystemMessage(content=TOOL_ARG_SYSTEM_PROMPT),
-                HumanMessage(
-                    content=TOOL_ARG_USER_PROMPT.format(
-                        history=history,
-                        query=query,
-                        tool_name=self.name,
-                        tool_description=self.description,
-                        tool_args=self.tool_definition()["function"]["parameters"],
-                    )
-                ),
-            ]
-        )
-        args_result_str = cast(str, args_result.content)
-
-        try:
-            return json.loads(args_result_str.strip())
-        except json.JSONDecodeError:
-            pass
-
-        # try removing ```
-        try:
-            return json.loads(args_result_str.strip("```"))
-        except json.JSONDecodeError:
-            pass
-
-        # try removing ```json
-        try:
-            return json.loads(args_result_str.strip("```").strip("json"))
-        except json.JSONDecodeError:
-            pass
-
-        # pretend like nothing happened if not parse-able
-        logger.error(
-            f"Failed to parse args for '{self.name}' tool. Received: {args_result_str}"
-        )
-        return None
 
     def _save_and_get_file_references(
         self, file_content: bytes | str, content_type: str

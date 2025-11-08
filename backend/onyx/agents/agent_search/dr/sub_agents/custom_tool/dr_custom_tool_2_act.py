@@ -83,16 +83,9 @@ def custom_tool_act(
             logger.warning("Tool-calling LLM did not emit a tool call")
 
     if tool_args is None:
-        # get tool call args from non-tool-calling LLM or for failed tool-calling LLM
-        tool_args = custom_tool.get_args_for_non_tool_calling_llm(
-            query=branch_query,
-            history=[],
-            llm=graph_config.tooling.primary_llm,
-            force_run=True,
+        raise ValueError(
+            "Failed to obtain tool arguments from LLM - tool calling is required"
         )
-
-    if tool_args is None:
-        raise ValueError("Failed to obtain tool arguments from LLM")
 
     # run the tool
     response_summary: CustomToolCallSummary | None = None

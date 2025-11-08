@@ -31,11 +31,10 @@ from onyx.prompts.dr_prompts import INTERNAL_SEARCH_PROMPTS
 from onyx.secondary_llm_flows.source_filter import strings_to_document_sources
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.tools.models import SearchToolOverrideKwargs
-from onyx.tools.tool_implementations.search.search_tool import (
-    SEARCH_RESPONSE_SUMMARY_ID,
-)
-from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.search_like_tool_utils import (
+    SEARCH_INFERENCE_SECTIONS_ID,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -149,9 +148,8 @@ def basic_search(
         override_kwargs=SearchToolOverrideKwargs(original_query=rewritten_query),
     ):
         # get retrieved docs to send to the rest of the graph
-        if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:
-            response = cast(SearchResponseSummary, tool_response.response)
-            retrieved_docs = response.top_sections
+        if tool_response.id == SEARCH_INFERENCE_SECTIONS_ID:
+            retrieved_docs = cast(list[InferenceSection], tool_response.response)
 
             break
 

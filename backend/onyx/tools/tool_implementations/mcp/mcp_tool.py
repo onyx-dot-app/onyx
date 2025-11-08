@@ -3,14 +3,9 @@ from collections.abc import Generator
 from typing import Any
 from typing import cast
 
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import SystemMessage
-
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import PreviousMessage
 from onyx.tools.base_tool import BaseTool
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
@@ -96,74 +91,6 @@ class MCPTool(BaseTool):
         # For now, just return the JSON result
         # Future versions might handle base64 content differently
         return json.dumps(response.tool_result)
-
-    def get_args_for_non_tool_calling_llm(
-        self,
-        query: str,
-        history: list[PreviousMessage],
-        llm: LLM,
-        force_run: bool = False,
-    ) -> dict[str, Any] | None:
-        """Get arguments for non-tool-calling LLMs using prompt-based extraction"""
-
-        # Simple implementation for now - in production this would use more sophisticated prompting
-        if not force_run:
-            # Basic check if we should use this tool
-            should_use_prompt = f"""
-Should the following query use the {self._name} tool from mcp server {self.mcp_server.name}?
-Tool description: {self._description}
-Query: {query}
-
-Answer with 'YES' or 'NO' only.
-"""
-            should_use_result = llm.invoke(
-                [
-                    SystemMessage(
-                        content="You are a helpful assistant that determines if a tool should be used."
-                    ),
-                    HumanMessage(content=should_use_prompt),
-                ]
-            )
-
-            if "YES" not in cast(str, should_use_result.content).upper():
-                return None
-
-        # Extract arguments using the tool schema
-        args_prompt = f"""
-Extract the arguments for the {self._name} tool from the following query.
-Tool description: {self._description}
-Tool parameters: {json.dumps(self._tool_definition.get('inputSchema', {}), indent=2)}
-Query: {query}
-Chat history: {history}
-
-Return ONLY a valid JSON object with the extracted arguments. If no arguments are needed, return {{}}.
-"""
-
-        args_result = llm.invoke(
-            [
-                SystemMessage(
-                    content="You are a helpful assistant that extracts tool arguments from user queries."
-                ),
-                HumanMessage(content=args_prompt),
-            ]
-        )
-
-        args_result_str = cast(str, args_result.content)
-
-        try:
-            return json.loads(args_result_str.strip())
-        except json.JSONDecodeError:
-            # Try removing code block markers
-            try:
-                cleaned = (
-                    args_result_str.strip().strip("```").strip("json").strip("```")
-                )
-                return json.loads(cleaned)
-            except json.JSONDecodeError:
-                logger.error(
-                    f"Failed to parse args for MCP tool '{self._name}'. Received: {args_result_str}"
-                )
-                return {}
 
     def run(
         self, override_kwargs: dict[str, Any] | None = None, **kwargs: Any

@@ -4,8 +4,6 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from onyx.db.kg_config import get_kg_config_settings
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import PreviousMessage
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
@@ -65,18 +63,6 @@ class KnowledgeGraphTool(Tool[None]):
                 },
             },
         }
-
-    def get_args_for_non_tool_calling_llm(
-        self,
-        query: str,
-        history: list[PreviousMessage],
-        llm: LLM,
-        force_run: bool = False,
-    ) -> dict[str, Any] | None:
-        raise ValueError(
-            "KnowledgeGraphTool should only be used by the Deep Research Agent, "
-            "not via tool calling."
-        )
 
     def build_tool_message_content(
         self, *args: ToolResponse

@@ -14,10 +14,10 @@ from onyx.server.query_and_chat.streaming_models import SavedSearchDoc
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.tools.tool_implementations.search.search_tool import (
-    SEARCH_RESPONSE_SUMMARY_ID,
-)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.search_like_tool_utils import (
+    SEARCH_INFERENCE_SECTIONS_ID,
+)
 from onyx.tools.tool_implementations_v2.tool_result_models import (
     LlmInternalSearchResult,
 )
@@ -84,16 +84,9 @@ class FakeSearchPipeline:
 class FakeSearchResponse:
     """Fake search response for testing"""
 
-    def __init__(self, response_id: str, top_sections: list | None = None) -> None:
+    def __init__(self, response_id: str, sections: list | None = None) -> None:
         self.id = response_id
-        self.response = FakeSearchResponseSummary(top_sections or [])
-
-
-class FakeSearchResponseSummary:
-    """Fake search response summary for testing"""
-
-    def __init__(self, top_sections: list) -> None:
-        self.top_sections = top_sections
+        self.response = sections or []
 
 
 class FakeSessionContextManager:
@@ -153,8 +146,8 @@ def create_fake_search_pipeline_with_results(
 
     responses = [
         FakeSearchResponse(
-            response_id=SEARCH_RESPONSE_SUMMARY_ID,
-            top_sections=sections,
+            response_id=SEARCH_INFERENCE_SECTIONS_ID,
+            sections=sections,
         ),
     ]
 
@@ -172,12 +165,12 @@ def create_fake_search_pipeline_multiple_responses() -> FakeSearchPipeline:
     """Create a fake search pipeline with multiple responses"""
     test_sections = [create_test_inference_section()]
     responses = [
-        FakeSearchResponse(response_id="other_response_id", top_sections=[]),
+        FakeSearchResponse(response_id="other_response_id", sections=[]),
         FakeSearchResponse(
-            response_id=SEARCH_RESPONSE_SUMMARY_ID,
-            top_sections=test_sections,
+            response_id=SEARCH_INFERENCE_SECTIONS_ID,
+            sections=test_sections,
         ),
-        FakeSearchResponse(response_id="another_response_id", top_sections=[]),
+        FakeSearchResponse(response_id="another_response_id", sections=[]),
     ]
     return FakeSearchPipeline(responses=responses)
 

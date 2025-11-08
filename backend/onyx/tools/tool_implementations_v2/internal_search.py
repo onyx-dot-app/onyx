@@ -16,11 +16,10 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.models import SearchToolOverrideKwargs
-from onyx.tools.tool_implementations.search.search_tool import (
-    SEARCH_RESPONSE_SUMMARY_ID,
-)
-from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.search_like_tool_utils import (
+    SEARCH_INFERENCE_SECTIONS_ID,
+)
 from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
 from onyx.tools.tool_implementations_v2.tool_result_models import (
     LlmInternalSearchResult,
@@ -77,11 +76,11 @@ def _internal_search_core(
             ):
                 break
             # get retrieved docs to send to the rest of the graph
-            if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:
-                response = cast(SearchResponseSummary, tool_response.response)
+            if tool_response.id == SEARCH_INFERENCE_SECTIONS_ID:
+                all_sections = cast(list[InferenceSection], tool_response.response)
                 # TODO: just a heuristic to not overload context window -- carried over from existing DR flow
                 docs_to_feed_llm = 15
-                retrieved_sections: list[InferenceSection] = response.top_sections[
+                retrieved_sections: list[InferenceSection] = all_sections[
                     :docs_to_feed_llm
                 ]
 

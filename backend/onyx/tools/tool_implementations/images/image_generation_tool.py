@@ -10,15 +10,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.chat_utils import combine_message_chain
 from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
-from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.db.llm import fetch_existing_llm_providers
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import build_content_with_imgs
-from onyx.llm.utils import message_to_string
 from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
@@ -154,36 +149,6 @@ class ImageGenerationTool(Tool[None]):
                 },
             },
         }
-
-    def get_args_for_non_tool_calling_llm(
-        self,
-        query: str,
-        history: list[PreviousMessage],
-        llm: LLM,
-        force_run: bool = False,
-    ) -> dict[str, Any] | None:
-        args = {"prompt": query}
-        if force_run:
-            return args
-
-        history_str = combine_message_chain(
-            messages=history, token_limit=GEN_AI_HISTORY_CUTOFF
-        )
-        prompt = IMAGE_GENERATION_TEMPLATE.format(
-            chat_history=history_str,
-            final_query=query,
-        )
-        use_image_generation_tool_output = message_to_string(llm.invoke(prompt))
-
-        logger.debug(
-            f"Evaluated if should use ImageGenerationTool: {use_image_generation_tool_output}"
-        )
-        if (
-            YES_IMAGE_GENERATION.split()[0]
-        ).lower() in use_image_generation_tool_output.lower():
-            return args
-
-        return None
 
     def build_tool_message_content(
         self, *args: ToolResponse
