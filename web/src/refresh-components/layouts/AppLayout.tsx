@@ -41,7 +41,7 @@ export default function AppLayout({
                 height: FOLDED_SIZE,
                 width: FOLDED_SIZE,
               }}
-              className={cn("flex-shrink-0", className)}
+              className="flex-shrink-0"
             />
           )}
           {customFooterContent && (
