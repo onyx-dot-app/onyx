@@ -1466,6 +1466,62 @@ export function AssistantEditor({
                                 <CameraIcon size={14} />
                                 {t(k.UPLOAD_TEMPLATE_FILE)}
                               </Button>
+                              <div className="mb-4">
+                              <Label>Langflow File Node IDs</Label>
+                              <SubLabel>
+                                {t(k.FILE_NODES_DESCRIPTION)}
+                              </SubLabel>
+                              <FieldArray
+                                name="langflow_file_nodes"
+                                render={(arrayHelpers: ArrayHelpers) => (
+                                  <div>
+                                    {values.langflow_file_nodes &&
+                                    values.langflow_file_nodes.length > 0 ? (
+                                      values.langflow_file_nodes.map(
+                                        (node: any, index: number) => (
+                                          <div
+                                            key={index}
+                                            className="flex items-center gap-2 mb-2"
+                                          >
+                                            <div className="flex-grow">
+                                              <TextFormField
+                                                name={`langflow_file_nodes.${index}.file_node_id`}
+                                                placeholder="e.g., File-XYZ"
+                                              />
+                                            </div>
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={() =>
+                                                arrayHelpers.remove(index)
+                                              }
+                                            >
+                                              <TrashIcon className="h-4 w-4" />
+                                            </Button>
+                                          </div>
+                                        )
+                                      )
+                                    ) : (
+                                      <div className="text-sm text-text-500">
+                                        {t(k.NO_FILE_NODES_SPECIFIED)}
+                                      </div>
+                                    )}
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        arrayHelpers.push({ file_node_id: "" })
+                                      }
+                                    >
+                                      + {t(k.ADD_NODE_ID)}
+                                    </Button>
+                                  </div>
+                                )}
+                              />
+                              </div>
+
                               {values.template_file && (
                                 <div className="text-sm text-neutral-600 dark:text-neutral-300 mb-2">
                                   {values.template_file.name}
