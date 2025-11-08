@@ -118,17 +118,9 @@ export function AccessTypeGroupSelector({
                 <div className="animate-pulse bg-background-200 h-8 w-32 rounded" />
               ) : (
                 <Text mainUiMuted text03>
-                  {isAdmin ? (
-                    <>
-                      This Connector will be visible/accessible by the groups
-                      selected below
-                    </>
-                  ) : (
-                    <>
-                      Curators must select one or more groups to give access to
-                      this Connector
-                    </>
-                  )}
+                  {isAdmin
+                    ? "This Connector will be visible/accessible by the groups selected below"
+                    : "Curators must select one or more groups to give access to this Connector"}
                 </Text>
               )}
             </div>
