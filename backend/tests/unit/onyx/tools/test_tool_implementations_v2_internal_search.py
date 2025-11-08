@@ -8,7 +8,6 @@ from agents import RunContextWrapper
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
-from onyx.chat.models import LlmDoc
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.context.search.models import InferenceSection
 from onyx.server.query_and_chat.streaming_models import SavedSearchDoc
@@ -19,6 +18,9 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations_v2.tool_result_models import (
+    LlmInternalSearchResult,
+)
 from tests.unit.onyx.chat.turn.utils import create_test_inference_chunk
 from tests.unit.onyx.chat.turn.utils import create_test_inference_section
 from tests.unit.onyx.chat.turn.utils import FakeQuery
@@ -186,7 +188,7 @@ def run_internal_search_core_with_dependencies(
     search_pipeline: FakeSearchPipeline,
     session_context_manager: FakeSessionContextManager | None = None,
     redis_client: FakeRedis | None = None,
-) -> list[LlmDoc]:
+) -> list[LlmInternalSearchResult]:
     """Helper function to run the real _internal_search_core with injected dependencies"""
     from unittest.mock import patch
     from onyx.tools.tool_implementations_v2.internal_search import _internal_search_core
@@ -297,33 +299,36 @@ def test_internal_search_core_basic_functionality(
     # Assert
     assert isinstance(result, list)
     assert len(result) == 2
-    # Verify result contains LlmDoc objects
-    assert all(isinstance(doc, LlmDoc) for doc in result)
-    assert result[0].document_id == "doc1"
-    assert result[0].semantic_identifier == "test_doc_1"
-    assert result[0].content == "First test document content"
-    assert result[1].document_id == "doc2"
-    assert result[1].semantic_identifier == "test_doc_2"
-    assert result[1].content == "Second test document content"
+    # Verify result contains InternalSearchResult objects
+    assert all(isinstance(doc, LlmInternalSearchResult) for doc in result)
+    assert result[0].unique_identifier_to_strip_away == "doc1"
+    assert result[0].title == "test_doc_1"
+    assert result[0].excerpt == "First test document content"
+    assert result[0].document_citation_number == -1
+    assert result[1].unique_identifier_to_strip_away == "doc2"
+    assert result[1].title == "test_doc_2"
+    assert result[1].excerpt == "Second test document content"
+    assert result[1].document_citation_number == -1
 
     # Verify context was updated (decorator increments current_run_step)
     assert fake_run_context.context.current_run_step == 2
     assert len(fake_run_context.context.iteration_instructions) == 1
     assert len(fake_run_context.context.global_iteration_responses) == 1
-    # Verify inference sections were added to context
-    assert len(fake_run_context.context.unordered_fetched_inference_sections) == 2
-    assert (
-        fake_run_context.context.unordered_fetched_inference_sections[
-            0
-        ].center_chunk.document_id
-        == "doc1"
-    )
-    assert (
-        fake_run_context.context.unordered_fetched_inference_sections[
-            1
-        ].center_chunk.document_id
-        == "doc2"
-    )
+
+    # Verify fetched_documents_cache was populated
+    assert len(fake_run_context.context.fetched_documents_cache) == 2
+    assert "doc1" in fake_run_context.context.fetched_documents_cache
+    assert "doc2" in fake_run_context.context.fetched_documents_cache
+
+    # Verify cache entries have correct structure
+    cache_entry_1 = fake_run_context.context.fetched_documents_cache["doc1"]
+    assert cache_entry_1.document_citation_number == -1
+    assert cache_entry_1.inference_section is not None
+    assert cache_entry_1.inference_section.center_chunk.document_id == "doc1"
+
+    cache_entry_2 = fake_run_context.context.fetched_documents_cache["doc2"]
+    assert cache_entry_2.document_citation_number == -1
+    assert cache_entry_2.inference_section.center_chunk.document_id == "doc2"
 
     # Check iteration instruction
     instruction = fake_run_context.context.iteration_instructions[0]
@@ -427,8 +432,11 @@ def test_internal_search_core_with_multiple_queries(
     assert isinstance(result, list)
     # Should have results from all queries
     assert len(result) > 0
-    # Verify result contains LlmDoc objects
-    assert all(isinstance(doc, LlmDoc) for doc in result)
+    # Verify result contains InternalSearchResult objects
+    assert all(isinstance(doc, LlmInternalSearchResult) for doc in result)
+
+    # Verify fetched_documents_cache was populated
+    assert len(fake_run_context.context.fetched_documents_cache) > 0
 
     # Verify all queries were executed
     assert len(call_queries) == len(queries)

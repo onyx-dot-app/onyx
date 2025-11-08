@@ -3,6 +3,7 @@ from typing import Any
 
 from agents import ModelSettings
 from agents.models.interface import Model
+from agents.models.openai_responses import OpenAIResponsesModel
 
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
@@ -19,11 +20,13 @@ from onyx.llm.chat_llm import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.chat_llm import VERTEX_LOCATION_KWARG
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
+from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OPENROUTER_PROVIDER_NAME
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
+from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import LLMProviderView
@@ -153,13 +156,12 @@ def get_llm_model_and_settings_for_persona(
     if not llm_provider:
         raise ValueError("No LLM provider found")
 
-    return get_llm_model_and_settings(
+    return _get_llm_model_and_settings(
         provider=llm_provider.provider,
         model=model,
         deployment_name=llm_provider.deployment_name,
         api_key=llm_provider.api_key,
         api_base=llm_provider.api_base,
-        api_version=llm_provider.api_version,
         custom_config=llm_provider.custom_config,
         temperature=temperature_override,
         timeout=timeout,
@@ -372,20 +374,24 @@ def get_llm(
     )
 
 
-def get_llm_model_and_settings(
+def _get_llm_model_and_settings(
     provider: str,
     model: str,
     deployment_name: str | None = None,
     api_key: str | None = None,
     api_base: str | None = None,
-    api_version: str | None = None,
     custom_config: dict[str, str] | None = None,
     temperature: float | None = None,
     timeout: int | None = None,
     additional_headers: dict[str, str] | None = None,
     model_kwargs: dict[str, Any] | None = None,
 ) -> tuple[Model, ModelSettings]:
+    """TODO: clean this up after moving off of Agents SDK.
+
+    It is VERY messy atm.
+    """
     from onyx.llm.litellm_singleton import LitellmModel
+    from openai.types.shared.reasoning import Reasoning
 
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -423,31 +429,81 @@ def get_llm_model_and_settings(
             elif k == VERTEX_LOCATION_KWARG:
                 model_kwargs[k] = v
                 continue
+
     # This is needed for Ollama to do proper function calling
     if provider == OLLAMA_PROVIDER_NAME and api_base is not None:
         os.environ["OLLAMA_API_BASE"] = api_base
-    if api_version:
-        model_kwargs["api_version"] = api_version
-    # Add timeout to model_kwargs so it gets passed to litellm
-    model_kwargs["timeout"] = timeout
-    # Build the full model name in provider/model format
-    model_name = f"{provider}/{deployment_name or model}"
 
-    # Create LitellmModel instance
-    litellm_model = LitellmModel(
-        model=model_name,
-        # NOTE: have to pass in None instead of empty string for these
-        # otherwise litellm can have some issues with bedrock
-        base_url=api_base or None,
-        api_key=api_key or None,
-    )
+    # for typing, set below
+    litellm_model: Model
+
+    # Responses API needed to support reasoning streaming for OpenAI models
+    # NOTE: need to check if it's a true OpenAI model since openai provider
+    # is used generically as a catch-all for OpenAI-compatible providers. These
+    # providers may not support the responses API.
+    # TODO: should check if ALL models are OpenAI models to really be sure. If you're
+    # using your own proxy w/ OpenAI provider + support for OpenAI models, this could
+    # cause some issues
+    if is_true_openai_model(provider, model):
+        from openai import AsyncOpenAI
+
+        litellm_model = OpenAIResponsesModel(
+            model=model,
+            openai_client=AsyncOpenAI(
+                api_key=api_key,
+                base_url=api_base or None,
+                timeout=timeout,
+            ),
+        )
+    elif provider == AZURE_PROVIDER_NAME:
+        from openai import AsyncOpenAI
+
+        if not api_base:
+            raise ValueError("API base is required for Azure OpenAI")
+
+        base_url = api_base
+        if not base_url.endswith("/openai/v1/"):
+            base_url = f"{base_url}/openai/v1/"
+
+        azure_model_name = deployment_name or model
+
+        litellm_model = OpenAIResponsesModel(
+            model=azure_model_name,
+            openai_client=AsyncOpenAI(
+                api_key=api_key,
+                base_url=base_url,
+                timeout=timeout,
+            ),
+        )
+    else:
+        # Add timeout to model_kwargs so it gets passed to litellm
+        model_kwargs["timeout"] = timeout
+
+        # Create LitellmModel instance to handle all other models that
+        # don't use the responses API
+        model_name = f"{provider}/{deployment_name or model}"
+        litellm_model = LitellmModel(
+            model=model_name,
+            # NOTE: have to pass in None instead of empty string for these
+            # otherwise litellm can have some issues with bedrock
+            base_url=api_base or None,
+            api_key=api_key or None,
+        )
 
     # Create ModelSettings with the provided configuration
     model_settings = ModelSettings(
-        temperature=temperature,
-        include_usage=True,
+        temperature=(
+            temperature if not model_is_reasoning_model(model, provider) else 1.0
+        ),
         extra_headers=extra_headers if extra_headers else None,
         extra_args=model_kwargs,
+        reasoning=Reasoning(
+            summary="auto",
+            # TODO: dynamically set this?
+            # It seems like openai sets this as a cap, but anthropic sets this as an
+            # exact value?
+            # effort="medium",
+        ),
     )
 
     return litellm_model, model_settings

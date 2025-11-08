@@ -262,6 +262,7 @@ class FakeModel(StreamableFakeModel):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._output_schema: AgentOutputSchemaBase | None = None
+        self.input_history: list[str | list] = []
 
     async def get_response(
         self,
@@ -308,6 +309,8 @@ class FakeModel(StreamableFakeModel):
         prompt: Any = None,
     ) -> AsyncIterator[object]:
         """Override streaming to handle structured output."""
+        # Update this history for testing purposes
+        self.input_history.append(input)
         # Store output_schema for streaming
         self._output_schema = output_schema
 
@@ -623,7 +626,15 @@ def chat_turn_dependencies(
     fake_redis_client: FakeRedis,
 ) -> ChatTurnDependencies:
     """Fixture providing a complete ChatTurnDependencies object with fake implementations."""
+    from onyx.chat.models import PromptConfig
+
     emitter = get_default_emitter()
+    prompt_config = PromptConfig(
+        default_behavior_system_prompt="You are a helpful assistant.",
+        reminder="Answer the user's question.",
+        custom_instructions="",
+        datetime_aware=False,
+    )
     return ChatTurnDependencies(
         llm_model=fake_model,
         model_settings=ModelSettings(temperature=0.0, include_usage=True),
@@ -632,6 +643,8 @@ def chat_turn_dependencies(
         tools=fake_tools,
         redis_client=fake_redis_client,  # type: ignore[arg-type]
         emitter=emitter,
+        user_or_none=None,
+        prompt_config=prompt_config,
     )
 
 

@@ -15,11 +15,14 @@ from onyx.agents.agent_sdk.message_types import UserMessage
 # the future, we might support native file uploads for other types of files.
 def base_messages_to_agent_sdk_msgs(
     msgs: Sequence[BaseMessage],
+    is_responses_api: bool,
 ) -> list[AgentSDKMessage]:
-    return [_base_message_to_agent_sdk_msg(msg) for msg in msgs]
+    return [_base_message_to_agent_sdk_msg(msg, is_responses_api) for msg in msgs]
 
 
-def _base_message_to_agent_sdk_msg(msg: BaseMessage) -> AgentSDKMessage:
+def _base_message_to_agent_sdk_msg(
+    msg: BaseMessage, is_responses_api: bool
+) -> AgentSDKMessage:
     message_type_to_agent_sdk_role = {
         "human": "user",
         "system": "system",
@@ -50,31 +53,61 @@ def _base_message_to_agent_sdk_msg(msg: BaseMessage) -> AgentSDKMessage:
                 }
                 return user_msg
         else:  # assistant
-            assistant_msg: AssistantMessageWithContent = {
-                "role": "assistant",
-                "content": [InputTextContent(type="input_text", text=content)],
-            }
+            assistant_msg: AssistantMessageWithContent
+            if is_responses_api:
+                from onyx.agents.agent_sdk.message_types import OutputTextContent
+
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": [OutputTextContent(type="output_text", text=content)],
+                }
+            else:
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": [InputTextContent(type="input_text", text=content)],
+                }
             return assistant_msg
     elif isinstance(content, list):
         # For lists, we need to process based on the role
         if role == "assistant":
-            # Assistant messages use InputTextContent | OutputTextContent
-            from onyx.agents.agent_sdk.message_types import OutputTextContent
-
+            # For responses API, use OutputTextContent; otherwise use InputTextContent
             assistant_content: list[InputTextContent | OutputTextContent] = []
-            for item in content:
-                if isinstance(item, str):
-                    assistant_content.append(
-                        InputTextContent(type="input_text", text=item)
-                    )
-                elif isinstance(item, dict) and item.get("type") == "text":
-                    assistant_content.append(
-                        InputTextContent(type="input_text", text=item.get("text", ""))
-                    )
-                else:
-                    raise ValueError(
-                        f"Unexpected item type for assistant message: {type(item)}. Item: {item}"
-                    )
+
+            if is_responses_api:
+                from onyx.agents.agent_sdk.message_types import OutputTextContent
+
+                for item in content:
+                    if isinstance(item, str):
+                        assistant_content.append(
+                            OutputTextContent(type="output_text", text=item)
+                        )
+                    elif isinstance(item, dict) and item.get("type") == "text":
+                        assistant_content.append(
+                            OutputTextContent(
+                                type="output_text", text=item.get("text", "")
+                            )
+                        )
+                    else:
+                        raise ValueError(
+                            f"Unexpected item type for assistant message: {type(item)}. Item: {item}"
+                        )
+            else:
+                for item in content:
+                    if isinstance(item, str):
+                        assistant_content.append(
+                            InputTextContent(type="input_text", text=item)
+                        )
+                    elif isinstance(item, dict) and item.get("type") == "text":
+                        assistant_content.append(
+                            InputTextContent(
+                                type="input_text", text=item.get("text", "")
+                            )
+                        )
+                    else:
+                        raise ValueError(
+                            f"Unexpected item type for assistant message: {type(item)}. Item: {item}"
+                        )
+
             assistant_msg_list: AssistantMessageWithContent = {
                 "role": "assistant",
                 "content": assistant_content,

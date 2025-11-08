@@ -18,8 +18,7 @@ import {
   PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { useAppRouter } from "@/hooks/appNavigation";
 import {
   Project,
   removeChatSessionFromProject,
@@ -37,17 +36,14 @@ import MenuButton from "@/refresh-components/buttons/MenuButton";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import {
-  DRAG_TYPES,
-  DEFAULT_PERSONA_ID,
-  LOCAL_STORAGE_KEYS,
-} from "@/sections/sidebar/constants";
+import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import {
   shouldShowMoveModal,
   showErrorNotification,
   handleMoveOperation,
 } from "@/sections/sidebar/sidebarUtils";
 import ButtonRenaming from "@/sections/sidebar/ButtonRenaming";
+import { useActiveSidebarTab } from "@/lib/hooks";
 
 // (no local constants; use shared constants/imports)
 
@@ -112,7 +108,14 @@ function ChatButtonInner({
   draggable = false,
 }: ChatButtonProps) {
   const route = useAppRouter();
-  const params = useAppParams();
+  const activeSidebarTab = useActiveSidebarTab();
+  const active = useMemo(
+    () =>
+      typeof activeSidebarTab === "object" &&
+      activeSidebarTab.type === "chat" &&
+      activeSidebarTab.id === chatSession.id,
+    [activeSidebarTab, chatSession.id]
+  );
   const [mounted, setMounted] = useState(false);
   const [displayName, setDisplayName] = useState(
     chatSession.name || UNNAMED_CHAT
@@ -280,7 +283,7 @@ function ChatButtonInner({
         await refreshCurrentProjectDetails();
 
         // Only route if the deleted chat is the currently opened chat session
-        if (params(SEARCH_PARAM_NAMES.CHAT_ID) == chatSession.id) {
+        if (active) {
           route({ projectId: project.id });
         }
       }
@@ -369,7 +372,7 @@ function ChatButtonInner({
       <PopoverAnchor>
         <SidebarTab
           onClick={() => route({ chatSessionId: chatSession.id })}
-          active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
+          active={active}
           rightChildren={rightMenu}
           focused={renaming}
         >

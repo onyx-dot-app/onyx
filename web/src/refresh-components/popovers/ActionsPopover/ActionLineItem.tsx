@@ -92,7 +92,6 @@ export default function ActionLineItem({
                   className={cn(
                     !disabled && "invisible group-hover/LineItem:visible"
                   )}
-                  transient={disabled}
                   tooltip={disabled ? "Enable" : "Disable"}
                 />
               )}

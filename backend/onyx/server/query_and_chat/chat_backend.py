@@ -587,6 +587,7 @@ def get_max_document_tokens(
     return MaxSelectedDocumentTokens(
         max_tokens=compute_max_document_tokens_for_persona(
             persona=persona,
+            db_session=db_session,
         ),
     )
 
@@ -618,6 +619,7 @@ def get_available_context_tokens_for_session(
 
     available = compute_max_document_tokens_for_persona(
         persona=chat_session.persona,
+        db_session=db_session,
     )
 
     return AvailableContextTokensResponse(available_tokens=available)

@@ -29,6 +29,7 @@ export interface ModelConfiguration {
 export interface WellKnownLLMProviderDescriptor {
   name: string;
   display_name: string;
+  title: string;
 
   deployment_name_required: boolean;
   api_key_required: boolean;

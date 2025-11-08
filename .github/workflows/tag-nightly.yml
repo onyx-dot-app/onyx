@@ -19,7 +19,7 @@ jobs:
       # Additional NOTE: even though this is named "rkuo", the actual key is tied to the onyx repo
       # and not rkuo's personal account. It is fine to leave this key as is!
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
         with:
           ssh-key: "${{ secrets.RKUO_DEPLOY_KEY }}"
 

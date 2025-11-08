@@ -1,7 +1,7 @@
 "use client";
 
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Popover,
   PopoverContent,
@@ -78,12 +78,14 @@ export interface ActionsPopoverProps {
   selectedAssistant: MinimalPersonaSnapshot;
   filterManager: FilterManager;
   availableSources?: ValidSources[];
+  disabled?: boolean;
 }
 
 export default function ActionsPopover({
   selectedAssistant,
   filterManager,
   availableSources = [],
+  disabled = false,
 }: ActionsPopoverProps) {
   const [open, setOpen] = useState(false);
   const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
@@ -593,6 +595,7 @@ export default function ActionsPopover({
               transient={open}
               tertiary
               tooltip="Manage Actions"
+              disabled={disabled}
             />
           </div>
         </PopoverTrigger>

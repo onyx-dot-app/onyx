@@ -4,11 +4,11 @@ import { useEscape } from "@/hooks/useKeyPress";
 import { createContext, useContext, useState, ReactNode } from "react";
 
 export enum ModalIds {
-  AgentsModal = "AgentsModal",
   CreateProjectModal = "CreateProjectModal",
   FeedbackModal = "FeedbackModal",
   AddInstructionModal = "AddInstructionModal",
   ProjectFilesModal = "ProjectFilesModal",
+  LLMConnectionModal = "LLMConnectionModal",
 }
 
 interface ModalProviderProps {
