@@ -45,7 +45,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import * as Yup from "yup";
-import { FullPersona, PersonaLabel, StarterMessage } from "./interfaces";
+import { FullPersona, PersonaLabel, StarterMessage, LangflowFileNode } from "./interfaces";
 import {
   PersonaUpsertParameters,
   createPersona,
@@ -112,6 +112,10 @@ function findSearchTool(tools: ToolSnapshot[]) {
 
 function findLangflowTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "LangflowTool");
+}
+
+function findDocGeneratorTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === "DocGeneratorTool");
 }
 
 function findDocFormatterTool(tools: ToolSnapshot[]) {
@@ -243,6 +247,7 @@ export function AssistantEditor({
 
   const searchTool = findSearchTool(tools);
   const langflowTool = findLangflowTool(tools);
+  const docGeneratorTool = findDocGeneratorTool(tools);
   const docFormatterTool = findDocFormatterTool(tools);
   const imageGenerationTool = findImageGenerationTool(tools);
   const internetSearchTool = findInternetSearchTool(tools);
@@ -255,6 +260,7 @@ export function AssistantEditor({
       tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
       tool.in_code_tool_id !== langflowTool?.in_code_tool_id &&
+      tool.in_code_tool_id !== docGeneratorTool?.in_code_tool_id &&
       tool.in_code_tool_id !== docFormatterTool?.in_code_tool_id &&
       tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== knowledgeMapTool?.in_code_tool_id
@@ -265,6 +271,7 @@ export function AssistantEditor({
     ...(searchTool ? [searchTool] : []),
     ...(langflowTool ? [langflowTool] : []),
     ...(docFormatterTool ? [docFormatterTool] : []),
+    ...(docGeneratorTool ? [docGeneratorTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
     ...(internetSearchTool ? [internetSearchTool] : []),
     ...(knowledgeMapTool ? [knowledgeMapTool] : []),
@@ -333,6 +340,9 @@ export function AssistantEditor({
     use_default: existingPersona?.use_default,
     template_file: null,
     selectedValidators: existingPersona?.validators ?? [],
+    langflow_file_nodes: existingPersona?.langflow_file_nodes?.length
+      ? existingPersona.langflow_file_nodes
+      : [{ file_node_id: "" }],
   };
 
   interface AssistantPrompt {
@@ -544,6 +554,13 @@ export function AssistantEditor({
             selectedGroups: Yup.array().of(Yup.number()),
             knowledge_source: Yup.string().required(),
             is_default_persona: Yup.boolean().required(),
+            pipeline_id: Yup.string().nullable(),
+            template_file: Yup.mixed().nullable(),
+            langflow_file_nodes: Yup.array().of(
+              Yup.object().shape({
+                file_node_id: Yup.string(),
+              })
+            ),
           })
           .test(
             "system-prompt-or-task-prompt",
@@ -608,7 +625,9 @@ export function AssistantEditor({
           const knowledgeMapToolEnabled = knowledgeMapTool
             ? enabledTools.includes(knowledgeMapTool.id)
             : false;
-
+          const docGeneratorToolEnabled = docGeneratorTool
+            ? enabledTools.includes(docGeneratorTool.id)
+            : false;
           // if disable_retrieval is set, set num_chunks to 0
           // to tell the backend to not fetch any documents
           const numChunks = searchToolEnabled ? values.num_chunks || 10 : 0;
@@ -646,6 +665,9 @@ export function AssistantEditor({
             user_folder_ids: selectedFolders.map((folder) => folder.id),
             validator_ids: values.selectedValidators.map((validator) =>
               String(validator.id)
+            ),
+            langflow_file_nodes: values.langflow_file_nodes.filter(
+              (node: LangflowFileNode) => node.file_node_id.trim() !== ""
             ),
           };
 
@@ -734,6 +756,13 @@ export function AssistantEditor({
               ? true
               : false;
           }
+
+          function docGeneratorToolEnabled() {
+              return (
+                docGeneratorTool &&
+                values.enabled_tools_map[docGeneratorTool.id]
+              );
+            }
 
           console.log("TEST LANGFLOW", langflowTool, langflowToolEnabled());
           console.log(
@@ -1385,6 +1414,64 @@ export function AssistantEditor({
                                 )}
                               </>
                             )}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {docGeneratorTool && (
+                      <>
+                        <BooleanFormField
+                          name={`enabled_tools_map.${docGeneratorTool.id}`}
+                          label={t(k.DOC_GENERATOR_LABEL)} // Assuming a specific key; adjust if needed
+                          subtext={t(k.DOC_GENERATOR_SUBTEXT)} // Assuming a specific key; adjust if needed
+                          onChange={() => {
+                            toggleToolInValues(docGeneratorTool.id);
+                          }}
+                        />
+
+                        {docGeneratorToolEnabled() && (
+                          <div className="pl-4 border-l-2 ml-4 border-border flex flex-col gap-4 mb-4">
+                            <>
+                              <TextFormField
+                                name="pipeline_id"
+                                label={t(k.PIPELINE_ID_LABEL)}
+                                placeholder={t(k.PIPELINE_ID_PLACEHOLDER)}
+                                subtext={t(k.PIPELINE_ID_SUBTEXT)}
+                              />
+
+                              <BooleanFormField
+                                name="use_default"
+                                label={t(k.USE_DEFAULT_LABEL)}
+                                subtext={t(k.USE_DEFAULT_SUBTEXT)}
+                              />
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="text-xs flex justify-start gap-x-2"
+                                onClick={() => {
+                                  const fileInput = document.createElement("input");
+                                  fileInput.type = "file";
+                                  fileInput.onchange = (e) => {
+                                    const file = (e.target as HTMLInputElement).files?.[0];
+                                    if (file) {
+                                      setFieldValue("template_file", file);
+                                    }
+                                  };
+                                  fileInput.click();
+                                }}
+                              >
+                                <CameraIcon size={14} />
+                                {t(k.UPLOAD_TEMPLATE_FILE)}
+                              </Button>
+                              {values.template_file && (
+                                <div className="text-sm text-neutral-600 dark:text-neutral-300 mb-2">
+                                  {values.template_file.name}
+                                </div>
+                              )}
+                            </>
                           </div>
                         )}
                       </>

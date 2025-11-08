@@ -59,9 +59,14 @@ export interface FullPersona extends Persona {
   template_file?: File | null;
   selectedValidators?: Array<{ id: string; name: string }>;
   validators?: APIKey[];
+  langflow_file_nodes?: LangflowFileNode[];
 }
 
 export interface PersonaLabel {
   id: number;
   name: string;
+}
+
+export interface LangflowFileNode {
+  file_node_id: string;
 }
