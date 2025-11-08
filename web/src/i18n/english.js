@@ -2841,6 +2841,8 @@ module.exports = {
   [k.PIPELINE_ID_LABEL]: `Pipeline ID`,
   [k.PIPELINE_ID_PLACEHOLDER]: `Enter pipeline identifier`,
   [k.PIPELINE_ID_SUBTEXT]: `Langflow pipeline identifier`,
+  [k.DOC_GENERATOR_LABEL]: `Document Generator`,
+  [k.DOC_GENERATOR_SUBTEXT]: `Document Generator tool`,
   [k.USE_DEFAULT_LABEL]: `Use tool for all requests`,
   [k.USE_DEFAULT_SUBTEXT]: `If enabled, all requests after input will be sent to the tool without prior checking for its necessity`,
   [k.DOC_FORMATTER_LABEL]: `Doc Formatter`,
