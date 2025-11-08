@@ -1,9 +1,3 @@
-// Get Onyx Web Version
-const { version: package_version } = require("./package.json"); // version from package.json
-const env_version = process.env.ONYX_VERSION; // version from env variable
-// Use env version if set & valid, otherwise default to package version
-const version = env_version || package_version;
-
 // Always require withSentryConfig
 const { withSentryConfig } = require("@sentry/nextjs");
 
@@ -24,9 +18,6 @@ const cspHeader = `
 const nextConfig = {
   productionBrowserSourceMaps: false,
   output: "standalone",
-  publicRuntimeConfig: {
-    version,
-  },
   transpilePackages: ["@onyx/opal"],
   reactCompiler: true,
   images: {
