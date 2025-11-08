@@ -12,7 +12,7 @@ from onyx.agents.agent_search.orchestration.nodes.call_tool import ToolCallExcep
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
-from onyx.chat.models import AgenticMessageResponseIDInfo, LangflowToolResponse, ResumeToolResponse
+from onyx.chat.models import AgenticMessageResponseIDInfo, LangflowToolResponse, ResumeToolResponse, DocGeneratorToolResponse
 from onyx.chat.models import AgentMessageIDInfo
 from onyx.chat.models import AgentSearchPacket
 from onyx.chat.models import AllCitations
@@ -141,6 +141,10 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
 from onyx.tools.tool_implementations.knowledge_map.knowledge_map_tool import KnowledgeMapTool
 from onyx.tools.tool_implementations.langflow.langflow_tool import LANGFLOW_RESPONSE_SUMMARY_ID, \
     LangflowResponseSummary, LangflowTool
+from onyx.tools.tool_implementations.doc_generator.doc_generator_tool import (
+    DOC_GENERATOR_RESPONSE_SUMMARY_ID,
+    DocGeneratorResponseSummary,
+)
 from onyx.tools.tool_implementations.resume.resume_tool import ResumeTool, ResumeResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,
@@ -1327,6 +1331,13 @@ def stream_chat_message_objects(
 
                     yield ResumeToolResponse(
                         response=tool_response.tool_result,  # Текст
+                        tool_name=tool_response.tool_name,
+                    )
+                elif packet.id == DOC_GENERATOR_RESPONSE_SUMMARY_ID:
+                    tool_response = cast(DocGeneratorResponseSummary, packet.response)
+
+                    yield DocGeneratorToolResponse(
+                        response=tool_response.tool_result,
                         tool_name=tool_response.tool_name,
                     )
                 elif packet.id == CUSTOM_TOOL_RESPONSE_ID:
