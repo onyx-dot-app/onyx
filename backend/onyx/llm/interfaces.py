@@ -1,5 +1,6 @@
 import abc
 from collections.abc import Iterator
+from typing import Any
 from typing import Literal
 
 from braintrust import traced
@@ -97,7 +98,14 @@ class LLM(abc.ABC):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
     ) -> None:
-        pass
+        self._stream(
+            prompt,
+            tools,
+            tool_choice,
+            structured_response_format,
+            timeout_override,
+            max_tokens,
+        )
 
     @traced(name="invoke llm", type="llm")
     def invoke_langchain(
@@ -122,6 +130,30 @@ class LLM(abc.ABC):
         )
 
     @abc.abstractmethod
+    def _invoke_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _stream_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> Iterator[dict]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def _invoke_implementation_langchain(
         self,
         prompt: LanguageModelInput,
@@ -135,14 +167,21 @@ class LLM(abc.ABC):
 
     def stream(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[dict],
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> None:
-        pass
+    ) -> Iterator[Any]:
+        return self._stream_implementation(
+            prompt,
+            tools,
+            tool_choice,
+            structured_response_format,
+            timeout_override,
+            max_tokens,
+        )
 
     def stream_langchain(
         self,

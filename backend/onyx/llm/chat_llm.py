@@ -495,7 +495,7 @@ class DefaultMultiLLM(LLM):
             max_input_tokens=self._max_input_tokens,
         )
 
-    def _invoke_implementation(
+    def _invoke_implementation_langchain(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -530,7 +530,7 @@ class DefaultMultiLLM(LLM):
         else:
             raise ValueError("Unexpected response choice type")
 
-    def _stream_implementation(
+    def _stream_implementation_langchain(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -616,3 +616,71 @@ class DefaultMultiLLM(LLM):
                 logger.debug(f"Raw Model Output:\n{log_msg}")
             else:
                 logger.debug(f"Raw Model Output:\n{content}")
+
+    def _invoke_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> Iterator[Any]:
+        from litellm import CustomStreamWrapper
+
+        if LOG_ONYX_MODEL_INTERACTIONS:
+            self.log_model_configs()
+
+        response = self._completion(
+            prompt=prompt,
+            tools=tools,
+            tool_choice=tool_choice,
+            stream=False,
+            structured_response_format=structured_response_format,
+            timeout_override=timeout_override,
+            max_tokens=max_tokens,
+        )
+
+        if isinstance(response, CustomStreamWrapper):
+            return response
+
+        return iter([response])
+
+    def _stream_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> Iterator[Any]:
+        from litellm import CustomStreamWrapper
+
+        if LOG_ONYX_MODEL_INTERACTIONS:
+            self.log_model_configs()
+
+        if DISABLE_LITELLM_STREAMING:
+            return self._invoke_implementation(
+                prompt,
+                tools,
+                tool_choice,
+                structured_response_format,
+                timeout_override,
+                max_tokens,
+            )
+
+        response = cast(
+            CustomStreamWrapper,
+            self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=True,
+                structured_response_format=structured_response_format,
+                timeout_override=timeout_override,
+                max_tokens=max_tokens,
+            ),
+        )
+
+        return response

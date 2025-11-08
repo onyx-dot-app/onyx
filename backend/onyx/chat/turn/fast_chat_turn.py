@@ -64,6 +64,41 @@ if TYPE_CHECKING:
 MAX_ITERATIONS = 10
 
 
+def normalize_messages(messages: list[dict], model: str) -> list[dict]:
+    """
+    Convert messages to the correct format for either:
+    - Chat Completions API (plain string content)
+    - Responses API (list of {type, text} parts)
+
+    Usage:
+        normalize_messages(messages, "openai/gpt-4o")
+        normalize_messages(messages, "responses/openai/gpt-4o")
+    """
+    use_responses = model.startswith("responses/")
+
+    normalized = []
+    for m in messages:
+        role = m.get("role")
+        content = m.get("content")
+
+        # Extract text regardless of format
+        if isinstance(content, list):
+            text = "\n".join(
+                part.get("text", "") for part in content if isinstance(part, dict)
+            )
+        else:
+            text = str(content or "")
+
+        if use_responses:
+            normalized.append(
+                {"role": role, "content": [{"type": "text", "text": text}]}
+            )
+        else:
+            normalized.append({"role": role, "content": text})
+
+    return normalized
+
+
 # TODO -- this can be refactored out and played with in evals + normal demo
 def _run_agent_loop(
     messages: list[AgentSDKMessage],
@@ -84,6 +119,12 @@ def _run_agent_loop(
     agent_turn_messages: list[AgentSDKMessage] = []
     last_call_is_final = False
     iteration_count = 0
+
+    converted = normalize_messages(messages, dependencies.llm.config.model_name)
+    for chunk in dependencies.llm.stream(
+        prompt=converted,
+    ):
+        print(chunk)
 
     while not last_call_is_final:
         available_tools: Sequence[Tool] = (
