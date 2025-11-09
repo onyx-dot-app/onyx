@@ -68,17 +68,27 @@ ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
 /**
  * Modal Content Component
  *
- * Main modal container with default styling. Size and other styles controlled via className.
+ * Main modal container with default styling. Size and other styles controlled via className or size prop.
  *
  * @example
  * ```tsx
- * <Modal.Content className="w-[27rem]">
- *   {/* Modal children *\/}
+ * // Using size variants
+ * <Modal.Content size="sm">
+ *   {/* Small modal (32rem) *\/}
  * </Modal.Content>
  *
- * // Large modal
+ * <Modal.Content size="md">
+ *   {/* Medium modal (60rem) *\/}
+ * </Modal.Content>
+ *
+ * // Custom size with className
+ * <Modal.Content className="w-[27rem]">
+ *   {/* Custom sized modal *\/}
+ * </Modal.Content>
+ *
+ * // Large modal with height
  * <Modal.Content className="w-[60rem] h-[80vh]">
- *   {/* Modal children *\/}
+ *   {/* Custom large modal *\/}
  * </Modal.Content>
  * ```
  */
@@ -86,8 +96,9 @@ const ModalContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     hideCloseButton?: boolean;
+    size?: "sm" | "md";
   }
->(({ className, children, hideCloseButton, ...props }, ref) => (
+>(({ className, children, hideCloseButton, size, ...props }, ref) => (
   <ModalPortal>
     <ModalOverlay />
     <DialogPrimitive.Content
@@ -102,6 +113,9 @@ const ModalContent = React.forwardRef<
         "data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]",
         "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
         "duration-200",
+        // Size variants
+        size === "sm" && "w-[32rem] max-h-[calc(100dvh-4rem)]",
+        size === "md" && "w-[60rem] max-h-[calc(100dvh-4rem)]",
         className
       )}
       {...props}
@@ -127,7 +141,7 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * </Modal.Header>
  *
  * // With custom content
- * <Modal.Header className="bg-background-tint-01 p-6">
+ * <Modal.Header className="bg-background-tint-01 p-6" withBottomShadow>
  *   <Modal.Icon icon={SvgFile} />
  *   <Modal.Title>Select Files</Modal.Title>
  *   <InputTypeIn placeholder="Search..." />
@@ -141,19 +155,20 @@ interface ModalHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
   ({ withBottomShadow = false, className, children, ...props }, ref) => {
     return (
-      <div ref={ref} className="relative">
-        <div className={cn(className)} {...props}>
-          {children}
-        </div>
-        {withBottomShadow && (
-          <div
-            className="absolute left-0 right-0 bottom-0 h-[0.5rem] pointer-events-none"
-            style={{
-              background:
-                "linear-gradient(to bottom, var(--mask-02), transparent)",
-            }}
-          />
-        )}
+      <div
+        ref={ref}
+        className={cn("relative z-10", className)}
+        style={
+          withBottomShadow
+            ? {
+                boxShadow:
+                  "0 2px 12px 0 var(--Shadow-02, rgba(0, 0, 0, 0.10)), 0 0 4px 1px var(--Shadow-01, rgba(0, 0, 0, 0.05))",
+              }
+            : undefined
+        }
+        {...props}
+      >
+        {children}
       </div>
     );
   }

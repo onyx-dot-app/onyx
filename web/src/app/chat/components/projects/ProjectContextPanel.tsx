@@ -14,9 +14,8 @@ import {
   ModalIds,
 } from "@/refresh-components/contexts/ChatModalContext";
 import AddInstructionModal from "@/components/modals/AddInstructionModal";
-import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
+import UserFilesModal from "@/components/modals/UserFilesModal";
 import { useEscape } from "@/hooks/useKeyPress";
-import CoreModal from "@/refresh-components/modals/CoreModal";
 import Text from "@/refresh-components/texts/Text";
 import SvgFolderOpen from "@/icons/folder-open";
 import SvgAddLines from "@/icons/add-lines";
@@ -265,26 +264,22 @@ export default function ProjectContextPanel({
 
       <AddInstructionModal />
 
-      {open && (
-        <CoreModal
-          className="w-[32rem] rounded-16 border flex flex-col bg-background-tint-00"
-          onClickOutside={onClose}
-        >
-          <UserFilesModalContent
-            title="Project files"
-            description="Sessions in this project can access the files here."
-            icon={SvgFiles}
-            recentFiles={[...allCurrentProjectFiles]}
-            onView={handleOnView}
-            handleUploadChange={handleUploadChange}
-            onDelete={async (file: ProjectFile) => {
-              if (!currentProjectId) return;
-              await unlinkFileFromProject(currentProjectId, file.id);
-            }}
-            onClose={onClose}
-          />
-        </CoreModal>
-      )}
+      <UserFilesModal
+        open={open}
+        onOpenChange={(isOpen) =>
+          toggleModal(ModalIds.ProjectFilesModal, isOpen)
+        }
+        title="Project files"
+        description="Sessions in this project can access the files here."
+        icon={SvgFiles}
+        recentFiles={[...allCurrentProjectFiles]}
+        onView={handleOnView}
+        handleUploadChange={handleUploadChange}
+        onDelete={async (file: ProjectFile) => {
+          if (!currentProjectId) return;
+          await unlinkFileFromProject(currentProjectId, file.id);
+        }}
+      />
       {popup}
     </div>
   );

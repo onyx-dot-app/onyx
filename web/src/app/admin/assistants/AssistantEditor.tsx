@@ -86,8 +86,7 @@ import {
 import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
 import { FileCard } from "@/app/chat/components/input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
-import CoreModal from "@/refresh-components/modals/CoreModal";
-import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
+import UserFilesModal from "@/components/modals/UserFilesModal";
 import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
@@ -1909,41 +1908,29 @@ export function AssistantEditor({
                   </div>
                 </div>
               </Form>
-              {showAllUserFiles && (
-                <CoreModal
-                  className="w-full max-w-lg"
-                  onClickOutside={() => setShowAllUserFiles(false)}
-                >
-                  <UserFilesModalContent
-                    title="User Files"
-                    description="All files selected for this assistant"
-                    icon={SvgFiles}
-                    recentFiles={values.user_file_ids.map(
-                      (userFileId: string) => {
-                        const rf = allRecentFiles.find(
-                          (f) => f.id === userFileId
-                        );
-                        return (
-                          rf || {
-                            id: userFileId,
-                            name: `File ${userFileId.slice(0, 8)}`,
-                            status: "completed" as const,
-                          }
-                        );
-                      }
-                    )}
-                    onDelete={(file) => {
-                      setFieldValue(
-                        "user_file_ids",
-                        values.user_file_ids.filter(
-                          (id: string) => id !== file.id
-                        )
-                      );
-                    }}
-                    onClose={() => setShowAllUserFiles(false)}
-                  />
-                </CoreModal>
-              )}
+              <UserFilesModal
+                open={showAllUserFiles}
+                onOpenChange={setShowAllUserFiles}
+                title="User Files"
+                description="All files selected for this assistant"
+                icon={SvgFiles}
+                recentFiles={values.user_file_ids.map((userFileId: string) => {
+                  const rf = allRecentFiles.find((f) => f.id === userFileId);
+                  return (
+                    rf || {
+                      id: userFileId,
+                      name: `File ${userFileId.slice(0, 8)}`,
+                      status: "completed" as const,
+                    }
+                  );
+                })}
+                onDelete={(file) => {
+                  setFieldValue(
+                    "user_file_ids",
+                    values.user_file_ids.filter((id: string) => id !== file.id)
+                  );
+                }}
+              />
             </>
           );
         }}
