@@ -6,10 +6,6 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.dr.enums import ResearchType
-from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
-    GeneratedImage,
-)
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_db_search_doc_by_document_id
@@ -37,6 +33,7 @@ from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.models import GeneratedImage
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -263,7 +260,7 @@ def translate_db_message_to_packets_simple(
     start_step_nr: int = 1,
 ) -> EndStepPacketList:
     """
-    Translation function for simple agent framework (ResearchType.FAST).
+    Translation function for simple agent framework.
     Includes support for FetchToolStart packets for web fetch operations.
     """
     step_nr = start_step_nr
@@ -293,34 +290,11 @@ def translate_db_message_to_packets_simple(
                 )
 
         research_iterations = []
-        if chat_message.research_type in [
-            ResearchType.THOUGHTFUL,
-            ResearchType.DEEP,
-            ResearchType.LEGACY_AGENTIC,
-            ResearchType.FAST,
-        ]:
+        if chat_message.research_iterations:
             research_iterations = sorted(
                 chat_message.research_iterations, key=lambda x: x.iteration_nr
             )
             for research_iteration in research_iterations:
-                if (
-                    research_iteration.iteration_nr > 1
-                    and research_iteration.reasoning
-                    and chat_message.research_type == ResearchType.DEEP
-                ):
-                    packet_list.extend(
-                        create_reasoning_packets(research_iteration.reasoning, step_nr)
-                    )
-                    step_nr += 1
-
-                if (
-                    research_iteration.purpose
-                    and chat_message.research_type == ResearchType.DEEP
-                ):
-                    packet_list.extend(
-                        create_reasoning_packets(research_iteration.purpose, step_nr)
-                    )
-                    step_nr += 1
 
                 sub_steps = research_iteration.sub_steps
                 tasks: list[str] = []
@@ -359,13 +333,6 @@ def translate_db_message_to_packets_simple(
                             )
 
                         cited_docs.extend(sub_step_saved_search_docs)
-                    else:
-                        if chat_message.research_type == ResearchType.DEEP:
-                            packet_list.extend(
-                                create_reasoning_packets(
-                                    _CANNOT_SHOW_STEP_RESULTS_STR, step_nr
-                                )
-                            )
                     step_nr += 1
 
                     if sub_step.is_web_fetch and len(sub_step_saved_search_docs) > 0:
@@ -373,12 +340,6 @@ def translate_db_message_to_packets_simple(
                         fetches.append(sub_step_saved_search_docs)
 
                 if len(set(tool_call_ids)) > 1:
-                    if chat_message.research_type == ResearchType.DEEP:
-                        packet_list.extend(
-                            create_reasoning_packets(
-                                _CANNOT_SHOW_STEP_RESULTS_STR, step_nr
-                            )
-                        )
                     step_nr += 1
 
                 elif len(sub_steps) == 0:
@@ -439,8 +400,7 @@ def translate_db_message_to_packets_simple(
                         for doc in chat_message.search_docs
                     ],
                     step_nr=step_nr,
-                    is_legacy_agentic=chat_message.research_type
-                    == ResearchType.LEGACY_AGENTIC,
+                    is_legacy_agentic=False,
                 )
             )
             step_nr += 1
@@ -473,20 +433,14 @@ def translate_db_message_to_packets(
     db_session: Session,
     start_step_nr: int = 1,
 ) -> EndStepPacketList:
-    use_simple_translation = True
-    if chat_message.research_type and chat_message.research_type != ResearchType.DEEP:
-        feature_flag_provider = get_default_feature_flag_provider()
-        tenant_id = get_current_tenant_id()
-        user = chat_message.chat_session.user
-        use_simple_translation = (
-            not feature_flag_provider.feature_enabled_for_user_tenant(
-                flag_key=DISABLE_SIMPLE_AGENT_FRAMEWORK,
-                user=user,
-                tenant_id=tenant_id,
-            )
-        )
-    else:
-        use_simple_translation = False
+    feature_flag_provider = get_default_feature_flag_provider()
+    tenant_id = get_current_tenant_id()
+    user = chat_message.chat_session.user
+    use_simple_translation = not feature_flag_provider.feature_enabled_for_user_tenant(
+        flag_key=DISABLE_SIMPLE_AGENT_FRAMEWORK,
+        user=user,
+        tenant_id=tenant_id,
+    )
 
     if use_simple_translation:
         return translate_db_message_to_packets_simple(
@@ -522,11 +476,7 @@ def translate_db_message_to_packets(
                 )
 
         research_iterations = []
-        if chat_message.research_type in [
-            ResearchType.THOUGHTFUL,
-            ResearchType.DEEP,
-            ResearchType.LEGACY_AGENTIC,
-        ]:
+        if chat_message.research_iterations:
             research_iterations = sorted(
                 chat_message.research_iterations, key=lambda x: x.iteration_nr
             )
@@ -648,8 +598,7 @@ def translate_db_message_to_packets(
                         for doc in chat_message.search_docs
                     ],
                     step_nr=step_nr,
-                    is_legacy_agentic=chat_message.research_type
-                    == ResearchType.LEGACY_AGENTIC,
+                    is_legacy_agentic=False,
                 )
             )
             step_nr += 1

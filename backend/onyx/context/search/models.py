@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -29,6 +30,11 @@ MAX_METRICS_CONTENT = (
 class QueryExpansions(BaseModel):
     keywords_expansions: list[str] | None = None
     semantic_expansions: list[str] | None = None
+
+
+class QueryExpansionType(Enum):
+    KEYWORD = "keyword"
+    SEMANTIC = "semantic"
 
 
 class RerankingDetails(BaseModel):

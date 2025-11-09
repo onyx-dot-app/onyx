@@ -1,6 +1,5 @@
 from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.enums import DRPath
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.prompts.prompt_template import PromptTemplate
 
 
@@ -17,21 +16,18 @@ CLOSER = DRPath.CLOSER.value
 WEB_SEARCH = DRPath.WEB_SEARCH.value
 
 
-DONE_STANDARD: dict[str, str] = {}
-DONE_STANDARD[ResearchType.THOUGHTFUL] = (
-    "Try to make sure that you think you have enough information to \
+# Default done standard for non-agentic search
+DONE_STANDARD_DEFAULT = "Try to make sure that you think you have enough information to \
 answer the question in the spirit and the level of detail that is pretty explicit in the question. \
 But it should be answerable with the given information in full. If information is missing you \
 should ask follow-up questions as necessary."
-)
 
-DONE_STANDARD[ResearchType.DEEP] = (
-    "Try to make sure that you think you have enough information to \
+# Done standard for agentic search (more thorough)
+DONE_STANDARD_AGENTIC = "Try to make sure that you think you have enough information to \
 answer the question in the spirit and the level of detail that is pretty explicit in the question. \
 Be particularly sensitive to details that you think the user would be interested in, and \
 whether individual points would require more information, or should be researched more. Consider \
 asking follow-up questions as necessary."
-)
 
 
 # TODO: see TODO in OrchestratorTool, move to tool implementation class for v2
@@ -397,7 +393,7 @@ retrieved documents/information you already have to determine whether there is n
 information to answer the overall question, but also that the depth of the information likely matches \
 the user expectations.
    - here is roughly how you should decide whether you are done or more research is needed:
-{DONE_STANDARD[ResearchType.THOUGHTFUL]}
+{DONE_STANDARD_DEFAULT}
 
 
 Please reason briefly (1-2 sentences) whether there is sufficient information to answer the overall question, \
@@ -682,7 +678,7 @@ NEW targeted information that gets us to be able to answer the original question
 the request to the CLOSER tool is an option if you think the information is sufficient.)
 
 Here is roughly how you should decide whether you are done to call the {CLOSER} tool:
-{DONE_STANDARD[ResearchType.DEEP]}
+{DONE_STANDARD_AGENTIC}
 
 Please format your answer as a json dictionary in the format below.
 Note:
@@ -736,8 +732,8 @@ in the brackets, not any titles. So this should have format like \
 """
 
 
-INTERNAL_SEARCH_PROMPTS: dict[ResearchType, PromptTemplate] = {}
-INTERNAL_SEARCH_PROMPTS[ResearchType.THOUGHTFUL] = PromptTemplate(
+INTERNAL_SEARCH_PROMPTS: dict[bool, PromptTemplate] = {}
+INTERNAL_SEARCH_PROMPTS[False] = PromptTemplate(
     f"""\
 You are great at using the provided documents, the specific search query, and the \
 user query that needs to be ultimately answered, to provide a succinct, relevant, and grounded \
@@ -792,7 +788,7 @@ relevant to the question sent to you.
 """
 )
 
-INTERNAL_SEARCH_PROMPTS[ResearchType.DEEP] = PromptTemplate(
+INTERNAL_SEARCH_PROMPTS[True] = PromptTemplate(
     f"""\
 You are great at using the provided documents, the specific search query, and the \
 user query that needs to be ultimately answered, to provide a succinct, relevant, and grounded \

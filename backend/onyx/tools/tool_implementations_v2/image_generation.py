@@ -3,9 +3,6 @@ from typing import cast
 from agents import function_tool
 from agents import RunContextWrapper
 
-from onyx.agents.agent_search.dr.models import GeneratedImage
-from onyx.agents.agent_search.dr.models import IterationAnswer
-from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.file_store.utils import build_frontend_file_url
@@ -14,6 +11,7 @@ from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.models import GeneratedImage
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationResponse,
 )
@@ -97,32 +95,6 @@ def _image_generation_core(
             ]
             break
 
-    run_context.context.iteration_instructions.append(
-        IterationInstructions(
-            iteration_nr=index,
-            plan="Generating images",
-            purpose="Generating images",
-            reasoning="Generating images",
-        )
-    )
-    run_context.context.global_iteration_responses.append(
-        IterationAnswer(
-            tool=image_generation_tool_instance.name,
-            tool_id=image_generation_tool_instance.id,
-            iteration_nr=run_context.context.current_run_step,
-            parallelization_nr=0,
-            question=prompt,
-            answer="",
-            reasoning="",
-            claims=[],
-            generated_images=generated_images,
-            additional_data={},
-            response_type=None,
-            data=None,
-            file_ids=None,
-            cited_documents={},
-        )
-    )
     emitter.emit(
         Packet(
             ind=index,

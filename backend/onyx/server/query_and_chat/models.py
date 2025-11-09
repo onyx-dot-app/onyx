@@ -6,7 +6,6 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import model_validator
 
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import RetrievalDocs
 from onyx.configs.constants import DocumentSource
@@ -140,7 +139,6 @@ class CreateChatMessageRequest(ChunkContext):
 
     # If true, ignores most of the search options and uses pro search instead.
     # TODO: decide how many of the above options we want to pass through to pro search
-    # TODO: Deprecate this in favor of research_type
     use_agentic_search: bool = False
 
     skip_gen_ai_answer_generation: bool = False
@@ -256,7 +254,6 @@ class ChatMessageDetail(BaseModel):
     rephrased_query: str | None = None
     context_docs: RetrievalDocs | None = None
     message_type: MessageType
-    research_type: ResearchType | None = None
     time_sent: datetime
     overridden_model: str | None
     alternate_assistant_id: int | None = None
