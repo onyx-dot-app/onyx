@@ -491,6 +491,7 @@ export enum ValidSources {
   GoogleCloudStorage = "google_cloud_storage",
   Xenforo = "xenforo",
   OciStorage = "oci_storage",
+  S3Compatible = "s3_compatible",
   NotApplicable = "not_applicable",
   IngestionApi = "ingestion_api",
   Freshdesk = "freshdesk",

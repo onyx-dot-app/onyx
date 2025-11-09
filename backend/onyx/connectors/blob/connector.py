@@ -58,12 +58,16 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         bucket_type: str,
         bucket_name: str,
         prefix: str = "",
+        endpoint_url: str | None = None,
+        region: str = "us-east-1",
         batch_size: int = INDEX_BATCH_SIZE,
         european_residency: bool = False,
     ) -> None:
         self.bucket_type: BlobType = BlobType(bucket_type)
         self.bucket_name = bucket_name.strip()
         self.prefix = prefix if not prefix or prefix.endswith("/") else prefix + "/"
+        self.endpoint_url = endpoint_url
+        self.region = region
         self.batch_size = batch_size
         self.s3_client: Optional[S3Client] = None
         self._allow_images: bool | None = None
@@ -233,6 +237,32 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 region_name=credentials["region"],
             )
 
+        elif self.bucket_type == BlobType.S3_COMPATIBLE:
+            # Generic S3-compatible storage - user provides endpoint URL
+            if not self.endpoint_url:
+                raise ConnectorMissingCredentialError(
+                    "S3-Compatible Storage requires an endpoint URL"
+                )
+
+            if not all(
+                credentials.get(key) for key in ["access_key_id", "secret_access_key"]
+            ):
+                raise ConnectorMissingCredentialError("S3-Compatible Storage")
+
+            self.s3_client = boto3.client(
+                "s3",
+                endpoint_url=self.endpoint_url,
+                aws_access_key_id=credentials["access_key_id"],
+                aws_secret_access_key=credentials["secret_access_key"],
+                region_name=self.region,
+                config=Config(
+                    signature_version="s3v4",
+                    s3={
+                        "addressing_style": "path"
+                    },  # Required for S3-compatible services
+                ),
+            )
+
         else:
             raise ValueError(f"Unsupported bucket type: {self.bucket_type}")
 
@@ -317,6 +347,17 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             namespace = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
             region = self.s3_client.meta.region_name
             return f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{self.bucket_name}/o/{encoded_key}"
+
+        elif self.bucket_type == BlobType.S3_COMPATIBLE:
+            # Return direct object URL for S3-compatible storage
+            # This allows users to access objects directly if bucket/object permissions allow
+            # Format: {endpoint_url}/{bucket_name}/{key}
+
+            # Remove trailing slash from endpoint if present
+            endpoint_clean = self.endpoint_url.rstrip("/") if self.endpoint_url else ""
+
+            # Construct direct object URL
+            return f"{endpoint_clean}/{self.bucket_name}/{encoded_key}"
 
         else:
             # This should never happen!

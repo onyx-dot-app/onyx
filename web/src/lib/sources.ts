@@ -213,6 +213,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Storage,
     docs: "https://docs.onyx.app/admin/connectors/official/oci_storage",
   },
+  s3_compatible: {
+    icon: S3Icon,
+    displayName: "S3-Compatible Storage",
+    category: SourceCategory.Storage,
+    docs: "https://docs.onyx.app/admin/connectors/official/s3_compatible",
+  },
   r2: {
     icon: R2Icon,
     displayName: "R2",

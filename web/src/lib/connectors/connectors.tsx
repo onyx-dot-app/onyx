@@ -1233,6 +1233,58 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  s3_compatible: {
+    description: "Configure S3-Compatible Storage connector",
+    subtext:
+      "Connect to any S3-compatible storage service (MinIO, Wasabi, DigitalOcean Spaces, Backblaze B2, etc.)",
+    values: [
+      {
+        type: "text",
+        query: "Enter the endpoint URL:",
+        label: "Endpoint URL",
+        name: "endpoint_url",
+        optional: false,
+        description:
+          "Full endpoint URL including protocol, e.g., https://s3.us-west-1.wasabisys.com or https://minio.example.com:9000",
+      },
+      {
+        type: "text",
+        query: "Enter the bucket name:",
+        label: "Bucket Name",
+        name: "bucket_name",
+        optional: false,
+        description: "Name of the bucket to index",
+      },
+      {
+        type: "text",
+        query: "Enter the prefix:",
+        label: "Path Prefix",
+        name: "prefix",
+        optional: true,
+        description:
+          "Optional path prefix to limit indexing to a specific folder",
+      },
+      {
+        type: "text",
+        query: "Enter the region:",
+        label: "Region",
+        name: "region",
+        optional: true,
+        default: "us-east-1",
+        description: "S3 region, defaults to us-east-1 if not specified",
+      },
+      {
+        type: "text",
+        label: "Bucket Type",
+        name: "bucket_type",
+        optional: false,
+        default: "s3_compatible",
+        hidden: true,
+      },
+    ],
+    advanced_values: [],
+    overrideDefaultFreq: 60 * 60 * 24,
+  },
   wikipedia: {
     description: "Configure Wikipedia connector",
     values: [
