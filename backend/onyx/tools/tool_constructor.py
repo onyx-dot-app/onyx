@@ -18,9 +18,7 @@ from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.enums import OptionalSearchSetting
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import RerankingDetails
-from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import BaseFilters
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.kg_config import get_kg_config_settings
@@ -33,7 +31,6 @@ from onyx.db.models import User
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.natural_language_processing.utils import get_tokenizer
@@ -64,20 +61,8 @@ logger = setup_logger()
 
 
 class SearchToolConfig(BaseModel):
-    answer_style_config: AnswerStyleConfig = Field(
-        default_factory=lambda: AnswerStyleConfig(citation_config=CitationConfig())
-    )
-    document_pruning_config: DocumentPruningConfig = Field(
-        default_factory=DocumentPruningConfig
-    )
-    retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
-    rerank_settings: RerankingDetails | None = None
-    selected_sections: list[InferenceSection] | None = None
-    chunks_above: int = 0
-    chunks_below: int = 0
-    full_doc: bool = False
-    latest_query_files: list[InMemoryChatFile] | None = None
-    # Use with care, should only be used for OnyxBot in channels with multiple users
+    user_selected_filters: BaseFilters | None = None
+    project_id: int | None = None
     bypass_acl: bool = False
 
 
@@ -156,7 +141,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 # Note: this is not very clear / not the way things should generally be done. (+impure function)
 # TODO: refactor the tool config flow to be easier
 def _configure_document_pruning_for_tool_config(
-    tool_config: SearchToolConfig | WebSearchToolConfig,
+    tool_config: WebSearchToolConfig,
     tools: list[Tool],
     llm: LLM,
 ) -> None:
@@ -243,9 +228,9 @@ def construct_tools(
                     llm=llm,
                     fast_llm=fast_llm,
                     document_index=document_index,
-                    user_selected_filters=search_tool_config.retrieval_options.filters,
-                    project_id=None,  # TODO
-                    bypass_acl=False,
+                    user_selected_filters=search_tool_config.user_selected_filters,
+                    project_id=search_tool_config.project_id,
+                    bypass_acl=search_tool_config.bypass_acl,
                     slack_context=slack_context,
                 )
 
@@ -406,10 +391,6 @@ def construct_tools(
     tools: list[Tool] = []
     for tool_list in tool_dict.values():
         tools.extend(tool_list)
-
-    # factor in tool definition size when pruning
-    if search_tool_config:
-        _configure_document_pruning_for_tool_config(search_tool_config, tools, llm)
 
     if internet_search_tool_config:
         _configure_document_pruning_for_tool_config(

@@ -55,14 +55,12 @@ This will run the evaluation with the following default settings:
 
 The evaluation system uses test data stored in `evals/data/data.json`. This file contains a list of test cases, each with:
 - `input`: The question or prompt to test
-- `research_type`: DEEP or THOUGHTFUL
 
 Example test case:
 ```json
 {
-    "input": { 
-      "message": "What is the capital of France?",
-      "research_type": "THOUGHTFUL"
+    "input": {
+      "message": "What is the capital of France?"
     }
 }
 ```

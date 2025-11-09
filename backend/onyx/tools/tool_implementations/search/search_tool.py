@@ -4,7 +4,6 @@ from typing import Any
 from typing import cast
 from typing import TypeVar
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
@@ -12,7 +11,6 @@ from onyx.chat.chat_utils import llm_doc_from_inference_section
 from onyx.chat.models import LlmDoc
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkSearchRequest
-from onyx.context.search.models import InferenceSection
 from onyx.context.search.pipeline import merge_individual_chunks
 from onyx.context.search.pipeline import search_pipeline
 from onyx.db.connector import check_connectors_exist
@@ -21,10 +19,7 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import PreviousMessage
 from onyx.onyxbot.slack.models import SlackContext
-from onyx.secondary_llm_flows.choose_search import check_if_need_search
-from onyx.secondary_llm_flows.query_expansion import history_based_query_rephrase
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
@@ -32,25 +27,19 @@ from onyx.tools.tool_implementations.search.search_utils import llm_doc_to_dict
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
+from onyx.tools.tool_implementations.search_like_tool_utils import (
+    FINAL_SEARCH_QUERIES_ID,
+)
+from onyx.tools.tool_implementations.search_like_tool_utils import (
+    SEARCH_INFERENCE_SECTIONS_ID,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
-SEARCH_RESPONSE_SUMMARY_ID = "search_response_summary"
 SEARCH_EVALUATION_ID = "llm_doc_eval"
 QUERY_FIELD = "query"
-
-
-# class SearchResponseSummary(SearchQueryInfo):
-#     top_sections: list[InferenceSection]
-#     rephrased_query: str | None = None
-#     predicted_flow: QueryFlow | None
-
-
-class SearchResponseSummary(BaseModel):
-    final_query: str
-    top_sections: list[InferenceSection]
 
 
 SEARCH_TOOL_DESCRIPTION = """
@@ -163,44 +152,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             },
         }
 
-    def build_tool_message_content(
-        self, *args: ToolResponse
-    ) -> str | list[str | dict[str, Any]]:
-        final_context_docs_response = next(
-            response for response in args if response.id == FINAL_CONTEXT_DOCUMENTS_ID
-        )
-        final_context_docs = cast(list[LlmDoc], final_context_docs_response.response)
-
-        return json.dumps(
-            {
-                "search_results": [
-                    llm_doc_to_dict(doc, ind)
-                    for ind, doc in enumerate(final_context_docs)
-                ]
-            }
-        )
-
-    """For LLMs that don't support tool calling"""
-
-    def get_args_for_non_tool_calling_llm(
-        self,
-        query: str,
-        history: list[PreviousMessage],
-        llm: LLM,
-        force_run: bool = False,
-    ) -> dict[str, Any] | None:
-        if not force_run and not check_if_need_search(
-            query=query, history=history, llm=llm
-        ):
-            return None
-
-        rephrased_query = history_based_query_rephrase(
-            query=query, history=history, llm=llm
-        )
-        return {QUERY_FIELD: rephrased_query}
-
-    """Actual tool execution"""
-
     def run(
         self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
     ) -> Generator[ToolResponse, None, None]:
@@ -217,7 +168,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # TODO use the original query.
             override_kwargs.original_query
 
-            # TODO yield something here so the UI knows what the queries are ASAP so it can render it
+            # Yield the queries early so the UI can display them immediately
+            yield ToolResponse(
+                id=FINAL_SEARCH_QUERIES_ID,
+                response=["query"],
+            )
 
             # If needed, hybrid alpha, recency bias, etc. can be added here.
             top_chunks = search_pipeline(
@@ -236,13 +191,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             top_sections = merge_individual_chunks(top_chunks)
 
-            # TODO these are redundant, need to clean it up
+            # Yield the inference sections for consumers that need them
             yield ToolResponse(
-                id=SEARCH_RESPONSE_SUMMARY_ID,
-                response=SearchResponseSummary(
-                    final_query=query,
-                    top_sections=top_sections,
-                ),
+                id=SEARCH_INFERENCE_SECTIONS_ID,
+                response=top_sections,
             )
 
             llm_docs = [
@@ -266,6 +218,23 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # subfields that are not serializable by default (datetime)
         # this forces pydantic to make them JSON serializable for us
         return [json.loads(doc.model_dump_json()) for doc in final_docs]
+
+    def get_llm_tool_response(
+        self, *args: ToolResponse
+    ) -> str | list[str | dict[str, Any]]:
+        final_context_docs_response = next(
+            response for response in args if response.id == FINAL_CONTEXT_DOCUMENTS_ID
+        )
+        final_context_docs = cast(list[LlmDoc], final_context_docs_response.response)
+
+        return json.dumps(
+            {
+                "search_results": [
+                    llm_doc_to_dict(doc, ind)
+                    for ind, doc in enumerate(final_context_docs)
+                ]
+            }
+        )
 
 
 T = TypeVar("T")

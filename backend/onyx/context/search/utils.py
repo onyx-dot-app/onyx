@@ -165,3 +165,19 @@ def get_query_embeddings(queries: list[str], db_session: Session) -> list[Embedd
 @log_function_time(print_only=True, debug_only=True)
 def get_query_embedding(query: str, db_session: Session) -> Embedding:
     return get_query_embeddings([query], db_session)[0]
+
+
+def convert_inference_sections_to_search_docs(
+    inference_sections: list[InferenceSection],
+    is_internet: bool = False,
+) -> list[SavedSearchDoc]:
+    # Convert InferenceSections to SavedSearchDocs
+    search_docs = SearchDoc.from_chunks_or_sections(inference_sections)
+    for search_doc in search_docs:
+        search_doc.is_internet = is_internet
+
+    retrieved_saved_search_docs = [
+        SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
+        for search_doc in search_docs
+    ]
+    return retrieved_saved_search_docs

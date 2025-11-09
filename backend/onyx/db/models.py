@@ -41,11 +41,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy import PrimaryKeyConstraint
-from sqlalchemy import ForeignKeyConstraint
 
-from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
-    GeneratedImageFullResult,
-)
 from onyx.auth.schemas import UserRole
 from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
 from onyx.configs.constants import (
@@ -93,8 +89,6 @@ from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import RerankerProvider
-from onyx.agents.agent_search.dr.enums import ResearchType
-from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 
 logger = setup_logger()
 
@@ -444,17 +438,6 @@ class ChatMessage__SearchDoc(Base):
 
     chat_message_id: Mapped[int] = mapped_column(
         ForeignKey("chat_message.id"), primary_key=True
-    )
-    search_doc_id: Mapped[int] = mapped_column(
-        ForeignKey("search_doc.id"), primary_key=True
-    )
-
-
-class AgentSubQuery__SearchDoc(Base):
-    __tablename__ = "agent__sub_query__search_doc"
-
-    sub_query_id: Mapped[int] = mapped_column(
-        ForeignKey("agent__sub_query.id", ondelete="CASCADE"), primary_key=True
     )
     search_doc_id: Mapped[int] = mapped_column(
         ForeignKey("search_doc.id"), primary_key=True
@@ -2058,42 +2041,6 @@ class SearchDoc(Base):
     is_relevant: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     relevance_explanation: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    chat_messages = relationship(
-        "ChatMessage",
-        secondary=ChatMessage__SearchDoc.__table__,
-        back_populates="search_docs",
-    )
-    sub_queries = relationship(
-        "AgentSubQuery",
-        secondary=AgentSubQuery__SearchDoc.__table__,
-        back_populates="search_docs",
-    )
-
-
-class ToolCall(Base):
-    """Represents a single tool call"""
-
-    __tablename__ = "tool_call"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    # not a FK because we want to be able to delete the tool without deleting
-    # this entry
-    tool_id: Mapped[int] = mapped_column(Integer())
-    tool_name: Mapped[str] = mapped_column(String())
-    tool_arguments: Mapped[dict[str, JSON_ro]] = mapped_column(postgresql.JSONB())
-    tool_result: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
-
-    message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id"), nullable=False
-    )
-
-    # Update the relationship
-    message: Mapped["ChatMessage"] = relationship(
-        "ChatMessage",
-        back_populates="tool_call",
-        uselist=False,
-    )
-
 
 class ChatSession(Base):
     __tablename__ = "chat_session"
@@ -2175,39 +2122,42 @@ class ChatMessage(Base):
     __tablename__ = "chat_message"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Where is this message located
     chat_session_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("chat_session.id")
     )
 
-    alternate_assistant_id = mapped_column(
-        Integer, ForeignKey("persona.id"), nullable=True
+    # Parent message pointer for the tree structure, nullable because the first message is
+    # an empty root node to allow edits on the first message of a session.
+    parent_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id"), nullable=True
+    )
+    # This only maps to the latest because only that message chain is needed.
+    # It can be updated as needed to trace other branches.
+    latest_child_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id"), nullable=True
     )
 
-    overridden_model: Mapped[str | None] = mapped_column(String, nullable=True)
-    parent_message: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    latest_child_message: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # What does this message contain
+    reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     message: Mapped[str] = mapped_column(Text)
-    rephrased_query: Mapped[str] = mapped_column(Text, nullable=True)
     token_count: Mapped[int] = mapped_column(Integer)
     message_type: Mapped[MessageType] = mapped_column(
         Enum(MessageType, native_enum=False)
     )
-    # Maps the citation numbers to a SearchDoc id
-    citations: Mapped[dict[int, int]] = mapped_column(postgresql.JSONB(), nullable=True)
-    # files associated with this message (e.g. images uploaded by the user that the
-    # user is asking a question of)
+    # Files attached to the message, when parsed into history, it becomes a separate message
     files: Mapped[list[FileDescriptor] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
-    # Only applies for LLM
+
+    # Metadata
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     time_sent: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 
-    is_agentic: Mapped[bool] = mapped_column(Boolean, default=False)
-    refined_answer_improvement: Mapped[bool] = mapped_column(Boolean, nullable=True)
-
+    # Relationships
     chat_session: Mapped[ChatSession] = relationship("ChatSession")
 
     chat_message_feedbacks: Mapped[list["ChatMessageFeedback"]] = relationship(
@@ -2219,6 +2169,8 @@ class ChatMessage(Base):
         "DocumentRetrievalFeedback",
         back_populates="chat_message",
     )
+
+    # Even though search docs come from tool calls, the answer has a final set of saved search docs that we will show
     search_docs: Mapped[list["SearchDoc"]] = relationship(
         "SearchDoc",
         secondary=ChatMessage__SearchDoc.__table__,
@@ -2227,22 +2179,23 @@ class ChatMessage(Base):
         single_parent=True,
     )
 
-    tool_call: Mapped["ToolCall"] = relationship(
+    parent_message: Mapped["ChatMessage | None"] = relationship(
+        "ChatMessage",
+        foreign_keys=[parent_message_id],
+        remote_side="ChatMessage.id",
+    )
+
+    latest_child_message: Mapped["ChatMessage | None"] = relationship(
+        "ChatMessage",
+        foreign_keys=[latest_child_message_id],
+        remote_side="ChatMessage.id",
+    )
+
+    # Chat messages only need to know their immediate tool call children
+    # If there are nested tool calls, they are stored in the tool_call_children relationship.
+    tool_calls: Mapped[list["ToolCall"] | None] = relationship(
         "ToolCall",
-        back_populates="message",
-        uselist=False,
-    )
-
-    sub_questions: Mapped[list["AgentSubQuestion"]] = relationship(
-        "AgentSubQuestion",
-        back_populates="primary_message",
-        order_by="(AgentSubQuestion.level, AgentSubQuestion.level_question_num)",
-    )
-
-    research_iterations: Mapped[list["ResearchAgentIteration"]] = relationship(
-        "ResearchAgentIteration",
-        foreign_keys="ResearchAgentIteration.primary_question_id",
-        cascade="all, delete-orphan",
+        back_populates="chat_message",
     )
 
     standard_answers: Mapped[list["StandardAnswer"]] = relationship(
@@ -2251,79 +2204,69 @@ class ChatMessage(Base):
         back_populates="chat_messages",
     )
 
-    research_type: Mapped[ResearchType] = mapped_column(
-        Enum(ResearchType, native_enum=False), nullable=True
-    )
-    research_plan: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
-    research_answer_purpose: Mapped[ResearchAnswerPurpose] = mapped_column(
-        Enum(ResearchAnswerPurpose, native_enum=False), nullable=True
-    )
 
+class ToolCall(Base):
+    """Represents a Tool Call and Tool Response"""
 
-class AgentSubQuestion(Base):
-    """
-    A sub-question is a question that is asked of the LLM to gather supporting
-    information to answer a primary question.
-    """
-
-    __tablename__ = "agent__sub_question"
+    __tablename__ = "tool_call"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    primary_question_id: Mapped[int] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="CASCADE")
-    )
+
     chat_session_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("chat_session.id")
     )
-    sub_question: Mapped[str] = mapped_column(Text)
-    level: Mapped[int] = mapped_column(Integer)
-    level_question_num: Mapped[int] = mapped_column(Integer)
-    time_created: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+
+    # If this is not None, it's a top level tool call from the user message
+    # If this is None, it's a lower level call from another tool/agent
+    parent_chat_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id"), nullable=True
     )
-    sub_answer: Mapped[str] = mapped_column(Text)
-    sub_question_doc_results: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
+    # If this is not None, this tool call is a child of another tool call
+    parent_tool_call_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tool_call.id"), nullable=True
+    )
+    # The tools with the same turn number (and parent) were called in parallel
+    # Ones with different turn numbers (and same parent) were called sequentially
+    turn_number: Mapped[int] = mapped_column(Integer)
+    # The depth of the tool call in the tree structure
+    # 0 for top level tool calls (like web search or calling the Research Agent in Deep Research)
+    # 1 for tool calls from other tool calls (like the search tool calls from the Research Agent)
+    depth: Mapped[int] = mapped_column(Integer)
+
+    # Not a FK because we want to be able to delete the tool without deleting
+    # this entry
+    tool_id: Mapped[int] = mapped_column(Integer())
+    # This is needed because LLMs expect the tool call and the response to have matching IDs
+    # This is better than just regenerating one randomly
+    tool_call_id: Mapped[int] = mapped_column(Integer())
+    # Preceeding reasoning tokens for this tool call, not included in the history
+    reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # For "Agents" like the Research Agent for Deep Research -
+    # the argument and final report are stored as the argument and response.
+    tool_call_arguments: Mapped[dict[str, JSON_ro]] = mapped_column(postgresql.JSONB())
+    tool_call_response: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
+    # This just counts the number of tokens in the arg because it's all that's kept for the history
+    # Only the top level tools (the ones with a parent_chat_message_id) have token counts that are counted
+    # towards the session total.
+    tool_call_tokens: Mapped[int] = mapped_column(Integer())
 
     # Relationships
-    primary_message: Mapped["ChatMessage"] = relationship(
+    chat_session: Mapped[ChatSession] = relationship("ChatSession")
+
+    chat_message: Mapped["ChatMessage | None"] = relationship(
         "ChatMessage",
-        foreign_keys=[primary_question_id],
-        back_populates="sub_questions",
+        foreign_keys=[parent_chat_message_id],
+        back_populates="tool_calls",
     )
-    chat_session: Mapped["ChatSession"] = relationship("ChatSession")
-    sub_queries: Mapped[list["AgentSubQuery"]] = relationship(
-        "AgentSubQuery", back_populates="parent_question"
+    parent_tool_call: Mapped["ToolCall | None"] = relationship(
+        "ToolCall",
+        foreign_keys=[parent_tool_call_id],
+        remote_side="ToolCall.id",
     )
-
-
-class AgentSubQuery(Base):
-    """
-    A sub-query is a vector DB query that gathers supporting information to answer a sub-question.
-    """
-
-    __tablename__ = "agent__sub_query"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    parent_question_id: Mapped[int] = mapped_column(
-        ForeignKey("agent__sub_question.id", ondelete="CASCADE")
-    )
-    chat_session_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("chat_session.id")
-    )
-    sub_query: Mapped[str] = mapped_column(Text)
-    time_created: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-
-    # Relationships
-    parent_question: Mapped["AgentSubQuestion"] = relationship(
-        "AgentSubQuestion", back_populates="sub_queries"
-    )
-    chat_session: Mapped["ChatSession"] = relationship("ChatSession")
-    search_docs: Mapped[list["SearchDoc"]] = relationship(
-        "SearchDoc",
-        secondary=AgentSubQuery__SearchDoc.__table__,
-        back_populates="sub_queries",
+    tool_call_children: Mapped[list["ToolCall"]] = relationship(
+        "ToolCall",
+        foreign_keys=[parent_tool_call_id],
+        back_populates="parent_tool_call",
     )
 
 
@@ -3547,102 +3490,6 @@ class TenantAnonymousUserPath(Base):
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
     anonymous_user_path: Mapped[str] = mapped_column(
         String, nullable=False, unique=True
-    )
-
-
-class ResearchAgentIteration(Base):
-    __tablename__ = "research_agent_iteration"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    primary_question_id: Mapped[int] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="CASCADE")
-    )
-    iteration_nr: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    purpose: Mapped[str] = mapped_column(String, nullable=True)
-
-    reasoning: Mapped[str] = mapped_column(String, nullable=True)
-
-    # Relationships
-    primary_message: Mapped["ChatMessage"] = relationship(
-        "ChatMessage",
-        foreign_keys=[primary_question_id],
-        back_populates="research_iterations",
-    )
-
-    sub_steps: Mapped[list["ResearchAgentIterationSubStep"]] = relationship(
-        "ResearchAgentIterationSubStep",
-        primaryjoin=(
-            "and_("
-            "ResearchAgentIteration.primary_question_id == ResearchAgentIterationSubStep.primary_question_id, "
-            "ResearchAgentIteration.iteration_nr == ResearchAgentIterationSubStep.iteration_nr"
-            ")"
-        ),
-        foreign_keys="[ResearchAgentIterationSubStep.primary_question_id, ResearchAgentIterationSubStep.iteration_nr]",
-        cascade="all, delete-orphan",
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "primary_question_id",
-            "iteration_nr",
-            name="_research_agent_iteration_unique_constraint",
-        ),
-    )
-
-
-class ResearchAgentIterationSubStep(Base):
-    __tablename__ = "research_agent_iteration_sub_step"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    primary_question_id: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    iteration_nr: Mapped[int] = mapped_column(Integer, nullable=False)
-    iteration_sub_step_nr: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    sub_step_instructions: Mapped[str | None] = mapped_column(String, nullable=True)
-    sub_step_tool_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tool.id", ondelete="SET NULL"), nullable=True
-    )
-
-    # for all step-types
-    reasoning: Mapped[str | None] = mapped_column(String, nullable=True)
-    sub_answer: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    # for search-based step-types
-    cited_doc_results: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
-    claims: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
-    is_web_fetch: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    queries: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
-
-    # for image generation step-types
-    generated_images: Mapped[GeneratedImageFullResult | None] = mapped_column(
-        PydanticType(GeneratedImageFullResult), nullable=True
-    )
-
-    # for custom step-types
-    additional_data: Mapped[JSON_ro | None] = mapped_column(
-        postgresql.JSONB(), nullable=True
-    )
-
-    # Relationships
-    # Note: ChatMessage is accessible via primary_question_id. It is tied to the
-    # primary_question_id in research_agent_iteration, which has a foreign key constraint
-    # to ChatMessage.id.
-
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["primary_question_id", "iteration_nr"],
-            [
-                "research_agent_iteration.primary_question_id",
-                "research_agent_iteration.iteration_nr",
-            ],
-            ondelete="CASCADE",
-        ),
     )
 
 

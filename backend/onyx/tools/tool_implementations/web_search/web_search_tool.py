@@ -6,8 +6,6 @@ from typing_extensions import override
 
 from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.configs.chat_configs import SERPER_API_KEY
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import PreviousMessage
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
@@ -70,16 +68,7 @@ class WebSearchTool(Tool[None]):
             },
         }
 
-    def get_args_for_non_tool_calling_llm(
-        self,
-        query: str,
-        history: list[PreviousMessage],
-        llm: LLM,
-        force_run: bool = False,
-    ) -> dict[str, Any] | None:
-        raise ValueError(_GENERIC_ERROR_MESSAGE)
-
-    def build_tool_message_content(
+    def get_llm_tool_response(
         self, *args: ToolResponse
     ) -> str | list[str | dict[str, Any]]:
         raise ValueError(_GENERIC_ERROR_MESSAGE)

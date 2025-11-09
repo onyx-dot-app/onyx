@@ -5,10 +5,10 @@ from typing import Any
 
 from onyx.access.models import DocumentAccess
 from onyx.access.models import ExternalAccess
-from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import QueryExpansionType
 from onyx.db.enums import EmbeddingPrecision
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding

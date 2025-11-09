@@ -15,7 +15,7 @@ from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_sdk.message_format import base_messages_to_agent_sdk_msgs
-from onyx.chat.answer import Answer
+from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
 from onyx.chat.chat_utils import process_kg_commands
@@ -51,18 +51,12 @@ from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
 from onyx.context.search.enums import OptionalSearchSetting
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.retrieval.search_runner import (
-    inference_sections_from_ids,
-)
 from onyx.db.chat import attach_files_to_chat_message
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_message
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_db_search_doc_by_id
-from onyx.db.chat import get_doc_query_identifiers_from_model
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -75,7 +69,6 @@ from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
-from onyx.db.projects import get_project_instructions
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
@@ -89,7 +82,6 @@ from onyx.kg.models import KGException
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llm_model_and_settings_for_persona
 from onyx.llm.factory import get_llms_for_persona
-from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import litellm_exception_to_error_msg
@@ -356,7 +348,6 @@ def stream_chat_message_objects(
     new_msg_req.chunks_below = 0
 
     llm: LLM
-    answer: Answer
 
     try:
         # Move these variables inside the try block
@@ -374,6 +365,7 @@ def stream_chat_message_objects(
         reference_doc_ids = new_msg_req.search_doc_ids
         retrieval_options = new_msg_req.retrieval_options
         new_msg_req.alternate_assistant_id
+        user_selected_filters = retrieval_options.filters if retrieval_options else None
 
         # permanent "log" store, used primarily for debugging
         long_term_logger = LongTermLogger(
@@ -443,7 +435,7 @@ def stream_chat_message_objects(
         )
 
         search_settings = get_current_search_settings(db_session)
-        document_index = get_default_document_index(search_settings, None)
+        get_default_document_index(search_settings, None)
 
         # Every chat Session begins with an empty root message
         root_message = get_or_create_root_message(
@@ -587,23 +579,7 @@ def stream_chat_message_objects(
         )
 
         selected_db_search_docs = None
-        selected_sections: list[InferenceSection] | None = None
         if reference_doc_ids:
-            identifier_tuples = get_doc_query_identifiers_from_model(
-                search_doc_ids=reference_doc_ids,
-                chat_session=chat_session,
-                user_id=user_id,
-                db_session=db_session,
-                enforce_chat_session_id_for_search_docs=enforce_chat_session_id_for_search_docs,
-            )
-
-            # Generates full documents currently
-            # May extend to use sections instead in the future
-            selected_sections = inference_sections_from_ids(
-                doc_identifiers=identifier_tuples,
-                document_index=document_index,
-            )
-
             # Add a maximum context size in the case of user-selected docs to prevent
             # slight inaccuracies in context window size pruning from causing
             # the entire query to fail
@@ -673,14 +649,15 @@ def stream_chat_message_objects(
         else:
             prompt_config = PromptConfig.from_model(persona, db_session=db_session)
 
-        # Retrieve project-specific instructions if this chat session is associated with a project.
-        project_instructions: str | None = (
-            get_project_instructions(
-                db_session=db_session, project_id=chat_session.project_id
-            )
-            if persona.is_default_persona
-            else None
-        )  # if the persona is not default, we don't want to use the project instructions
+        # TODO need to add back in
+        # # Retrieve project-specific instructions if this chat session is associated with a project.
+        # project_instructions: str | None = (
+        #     get_project_instructions(
+        #         db_session=db_session, project_id=chat_session.project_id
+        #     )
+        #     if persona.is_default_persona
+        #     else None
+        # )  # if the persona is not default, we don't want to use the project instructions
 
         answer_style_config = AnswerStyleConfig(
             citation_config=CitationConfig(
@@ -711,15 +688,8 @@ def stream_chat_message_objects(
                 )
             ),
             search_tool_config=SearchToolConfig(
-                answer_style_config=answer_style_config,
-                document_pruning_config=document_pruning_config,
-                retrieval_options=retrieval_options or RetrievalDetails(),
-                rerank_settings=new_msg_req.rerank_settings,
-                selected_sections=selected_sections,
-                chunks_above=new_msg_req.chunks_above,
-                chunks_below=new_msg_req.chunks_below,
-                full_doc=new_msg_req.full_doc,
-                latest_query_files=latest_query_files,
+                user_selected_filters=user_selected_filters,
+                project_id=chat_session.project_id,
                 bypass_acl=bypass_acl,
             ),
             internet_search_tool_config=WebSearchToolConfig(
@@ -740,9 +710,10 @@ def stream_chat_message_objects(
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
 
-        force_use_tool = _get_force_search_settings(
-            new_msg_req, tools, search_tool_override_kwargs_for_user_files
-        )
+        # TODO need to add back in
+        # force_use_tool = _get_force_search_settings(
+        #     new_msg_req, tools, search_tool_override_kwargs_for_user_files
+        # )
 
         # TODO: unify message history with single message history
         message_history = [
@@ -794,61 +765,30 @@ def stream_chat_message_objects(
             # Store for downstream streaming to wire citations and final_documents
             prompt_builder.context_llm_docs = project_llm_docs
 
-        # LLM prompt building, response capturing, etc.
-        answer = Answer(
-            prompt_builder=prompt_builder,
-            is_connected=is_connected,
-            latest_query_files=latest_query_files,
-            answer_style_config=answer_style_config,
-            llm=(
-                llm
-                or get_main_llm_from_tuple(
-                    get_llms_for_persona(
-                        persona=persona,
-                        llm_override=(
-                            new_msg_req.llm_override or chat_session.llm_override
-                        ),
-                        additional_headers=litellm_additional_headers,
-                    )
-                )
-            ),
-            fast_llm=fast_llm,
-            force_use_tool=force_use_tool,
+        llm_model, model_settings = get_llm_model_and_settings_for_persona(
             persona=persona,
-            rerank_settings=new_msg_req.rerank_settings,
-            chat_session_id=chat_session_id,
-            current_agent_message_id=reserved_message_id,
-            tools=tools,
-            db_session=db_session,
-            use_agentic_search=new_msg_req.use_agentic_search,
-            skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
-            project_instructions=project_instructions,
+            llm_override=(new_msg_req.llm_override or chat_session.llm_override),
+            additional_headers=litellm_additional_headers,
+            timeout=None,  # Will use default timeout logic
         )
-        if not simple_agent_framework_disabled:
-            llm_model, model_settings = get_llm_model_and_settings_for_persona(
-                persona=persona,
-                llm_override=(new_msg_req.llm_override or chat_session.llm_override),
-                additional_headers=litellm_additional_headers,
-                timeout=None,  # Will use default timeout logic
-            )
-            yield from _fast_message_stream(
-                answer,
-                tools,
-                db_session,
-                get_redis_client(),
-                chat_session_id,
-                reserved_message_id,
-                prompt_config,
-                llm_model,
-                model_settings,
-                user,
-            )
-        else:
-            from onyx.chat.packet_proccessing import process_streamed_packets
 
-            yield from process_streamed_packets.process_streamed_packets(
-                answer_processed_output=answer.processed_streamed_output,
-            )
+        is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
+        messages_in_agent_sdk_format = base_messages_to_agent_sdk_msgs(
+            prompt_builder.build(), is_responses_api=is_responses_api
+        )
+
+        yield from _fast_message_stream(
+            messages_in_agent_sdk_format,
+            tools,
+            db_session,
+            get_redis_client(),
+            chat_session_id,
+            reserved_message_id,
+            prompt_config,
+            llm_model,
+            model_settings,
+            user,
+        )
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")
@@ -887,7 +827,7 @@ def stream_chat_message_objects(
 
 # TODO: Refactor this to live somewhere else
 def _fast_message_stream(
-    answer: Answer,
+    messages: list[AgentSDKMessage],
     tools: list[Tool],
     db_session: Session,
     redis_client: Redis,
@@ -895,14 +835,10 @@ def _fast_message_stream(
     reserved_message_id: int,
     prompt_config: PromptConfig,
     llm_model: Model,
+    llm: LLM,  # TODO remove this duplication nonsense
     model_settings: ModelSettings,
     user_or_none: User | None,
 ) -> Generator[Packet, None, None]:
-    # TODO: clean up this jank
-    is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
-    messages = base_messages_to_agent_sdk_msgs(
-        answer.graph_inputs.prompt_builder.build(), is_responses_api=is_responses_api
-    )
     emitter = get_default_emitter()
     return fast_chat_turn.fast_chat_turn(
         messages=messages,
@@ -910,7 +846,7 @@ def _fast_message_stream(
         dependencies=ChatTurnDependencies(
             llm_model=llm_model,
             model_settings=model_settings,
-            llm=answer.graph_tooling.primary_llm,
+            llm=llm,
             tools=tools,
             db_session=db_session,
             redis_client=redis_client,
@@ -920,9 +856,8 @@ def _fast_message_stream(
         ),
         chat_session_id=chat_session_id,
         message_id=reserved_message_id,
-        research_type=answer.graph_config.behavior.research_type,
         prompt_config=prompt_config,
-        force_use_tool=answer.graph_tooling.force_use_tool,
+        force_use_tool=None,
     )
 
 

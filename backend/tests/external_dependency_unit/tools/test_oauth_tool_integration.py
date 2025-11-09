@@ -16,13 +16,9 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import CitationConfig
-from onyx.chat.models import DocumentPruningConfig
 from onyx.chat.models import PromptConfig
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.enums import RecencyBiasSetting
-from onyx.context.search.models import RetrievalDetails
 from onyx.db.models import OAuthAccount
 from onyx.db.models import OAuthConfig
 from onyx.db.models import Persona
@@ -194,13 +190,7 @@ class TestOAuthToolIntegrationPriority:
             reminder="Test",
             datetime_aware=False,
         )
-        search_tool_config = SearchToolConfig(
-            answer_style_config=AnswerStyleConfig(
-                citation_config=CitationConfig(all_docs_useful=False)
-            ),
-            document_pruning_config=DocumentPruningConfig(),
-            retrieval_options=RetrievalDetails(),
-        )
+        search_tool_config = SearchToolConfig()
 
         tool_dict = construct_tools(
             persona=persona,

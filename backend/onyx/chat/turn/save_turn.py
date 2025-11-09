@@ -2,26 +2,20 @@
 # modular so easily testable in unit tests and evals [likely injecting some higher
 # level session manager and span sink], potentially has some robustness off the critical path,
 # and promotes clean separation of concerns.
+import json
 import re
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
-from onyx.agents.agent_search.dr.enums import ResearchType
-from onyx.agents.agent_search.dr.models import IterationAnswer
-from onyx.agents.agent_search.dr.models import IterationInstructions
-from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
-    GeneratedImageFullResult,
-)
-from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
+from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.chat.turn.models import FetchedDocumentCacheEntry
 from onyx.configs.constants import DocumentSource
 from onyx.db.chat import create_search_doc_from_inference_section
 from onyx.db.chat import update_db_session_with_messages
 from onyx.db.models import ChatMessage__SearchDoc
-from onyx.db.models import ResearchAgentIteration
-from onyx.db.models import ResearchAgentIterationSubStep
+from onyx.db.models import Tool
+from onyx.db.models import ToolCall
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
@@ -32,16 +26,19 @@ def save_turn(
     db_session: Session,
     message_id: int,
     chat_session_id: UUID,
-    research_type: ResearchType,
     final_answer: str,
     fetched_documents_cache: dict[str, FetchedDocumentCacheEntry],
-    iteration_instructions: list[IterationInstructions],
-    global_iteration_responses: list[IterationAnswer],
-    # TODO: figure out better way to pass these dependencies
+    agent_turn_messages: list[AgentSDKMessage],
     model_name: str,
     model_provider: str,
 ) -> None:
-    # Create search docs from inference sections and build mapping
+    """
+    Save the complete chat turn including:
+    - Update assistant ChatMessage with final answer
+    - Create ToolCall entries for all tool invocations
+    - Link SearchDocs to the assistant message
+    """
+    # 1. Create search docs from inference sections and build mapping
     citation_number_to_search_doc_id: dict[int, int] = {}
     search_docs = []
     for cache_entry in fetched_documents_cache.values():
@@ -57,79 +54,38 @@ def save_turn(
             search_doc.id
         )
 
-    # Map search_docs to message
+    # 2. Link search docs to message
     _insert_chat_message_search_doc_pair(
         message_id, [doc.id for doc in search_docs], db_session
     )
 
-    # Build citations dict using cited doc numbers from the final answer
-    cited_doc_nrs = _extract_citation_numbers(final_answer)
-    citation_dict: dict[int, int] = {
-        cited_doc_nr: citation_number_to_search_doc_id[cited_doc_nr]
-        for cited_doc_nr in cited_doc_nrs
-        if cited_doc_nr in citation_number_to_search_doc_id
-    }
+    # 3. Calculate token count for final answer
     llm_tokenizer = get_tokenizer(
         model_name=model_name,
         provider_type=model_provider,
     )
     num_tokens = len(llm_tokenizer.encode(final_answer or ""))
-    # Update the chat message and its parent message in database
+
+    # 4. Update the assistant ChatMessage with final answer
     update_db_session_with_messages(
         db_session=db_session,
         chat_message_id=message_id,
         chat_session_id=chat_session_id,
-        is_agentic=research_type == ResearchType.DEEP,
         message=final_answer,
-        citations=citation_dict,
-        research_type=research_type,
-        research_plan={},
-        final_documents=search_docs,
-        update_parent_message=True,
-        research_answer_purpose=ResearchAnswerPurpose.ANSWER,
         token_count=num_tokens,
+        update_parent_message=True,
+        commit=False,
     )
 
-    # TODO: I don't think this is the ideal schema for all use cases
-    # find a better schema to store tool and reasoning calls
-    for iteration_preparation in iteration_instructions:
-        research_agent_iteration_step = ResearchAgentIteration(
-            primary_question_id=message_id,
-            reasoning=iteration_preparation.reasoning,
-            purpose=iteration_preparation.purpose,
-            iteration_nr=iteration_preparation.iteration_nr,
-        )
-        db_session.add(research_agent_iteration_step)
-
-    for iteration_answer in global_iteration_responses:
-
-        retrieved_search_docs = convert_inference_sections_to_search_docs(
-            list(iteration_answer.cited_documents.values())
-        )
-
-        # Convert SavedSearchDoc objects to JSON-serializable format
-        serialized_search_docs = [doc.model_dump() for doc in retrieved_search_docs]
-
-        research_agent_iteration_sub_step = ResearchAgentIterationSubStep(
-            primary_question_id=message_id,
-            iteration_nr=iteration_answer.iteration_nr,
-            iteration_sub_step_nr=iteration_answer.parallelization_nr,
-            sub_step_instructions=iteration_answer.question,
-            sub_step_tool_id=iteration_answer.tool_id,
-            sub_answer=iteration_answer.answer,
-            reasoning=iteration_answer.reasoning,
-            claims=iteration_answer.claims,
-            cited_doc_results=serialized_search_docs,
-            generated_images=(
-                GeneratedImageFullResult(images=iteration_answer.generated_images)
-                if iteration_answer.generated_images
-                else None
-            ),
-            additional_data=iteration_answer.additional_data,
-            is_web_fetch=iteration_answer.is_web_fetch,
-            queries=iteration_answer.queries,
-        )
-        db_session.add(research_agent_iteration_sub_step)
+    # 5. Parse agent_turn_messages to create ToolCall entries
+    _save_tool_calls_from_messages(
+        db_session=db_session,
+        chat_session_id=chat_session_id,
+        parent_chat_message_id=message_id,
+        agent_turn_messages=agent_turn_messages,
+        model_name=model_name,
+        model_provider=model_provider,
+    )
 
     db_session.commit()
 
@@ -168,6 +124,91 @@ def _extract_citation_numbers(text: str) -> list[int]:
         cited_numbers.extend(numbers)
 
     return list(set(cited_numbers))  # Return unique numbers
+
+
+def _save_tool_calls_from_messages(
+    db_session: Session,
+    chat_session_id: UUID,
+    parent_chat_message_id: int,
+    agent_turn_messages: list[AgentSDKMessage],
+    model_name: str,
+    model_provider: str,
+) -> None:
+    """
+    Parse agent_turn_messages to extract tool calls and responses,
+    then create ToolCall DB entries.
+
+    Matches FunctionCallMessage with FunctionCallOutputMessage by call_id
+    and creates a ToolCall database entry for each matched pair.
+    """
+    # Build a mapping of call_id -> (call_msg, output_msg)
+    tool_call_map: dict[str, dict] = {}
+
+    for msg in agent_turn_messages:
+        msg_type = msg.get("type")
+
+        if msg_type == "function_call":
+            call_id = msg["call_id"]
+            if call_id not in tool_call_map:
+                tool_call_map[call_id] = {}
+            tool_call_map[call_id]["call"] = msg
+
+        elif msg_type == "function_call_output":
+            call_id = msg["call_id"]
+            if call_id not in tool_call_map:
+                tool_call_map[call_id] = {}
+            tool_call_map[call_id]["output"] = msg
+
+    # Create ToolCall entries
+    llm_tokenizer = get_tokenizer(
+        model_name=model_name,
+        provider_type=model_provider,
+    )
+    turn_number = 0
+
+    for call_id, call_data in tool_call_map.items():
+        # Skip incomplete tool calls (missing either call or output)
+        if "call" not in call_data or "output" not in call_data:
+            continue
+
+        call_msg = call_data["call"]
+        output_msg = call_data["output"]
+
+        # Parse arguments and response
+        try:
+            tool_arguments = json.loads(call_msg["arguments"])
+        except json.JSONDecodeError:
+            tool_arguments = {"raw": call_msg["arguments"]}
+
+        try:
+            tool_response = json.loads(output_msg["output"])
+        except json.JSONDecodeError:
+            tool_response = {"raw": output_msg["output"]}
+
+        # Look up tool_id by name
+        tool_name = call_msg["name"]
+        tool = db_session.query(Tool).filter(Tool.name == tool_name).first()
+        tool_id = tool.id if tool else 0
+
+        # Calculate token count for the arguments
+        token_count = len(llm_tokenizer.encode(call_msg["arguments"]))
+
+        # Create ToolCall entry
+        tool_call = ToolCall(
+            chat_session_id=chat_session_id,
+            parent_chat_message_id=parent_chat_message_id,
+            parent_tool_call_id=None,  # Top-level tool call
+            turn_number=turn_number,
+            depth=0,  # Top-level depth
+            tool_id=tool_id,
+            tool_call_id=call_id,
+            tool_call_arguments=tool_arguments,
+            tool_call_response=tool_response,
+            tool_call_tokens=token_count,
+        )
+
+        db_session.add(tool_call)
+        turn_number += 1
 
 
 def extract_final_answer_from_packets(packet_history: list[Packet]) -> str:
