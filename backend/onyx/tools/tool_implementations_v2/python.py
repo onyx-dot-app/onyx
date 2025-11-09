@@ -1,4 +1,5 @@
-import base64
+import mimetypes
+from io import BytesIO
 
 from agents import function_tool
 from agents import RunContextWrapper
@@ -7,12 +8,16 @@ from pydantic import TypeAdapter
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.chat.turn.models import ChatTurnContext
+from onyx.configs.app_configs import CODE_INTERPRETER_DEFAULT_TIMEOUT_MS
+from onyx.configs.app_configs import CODE_INTERPRETER_MAX_OUTPUT_LENGTH
+from onyx.configs.constants import FileOrigin
+from onyx.db.tools import get_tool_by_name
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import get_default_file_store
-from onyx.file_store.utils import save_files
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PythonToolDelta
 from onyx.server.query_and_chat.streaming_models import PythonToolStart
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations_v2.code_interpreter_client import (
     CodeInterpreterClient,
 )
@@ -34,9 +39,6 @@ def _python_execution_core(
     client: CodeInterpreterClient,
 ) -> LlmPythonExecutionResult:
     """Core Python execution logic"""
-    from onyx.configs.app_configs import CODE_INTERPRETER_DEFAULT_TIMEOUT_MS
-    from onyx.configs.app_configs import CODE_INTERPRETER_MAX_OUTPUT_LENGTH
-
     index = run_context.context.current_run_step
     emitter = run_context.context.run_dependencies.emitter
 
@@ -120,23 +122,29 @@ def _python_execution_core(
                     # Download file from Code Interpreter
                     file_content = client.download_file(workspace_file.file_id)
 
-                    # Save to Onyx file store
-                    saved_file_ids = save_files(
-                        urls=[], base64_files=[base64.b64encode(file_content).decode()]
+                    # Determine MIME type from file extension
+                    filename = workspace_file.path.split("/")[-1]
+                    mime_type, _ = mimetypes.guess_type(filename)
+                    if not mime_type:
+                        # Default to binary if we can't determine the type
+                        mime_type = "application/octet-stream"
+
+                    # Save to Onyx file store directly
+                    onyx_file_id = file_store.save_file(
+                        content=BytesIO(file_content),
+                        display_name=filename,
+                        file_origin=FileOrigin.CHAT_UPLOAD,
+                        file_type=mime_type,
                     )
 
-                    if saved_file_ids:
-                        onyx_file_id = saved_file_ids[0]
-                        filename = workspace_file.path.split("/")[-1]
-
-                        generated_files.append(
-                            PythonExecutionFile(
-                                file_id=onyx_file_id,
-                                filename=filename,
-                                path=workspace_file.path,
-                                url=build_frontend_file_url(onyx_file_id),
-                            )
+                    generated_files.append(
+                        PythonExecutionFile(
+                            file_id=onyx_file_id,
+                            filename=filename,
+                            path=workspace_file.path,
+                            url=build_frontend_file_url(onyx_file_id),
                         )
+                    )
 
                     # Mark for cleanup
                     file_ids_to_cleanup.append(workspace_file.file_id)
@@ -189,9 +197,6 @@ def _python_execution_core(
         )
 
         # Get tool ID from database
-        from onyx.db.tools import get_tool_by_name
-        from onyx.tools.tool_implementations.python.python_tool import PythonTool
-
         tool_id = get_tool_by_name(
             PythonTool.__name__, run_context.context.run_dependencies.db_session
         ).id

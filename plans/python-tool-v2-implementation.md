@@ -103,17 +103,20 @@ From examining existing v2 tools (`backend/onyx/tools/tool_implementations_v2/`)
 From `backend/onyx/file_store/utils.py` and `backend/onyx/file_store/file_store.py`:
 
 **Existing Utilities:**
-- `save_files(urls, base64_files)` - Save files and return file IDs
+- `file_store.save_file(content, display_name, file_origin, file_type)` - Save files directly with MIME type
 - `build_frontend_file_url(file_id)` - Generate URL for frontend
 - `get_default_file_store().read_file(file_id)` - Read file contents
 - `InMemoryChatFile` - Model for chat-associated files
 
-**File Handling Pattern (from Image Generation):**
-1. Tool generates base64-encoded file content
-2. Call `save_files()` to persist to file store
-3. Store file_ids in `IterationAnswer`
-4. Return file references to LLM
-5. Frontend can download/display files
+**File Handling Pattern (Updated for Python Tool):**
+1. Tool downloads file content from Code Interpreter
+2. Detect MIME type using `mimetypes.guess_type(filename)`
+3. Call `file_store.save_file()` directly with proper MIME type and FileOrigin.CHAT_UPLOAD
+4. Store file_ids in `IterationAnswer`
+5. Return file references to LLM
+6. Frontend can download/display files
+
+**Note:** The `save_files()` utility is NOT used because it only supports image formats (PNG, JPEG, GIF, WEBP). Python tool generates various file types (CSV, TXT, JSON, etc.), so we use `file_store.save_file()` directly with automatic MIME type detection.
 
 ### Configuration & Environment
 
