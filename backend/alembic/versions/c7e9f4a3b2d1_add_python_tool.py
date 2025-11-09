@@ -21,43 +21,25 @@ def upgrade() -> None:
     """Add PythonTool to built-in tools"""
     conn = op.get_bind()
 
-    # Start transaction
-    conn.execute(sa.text("BEGIN"))
-
-    try:
-        # Check if PythonTool already exists
-        existing_tool = conn.execute(
-            sa.text("SELECT id FROM tool WHERE in_code_tool_id = 'PythonTool'")
-        ).fetchone()
-
-        if not existing_tool:
-            # Insert PythonTool
-            conn.execute(
-                sa.text(
-                    """
-                    INSERT INTO tool (name, display_name, description, in_code_tool_id)
-                    VALUES (:name, :display_name, :description, :in_code_tool_id)
-                    """
-                ),
-                {
-                    "name": "PythonTool",
-                    "display_name": "Python Execution",
-                    "description": (
-                        "The Python Execution Action allows the assistant to execute "
-                        "Python code in a secure, isolated environment for data analysis, "
-                        "computation, visualization, and file processing."
-                    ),
-                    "in_code_tool_id": "PythonTool",
-                },
-            )
-
-        # Commit transaction
-        conn.execute(sa.text("COMMIT"))
-
-    except Exception as e:
-        # Rollback on error
-        conn.execute(sa.text("ROLLBACK"))
-        raise e
+    conn.execute(
+        sa.text(
+            """
+            INSERT INTO tool (name, display_name, description, in_code_tool_id, enabled)
+            VALUES (:name, :display_name, :description, :in_code_tool_id, :enabled)
+            """
+        ),
+        {
+            "name": "PythonTool",
+            "display_name": "Python Execution",
+            "description": (
+                "The Python Execution Action allows the assistant to execute "
+                "Python code in a secure, isolated environment for data analysis, "
+                "computation, visualization, and file processing."
+            ),
+            "in_code_tool_id": "PythonTool",
+            "enabled": True,
+        },
+    )
 
 
 def downgrade() -> None:

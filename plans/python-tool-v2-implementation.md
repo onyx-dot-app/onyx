@@ -9,6 +9,21 @@ Add a new built-in Python code execution tool using the v2 tool implementation p
 - Provides streaming progress updates to the frontend
 - Handles execution errors, timeouts, and workspace file management
 
+## Critical Implementation Notes
+
+### Known Issues Fixed
+
+1. **Tool Constructor Integration (CRITICAL)**: The Python tool must be explicitly handled in `backend/onyx/tools/tool_constructor.py` with an elif clause that instantiates `PythonTool`. Without this, the tool passes availability checks but is never added to the tools list, causing "No tools found for forced tool IDs: [X]" errors when configured in an assistant.
+
+2. **V2 Tool Registration (CRITICAL)**: The Python tool must be added to `BUILT_IN_TOOL_MAP_V2` in `backend/onyx/tools/built_in_tools_v2.py`. This map is used by `adapter_v1_to_v2.py` to convert Tool instances to FunctionTool instances that the v2 agent framework can execute. Without this, the v2 agent cannot discover or execute the Python tool's `@function_tool` decorated function.
+
+3. **Built-in Tools Registration**: Python tool must be added to both `BUILT_IN_TOOL_TYPES` union and `BUILT_IN_TOOL_MAP` in `backend/onyx/tools/built_in_tools.py`. This enables tool discovery and availability checking.
+
+4. **Default Assistant Page Integration**: The Python tool must be added to:
+   - Backend: `ORDERED_TOOL_IDS` in `backend/onyx/server/features/default_assistant/api.py`
+   - Frontend: Tool availability tooltip in `web/src/app/admin/configuration/default-assistant/page.tsx`
+   - Frontend: Tool constants in `web/src/app/chat/components/tools/constants.ts`
+
 ## Important Notes
 
 ### V2 Tool Architecture
@@ -117,7 +132,7 @@ The Python tool uses a **dual architecture**:
    - Registered in `BUILT_IN_TOOL_MAP` for tool discovery
    - Stub implementations throw errors - this tool is only meant for v2 agent framework
 
-2. **`python_execution` function** (`backend/onyx/tools/tool_implementations_v2/python_execution.py`):
+2. **`python` function** (`backend/onyx/tools/tool_implementations_v2/python.py`):
    - Decorated with `@function_tool` for v2 agent framework
    - Contains actual execution logic
    - Handles file staging, code execution, output truncation, and file generation
@@ -451,6 +466,37 @@ BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
     PythonTool.__name__: PythonTool,
 }
 ```
+
+**Update** `backend/onyx/tools/built_in_tools_v2.py`:
+```python
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations_v2 import python_execution
+
+# Add to BUILT_IN_TOOL_MAP_V2
+BUILT_IN_TOOL_MAP_V2: dict[str, list[FunctionTool]] = {
+    SearchTool.__name__: [internal_search],
+    ImageGenerationTool.__name__: [image_generation],
+    WebSearchTool.__name__: [web_search, open_url],
+    PythonTool.__name__: [python_execution],  # Add this line
+}
+```
+
+**Note:** `BUILT_IN_TOOL_MAP_V2` is critical for the v2 agent framework. It maps Tool wrapper class names to their v2 `@function_tool` decorated implementations. The `adapter_v1_to_v2.py` module uses this map in `tools_to_function_tools()` to convert Tool instances (v1 style) into FunctionTool instances (v2 style) that the agent framework can execute.
+
+**Update** `backend/onyx/tools/tool_constructor.py` to instantiate PythonTool:
+```python
+# After the KnowledgeGraphTool elif clause (around line 312):
+
+            # Handle Python Tool
+            elif tool_cls.__name__ == "PythonTool":
+                from onyx.tools.tool_implementations.python.python_tool import (
+                    PythonTool,
+                )
+
+                tool_dict[db_tool_model.id] = [PythonTool(tool_id=db_tool_model.id)]
+```
+
+**Note:** This is critical - without this, the Python tool passes availability checks but never gets instantiated into the tools list, causing "No tools found for forced tool IDs" errors when the tool is configured in an assistant.
 
 ### 5. Core V2 Tool Implementation
 
@@ -819,7 +865,58 @@ def test_python_tool_availability():
     # Assert: is_available() returns False
 ```
 
-### 8. Frontend Integration (Brief Overview)
+### 8. Default Assistant Page Integration
+
+**Update** `backend/onyx/server/features/default_assistant/api.py`:
+```python
+# Import PythonTool at the top
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
+
+# In the list_available_tools endpoint, add PythonTool to ORDERED_TOOL_IDS:
+ORDERED_TOOL_IDS = [
+    SearchTool.__name__,
+    WebSearchTool.__name__,
+    ImageGenerationTool.__name__,
+    PythonTool.__name__,  # Add this line
+]
+```
+
+**Update** `web/src/app/admin/configuration/default-assistant/page.tsx`:
+```typescript
+// In the ToolCard component's notEnabledReason logic (around line 265):
+const notEnabledReason = (() => {
+  if (tool.in_code_tool_id === "WebSearchTool") {
+    return "Set EXA_API_KEY on the server and restart to enable Web Search.";
+  }
+  if (tool.in_code_tool_id === "ImageGenerationTool") {
+    return "Add an OpenAI LLM provider with an API key under Admin → Configuration → LLM.";
+  }
+  if (tool.in_code_tool_id === "PythonTool") {
+    return "Set CODE_INTERPRETER_BASE_URL on the server and restart to enable Python Execution.";
+  }
+  return "Not configured.";
+})();
+```
+
+**Update** `web/src/app/chat/components/tools/constants.ts`:
+```typescript
+// Add Python tool constants:
+export const PYTHON_TOOL_NAME = "run_python";
+export const PYTHON_TOOL_ID = "PythonTool";
+
+// Add to SYSTEM_TOOL_ICONS:
+export const SYSTEM_TOOL_ICONS: Record<
+  string,
+  React.FunctionComponent<SvgProps>
+> = {
+  [SEARCH_TOOL_ID]: SvgSearch,
+  [WEB_SEARCH_TOOL_ID]: SvgGlobe,
+  [IMAGE_GENERATION_TOOL_ID]: SvgImage,
+  [PYTHON_TOOL_ID]: SvgCode,  // Add this line
+};
+```
+
+### 9. Frontend Integration (Brief Overview)
 
 **Streaming Packet Handlers:**
 - Add handlers for `PythonToolStart` and `PythonToolDelta` packet types
@@ -837,11 +934,11 @@ def test_python_tool_availability():
 - Use same UI components as custom tool file handling
 
 **Tool Selection UI:**
-- Add "Python Execution" to tool selector in admin/assistant editor
-- Show configuration options (timeout limits)
+- Tool appears in default assistant page with availability status
 - Tool will appear/disappear based on whether `CODE_INTERPRETER_BASE_URL` is configured
+- Shows "Not enabled" badge with helpful tooltip when unavailable
 
-### 9. Migration & Rollout
+### 10. Migration & Rollout
 
 **Phase 1: Backend Core (Weeks 1-2)**
 1. Add configuration and service client
@@ -858,17 +955,20 @@ def test_python_tool_availability():
 
 **Phase 3: Integration (Week 4)**
 10. Create Alembic migration to seed `PythonTool` in database
-11. Update `built_in_tools.py` to register `PythonTool`
-12. Verify availability checking works correctly (URL configured vs. not configured)
-13. Add frontend packet handlers
-14. Manual testing with real service
+11. Update `built_in_tools.py` to register `PythonTool` in `BUILT_IN_TOOL_MAP`
+12. **Update `built_in_tools_v2.py` to register `python_execution` in `BUILT_IN_TOOL_MAP_V2`** (critical - enables v2 agent to execute the tool)
+13. **Add PythonTool instantiation in `tool_constructor.py`** (critical - prevents "No tools found" errors)
+14. Update default assistant API and frontend for Python tool
+15. Verify availability checking works correctly (URL configured vs. not configured)
+16. Add frontend packet handlers
+17. Manual testing with real service
 
 **Phase 4: Polish & Documentation (Week 5)**
-15. Add error handling improvements
-16. Write user-facing documentation
-17. Add admin documentation for service deployment
-18. Performance testing and optimization
-19. Test tool availability UI (tool should appear/disappear based on `CODE_INTERPRETER_BASE_URL` configuration)
+18. Add error handling improvements
+19. Write user-facing documentation
+20. Add admin documentation for service deployment
+21. Performance testing and optimization
+22. Test tool availability UI (tool should appear/disappear based on `CODE_INTERPRETER_BASE_URL` configuration)
 
 ## Implementation Decisions
 

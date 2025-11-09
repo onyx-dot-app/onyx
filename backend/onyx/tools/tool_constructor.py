@@ -310,6 +310,14 @@ def construct_tools(
                     KnowledgeGraphTool(tool_id=db_tool_model.id)
                 ]
 
+            # Handle Python Tool
+            elif tool_cls.__name__ == "PythonTool":
+                from onyx.tools.tool_implementations.python.python_tool import (
+                    PythonTool,
+                )
+
+                tool_dict[db_tool_model.id] = [PythonTool(tool_id=db_tool_model.id)]
+
         # Handle custom tools
         elif db_tool_model.openapi_schema:
             if not custom_tool_config:

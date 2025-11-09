@@ -18,6 +18,7 @@ from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
@@ -107,6 +108,7 @@ def list_available_tools(
         SearchTool.__name__,
         WebSearchTool.__name__,
         ImageGenerationTool.__name__,
+        PythonTool.__name__,
     ]
     tool_by_in_code_id = {
         tool.in_code_tool_id: tool
@@ -121,9 +123,14 @@ def list_available_tools(
     def _is_available(in_code_id: str) -> bool:
         try:
             tool_cls = get_built_in_tool_by_id(in_code_id)
-            return tool_cls.is_available(db_session)
+            is_avail = tool_cls.is_available(db_session)
+            logger.info(f"Checking availability for {in_code_id}: {is_avail}")
+            return is_avail
         except KeyError:
             # If tool ID not found in registry, include it by default
+            logger.warning(
+                f"Tool {in_code_id} not found in registry, assuming available"
+            )
             return True
 
     return [

@@ -247,7 +247,7 @@ def _python_execution_core(
 
 
 @function_tool
-def python_execution(
+def python(
     run_context: RunContextWrapper[ChatTurnContext],
     code: str,
 ) -> str:

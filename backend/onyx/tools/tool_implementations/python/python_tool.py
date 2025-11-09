@@ -61,10 +61,14 @@ class PythonTool(Tool[None]):
         """
         from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
 
-        if not CODE_INTERPRETER_BASE_URL:
-            logger.debug(
-                "Python tool unavailable: CODE_INTERPRETER_BASE_URL not configured"
-            )
+        is_available = bool(CODE_INTERPRETER_BASE_URL)
+        logger.info(
+            "PythonTool.is_available() called: "
+            f"CODE_INTERPRETER_BASE_URL={CODE_INTERPRETER_BASE_URL!r}, "
+            f"returning {is_available}"
+        )
+
+        if not is_available:
             return False
 
         return True
