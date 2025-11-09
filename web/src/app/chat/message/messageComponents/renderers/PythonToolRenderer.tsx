@@ -1,0 +1,215 @@
+import React, { useEffect, useMemo } from "react";
+import { FiCode } from "react-icons/fi";
+import {
+  PacketType,
+  PythonToolPacket,
+  PythonToolStart,
+  PythonToolDelta,
+  SectionEnd,
+} from "../../../services/streamingModels";
+import { MessageRenderer, RenderType } from "../interfaces";
+
+// Helper function to construct current Python execution state
+function constructCurrentPythonState(packets: PythonToolPacket[]) {
+  const pythonStart = packets.find(
+    (packet) => packet.obj.type === PacketType.PYTHON_TOOL_START
+  )?.obj as PythonToolStart | null;
+  const pythonDeltas = packets
+    .filter((packet) => packet.obj.type === PacketType.PYTHON_TOOL_DELTA)
+    .map((packet) => packet.obj as PythonToolDelta);
+  const pythonEnd = packets.find(
+    (packet) => packet.obj.type === PacketType.SECTION_END
+  )?.obj as SectionEnd | null;
+
+  const stdout = pythonDeltas
+    .map((delta) => delta?.stdout || "")
+    .filter((s) => s)
+    .join("");
+  const stderr = pythonDeltas
+    .map((delta) => delta?.stderr || "")
+    .filter((s) => s)
+    .join("");
+  const fileIds = pythonDeltas.flatMap((delta) => delta?.file_ids || []);
+  const isExecuting = pythonStart && !pythonEnd;
+  const isComplete = pythonStart && pythonEnd;
+  const hasError = stderr.length > 0;
+
+  return {
+    stdout,
+    stderr,
+    fileIds,
+    isExecuting,
+    isComplete,
+    hasError,
+  };
+}
+
+export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
+  packets,
+  onComplete,
+  renderType,
+  children,
+}) => {
+  const { stdout, stderr, fileIds, isExecuting, isComplete, hasError } =
+    constructCurrentPythonState(packets);
+
+  useEffect(() => {
+    if (isComplete) {
+      onComplete();
+    }
+  }, [isComplete]);
+
+  const status = useMemo(() => {
+    if (isComplete) {
+      if (hasError) {
+        return "Python execution failed";
+      }
+      return "Python execution completed";
+    }
+    if (isExecuting) {
+      return "Executing Python code...";
+    }
+    return null;
+  }, [isComplete, isExecuting, hasError]);
+
+  // Render based on renderType
+  if (renderType === RenderType.FULL) {
+    // Loading state - when executing
+    if (isExecuting) {
+      return children({
+        icon: FiCode,
+        status: "Executing Python code...",
+        content: (
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex gap-0.5">
+                <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
+                <div
+                  className="w-1 h-1 bg-current rounded-full animate-pulse"
+                  style={{ animationDelay: "0.1s" }}
+                ></div>
+                <div
+                  className="w-1 h-1 bg-current rounded-full animate-pulse"
+                  style={{ animationDelay: "0.2s" }}
+                ></div>
+              </div>
+              <span>Running code...</span>
+            </div>
+          </div>
+        ),
+      });
+    }
+
+    // Complete state - show output
+    if (isComplete) {
+      return children({
+        icon: FiCode,
+        status: hasError
+          ? "Python execution failed"
+          : "Python execution completed",
+        content: (
+          <div className="flex flex-col my-1 space-y-2">
+            {stdout && (
+              <div className="rounded-md bg-gray-100 dark:bg-gray-800 p-3">
+                <div className="text-xs font-semibold mb-1 text-gray-600 dark:text-gray-400">
+                  Output:
+                </div>
+                <pre className="text-sm whitespace-pre-wrap font-mono text-gray-900 dark:text-gray-100">
+                  {stdout}
+                </pre>
+              </div>
+            )}
+            {stderr && (
+              <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3 border border-red-200 dark:border-red-800">
+                <div className="text-xs font-semibold mb-1 text-red-600 dark:text-red-400">
+                  Error:
+                </div>
+                <pre className="text-sm whitespace-pre-wrap font-mono text-red-900 dark:text-red-100">
+                  {stderr}
+                </pre>
+              </div>
+            )}
+            {fileIds.length > 0 && (
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Generated {fileIds.length} file{fileIds.length !== 1 ? "s" : ""}
+              </div>
+            )}
+            {!stdout && !stderr && (
+              <div className="py-4 text-center text-gray-500 dark:text-gray-400">
+                <FiCode className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No output</p>
+              </div>
+            )}
+          </div>
+        ),
+      });
+    }
+
+    // Fallback
+    return children({
+      icon: FiCode,
+      status: status,
+      content: <div></div>,
+    });
+  }
+
+  // Highlight/Short rendering
+  if (isExecuting) {
+    return children({
+      icon: FiCode,
+      status: "Executing Python code...",
+      content: (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex gap-0.5">
+            <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
+            <div
+              className="w-1 h-1 bg-current rounded-full animate-pulse"
+              style={{ animationDelay: "0.1s" }}
+            ></div>
+            <div
+              className="w-1 h-1 bg-current rounded-full animate-pulse"
+              style={{ animationDelay: "0.2s" }}
+            ></div>
+          </div>
+          <span>Running code...</span>
+        </div>
+      ),
+    });
+  }
+
+  if (hasError) {
+    return children({
+      icon: FiCode,
+      status: "Python execution failed",
+      content: (
+        <div className="text-sm text-red-600 dark:text-red-400">
+          Execution failed
+        </div>
+      ),
+    });
+  }
+
+  if (isComplete) {
+    return children({
+      icon: FiCode,
+      status: "Python execution completed",
+      content: (
+        <div className="text-sm text-muted-foreground">
+          Execution completed
+          {fileIds.length > 0 &&
+            ` - ${fileIds.length} file${
+              fileIds.length !== 1 ? "s" : ""
+            } generated`}
+        </div>
+      ),
+    });
+  }
+
+  return children({
+    icon: FiCode,
+    status: "Python execution",
+    content: (
+      <div className="text-sm text-muted-foreground">Python execution</div>
+    ),
+  });
+};
