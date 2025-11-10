@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import { SvgProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
 import { Modal } from "@/refresh-components/modals/NewModal";
@@ -29,11 +29,23 @@ export default function ConfirmationModal({
   hideCancel,
   onClose,
 }: ConfirmationModalProps) {
+  const submitButtonRef = useRef<HTMLDivElement>(null);
+
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       onClose();
     }
   };
+
+  useEffect(() => {
+    // Focus on submit button when modal opens
+    setTimeout(() => {
+      const button = submitButtonRef.current?.querySelector("button");
+      if (button) {
+        button.focus();
+      }
+    }, 0);
+  }, []);
 
   return (
     <Modal open onOpenChange={handleOpenChange}>
@@ -72,7 +84,7 @@ export default function ConfirmationModal({
               Cancel
             </Button>
           )}
-          {submit}
+          <div ref={submitButtonRef}>{submit}</div>
         </Modal.Footer>
       </Modal.Content>
     </Modal>
