@@ -9,6 +9,7 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
@@ -83,6 +84,17 @@ class KnowledgeGraphTool(Tool[None]):
     def build_tool_message_content(
         self, *args: ToolResponse
     ) -> str | list[str | dict[str, Any]]:
+        raise ValueError(
+            "KnowledgeGraphTool should only be used by the Deep Research Agent, "
+            "not via tool calling."
+        )
+
+    def run_v2(
+        self,
+        run_context: RunContextWrapper[Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
         raise ValueError(
             "KnowledgeGraphTool should only be used by the Deep Research Agent, "
             "not via tool calling."
