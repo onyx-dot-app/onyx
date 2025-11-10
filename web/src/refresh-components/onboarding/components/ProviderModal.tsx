@@ -1,15 +1,13 @@
-import React, { useRef } from "react";
+import React from "react";
 import Text from "@/refresh-components/texts/Text";
-import SvgX from "@/icons/x";
 import {
   ModalIds,
   useChatModal,
 } from "@/refresh-components/contexts/ChatModalContext";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
-import CoreModal from "@/refresh-components/modals/CoreModal";
+import { Modal } from "@/refresh-components/modals/NewModal";
 import SvgLoader from "@/icons/loader";
 
 interface ProviderModalProps {
@@ -38,9 +36,6 @@ interface ProviderModalProps {
 }
 
 export default function ProviderModal({
-  sm,
-  xs,
-
   clickOutsideToClose = true,
 
   id,
@@ -54,10 +49,9 @@ export default function ProviderModal({
   isSubmitting = false,
   submitLabel = "Connect",
   cancelLabel = "Cancel",
-  className,
 }: ProviderModalProps) {
   const { isOpen, toggleModal } = useChatModal();
-  const insideModal = useRef(false);
+  const open = isOpen(id);
 
   const SpinningLoader: React.FunctionComponent<SvgProps> = (props) => (
     <SvgLoader
@@ -68,71 +62,57 @@ export default function ProviderModal({
     />
   );
 
-  if (!isOpen(id)) return null;
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      toggleModal(id, false);
+    }
+  };
 
   return (
-    <CoreModal
-      className={cn(
-        "w-[80dvw] h-fit max-h-[calc(100dvh-9rem)]",
-        sm && "max-w-[60rem]",
-        xs && "max-w-[32rem]",
-        className
-      )}
-      onClickOutside={
-        clickOutsideToClose
-          ? () => {
-              if (insideModal.current) return;
-              toggleModal(id, false);
-            }
-          : undefined
-      }
-    >
-      <div className="flex flex-col h-full max-h-[calc(100dvh-9rem)]">
-        <div className="flex flex-col gap-2 p-4">
-          <div className="flex flex-row items-center justify-between">
-            {Icon ? (
-              <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
-            ) : (
-              startAdornment
-            )}
-            <div data-testid="Modal/close-modal">
-              <IconButton
-                icon={SvgX}
-                internal
-                onClick={() => toggleModal(id, false)}
-              />
-            </div>
-          </div>
-          <Text headingH3>{title}</Text>
-          {description && (
-            <Text secondaryBody text02>
-              {description}
-            </Text>
-          )}
-        </div>
-        <div className="flex-1 overflow-scroll">{children}</div>
+    <Modal open={open} onOpenChange={handleOpenChange}>
+      <Modal.Content
+        size="sm"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => {
+          if (!clickOutsideToClose) {
+            e.preventDefault();
+          }
+        }}
+      >
+        <Modal.CloseButton />
+
+        <Modal.Header className="flex flex-col gap-2 p-4">
+          {Icon ? (
+            <Modal.Icon icon={Icon} />
+          ) : startAdornment ? (
+            startAdornment
+          ) : null}
+          <Modal.Title>{title}</Modal.Title>
+          {description && <Modal.Description>{description}</Modal.Description>}
+        </Modal.Header>
+
+        <Modal.Body className="flex-1 overflow-y-auto">{children}</Modal.Body>
+
         {onSubmit && (
-          <div className="sticky bottom-0">
-            <div className="flex justify-end gap-2 w-full p-4">
-              <Button
-                type="button"
-                secondary
-                onClick={() => toggleModal(id, false)}
-              >
-                {cancelLabel}
-              </Button>
-              <Button
-                type="button"
-                onClick={onSubmit}
-                disabled={submitDisabled || isSubmitting}
-                leftIcon={isSubmitting ? SpinningLoader : undefined}
-              >
-                {submitLabel}
-              </Button>
-            </div>
-          </div>
+          <Modal.Footer className="flex justify-end gap-2 p-4">
+            <Button
+              type="button"
+              secondary
+              onClick={() => toggleModal(id, false)}
+            >
+              {cancelLabel}
+            </Button>
+            <Button
+              type="button"
+              onClick={onSubmit}
+              disabled={submitDisabled || isSubmitting}
+              leftIcon={isSubmitting ? SpinningLoader : undefined}
+            >
+              {submitLabel}
+            </Button>
+          </Modal.Footer>
         )}
-      </div>
-    </CoreModal>
+      </Modal.Content>
+    </Modal>
   );
 }

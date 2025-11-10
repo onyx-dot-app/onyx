@@ -175,7 +175,7 @@ const LLMFormikEffects: React.FC<LLMFormikEffectsProps> = ({
 };
 
 const LLMConnectionModal = () => {
-  const { getModalData, toggleModal } = useChatModal();
+  const { getModalData, toggleModal, isOpen } = useChatModal();
   const data = getModalData<LLMConnectionModalData>();
   const icon = data?.icon;
   const title = data?.title ?? "";
@@ -188,6 +188,7 @@ const LLMConnectionModal = () => {
       : undefined;
   const onboardingActions = data?.onboardingActions;
   const onboardingState = data?.onboardingState;
+  const modalOpen = isOpen(ModalIds.LLMConnectionModal);
 
   const initialValues = useMemo(
     () => buildInitialValues(llmDescriptor, isCustomProvider),
@@ -208,6 +209,27 @@ const LLMConnectionModal = () => {
     any[]
   >([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Autofocus first input when modal opens
+  useEffect(() => {
+    if (modalOpen && data) {
+      const focusTimer = setTimeout(() => {
+        // Scope to modal content to avoid focusing inputs outside the modal
+        const modalContent = document.querySelector('[role="dialog"]');
+        if (modalContent) {
+          const firstInput = modalContent.querySelector<HTMLInputElement>(
+            'input:not([type="hidden"]):not([disabled]):not([readonly])'
+          );
+          if (firstInput) {
+            firstInput.focus();
+            firstInput.select?.();
+          }
+        }
+      }, 500);
+
+      return () => clearTimeout(focusTimer);
+    }
+  }, [modalOpen, data]);
 
   // Set default tab when llmDescriptor changes
   useEffect(() => {
@@ -496,7 +518,6 @@ const LLMConnectionModal = () => {
             title={title}
             description={modalContent?.description}
             startAdornment={icon}
-            xs
             onSubmit={formikProps.submitForm}
             submitDisabled={
               isCustomProvider

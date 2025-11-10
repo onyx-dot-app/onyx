@@ -20,6 +20,7 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 
 function getIcon(
   file: ProjectFile,
@@ -184,7 +185,7 @@ export default function UserFilesModal({
         >
           <Modal.CloseButton />
 
-          <Modal.Header withBottomShadow className="flex flex-col gap-3 pb-2">
+          <Modal.Header className="flex flex-col gap-3 pb-2">
             {/* Icon, Title, Description */}
             <div className="flex flex-col gap-1 px-4 pt-4">
               <Modal.Icon icon={Icon} />
@@ -226,7 +227,7 @@ export default function UserFilesModal({
                 <Text text03>No files found</Text>
               </div>
             ) : (
-              <OverflowDiv className="px-2 pt-2 gap-2">
+              <ScrollIndicatorDiv variant="shadow" className="px-2 pt-2 gap-2">
                 {filtered.map((projectFile) => {
                   const isSelected = selectedIds.has(projectFile.id);
                   return (
@@ -262,7 +263,7 @@ export default function UserFilesModal({
                     />
                   );
                 })}
-              </OverflowDiv>
+              </ScrollIndicatorDiv>
             )}
           </Modal.Body>
 

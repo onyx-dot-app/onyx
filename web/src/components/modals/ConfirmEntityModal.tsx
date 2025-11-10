@@ -1,4 +1,4 @@
-import Modal from "@/refresh-components/modals/ConfirmationModal";
+import { Modal } from "@/refresh-components/modals/NewModal";
 import Button from "@/refresh-components/buttons/Button";
 import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/texts/Text";
@@ -43,26 +43,43 @@ export function ConfirmEntityModal({
       : "Confirm";
   const actionText = action ? action : danger ? "delete" : "modify";
 
-  return (
-    <Modal
-      icon={SvgAlertCircle}
-      title={`${buttonText} ${entityType}`}
-      onClose={onClose}
-      submit={
-        <Button onClick={onSubmit} danger={danger}>
-          {buttonText}
-        </Button>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        {!removeConfirmationText && (
-          <Text>
-            Are you sure you want to {actionText} <b>{entityName}</b>?
-          </Text>
-        )}
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      onClose();
+    }
+  };
 
-        {additionalDetails && <Text text03>{additionalDetails}</Text>}
-      </div>
+  return (
+    <Modal open onOpenChange={handleOpenChange}>
+      <Modal.Content size="xs" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <Modal.CloseButton />
+
+        <Modal.Header className="flex flex-col p-4 gap-1">
+          <Modal.Icon icon={SvgAlertCircle} />
+          <Modal.Title>{`${buttonText} ${entityType}`}</Modal.Title>
+        </Modal.Header>
+
+        <Modal.Body className="px-4 pb-4">
+          <div className="flex flex-col gap-4">
+            {!removeConfirmationText && (
+              <Text>
+                Are you sure you want to {actionText} <b>{entityName}</b>?
+              </Text>
+            )}
+
+            {additionalDetails && <Text text03>{additionalDetails}</Text>}
+          </div>
+        </Modal.Body>
+
+        <Modal.Footer className="flex flex-row w-full items-center justify-end px-4 pb-4 gap-2">
+          <Button secondary onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={onSubmit} danger={danger}>
+            {buttonText}
+          </Button>
+        </Modal.Footer>
+      </Modal.Content>
     </Modal>
   );
 }

@@ -49,7 +49,7 @@ const ModalClose = DialogPrimitive.Close;
  * ```
  */
 const ModalOverlay = React.forwardRef<
-  React.ElementRef<typeof DialogPrimitive.Overlay>,
+  React.ComponentRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
@@ -73,6 +73,10 @@ ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
  * @example
  * ```tsx
  * // Using size variants
+ * <Modal.Content size="xs">
+ *   {/* Extra small modal (27rem) *\/}
+ * </Modal.Content>
+ *
  * <Modal.Content size="sm">
  *   {/* Small modal (32rem) *\/}
  * </Modal.Content>
@@ -82,7 +86,7 @@ ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
  * </Modal.Content>
  *
  * // Custom size with className
- * <Modal.Content className="w-[27rem]">
+ * <Modal.Content className="w-[48rem]">
  *   {/* Custom sized modal *\/}
  * </Modal.Content>
  *
@@ -93,10 +97,10 @@ ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
  * ```
  */
 const ModalContent = React.forwardRef<
-  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     hideCloseButton?: boolean;
-    size?: "sm" | "md";
+    size?: "xs" | "sm" | "md";
   }
 >(({ className, children, hideCloseButton, size, ...props }, ref) => (
   <ModalPortal>
@@ -114,6 +118,7 @@ const ModalContent = React.forwardRef<
         "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
         "duration-200",
         // Size variants
+        size === "xs" && "w-[27rem] max-h-[calc(100dvh-4rem)]",
         size === "sm" && "w-[32rem] max-h-[calc(100dvh-4rem)]",
         size === "md" && "w-[60rem] max-h-[calc(100dvh-4rem)]",
         className
@@ -230,7 +235,7 @@ const ModalCloseButton = React.forwardRef<
   return (
     <div
       ref={ref}
-      className={cn("absolute top-4 right-4 z-10", className)}
+      className={cn("absolute top-4 right-4 z-20", className)}
       {...props}
     >
       <ModalClose asChild>
@@ -254,7 +259,7 @@ ModalCloseButton.displayName = "ModalCloseButton";
  * ```
  */
 const ModalTitle = React.forwardRef<
-  React.ElementRef<typeof DialogPrimitive.Title>,
+  React.ComponentRef<typeof DialogPrimitive.Title>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
 >(({ className, children, ...props }, ref) => (
   <DialogPrimitive.Title ref={ref} asChild {...props}>
@@ -278,7 +283,7 @@ ModalTitle.displayName = DialogPrimitive.Title.displayName;
  * ```
  */
 const ModalDescription = React.forwardRef<
-  React.ElementRef<typeof DialogPrimitive.Description>,
+  React.ComponentRef<typeof DialogPrimitive.Description>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
 >(({ className, children, ...props }, ref) => (
   <DialogPrimitive.Description ref={ref} asChild {...props}>

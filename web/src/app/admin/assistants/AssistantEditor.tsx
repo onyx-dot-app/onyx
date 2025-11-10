@@ -1883,7 +1883,7 @@ export function AssistantEditor({
                 <div className="mt-12 w-full flex justify-between items-center">
                   <div>
                     {existingPersona && (
-                      <Button danger onClick={openDeleteModal}>
+                      <Button danger type="button" onClick={openDeleteModal}>
                         Delete
                       </Button>
                     )}

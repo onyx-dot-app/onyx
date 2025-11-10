@@ -6,7 +6,7 @@ import NewTenantModal from "../modals/NewTenantModal";
 import { User, NewTenantInfo } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { UserSettings } from "@/app/chat/components/modal/UserSettings";
-import CoreModal from "@/refresh-components/modals/CoreModal";
+import { Modal } from "@/refresh-components/modals/NewModal";
 
 type ModalContextType = {
   showNewTeamModal: boolean;
@@ -54,17 +54,24 @@ export const ModalProvider: React.FC<{
 
   // Render all application-wide modals
   const renderModals = () => {
+    const handleUserSettingsOpenChange = (open: boolean) => {
+      if (!open) {
+        setShowUserSettingsModal(false);
+      }
+    };
+
     if (!user || !NEXT_PUBLIC_CLOUD_ENABLED)
       return (
         <>
-          {showUserSettingsModal && (
-            <CoreModal
-              onClickOutside={() => setShowUserSettingsModal(false)}
-              className="w-full max-w-xl mx-4"
-            >
+          <Modal
+            open={showUserSettingsModal}
+            onOpenChange={handleUserSettingsOpenChange}
+          >
+            <Modal.Content className="w-full max-w-xl">
+              <Modal.CloseButton />
               <UserSettings onClose={() => setShowUserSettingsModal(false)} />
-            </CoreModal>
-          )}
+            </Modal.Content>
+          </Modal>
         </>
       );
 
@@ -73,14 +80,15 @@ export const ModalProvider: React.FC<{
         {/* Modal for users to request to join an existing team */}
         <NewTeamModal />
 
-        {showUserSettingsModal && (
-          <CoreModal
-            onClickOutside={() => setShowUserSettingsModal(false)}
-            className="w-full max-w-xl mx-4"
-          >
+        <Modal
+          open={showUserSettingsModal}
+          onOpenChange={handleUserSettingsOpenChange}
+        >
+          <Modal.Content className="w-full max-w-xl">
+            <Modal.CloseButton />
             <UserSettings onClose={() => setShowUserSettingsModal(false)} />
-          </CoreModal>
-        )}
+          </Modal.Content>
+        </Modal>
 
         {/* Modal for users who've been accepted to a new team */}
         {newTenantInfo && (
