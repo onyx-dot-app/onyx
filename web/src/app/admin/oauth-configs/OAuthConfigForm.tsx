@@ -1,7 +1,7 @@
 import { Form, Formik } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { TextFormField } from "@/components/Field";
-import CoreModal from "@/refresh-components/modals/CoreModal";
+import { Modal } from "@/refresh-components/modals/NewModal";
 import Button from "@/refresh-components/buttons/Button";
 import { Separator } from "@/components/ui/separator";
 import { Callout } from "@/components/ui/callout";
@@ -50,17 +50,38 @@ export const OAuthConfigForm = ({
 }: OAuthConfigFormProps) => {
   const isUpdate = config !== undefined;
 
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      onClose();
+    }
+  };
+
   return (
-    <CoreModal onClickOutside={onClose} className="w-[60%] max-h-[80vh]">
-      <div className="overflow-y-auto p-6">
-        <Text headingH2 className="mb-4">
-          {isUpdate
-            ? "Update OAuth Configuration"
-            : "Create OAuth Configuration"}
-        </Text>
+    <Modal open onOpenChange={handleOpenChange}>
+      <Modal.Content
+        className="w-[60%] max-h-[calc(100dvh-4rem)]"
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          // Use setTimeout to wait for Formik to render the inputs
+          setTimeout(() => {
+            const firstInput =
+              document.querySelector<HTMLInputElement>('input[name="name"]');
+            if (firstInput) {
+              firstInput.focus();
+            }
+          }, 0);
+        }}
+      >
+        <Modal.CloseButton />
 
-        <Separator />
-
+        <Modal.Header className="px-6 pt-6 pb-4">
+          <Modal.Title className="font-heading-h2">
+            {isUpdate
+              ? "Update OAuth Configuration"
+              : "Create OAuth Configuration"}
+          </Modal.Title>
+          <Separator />
+        </Modal.Header>
         <Formik
           initialValues={{
             name: config?.name || "",
@@ -148,96 +169,99 @@ export const OAuthConfigForm = ({
           }}
         >
           {({ isSubmitting }) => (
-            <Form className="w-full overflow-visible">
-              <Text>
-                Configure an OAuth provider that can be shared across multiple
-                custom tools. Users will authenticate with this provider when
-                using tools that require it.
-              </Text>
-
-              <Callout
-                type="notice"
-                icon="📋"
-                title="Redirect URI for OAuth App Configuration"
-                className="my-0"
-              >
-                <Text className="text-sm mb-2">
-                  When configuring your OAuth application in the provider&apos;s
-                  dashboard, use this redirect URI:
+            <Form className="flex flex-col flex-1 overflow-hidden w-full">
+              <Modal.Body className="flex-1 overflow-y-auto px-6 pb-4 space-y-4 w-full">
+                <Text>
+                  Configure an OAuth provider that can be shared across multiple
+                  custom tools. Users will authenticate with this provider when
+                  using tools that require it.
                 </Text>
-                <code className="block p-2 bg-background-100 rounded text-sm font-mono">
-                  {typeof window !== "undefined"
-                    ? `${window.location.origin}/oauth-config/callback`
-                    : "{YOUR_DOMAIN}/oauth-config/callback"}
-                </code>
-              </Callout>
 
-              <TextFormField
-                name="name"
-                label="Configuration Name:"
-                subtext="A friendly name to identify this OAuth configuration (e.g., 'GitHub OAuth', 'Google OAuth')"
-                placeholder="e.g., GitHub OAuth"
-                autoCompleteDisabled={true}
-              />
+                <Callout
+                  type="notice"
+                  icon="📋"
+                  title="Redirect URI for OAuth App Configuration"
+                >
+                  <Text className="text-sm mb-2">
+                    When configuring your OAuth application in the
+                    provider&apos;s dashboard, use this redirect URI:
+                  </Text>
+                  <code className="block p-2 bg-background-100 rounded text-sm font-mono">
+                    {typeof window !== "undefined"
+                      ? `${window.location.origin}/oauth-config/callback`
+                      : "{YOUR_DOMAIN}/oauth-config/callback"}
+                  </code>
+                </Callout>
 
-              <TextFormField
-                name="authorization_url"
-                label="Authorization URL:"
-                subtext="The OAuth provider's authorization endpoint"
-                placeholder="e.g., https://github.com/login/oauth/authorize"
-                autoCompleteDisabled={true}
-              />
+                <TextFormField
+                  name="name"
+                  label="Configuration Name:"
+                  subtext="A friendly name to identify this OAuth configuration (e.g., 'GitHub OAuth', 'Google OAuth')"
+                  placeholder="e.g., GitHub OAuth"
+                  autoCompleteDisabled={true}
+                />
 
-              <TextFormField
-                name="token_url"
-                label="Token URL:"
-                subtext="The OAuth provider's token exchange endpoint"
-                placeholder="e.g., https://github.com/login/oauth/access_token"
-                autoCompleteDisabled={true}
-              />
+                <TextFormField
+                  name="authorization_url"
+                  label="Authorization URL:"
+                  subtext="The OAuth provider's authorization endpoint"
+                  placeholder="e.g., https://github.com/login/oauth/authorize"
+                  autoCompleteDisabled={true}
+                />
 
-              <TextFormField
-                name="client_id"
-                label={isUpdate ? "Client ID (optional):" : "Client ID:"}
-                subtext={
-                  isUpdate
-                    ? "Leave empty to keep existing client ID"
-                    : "Your OAuth application's client ID"
-                }
-                placeholder={
-                  isUpdate ? "Enter new client ID to update" : "Your client ID"
-                }
-                autoCompleteDisabled={true}
-              />
+                <TextFormField
+                  name="token_url"
+                  label="Token URL:"
+                  subtext="The OAuth provider's token exchange endpoint"
+                  placeholder="e.g., https://github.com/login/oauth/access_token"
+                  autoCompleteDisabled={true}
+                />
 
-              <TextFormField
-                name="client_secret"
-                label={
-                  isUpdate ? "Client Secret (optional):" : "Client Secret:"
-                }
-                subtext={
-                  isUpdate
-                    ? "Leave empty to keep existing client secret"
-                    : "Your OAuth application's client secret"
-                }
-                placeholder={
-                  isUpdate
-                    ? "Enter new client secret to update"
-                    : "Your client secret"
-                }
-                type="password"
-                autoCompleteDisabled={true}
-              />
+                <TextFormField
+                  name="client_id"
+                  label={isUpdate ? "Client ID (optional):" : "Client ID:"}
+                  subtext={
+                    isUpdate
+                      ? "Leave empty to keep existing client ID"
+                      : "Your OAuth application's client ID"
+                  }
+                  placeholder={
+                    isUpdate
+                      ? "Enter new client ID to update"
+                      : "Your client ID"
+                  }
+                  autoCompleteDisabled={true}
+                />
 
-              <TextFormField
-                name="scopes"
-                label="Scopes (optional):"
-                subtext="Comma-separated list of OAuth scopes to request (e.g., 'repo, user')"
-                placeholder="e.g., repo, user"
-                autoCompleteDisabled={true}
-              />
+                <TextFormField
+                  name="client_secret"
+                  label={
+                    isUpdate ? "Client Secret (optional):" : "Client Secret:"
+                  }
+                  subtext={
+                    isUpdate
+                      ? "Leave empty to keep existing client secret"
+                      : "Your OAuth application's client secret"
+                  }
+                  placeholder={
+                    isUpdate
+                      ? "Enter new client secret to update"
+                      : "Your client secret"
+                  }
+                  type="password"
+                  autoCompleteDisabled={true}
+                />
 
-              <div className="flex gap-2 mt-6">
+                <TextFormField
+                  name="scopes"
+                  label="Scopes (optional):"
+                  subtext="Comma-separated list of OAuth scopes to request (e.g., 'repo, user')"
+                  placeholder="e.g., repo, user"
+                  autoCompleteDisabled={true}
+                />
+              </Modal.Body>
+
+              <Modal.Footer className="flex gap-2 px-6 py-4 w-full">
                 <Button type="submit" disabled={isSubmitting} primary>
                   {isUpdate ? "Update" : "Create"}
                 </Button>
@@ -249,11 +273,11 @@ export const OAuthConfigForm = ({
                 >
                   Cancel
                 </Button>
-              </div>
+              </Modal.Footer>
             </Form>
           )}
         </Formik>
-      </div>
-    </CoreModal>
+      </Modal.Content>
+    </Modal>
   );
 };

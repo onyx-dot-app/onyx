@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FeedbackType } from "@/app/chat/interfaces";
-import Modal from "@/refresh-components/modals/Modal";
-import { FilledLikeIcon } from "@/components/icons/icons";
+import { Modal } from "@/refresh-components/modals/NewModal";
 import {
   ModalIds,
   useChatModal,
@@ -91,43 +90,58 @@ export const FeedbackModal = () => {
       : predefinedNegativeFeedbackOptions;
 
   const icon = feedbackType === "like" ? SvgThumbsUp : SvgThumbsDown;
+  const modalOpen = isOpen(ModalIds.FeedbackModal);
+
+  const handleClose = () => {
+    toggleModal(ModalIds.FeedbackModal, false);
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      handleClose();
+    }
+  };
 
   return (
-    <Modal
-      id={ModalIds.FeedbackModal}
-      title="Provide Additional Feedback"
-      icon={icon}
-      xs
-    >
-      {predefinedFeedbackOptions.length > 0 && (
-        <div className="flex flex-col p-4 gap-1">
-          {predefinedFeedbackOptions.map((feedback, index) => (
-            <LineItem
-              key={index}
-              onClick={() => setPredefinedFeedback(feedback)}
-            >
-              {feedback}
-            </LineItem>
-          ))}
-        </div>
-      )}
-      <div className="flex flex-col p-4 items-center justify-center bg-background-tint-01">
-        <FieldInput
-          label="Feedback"
-          placeholder={`What did you ${feedbackType} about this response?`}
-          className="!w-full"
-          ref={fieldInputRef}
-        />
-      </div>
-      <div className="flex flex-row p-4 items-center justify-end w-full gap-2">
-        <Button
-          onClick={() => toggleModal(ModalIds.FeedbackModal, false)}
-          secondary
-        >
-          Cancel
-        </Button>
-        <Button onClick={handleSubmit}>Submit</Button>
-      </div>
+    <Modal open={modalOpen} onOpenChange={handleOpenChange}>
+      <Modal.Content size="xs" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <Modal.CloseButton />
+
+        <Modal.Header className="flex flex-col p-4 gap-1">
+          <Modal.Icon icon={icon} />
+          <Modal.Title>Provide Additional Feedback</Modal.Title>
+        </Modal.Header>
+
+        <Modal.Body className="flex flex-col">
+          {predefinedFeedbackOptions.length > 0 && (
+            <div className="flex flex-col px-4 pb-4 gap-1">
+              {predefinedFeedbackOptions.map((feedback, index) => (
+                <LineItem
+                  key={index}
+                  onClick={() => setPredefinedFeedback(feedback)}
+                >
+                  {feedback}
+                </LineItem>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-col p-4 bg-background-tint-01">
+            <FieldInput
+              label="Feedback"
+              placeholder={`What did you ${feedbackType} about this response?`}
+              className="!w-full"
+              ref={fieldInputRef}
+            />
+          </div>
+        </Modal.Body>
+
+        <Modal.Footer className="flex flex-row p-4 items-center justify-end w-full gap-2">
+          <Button onClick={handleClose} secondary>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit}>Submit</Button>
+        </Modal.Footer>
+      </Modal.Content>
     </Modal>
   );
 };

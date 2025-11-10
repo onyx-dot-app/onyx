@@ -1,10 +1,7 @@
 import React from "react";
 import { SvgProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
-import SvgX from "@/icons/x";
-import CoreModal from "@/refresh-components/modals/CoreModal";
-import { useEscape } from "@/hooks/useKeyPress";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Modal } from "@/refresh-components/modals/NewModal";
 import Button from "@/refresh-components/buttons/Button";
 
 interface ConfirmationModalProps {
@@ -24,7 +21,7 @@ export default function ConfirmationModal({
   escapeToClose = true,
   clickOutsideToClose = true,
 
-  icon: Icon,
+  icon,
   title,
   children,
 
@@ -32,37 +29,52 @@ export default function ConfirmationModal({
   hideCancel,
   onClose,
 }: ConfirmationModalProps) {
-  useEscape(onClose, escapeToClose);
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      onClose();
+    }
+  };
 
   return (
-    <CoreModal
-      className="z-10 w-[27rem] rounded-16 border flex flex-col bg-background-tint-00"
-      onClickOutside={clickOutsideToClose ? onClose : undefined}
-    >
-      <div className="flex flex-col items-center justify-center p-4 gap-1">
-        <div className="h-[1.5rem] flex flex-row justify-between items-center w-full">
-          <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
-          <IconButton icon={SvgX} internal onClick={onClose} />
-        </div>
-        <Text headingH3 text04 className="w-full text-left">
-          {title}
-        </Text>
-      </div>
-      <div className="p-4">
-        {typeof children === "string" ? (
-          <Text text03>{children}</Text>
-        ) : (
-          children
-        )}
-      </div>
-      <div className="flex flex-row w-full items-center justify-end p-4 gap-2">
-        {!hideCancel && (
-          <Button secondary onClick={onClose}>
-            Cancel
-          </Button>
-        )}
-        {submit}
-      </div>
-    </CoreModal>
+    <Modal open onOpenChange={handleOpenChange}>
+      <Modal.Content
+        size="xs"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => {
+          if (!escapeToClose) {
+            e.preventDefault();
+          }
+        }}
+        onPointerDownOutside={(e) => {
+          if (!clickOutsideToClose) {
+            e.preventDefault();
+          }
+        }}
+      >
+        <Modal.CloseButton />
+
+        <Modal.Header className="flex flex-col p-4 gap-1">
+          <Modal.Icon icon={icon} />
+          <Modal.Title>{title}</Modal.Title>
+        </Modal.Header>
+
+        <Modal.Body className="px-4 pb-4">
+          {typeof children === "string" ? (
+            <Text text03>{children}</Text>
+          ) : (
+            children
+          )}
+        </Modal.Body>
+
+        <Modal.Footer className="flex flex-row w-full items-center justify-end px-4 pb-4 gap-2">
+          {!hideCancel && (
+            <Button secondary onClick={onClose}>
+              Cancel
+            </Button>
+          )}
+          {submit}
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal>
   );
 }
