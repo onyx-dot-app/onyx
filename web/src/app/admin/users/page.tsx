@@ -25,6 +25,7 @@ import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
 import SvgDownloadCloud from "@/icons/download-cloud";
+import { useAuthType } from "@/lib/hooks";
 
 interface CountDisplayProps {
   label: string;
@@ -285,11 +286,20 @@ const AddUserButton = ({
   const [bulkAddUsersModal, setBulkAddUsersModal] = useState(false);
   const [firstUserConfirmationModal, setFirstUserConfirmationModal] =
     useState(false);
+  const authType = useAuthType();
 
   const { data: invitedUsers } = useSWR<InvitedUserSnapshot[]>(
     "/api/manage/users/invited",
     errorHandlingFetcher
   );
+
+  const shouldShowFirstInviteWarning =
+    !NEXT_PUBLIC_CLOUD_ENABLED &&
+    authType !== null &&
+    authType !== "saml" &&
+    authType !== "oidc" &&
+    invitedUsers &&
+    invitedUsers.length === 0;
 
   const onSuccess = () => {
     mutate(
@@ -311,11 +321,7 @@ const AddUserButton = ({
   };
 
   const handleInviteClick = () => {
-    if (
-      !NEXT_PUBLIC_CLOUD_ENABLED &&
-      invitedUsers &&
-      invitedUsers.length === 0
-    ) {
+    if (shouldShowFirstInviteWarning) {
       setFirstUserConfirmationModal(true);
     } else {
       setBulkAddUsersModal(true);
