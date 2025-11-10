@@ -24,6 +24,7 @@ from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
+from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchRequest
@@ -48,9 +49,42 @@ logger = setup_logger()
 basic_router = APIRouter(prefix="/query")
 
 
+class DocumentSearchPagination(BaseModel):
+    offset: int
+    limit: int
+    returned_count: int
+    has_more: bool
+    next_offset: int | None = None
+
+
 class DocumentSearchResponse(BaseModel):
     top_documents: list[SavedSearchDocWithContent]
     llm_indices: list[int]
+    pagination: DocumentSearchPagination
+
+
+def _normalize_pagination(limit: int | None, offset: int | None) -> tuple[int, int]:
+    if limit is None:
+        resolved_limit = NUM_RETURNED_HITS
+    else:
+        resolved_limit = limit
+
+    if resolved_limit <= 0:
+        raise HTTPException(
+            status_code=400, detail="retrieval_options.limit must be positive"
+        )
+
+    if offset is None:
+        resolved_offset = 0
+    else:
+        resolved_offset = offset
+
+    if resolved_offset < 0:
+        raise HTTPException(
+            status_code=400, detail="retrieval_options.offset cannot be negative"
+        )
+
+    return resolved_limit, resolved_offset
 
 
 @basic_router.post("/document-search")
@@ -64,6 +98,10 @@ def handle_search_request(
     logger.notice(f"Received document search query: {query}")
 
     llm, fast_llm = get_default_llms()
+    pagination_limit, pagination_offset = _normalize_pagination(
+        limit=search_request.retrieval_options.limit,
+        offset=search_request.retrieval_options.offset,
+    )
 
     search_pipeline = SearchPipeline(
         search_request=SearchRequest(
@@ -72,8 +110,8 @@ def handle_search_request(
             human_selected_filters=search_request.retrieval_options.filters,
             enable_auto_detect_filters=search_request.retrieval_options.enable_auto_detect_filters,
             persona=None,  # For simplicity, default settings should be good for this search
-            offset=search_request.retrieval_options.offset,
-            limit=search_request.retrieval_options.limit,
+            offset=pagination_offset,
+            limit=pagination_limit + 1,
             rerank_settings=search_request.rerank_settings,
             evaluation_type=search_request.evaluation_type,
             chunks_above=search_request.chunks_above,
@@ -116,6 +154,9 @@ def handle_search_request(
         for section in top_sections
     ]
 
+    # Track whether the underlying retrieval produced more items than requested
+    has_more_results = len(top_docs) > pagination_limit
+
     # Deduping happens at the last step to avoid harming quality by dropping content early on
     deduped_docs = top_docs
     dropped_inds = None
@@ -134,7 +175,22 @@ def handle_search_request(
             dropped_indices=dropped_inds,
         )
 
-    return DocumentSearchResponse(top_documents=deduped_docs, llm_indices=llm_indices)
+    paginated_docs = deduped_docs[:pagination_limit]
+    llm_indices = [index for index in llm_indices if index < len(paginated_docs)]
+    has_more = has_more_results
+    pagination = DocumentSearchPagination(
+        offset=pagination_offset,
+        limit=pagination_limit,
+        returned_count=len(paginated_docs),
+        has_more=has_more,
+        next_offset=(pagination_offset + pagination_limit) if has_more else None,
+    )
+
+    return DocumentSearchResponse(
+        top_documents=paginated_docs,
+        llm_indices=llm_indices,
+        pagination=pagination,
+    )
 
 
 def get_answer_stream(
@@ -162,7 +218,7 @@ def get_answer_stream(
             is_for_edit=False,
         )
 
-    llm = get_main_llm_from_tuple(get_llms_for_persona(persona_info))
+    llm = get_main_llm_from_tuple(get_llms_for_persona(persona=persona_info, user=user))
 
     llm_tokenizer = get_tokenizer(
         model_name=llm.config.model_name,

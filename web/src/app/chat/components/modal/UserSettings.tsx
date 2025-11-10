@@ -35,6 +35,7 @@ import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import Text from "@/refresh-components/texts/Text";
 import SvgXOctagon from "@/icons/x-octagon";
 import { PATManagement } from "@/components/user/PATManagement";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 
 type SettingsSection =
   | "settings"
@@ -191,7 +192,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     string,
     { name: string; value: string }[]
   >();
-  llmProviders.forEach((llmProvider) => {
+  llmProviders?.forEach((llmProvider) => {
     const providerOptions = llmProvider.model_configurations.map(
       (model_configuration) => ({
         name: getDisplayNameForModel(model_configuration.name),
@@ -206,7 +207,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   } = {};
   const uniqueModelNames = new Set<string>();
 
-  llmProviders.forEach((llmProvider) => {
+  llmProviders?.forEach((llmProvider) => {
     if (!llmOptionsByProvider[llmProvider.provider]) {
       llmOptionsByProvider[llmProvider.provider] = [];
     }
@@ -475,7 +476,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
               </div>
               <LLMSelector
                 userSettings
-                llmProviders={llmProviders}
+                llmProviders={llmProviders ?? []}
                 currentLlm={
                   displayModel
                     ? structureValue(
