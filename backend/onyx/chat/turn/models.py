@@ -13,11 +13,11 @@ from agents import LocalShellTool
 from agents import Model
 from agents import ModelSettings
 from agents import WebSearchTool
-from backend.onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from pydantic import BaseModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.chat.models import PromptConfig
 from onyx.chat.turn.infra.emitter import Emitter
 from onyx.context.search.models import InferenceSection
@@ -25,6 +25,8 @@ from onyx.db.models import User
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.tool import Tool
+
+# from onyx.chat.models import PromptConfig
 
 # Type alias for all tool types accepted by the Agent
 AgentToolType = (

@@ -1,4 +1,3 @@
-from enum import Enum
 from typing import TYPE_CHECKING
 
 from langchain.schema.messages import AIMessage
@@ -17,13 +16,6 @@ if TYPE_CHECKING:
     from onyx.db.models import ChatMessage
 
 
-class ResearchAnswerPurpose(str, Enum):
-    """Research answer purpose options for agent search operations"""
-
-    ANSWER = "ANSWER"
-    CLARIFICATION_REQUEST = "CLARIFICATION_REQUEST"
-
-
 class PreviousMessage(BaseModel):
     """Simplified version of `ChatMessage`"""
 
@@ -32,8 +24,6 @@ class PreviousMessage(BaseModel):
     message_type: MessageType
     files: list[InMemoryChatFile]
     tool_call: ToolCallFinalResult | None
-    refined_answer_improvement: bool | None
-    research_answer_purpose: ResearchAnswerPurpose | None
 
     @classmethod
     def from_chat_message(
@@ -51,17 +41,16 @@ class PreviousMessage(BaseModel):
                 for file in available_files
                 if str(file.file_id) in message_file_ids
             ],
-            tool_call=(
-                ToolCallFinalResult(
-                    tool_name=chat_message.tool_call.tool_name,
-                    tool_args=chat_message.tool_call.tool_arguments,
-                    tool_result=chat_message.tool_call.tool_result,
-                )
-                if chat_message.tool_call
-                else None
-            ),
-            refined_answer_improvement=chat_message.refined_answer_improvement,
-            research_answer_purpose=chat_message.research_answer_purpose,
+            # TODO ensure the tool calls are correct here with the layering etc.
+            tool_call=None,  # TODO
+            #     ToolCallFinalResult(
+            #         tool_name=chat_message.tool_calls.tool_name,
+            #         tool_args=chat_message.tool_calls.tool_arguments,
+            #         tool_result=chat_message.tool_calls.tool_result,
+            #     )
+            #     if chat_message.tool_calls
+            #     else None
+            # ),
         )
 
     def to_agent_sdk_msg(self) -> dict:
@@ -107,6 +96,4 @@ class PreviousMessage(BaseModel):
             message_type=message_type,
             files=[],
             tool_call=None,
-            refined_answer_improvement=None,
-            research_answer_purpose=None,
         )

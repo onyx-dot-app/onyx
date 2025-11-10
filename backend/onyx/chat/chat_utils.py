@@ -236,7 +236,6 @@ def create_chat_chain(
         skip_permission_check=True,
         prefetch_tool_calls=prefetch_tool_calls,
     )
-    id_to_msg = {msg.id: msg for msg in all_chat_messages}
 
     if not all_chat_messages:
         raise RuntimeError("No messages in Chat Session")
@@ -258,13 +257,7 @@ def create_chat_chain(
             stop_at_message_id and current_message.id == stop_at_message_id
         ):
             break
-        current_message = id_to_msg.get(child_msg)
-
-        if current_message is None:
-            raise RuntimeError(
-                "Invalid message chain,"
-                "could not find next message in the same session"
-            )
+        current_message = child_msg
 
         if (
             current_message.message_type == MessageType.ASSISTANT
@@ -272,8 +265,11 @@ def create_chat_chain(
             and previous_message.message_type == MessageType.ASSISTANT
             and mainline_messages
         ):
-            if current_message.refined_answer_improvement:
-                mainline_messages[-1] = current_message
+            # Note that 2 user messages in a row is fine since this is often used for
+            # adding custom prompts and reminders
+            raise RuntimeError(
+                "Invalid message chain, cannot have two assistant messages in a row"
+            )
         else:
             mainline_messages.append(current_message)
 

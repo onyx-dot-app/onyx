@@ -545,7 +545,6 @@ export function processRawChatHistory(
       parentNodeId: messageInfo.parent_message,
       childrenNodeIds: [],
       latestChildNodeId: messageInfo.latest_child_message,
-      overridden_model: messageInfo.overridden_model,
       packets: packetsForMessage || [],
       currentFeedback: messageInfo.current_feedback as FeedbackType | null,
     };

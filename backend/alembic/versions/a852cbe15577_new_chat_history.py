@@ -18,130 +18,265 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Drop research agent tables
-    op.drop_table("research_agent_iteration_sub_step")
-    op.drop_table("research_agent_iteration")
+    # Drop research agent tables (if they exist)
+    op.execute("DROP TABLE IF EXISTS research_agent_iteration_sub_step CASCADE")
+    op.execute("DROP TABLE IF EXISTS research_agent_iteration CASCADE")
 
-    # Drop agent sub query and sub question tables
-    op.drop_table("agent__sub_query__search_doc")
-    op.drop_table("agent__sub_query")
-    op.drop_table("agent__sub_question")
+    # Drop agent sub query and sub question tables (if they exist)
+    op.execute("DROP TABLE IF EXISTS agent__sub_query__search_doc CASCADE")
+    op.execute("DROP TABLE IF EXISTS agent__sub_query CASCADE")
+    op.execute("DROP TABLE IF EXISTS agent__sub_question CASCADE")
 
     # Update ChatMessage table
-    # Rename parent_message to parent_message_id and make it a foreign key
-    op.alter_column(
-        "chat_message", "parent_message", new_column_name="parent_message_id"
+    # Rename parent_message to parent_message_id and make it a foreign key (if not already done)
+    conn = op.get_bind()
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'chat_message' AND column_name = 'parent_message'
+    """
+        )
     )
-    op.create_foreign_key(
-        "fk_chat_message_parent_message_id",
-        "chat_message",
-        "chat_message",
-        ["parent_message_id"],
-        ["id"],
-    )
+    if result.fetchone():
+        op.alter_column(
+            "chat_message", "parent_message", new_column_name="parent_message_id"
+        )
+        op.create_foreign_key(
+            "fk_chat_message_parent_message_id",
+            "chat_message",
+            "chat_message",
+            ["parent_message_id"],
+            ["id"],
+        )
 
-    # Rename latest_child_message to latest_child_message_id and make it a foreign key
-    op.alter_column(
-        "chat_message",
-        "latest_child_message",
-        new_column_name="latest_child_message_id",
+    # Rename latest_child_message to latest_child_message_id and make it a foreign key (if not already done)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'chat_message' AND column_name = 'latest_child_message'
+    """
+        )
     )
-    op.create_foreign_key(
-        "fk_chat_message_latest_child_message_id",
-        "chat_message",
-        "chat_message",
-        ["latest_child_message_id"],
-        ["id"],
-    )
+    if result.fetchone():
+        op.alter_column(
+            "chat_message",
+            "latest_child_message",
+            new_column_name="latest_child_message_id",
+        )
+        op.create_foreign_key(
+            "fk_chat_message_latest_child_message_id",
+            "chat_message",
+            "chat_message",
+            ["latest_child_message_id"],
+            ["id"],
+        )
 
-    # Add reasoning_tokens column
-    op.add_column(
-        "chat_message", sa.Column("reasoning_tokens", sa.Text(), nullable=True)
+    # Add reasoning_tokens column (if not exists)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'chat_message' AND column_name = 'reasoning_tokens'
+    """
+        )
     )
+    if not result.fetchone():
+        op.add_column(
+            "chat_message", sa.Column("reasoning_tokens", sa.Text(), nullable=True)
+        )
 
-    # Drop columns no longer needed
-    op.drop_column("chat_message", "rephrased_query")
-    op.drop_column("chat_message", "alternate_assistant_id")
-    op.drop_column("chat_message", "overridden_model")
-    op.drop_column("chat_message", "is_agentic")
-    op.drop_column("chat_message", "refined_answer_improvement")
-    op.drop_column("chat_message", "research_type")
-    op.drop_column("chat_message", "research_plan")
-    op.drop_column("chat_message", "research_answer_purpose")
-    op.drop_column("chat_message", "citations")
+    # Drop columns no longer needed (if they exist)
+    for col in [
+        "rephrased_query",
+        "alternate_assistant_id",
+        "overridden_model",
+        "is_agentic",
+        "refined_answer_improvement",
+        "research_type",
+        "research_plan",
+        "research_answer_purpose",
+    ]:
+        result = conn.execute(
+            sa.text(
+                f"""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'chat_message' AND column_name = '{col}'
+        """
+            )
+        )
+        if result.fetchone():
+            op.drop_column("chat_message", col)
 
     # Update ToolCall table
-    # Add new columns
-    op.add_column(
-        "tool_call",
-        sa.Column("chat_session_id", postgresql.UUID(as_uuid=True), nullable=False),
+    # Add chat_session_id column (if not exists)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'tool_call' AND column_name = 'chat_session_id'
+    """
+        )
     )
-    op.create_foreign_key(
-        "fk_tool_call_chat_session_id",
-        "tool_call",
-        "chat_session",
-        ["chat_session_id"],
-        ["id"],
-    )
+    if not result.fetchone():
+        op.add_column(
+            "tool_call",
+            sa.Column("chat_session_id", postgresql.UUID(as_uuid=True), nullable=False),
+        )
+        op.create_foreign_key(
+            "fk_tool_call_chat_session_id",
+            "tool_call",
+            "chat_session",
+            ["chat_session_id"],
+            ["id"],
+        )
 
-    # Rename message_id to parent_chat_message_id and make nullable
-    op.alter_column(
-        "tool_call",
-        "message_id",
-        new_column_name="parent_chat_message_id",
-        nullable=True,
+    # Rename message_id to parent_chat_message_id and make nullable (if not already done)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'tool_call' AND column_name = 'message_id'
+    """
+        )
     )
+    if result.fetchone():
+        op.alter_column(
+            "tool_call",
+            "message_id",
+            new_column_name="parent_chat_message_id",
+            nullable=True,
+        )
 
-    # Add parent_tool_call_id
-    op.add_column(
-        "tool_call", sa.Column("parent_tool_call_id", sa.Integer(), nullable=True)
+    # Add parent_tool_call_id (if not exists)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'tool_call' AND column_name = 'parent_tool_call_id'
+    """
+        )
     )
-    op.create_foreign_key(
-        "fk_tool_call_parent_tool_call_id",
-        "tool_call",
-        "tool_call",
-        ["parent_tool_call_id"],
-        ["id"],
-    )
+    if not result.fetchone():
+        op.add_column(
+            "tool_call", sa.Column("parent_tool_call_id", sa.Integer(), nullable=True)
+        )
+        op.create_foreign_key(
+            "fk_tool_call_parent_tool_call_id",
+            "tool_call",
+            "tool_call",
+            ["parent_tool_call_id"],
+            ["id"],
+        )
 
-    # Add turn_number, depth, tool_call_id
-    op.add_column(
-        "tool_call",
-        sa.Column("turn_number", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "tool_call",
-        sa.Column("depth", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "tool_call",
-        sa.Column("tool_call_id", sa.Integer(), nullable=False, server_default="0"),
-    )
+    # Add turn_number, depth, tool_id (if not exists)
+    for col_name in ["turn_number", "depth", "tool_id"]:
+        result = conn.execute(
+            sa.text(
+                f"""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'tool_call' AND column_name = '{col_name}'
+        """
+            )
+        )
+        if not result.fetchone():
+            op.add_column(
+                "tool_call",
+                sa.Column(col_name, sa.Integer(), nullable=False, server_default="0"),
+            )
 
-    # Add reasoning_tokens
-    op.add_column("tool_call", sa.Column("reasoning_tokens", sa.Text(), nullable=True))
-
-    # Rename tool_arguments to tool_call_arguments
-    op.alter_column(
-        "tool_call", "tool_arguments", new_column_name="tool_call_arguments"
+    # Add tool_call_id as String (if not exists)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'tool_call' AND column_name = 'tool_call_id'
+    """
+        )
     )
+    if not result.fetchone():
+        op.add_column(
+            "tool_call",
+            sa.Column("tool_call_id", sa.String(), nullable=False, server_default=""),
+        )
 
-    # Rename tool_result to tool_call_response
-    op.alter_column("tool_call", "tool_result", new_column_name="tool_call_response")
-
-    # Add tool_call_tokens
-    op.add_column(
-        "tool_call",
-        sa.Column("tool_call_tokens", sa.Integer(), nullable=False, server_default="0"),
+    # Add reasoning_tokens (if not exists)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'tool_call' AND column_name = 'reasoning_tokens'
+    """
+        )
     )
+    if not result.fetchone():
+        op.add_column(
+            "tool_call", sa.Column("reasoning_tokens", sa.Text(), nullable=True)
+        )
 
-    # Drop tool_name column
-    op.drop_column("tool_call", "tool_name")
+    # Rename tool_arguments to tool_call_arguments (if not already done)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'tool_call' AND column_name = 'tool_arguments'
+    """
+        )
+    )
+    if result.fetchone():
+        op.alter_column(
+            "tool_call", "tool_arguments", new_column_name="tool_call_arguments"
+        )
+
+    # Rename tool_result to tool_call_response (if not already done)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'tool_call' AND column_name = 'tool_result'
+    """
+        )
+    )
+    if result.fetchone():
+        op.alter_column(
+            "tool_call", "tool_result", new_column_name="tool_call_response"
+        )
+
+    # Add tool_call_tokens (if not exists)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'tool_call' AND column_name = 'tool_call_tokens'
+    """
+        )
+    )
+    if not result.fetchone():
+        op.add_column(
+            "tool_call",
+            sa.Column(
+                "tool_call_tokens", sa.Integer(), nullable=False, server_default="0"
+            ),
+        )
+
+    # Drop tool_name column (if exists)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'tool_call' AND column_name = 'tool_name'
+    """
+        )
+    )
+    if result.fetchone():
+        op.drop_column("tool_call", "tool_name")
 
 
 def downgrade() -> None:
     # Reverse ToolCall changes
     op.add_column("tool_call", sa.Column("tool_name", sa.String(), nullable=False))
+    op.drop_column("tool_call", "tool_id")
     op.drop_column("tool_call", "tool_call_tokens")
     op.alter_column("tool_call", "tool_call_response", new_column_name="tool_result")
     op.alter_column(
@@ -164,10 +299,6 @@ def downgrade() -> None:
     op.drop_constraint("fk_tool_call_chat_session_id", "tool_call", type_="foreignkey")
     op.drop_column("tool_call", "chat_session_id")
 
-    # Reverse ChatMessage changes
-    op.add_column(
-        "chat_message", sa.Column("citations", postgresql.JSONB(), nullable=True)
-    )
     op.add_column(
         "chat_message",
         sa.Column(

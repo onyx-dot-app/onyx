@@ -778,16 +778,17 @@ def stream_chat_message_objects(
         )
 
         yield from _fast_message_stream(
-            messages_in_agent_sdk_format,
-            tools,
-            db_session,
-            get_redis_client(),
-            chat_session_id,
-            reserved_message_id,
-            prompt_config,
-            llm_model,
-            model_settings,
-            user,
+            messages=messages_in_agent_sdk_format,
+            tools=tools,
+            db_session=db_session,
+            redis_client=get_redis_client(),
+            chat_session_id=chat_session_id,
+            reserved_message_id=reserved_message_id,
+            prompt_config=prompt_config,
+            llm_model=llm_model,
+            llm=llm,
+            model_settings=model_settings,
+            user_or_none=user,
         )
 
     except ValueError as e:

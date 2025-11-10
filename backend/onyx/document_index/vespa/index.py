@@ -21,7 +21,6 @@ import requests  # type: ignore
 from pydantic import BaseModel
 from retry import retry
 
-from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
@@ -32,6 +31,7 @@ from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.models import QueryExpansionType
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info

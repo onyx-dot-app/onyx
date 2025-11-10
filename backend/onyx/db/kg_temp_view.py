@@ -15,17 +15,33 @@
 # Base = declarative_base()
 
 
-# def get_user_view_names(user_email: str, tenant_id: str) -> KGViewNames:
+# def get_user_view_names(
+#     user_email: str, tenant_id: str
+# ) -> KGViewNames:
 #     user_email_cleaned = (
-#         user_email.replace("@", "__").replace(".", "_").replace("+", "_")
+#         user_email.replace("@", "__")
+#         .replace(".", "_")
+#         .replace("+", "_")
 #     )
-#     random_suffix_str = str(random.randint(1000000, 9999999))
-#     prefix = f'"{tenant_id}".'
-#     suffix = f"_{user_email_cleaned}_{random_suffix_str}"
+#     random_suffix_str = str(
+#         random.randint(1000000, 9999999)
+#     )
 #     return KGViewNames(
-#         allowed_docs_view_name=f"{prefix}{KG_TEMP_ALLOWED_DOCS_VIEW_NAME_PREFIX}{suffix}",
-#         kg_relationships_view_name=f"{prefix}{KG_TEMP_KG_RELATIONSHIPS_VIEW_NAME_PREFIX}{suffix}",
-#         kg_entity_view_name=f"{prefix}{KG_TEMP_KG_ENTITIES_VIEW_NAME_PREFIX}{suffix}",
+#         allowed_docs_view_name=(
+#             f'"{tenant_id}".'
+#             f"{KG_TEMP_ALLOWED_DOCS_VIEW_NAME_PREFIX}_"
+#             f"{user_email_cleaned}_{random_suffix_str}"
+#         ),
+#         kg_relationships_view_name=(
+#             f'"{tenant_id}".'
+#             f"{KG_TEMP_KG_RELATIONSHIPS_VIEW_NAME_PREFIX}_"
+#             f"{user_email_cleaned}_{random_suffix_str}"
+#         ),
+#         kg_entity_view_name=(
+#             f'"{tenant_id}".'
+#             f"{KG_TEMP_KG_ENTITIES_VIEW_NAME_PREFIX}_"
+#             f"{user_email_cleaned}_{random_suffix_str}"
+#         ),
 #     )
 
 

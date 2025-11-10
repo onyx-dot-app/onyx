@@ -345,16 +345,8 @@ class ExtendedToolResponse(ToolResponse, SubQuestionIdentifier):
     pass
 
 
-class RefinedAnswerImprovement(BaseModel):
-    refined_answer_improvement: bool
-
-
 AgentSearchPacket = Union[
-    SubQuestionPiece
-    | AgentAnswerPiece
-    | SubQueryPiece
-    | ExtendedToolResponse
-    | RefinedAnswerImprovement
+    SubQuestionPiece | AgentAnswerPiece | SubQueryPiece | ExtendedToolResponse
 ]
 
 

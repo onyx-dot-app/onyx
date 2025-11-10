@@ -189,7 +189,7 @@ def create_run(
         commit=False,
     )
     db_session.flush()
-    latest_message.latest_child_message = new_message.id
+    latest_message.latest_child_message = new_message
     db_session.commit()
 
     # Schedule the background task

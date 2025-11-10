@@ -17,7 +17,6 @@ from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.shared_graph_utils.models import CombinedAgentMetrics
 from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
@@ -25,14 +24,12 @@ from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDocs
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
-from onyx.db.models import AgentSearchMetrics
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ChatSession
 from onyx.db.models import ChatSessionSharedStatus
 from onyx.db.models import SearchDoc
 from onyx.db.models import SearchDoc as DBSearchDoc
-from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.file_store.file_store import get_default_file_store
@@ -181,22 +178,6 @@ def get_chat_sessions_by_user(
     return list(chat_sessions)
 
 
-def delete_search_doc_message_relationship(
-    message_id: int, db_session: Session
-) -> None:
-    db_session.query(ChatMessage__SearchDoc).filter(
-        ChatMessage__SearchDoc.chat_message_id == message_id
-    ).delete(synchronize_session=False)
-
-    db_session.commit()
-
-
-def delete_tool_call_for_message_id(message_id: int, db_session: Session) -> None:
-    stmt = delete(ToolCall).where(ToolCall.message_id == message_id)
-    db_session.execute(stmt)
-    db_session.commit()
-
-
 def delete_orphaned_search_docs(db_session: Session) -> None:
     orphaned_docs = (
         db_session.query(SearchDoc)
@@ -219,10 +200,7 @@ def delete_messages_and_files_from_chat_session(
         )
     ).fetchall()
 
-    for id, files in messages_with_files:
-        delete_tool_call_for_message_id(message_id=id, db_session=db_session)
-        delete_search_doc_message_relationship(message_id=id, db_session=db_session)
-
+    for _, files in messages_with_files:
         file_store = get_default_file_store()
         for file_info in files or []:
             file_store.delete_file(file_id=file_info.get("id"))
@@ -864,48 +842,53 @@ def translate_db_message_to_chat_message_detail(
         parent_message=chat_message.parent_message_id,
         latest_child_message=chat_message.latest_child_message_id,
         message=chat_message.message,
+        reasoning_tokens=chat_message.reasoning_tokens,
+        tool_call=None,  # TODO
         message_type=chat_message.message_type,
+        context_docs=get_retrieval_docs_from_search_docs(
+            chat_message.search_docs, remove_doc_content=remove_doc_content
+        ),
+        citations=chat_message.citations,
         time_sent=chat_message.time_sent,
         files=chat_message.files or [],
         error=chat_message.error,
         current_feedback=current_feedback,
-        reasoning_tokens=chat_message.reasoning_tokens,
     )
 
     return chat_msg_detail
 
 
-def log_agent_metrics(
-    db_session: Session,
-    user_id: UUID | None,
-    persona_id: int | None,  # Can be none if temporary persona is used
-    agent_type: str,
-    start_time: datetime | None,
-    agent_metrics: CombinedAgentMetrics,
-) -> AgentSearchMetrics:
-    agent_timings = agent_metrics.timings
-    agent_base_metrics = agent_metrics.base_metrics
-    agent_refined_metrics = agent_metrics.refined_metrics
-    agent_additional_metrics = agent_metrics.additional_metrics
+# def log_agent_metrics(
+#     db_session: Session,
+#     user_id: UUID | None,
+#     persona_id: int | None,  # Can be none if temporary persona is used
+#     agent_type: str,
+#     start_time: datetime | None,
+#     agent_metrics: CombinedAgentMetrics,
+# ) -> AgentSearchMetrics:
+#     agent_timings = agent_metrics.timings
+#     agent_base_metrics = agent_metrics.base_metrics
+#     agent_refined_metrics = agent_metrics.refined_metrics
+#     agent_additional_metrics = agent_metrics.additional_metrics
 
-    agent_metric_tracking = AgentSearchMetrics(
-        user_id=user_id,
-        persona_id=persona_id,
-        agent_type=agent_type,
-        start_time=start_time,
-        base_duration_s=agent_timings.base_duration_s,
-        full_duration_s=agent_timings.full_duration_s,
-        base_metrics=vars(agent_base_metrics) if agent_base_metrics else None,
-        refined_metrics=vars(agent_refined_metrics) if agent_refined_metrics else None,
-        all_metrics=(
-            vars(agent_additional_metrics) if agent_additional_metrics else None
-        ),
-    )
+#     agent_metric_tracking = AgentSearchMetrics(
+#         user_id=user_id,
+#         persona_id=persona_id,
+#         agent_type=agent_type,
+#         start_time=start_time,
+#         base_duration_s=agent_timings.base_duration_s,
+#         full_duration_s=agent_timings.full_duration_s,
+#         base_metrics=vars(agent_base_metrics) if agent_base_metrics else None,
+#         refined_metrics=vars(agent_refined_metrics) if agent_refined_metrics else None,
+#         all_metrics=(
+#             vars(agent_additional_metrics) if agent_additional_metrics else None
+#         ),
+#     )
 
-    db_session.add(agent_metric_tracking)
-    db_session.flush()
+#     db_session.add(agent_metric_tracking)
+#     db_session.flush()
 
-    return agent_metric_tracking
+#     return agent_metric_tracking
 
 
 def update_chat_session_updated_at_timestamp(

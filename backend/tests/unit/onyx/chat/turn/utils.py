@@ -532,10 +532,8 @@ class FakeQuery:
                 self.citations: dict[str, Any] = {}
                 self.error = None
                 self.alternate_assistant_id = None
-                self.overridden_model = None
                 self.research_plan: dict[str, Any] = {}
                 self.final_documents: list[Any] = []
-                self.research_answer_purpose = "ANSWER"
                 self.parent_message = None
                 self.is_agentic = False
                 self.search_docs: list[Any] = []

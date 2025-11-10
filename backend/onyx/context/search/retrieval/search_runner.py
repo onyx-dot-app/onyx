@@ -4,7 +4,6 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import ChunkIndexRequest
@@ -13,6 +12,7 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import MAX_METRICS_CONTENT
+from onyx.context.search.models import QueryExpansionType
 from onyx.context.search.models import RetrievalMetricsContainer
 from onyx.context.search.models import SearchQuery
 from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA

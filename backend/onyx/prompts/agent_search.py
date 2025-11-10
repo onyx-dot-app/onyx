@@ -1,6 +1,4 @@
-from onyx.agents.agent_search.shared_graph_utils.constants import (
-    AGENT_ANSWER_SEPARATOR,
-)
+AGENT_ANSWER_SEPARATOR = "Answer:"
 
 # Standards
 SEPARATOR_LINE = "-------"

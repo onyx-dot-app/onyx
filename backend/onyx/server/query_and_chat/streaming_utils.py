@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
-from typing import cast
 
 from sqlalchemy.orm import Session
 
@@ -12,7 +10,6 @@ from onyx.db.chat import get_db_search_doc_by_document_id
 from onyx.db.chat import get_db_search_doc_by_id
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
 from onyx.db.models import ChatMessage
-from onyx.db.tools import get_tool_by_id
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.feature_flags_keys import DISABLE_SIMPLE_AGENT_FRAMEWORK
 from onyx.server.query_and_chat.streaming_models import CitationDelta
@@ -34,14 +31,6 @@ from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.models import GeneratedImage
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
-from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
-    KnowledgeGraphTool,
-)
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -268,8 +257,8 @@ def translate_db_message_to_packets_simple(
 
     if chat_message.message_type == MessageType.ASSISTANT:
         citations = chat_message.citations
-
         citation_info_list: list[CitationInfo] = []
+
         if citations:
             for citation_num, search_doc_id in citations.items():
                 search_doc = get_db_search_doc_by_id(search_doc_id, db_session)
@@ -280,116 +269,108 @@ def translate_db_message_to_packets_simple(
                             document_id=search_doc.document_id,
                         )
                     )
-        elif chat_message.search_docs:
-            for i, search_doc in enumerate(chat_message.search_docs):
-                citation_info_list.append(
-                    CitationInfo(
-                        citation_num=i,
-                        document_id=search_doc.document_id,
-                    )
-                )
 
-        research_iterations = []
-        if chat_message.research_iterations:
-            research_iterations = sorted(
-                chat_message.research_iterations, key=lambda x: x.iteration_nr
-            )
-            for research_iteration in research_iterations:
+        # research_iterations = []
+        # if chat_message.research_iterations:
+        #     research_iterations = sorted(
+        #         chat_message.research_iterations, key=lambda x: x.iteration_nr
+        #     )
+        #     for research_iteration in research_iterations:
 
-                sub_steps = research_iteration.sub_steps
-                tasks: list[str] = []
-                tool_call_ids: list[int | None] = []
-                cited_docs: list[SavedSearchDoc] = []
-                fetches: list[list[SavedSearchDoc]] = []
-                is_web_fetch: bool = False
+        #         sub_steps = research_iteration.sub_steps
+        #         tasks: list[str] = []
+        #         tool_call_ids: list[int | None] = []
+        #         cited_docs: list[SavedSearchDoc] = []
+        #         fetches: list[list[SavedSearchDoc]] = []
+        #         is_web_fetch: bool = False
 
-                for sub_step in sub_steps:
-                    # For v2 tools, use the queries field if available, otherwise fall back to sub_step_instructions
-                    if sub_step.queries:
-                        tasks.extend(sub_step.queries)
-                    else:
-                        tasks.append(sub_step.sub_step_instructions or "")
-                    tool_call_ids.append(sub_step.sub_step_tool_id)
+        #         for sub_step in sub_steps:
+        #             # For v2 tools, use the queries field if available, otherwise fall back to sub_step_instructions
+        #             if sub_step.queries:
+        #                 tasks.extend(sub_step.queries)
+        #             else:
+        #                 tasks.append(sub_step.sub_step_instructions or "")
+        #             tool_call_ids.append(sub_step.sub_step_tool_id)
 
-                    sub_step_cited_docs = sub_step.cited_doc_results
-                    sub_step_saved_search_docs: list[SavedSearchDoc] = []
-                    if isinstance(sub_step_cited_docs, list):
-                        for doc_data in sub_step_cited_docs:
-                            doc_data["db_doc_id"] = 1
-                            doc_data["boost"] = 1
-                            doc_data["hidden"] = False
-                            doc_data["chunk_ind"] = 0
+        #             sub_step_cited_docs = sub_step.cited_doc_results
+        #             sub_step_saved_search_docs: list[SavedSearchDoc] = []
+        #             if isinstance(sub_step_cited_docs, list):
+        #                 for doc_data in sub_step_cited_docs:
+        #                     doc_data["db_doc_id"] = 1
+        #                     doc_data["boost"] = 1
+        #                     doc_data["hidden"] = False
+        #                     doc_data["chunk_ind"] = 0
 
-                            if (
-                                doc_data["updated_at"] is None
-                                or doc_data["updated_at"] == "None"
-                            ):
-                                doc_data["updated_at"] = datetime.now()
+        #                     if (
+        #                         doc_data["updated_at"] is None
+        #                         or doc_data["updated_at"] == "None"
+        #                     ):
+        #                         doc_data["updated_at"] = datetime.now()
 
-                            sub_step_saved_search_docs.append(
-                                SavedSearchDoc.from_dict(doc_data)
-                                if isinstance(doc_data, dict)
-                                else doc_data
-                            )
+        #                     sub_step_saved_search_docs.append(
+        #                         SavedSearchDoc.from_dict(doc_data)
+        #                         if isinstance(doc_data, dict)
+        #                         else doc_data
+        #                     )
 
-                        cited_docs.extend(sub_step_saved_search_docs)
-                    step_nr += 1
+        #                 cited_docs.extend(sub_step_saved_search_docs)
+        #             step_nr += 1
 
-                    if sub_step.is_web_fetch and len(sub_step_saved_search_docs) > 0:
-                        is_web_fetch = True
-                        fetches.append(sub_step_saved_search_docs)
+        #             if sub_step.is_web_fetch and len(sub_step_saved_search_docs) > 0:
+        #                 is_web_fetch = True
+        #                 fetches.append(sub_step_saved_search_docs)
 
-                if len(set(tool_call_ids)) > 1:
-                    step_nr += 1
+        #         if len(set(tool_call_ids)) > 1:
+        #             step_nr += 1
 
-                elif len(sub_steps) == 0:
-                    # no sub steps, no tool calls. But iteration can have reasoning or purpose
-                    continue
+        #         elif len(sub_steps) == 0:
+        #             # no sub steps, no tool calls. But iteration can have reasoning or purpose
+        #             continue
 
-                else:
-                    tool_id = tool_call_ids[0]
-                    if not tool_id:
-                        raise ValueError("Tool ID is required")
-                    tool = get_tool_by_id(tool_id, db_session)
-                    tool_name = tool.name
+        #         else:
+        #             tool_id = tool_call_ids[0]
+        #             if not tool_id:
+        #                 raise ValueError("Tool ID is required")
+        #             tool = get_tool_by_id(tool_id, db_session)
+        #             tool_name = tool.name
 
-                    if tool_name in [SearchTool.__name__, KnowledgeGraphTool.__name__]:
-                        cited_docs = cast(list[SavedSearchDoc], cited_docs)
-                        packet_list.extend(
-                            create_search_packets(tasks, cited_docs, False, step_nr)
-                        )
-                        step_nr += 1
+        #             if tool_name in [SearchTool.__name__, KnowledgeGraphTool.__name__]:
+        #                 cited_docs = cast(list[SavedSearchDoc], cited_docs)
+        #                 packet_list.extend(
+        #                     create_search_packets(tasks, cited_docs, False, step_nr)
+        #                 )
+        #                 step_nr += 1
 
-                    elif tool_name == WebSearchTool.__name__:
-                        cited_docs = cast(list[SavedSearchDoc], cited_docs)
-                        if is_web_fetch:
-                            packet_list.extend(create_fetch_packets(fetches, step_nr))
-                        else:
-                            packet_list.extend(
-                                create_search_packets(tasks, cited_docs, True, step_nr)
-                            )
+        #             elif tool_name == WebSearchTool.__name__:
+        #                 cited_docs = cast(list[SavedSearchDoc], cited_docs)
+        #                 if is_web_fetch:
+        #                     packet_list.extend(create_fetch_packets(fetches, step_nr))
+        #                 else:
+        #                     packet_list.extend(
+        #                         create_search_packets(tasks, cited_docs, True, step_nr)
+        #                     )
 
-                        step_nr += 1
+        #                 step_nr += 1
 
-                    elif tool_name == ImageGenerationTool.__name__:
-                        if sub_step.generated_images:
-                            packet_list.extend(
-                                create_image_generation_packets(
-                                    sub_step.generated_images.images, step_nr
-                                )
-                            )
-                        step_nr += 1
+        #             elif tool_name == ImageGenerationTool.__name__:
+        #                 if sub_step.generated_images:
+        #                     packet_list.extend(
+        #                         create_image_generation_packets(
+        #                             sub_step.generated_images.images, step_nr
+        #                         )
+        #                     )
+        #                 step_nr += 1
 
-                    else:
-                        packet_list.extend(
-                            create_custom_tool_packets(
-                                tool_name=tool_name,
-                                response_type="text",
-                                step_nr=step_nr,
-                                data=sub_step.sub_answer,
-                            )
-                        )
-                        step_nr += 1
+        #             else:
+        #                 packet_list.extend(
+        #                     create_custom_tool_packets(
+        #                         tool_name=tool_name,
+        #                         response_type="text",
+        #                         step_nr=step_nr,
+        #                         data=sub_step.sub_answer,
+        #                     )
+        #                 )
+        #                 step_nr += 1
 
         if chat_message.message:
             packet_list.extend(
@@ -405,7 +386,7 @@ def translate_db_message_to_packets_simple(
             )
             step_nr += 1
 
-        if len(citation_info_list) > 0 and len(research_iterations) == 0:
+        if len(citation_info_list) > 0:
             saved_search_docs: list[SavedSearchDoc] = []
             for citation_info in citation_info_list:
                 cited_doc = get_db_search_doc_by_document_id(
@@ -475,119 +456,119 @@ def translate_db_message_to_packets(
                     )
                 )
 
-        research_iterations = []
-        if chat_message.research_iterations:
-            research_iterations = sorted(
-                chat_message.research_iterations, key=lambda x: x.iteration_nr
-            )
-            for research_iteration in research_iterations:
-                if research_iteration.iteration_nr > 1 and research_iteration.reasoning:
-                    packet_list.extend(
-                        create_reasoning_packets(research_iteration.reasoning, step_nr)
-                    )
-                    step_nr += 1
+        # research_iterations = []
+        # if chat_message.research_iterations:
+        #     research_iterations = sorted(
+        #         chat_message.research_iterations, key=lambda x: x.iteration_nr
+        #     )
+        #     for research_iteration in research_iterations:
+        #         if research_iteration.iteration_nr > 1 and research_iteration.reasoning:
+        #             packet_list.extend(
+        #                 create_reasoning_packets(research_iteration.reasoning, step_nr)
+        #             )
+        #             step_nr += 1
 
-                if research_iteration.purpose:
-                    packet_list.extend(
-                        create_reasoning_packets(research_iteration.purpose, step_nr)
-                    )
-                    step_nr += 1
+        #         if research_iteration.purpose:
+        #             packet_list.extend(
+        #                 create_reasoning_packets(research_iteration.purpose, step_nr)
+        #             )
+        #             step_nr += 1
 
-                sub_steps = research_iteration.sub_steps
-                tasks: list[str] = []
-                tool_call_ids: list[int | None] = []
-                cited_docs: list[SavedSearchDoc] = []
+        #         sub_steps = research_iteration.sub_steps
+        #         tasks: list[str] = []
+        #         tool_call_ids: list[int | None] = []
+        #         cited_docs: list[SavedSearchDoc] = []
 
-                for sub_step in sub_steps:
-                    # For v2 tools, use the queries field if available, otherwise fall back to sub_step_instructions
-                    if sub_step.queries:
-                        tasks.extend(sub_step.queries)
-                    else:
-                        tasks.append(sub_step.sub_step_instructions or "")
-                    tool_call_ids.append(sub_step.sub_step_tool_id)
+        #         for sub_step in sub_steps:
+        #             # For v2 tools, use the queries field if available, otherwise fall back to sub_step_instructions
+        #             if sub_step.queries:
+        #                 tasks.extend(sub_step.queries)
+        #             else:
+        #                 tasks.append(sub_step.sub_step_instructions or "")
+        #             tool_call_ids.append(sub_step.sub_step_tool_id)
 
-                    sub_step_cited_docs = sub_step.cited_doc_results
-                    if isinstance(sub_step_cited_docs, list):
-                        sub_step_saved_search_docs: list[SavedSearchDoc] = []
-                        for doc_data in sub_step_cited_docs:
-                            doc_data["db_doc_id"] = 1
-                            doc_data["boost"] = 1
-                            doc_data["hidden"] = False
-                            doc_data["chunk_ind"] = 0
+        #             sub_step_cited_docs = sub_step.cited_doc_results
+        #             if isinstance(sub_step_cited_docs, list):
+        #                 sub_step_saved_search_docs: list[SavedSearchDoc] = []
+        #                 for doc_data in sub_step_cited_docs:
+        #                     doc_data["db_doc_id"] = 1
+        #                     doc_data["boost"] = 1
+        #                     doc_data["hidden"] = False
+        #                     doc_data["chunk_ind"] = 0
 
-                            if (
-                                doc_data["updated_at"] is None
-                                or doc_data["updated_at"] == "None"
-                            ):
-                                doc_data["updated_at"] = datetime.now()
+        #                     if (
+        #                         doc_data["updated_at"] is None
+        #                         or doc_data["updated_at"] == "None"
+        #                     ):
+        #                         doc_data["updated_at"] = datetime.now()
 
-                            sub_step_saved_search_docs.append(
-                                SavedSearchDoc.from_dict(doc_data)
-                                if isinstance(doc_data, dict)
-                                else doc_data
-                            )
+        #                     sub_step_saved_search_docs.append(
+        #                         SavedSearchDoc.from_dict(doc_data)
+        #                         if isinstance(doc_data, dict)
+        #                         else doc_data
+        #                     )
 
-                        cited_docs.extend(sub_step_saved_search_docs)
-                    else:
-                        packet_list.extend(
-                            create_reasoning_packets(
-                                _CANNOT_SHOW_STEP_RESULTS_STR, step_nr
-                            )
-                        )
-                    step_nr += 1
+        #                 cited_docs.extend(sub_step_saved_search_docs)
+        #             else:
+        #                 packet_list.extend(
+        #                     create_reasoning_packets(
+        #                         _CANNOT_SHOW_STEP_RESULTS_STR, step_nr
+        #                     )
+        #                 )
+        #             step_nr += 1
 
-                if len(set(tool_call_ids)) > 1:
-                    packet_list.extend(
-                        create_reasoning_packets(_CANNOT_SHOW_STEP_RESULTS_STR, step_nr)
-                    )
-                    step_nr += 1
+        #         if len(set(tool_call_ids)) > 1:
+        #             packet_list.extend(
+        #                 create_reasoning_packets(_CANNOT_SHOW_STEP_RESULTS_STR, step_nr)
+        #             )
+        #             step_nr += 1
 
-                elif len(sub_steps) == 0:
-                    # no sub steps, no tool calls. But iteration can have reasoning or purpose
-                    continue
+        #         elif len(sub_steps) == 0:
+        #             # no sub steps, no tool calls. But iteration can have reasoning or purpose
+        #             continue
 
-                else:
-                    tool_id = tool_call_ids[0]
-                    if not tool_id:
-                        raise ValueError("Tool ID is required")
-                    tool = get_tool_by_id(tool_id, db_session)
-                    tool_name = tool.name
+        #         else:
+        #             tool_id = tool_call_ids[0]
+        #             if not tool_id:
+        #                 raise ValueError("Tool ID is required")
+        #             tool = get_tool_by_id(tool_id, db_session)
+        #             tool_name = tool.name
 
-                    if tool_name in [SearchTool.__name__, KnowledgeGraphTool.__name__]:
-                        cited_docs = cast(list[SavedSearchDoc], cited_docs)
-                        packet_list.extend(
-                            create_search_packets(tasks, cited_docs, False, step_nr)
-                        )
-                        step_nr += 1
+        #             if tool_name in [SearchTool.__name__, KnowledgeGraphTool.__name__]:
+        #                 cited_docs = cast(list[SavedSearchDoc], cited_docs)
+        #                 packet_list.extend(
+        #                     create_search_packets(tasks, cited_docs, False, step_nr)
+        #                 )
+        #                 step_nr += 1
 
-                    elif tool_name == WebSearchTool.__name__:
-                        cited_docs = cast(list[SavedSearchDoc], cited_docs)
-                        packet_list.extend(
-                            create_search_packets(tasks, cited_docs, True, step_nr)
-                        )
-                        step_nr += 1
+        #             elif tool_name == WebSearchTool.__name__:
+        #                 cited_docs = cast(list[SavedSearchDoc], cited_docs)
+        #                 packet_list.extend(
+        #                     create_search_packets(tasks, cited_docs, True, step_nr)
+        #                 )
+        #                 step_nr += 1
 
-                    elif tool_name == ImageGenerationTool.__name__:
-                        if sub_step.generated_images is None:
-                            raise ValueError("No generated images found")
+        #             elif tool_name == ImageGenerationTool.__name__:
+        #                 if sub_step.generated_images is None:
+        #                     raise ValueError("No generated images found")
 
-                        packet_list.extend(
-                            create_image_generation_packets(
-                                sub_step.generated_images.images, step_nr
-                            )
-                        )
-                        step_nr += 1
+        #                 packet_list.extend(
+        #                     create_image_generation_packets(
+        #                         sub_step.generated_images.images, step_nr
+        #                     )
+        #                 )
+        #                 step_nr += 1
 
-                    else:
-                        packet_list.extend(
-                            create_custom_tool_packets(
-                                tool_name=tool_name,
-                                response_type="text",
-                                step_nr=step_nr,
-                                data=sub_step.sub_answer,
-                            )
-                        )
-                        step_nr += 1
+        #             else:
+        #                 packet_list.extend(
+        #                     create_custom_tool_packets(
+        #                         tool_name=tool_name,
+        #                         response_type="text",
+        #                         step_nr=step_nr,
+        #                         data=sub_step.sub_answer,
+        #                     )
+        #                 )
+        #                 step_nr += 1
 
         if chat_message.message:
             packet_list.extend(
@@ -603,7 +584,7 @@ def translate_db_message_to_packets(
             )
             step_nr += 1
 
-        if len(citation_info_list) > 0 and len(research_iterations) == 0:
+        if len(citation_info_list) > 0:
             saved_search_docs: list[SavedSearchDoc] = []
             for citation_info in citation_info_list:
                 cited_doc = get_db_search_doc_by_document_id(

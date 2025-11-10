@@ -845,7 +845,6 @@ export function useChatController({
                   files: finalMessage?.files || aiMessageImages || [],
                   toolCall: finalMessage?.tool_call || toolCall,
                   stackTrace: stackTrace,
-                  overridden_model: finalMessage?.overridden_model,
                   stopReason: stopReason,
                   packets: packets,
                 },

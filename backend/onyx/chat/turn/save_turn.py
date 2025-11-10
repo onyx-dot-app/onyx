@@ -3,6 +3,7 @@
 # level session manager and span sink], potentially has some robustness off the critical path,
 # and promotes clean separation of concerns.
 import json
+import logging
 import re
 from uuid import UUID
 
@@ -20,6 +21,8 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import Packet
+
+logger = logging.getLogger(__name__)
 
 
 def save_turn(
@@ -140,6 +143,19 @@ def _save_tool_calls_from_messages(
 
     Matches FunctionCallMessage with FunctionCallOutputMessage by call_id
     and creates a ToolCall database entry for each matched pair.
+
+    Args:
+        db_session: Database session for persistence
+        chat_session_id: ID of the chat session
+        parent_chat_message_id: ID of the parent chat message (assistant message)
+        agent_turn_messages: List of agent SDK messages containing tool calls
+        model_name: Name of the LLM model used
+        model_provider: Provider of the LLM model
+
+    Note:
+        - All tool calls created here are top-level (depth=0, parent_tool_call_id=None)
+        - Nested tool calls are not yet supported
+        - Reasoning tokens are not yet implemented
     """
     # Build a mapping of call_id -> (call_msg, output_msg)
     tool_call_map: dict[str, dict] = {}
@@ -164,51 +180,95 @@ def _save_tool_calls_from_messages(
         model_name=model_name,
         provider_type=model_provider,
     )
+
+    # TODO: Fix turn_number logic to properly distinguish parallel vs sequential tool calls.
+    # Currently using sequential numbering (0, 1, 2...) but this is incorrect:
+    # - Parallel tool calls should have the SAME turn_number
+    # - Sequential tool calls should have DIFFERENT turn_numbers
+    # For now, treating all as sequential until we have better metadata to distinguish them.
     turn_number = 0
 
     for call_id, call_data in tool_call_map.items():
-        # Skip incomplete tool calls (missing either call or output)
-        if "call" not in call_data or "output" not in call_data:
+        # Validate we have both call and output
+        if "call" not in call_data:
+            logger.warning(
+                f"Tool call {call_id} missing function_call message - skipping"
+            )
+            continue
+
+        if "output" not in call_data:
+            logger.warning(
+                f"Tool call {call_id} missing function_call_output message - skipping"
+            )
             continue
 
         call_msg = call_data["call"]
         output_msg = call_data["output"]
 
-        # Parse arguments and response
+        # Parse arguments
         try:
             tool_arguments = json.loads(call_msg["arguments"])
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(
+                f"Failed to parse tool call arguments for {call_id}: {e}. "
+                f"Storing as raw string."
+            )
             tool_arguments = {"raw": call_msg["arguments"]}
 
+        # Parse response
         try:
             tool_response = json.loads(output_msg["output"])
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(
+                f"Failed to parse tool call output for {call_id}: {e}. "
+                f"Storing as raw string."
+            )
             tool_response = {"raw": output_msg["output"]}
 
         # Look up tool_id by name
         tool_name = call_msg["name"]
         tool = db_session.query(Tool).filter(Tool.name == tool_name).first()
-        tool_id = tool.id if tool else 0
+
+        if tool is None:
+            logger.warning(
+                f"Tool '{tool_name}' not found in database for call_id {call_id}. "
+                f"Using tool_id=0."
+            )
+            tool_id = 0
+        else:
+            tool_id = tool.id
 
         # Calculate token count for the arguments
-        token_count = len(llm_tokenizer.encode(call_msg["arguments"]))
+        try:
+            token_count = len(llm_tokenizer.encode(call_msg["arguments"]))
+        except Exception as e:
+            logger.warning(
+                f"Failed to tokenize arguments for {call_id}: {e}. Using length as estimate."
+            )
+            token_count = len(call_msg["arguments"])
 
         # Create ToolCall entry
         tool_call = ToolCall(
             chat_session_id=chat_session_id,
             parent_chat_message_id=parent_chat_message_id,
-            parent_tool_call_id=None,  # Top-level tool call
+            parent_tool_call_id=None,  # Top-level tool call (nested not yet supported)
             turn_number=turn_number,
-            depth=0,  # Top-level depth
+            depth=0,  # Top-level depth (nested not yet supported)
             tool_id=tool_id,
-            tool_call_id=call_id,
+            tool_call_id=call_id,  # Now correctly stored as string
             tool_call_arguments=tool_arguments,
             tool_call_response=tool_response,
             tool_call_tokens=token_count,
+            reasoning_tokens=None,  # Not yet implemented
         )
 
         db_session.add(tool_call)
         turn_number += 1
+
+    logger.info(
+        f"Saved {turn_number} tool calls for chat session {chat_session_id}, "
+        f"message {parent_chat_message_id}"
+    )
 
 
 def extract_final_answer_from_packets(packet_history: list[Packet]) -> str:
