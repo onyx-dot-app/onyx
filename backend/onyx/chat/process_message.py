@@ -16,9 +16,9 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.agent_sdk.message_format import base_messages_to_agent_sdk_msgs
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
+from onyx.chat.chat_milestones import process_multi_assistant_milestone
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
-from onyx.chat.chat_utils import process_kg_commands
 from onyx.chat.memories import get_memories
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
@@ -48,8 +48,6 @@ from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import SELECTED_SECTIONS_MAX_WINDOW_PERCENTAGE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import NO_AUTH_USER_ID
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import attach_files_to_chat_message
@@ -60,9 +58,6 @@ from onyx.db.chat import get_db_search_doc_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.milestone import check_multi_assistant_milestone
-from onyx.db.milestone import create_milestone_if_not_exists
-from onyx.db.milestone import update_user_assistant_milestone
 from onyx.db.models import ChatMessage
 from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DbSearchDoc
@@ -108,7 +103,6 @@ from onyx.tools.tool_implementations.web_search.web_search_tool import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
-from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.timing import log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
@@ -377,36 +371,14 @@ def stream_chat_message_objects(
             db_session=db_session,
             default_persona=chat_session.persona,
         )
-        # TODO: remove once we have an endpoint for this stuff
-        process_kg_commands(new_msg_req.message, persona.name, tenant_id, db_session)
 
-        multi_assistant_milestone, _is_new = create_milestone_if_not_exists(
+        # Milestone tracking, not needed for most devs using the API to understand this
+        process_multi_assistant_milestone(
             user=user,
-            event_type=MilestoneRecordType.MULTIPLE_ASSISTANTS,
-            db_session=db_session,
-        )
-
-        update_user_assistant_milestone(
-            milestone=multi_assistant_milestone,
-            user_id=str(user.id) if user else NO_AUTH_USER_ID,
             assistant_id=persona.id,
+            tenant_id=tenant_id,
             db_session=db_session,
         )
-
-        _, just_hit_multi_assistant_milestone = check_multi_assistant_milestone(
-            milestone=multi_assistant_milestone,
-            db_session=db_session,
-        )
-
-        if just_hit_multi_assistant_milestone:
-            mt_cloud_telemetry(
-                distinct_id=tenant_id,
-                event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
-                properties=None,
-            )
-
-        # Note: prompt configuration is now embedded in the persona
-        # No need for separate prompt_id handling
 
         if reference_doc_ids is None and retrieval_options is None:
             raise RuntimeError(
