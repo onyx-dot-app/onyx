@@ -53,6 +53,9 @@ export const EmbeddingFormProvider: React.FC<{
     setFormStep(2);
   };
 
+  // Extract the specific step value from URL to use as dependency
+  const stepFromUrl = searchParams?.get("step");
+
   useEffect(() => {
     // Update URL when formStep changes
     const updatedSearchParams = new URLSearchParams(
@@ -67,15 +70,15 @@ export const EmbeddingFormProvider: React.FC<{
     } else if (newUrl !== pathname) {
       router.push(newUrl);
     }
-  }, [formStep, router, pathname, searchParams]);
+  }, [formStep, router, pathname, stepFromUrl]);
 
   // Update formStep when URL changes
   useEffect(() => {
-    const stepFromUrl = parseInt(searchParams?.get("step") || "0", 10);
-    if (stepFromUrl !== formStep) {
-      setFormStep(stepFromUrl);
+    const stepValue = parseInt(stepFromUrl || "0", 10);
+    if (stepValue !== formStep) {
+      setFormStep(stepValue);
     }
-  }, [searchParams]);
+  }, [stepFromUrl, formStep]);
 
   const contextValue: EmbeddingFormContextType = {
     formStep,
