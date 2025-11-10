@@ -4,7 +4,6 @@ import traceback
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
-from typing import cast
 from typing import Protocol
 from uuid import UUID
 
@@ -65,8 +64,6 @@ from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.projects import get_user_files_from_project
-from onyx.db.search_settings import get_current_search_settings
-from onyx.document_index.factory import get_default_document_index
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.feature_flags_keys import DISABLE_SIMPLE_AGENT_FRAMEWORK
 from onyx.file_store.models import FileDescriptor
@@ -74,13 +71,12 @@ from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import load_all_chat_files
 from onyx.kg.models import KGException
-from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llm_model_and_settings_for_persona
+from onyx.llm.factory import get_llm_tokenizer_encode_func
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import litellm_exception_to_error_msg
-from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import CitationDelta
@@ -336,6 +332,7 @@ def stream_chat_message_objects(
     use_existing_user_message = new_msg_req.use_existing_user_message
     existing_assistant_message_id = new_msg_req.existing_assistant_message_id
 
+    # TODO remove this more cleanly
     # Currently surrounding context is not supported for chat
     # Chat is already token heavy and harder for the model to process plus it would roll history over much faster
     new_msg_req.chunks_above = 0
@@ -344,7 +341,6 @@ def stream_chat_message_objects(
     llm: LLM
 
     try:
-        # Move these variables inside the try block
         user_id = user.id if user is not None else None
 
         chat_session = get_chat_session_by_id(
@@ -385,29 +381,12 @@ def stream_chat_message_objects(
                 "Must specify a set of documents for chat or specify search options"
             )
 
-        try:
-            llm, fast_llm = get_llms_for_persona(
-                persona=persona,
-                llm_override=new_msg_req.llm_override or chat_session.llm_override,
-                additional_headers=litellm_additional_headers,
-                long_term_logger=long_term_logger,
-            )
-        except GenAIDisabledException:
-            raise RuntimeError("LLM is disabled. Can't use chat flow without LLM.")
-
-        llm_provider = llm.config.model_provider
-        llm_model_name = llm.config.model_name
-
-        llm_tokenizer = get_tokenizer(
-            model_name=llm_model_name,
-            provider_type=llm_provider,
+        llm, fast_llm = get_llms_for_persona(
+            persona=persona,
+            llm_override=new_msg_req.llm_override or chat_session.llm_override,
+            additional_headers=litellm_additional_headers,
+            long_term_logger=long_term_logger,
         )
-        llm_tokenizer_encode_func = cast(
-            Callable[[str], list[int]], llm_tokenizer.encode
-        )
-
-        search_settings = get_current_search_settings(db_session)
-        get_default_document_index(search_settings, None)
 
         # Every chat Session begins with an empty root message
         root_message = get_or_create_root_message(
@@ -439,7 +418,7 @@ def stream_chat_message_objects(
                 chat_session_id=chat_session_id,
                 parent_message=parent_message,
                 message=message_text,
-                token_count=len(llm_tokenizer_encode_func(message_text)),
+                token_count=len(get_llm_tokenizer_encode_func(llm)(message_text)),
                 message_type=MessageType.USER,
                 files=None,  # Need to attach later for optimization to only load files once in parallel
                 db_session=db_session,

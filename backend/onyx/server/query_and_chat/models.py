@@ -88,7 +88,7 @@ class CreateChatMessageRequest(ChunkContext):
     current_message_files: list[FileDescriptor] = []
 
     # Prompts are embedded in personas, so no separate prompt_id needed
-    # If search_doc_ids provided, it should use those docs
+    # If search_doc_ids provided, it should use those docs explicitly
     search_doc_ids: list[int] | None
     retrieval_options: RetrievalDetails | None
     # Useable via the APIs but not recommended for most flows
