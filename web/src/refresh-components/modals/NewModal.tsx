@@ -96,39 +96,177 @@ ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
  * </Modal.Content>
  * ```
  */
+/**
+ * Modal Context for managing close button ref and warning state
+ */
+interface ModalContextValue {
+  closeButtonRef: React.RefObject<HTMLDivElement | null>;
+  hasAttemptedClose: boolean;
+  setHasAttemptedClose: (value: boolean) => void;
+}
+
+const ModalContext = React.createContext<ModalContextValue | null>(null);
+
+const useModalContext = () => {
+  const context = React.useContext(ModalContext);
+  if (!context) {
+    throw new Error("Modal compound components must be used within Modal");
+  }
+  return context;
+};
+
 const ModalContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     hideCloseButton?: boolean;
     size?: "xs" | "sm" | "md";
   }
->(({ className, children, hideCloseButton, size, ...props }, ref) => (
-  <ModalPortal>
-    <ModalOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed left-[50%] top-[50%] z-[2001] translate-x-[-50%] translate-y-[-50%]",
-        "bg-background-tint-00 border rounded-16 shadow-2xl",
-        "flex flex-col overflow-hidden",
-        "data-[state=open]:animate-in data-[state=closed]:animate-out",
-        "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-        "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-        "data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]",
-        "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
-        "duration-200",
-        // Size variants
-        size === "xs" && "w-[27rem] max-h-[calc(100dvh-4rem)]",
-        size === "sm" && "w-[32rem] max-h-[calc(100dvh-4rem)]",
-        size === "md" && "w-[60rem] max-h-[calc(100dvh-4rem)]",
-        className
-      )}
-      {...props}
+>(({ className, children, hideCloseButton, size, ...props }, ref) => {
+  const closeButtonRef = React.useRef<HTMLDivElement>(null);
+  const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
+  const hasUserTypedRef = React.useRef(false);
+
+  // Reset state when modal closes or opens
+  const resetState = React.useCallback(() => {
+    setHasAttemptedClose(false);
+    hasUserTypedRef.current = false;
+  }, []);
+
+  // Handle input events to detect typing
+  const handleInput = React.useCallback((e: Event) => {
+    // Early exit if already detected typing (performance optimization)
+    if (hasUserTypedRef.current) {
+      return;
+    }
+
+    // Only trust events triggered by actual user interaction
+    if (!e.isTrusted) {
+      return;
+    }
+
+    const target = e.target as HTMLInputElement | HTMLTextAreaElement;
+
+    // Skip non-text inputs
+    if (
+      target.type === "hidden" ||
+      target.type === "submit" ||
+      target.type === "button" ||
+      target.type === "checkbox" ||
+      target.type === "radio"
+    ) {
+      return;
+    }
+    // Mark that user has typed something
+    hasUserTypedRef.current = true;
+  }, []);
+
+  // Keep track of the container node for cleanup
+  const containerNodeRef = React.useRef<HTMLDivElement | null>(null);
+
+  // Callback ref to attach event listener when element mounts
+  const contentRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      // Cleanup previous listener if exists
+      if (containerNodeRef.current) {
+        containerNodeRef.current.removeEventListener(
+          "input",
+          handleInput,
+          true
+        );
+      }
+
+      // Attach new listener if node exists
+      if (node) {
+        node.addEventListener("input", handleInput, true);
+        containerNodeRef.current = node;
+      } else {
+        containerNodeRef.current = null;
+      }
+    },
+    [handleInput]
+  );
+
+  // Check if user has typed anything
+  const hasModifiedInputs = React.useCallback(() => {
+    return hasUserTypedRef.current;
+  }, []);
+
+  // Handle escape key and outside clicks
+  const handleInteractOutside = React.useCallback(
+    (e: Event) => {
+      if (hasModifiedInputs()) {
+        if (!hasAttemptedClose) {
+          // First attempt: prevent close and focus the close button
+          e.preventDefault();
+          setHasAttemptedClose(true);
+          setTimeout(() => {
+            closeButtonRef.current?.focus();
+          }, 0);
+        } else {
+          // Second attempt: allow close
+          setHasAttemptedClose(false);
+        }
+      } else {
+        // No modified inputs: allow immediate close
+        setHasAttemptedClose(false);
+      }
+    },
+    [hasModifiedInputs, hasAttemptedClose]
+  );
+
+  return (
+    <ModalContext.Provider
+      value={{ closeButtonRef, hasAttemptedClose, setHasAttemptedClose }}
     >
-      {children}
-    </DialogPrimitive.Content>
-  </ModalPortal>
-));
+      <ModalPortal>
+        <ModalOverlay />
+        <DialogPrimitive.Content
+          ref={(node) => {
+            // Handle forwarded ref
+            if (typeof ref === "function") {
+              ref(node);
+            } else if (ref) {
+              ref.current = node;
+            }
+            // Handle content ref with event listener
+            contentRef(node);
+          }}
+          className={cn(
+            "fixed left-[50%] top-[50%] z-[2001] translate-x-[-50%] translate-y-[-50%]",
+            "bg-background-tint-00 border rounded-16 shadow-2xl",
+            "flex flex-col overflow-hidden",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+            "data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]",
+            "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
+            "duration-200",
+            // Size variants
+            size === "xs" && "w-[27rem] max-h-[calc(100dvh-4rem)]",
+            size === "sm" && "w-[32rem] max-h-[calc(100dvh-4rem)]",
+            size === "md" && "w-[60rem] max-h-[calc(100dvh-4rem)]",
+            className
+          )}
+          onOpenAutoFocus={(e) => {
+            // Reset typing detection when modal opens
+            resetState();
+            props.onOpenAutoFocus?.(e);
+          }}
+          onCloseAutoFocus={(e) => {
+            // Reset typing detection when modal closes
+            resetState();
+            props.onCloseAutoFocus?.(e);
+          }}
+          onEscapeKeyDown={handleInteractOutside}
+          onPointerDownOutside={handleInteractOutside}
+          {...props}
+        >
+          {children}
+        </DialogPrimitive.Content>
+      </ModalPortal>
+    </ModalContext.Provider>
+  );
+});
 ModalContent.displayName = DialogPrimitive.Content.displayName;
 
 /**
@@ -232,15 +370,23 @@ const ModalCloseButton = React.forwardRef<
   HTMLDivElement,
   ModalCloseButtonProps
 >(({ onClose, className, ...props }, ref) => {
+  const { closeButtonRef } = useModalContext();
+
   return (
     <div
       ref={ref}
       className={cn("absolute top-4 right-4 z-20", className)}
       {...props}
     >
-      <ModalClose asChild>
-        <IconButton icon={SvgX} internal onClick={onClose} />
-      </ModalClose>
+      <div
+        ref={closeButtonRef as React.RefObject<HTMLDivElement>}
+        tabIndex={-1}
+        className="rounded-12 !outline-none !border-[3px] !border-transparent focus:!border-action-link-05 transition-colors duration-200"
+      >
+        <ModalClose asChild>
+          <IconButton icon={SvgX} internal onClick={onClose} />
+        </ModalClose>
+      </div>
     </div>
   );
 });
