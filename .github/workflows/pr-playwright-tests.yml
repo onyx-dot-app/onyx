@@ -50,8 +50,7 @@ jobs:
           push: true
           cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache
           cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache,mode=max
-          # no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
-          no-cache: true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-image:
     runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
