@@ -17,7 +17,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-ToolChoiceOptions = Literal["required"] | Literal["auto"] | Literal["none"]
+ToolChoiceOptions = Literal["required"] | Literal["auto"] | Literal["none"] | str
 
 
 class LLMConfig(BaseModel):
