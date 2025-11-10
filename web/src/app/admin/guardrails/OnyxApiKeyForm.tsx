@@ -228,7 +228,12 @@ export const OnyxApiKeyForm = ({
                   }
                 }}
               />
-              <Text>{values.description}</Text>
+              {(() => {
+                const tpl = Array.isArray(templates)
+                  ? templates.find((t) => String(t?.id) === values.template)
+                  : undefined;
+                return tpl ? <Text>{tpl?.description}</Text> : null;
+              })()}
 
               <TextFormField
                 name="name"
