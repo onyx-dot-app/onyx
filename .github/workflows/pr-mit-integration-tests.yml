@@ -140,7 +140,7 @@ jobs:
           password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
 
       - name: Download OpenAPI artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # ratchet:actions/download-artifact@v4
         with:
           name: openapi-artifacts
           path: backend/generated/
