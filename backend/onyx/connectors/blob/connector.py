@@ -108,12 +108,14 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         (2) S3: AWS Access Key ID, AWS Secret Access Key or IAM role or Assume Role
         (3) GOOGLE_CLOUD_STORAGE: Access Key ID, Secret Access Key, Project ID
         (4) OCI_STORAGE: Namespace, Region, Access Key ID, Secret Access Key
+        (5) S3_COMPATIBLE: Access Key ID, Secret Access Key, Endpoint URL (from config)
 
         For each bucket type, the method initializes the appropriate S3 client:
         - R2: Uses Cloudflare R2 endpoint with S3v4 signature
         - S3: Creates a standard boto3 S3 client
         - GOOGLE_CLOUD_STORAGE: Uses Google Cloud Storage endpoint
         - OCI_STORAGE: Uses Oracle Cloud Infrastructure Object Storage endpoint
+        - S3_COMPATIBLE: Uses custom endpoint URL with path-style addressing for generic S3-compatible services
 
         Raises ConnectorMissingCredentialError if required credentials are missing.
         Raises ValueError for unsupported bucket types.
@@ -245,15 +247,19 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 )
 
             if not all(
-                credentials.get(key) for key in ["access_key_id", "secret_access_key"]
+                credentials.get(key)
+                for key in [
+                    "s3_compatible_access_key_id",
+                    "s3_compatible_secret_access_key",
+                ]
             ):
                 raise ConnectorMissingCredentialError("S3-Compatible Storage")
 
             self.s3_client = boto3.client(
                 "s3",
                 endpoint_url=self.endpoint_url,
-                aws_access_key_id=credentials["access_key_id"],
-                aws_secret_access_key=credentials["secret_access_key"],
+                aws_access_key_id=credentials["s3_compatible_access_key_id"],
+                aws_secret_access_key=credentials["s3_compatible_secret_access_key"],
                 region_name=self.region,
                 config=Config(
                     signature_version="s3v4",

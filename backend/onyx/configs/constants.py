@@ -612,6 +612,7 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.R2: "r2",
     DocumentSource.GOOGLE_CLOUD_STORAGE: "google_cloud_storage - cloud storage",
     DocumentSource.OCI_STORAGE: "oci_storage - cloud storage",
+    DocumentSource.S3_COMPATIBLE: "s3_compatible - generic S3-compatible storage",
     DocumentSource.XENFORO: "xenforo - forum data",
     DocumentSource.DISCORD: "discord - chat and collaboration",
     DocumentSource.FRESHDESK: "freshdesk - customer support data",
