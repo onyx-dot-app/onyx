@@ -33,8 +33,8 @@ export const EmbeddingFormProvider: React.FC<{
   const pathname = usePathname();
 
   // Initialize formStep based on the URL parameter
-  const initialStep = parseInt(searchParams?.get("step") || "0", 10);
-  const [formStep, setFormStep] = useState(initialStep);
+  const stepFromUrl = parseInt(searchParams?.get("step") || "0", 10);
+  const [formStep, setFormStep] = useState(stepFromUrl);
   const [formValues, setFormValues] = useState<Record<string, any>>({});
 
   const [allowAdvanced, setAllowAdvanced] = useState(false);
@@ -53,9 +53,6 @@ export const EmbeddingFormProvider: React.FC<{
     setFormStep(2);
   };
 
-  // Extract the specific step value from URL to use as dependency
-  const stepFromUrl = searchParams?.get("step");
-
   useEffect(() => {
     // Update URL when formStep changes
     const updatedSearchParams = new URLSearchParams(
@@ -70,15 +67,14 @@ export const EmbeddingFormProvider: React.FC<{
     } else if (newUrl !== pathname) {
       router.push(newUrl);
     }
-  }, [formStep, router, pathname, stepFromUrl]);
+  }, [formStep, router, pathname]);
 
   // Update formStep when URL changes
   useEffect(() => {
-    const stepValue = parseInt(stepFromUrl || "0", 10);
-    if (stepValue !== formStep) {
-      setFormStep(stepValue);
+    if (stepFromUrl !== formStep) {
+      setFormStep(stepFromUrl);
     }
-  }, [stepFromUrl, formStep]);
+  }, [stepFromUrl]);
 
   const contextValue: EmbeddingFormContextType = {
     formStep,
