@@ -10,7 +10,7 @@ runs:
       #   enable-cache: true
 
     - name: Cache uv cache directory
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
+      uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
       with:
         path: ~/.cache/uv
         key: ${{ runner.os }}-uv-${{ hashFiles('backend/requirements/*.txt', 'backend/pyproject.toml') }}
