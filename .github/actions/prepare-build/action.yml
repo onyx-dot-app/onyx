@@ -31,8 +31,7 @@ runs:
       run: |
         uv pip install --system \
           -r backend/requirements/default.txt \
-          -r backend/requirements/dev.txt \
-          -r backend/requirements/model_server.txt
+          -r backend/requirements/dev.txt
 
     - name: Generate OpenAPI schema
       shell: bash
