@@ -22,7 +22,6 @@ def parse_user_files(
     persona: Persona,
     actual_user_input: str,
     project_id: int | None,
-    # should only be None if auth is disabled
     user_id: UUID | None,
 ) -> tuple[list[InMemoryChatFile], list[UserFile], SearchToolOverrideKwargs | None]:
     """
@@ -35,7 +34,7 @@ def parse_user_files(
         persona: Persona to calculate available tokens
         actual_user_input: User's input message for token calculation
         project_id: Project ID to validate file ownership
-        user_id: User ID to validate file ownership
+        user_id: User ID for file ownership validation and LLM access
 
     Returns:
         Tuple of (
@@ -96,6 +95,7 @@ def parse_user_files(
     )
 
     # Calculate available tokens for documents based on prompt, user input, etc.
+    # Access to persona is assumed to have been verified already
     available_tokens = compute_max_document_tokens_for_persona(
         persona=persona,
         db_session=db_session,

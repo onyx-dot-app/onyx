@@ -211,6 +211,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       custom_config: {},
       is_public: true,
       groups: [],
+      personas: [],
       deployment_name: null,
       is_default_provider: false,
       default_vision_model: null,

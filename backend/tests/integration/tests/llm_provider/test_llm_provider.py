@@ -38,6 +38,7 @@ def assert_response_is_equivalent(
     assert provider_data is not None
 
     assert provider_data["default_model_name"] == default_model_name
+    assert provider_data["personas"] == []
 
     def fill_max_input_tokens_and_supports_image_input(
         req: ModelConfigurationUpsertRequest,
@@ -378,3 +379,171 @@ def test_delete_llm_provider(
     # Verify provider is deleted by checking it's not in the list
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
     assert provider_data is None
+
+
+def test_model_visibility_preserved_on_edit(reset: None) -> None:
+    """
+    Test that model visibility flags are correctly preserved when editing an LLM provider.
+
+    This test verifies the fix for the bug where editing a provider with specific visible models
+    would incorrectly map visibility flags when the provider's model list differs from the
+    descriptor's default model list.
+
+    Scenario:
+    1. Create a provider with 3 models, 2 visible
+    2. Edit the provider to change visibility (make all 3 visible)
+    3. Verify all 3 models are now visible
+    4. Edit again to make only 1 visible
+    5. Verify only 1 is visible
+    """
+    admin_user = UserManager.create(name="admin_user")
+
+    # Initial model configurations: 2 visible, 1 hidden
+    model_configs = [
+        ModelConfigurationUpsertRequest(
+            name="gpt-4o",
+            is_visible=True,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+        ModelConfigurationUpsertRequest(
+            name="gpt-4o-mini",
+            is_visible=True,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+        ModelConfigurationUpsertRequest(
+            name="gpt-3.5-turbo",
+            is_visible=False,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+    ]
+
+    # Create the provider
+    create_response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "test-visibility-provider",
+            "provider": "openai",
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "default_model_name": "gpt-4o",
+            "fast_default_model_name": "gpt-4o-mini",
+            "model_configurations": [config.dict() for config in model_configs],
+            "is_public": True,
+            "groups": [],
+            "personas": [],
+        },
+    )
+    assert create_response.status_code == 200
+    created_provider = create_response.json()
+
+    # Verify initial state: 2 visible models
+    provider_data = _get_provider_by_id(admin_user, created_provider["id"])
+    assert provider_data is not None
+    visible_models = [
+        model for model in provider_data["model_configurations"] if model["is_visible"]
+    ]
+    assert len(visible_models) == 2
+    assert any(m["name"] == "gpt-4o" for m in visible_models)
+    assert any(m["name"] == "gpt-4o-mini" for m in visible_models)
+
+    # Edit 1: Make all 3 models visible
+    edit_configs_all_visible = [
+        ModelConfigurationUpsertRequest(
+            name="gpt-4o",
+            is_visible=True,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+        ModelConfigurationUpsertRequest(
+            name="gpt-4o-mini",
+            is_visible=True,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+        ModelConfigurationUpsertRequest(
+            name="gpt-3.5-turbo",
+            is_visible=True,  # Now visible
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+    ]
+
+    edit_response_1 = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
+        headers=admin_user.headers,
+        json={
+            "name": "test-visibility-provider",
+            "provider": "openai",
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "default_model_name": "gpt-4o",
+            "fast_default_model_name": "gpt-4o-mini",
+            "model_configurations": [
+                config.dict() for config in edit_configs_all_visible
+            ],
+            "is_public": True,
+            "groups": [],
+            "personas": [],
+        },
+    )
+    assert edit_response_1.status_code == 200
+
+    # Verify all 3 models are now visible
+    provider_data = _get_provider_by_id(admin_user, created_provider["id"])
+    assert provider_data is not None
+    visible_models = [
+        model for model in provider_data["model_configurations"] if model["is_visible"]
+    ]
+    assert len(visible_models) == 3
+
+    # Edit 2: Make only 1 model visible
+    edit_configs_one_visible = [
+        ModelConfigurationUpsertRequest(
+            name="gpt-4o",
+            is_visible=True,  # Only this one visible
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+        ModelConfigurationUpsertRequest(
+            name="gpt-4o-mini",
+            is_visible=False,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+        ModelConfigurationUpsertRequest(
+            name="gpt-3.5-turbo",
+            is_visible=False,
+            max_input_tokens=None,
+            supports_image_input=None,
+        ),
+    ]
+
+    edit_response_2 = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
+        headers=admin_user.headers,
+        json={
+            "name": "test-visibility-provider",
+            "provider": "openai",
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "default_model_name": "gpt-4o",
+            "fast_default_model_name": "gpt-4o",  # Set to same as default to have only 1 visible
+            "model_configurations": [
+                config.dict() for config in edit_configs_one_visible
+            ],
+            "is_public": True,
+            "groups": [],
+            "personas": [],
+        },
+    )
+    assert edit_response_2.status_code == 200
+
+    # Verify only 1 model is visible (both default and fast_default point to the same model)
+    provider_data = _get_provider_by_id(admin_user, created_provider["id"])
+    assert provider_data is not None
+    visible_models = [
+        model for model in provider_data["model_configurations"] if model["is_visible"]
+    ]
+    assert len(visible_models) == 1
+    assert visible_models[0]["name"] == "gpt-4o"

@@ -86,6 +86,15 @@ jobs:
           playwright install chromium
           playwright install-deps chromium
 
+      # needed for pulling Vespa, Redis, Postgres, and Minio images
+      # otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
       - name: Set up Standard Dependencies
         run: |
           cd deployment/docker_compose
