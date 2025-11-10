@@ -45,6 +45,7 @@ jobs:
         with:
           context: ./web
           file: ./web/Dockerfile
+          platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
           push: true
           cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache
@@ -77,6 +78,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
           push: true
           cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-cache
@@ -109,6 +111,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
+          platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
           push: true
           cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-cache
