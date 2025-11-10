@@ -30,6 +30,9 @@ jobs:
 
       - name: Prepare build
         uses: ./.github/actions/prepare-build
+        with:
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Cache mypy cache
         if: ${{ vars.DISABLE_MYPY_CACHE != 'true' }}
