@@ -62,6 +62,20 @@ class FakeLLM(LLM):
     def log_model_configs(self) -> None:
         """Fake log_model_configs method."""
 
+    def _invoke_implementation_langchain(
+        self,
+        prompt: Any,
+        tools: Any = None,
+        tool_choice: Any = None,
+        structured_response_format: Any = None,
+        timeout_override: Any = None,
+        max_tokens: Any = None,
+    ) -> Any:
+        """Fake _invoke_implementation method."""
+        from langchain_core.messages import AIMessage
+
+        return AIMessage(content="fake response")
+
     def _invoke_implementation(
         self,
         prompt: Any,
@@ -75,6 +89,18 @@ class FakeLLM(LLM):
         from langchain_core.messages import AIMessage
 
         return AIMessage(content="fake response")
+
+    def _stream_implementation_langchain(
+        self,
+        prompt: Any,
+        tools: Any = None,
+        tool_choice: Any = None,
+        structured_response_format: Any = None,
+        timeout_override: Any = None,
+        max_tokens: Any = None,
+    ) -> Any:
+        """Fake _stream_implementation method that yields no messages."""
+        return iter([])
 
     def _stream_implementation(
         self,

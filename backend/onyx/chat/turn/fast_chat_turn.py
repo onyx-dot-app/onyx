@@ -1,5 +1,7 @@
+from collections.abc import Mapping
 from collections.abc import Sequence
 from dataclasses import replace
+from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -64,7 +66,9 @@ if TYPE_CHECKING:
 MAX_ITERATIONS = 10
 
 
-def normalize_messages(messages: list[dict], model: str) -> list[dict]:
+def normalize_messages(
+    messages: Sequence[AgentSDKMessage | Mapping[str, Any]], model: str
+) -> list[dict[str, Any]]:
     """
     Convert messages to the correct format for either:
     - Chat Completions API (plain string content)
@@ -76,10 +80,12 @@ def normalize_messages(messages: list[dict], model: str) -> list[dict]:
     """
     use_responses = model.startswith("responses/")
 
-    normalized = []
-    for m in messages:
-        role = m.get("role")
-        content = m.get("content")
+    normalized: list[dict[str, Any]] = []
+    for message in messages:
+        msg_mapping = cast(Mapping[str, Any], message)
+
+        role = msg_mapping.get("role")
+        content = msg_mapping.get("content")
 
         # Extract text regardless of format
         if isinstance(content, list):
@@ -119,12 +125,6 @@ def _run_agent_loop(
     agent_turn_messages: list[AgentSDKMessage] = []
     last_call_is_final = False
     iteration_count = 0
-
-    converted = normalize_messages(messages, dependencies.llm.config.model_name)
-    for chunk in dependencies.llm.stream(
-        prompt=converted,
-    ):
-        print(chunk)
 
     while not last_call_is_final:
         available_tools: Sequence[Tool] = (
@@ -208,6 +208,9 @@ def _run_agent_loop(
         )
 
         # 3. Assign citation numbers to tool call outputs
+        # Instead of doing this complex parsing from the tool call response,
+        # I could have just used the ToolCallOutput event from the Agents SDK.
+        # TODO: When agent framework is gone, I can just use our ToolCallOutput event.
         citation_result = assign_citation_numbers_recent_tool_calls(
             agent_turn_messages, ctx
         )

@@ -98,7 +98,7 @@ class LLM(abc.ABC):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
     ) -> None:
-        self._stream(
+        self._invoke_implementation(
             prompt,
             tools,
             tool_choice,
@@ -138,7 +138,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> str:
+    ) -> Any:
         raise NotImplementedError
 
     @abc.abstractmethod
