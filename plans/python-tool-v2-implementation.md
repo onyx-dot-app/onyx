@@ -154,6 +154,131 @@ This pattern follows the same approach as `WebSearchTool`:
 
 ## Implementation Strategy
 
+### 0. Chat File Access Infrastructure (PREREQUISITE)
+
+**Problem:** The `ChatTurnContext` model does not have a `chat_files` field by default, so v2 tools cannot access files uploaded by users in the chat.
+
+**Solution:** Add `chat_files` field to `ChatTurnContext` and thread files through the execution call chain.
+
+**Update ChatTurnContext Model** (`backend/onyx/chat/turn/models.py`):
+```python
+from onyx.file_store.models import InMemoryChatFile
+
+@dataclass
+class ChatTurnContext:
+    """Context class to hold search tool and other dependencies"""
+
+    chat_session_id: UUID
+    message_id: int
+    research_type: ResearchType
+    run_dependencies: ChatTurnDependencies
+    current_run_step: int = 0
+    iteration_instructions: list[IterationInstructions] = dataclasses.field(default_factory=list)
+    global_iteration_responses: list[IterationAnswer] = dataclasses.field(default_factory=list)
+    should_cite_documents: bool = False
+    documents_processed_by_citation_context_handler: int = 0
+    tool_calls_processed_by_citation_context_handler: int = 0
+    fetched_documents_cache: dict[str, FetchedDocumentCacheEntry] = dataclasses.field(default_factory=dict)
+    citations: list[CitationInfo] = dataclasses.field(default_factory=list)
+    current_output_index: int | None = None
+
+    # ADD THIS FIELD:
+    chat_files: list[InMemoryChatFile] = dataclasses.field(default_factory=list)
+```
+
+**Update fast_chat_turn signature** (`backend/onyx/chat/turn/fast_chat_turn.py`):
+```python
+@unified_event_stream
+def fast_chat_turn(
+    messages: list[AgentSDKMessage],
+    dependencies: ChatTurnDependencies,
+    chat_session_id: UUID,
+    message_id: int,
+    research_type: ResearchType,
+    prompt_config: PromptConfig,
+    force_use_tool: ForceUseTool | None = None,
+    latest_query_files: list[InMemoryChatFile] | None = None,  # ADD THIS PARAMETER
+) -> None:
+    """Main fast chat turn function that calls the core logic with default parameters."""
+    _fast_chat_turn_core(
+        messages,
+        dependencies,
+        chat_session_id,
+        message_id,
+        research_type,
+        prompt_config,
+        force_use_tool=force_use_tool,
+        latest_query_files=latest_query_files,  # PASS IT THROUGH
+    )
+```
+
+**Update _fast_chat_turn_core** (`backend/onyx/chat/turn/fast_chat_turn.py`):
+```python
+def _fast_chat_turn_core(
+    messages: list[AgentSDKMessage],
+    dependencies: ChatTurnDependencies,
+    chat_session_id: UUID,
+    message_id: int,
+    research_type: ResearchType,
+    prompt_config: PromptConfig,
+    force_use_tool: ForceUseTool | None = None,
+    starter_context: ChatTurnContext | None = None,
+    latest_query_files: list[InMemoryChatFile] | None = None,  # ADD THIS PARAMETER
+) -> None:
+    reset_cancel_status(chat_session_id, dependencies.redis_client)
+
+    ctx = starter_context or ChatTurnContext(
+        run_dependencies=dependencies,
+        chat_session_id=chat_session_id,
+        message_id=message_id,
+        research_type=research_type,
+        chat_files=latest_query_files or [],  # ADD THIS TO CONTEXT CREATION
+    )
+    # ... rest of function
+```
+
+**Pass files from process_message** (`backend/onyx/chat/process_message.py` in `_fast_message_stream` function):
+```python
+# Around line 802 where fast_chat_turn.fast_chat_turn is called
+return fast_chat_turn.fast_chat_turn(
+    messages=messages,
+    dependencies=ChatTurnDependencies(
+        llm_model=llm_model,
+        model_settings=model_settings,
+        llm=answer.graph_tooling.primary_llm,
+        tools=tools,
+        db_session=db_session,
+        redis_client=redis_client,
+        emitter=emitter,
+        user_or_none=user_or_none,
+        prompt_config=prompt_config,
+    ),
+    chat_session_id=chat_session_id,
+    message_id=reserved_message_id,
+    research_type=answer.graph_config.behavior.research_type,
+    prompt_config=prompt_config,
+    force_use_tool=answer.graph_tooling.force_use_tool,
+    latest_query_files=answer.graph_inputs.files,  # ADD THIS LINE
+)
+```
+
+**File Structure:** Files are `InMemoryChatFile` objects with:
+- `file_id`: str - Unique identifier
+- `content`: bytes - File content already loaded in memory
+- `file_type`: ChatFileType - IMAGE, DOC, PLAIN_TEXT, CSV, USER_KNOWLEDGE
+- `filename`: str | None - Original filename
+
+**Access Pattern in Python Tool:**
+```python
+# After these changes, access files in the tool like this:
+chat_files = run_context.context.chat_files
+
+for chat_file in chat_files:
+    file_content = chat_file.content  # bytes already in memory
+    filename = chat_file.filename
+    file_type = chat_file.file_type
+```
+
 ### 1. Configuration & Service Client
 
 **Add Environment Variables** (`backend/onyx/configs/app_configs.py`):
@@ -566,16 +691,14 @@ def _python_execution_core(
 
     # Get all files from chat context and upload to Code Interpreter
     files_to_stage = []
-    file_store = get_default_file_store()
 
-    # Get chat files from run_context
-    # Note: chat files are typically available in run_context.context.run_dependencies or message context
-    chat_files = getattr(run_context.context, "chat_files", [])
+    # Access chat files directly from context (available after Step 0 changes)
+    chat_files = run_context.context.chat_files
 
     for chat_file in chat_files:
         try:
-            # Read file from Onyx file store
-            file_content = file_store.read_file(chat_file.file_id)
+            # Use file content already loaded in memory
+            file_content = chat_file.content
 
             # Upload to Code Interpreter
             ci_file_id = client.upload_file(file_content, chat_file.filename)
@@ -944,34 +1067,35 @@ export const SYSTEM_TOOL_ICONS: Record<
 ### 10. Migration & Rollout
 
 **Phase 1: Backend Core (Weeks 1-2)**
-1. Add configuration and service client
-2. Create `PythonTool` wrapper class for availability checking
-3. Implement core v2 tool function with basic execution
-4. Add streaming models and result models
-5. Write external dependency unit tests
+1. **Implement chat file access infrastructure (Step 0)** - Update ChatTurnContext, fast_chat_turn, and process_message
+2. Add configuration and service client
+3. Create `PythonTool` wrapper class for availability checking
+4. Implement core v2 tool function with basic execution
+5. Add streaming models and result models
+6. Write external dependency unit tests
 
 **Phase 2: File Handling (Week 3)**
-6. Implement file upload/download workflow
-7. Add file generation and retrieval logic
-8. Test with matplotlib plots and CSV files
-9. Expand external dependency tests for file handling
+7. Implement file upload/download workflow
+8. Add file generation and retrieval logic
+9. Test with matplotlib plots and CSV files
+10. Expand external dependency tests for file handling
 
 **Phase 3: Integration (Week 4)**
-10. Create Alembic migration to seed `PythonTool` in database
-11. Update `built_in_tools.py` to register `PythonTool` in `BUILT_IN_TOOL_MAP`
-12. **Update `built_in_tools_v2.py` to register `python_execution` in `BUILT_IN_TOOL_MAP_V2`** (critical - enables v2 agent to execute the tool)
-13. **Add PythonTool instantiation in `tool_constructor.py`** (critical - prevents "No tools found" errors)
-14. Update default assistant API and frontend for Python tool
-15. Verify availability checking works correctly (URL configured vs. not configured)
-16. Add frontend packet handlers
-17. Manual testing with real service
+11. Create Alembic migration to seed `PythonTool` in database
+12. Update `built_in_tools.py` to register `PythonTool` in `BUILT_IN_TOOL_MAP`
+13. **Update `built_in_tools_v2.py` to register `python_execution` in `BUILT_IN_TOOL_MAP_V2`** (critical - enables v2 agent to execute the tool)
+14. **Add PythonTool instantiation in `tool_constructor.py`** (critical - prevents "No tools found" errors)
+15. Update default assistant API and frontend for Python tool
+16. Verify availability checking works correctly (URL configured vs. not configured)
+17. Add frontend packet handlers
+18. Manual testing with real service
 
 **Phase 4: Polish & Documentation (Week 5)**
-18. Add error handling improvements
-19. Write user-facing documentation
-20. Add admin documentation for service deployment
-21. Performance testing and optimization
-22. Test tool availability UI (tool should appear/disappear based on `CODE_INTERPRETER_BASE_URL` configuration)
+19. Add error handling improvements
+20. Write user-facing documentation
+21. Add admin documentation for service deployment
+22. Performance testing and optimization
+23. Test tool availability UI (tool should appear/disappear based on `CODE_INTERPRETER_BASE_URL` configuration)
 
 ## Implementation Decisions
 

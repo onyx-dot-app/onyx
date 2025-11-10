@@ -1,4 +1,5 @@
 from typing import Literal
+from typing import TypedDict
 
 import requests
 from pydantic import BaseModel
@@ -7,6 +8,13 @@ from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+class FileInput(TypedDict):
+    """Input file to be staged in execution workspace"""
+
+    path: str
+    file_id: str
 
 
 class WorkspaceFile(BaseModel):
@@ -41,7 +49,7 @@ class CodeInterpreterClient:
         code: str,
         stdin: str | None = None,
         timeout_ms: int = 30000,
-        files: list[dict[str, str]] | None = None,
+        files: list[FileInput] | None = None,
     ) -> ExecuteResponse:
         """Execute Python code"""
         url = f"{self.base_url}/v1/execute"
