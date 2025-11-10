@@ -37,8 +37,8 @@ runs:
     - name: Login to Docker Hub
       uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
       with:
-        username: ${{ input.docker-username }}
-        password: ${{ input.docker-password }}
+        username: ${{ inputs['docker-username'] }}
+        password: ${{ inputs['docker-password'] }}
 
     - name: Generate OpenAPI Python client
       shell: bash
