@@ -1,7 +1,5 @@
-from collections.abc import Mapping
 from collections.abc import Sequence
 from dataclasses import replace
-from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -64,45 +62,6 @@ if TYPE_CHECKING:
     from litellm import ResponseFunctionToolCall
 
 MAX_ITERATIONS = 10
-
-
-def normalize_messages(
-    messages: Sequence[AgentSDKMessage | Mapping[str, Any]], model: str
-) -> list[dict[str, Any]]:
-    """
-    Convert messages to the correct format for either:
-    - Chat Completions API (plain string content)
-    - Responses API (list of {type, text} parts)
-
-    Usage:
-        normalize_messages(messages, "openai/gpt-4o")
-        normalize_messages(messages, "responses/openai/gpt-4o")
-    """
-    use_responses = model.startswith("responses/")
-
-    normalized: list[dict[str, Any]] = []
-    for message in messages:
-        msg_mapping = cast(Mapping[str, Any], message)
-
-        role = msg_mapping.get("role")
-        content = msg_mapping.get("content")
-
-        # Extract text regardless of format
-        if isinstance(content, list):
-            text = "\n".join(
-                part.get("text", "") for part in content if isinstance(part, dict)
-            )
-        else:
-            text = str(content or "")
-
-        if use_responses:
-            normalized.append(
-                {"role": role, "content": [{"type": "text", "text": text}]}
-            )
-        else:
-            normalized.append({"role": role, "content": text})
-
-    return normalized
 
 
 # TODO -- this can be refactored out and played with in evals + normal demo
