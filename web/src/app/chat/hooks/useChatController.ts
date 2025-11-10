@@ -138,7 +138,7 @@ export function useChatController({
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useAppParams();
-  const { refreshChatSessions, llmProviders } = useChatContext();
+  const { refreshChatSessions } = useChatContext();
   const { agentPreferences: assistantPreferences, forcedToolIds } =
     useAgentsContext();
   const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
@@ -920,7 +920,6 @@ export function useChatController({
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,
-      llmProviders,
       // Ensure latest forced tools are used when submitting
       forcedToolIds,
       // Keep tool preference-derived values fresh
@@ -932,11 +931,14 @@ export function useChatController({
   const handleMessageSpecificFileUpload = useCallback(
     async (acceptedFiles: File[]) => {
       const [_, llmModel] = getFinalLLM(
-        llmProviders,
+        llmManager.llmProviders || [],
         liveAssistant || null,
         llmManager.currentLlm
       );
-      const llmAcceptsImages = modelSupportsImageInput(llmProviders, llmModel);
+      const llmAcceptsImages = modelSupportsImageInput(
+        llmManager.llmProviders || [],
+        llmModel
+      );
 
       const imageFiles = acceptedFiles.filter((file) =>
         file.type.startsWith("image/")
@@ -959,7 +961,7 @@ export function useChatController({
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [llmProviders, liveAssistant, llmManager, forcedToolIds]
+    [liveAssistant, llmManager, forcedToolIds]
   );
 
   useEffect(() => {

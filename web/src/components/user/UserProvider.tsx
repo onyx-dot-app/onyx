@@ -28,6 +28,7 @@ interface UserContextType {
   isCurator: boolean;
   refreshUser: () => Promise<void>;
   isCloudSuperuser: boolean;
+  authTypeMetadata: AuthTypeMetadata;
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
   toggleAssistantPinnedStatus: (
@@ -372,6 +373,7 @@ export function UserProvider({
       value={{
         user: upToDateUser,
         refreshUser,
+        authTypeMetadata,
         updateUserAutoScroll,
         updateUserShortcuts,
         updateUserTemperatureOverrideEnabled,

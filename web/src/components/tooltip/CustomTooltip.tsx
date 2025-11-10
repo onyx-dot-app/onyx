@@ -5,6 +5,7 @@ import React, {
   useRef,
   createContext,
   useContext,
+  JSX,
 } from "react";
 import { createPortal } from "react-dom";
 

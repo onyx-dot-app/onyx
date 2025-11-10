@@ -15,18 +15,23 @@ from fastapi import Query
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
-from onyx.db.llm import fetch_existing_llm_providers_for_user
+from onyx.db.llm import fetch_persona_with_groups
+from onyx.db.llm import fetch_user_group_ids
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import update_default_vision_provider
 from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import validate_persona_ids_exist
 from onyx.db.models import User
+from onyx.db.persona import user_can_access_persona
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
@@ -58,6 +63,13 @@ logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/llm")
 basic_router = APIRouter(prefix="/llm")
+
+
+def _mask_provider_api_key(provider_view: LLMProviderView) -> None:
+    if provider_view.api_key:
+        provider_view.api_key = (
+            provider_view.api_key[:4] + "****" + provider_view.api_key[-4:]
+        )
 
 
 @admin_router.get("/built-in/options")
@@ -157,7 +169,7 @@ def test_default_provider(
         parallel_results[1] if len(parallel_results) > 1 else None
     )
     if error:
-        raise HTTPException(status_code=400, detail=error)
+        raise HTTPException(status_code=400, detail=str(error))
 
 
 @admin_router.get("/provider")
@@ -178,10 +190,7 @@ def list_llm_providers(
             f"LLMProviderView.from_model took {from_model_duration:.2f} seconds"
         )
 
-        if full_llm_provider.api_key:
-            full_llm_provider.api_key = (
-                full_llm_provider.api_key[:4] + "****" + full_llm_provider.api_key[-4:]
-            )
+        _mask_provider_api_key(full_llm_provider)
         llm_provider_list.append(full_llm_provider)
 
     end_time = datetime.now(timezone.utc)
@@ -217,6 +226,25 @@ def put_llm_provider(
             status_code=400,
             detail=f"LLM Provider with name {llm_provider_upsert_request.name} does not exist",
         )
+
+    persona_ids = llm_provider_upsert_request.personas
+    if persona_ids:
+        _fetched_persona_ids, missing_personas = validate_persona_ids_exist(
+            db_session, persona_ids
+        )
+        if missing_personas:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid persona IDs: {', '.join(map(str, missing_personas))}",
+            )
+        # Remove duplicates while preserving order
+        seen: set[int] = set()
+        deduplicated_personas: list[int] = []
+        for persona_id in persona_ids:
+            if persona_id not in seen:
+                seen.add(persona_id)
+                deduplicated_personas.append(persona_id)
+        llm_provider_upsert_request.personas = deduplicated_personas
 
     default_model_found = False
     default_fast_model_found = False
@@ -269,7 +297,10 @@ def delete_llm_provider(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    remove_llm_provider(db_session, provider_id)
+    try:
+        remove_llm_provider(db_session, provider_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @admin_router.post("/provider/{provider_id}/default")
@@ -339,23 +370,133 @@ def list_llm_provider_basics(
     user: User | None = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderDescriptor]:
-    start_time = datetime.now(timezone.utc)
-    logger.debug("Starting to fetch basic LLM providers for user")
+    """Get LLM providers accessible to the current user.
 
-    llm_provider_list: list[LLMProviderDescriptor] = []
-    for llm_provider_model in fetch_existing_llm_providers_for_user(db_session, user):
-        from_model_start = datetime.now(timezone.utc)
-        full_llm_provider = LLMProviderDescriptor.from_model(llm_provider_model)
-        from_model_end = datetime.now(timezone.utc)
-        from_model_duration = (from_model_end - from_model_start).total_seconds()
-        logger.debug(
-            f"LLMProviderView.from_model took {from_model_duration:.2f} seconds"
-        )
-        llm_provider_list.append(full_llm_provider)
+    Returns:
+    - All public providers (is_public=True) - Always included
+    - Restricted providers user can access via their group memberships
+
+    For anonymous users or no_auth mode: returns only public providers
+    This ensures backward compatibility while providing better UX for authenticated users.
+    """
+    start_time = datetime.now(timezone.utc)
+    logger.debug("Starting to fetch user-accessible LLM providers")
+
+    all_providers = fetch_existing_llm_providers(db_session)
+    user_group_ids = fetch_user_group_ids(db_session, user) if user else set()
+    is_admin = user and user.role == UserRole.ADMIN
+
+    accessible_providers = []
+
+    for provider in all_providers:
+        # Include all public providers
+        if provider.is_public:
+            accessible_providers.append(LLMProviderDescriptor.from_model(provider))
+            continue
+
+        # Include restricted providers user has access to via groups
+        if is_admin:
+            # Admins see all providers
+            accessible_providers.append(LLMProviderDescriptor.from_model(provider))
+        elif provider.groups:
+            # User must be in at least one of the provider's groups
+            if user_group_ids.intersection({g.id for g in provider.groups}):
+                accessible_providers.append(LLMProviderDescriptor.from_model(provider))
+        elif not provider.personas:
+            # No restrictions = accessible
+            accessible_providers.append(LLMProviderDescriptor.from_model(provider))
 
     end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
-    logger.debug(f"Completed fetching basic LLM providers in {duration:.2f} seconds")
+    logger.debug(
+        f"Completed fetching {len(accessible_providers)} user-accessible providers in {duration:.2f} seconds"
+    )
+
+    return accessible_providers
+
+
+def get_valid_model_names_for_persona(
+    persona_id: int,
+    user: User | None,
+    db_session: Session,
+) -> list[str]:
+    """Get all valid model names that a user can access for this persona.
+
+    Returns a list of model names (e.g., ["gpt-4o", "claude-3-5-sonnet"]) that are
+    available to the user when using this persona, respecting all RBAC restrictions.
+    Public providers are always included.
+    """
+    persona = fetch_persona_with_groups(db_session, persona_id)
+    if not persona:
+        return []
+
+    is_admin = user is not None and user.role == UserRole.ADMIN
+    all_providers = fetch_existing_llm_providers(db_session)
+    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
+
+    valid_models = []
+    for llm_provider_model in all_providers:
+        # Public providers always included, restricted checked via RBAC
+        if can_user_access_llm_provider(
+            llm_provider_model, user_group_ids, persona, is_admin=is_admin
+        ):
+            # Collect all model names from this provider
+            for model_config in llm_provider_model.model_configurations:
+                if model_config.is_visible:
+                    valid_models.append(model_config.name)
+
+    return valid_models
+
+
+@basic_router.get("/persona/{persona_id}/providers")
+def list_llm_providers_for_persona(
+    persona_id: int,
+    user: User | None = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> list[LLMProviderDescriptor]:
+    """Get LLM providers for a specific persona.
+
+    Returns providers that the user can access when using this persona:
+    - All public providers (is_public=True) - ALWAYS included
+    - Restricted providers user can access via group/persona restrictions
+
+    This endpoint is used for background fetching of restricted providers
+    and should NOT block the UI.
+    """
+    start_time = datetime.now(timezone.utc)
+    logger.debug(f"Starting to fetch LLM providers for persona {persona_id}")
+
+    persona = fetch_persona_with_groups(db_session, persona_id)
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+
+    # Verify user has access to this persona
+    if not user_can_access_persona(db_session, persona_id, user, get_editable=False):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have access to this assistant",
+        )
+
+    is_admin = user is not None and user.role == UserRole.ADMIN
+    all_providers = fetch_existing_llm_providers(db_session)
+    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
+
+    llm_provider_list: list[LLMProviderDescriptor] = []
+
+    for llm_provider_model in all_providers:
+        # Use simplified access check - public providers always included
+        if can_user_access_llm_provider(
+            llm_provider_model, user_group_ids, persona, is_admin=is_admin
+        ):
+            llm_provider_list.append(
+                LLMProviderDescriptor.from_model(llm_provider_model)
+            )
+
+    end_time = datetime.now(timezone.utc)
+    duration = (end_time - start_time).total_seconds()
+    logger.debug(
+        f"Completed fetching {len(llm_provider_list)} LLM providers for persona {persona_id} in {duration:.2f} seconds"
+    )
 
     return llm_provider_list
 
@@ -477,11 +618,13 @@ def get_bedrock_available_models(
 
     except (ClientError, NoCredentialsError, BotoCoreError) as e:
         raise HTTPException(
-            status_code=400, detail=f"Failed to connect to AWS Bedrock: {e}"
+            status_code=400,
+            detail=f"Failed to connect to AWS Bedrock: {e}",
         )
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Unexpected error fetching Bedrock models: {e}"
+            status_code=500,
+            detail=f"Unexpected error fetching Bedrock models: {e}",
         )
 
 
@@ -512,7 +655,8 @@ def get_ollama_available_models(
     cleaned_api_base = request.api_base.strip().rstrip("/")
     if not cleaned_api_base:
         raise HTTPException(
-            status_code=400, detail="API base URL is required to fetch Ollama models."
+            status_code=400,
+            detail="API base URL is required to fetch Ollama models.",
         )
 
     model_names = _get_ollama_available_model_names(cleaned_api_base)

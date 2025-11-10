@@ -1,14 +1,14 @@
-import json
 from typing import cast
 
 from agents import function_tool
 from agents import RunContextWrapper
+from pydantic import TypeAdapter
 
 from onyx.agents.agent_search.dr.models import InferenceSection
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
-from onyx.chat.models import LlmDoc
+from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -22,10 +22,10 @@ from onyx.tools.tool_implementations.search.search_tool import (
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.search.search_utils import (
-    section_to_llm_doc_with_empty_doc_citation_number,
-)
 from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
+from onyx.tools.tool_implementations_v2.tool_result_models import (
+    LlmInternalSearchResult,
+)
 from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 
@@ -35,7 +35,7 @@ def _internal_search_core(
     run_context: RunContextWrapper[ChatTurnContext],
     queries: list[str],
     search_tool: SearchTool,
-) -> list[LlmDoc]:
+) -> list[LlmInternalSearchResult]:
     """Core internal search logic that can be tested with dependency injection"""
     index = run_context.context.current_run_step
     run_context.context.run_dependencies.emitter.emit(
@@ -63,9 +63,11 @@ def _internal_search_core(
         )
     )
 
-    def execute_single_query(query: str, parallelization_nr: int) -> list[LlmDoc]:
+    def execute_single_query(
+        query: str, parallelization_nr: int
+    ) -> list[LlmInternalSearchResult]:
         """Execute a single query and return the retrieved documents as LlmDocs"""
-        retrieved_llm_docs_for_query: list[LlmDoc] = []
+        search_results_for_query: list[LlmInternalSearchResult] = []
 
         with get_session_with_current_tenant() as search_db_session:
             for tool_response in search_tool.run(
@@ -92,13 +94,29 @@ def _internal_search_core(
                     ]
 
                     # Convert InferenceSections to LlmDocs for return value
-                    retrieved_llm_docs_for_query = [
-                        section_to_llm_doc_with_empty_doc_citation_number(section)
+                    search_results_for_query = [
+                        LlmInternalSearchResult(
+                            document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                            title=section.center_chunk.semantic_identifier,
+                            excerpt=section.combined_content,
+                            metadata=section.center_chunk.metadata,
+                            unique_identifier_to_strip_away=section.center_chunk.document_id,
+                        )
                         for section in retrieved_sections
                     ]
-                    run_context.context.unordered_fetched_inference_sections.extend(
-                        retrieved_sections
-                    )
+
+                    from onyx.chat.turn.models import FetchedDocumentCacheEntry
+
+                    for section in retrieved_sections:
+                        unique_id = section.center_chunk.document_id
+                        if unique_id not in run_context.context.fetched_documents_cache:
+                            run_context.context.fetched_documents_cache[unique_id] = (
+                                FetchedDocumentCacheEntry(
+                                    inference_section=section,
+                                    document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                                )
+                            )
+
                     run_context.context.run_dependencies.emitter.emit(
                         Packet(
                             ind=index,
@@ -134,7 +152,7 @@ def _internal_search_core(
                     )
                     break
 
-        return retrieved_llm_docs_for_query
+        return search_results_for_query
 
     # Execute all queries in parallel using run_functions_in_parallel
     function_calls = [
@@ -144,7 +162,7 @@ def _internal_search_core(
     search_results_dict = run_functions_in_parallel(function_calls)
 
     # Aggregate all results from all queries
-    all_retrieved_docs: list[LlmDoc] = []
+    all_retrieved_docs: list[LlmInternalSearchResult] = []
     for result_id in search_results_dict:
         retrieved_docs = search_results_dict[result_id]
         if retrieved_docs:
@@ -180,5 +198,5 @@ def internal_search(
     retrieved_docs = _internal_search_core(
         run_context, queries, cast(SearchTool, search_pipeline_instance)
     )
-
-    return json.dumps([doc.model_dump(mode="json") for doc in retrieved_docs])
+    adapter = TypeAdapter(list[LlmInternalSearchResult])
+    return adapter.dump_json(retrieved_docs).decode()

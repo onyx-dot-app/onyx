@@ -63,6 +63,7 @@ export interface LLMProvider {
   fast_default_model_name: string | null;
   is_public: boolean;
   groups: number[];
+  personas: number[];
   deployment_name: string | null;
   default_vision_model: string | null;
   is_default_vision_provider: boolean | null;
@@ -87,6 +88,7 @@ export interface LLMProviderDescriptor {
   is_default_provider: boolean | null;
   is_public: boolean;
   groups: number[];
+  personas: number[];
   model_configurations: ModelConfiguration[];
 }
 

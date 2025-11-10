@@ -6,7 +6,7 @@ from onyx.connectors.teams.connector import _collect_all_teams
 
 
 def test_special_characters_in_team_names() -> None:
-    """Test that team names with special characters work correctly with OData filters."""
+    """Test that team names with special characters skip OData and use get_all()."""
     mock_graph_client = MagicMock()
 
     # Mock successful responses
@@ -25,15 +25,13 @@ def test_special_characters_in_team_names() -> None:
     mock_graph_client.teams.get = MagicMock(return_value=mock_get_query)
 
     # Test with the actual customer's problematic team name (has &, parentheses, spaces)
+    # This should skip OData filtering entirely and use get_all() for client-side filtering
     _collect_all_teams(mock_graph_client, ["Grainger Data & Analytics (GDA) Users"])
 
-    # Verify OData filter was used with raw special characters
-    mock_graph_client.teams.get.assert_called()
-    filter_arg = mock_get_query.filter.call_args[0][0]
-    expected_filter = "displayName eq 'Grainger Data & Analytics (GDA) Users'"
-    assert (
-        filter_arg == expected_filter
-    ), f"Expected: {expected_filter}, Got: {filter_arg}"
+    # Verify that get_all() was called (NOT get().filter())
+    # because special characters are not supported in OData string literals
+    mock_graph_client.teams.get_all.assert_called()
+    mock_graph_client.teams.get.assert_not_called()
 
     # Reset mocks
     mock_graph_client.reset_mock()

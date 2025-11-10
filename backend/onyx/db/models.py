@@ -30,6 +30,7 @@ from sqlalchemy import Integer
 from sqlalchemy import Sequence
 from sqlalchemy import String
 from sqlalchemy import Text
+from sqlalchemy import text
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine.interfaces import Dialect
@@ -318,6 +319,45 @@ class ApiKey(Base):
 
     # Add this relationship to access the User object via user_id
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+
+
+class PersonalAccessToken(Base):
+    __tablename__ = "personal_access_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)  # User-provided label
+    hashed_token: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False
+    )  # SHA256 = 64 hex chars
+    token_display: Mapped[str] = mapped_column(String, nullable=False)
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )  # NULL = no expiration. Revocation sets this to NOW() for immediate expiry.
+
+    # Audit fields
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_used_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_revoked: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )  # True if user explicitly revoked (vs naturally expired)
+
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+
+    # Indexes for performance
+    __table_args__ = (
+        Index(
+            "ix_pat_user_created", user_id, created_at.desc()
+        ),  # Fast user token listing
+    )
 
 
 class Notification(Base):
@@ -2366,6 +2406,12 @@ class LLMProvider(Base):
         secondary="llm_provider__user_group",
         viewonly=True,
     )
+    personas: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary="llm_provider__persona",
+        back_populates="allowed_by_llm_providers",
+        viewonly=True,
+    )
     model_configurations: Mapped[list["ModelConfiguration"]] = relationship(
         "ModelConfiguration",
         back_populates="llm_provider",
@@ -2741,6 +2787,12 @@ class Persona(Base):
         secondary="persona__user_group",
         viewonly=True,
     )
+    allowed_by_llm_providers: Mapped[list["LLMProvider"]] = relationship(
+        "LLMProvider",
+        secondary="llm_provider__persona",
+        back_populates="personas",
+        viewonly=True,
+    )
     # Relationship to UserFile
     user_files: Mapped[list["UserFile"]] = relationship(
         "UserFile",
@@ -3058,6 +3110,22 @@ class Persona__UserGroup(Base):
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id"), primary_key=True
+    )
+
+
+class LLMProvider__Persona(Base):
+    """Association table restricting LLM providers to specific personas.
+
+    If no such rows exist for a given LLM provider, then it is accessible by all personas.
+    """
+
+    __tablename__ = "llm_provider__persona"
+
+    llm_provider_id: Mapped[int] = mapped_column(
+        ForeignKey("llm_provider.id", ondelete="CASCADE"), primary_key=True
+    )
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
     )
 
 

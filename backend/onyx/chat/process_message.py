@@ -114,6 +114,7 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
+from onyx.tools.utils import compute_all_tool_tokens
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -420,10 +421,10 @@ def stream_chat_message_objects(
             raise RuntimeError(
                 "Must specify a set of documents for chat or specify search options"
             )
-
         try:
             llm, fast_llm = get_llms_for_persona(
                 persona=persona,
+                user=user,
                 llm_override=new_msg_req.llm_override or chat_session.llm_override,
                 additional_headers=litellm_additional_headers,
                 long_term_logger=long_term_logger,
@@ -654,10 +655,11 @@ def stream_chat_message_objects(
         prompt_override = new_msg_req.prompt_override or chat_session.prompt_override
         if new_msg_req.persona_override_config:
             prompt_config = PromptConfig(
-                system_prompt=new_msg_req.persona_override_config.prompts[
+                default_behavior_system_prompt=new_msg_req.persona_override_config.prompts[
                     0
                 ].system_prompt,
-                task_prompt=new_msg_req.persona_override_config.prompts[0].task_prompt,
+                custom_instructions=None,
+                reminder=new_msg_req.persona_override_config.prompts[0].task_prompt,
                 datetime_aware=new_msg_req.persona_override_config.prompts[
                     0
                 ].datetime_aware,
@@ -666,10 +668,11 @@ def stream_chat_message_objects(
             # Apply prompt override on top of persona-embedded prompt
             prompt_config = PromptConfig.from_model(
                 persona,
+                db_session=db_session,
                 prompt_override=prompt_override,
             )
         else:
-            prompt_config = PromptConfig.from_model(persona)
+            prompt_config = PromptConfig.from_model(persona, db_session=db_session)
 
         # Retrieve project-specific instructions if this chat session is associated with a project.
         project_instructions: str | None = (
@@ -803,6 +806,7 @@ def stream_chat_message_objects(
                 or get_main_llm_from_tuple(
                     get_llms_for_persona(
                         persona=persona,
+                        user=user,
                         llm_override=(
                             new_msg_req.llm_override or chat_session.llm_override
                         ),
@@ -884,6 +888,40 @@ def stream_chat_message_objects(
 
 
 # TODO: Refactor this to live somewhere else
+def _reserve_prompt_tokens_for_agent_overhead(
+    prompt_builder: AnswerPromptBuilder,
+    primary_llm: LLM,
+    tools: list[Tool],
+    prompt_config: PromptConfig,
+) -> None:
+    try:
+        tokenizer = get_tokenizer(
+            provider_type=primary_llm.config.model_provider,
+            model_name=primary_llm.config.model_name,
+        )
+    except Exception:
+        logger.exception("Failed to initialize tokenizer for agent token budgeting.")
+        return
+
+    reserved_tokens = 0
+
+    if tools:
+        try:
+            reserved_tokens += compute_all_tool_tokens(tools, tokenizer)
+        except Exception:
+            logger.exception("Failed to compute tool token budget.")
+
+    custom_instructions = prompt_config.custom_instructions
+    if custom_instructions:
+        custom_instruction_text = f"Custom Instructions: {custom_instructions}"
+        reserved_tokens += len(tokenizer.encode(custom_instruction_text))
+
+    if reserved_tokens <= 0:
+        return
+
+    prompt_builder.max_tokens = max(0, prompt_builder.max_tokens - reserved_tokens)
+
+
 def _fast_message_stream(
     answer: Answer,
     tools: list[Tool],
@@ -898,6 +936,12 @@ def _fast_message_stream(
 ) -> Generator[Packet, None, None]:
     # TODO: clean up this jank
     is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
+    prompt_builder = answer.graph_inputs.prompt_builder
+    primary_llm = answer.graph_tooling.primary_llm
+    if prompt_builder and primary_llm:
+        _reserve_prompt_tokens_for_agent_overhead(
+            prompt_builder, primary_llm, tools, prompt_config
+        )
     messages = base_messages_to_agent_sdk_msgs(
         answer.graph_inputs.prompt_builder.build(), is_responses_api=is_responses_api
     )

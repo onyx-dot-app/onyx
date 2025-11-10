@@ -97,7 +97,7 @@ export interface ChatInputBarProps {
 
   toggleDocumentSidebar: () => void;
   handleFileUpload: (files: File[]) => void;
-  textAreaRef: React.RefObject<HTMLTextAreaElement>;
+  textAreaRef: React.RefObject<HTMLTextAreaElement | null>;
   filterManager: FilterManager;
   retrievalEnabled: boolean;
   deepResearchEnabled: boolean;
@@ -131,7 +131,6 @@ function ChatInputBarInner({
   disabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
-
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
@@ -626,7 +625,6 @@ function ChatInputBarInner({
     </div>
   );
 }
-
 const ChatInputBar = React.memo(ChatInputBarInner);
 ChatInputBar.displayName = "ChatInputBar";
 

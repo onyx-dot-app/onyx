@@ -18,7 +18,6 @@ import {
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
-import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { FeedbackModal } from "@/app/chat/components/modal/FeedbackModal";
 import { FiArrowDown } from "react-icons/fi";
@@ -112,14 +111,8 @@ export function ChatPage({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const {
-    chatSessions,
-    ccPairs,
-    tags,
-    documentSets,
-    llmProviders,
-    refreshChatSessions,
-  } = useChatContext();
+  const { chatSessions, ccPairs, tags, documentSets, refreshChatSessions } =
+    useChatContext();
 
   const {
     currentMessageFiles,
@@ -145,10 +138,6 @@ export function ChatPage({
 
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
-  const {
-    connectors: federatedConnectorOAuthStatus,
-    refetch: refetchFederatedConnectors,
-  } = useFederatedOAuthStatus();
 
   const { user, isAdmin } = useUser();
   const existingChatIdRaw = searchParams?.get("chatId");
@@ -216,18 +205,21 @@ export function ChatPage({
     llmDescriptors,
   } = useOnboardingState();
 
-  // On first render, open onboarding if there are no configured LLM providers.
-  // Intentionally exclude llmProviders from deps to avoid changing the state
-  // when data refreshes.
-  useEffect(() => {
-    setShowOnboarding(llmProviders.length === 0);
-  }, []);
+  const llmManager = useLlmManager(selectedChatSession, liveAssistant);
 
-  const llmManager = useLlmManager(
-    llmProviders,
-    selectedChatSession,
-    liveAssistant
-  );
+  // Track if we've done the initial onboarding check
+  const hasCheckedOnboarding = useRef(false);
+
+  // On first render, open onboarding if there are no configured LLM providers.
+  // Only check once to avoid re-triggering onboarding when data refreshes.
+  useEffect(() => {
+    if (!hasCheckedOnboarding.current) {
+      setShowOnboarding(
+        !llmManager.llmProviders || llmManager.llmProviders.length === 0
+      );
+      hasCheckedOnboarding.current = true;
+    }
+  }, [llmManager.llmProviders]);
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
@@ -935,8 +927,8 @@ export function ChatPage({
                           textAreaRef={textAreaRef}
                           setPresentingDocument={setPresentingDocument}
                           disabled={
-                            llmProviders.length === 0 ||
-                            (llmProviders.length === 0 &&
+                            llmManager.llmProviders?.length === 0 ||
+                            (llmManager.llmProviders?.length === 0 &&
                               !user?.personalization?.name) ||
                             onboardingState.currentStep !==
                               OnboardingStep.Complete
@@ -956,29 +948,6 @@ export function ChatPage({
                         showCenteredHero && (
                           <div className="mt-6 row-start-3 max-w-[50rem]">
                             <Suggestions onSubmit={onSubmit} />
-                          </div>
-                        )}
-                      {enterpriseSettings &&
-                        enterpriseSettings.custom_lower_disclaimer_content && (
-                          <div className="mobile:hidden mt-4 flex items-center justify-center relative w-[95%] mx-auto">
-                            <div className="text-sm text-text-500 max-w-searchbar-max px-4 text-center">
-                              <MinimalMarkdown
-                                content={
-                                  enterpriseSettings.custom_lower_disclaimer_content
-                                }
-                              />
-                            </div>
-                          </div>
-                        )}
-                      {enterpriseSettings &&
-                        enterpriseSettings.use_custom_logotype && (
-                          <div className="hidden lg:block absolute right-0 bottom-0">
-                            <img
-                              src="/api/enterprise-settings/logotype"
-                              alt="logotype"
-                              style={{ objectFit: "contain" }}
-                              className="w-fit h-8"
-                            />
                           </div>
                         )}
                     </div>

@@ -44,3 +44,6 @@ CLAUDE.md
 
 # Local .terraform.lock.hcl file
 .terraform.lock.hcl
+
+# MCP configs
+.playwright-mcp
