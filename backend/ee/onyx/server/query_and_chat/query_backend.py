@@ -154,6 +154,9 @@ def handle_search_request(
         for section in top_sections
     ]
 
+    # Track whether the underlying retrieval produced more items than requested
+    has_more_results = len(top_docs) > pagination_limit
+
     # Deduping happens at the last step to avoid harming quality by dropping content early on
     deduped_docs = top_docs
     dropped_inds = None
@@ -174,13 +177,13 @@ def handle_search_request(
 
     paginated_docs = deduped_docs[:pagination_limit]
     llm_indices = [index for index in llm_indices if index < len(paginated_docs)]
-    has_more = len(deduped_docs) > len(paginated_docs)
+    has_more = has_more_results
     pagination = DocumentSearchPagination(
         offset=pagination_offset,
         limit=pagination_limit,
         returned_count=len(paginated_docs),
         has_more=has_more,
-        next_offset=(pagination_offset + len(paginated_docs)) if has_more else None,
+        next_offset=(pagination_offset + pagination_limit) if has_more else None,
     )
 
     return DocumentSearchResponse(
