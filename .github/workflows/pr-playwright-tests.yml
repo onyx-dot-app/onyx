@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
         with:
-          metrics: cpu,memory 
+          metrics: cpu,memory
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
@@ -57,7 +57,7 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
         with:
-          metrics: cpu,memory 
+          metrics: cpu,memory
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
@@ -90,7 +90,7 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
         with:
-          metrics: cpu,memory 
+          metrics: cpu,memory
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
@@ -125,7 +125,7 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
         with:
-          metrics: cpu,memory 
+          metrics: cpu,memory
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
@@ -143,6 +143,7 @@ jobs:
           # Wait for all background jobs to complete
           wait
           echo "All Docker images pulled successfully"
+          docker images
 
           # Re-tag with expected names for docker-compose
           docker tag ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }} onyxdotapp/onyx-web-server:test
