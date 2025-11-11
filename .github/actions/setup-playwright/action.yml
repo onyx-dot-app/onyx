@@ -12,5 +12,6 @@ runs:
           ${{ runner.os }}-playwright-
 
     - name: Install playwright
+      shell: bash
       run: |
         playwright install chromium --with-deps
