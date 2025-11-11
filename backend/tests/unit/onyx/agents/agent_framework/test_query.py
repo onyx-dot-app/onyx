@@ -16,17 +16,17 @@ def test_query_emits_reasoning_and_tool_call_events(
         # Reasoning chunks
         stream_chunk(
             id=stream_id,
-            created=1762544618,
+            created="1762544618",
             reasoning_content="The user is asking",
             content="",
         ),
         stream_chunk(
-            id=stream_id, created=1762544618, reasoning_content=" to", content=""
+            id=stream_id, created="1762544618", reasoning_content=" to", content=""
         ),
         # Tool call chunks
         stream_chunk(
             id=stream_id,
-            created=1762544618,
+            created="1762544618",
             content="",
             tool_calls=[
                 tool_call_chunk(id=call_id, name="internal_search", arguments="")
@@ -34,7 +34,7 @@ def test_query_emits_reasoning_and_tool_call_events(
         ),
         stream_chunk(
             id=stream_id,
-            created=1762544618,
+            created="1762544618",
             content="",
             tool_calls=[tool_call_chunk(arguments="")],
         ),
@@ -42,7 +42,7 @@ def test_query_emits_reasoning_and_tool_call_events(
         *[
             stream_chunk(
                 id=stream_id,
-                created=1762544618,
+                created="1762544618",
                 content="",
                 tool_calls=[tool_call_chunk(arguments=arg)],
             )
@@ -55,7 +55,7 @@ def test_query_emits_reasoning_and_tool_call_events(
                 'amework"]}',
             ]
         ],
-        stream_chunk(id=stream_id, created=1762544618, finish_reason="tool_calls"),
+        stream_chunk(id=stream_id, created="1762544618", finish_reason="tool_calls"),
     ]
 
     llm = fake_llm(responses)
@@ -109,9 +109,9 @@ def test_query_emits_message_start_and_done_for_content(fake_llm) -> None:
     stream_id = "chatcmpl-2b136068-c6fb-4af1-97d5-d2c9d84cd52b"
 
     responses = [
-        stream_chunk(id=stream_id, created=1762544448, content="What"),
-        stream_chunk(id=stream_id, created=1762544448, content=" would"),
-        stream_chunk(id=stream_id, created=1762544448, finish_reason="stop"),
+        stream_chunk(id=stream_id, created="1762544448", content="What"),
+        stream_chunk(id=stream_id, created="1762544448", content=" would"),
+        stream_chunk(id=stream_id, created="1762544448", finish_reason="stop"),
     ]
 
     llm = fake_llm(responses)
@@ -145,7 +145,7 @@ def test_query_handles_parallel_tool_calls(
         # First tool call
         stream_chunk(
             id=stream_id,
-            created=1762819828,
+            created="1762819828",
             content="",
             tool_calls=[
                 tool_call_chunk(
@@ -155,14 +155,14 @@ def test_query_handles_parallel_tool_calls(
         ),
         stream_chunk(
             id=stream_id,
-            created=1762819828,
+            created="1762819828",
             content="",
             tool_calls=[tool_call_chunk(arguments="", index=0)],
         ),
         *[
             stream_chunk(
                 id=stream_id,
-                created=1762819828,
+                created="1762819828",
                 content="",
                 tool_calls=[tool_call_chunk(arguments=arg, index=0)],
             )
@@ -171,7 +171,7 @@ def test_query_handles_parallel_tool_calls(
         # Second tool call
         stream_chunk(
             id=stream_id,
-            created=1762819828,
+            created="1762819828",
             content="",
             tool_calls=[
                 tool_call_chunk(id=call_id_2, name="web_search", arguments="", index=1)
@@ -179,20 +179,20 @@ def test_query_handles_parallel_tool_calls(
         ),
         stream_chunk(
             id=stream_id,
-            created=1762819828,
+            created="1762819828",
             content="",
             tool_calls=[tool_call_chunk(arguments="", index=1)],
         ),
         *[
             stream_chunk(
                 id=stream_id,
-                created=1762819828,
+                created="1762819828",
                 content="",
                 tool_calls=[tool_call_chunk(arguments=arg, index=1)],
             )
             for arg in ['{"querie', 's": ', '["chees', 'e"]}']
         ],
-        stream_chunk(id=stream_id, created=1762819828, finish_reason="tool_calls"),
+        stream_chunk(id=stream_id, created="1762819828", finish_reason="tool_calls"),
     ]
 
     llm = fake_llm(responses)
@@ -253,7 +253,7 @@ def test_query_handles_parallel_tool_calls_in_one_event(
     responses = [
         stream_chunk(
             id=stream_id,
-            created=1762819684,
+            created="1762819684",
             tool_calls=[
                 tool_call_chunk(
                     id=call_id_1,
@@ -269,7 +269,7 @@ def test_query_handles_parallel_tool_calls_in_one_event(
                 ),
             ],
         ),
-        stream_chunk(id=stream_id, created=1762819684, finish_reason="tool_calls"),
+        stream_chunk(id=stream_id, created="1762819684", finish_reason="tool_calls"),
     ]
 
     llm = fake_llm(responses)

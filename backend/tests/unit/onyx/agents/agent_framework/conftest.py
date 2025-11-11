@@ -99,7 +99,7 @@ def fake_llm() -> Callable[[list[ModelResponseStream]], _FakeLLM]:
 # Helper functions for creating ModelResponseStream objects concisely
 def stream_chunk(
     id: str = "test-id",
-    created: int = 1234567890,
+    created: str = "1234567890",
     content: str | None = None,
     reasoning_content: str | None = None,
     tool_calls: list[ChatCompletionDeltaToolCall] | None = None,
