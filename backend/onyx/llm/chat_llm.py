@@ -408,9 +408,14 @@ class LitellmLLM(LLM):
         from litellm.exceptions import Timeout, RateLimitError
 
         if tools and tool_choice and tool_choice not in STANDARD_TOOL_CHOICE_OPTIONS:
-            tool_choice = {"type": "function", "function": {"name": tool_choice}}
+            tool_choice_formatted = {
+                "type": "function",
+                "function": {"name": tool_choice},
+            }
         elif not tools:
-            tool_choice = None
+            tool_choice_formatted = None
+        else:
+            tool_choice_formatted = tool_choice
 
         try:
             return litellm.completion(
@@ -427,7 +432,7 @@ class LitellmLLM(LLM):
                 # actual input
                 messages=processed_prompt,
                 tools=tools,
-                tool_choice=tool_choice,
+                tool_choice=tool_choice_formatted,
                 # streaming choice
                 stream=stream,
                 # model params
