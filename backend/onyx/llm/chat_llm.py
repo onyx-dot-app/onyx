@@ -407,6 +407,7 @@ class LitellmLLM(LLM):
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
 
+        tool_choice_formatted: dict[str, Any] | str | None
         if not tools:
             tool_choice_formatted = None
         elif tool_choice and tool_choice not in STANDARD_TOOL_CHOICE_OPTIONS:

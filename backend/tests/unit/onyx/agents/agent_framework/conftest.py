@@ -181,9 +181,11 @@ class FakeTool(Tool):
 
     def run_v2(
         self,
-        run_context: RunContextWrapper[dict],
-        queries: list[str],
-    ) -> str:
+        run_context: RunContextWrapper[Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        queries = kwargs.get("queries", [])
         self.calls.append({"queries": queries})
         run_context.context[f"{self._tool_name}_called"] = True
         return f"{self.display_name} results for: {', '.join(queries)}"

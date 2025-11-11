@@ -1,4 +1,6 @@
 from onyx.agents.agent_framework.models import RunItemStreamEvent
+from onyx.agents.agent_framework.models import ToolCallOutputStreamItem
+from onyx.agents.agent_framework.models import ToolCallStreamItem
 from onyx.agents.agent_framework.query import query
 from onyx.llm.model_response import ModelResponseStream
 from tests.unit.onyx.agents.agent_framework.conftest import stream_chunk
@@ -60,7 +62,7 @@ def test_query_emits_reasoning_and_tool_call_events(
 
     llm = fake_llm(responses)
     messages = [{"role": "user", "content": "tell me about the new agent framework"}]
-    context = {}
+    context: dict[str, bool] = {}
 
     events = list(
         query(
@@ -81,6 +83,8 @@ def test_query_emits_reasoning_and_tool_call_events(
 
     tool_call_events = [e for e in run_item_events if e.type == "tool_call"]
     assert len(tool_call_events) == 1
+    assert tool_call_events[0].details is not None
+    assert isinstance(tool_call_events[0].details, ToolCallStreamItem)
     assert tool_call_events[0].details.call_id == call_id
     assert tool_call_events[0].details.name == "internal_search"
     assert (
@@ -97,6 +101,8 @@ def test_query_emits_reasoning_and_tool_call_events(
 
     tool_output_events = [e for e in run_item_events if e.type == "tool_call_output"]
     assert len(tool_output_events) == 1
+    assert tool_output_events[0].details is not None
+    assert isinstance(tool_output_events[0].details, ToolCallOutputStreamItem)
     assert tool_output_events[0].details.call_id == call_id
     assert (
         tool_output_events[0].details.output
@@ -198,7 +204,7 @@ def test_query_handles_parallel_tool_calls(
     ]
 
     llm = fake_llm(responses)
-    context = {}
+    context: dict[str, bool] = {}
     events = list(
         query(
             llm,
@@ -216,11 +222,15 @@ def test_query_handles_parallel_tool_calls(
 
     tool_call_events = [e for e in run_item_events if e.type == "tool_call"]
     assert len(tool_call_events) == 2
+    assert tool_call_events[0].details is not None
+    assert isinstance(tool_call_events[0].details, ToolCallStreamItem)
     assert tool_call_events[0].details.call_id == call_id_1
     assert tool_call_events[0].details.name == "internal_search"
     assert (
         tool_call_events[0].details.arguments == '{"queries": ["new agent framework"]}'
     )
+    assert tool_call_events[1].details is not None
+    assert isinstance(tool_call_events[1].details, ToolCallStreamItem)
     assert tool_call_events[1].details.call_id == call_id_2
     assert tool_call_events[1].details.name == "web_search"
     assert tool_call_events[1].details.arguments == '{"queries": ["cheese"]}'
@@ -234,11 +244,15 @@ def test_query_handles_parallel_tool_calls(
 
     tool_output_events = [e for e in run_item_events if e.type == "tool_call_output"]
     assert len(tool_output_events) == 2
+    assert tool_output_events[0].details is not None
+    assert isinstance(tool_output_events[0].details, ToolCallOutputStreamItem)
     assert tool_output_events[0].details.call_id == call_id_1
     assert (
         tool_output_events[0].details.output
         == "Internal Search results for: new agent framework"
     )
+    assert tool_output_events[1].details is not None
+    assert isinstance(tool_output_events[1].details, ToolCallOutputStreamItem)
     assert tool_output_events[1].details.call_id == call_id_2
     assert tool_output_events[1].details.output == "Web Search results for: cheese"
 
@@ -275,7 +289,7 @@ def test_query_handles_parallel_tool_calls_in_one_event(
     ]
 
     llm = fake_llm(responses)
-    context = {}
+    context: dict[str, bool] = {}
     events = list(
         query(
             llm,
@@ -293,11 +307,15 @@ def test_query_handles_parallel_tool_calls_in_one_event(
 
     tool_call_events = [e for e in run_item_events if e.type == "tool_call"]
     assert len(tool_call_events) == 2
+    assert tool_call_events[0].details is not None
+    assert isinstance(tool_call_events[0].details, ToolCallStreamItem)
     assert tool_call_events[0].details.call_id == call_id_1
     assert tool_call_events[0].details.name == "internal_search"
     assert (
         tool_call_events[0].details.arguments == '{"queries": ["new agent framework"]}'
     )
+    assert tool_call_events[1].details is not None
+    assert isinstance(tool_call_events[1].details, ToolCallStreamItem)
     assert tool_call_events[1].details.call_id == call_id_2
     assert tool_call_events[1].details.name == "web_search"
     assert tool_call_events[1].details.arguments == '{"queries": ["cheese"]}'
@@ -311,10 +329,14 @@ def test_query_handles_parallel_tool_calls_in_one_event(
 
     tool_output_events = [e for e in run_item_events if e.type == "tool_call_output"]
     assert len(tool_output_events) == 2
+    assert tool_output_events[0].details is not None
+    assert isinstance(tool_output_events[0].details, ToolCallOutputStreamItem)
     assert tool_output_events[0].details.call_id == call_id_1
     assert (
         tool_output_events[0].details.output
         == "Internal Search results for: new agent framework"
     )
+    assert tool_output_events[1].details is not None
+    assert isinstance(tool_output_events[1].details, ToolCallOutputStreamItem)
     assert tool_output_events[1].details.call_id == call_id_2
     assert tool_output_events[1].details.output == "Web Search results for: cheese"
