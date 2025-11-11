@@ -36,6 +36,7 @@ from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import STANDARD_TOOL_CHOICE_OPTIONS
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
@@ -393,6 +394,8 @@ class LitellmLLM(LLM):
         tools: list[dict] | None,
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
+        parallel_tool_calls: bool,
+        reasoning_effort: str | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -403,6 +406,11 @@ class LitellmLLM(LLM):
         self._record_call(processed_prompt)
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
+
+        if tools and tool_choice and tool_choice not in STANDARD_TOOL_CHOICE_OPTIONS:
+            tool_choice = {"type": "function", "function": {"name": tool_choice}}
+        elif not tools:
+            tool_choice = None
 
         try:
             return litellm.completion(
@@ -419,7 +427,7 @@ class LitellmLLM(LLM):
                 # actual input
                 messages=processed_prompt,
                 tools=tools,
-                tool_choice=tool_choice if tools else None,
+                tool_choice=tool_choice,
                 # streaming choice
                 stream=stream,
                 # model params
@@ -431,7 +439,7 @@ class LitellmLLM(LLM):
                 # NOTE: we can't pass this in if tools are not specified
                 # or else OpenAI throws an error
                 **(
-                    {"parallel_tool_calls": False}
+                    {"parallel_tool_calls": parallel_tool_calls}
                     if tools
                     and self.config.model_name
                     not in [
@@ -444,12 +452,8 @@ class LitellmLLM(LLM):
                         "o3-mini-2025-01-31",
                     ]
                     else {}
-                ),  # TODO: remove once LITELLM has patched
-                **(
-                    {"reasoning_effort": "minimal"}
-                    if "gpt-5" in self.config.model_name
-                    else {}
-                ),  # TODO: remove once LITELLM has better support/we change API
+                ),
+                **({"reasoning_effort": reasoning_effort} if reasoning_effort else {}),
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format
@@ -514,6 +518,8 @@ class LitellmLLM(LLM):
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
+                parallel_tool_calls=False,
+                reasoning_effort="minimal",
             ),
         )
         choice = response.choices[0]
@@ -561,6 +567,8 @@ class LitellmLLM(LLM):
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
+                parallel_tool_calls=False,
+                reasoning_effort="minimal",
             ),
         )
         try:
@@ -638,6 +646,7 @@ class LitellmLLM(LLM):
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
+                parallel_tool_calls=True,
             ),
         )
 
@@ -668,6 +677,7 @@ class LitellmLLM(LLM):
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
+                parallel_tool_calls=True,
             ),
         )
 

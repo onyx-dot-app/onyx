@@ -1,6 +1,7 @@
 import abc
 from collections.abc import Iterator
 from typing import Literal
+from typing import Union
 
 from braintrust import traced
 from langchain.schema.language_model import LanguageModelInput
@@ -17,7 +18,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-ToolChoiceOptions = Literal["required"] | Literal["auto"] | Literal["none"] | str
+STANDARD_TOOL_CHOICE_OPTIONS = ("required", "auto", "none")
+ToolChoiceOptions = Union[Literal["required", "auto", "none"], str]
 
 
 class LLMConfig(BaseModel):
@@ -167,7 +169,7 @@ class LLM(abc.ABC):
 
     def stream(
         self,
-        prompt: list[dict],
+        prompt: LanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
