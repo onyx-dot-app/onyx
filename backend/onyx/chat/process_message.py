@@ -144,6 +144,7 @@ from onyx.tools.tool_implementations.langflow.langflow_tool import LANGFLOW_RESP
 from onyx.tools.tool_implementations.doc_generator.doc_generator_tool import (
     DOC_GENERATOR_RESPONSE_SUMMARY_ID,
     DocGeneratorResponseSummary,
+    DocGeneratorTool,
 )
 from onyx.tools.tool_implementations.resume.resume_tool import ResumeTool, ResumeResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import (
@@ -900,9 +901,10 @@ def stream_chat_message_objects(
             new_msg_req, tools, user_file_ids, user_folder_ids
         )
         langflow_tool_present = any(isinstance(tool, LangflowTool) for tool in tools)
+        doc_generator_tool_present = any(isinstance(tool, DocGeneratorTool) for tool in tools)
 
         # Set force_use if user files exceed token limit
-        if use_search_for_user_files and not langflow_tool_present:
+        if use_search_for_user_files and not langflow_tool_present and not doc_generator_tool_present:
             try:
                 # Check if search tool is available in the tools list
                 search_tool_available = any(
@@ -1092,45 +1094,48 @@ def stream_chat_message_objects(
             use_agentic_search=new_msg_req.use_agentic_search,
         )
 
-        onyx_answer_piece_packets = []
-        stream_stop_info_packets = []
-        other_packets = []
-
-        for packet in answer.processed_streamed_output:
-            if isinstance(packet, OnyxAnswerPiece):
-                onyx_answer_piece_packets.append(packet)
-            elif isinstance(packet, StreamStopInfo):
-                stream_stop_info_packets.append(packet)
-            else:
-                other_packets.append(packet)
-
         validated_llm_answer = answer.llm_answer
 
-        if onyx_answer_piece_packets:
-            # 1. Собираем ответ LLM из пакетов OnyxAnswerPiece
-            llm_answer = merge_packets(packets=onyx_answer_piece_packets)
-            logger.info("\nСобранный ответ LLM из пакетов OnyxAnswerPiece: %s", llm_answer)
+        if persona.validators:
+            logger.info("Обработка ответа от LLM валидаторами")
 
-            if llm_answer and llm_answer.strip():
+            onyx_answer_piece_packets = []
+            stream_stop_info_packets = []
+            other_packets = []
 
-                # 2. Отправляем ответ LLM на валидацию
-                validated_llm_answer = validator_manager.validate_message(
-                    message=llm_answer, direction="output"
-                )
+            for packet in answer.processed_streamed_output:
+                if isinstance(packet, OnyxAnswerPiece):
+                    onyx_answer_piece_packets.append(packet)
+                elif isinstance(packet, StreamStopInfo):
+                    stream_stop_info_packets.append(packet)
+                else:
+                    other_packets.append(packet)
 
-                # 3. Разбиваем валидированный ответ LLM обратно на пакеты OnyxAnswerPiece
-                splitted_onyx_answer_piece_packets = split_packets(text=validated_llm_answer)
+            if onyx_answer_piece_packets:
+                # 1. Собираем ответ LLM из пакетов OnyxAnswerPiece
+                llm_answer = merge_packets(packets=onyx_answer_piece_packets)
 
-                # 4. Добавляем в общий список пакетов: пакеты OnyxAnswerPiece
-                other_packets.extend(splitted_onyx_answer_piece_packets)
+                if llm_answer and llm_answer.strip():
+
+                    # 2. Отправляем ответ LLM на валидацию
+                    validated_llm_answer = validator_manager.validate_message(
+                        message=llm_answer, direction="output"
+                    )
+
+                    # 3. Разбиваем валидированный ответ LLM обратно на пакеты OnyxAnswerPiece
+                    splitted_onyx_answer_piece_packets = split_packets(text=validated_llm_answer)
+
+                    # 4. Добавляем в общий список пакетов: пакеты OnyxAnswerPiece
+                    other_packets.extend(splitted_onyx_answer_piece_packets)
+            else:
+                logger.warning("\nПакетов OnyxAnswerPiece не обнаружено!")
+
+            other_packets.extend(stream_stop_info_packets)
+            all_packets = other_packets
+
         else:
-            logger.warning("\nПакетов OnyxAnswerPiece не обнаружено!")
-
-        logger.info(
-            "\nИтоговый ответ после input и output валидации: %s",
-            validated_llm_answer,
-        )
-        other_packets.extend(stream_stop_info_packets)
+            all_packets = answer.processed_streamed_output
+            logger.info("Ответ от LLM не обрабатывается валидаторами")
 
         # reference_db_search_docs = None
         # qa_docs_response = None
@@ -1146,7 +1151,7 @@ def stream_chat_message_objects(
         refined_answer_improvement = True
 
         # 5. Отправляем пакеты пользователю
-        for packet in other_packets:
+        for packet in all_packets:
             if isinstance(packet, ToolResponse):
                 level, level_question_num = (
                     (packet.level, packet.level_question_num)
