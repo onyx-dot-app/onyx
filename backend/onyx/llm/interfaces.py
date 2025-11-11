@@ -1,6 +1,5 @@
 import abc
 from collections.abc import Iterator
-from typing import Any
 from typing import Literal
 from typing import TYPE_CHECKING
 
@@ -13,10 +12,11 @@ from pydantic import BaseModel
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_INDIVIDUAL_MODEL_TOKENS
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
+from onyx.llm.model_response import ModelResponseStream
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
-    from onyx.llm.model_response import ModelResponse
+    from onyx.llm.model_response import ModelResponse, ModelResponseStream
 
 
 logger = setup_logger()
@@ -154,7 +154,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Iterator[dict]:
+    ) -> Iterator[ModelResponseStream]:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -177,7 +177,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Iterator[Any]:
+    ) -> Iterator[ModelResponseStream]:
         return self._stream_implementation(
             prompt,
             tools,

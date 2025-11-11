@@ -40,6 +40,8 @@ from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
+from onyx.llm.model_response import ModelResponse
+from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
@@ -48,7 +50,7 @@ from onyx.utils.long_term_log import LongTermLogger
 logger = setup_logger()
 
 if TYPE_CHECKING:
-    from litellm import ModelResponse, CustomStreamWrapper, Message
+    from litellm import CustomStreamWrapper, Message
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
@@ -625,7 +627,7 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> "ModelResponse":
+    ) -> ModelResponse:
         from litellm import ModelResponse as LiteLLMModelResponse
 
         from onyx.llm.model_response import from_litellm_model_response
@@ -656,24 +658,15 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Iterator[Any]:
-        from litellm import CustomStreamWrapper
+    ) -> Iterator[ModelResponseStream]:
+        from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
+        from onyx.llm.model_response import from_litellm_model_response_stream
 
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()
 
-        if DISABLE_LITELLM_STREAMING:
-            return self._invoke_implementation(
-                prompt,
-                tools,
-                tool_choice,
-                structured_response_format,
-                timeout_override,
-                max_tokens,
-            )
-
         response = cast(
-            CustomStreamWrapper,
+            LiteLLMCustomStreamWrapper,
             self._completion(
                 prompt=prompt,
                 tools=tools,
@@ -685,4 +678,5 @@ class DefaultMultiLLM(LLM):
             ),
         )
 
-        return response
+        for chunk in response:
+            yield from_litellm_model_response_stream(chunk)
