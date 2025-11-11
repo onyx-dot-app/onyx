@@ -18,10 +18,8 @@ def _update_tool_call_with_delta(
     tool_calls_in_progress: dict[int, dict[str, Any]],
     tool_call_delta: Any,
 ) -> None:
-    """Update tool_calls_in_progress dict with information from a tool call delta."""
     index = tool_call_delta.index
 
-    # Initialize tool call tracking if this is the first chunk for this index
     if index not in tool_calls_in_progress:
         tool_calls_in_progress[index] = {
             "id": None,
@@ -29,7 +27,6 @@ def _update_tool_call_with_delta(
             "arguments": "",
         }
 
-    # Update tool call with new information
     if tool_call_delta.id:
         tool_calls_in_progress[index]["id"] = tool_call_delta.id
 
@@ -53,11 +50,9 @@ def query(
     tool_definitions = [tool.tool_definition() for tool in tools]
     tools_by_name = {tool.name: tool for tool in tools}
 
-    # Track state
     reasoning_started = False
     message_started = False
 
-    # Track tool calls being built up (indexed by tool call index)
     tool_calls_in_progress: dict[int, dict[str, Any]] = {}
 
     for chunk in llm_with_default_settings.stream(
@@ -70,21 +65,17 @@ def query(
         delta = chunk.choice.delta
         finish_reason = chunk.choice.finish_reason
 
-        # Handle reasoning content
         if delta.reasoning_content:
             if not reasoning_started:
                 yield RunItemStreamEvent(type="reasoning_start")
                 reasoning_started = True
 
-        # Handle regular content
         if delta.content:
             if not message_started:
                 yield RunItemStreamEvent(type="message_start")
                 message_started = True
 
-        # Handle tool calls
         if delta.tool_calls:
-            # If we had reasoning or message in progress, end them
             if reasoning_started and not message_started:
                 yield RunItemStreamEvent(type="reasoning_done")
                 reasoning_started = False
@@ -95,13 +86,10 @@ def query(
             for tool_call_delta in delta.tool_calls:
                 _update_tool_call_with_delta(tool_calls_in_progress, tool_call_delta)
 
-        # Yield the model response chunk
         yield chunk
 
-        # Handle completion
         if not finish_reason:
             continue
-            # End any in-progress reasoning or message
         if reasoning_started:
             yield RunItemStreamEvent(type="reasoning_done")
             reasoning_started = False
@@ -110,7 +98,6 @@ def query(
             message_started = False
 
         if finish_reason == "tool_calls" and tool_calls_in_progress:
-            # Sort by index to maintain order
             sorted_tool_calls = sorted(tool_calls_in_progress.items())
 
             for _, tool_call_data in sorted_tool_calls:
@@ -118,7 +105,6 @@ def query(
                 name = tool_call_data["name"]
                 arguments_str = tool_call_data["arguments"]
 
-                # Emit tool call event
                 yield RunItemStreamEvent(
                     type="tool_call",
                     details=ToolCallStreamItem(
@@ -128,18 +114,17 @@ def query(
                     ),
                 )
 
-                # Execute the tool
                 if name in tools_by_name:
                     tool = tools_by_name[name]
                     arguments = json.loads(arguments_str)
 
-                    # Create run context wrapper
                     run_context = RunContextWrapper(context=context)
 
-                    # Call the tool's run_v2 method
+                    # TODO: Instead of executing sequentially, execute in parallel
+                    # In practice, it's not a must right now since we don't use parallel
+                    # tool calls, so kicking the can down the road for now.
                     output = tool.run_v2(run_context, **arguments)
 
-                    # Emit tool call output event
                     yield RunItemStreamEvent(
                         type="tool_call_output",
                         details=ToolCallOutputStreamItem(
