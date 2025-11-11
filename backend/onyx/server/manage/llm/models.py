@@ -198,8 +198,9 @@ class ModelConfigurationView(BaseModel):
                 )
             ),
             supports_image_input=(
-                model_configuration_model.supports_image_input
-                or litellm_thinks_model_supports_image_input(
+                val
+                if (val := model_configuration_model.supports_image_input) is not None
+                else litellm_thinks_model_supports_image_input(
                     model_configuration_model.name, provider_name
                 )
             ),

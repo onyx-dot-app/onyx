@@ -11,11 +11,6 @@ on:
       - "release/**"
 
 env:
-  # Private Registry Configuration
-  PRIVATE_REGISTRY: experimental-registry.blacksmith.sh:5000
-  PRIVATE_REGISTRY_USERNAME: ${{ secrets.PRIVATE_REGISTRY_USERNAME }}
-  PRIVATE_REGISTRY_PASSWORD: ${{ secrets.PRIVATE_REGISTRY_PASSWORD }}
-
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -35,7 +30,7 @@ env:
 
 jobs:
   discover-test-dirs:
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "family=m7+c7+r7", "run-id=${{ github.run_id }}"]
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
@@ -62,11 +57,79 @@ jobs:
           all_dirs="[${all_dirs%,}]"
           echo "test-dirs=$all_dirs" >> $GITHUB_OUTPUT
 
-  prepare-build:
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+
+  build-backend-image:
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # needed for pulling Vespa, Redis, Postgres, and Minio images
+      # otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and push Backend Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}
+          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-cache
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-cache,mode=max
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+
+  build-model-server-image:
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - name: Checkout code
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # needed for pulling Vespa, Redis, Postgres, and Minio images
+      # otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and push Model Server Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.model_server
+          push: true
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}
+          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-cache
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-cache,mode=max
+
+
+  build-integration-image:
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+        with:
+          metrics: cpu,memory
+      - name: Checkout code
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Prepare build
         uses: ./.github/actions/prepare-build
@@ -74,92 +137,11 @@ jobs:
           docker-username: ${{ secrets.DOCKER_USERNAME }}
           docker-password: ${{ secrets.DOCKER_TOKEN }}
 
-
-  build-backend-image:
-    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
-
-      - name: Login to Private Registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          registry: ${{ env.PRIVATE_REGISTRY }}
-          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
-          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
-
-      - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
-
-      - name: Build and push Backend Docker image
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          platforms: linux/arm64
-          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
-          push: true
-          outputs: type=registry
-          no-cache: true
-
-
-  build-model-server-image:
-    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
-
-      - name: Login to Private Registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          registry: ${{ env.PRIVATE_REGISTRY }}
-          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
-          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
-
-      - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
-
-      - name: Build and push Model Server Docker image
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile.model_server
-          platforms: linux/arm64
-          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}
-          push: true
-          outputs: type=registry
-          provenance: false
-          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
-
-
-  build-integration-image:
-    needs: prepare-build
-    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
-
-      - name: Login to Private Registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          registry: ${{ env.PRIVATE_REGISTRY }}
-          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
-          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
-
-      - name: Download OpenAPI artifacts
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # ratchet:actions/download-artifact@v4
-        with:
-          name: openapi-artifacts
-          path: backend/generated/
-
-      - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
-
       - name: Build and push integration test image with Docker Bake
         env:
-          REGISTRY: ${{ env.PRIVATE_REGISTRY }}
-          TAG: test-${{ github.run_id }}
-        run: cd backend && docker buildx bake --no-cache --push integration
+          REPOSITORY: ${{ env.RUNS_ON_ECR_CACHE }}
+          TAG: integration-test-${{ github.run_id }}
+        run: cd backend && docker buildx bake --push integration
 
   integration-tests:
     needs:
@@ -169,7 +151,7 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
 
     strategy:
       fail-fast: false
@@ -177,15 +159,11 @@ jobs:
         test-dir: ${{ fromJson(needs.discover-test-dirs.outputs.test-dirs) }}
 
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+        with:
+          metrics: cpu,memory
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
-
-      - name: Login to Private Registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          registry: ${{ env.PRIVATE_REGISTRY }}
-          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
-          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
@@ -201,18 +179,18 @@ jobs:
           # Pull all images from registry in parallel
           echo "Pulling Docker images in parallel..."
           # Pull images from private registry
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }}) &
 
           # Wait for all background jobs to complete
           wait
           echo "All Docker images pulled successfully"
 
           # Re-tag to remove registry prefix for docker-compose
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
+          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }} onyxdotapp/onyx-backend:test
+          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
+          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} onyxdotapp/onyx-integration:test
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
@@ -357,18 +335,12 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
 
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
-
-      - name: Login to Private Registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          registry: ${{ env.PRIVATE_REGISTRY }}
-          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
-          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
@@ -378,13 +350,13 @@ jobs:
 
       - name: Pull Docker images
         run: |
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}) &
+          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }}) &
           wait
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
+          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }} onyxdotapp/onyx-backend:test
+          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
+          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} onyxdotapp/onyx-integration:test
 
       - name: Start Docker containers for multi-tenant tests
         run: |
@@ -488,7 +460,7 @@ jobs:
           docker compose -f docker-compose.multitenant-dev.yml down -v
 
   required:
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "family=m7+c7+r7", "run-id=${{ github.run_id }}"]
     needs: [integration-tests, multitenant-tests]
     if: ${{ always() }}
     steps:
