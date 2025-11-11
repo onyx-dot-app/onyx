@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import cast
+from typing import TYPE_CHECKING
+
 import pytest
 
 from onyx.llm.model_response import ChatCompletionDeltaToolCall
@@ -8,6 +11,12 @@ from onyx.llm.model_response import from_litellm_model_response_stream
 from onyx.llm.model_response import FunctionCall
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
+
+if TYPE_CHECKING:
+    from litellm.types.utils import (
+        ModelResponse as LiteLLMModelResponse,
+        ModelResponseStream as LiteLLMModelResponseStream,
+    )
 
 
 class _LiteLLMStreamDouble:
@@ -21,6 +30,29 @@ class _LiteLLMStreamDouble:
 
     def model_dump(self) -> dict:
         return self._payload
+
+
+class _LiteLLMResponseDouble:
+    """
+    Lightweight double that mimics the LiteLLM ``ModelResponse`` interface
+    used by ``from_litellm_model_response``.
+    """
+
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+
+    def model_dump(self) -> dict:
+        return self._payload
+
+
+def _make_stream_double(payload: dict) -> "LiteLLMModelResponseStream":
+    """Create a test double for LiteLLM ModelResponseStream."""
+    return cast("LiteLLMModelResponseStream", _LiteLLMStreamDouble(payload))
+
+
+def _make_response_double(payload: dict) -> "LiteLLMModelResponse":
+    """Create a test double for LiteLLM ModelResponse."""
+    return cast("LiteLLMModelResponse", _LiteLLMResponseDouble(payload))
 
 
 def _build_tool_call_payload() -> dict:
@@ -70,7 +102,7 @@ def _build_reasoning_payload() -> dict:
     }
 
 
-def _build_finish_reason_payload() -> dict:
+def _build_finish_reason_payload() -> tuple[dict, dict]:
     base_chunk = {
         "id": "chatcmpl-2b136068-c6fb-4af1-97d5-d2c9d84cd52b",
         "created": 1762544448,
@@ -190,7 +222,7 @@ def _build_non_streaming_tool_call_payload() -> dict:
 
 def test_from_litellm_model_response_stream_parses_tool_calls() -> None:
     response = from_litellm_model_response_stream(
-        _LiteLLMStreamDouble(_build_tool_call_payload())
+        _make_stream_double(_build_tool_call_payload())
     )
 
     assert isinstance(response, ModelResponseStream)
@@ -209,7 +241,7 @@ def test_from_litellm_model_response_stream_parses_tool_calls() -> None:
 
 def test_from_litellm_model_response_stream_preserves_reasoning_content() -> None:
     response = from_litellm_model_response_stream(
-        _LiteLLMStreamDouble(_build_reasoning_payload())
+        _make_stream_double(_build_reasoning_payload())
     )
 
     assert response.choice.delta.content is None
@@ -221,7 +253,7 @@ def test_from_litellm_model_response_stream_preserves_reasoning_content() -> Non
 def test_from_litellm_model_response_stream_handles_content_and_finish_reason(
     payload: dict,
 ) -> None:
-    response = from_litellm_model_response_stream(_LiteLLMStreamDouble(payload))
+    response = from_litellm_model_response_stream(_make_stream_double(payload))
 
     assert response.id == "chatcmpl-2b136068-c6fb-4af1-97d5-d2c9d84cd52b"
     assert response.created == "1762544448"
@@ -236,7 +268,7 @@ def test_from_litellm_model_response_stream_handles_content_and_finish_reason(
 
 def test_from_litellm_model_response_stream_parses_multiple_tool_calls() -> None:
     response = from_litellm_model_response_stream(
-        _LiteLLMStreamDouble(_build_multiple_tool_calls_payload())
+        _make_stream_double(_build_multiple_tool_calls_payload())
     )
 
     tool_calls = response.choice.delta.tool_calls
@@ -267,7 +299,7 @@ def test_from_litellm_model_response_stream_parses_multiple_tool_calls() -> None
 
 def test_from_litellm_model_response_parses_basic_message() -> None:
     response = from_litellm_model_response(
-        _LiteLLMStreamDouble(_build_non_streaming_response_payload())
+        _make_response_double(_build_non_streaming_response_payload())
     )
 
     assert isinstance(response, ModelResponse)
@@ -281,7 +313,7 @@ def test_from_litellm_model_response_parses_basic_message() -> None:
 
 def test_from_litellm_model_response_parses_tool_calls() -> None:
     response = from_litellm_model_response(
-        _LiteLLMStreamDouble(_build_non_streaming_tool_call_payload())
+        _make_response_double(_build_non_streaming_tool_call_payload())
     )
 
     assert isinstance(response, ModelResponse)
