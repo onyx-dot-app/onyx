@@ -380,7 +380,7 @@ export function ToolList({
       </Button>
     </div>
   ) : (
-    <div className="space-y-4 w-full">
+    <div className="space-y-4 w-full" data-testid="available-tools-section">
       <h3 className="text-lg font-medium">Available Tools</h3>
 
       {/* Search bar */}

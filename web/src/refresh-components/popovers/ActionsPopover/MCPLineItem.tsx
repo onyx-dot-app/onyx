@@ -12,7 +12,6 @@ import SvgCheck from "@/icons/check";
 import SvgServer from "@/icons/server";
 import SvgChevronRight from "@/icons/chevron-right";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { cn, noProp } from "@/lib/utils";
@@ -21,6 +20,7 @@ import { SvgProps } from "@/icons";
 export interface MCPServer {
   id: number;
   name: string;
+  owner_email: string;
   server_url: string;
   auth_type: MCPAuthenticationType;
   auth_performer: MCPAuthenticationPerformer;
@@ -39,6 +39,7 @@ export interface MCPLineItemProps {
   enabledTools: ToolSnapshot[];
   isAuthenticated: boolean;
   isLoading: boolean;
+  canEdit: boolean;
 }
 
 export default function MCPLineItem({
@@ -114,18 +115,22 @@ export default function MCPLineItem({
                 {` of ${tools.length}`}
               </Text>
             )}
-          {showReauthButton && (
-            <IconButton
-              icon={SvgKey}
-              internal
-              aria-label="Re-authenticate MCP server"
-              title="Re-authenticate"
-              tooltip="Re-authenticate"
-              onClick={noProp(onAuthenticate)}
-            />
+          {showInlineReauth && (
+            <span
+              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border-02 bg-background-tint-01"
+              role="img"
+              aria-label="Re-authentication required"
+            >
+              <SvgKey className="h-3.5 w-3.5 stroke-status-warning-05" />
+            </span>
           )}
-          {isAuthenticated && tools.length > 0 && (
-            <IconButton icon={SvgChevronRight} internal tooltip="More" />
+          {showReauthButton && (
+            <span
+              className="inline-flex h-6 w-6 items-center justify-center"
+              aria-hidden="true"
+            >
+              <SvgChevronRight className="h-3.5 w-3.5 stroke-text-03" />
+            </span>
           )}
         </div>
       }

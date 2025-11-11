@@ -117,7 +117,7 @@ export async function startMcpOauthServer(
     );
   const scriptDir = path.dirname(scriptPath);
 
-  const proc = spawn(pythonBinary, [scriptPath], {
+  const proc = spawn(pythonBinary, [scriptPath, port.toString()], {
     cwd: scriptDir,
     stdio: ["ignore", "pipe", "pipe"],
     env: {

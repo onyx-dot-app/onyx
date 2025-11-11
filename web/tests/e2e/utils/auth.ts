@@ -1,9 +1,10 @@
-import { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import {
   TEST_ADMIN2_CREDENTIALS,
   TEST_ADMIN_CREDENTIALS,
   TEST_USER_CREDENTIALS,
 } from "../constants";
+import { logPageState } from "./pageStateLogger";
 
 // Basic function which logs in a user (either admin or regular user) to the application
 // It handles both successful login attempts and potential timeouts, with a retry mechanism
@@ -26,14 +27,37 @@ export async function loginAs(
         ? TEST_ADMIN2_CREDENTIALS
         : TEST_USER_CREDENTIALS;
 
+  const waitForVisible = async (
+    locator: Locator,
+    debugContext: string,
+    timeoutMs = 30000
+  ) => {
+    try {
+      await locator.waitFor({ state: "visible", timeout: timeoutMs });
+    } catch (error) {
+      await logPageState(page, debugContext, "[login-debug]");
+      throw error;
+    }
+  };
+
+  const fillCredentials = async (contextLabel: string) => {
+    const emailInput = page.getByTestId("email");
+    const passwordInput = page.getByTestId("password");
+    await waitForVisible(emailInput, `${contextLabel}: email input`);
+    await waitForVisible(passwordInput, `${contextLabel}: password input`);
+    await emailInput.fill(email);
+    await passwordInput.fill(password);
+  };
+
   console.log(`[loginAs] Navigating to /auth/login as ${userType}`);
   await page.goto("http://localhost:3000/auth/login");
+  await logPageState(
+    page,
+    `[loginAs] Landed on /auth/login (${userType})`,
+    "[login-debug]"
+  );
 
-  const emailInput = page.getByTestId("email");
-  const passwordInput = page.getByTestId("password");
-  await emailInput.waitFor({ state: "visible", timeout: 30000 });
-  await emailInput.fill(email);
-  await passwordInput.fill(password);
+  await fillCredentials("loginAs primary form");
 
   // Click the login button
   await page.click('button[type="submit"]');
@@ -46,6 +70,11 @@ export async function loginAs(
 
   try {
     await page.waitForURL("http://localhost:3000/chat", { timeout: 10000 });
+    await logPageState(
+      page,
+      `[loginAs] After /chat redirect (${userType})`,
+      "[login-debug]"
+    );
     console.log(
       `[loginAs] Redirected to /chat for ${userType}. URL: ${page.url()}`
     );
@@ -55,18 +84,24 @@ export async function loginAs(
     // If redirect to /chat doesn't happen, go to /auth/login
     console.log(`[loginAs] Navigating to /auth/signup as fallback`);
     await page.goto("http://localhost:3000/auth/signup");
+    await logPageState(
+      page,
+      `[loginAs] Landed on /auth/signup fallback (${userType})`,
+      "[login-debug]"
+    );
 
-    const signupEmailInput = page.getByTestId("email");
-    const signupPasswordInput = page.getByTestId("password");
-    await signupEmailInput.waitFor({ state: "visible", timeout: 30000 });
-    await signupEmailInput.fill(email);
-    await signupPasswordInput.fill(password);
+    await fillCredentials("loginAs fallback form");
 
     // Click the login button
     await page.click('button[type="submit"]');
 
     try {
       await page.waitForURL("http://localhost:3000/chat", { timeout: 10000 });
+      await logPageState(
+        page,
+        `[loginAs] After fallback /chat redirect (${userType})`,
+        "[login-debug]"
+      );
       console.log(
         `[loginAs] Fallback redirected to /chat for ${userType}. URL: ${page.url()}`
       );

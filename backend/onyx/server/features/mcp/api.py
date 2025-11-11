@@ -168,6 +168,19 @@ class OnyxTokenStorage(TokenStorage):
             client_info_raw = config.config.get(MCPOAuthKeys.CLIENT_INFO.value)
             if client_info_raw:
                 return OAuthClientInformationFull.model_validate(client_info_raw)
+            if self.alt_config_id:
+                alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
+                if alt_config:
+                    alt_client_info = alt_config.config.get(
+                        MCPOAuthKeys.CLIENT_INFO.value
+                    )
+                    if alt_client_info:
+                        # Cache the admin client info on the user config for future calls
+                        config.config[MCPOAuthKeys.CLIENT_INFO.value] = alt_client_info
+                        update_connection_config(config.id, db_session, config.config)
+                        return OAuthClientInformationFull.model_validate(
+                            alt_client_info
+                        )
             return None
 
     async def set_client_info(self, info: OAuthClientInformationFull) -> None:
@@ -1286,20 +1299,6 @@ def _upsert_mcp_server(
                 detail="Authenticated user email required to create MCP servers",
             )
 
-        # Check existing servers for same server_url
-        existing_servers = get_all_mcp_servers(db_session)
-        existing_server = None
-        for server in existing_servers:
-            if server.server_url == normalized_url:
-                existing_server = server
-                break
-        if existing_server:
-            raise HTTPException(
-                status_code=409,
-                detail="An MCP server with this URL already exists for this owner",
-            )
-
-        # Create new MCP server
         mcp_server = create_mcp_server__no_commit(
             owner_email=user.email if user else "",
             name=request.name,
