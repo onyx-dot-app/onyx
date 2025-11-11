@@ -777,7 +777,6 @@ def get_max_input_tokens_from_llm_provider(
 
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
-
     # First, try to read an explicit configuration from the model_configuration table
     try:
         with get_session_with_current_tenant() as db_session:
@@ -800,6 +799,15 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
         )
 
     # Fallback to looking up the model in the litellm model_cost dict
+    return litellm_thinks_model_supports_image_input(model_name, model_provider)
+
+
+def litellm_thinks_model_supports_image_input(
+    model_name: str, model_provider: str
+) -> bool:
+    """Generally should call `model_supports_image_input` unless you already know that
+    `model_supports_image_input` from the DB is not set OR you need to avoid the performance
+    hit of querying the DB."""
     try:
         model_obj = find_model_obj(get_model_map(), model_provider, model_name)
         if not model_obj:
