@@ -24,6 +24,7 @@ from onyx.chat.models import PromptConfig
 from onyx.chat.turn.infra.emitter import Emitter
 from onyx.context.search.models import InferenceSection
 from onyx.db.models import User
+from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.tool import Tool
@@ -53,6 +54,7 @@ class ChatTurnDependencies:
     emitter: Emitter
     user_or_none: User | None
     prompt_config: PromptConfig
+    messages_2: LanguageModelInput
 
 
 class FetchedDocumentCacheEntry(BaseModel):

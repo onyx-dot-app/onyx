@@ -7,6 +7,7 @@ from onyx.agents.agent_framework.models import RunItemStreamEvent
 from onyx.agents.agent_framework.models import StreamEvent
 from onyx.agents.agent_framework.models import ToolCallOutputStreamItem
 from onyx.agents.agent_framework.models import ToolCallStreamItem
+from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.model_response import ModelResponseStream
@@ -42,7 +43,7 @@ def _update_tool_call_with_delta(
 
 def query(
     llm_with_default_settings: LLM,
-    messages: list[dict],
+    messages: LanguageModelInput,
     tools: Sequence[Tool],
     context: Any,
     tool_choice: ToolChoiceOptions | None = None,

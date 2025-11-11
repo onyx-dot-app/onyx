@@ -9,7 +9,9 @@ from typing import TYPE_CHECKING
 from typing import Union
 
 from httpx import RemoteProtocolError
-from langchain.schema.language_model import LanguageModelInput
+from langchain.schema.language_model import (
+    LanguageModelInput as LangChainLanguageModelInput,
+)
 from langchain_core.messages import AIMessage
 from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
@@ -34,6 +36,7 @@ from onyx.configs.model_configs import (
 )
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
+from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import STANDARD_TOOL_CHOICE_OPTIONS
@@ -57,6 +60,8 @@ if TYPE_CHECKING:
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
+
+LegacyPromptDict = Sequence[str | list[str] | dict[str, Any] | tuple[str, str]]
 
 
 class LLMTimeoutError(Exception):
@@ -231,7 +236,7 @@ def _convert_delta_to_message_chunk(
 
 
 def _prompt_to_dict(
-    prompt: LanguageModelInput,
+    prompt: LangChainLanguageModelInput,
 ) -> Sequence[str | list[str] | dict[str, Any] | tuple[str, str]]:
     # NOTE: this must go first, since it is also a Sequence
     if isinstance(prompt, str):
@@ -347,20 +352,58 @@ class LitellmLLM(LLM):
     def log_model_configs(self) -> None:
         logger.debug(f"Config: {self._safe_model_config()}")
 
-    def _record_call(self, prompt: LanguageModelInput) -> None:
+    def _record_call(
+        self, prompt: LanguageModelInput | LangChainLanguageModelInput
+    ) -> None:
         if self._long_term_logger:
+            # Handle both LangChain format (needs conversion) and new format (already dict-like)
+            prompt_dict: Any
+            if isinstance(prompt, str):
+                # String prompt - convert to dict format
+                prompt_dict = _prompt_to_dict(prompt)
+            elif (
+                isinstance(prompt, list)
+                and len(prompt) > 0
+                and isinstance(prompt[0], BaseMessage)
+            ):
+                # LangChain BaseMessage format - convert to dict
+                prompt_dict = _prompt_to_dict(prompt)
+            elif hasattr(prompt, "to_messages"):
+                # PromptValue format - convert to dict
+                prompt_dict = _prompt_to_dict(prompt)
+            else:
+                # Already in dict/ChatCompletionMessage format - use as-is
+                prompt_dict = prompt
+
             self._long_term_logger.record(
-                {"prompt": _prompt_to_dict(prompt), "model": self._safe_model_config()},
+                {"prompt": prompt_dict, "model": self._safe_model_config()},
                 category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
             )
 
     def _record_result(
-        self, prompt: LanguageModelInput, model_output: BaseMessage
+        self,
+        prompt: LanguageModelInput | LangChainLanguageModelInput,
+        model_output: BaseMessage,
     ) -> None:
         if self._long_term_logger:
+            # Handle both LangChain format (needs conversion) and new format (already dict-like)
+            prompt_dict: Any
+            if isinstance(prompt, str):
+                prompt_dict = _prompt_to_dict(prompt)
+            elif (
+                isinstance(prompt, list)
+                and len(prompt) > 0
+                and isinstance(prompt[0], BaseMessage)
+            ):
+                prompt_dict = _prompt_to_dict(prompt)
+            elif hasattr(prompt, "to_messages"):
+                prompt_dict = _prompt_to_dict(prompt)
+            else:
+                prompt_dict = prompt
+
             self._long_term_logger.record(
                 {
-                    "prompt": _prompt_to_dict(prompt),
+                    "prompt": prompt_dict,
                     "content": model_output.content,
                     "tool_calls": (
                         model_output.tool_calls
@@ -372,11 +415,28 @@ class LitellmLLM(LLM):
                 category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
             )
 
-    def _record_error(self, prompt: LanguageModelInput, error: Exception) -> None:
+    def _record_error(
+        self, prompt: LanguageModelInput | LangChainLanguageModelInput, error: Exception
+    ) -> None:
         if self._long_term_logger:
+            # Handle both LangChain format (needs conversion) and new format (already dict-like)
+            prompt_dict: Any
+            if isinstance(prompt, str):
+                prompt_dict = _prompt_to_dict(prompt)
+            elif (
+                isinstance(prompt, list)
+                and len(prompt) > 0
+                and isinstance(prompt[0], BaseMessage)
+            ):
+                prompt_dict = _prompt_to_dict(prompt)
+            elif hasattr(prompt, "to_messages"):
+                prompt_dict = _prompt_to_dict(prompt)
+            else:
+                prompt_dict = prompt
+
             self._long_term_logger.record(
                 {
-                    "prompt": _prompt_to_dict(prompt),
+                    "prompt": prompt_dict,
                     "error": str(error),
                     "traceback": "".join(
                         traceback.format_exception(
@@ -395,6 +455,7 @@ class LitellmLLM(LLM):
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
         parallel_tool_calls: bool,
+        legacy_prompt: LangChainLanguageModelInput | None = None,
         reasoning_effort: str | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
@@ -402,8 +463,11 @@ class LitellmLLM(LLM):
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
-        processed_prompt = _prompt_to_dict(prompt)
-        self._record_call(processed_prompt)
+        processed_prompt = _prompt_to_dict(legacy_prompt) if legacy_prompt else prompt
+
+        # Record the original prompt (not the processed one) for logging
+        original_prompt = legacy_prompt if legacy_prompt else prompt
+        self._record_call(original_prompt)
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
 
@@ -470,7 +534,7 @@ class LitellmLLM(LLM):
             )
         except Exception as e:
 
-            self._record_error(processed_prompt, e)
+            self._record_error(original_prompt, e)
             # for break pointing
             if isinstance(e, Timeout):
                 raise LLMTimeoutError(e)

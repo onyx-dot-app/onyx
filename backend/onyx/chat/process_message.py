@@ -91,6 +91,7 @@ from onyx.llm.factory import get_llm_model_and_settings_for_persona
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.llm.interfaces import LLM
+from onyx.llm.message_format import base_messages_to_chat_completion_msgs
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
@@ -945,6 +946,9 @@ def _fast_message_stream(
     messages = base_messages_to_agent_sdk_msgs(
         answer.graph_inputs.prompt_builder.build(), is_responses_api=is_responses_api
     )
+    messages_2 = base_messages_to_chat_completion_msgs(
+        answer.graph_inputs.prompt_builder.build()
+    )
     emitter = get_default_emitter()
     return fast_chat_turn.fast_chat_turn(
         messages=messages,
@@ -959,6 +963,7 @@ def _fast_message_stream(
             emitter=emitter,
             user_or_none=user_or_none,
             prompt_config=prompt_config,
+            messages_2=messages_2,
         ),
         chat_session_id=chat_session_id,
         message_id=reserved_message_id,

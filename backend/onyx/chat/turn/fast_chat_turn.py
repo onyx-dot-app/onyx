@@ -10,6 +10,7 @@ from agents import RunResultStreaming
 from agents import ToolCallItem
 from agents.tracing import trace
 
+from onyx.agents.agent_framework.query import query
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
@@ -84,6 +85,16 @@ def _run_agent_loop(
     agent_turn_messages: list[AgentSDKMessage] = []
     last_call_is_final = False
     iteration_count = 0
+
+    for chunk in query(
+        llm_with_default_settings=dependencies.llm,
+        messages=dependencies.messages_2,
+        tools=dependencies.tools,
+        context=ctx,
+        tool_choice=None,
+    ):
+        print(chunk)
+    print("hi")
 
     while not last_call_is_final:
         available_tools: Sequence[Tool] = (
