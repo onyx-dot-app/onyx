@@ -799,6 +799,14 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
         )
 
     # Fallback to looking up the model in the litellm model_cost dict
+    litellm_thinks_model_supports_image_input(model_name, model_provider)
+
+
+def litellm_thinks_model_supports_image_input(
+    model_name: str, model_provider: str
+) -> bool:
+    """Generally should call `model_supports_image_input` unless you already know that
+    `model_supports_image_input` from the DB is not set."""
     try:
         model_obj = find_model_obj(get_model_map(), model_provider, model_name)
         if not model_obj:
