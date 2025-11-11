@@ -14,6 +14,35 @@ from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
 
 
+def _update_tool_call_with_delta(
+    tool_calls_in_progress: dict[int, dict[str, Any]],
+    tool_call_delta: Any,
+) -> None:
+    """Update tool_calls_in_progress dict with information from a tool call delta."""
+    index = tool_call_delta.index
+
+    # Initialize tool call tracking if this is the first chunk for this index
+    if index not in tool_calls_in_progress:
+        tool_calls_in_progress[index] = {
+            "id": None,
+            "name": None,
+            "arguments": "",
+        }
+
+    # Update tool call with new information
+    if tool_call_delta.id:
+        tool_calls_in_progress[index]["id"] = tool_call_delta.id
+
+    if tool_call_delta.function:
+        if tool_call_delta.function.name:
+            tool_calls_in_progress[index]["name"] = tool_call_delta.function.name
+
+        if tool_call_delta.function.arguments:
+            tool_calls_in_progress[index][
+                "arguments"
+            ] += tool_call_delta.function.arguments
+
+
 def query(
     llm_with_default_settings: LLM,
     messages: list[dict],
@@ -64,80 +93,57 @@ def query(
                 message_started = False
 
             for tool_call_delta in delta.tool_calls:
-                index = tool_call_delta.index
-
-                # Initialize tool call tracking if this is the first chunk for this index
-                if index not in tool_calls_in_progress:
-                    tool_calls_in_progress[index] = {
-                        "id": None,
-                        "name": None,
-                        "arguments": "",
-                    }
-
-                # Update tool call with new information
-                if tool_call_delta.id:
-                    tool_calls_in_progress[index]["id"] = tool_call_delta.id
-
-                if tool_call_delta.function:
-                    if tool_call_delta.function.name:
-                        tool_calls_in_progress[index][
-                            "name"
-                        ] = tool_call_delta.function.name
-
-                    if tool_call_delta.function.arguments:
-                        tool_calls_in_progress[index][
-                            "arguments"
-                        ] += tool_call_delta.function.arguments
+                _update_tool_call_with_delta(tool_calls_in_progress, tool_call_delta)
 
         # Yield the model response chunk
         yield chunk
 
         # Handle completion
-        if finish_reason:
+        if not finish_reason:
+            continue
             # End any in-progress reasoning or message
-            if reasoning_started:
-                yield RunItemStreamEvent(type="reasoning_done")
-                reasoning_started = False
-            if message_started:
-                yield RunItemStreamEvent(type="message_done")
-                message_started = False
+        if reasoning_started:
+            yield RunItemStreamEvent(type="reasoning_done")
+            reasoning_started = False
+        if message_started:
+            yield RunItemStreamEvent(type="message_done")
+            message_started = False
 
-            # Execute tool calls if finish_reason is "tool_calls"
-            if finish_reason == "tool_calls" and tool_calls_in_progress:
-                # Sort by index to maintain order
-                sorted_tool_calls = sorted(tool_calls_in_progress.items())
+        if finish_reason == "tool_calls" and tool_calls_in_progress:
+            # Sort by index to maintain order
+            sorted_tool_calls = sorted(tool_calls_in_progress.items())
 
-                for _, tool_call_data in sorted_tool_calls:
-                    call_id = tool_call_data["id"]
-                    name = tool_call_data["name"]
-                    arguments_str = tool_call_data["arguments"]
+            for _, tool_call_data in sorted_tool_calls:
+                call_id = tool_call_data["id"]
+                name = tool_call_data["name"]
+                arguments_str = tool_call_data["arguments"]
 
-                    # Emit tool call event
+                # Emit tool call event
+                yield RunItemStreamEvent(
+                    type="tool_call",
+                    details=ToolCallStreamItem(
+                        call_id=call_id,
+                        name=name,
+                        arguments=arguments_str,
+                    ),
+                )
+
+                # Execute the tool
+                if name in tools_by_name:
+                    tool = tools_by_name[name]
+                    arguments = json.loads(arguments_str)
+
+                    # Create run context wrapper
+                    run_context = RunContextWrapper(context=context)
+
+                    # Call the tool's run_v2 method
+                    output = tool.run_v2(run_context, **arguments)
+
+                    # Emit tool call output event
                     yield RunItemStreamEvent(
-                        type="tool_call",
-                        details=ToolCallStreamItem(
+                        type="tool_call_output",
+                        details=ToolCallOutputStreamItem(
                             call_id=call_id,
-                            name=name,
-                            arguments=arguments_str,
+                            output=output,
                         ),
                     )
-
-                    # Execute the tool
-                    if name in tools_by_name:
-                        tool = tools_by_name[name]
-                        arguments = json.loads(arguments_str)
-
-                        # Create run context wrapper
-                        run_context = RunContextWrapper(context=context)
-
-                        # Call the tool's run_v2 method
-                        output = tool.run_v2(run_context, **arguments)
-
-                        # Emit tool call output event
-                        yield RunItemStreamEvent(
-                            type="tool_call_output",
-                            details=ToolCallOutputStreamItem(
-                                call_id=call_id,
-                                output=output,
-                            ),
-                        )
