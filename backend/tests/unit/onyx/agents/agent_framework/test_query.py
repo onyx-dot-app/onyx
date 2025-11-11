@@ -112,6 +112,8 @@ def test_query_emits_message_start_and_done_for_content(fake_llm) -> None:
         stream_chunk(id=stream_id, created="1762544448", content="What"),
         stream_chunk(id=stream_id, created="1762544448", content=" would"),
         stream_chunk(id=stream_id, created="1762544448", finish_reason="stop"),
+        # Extra empty message that can occur after finish_reason
+        stream_chunk(id=stream_id, created="1762544448"),
     ]
 
     llm = fake_llm(responses)
@@ -128,7 +130,7 @@ def test_query_emits_message_start_and_done_for_content(fake_llm) -> None:
     model_responses = [e for e in events if isinstance(e, ModelResponseStream)]
     run_item_events = [e for e in events if isinstance(e, RunItemStreamEvent)]
 
-    assert len(model_responses) == 3
+    assert len(model_responses) == 4
     assert len([e for e in run_item_events if e.type == "message_start"]) == 1
     assert len([e for e in run_item_events if e.type == "message_done"]) == 1
 
