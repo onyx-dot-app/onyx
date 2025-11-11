@@ -34,7 +34,7 @@ class StreamingChoice(BaseModel):
 
 class ModelResponseStream(BaseModel):
     id: str
-    created: int
+    created: str
     choice: StreamingChoice
 
 
@@ -103,6 +103,6 @@ def from_litellm_model_response_stream(
 
     return ModelResponseStream(
         id=str(response_id),
-        created=int(created),
+        created=str(created),
         choice=streaming_choice,
     )
