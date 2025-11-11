@@ -422,9 +422,7 @@ class DefaultMultiLLM(LLM):
                 stream=stream,
                 # model params
                 temperature=(
-                    1
-                    if self.config.model_name in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
-                    else self._temperature
+                    1 if "gpt-5" in self.config.model_name else self._temperature
                 ),
                 timeout=timeout_override or self._timeout,
                 # For now, we don't support parallel tool calls
@@ -447,12 +445,7 @@ class DefaultMultiLLM(LLM):
                 ),  # TODO: remove once LITELLM has patched
                 **(
                     {"reasoning_effort": "minimal"}
-                    if self.config.model_name
-                    in [
-                        "gpt-5",
-                        "gpt-5-mini",
-                        "gpt-5-nano",
-                    ]
+                    if "gpt-5" in self.config.model_name
                     else {}
                 ),  # TODO: remove once LITELLM has better support/we change API
                 **(
