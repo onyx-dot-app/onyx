@@ -120,7 +120,6 @@ jobs:
 
 
   build-integration-image:
-    needs: prepare-build
     runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
