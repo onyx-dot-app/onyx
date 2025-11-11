@@ -52,6 +52,23 @@ logger = setup_logger()
 MAX_CONTEXT_TOKENS = 100
 ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
+_TWELVE_LABS_PEGASUS_MODEL_NAMES = [
+    "us.twelvelabs.pegasus-1-2-v1:0",
+    "us.twelvelabs.pegasus-1-2-v1",
+    "twelvelabs/us.twelvelabs.pegasus-1-2-v1:0",
+    "twelvelabs/us.twelvelabs.pegasus-1-2-v1",
+]
+_TWELVE_LABS_PEGASUS_OUTPUT_TOKENS = max(512, GEN_AI_MODEL_FALLBACK_MAX_TOKENS // 4)
+CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
+    model_name: {
+        "max_input_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+        "max_output_tokens": _TWELVE_LABS_PEGASUS_OUTPUT_TOKENS,
+        "max_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+        "supports_reasoning": False,
+        "supports_vision": False,
+    }
+    for model_name in _TWELVE_LABS_PEGASUS_MODEL_NAMES
+}
 
 
 def _unwrap_nested_exception(error: Exception) -> Exception:
@@ -520,12 +537,17 @@ def get_model_map() -> dict:
             ):
                 starting_map[truncated_key] = potential_truncated_value
 
-    # NOTE: we could add additional models here in the future,
-    # but for now there is no point. Ollama allows the user to
-    # to specify their desired max context window, and it's
+    for model_name, model_metadata in CUSTOM_LITELLM_MODEL_OVERRIDES.items():
+        if model_name in starting_map:
+            continue
+        starting_map[model_name] = copy.deepcopy(model_metadata)
+
+    # NOTE: outside of the explicit CUSTOM_LITELLM_MODEL_OVERRIDES,
+    # we avoid hard-coding additional models here. Ollama, for example,
+    # allows the user to specify their desired max context window, and it's
     # unlikely to be standard across users even for the same model
-    # (it heavily depends on their hardware). For now, we'll just
-    # rely on GEN_AI_MODEL_FALLBACK_MAX_TOKENS to cover this.
+    # (it heavily depends on their hardware). For those cases, we rely on
+    # GEN_AI_MODEL_FALLBACK_MAX_TOKENS to cover this.
     # for model_name in [
     #     "llama3.2",
     #     "llama3.2:1b",
