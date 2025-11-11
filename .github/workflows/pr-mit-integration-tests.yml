@@ -66,6 +66,9 @@ jobs:
 
       - name: Prepare build
         uses: ./.github/actions/prepare-build
+        with:
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
 
   build-backend-image:
     runs-on: blacksmith-16vcpu-ubuntu-2404-arm
@@ -139,7 +142,7 @@ jobs:
           password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
 
       - name: Download OpenAPI artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # ratchet:actions/download-artifact@v4
         with:
           name: openapi-artifacts
           path: backend/generated/
@@ -243,15 +246,15 @@ jobs:
           while true; do
             current_time=$(date +%s)
             elapsed_time=$((current_time - start_time))
-            
+
             if [ $elapsed_time -ge $timeout ]; then
               echo "Timeout reached. Service did not become ready in 5 minutes."
               exit 1
             fi
-            
+
             # Use curl with error handling to ignore specific exit code 56
             response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
-            
+
             if [ "$response" = "200" ]; then
               echo "Service is ready!"
               break
@@ -260,7 +263,7 @@ jobs:
             else
               echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
             fi
-            
+
             sleep 5
           done
           echo "Finished waiting for service."
@@ -329,7 +332,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         with:
           name: docker-all-logs-${{ matrix.test-dir.name }}
           path: ${{ github.workspace }}/docker-compose.log
@@ -341,8 +344,8 @@ jobs:
           cd deployment/docker_compose
           docker compose down -v
 
-  
-  required: 
+
+  required:
     runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     needs: [integration-tests-mit]
     if: ${{ always() }}
