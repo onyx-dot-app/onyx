@@ -155,7 +155,7 @@ export function SimplifiedChatInputBar({
                     ? "overflow-y-auto mt-2"
                     : ""
                 }
-                whitespace-normal
+                whitespace-pre-wrap
                 break-word
                 overscroll-contain
                 outline-none

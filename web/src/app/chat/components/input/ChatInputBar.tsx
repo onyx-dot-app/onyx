@@ -429,7 +429,7 @@ function ChatInputBarInner({
             "bg-transparent",
             "resize-none",
             "placeholder:text-text-03",
-            "whitespace-normal",
+            "whitespace-pre-wrap",
             "break-word",
             "overscroll-contain",
             "overflow-y-auto",

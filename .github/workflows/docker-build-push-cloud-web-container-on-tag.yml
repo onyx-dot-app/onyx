@@ -9,7 +9,7 @@ on:
 env:
   REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
   DEPLOYMENT: cloud
-  
+
 jobs:
   build:
     runs-on:
