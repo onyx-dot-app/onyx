@@ -1,10 +1,11 @@
 import abc
 from collections.abc import Generator
-from dataclasses import dataclass
 from typing import Any
 from typing import Generic
 from typing import TYPE_CHECKING
 from typing import TypeVar
+
+from pydantic import BaseModel
 
 from onyx.utils.special_types import JSON_ro
 
@@ -23,8 +24,7 @@ OVERRIDE_T = TypeVar("OVERRIDE_T")
 TContext = TypeVar("TContext")
 
 
-@dataclass
-class RunContextWrapper(Generic[TContext]):
+class RunContextWrapper(BaseModel, Generic[TContext]):
     """This wraps the context object that you passed to the agent framework query function.
 
     NOTE: Contexts are not passed to the LLM. They're a way to pass dependencies and data to code
