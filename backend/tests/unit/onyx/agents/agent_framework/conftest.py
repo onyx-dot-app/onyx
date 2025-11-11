@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from collections.abc import Generator
 from collections.abc import Iterator
 from typing import Any
 
@@ -14,6 +15,7 @@ from onyx.llm.model_response import Delta
 from onyx.llm.model_response import FunctionCall
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.model_response import StreamingChoice
+from onyx.tools.models import ToolResponse
 from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
 
@@ -190,31 +192,40 @@ class FakeTool(Tool):
         run_context.context[f"{self._tool_name}_called"] = True
         return f"{self.display_name} results for: {', '.join(queries)}"
 
-    def build_tool_message_content(self, *args) -> str:
+    def build_tool_message_content(self, *args: Any) -> str:
         return ""
 
-    def get_args_for_non_tool_calling_llm(self, query, history, llm, force_run=False):
+    def get_args_for_non_tool_calling_llm(
+        self, query: Any, history: Any, llm: Any, force_run: bool = False
+    ) -> None:
         return None
 
-    def run(self, override_kwargs=None, **llm_kwargs):
+    def run(
+        self, override_kwargs: Any = None, **llm_kwargs: Any
+    ) -> Generator[ToolResponse, None, None]:
         raise NotImplementedError
+        yield  # Make this a generator
 
-    def final_result(self, *args):
+    def final_result(self, *args: Any) -> dict[str, Any]:
         return {}
 
     def build_next_prompt(
-        self, prompt_builder, tool_call_summary, tool_responses, using_tool_calling_llm
-    ):
+        self,
+        prompt_builder: Any,
+        tool_call_summary: Any,
+        tool_responses: Any,
+        using_tool_calling_llm: Any,
+    ) -> Any:
         return prompt_builder
 
 
 @pytest.fixture
-def fake_internal_search_tool():
+def fake_internal_search_tool() -> FakeTool:
     """Fixture providing a fake internal search tool."""
     return FakeTool("internal_search", tool_id=1)
 
 
 @pytest.fixture
-def fake_web_search_tool():
+def fake_web_search_tool() -> FakeTool:
     """Fixture providing a fake web search tool."""
     return FakeTool("web_search", tool_id=2)
