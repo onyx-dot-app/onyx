@@ -88,6 +88,28 @@ def write_cloud_services(cloud_services_template_path: str, output_path: Path) -
     logger.info(f"Wrote {services_file}")
 
 
+def write_deployment_xml(
+    deployment_template_path: str, output_path: Path, aws_account_id: str
+) -> None:
+    """Generate and write the deployment.xml file."""
+    # Create output directory if it doesn't exist
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    jinja_env = jinja2.Environment()
+
+    with open(deployment_template_path, "r", encoding="utf-8") as f:
+        template_str = f.read()
+
+    template = jinja_env.from_string(template_str)
+    deployment_xml = template.render(aws_account_id=aws_account_id)
+
+    deployment_file = output_path / "deployment.xml"
+    with open(deployment_file, "w", encoding="utf-8") as f:
+        f.write(deployment_xml)
+
+    logger.info(f"Wrote {deployment_file}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate multi tenant Vespa schemas and services configuration"
@@ -101,6 +123,16 @@ def main() -> None:
         "--cloud-services-template",
         help="The cloud-services.xml.jinja template path",
         default="ee/onyx/document_index/vespa/app_config/cloud-services.xml.jinja",
+    )
+    parser.add_argument(
+        "--deployment-template",
+        help="The deployment.xml.jinja template path",
+        default="ee/onyx/document_index/vespa/app_config/cloud-deployment.xml.jinja",
+    )
+    parser.add_argument(
+        "--aws-account-id",
+        help="AWS Account ID for PrivateLink configuration",
+        default="855178474906",
     )
     parser.add_argument(
         "--output-path",
@@ -148,6 +180,15 @@ def main() -> None:
             logger.error(
                 f"Cloud services template not found: {args.cloud_services_template}"
             )
+
+    # Generate deployment.xml configuration if template is provided
+    if args.deployment_template:
+        if os.path.exists(args.deployment_template):
+            write_deployment_xml(
+                args.deployment_template, output_path, args.aws_account_id
+            )
+        else:
+            logger.error(f"Deployment template not found: {args.deployment_template}")
 
 
 if __name__ == "__main__":

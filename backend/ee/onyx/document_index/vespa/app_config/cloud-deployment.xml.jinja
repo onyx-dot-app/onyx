@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<deployment version="1.0">
+    <prod>
+        <region>aws-us-east-1c</region>
+    </prod>
+
+    <!-- AWS PrivateLink Configuration -->
+    <!-- Enable private endpoints to allow VPC connectivity from your AWS account -->
+    <!-- This eliminates the need for NAT gateways and reduces data transfer costs -->
+    <endpoints>
+        <endpoint type="private" container-id="default">
+            <!-- Replace with your AWS account ID -->
+            <allow with="aws-private-link" arn="arn:aws:iam::{{ aws_account_id }}:root" />
+        </endpoint>
+
+        <!-- Optional: Disable public zone endpoints for additional security -->
+        <!-- Uncomment the line below to disable public access -->
+        <!-- <endpoint type="zone" container-id="default" enabled="false" /> -->
+    </endpoints>
+</deployment>
