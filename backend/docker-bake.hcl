@@ -1,4 +1,4 @@
-variable "REGISTRY" {
+variable "REPOSITORY" {
   default = "onyxdotapp"
 }
 
@@ -20,5 +20,5 @@ target "integration" {
     base = "target:backend"
   }
 
-  tags      = ["${REGISTRY}/integration-test-onyx-integration:${TAG}"]
+  tags      = ["${REPOSITORY}:${TAG}"]
 }

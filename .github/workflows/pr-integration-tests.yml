@@ -158,18 +158,10 @@ jobs:
           path: backend/generated/
 
       - name: Build and push integration test image with Docker Bake
-        uses: docker/bake-action@v6
         env:
-          REGISTRY: ${{ env.RUNS_ON_ECR_CACHE }}
+          REPOSITORY: ${{ env.RUNS_ON_ECR_CACHE }}
           TAG: test-${{ github.run_id }}
-        with:
-          files: ./backend/docker-bake.hcl
-          workdir: ./backend
-          push: true
-          targets: integration
-          set: |
-            *.cache-from=type=gha,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-cache
-            *.cache-to=type=gha,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-cache,mode=max
+        run: cd backend && docker buildx bake --push integration
 
   integration-tests:
     needs:
