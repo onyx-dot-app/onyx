@@ -169,7 +169,7 @@ class LLM(abc.ABC):
 
     def stream(
         self,
-        prompt: list[dict],
+        prompt: LanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
