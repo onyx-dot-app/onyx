@@ -164,7 +164,7 @@ jobs:
           TAG: test-${{ github.run_id }}
         with:
           files: backend/docker-bake.hcl
-          context: backend
+          workdir: ./backend
           push: true
           targets: integration
           set: |
