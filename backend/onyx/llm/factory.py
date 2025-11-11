@@ -19,8 +19,8 @@ from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Persona
-from onyx.llm.chat_llm import LitellmLLM
 from onyx.db.models import User
+from onyx.llm.chat_llm import LitellmLLM
 from onyx.llm.chat_llm import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.chat_llm import VERTEX_LOCATION_KWARG
 from onyx.llm.exceptions import GenAIDisabledException
