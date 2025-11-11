@@ -1,4 +1,7 @@
 name: External Dependency Unit Tests
+concurrency:
+  group: External-Dependency-Unit-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
 
 on:
   merge_group:
@@ -46,7 +49,7 @@ jobs:
     # Use larger runner with more resources for Vespa
     runs-on:
       - runs-on
-      - runner=16cpu-linux-x64
+      - runner=4cpu-linux-arm64
       - ${{ format('run-id={0}-external-dependency-unit-tests-job-{1}', github.run_id, strategy['job-index']) }}
       - extras=s3-cache
     strategy:
@@ -60,6 +63,8 @@ jobs:
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+        with:
+          metrics: cpu,memory
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
