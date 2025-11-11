@@ -6,7 +6,6 @@ from pydantic import Field
 from pydantic import field_validator
 
 from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import model_supports_image_input
 
 
 if TYPE_CHECKING:
@@ -190,14 +189,15 @@ class ModelConfigurationView(BaseModel):
         return cls(
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
-            max_input_tokens=model_configuration_model.max_input_tokens
-            or get_max_input_tokens(
-                model_name=model_configuration_model.name, model_provider=provider_name
+            max_input_tokens=(
+                model_configuration_model.max_input_tokens
+                or get_max_input_tokens(
+                    model_name=model_configuration_model.name,
+                    model_provider=provider_name,
+                )
             ),
-            supports_image_input=model_supports_image_input(
-                model_name=model_configuration_model.name,
-                model_provider=provider_name,
-            ),
+            supports_image_input=model_configuration_model.supports_image_input
+            or False,
         )
 
 
