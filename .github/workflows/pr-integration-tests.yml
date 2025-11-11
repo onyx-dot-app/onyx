@@ -163,7 +163,7 @@ jobs:
           REGISTRY: ${{ env.RUNS_ON_ECR_CACHE }}
           TAG: test-${{ github.run_id }}
         with:
-          files: docker-bake.hcl
+          files: ./backend/docker-bake.hcl
           workdir: ./backend
           push: true
           targets: integration
