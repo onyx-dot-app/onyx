@@ -7,7 +7,7 @@ runs:
       uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
       with:
         path: ~/.cache/ms-playwright
-        key: ${{ runner.os }}-playwright-${{ hashFiles('web/package-lock.json') }}
+        key: ${{ runner.os }}-playwright-${{ hashFiles('backend/requirements/default.txt') }}
         restore-keys: |
           ${{ runner.os }}-playwright-
 
