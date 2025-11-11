@@ -1,3 +1,4 @@
+from typing import Any
 from typing import Literal
 from typing import TypeAlias
 
@@ -23,7 +24,7 @@ class ToolCallStreamItem(BaseModel):
 class ToolCallOutputStreamItem(BaseModel):
     call_id: str | None = None
 
-    output: str | None = None
+    output: Any
 
     type: Literal["function_call_output"] = "function_call_output"
 
