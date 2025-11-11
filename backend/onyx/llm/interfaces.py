@@ -2,6 +2,7 @@ import abc
 from collections.abc import Iterator
 from typing import Any
 from typing import Literal
+from typing import TYPE_CHECKING
 
 from braintrust import traced
 from langchain.schema.language_model import LanguageModelInput
@@ -13,6 +14,9 @@ from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_INDIVIDUAL_MODEL_TOKENS
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from onyx.llm.model_response import ModelResponse
 
 
 logger = setup_logger()
@@ -97,8 +101,8 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> None:
-        self._invoke_implementation(
+    ) -> "ModelResponse":
+        return self._invoke_implementation(
             prompt,
             tools,
             tool_choice,
@@ -138,7 +142,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Any:
+    ) -> "ModelResponse":
         raise NotImplementedError
 
     @abc.abstractmethod

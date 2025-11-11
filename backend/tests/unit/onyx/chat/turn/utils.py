@@ -86,9 +86,19 @@ class FakeLLM(LLM):
         max_tokens: Any = None,
     ) -> Any:
         """Fake _invoke_implementation method."""
-        from langchain_core.messages import AIMessage
+        from onyx.llm.model_response import Choice
+        from onyx.llm.model_response import Message
+        from onyx.llm.model_response import ModelResponse as OnyxModelResponse
 
-        return AIMessage(content="fake response")
+        return OnyxModelResponse(
+            id="fake-id",
+            created="0",
+            choice=Choice(
+                finish_reason="stop",
+                index=0,
+                message=Message(content="fake response", role="assistant"),
+            ),
+        )
 
     def _stream_implementation_langchain(
         self,

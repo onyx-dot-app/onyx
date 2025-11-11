@@ -1,5 +1,6 @@
 import json
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 import requests
 from langchain.schema.language_model import LanguageModelInput
@@ -12,6 +13,10 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.utils import convert_lm_input_to_basic_string
 from onyx.utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from onyx.llm.interfaces import LLMConfig
+    from onyx.llm.model_response import ModelResponse
 
 
 logger = setup_logger()
@@ -72,6 +77,17 @@ class CustomModelServer(LLM):
         response_content = json.loads(response.content).get("generated_text", "")
         return AIMessage(content=response_content)
 
+    @property
+    def config(self) -> "LLMConfig":
+        from onyx.llm.interfaces import LLMConfig
+
+        return LLMConfig(
+            model_provider="custom",
+            model_name="custom-model",
+            temperature=0.0,
+            max_input_tokens=4096,
+        )
+
     def log_model_configs(self) -> None:
         logger.debug(f"Custom model at: {self._endpoint}")
 
@@ -83,8 +99,28 @@ class CustomModelServer(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> BaseMessage:
-        return self._execute(prompt)
+    ) -> "ModelResponse":
+        from onyx.llm.model_response import Choice
+        from onyx.llm.model_response import Message
+        from onyx.llm.model_response import ModelResponse
+
+        ai_message = self._execute(prompt)
+        return ModelResponse(
+            id="custom-model-response",
+            created="0",
+            choice=Choice(
+                finish_reason="stop",
+                index=0,
+                message=Message(
+                    content=(
+                        ai_message.content
+                        if isinstance(ai_message.content, str)
+                        else str(ai_message.content)
+                    ),
+                    role="assistant",
+                ),
+            ),
+        )
 
     def _stream_implementation(
         self,

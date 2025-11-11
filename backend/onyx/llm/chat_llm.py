@@ -625,26 +625,28 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Iterator[Any]:
-        from litellm import CustomStreamWrapper
+    ) -> "ModelResponse":
+        from litellm import ModelResponse as LiteLLMModelResponse
+
+        from onyx.llm.model_response import from_litellm_model_response
 
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()
 
-        response = self._completion(
-            prompt=prompt,
-            tools=tools,
-            tool_choice=tool_choice,
-            stream=False,
-            structured_response_format=structured_response_format,
-            timeout_override=timeout_override,
-            max_tokens=max_tokens,
+        response = cast(
+            LiteLLMModelResponse,
+            self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=False,
+                structured_response_format=structured_response_format,
+                timeout_override=timeout_override,
+                max_tokens=max_tokens,
+            ),
         )
 
-        if isinstance(response, CustomStreamWrapper):
-            return response
-
-        return iter([response])
+        return from_litellm_model_response(response)
 
     def _stream_implementation(
         self,
