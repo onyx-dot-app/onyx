@@ -445,12 +445,7 @@ class DefaultMultiLLM(LLM):
                 ),  # TODO: remove once LITELLM has patched
                 **(
                     {"reasoning_effort": "minimal"}
-                    if self.config.model_name
-                    in [
-                        "gpt-5",
-                        "gpt-5-mini",
-                        "gpt-5-nano",
-                    ]
+                    if "gpt-5" in self.config.model_name
                     else {}
                 ),  # TODO: remove once LITELLM has better support/we change API
                 **(
