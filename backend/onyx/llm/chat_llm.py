@@ -40,7 +40,7 @@ from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
-from onyx.llm.model_response import from_litellm_model_response_stream
+from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
@@ -50,7 +50,7 @@ from onyx.utils.long_term_log import LongTermLogger
 logger = setup_logger()
 
 if TYPE_CHECKING:
-    from litellm import ModelResponse, CustomStreamWrapper, Message
+    from litellm import CustomStreamWrapper, Message
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
@@ -424,9 +424,7 @@ class LitellmLLM(LLM):
                 stream=stream,
                 # model params
                 temperature=(
-                    1
-                    if self.config.model_name in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
-                    else self._temperature
+                    1 if "gpt-5" in self.config.model_name else self._temperature
                 ),
                 timeout=timeout_override or self._timeout,
                 # For now, we don't support parallel tool calls
@@ -449,12 +447,7 @@ class LitellmLLM(LLM):
                 ),  # TODO: remove once LITELLM has patched
                 **(
                     {"reasoning_effort": "minimal"}
-                    if self.config.model_name
-                    in [
-                        "gpt-5",
-                        "gpt-5-mini",
-                        "gpt-5-nano",
-                    ]
+                    if "gpt-5" in self.config.model_name
                     else {}
                 ),  # TODO: remove once LITELLM has better support/we change API
                 **(
@@ -627,14 +620,16 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Any:
-        from litellm import ModelResponse
+    ) -> ModelResponse:
+        from litellm import ModelResponse as LiteLLMModelResponse
+
+        from onyx.llm.model_response import from_litellm_model_response
 
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()
 
         response = cast(
-            ModelResponse,
+            LiteLLMModelResponse,
             self._completion(
                 prompt=prompt,
                 tools=tools,
@@ -646,7 +641,7 @@ class LitellmLLM(LLM):
             ),
         )
 
-        return response
+        return from_litellm_model_response(response)
 
     def _stream_implementation(
         self,
@@ -657,23 +652,14 @@ class LitellmLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
     ) -> Iterator[ModelResponseStream]:
-        from litellm import CustomStreamWrapper
+        from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
+        from onyx.llm.model_response import from_litellm_model_response_stream
 
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()
 
-        if DISABLE_LITELLM_STREAMING:
-            return self._invoke_implementation(
-                prompt,
-                tools,
-                tool_choice,
-                structured_response_format,
-                timeout_override,
-                max_tokens,
-            )
-
         response = cast(
-            CustomStreamWrapper,
+            LiteLLMCustomStreamWrapper,
             self._completion(
                 prompt=prompt,
                 tools=tools,

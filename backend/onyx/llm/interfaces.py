@@ -1,6 +1,5 @@
 import abc
 from collections.abc import Iterator
-from typing import Any
 from typing import Literal
 
 from braintrust import traced
@@ -13,8 +12,8 @@ from onyx.agents.agent_framework.models import ModelResponseStream
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_INDIVIDUAL_MODEL_TOKENS
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
+from onyx.llm.model_response import ModelResponse
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -98,8 +97,8 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> None:
-        self._invoke_implementation(
+    ) -> "ModelResponse":
+        return self._invoke_implementation(
             prompt,
             tools,
             tool_choice,
@@ -139,7 +138,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Any:
+    ) -> "ModelResponse":
         raise NotImplementedError
 
     @abc.abstractmethod
