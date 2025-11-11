@@ -200,7 +200,7 @@ class ImageGenerationTool(Tool[None]):
         *args: Any,
         **kwargs: Any,
     ) -> Any:
-        return self.run(*args, **kwargs)
+        raise NotImplementedError("ImageGenerationTool.run_v2 is not implemented.")
 
     def build_tool_message_content(
         self, *args: ToolResponse

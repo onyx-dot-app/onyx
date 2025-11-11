@@ -266,7 +266,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         *args: Any,
         **kwargs: Any,
     ) -> Any:
-        return self.run(*args, **kwargs)
+        raise NotImplementedError("SearchTool.run_v2 is not implemented.")
 
     def _build_response_for_specified_sections(
         self, query: str

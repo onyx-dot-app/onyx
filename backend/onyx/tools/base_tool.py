@@ -43,7 +43,7 @@ class BaseTool(Tool[None]):
         *args: Any,
         **kwargs: Any,
     ) -> Any:
-        return self.run(*args, **kwargs)
+        raise NotImplementedError("BaseTool.run_v2 is not implemented.")
 
     def build_next_prompt(
         self,

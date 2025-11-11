@@ -93,7 +93,7 @@ class WebSearchTool(Tool[None]):
         *args: Any,
         **kwargs: Any,
     ) -> Any:
-        raise ValueError(_GENERIC_ERROR_MESSAGE)
+        raise NotImplementedError("WebSearchTool.run_v2 is not implemented.")
 
     def run(
         self, override_kwargs: None = None, **llm_kwargs: str

@@ -40,6 +40,8 @@ from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
+from onyx.llm.model_response import from_litellm_model_response_stream
+from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
@@ -244,7 +246,7 @@ def _prompt_to_dict(
         return [_convert_message_to_dict(message) for message in prompt.to_messages()]
 
 
-class DefaultMultiLLM(LLM):
+class LitellmLLM(LLM):
     """Uses Litellm library to allow easy configuration to use a multitude of LLMs
     See https://python.langchain.com/docs/integrations/chat/litellm"""
 
@@ -625,26 +627,26 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Iterator[Any]:
-        from litellm import CustomStreamWrapper
+    ) -> Any:
+        from litellm import ModelResponse
 
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()
 
-        response = self._completion(
-            prompt=prompt,
-            tools=tools,
-            tool_choice=tool_choice,
-            stream=False,
-            structured_response_format=structured_response_format,
-            timeout_override=timeout_override,
-            max_tokens=max_tokens,
+        response = cast(
+            ModelResponse,
+            self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=False,
+                structured_response_format=structured_response_format,
+                timeout_override=timeout_override,
+                max_tokens=max_tokens,
+            ),
         )
 
-        if isinstance(response, CustomStreamWrapper):
-            return response
-
-        return iter([response])
+        return response
 
     def _stream_implementation(
         self,
@@ -654,7 +656,7 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Iterator[Any]:
+    ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper
 
         if LOG_ONYX_MODEL_INTERACTIONS:
@@ -683,4 +685,5 @@ class DefaultMultiLLM(LLM):
             ),
         )
 
-        return response
+        for chunk in response:
+            yield from_litellm_model_response_stream(chunk)

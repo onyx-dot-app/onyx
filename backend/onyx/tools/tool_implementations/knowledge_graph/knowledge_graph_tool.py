@@ -95,10 +95,7 @@ class KnowledgeGraphTool(Tool[None]):
         *args: Any,
         **kwargs: Any,
     ) -> Any:
-        raise ValueError(
-            "KnowledgeGraphTool should only be used by the Deep Research Agent, "
-            "not via tool calling."
-        )
+        raise NotImplementedError("KnowledgeGraphTool.run_v2 is not implemented.")
 
     def run(
         self, override_kwargs: None = None, **kwargs: str

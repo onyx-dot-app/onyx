@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 
+from onyx.agents.agent_framework.models import ModelResponseStream
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_INDIVIDUAL_MODEL_TOKENS
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
@@ -150,7 +151,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Iterator[dict]:
+    ) -> Iterator[ModelResponseStream]:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -173,7 +174,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Iterator[Any]:
+    ) -> Iterator[ModelResponseStream]:
         return self._stream_implementation(
             prompt,
             tools,
