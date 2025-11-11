@@ -407,13 +407,13 @@ class LitellmLLM(LLM):
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
 
-        if tools and tool_choice and tool_choice not in STANDARD_TOOL_CHOICE_OPTIONS:
+        if not tools:
+            tool_choice_formatted = None
+        elif tool_choice and tool_choice not in STANDARD_TOOL_CHOICE_OPTIONS:
             tool_choice_formatted = {
                 "type": "function",
                 "function": {"name": tool_choice},
             }
-        elif not tools:
-            tool_choice_formatted = None
         else:
             tool_choice_formatted = tool_choice
 
