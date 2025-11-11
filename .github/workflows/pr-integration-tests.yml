@@ -57,18 +57,6 @@ jobs:
           all_dirs="[${all_dirs%,}]"
           echo "test-dirs=$all_dirs" >> $GITHUB_OUTPUT
 
-  prepare-build:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}"]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
-
-      - name: Prepare build
-        uses: ./.github/actions/prepare-build
-        with:
-          docker-username: ${{ secrets.DOCKER_USERNAME }}
-          docker-password: ${{ secrets.DOCKER_TOKEN }}
-
 
   build-backend-image:
     runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
@@ -142,20 +130,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # needed for pulling Vespa, Redis, Postgres, and Minio images
-      # otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+      - name: Prepare build
+        uses: ./.github/actions/prepare-build
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Download OpenAPI artifacts
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # ratchet:actions/download-artifact@v4
-        with:
-          name: openapi-artifacts
-          path: backend/generated/
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push integration test image with Docker Bake
         env:
