@@ -40,6 +40,8 @@ class GraphTooling(BaseModel):
     # force tool args IF the tool is used
     force_use_tool: ForceUseTool
     using_tool_calling_llm: bool = False
+    # Whether to use LLM to summarize custom tool responses in DR agent
+    dr_custom_tool_use_llm_summary: bool = True
 
     class Config:
         arbitrary_types_allowed = True
