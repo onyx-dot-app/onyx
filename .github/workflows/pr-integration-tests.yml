@@ -71,11 +71,9 @@ jobs:
 
 
   build-backend-image:
-    runs-on: [runs-on, runner=4cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
-        with:
-          metrics: cpu,memory
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
@@ -104,11 +102,9 @@ jobs:
 
 
   build-model-server-image:
-    runs-on: [runs-on, runner=4cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
-        with:
-          metrics: cpu,memory
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
@@ -137,11 +133,9 @@ jobs:
 
   build-integration-image:
     needs: prepare-build
-    runs-on: [runs-on, runner=4cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
-        with:
-          metrics: cpu,memory
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
@@ -170,6 +164,7 @@ jobs:
           TAG: test-${{ github.run_id }}
         with:
           files: backend/docker-bake.hcl
+          context: backend
           push: true
           targets: integration
           set: |
@@ -372,8 +367,6 @@ jobs:
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
-        with:
-          metrics: cpu,memory
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
