@@ -145,7 +145,7 @@ def test_from_litellm_model_response_stream_parses_tool_calls() -> None:
 
     assert isinstance(response, ModelResponseStream)
     assert response.id == "chatcmpl-f739f09c-7c9b-4dd6-aea7-cf41d4fd2196"
-    assert response.created == 1762544538
+    assert response.created == "1762544538"
 
     tool_calls = response.choice.delta.tool_calls
     assert len(tool_calls) == 1
@@ -174,7 +174,7 @@ def test_from_litellm_model_response_stream_handles_content_and_finish_reason(
     response = from_litellm_model_response_stream(_LiteLLMStreamDouble(payload))
 
     assert response.id == "chatcmpl-2b136068-c6fb-4af1-97d5-d2c9d84cd52b"
-    assert response.created == 1762544448
+    assert response.created == "1762544448"
     assert response.choice.index == 0
     if payload["choices"][0]["finish_reason"] == "stop":
         assert response.choice.finish_reason == "stop"
@@ -191,7 +191,7 @@ def test_from_litellm_model_response_stream_parses_multiple_tool_calls() -> None
 
     tool_calls = response.choice.delta.tool_calls
     assert response.id == "Yn4SaajROLXEnvgP5JTN-AQ"
-    assert response.created == 1762819684
+    assert response.created == "1762819684"
     assert response.choice.finish_reason is None
     assert response.choice.delta.content is None
     assert len(tool_calls) == 2
