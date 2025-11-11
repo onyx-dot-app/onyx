@@ -41,6 +41,8 @@ import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
 import { usePathname, useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { useLLMProviders } from "./hooks/useLLMProviders";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 
 export function useIsMounted() {
   const [mounted, setMounted] = useState(false);
@@ -389,7 +391,7 @@ export function useFilters(): FilterManager {
   );
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
 
-  const getFilterString = useCallback(() => {
+  function getFilterString() {
     const params = new URLSearchParams();
 
     if (timeRange) {
@@ -420,14 +422,14 @@ export function useFilters(): FilterManager {
 
     const queryString = params.toString();
     return queryString ? `&${queryString}` : "";
-  }, [timeRange, selectedSources, selectedDocumentSets, selectedTags]);
+  }
 
-  const clearFilters = useCallback(() => {
+  function clearFilters() {
     setTimeRange(null);
     setSelectedSources([]);
     setSelectedDocumentSets([]);
     setSelectedTags([]);
-  }, []);
+  }
 
   function buildFiltersFromQueryString(
     filterString: string,
@@ -532,6 +534,8 @@ export interface LlmManager {
   updateImageFilesPresent: (present: boolean) => void;
   liveAssistant: MinimalPersonaSnapshot | null;
   maxTemperature: number;
+  llmProviders: LLMProviderDescriptor[] | undefined;
+  isLoadingProviders: boolean;
 }
 
 // Things to test
@@ -576,11 +580,26 @@ providing appropriate defaults for new conversations based on the available tool
 */
 
 export function useLlmManager(
-  llmProviders: LLMProviderDescriptor[],
   currentChatSession?: ChatSession,
   liveAssistant?: MinimalPersonaSnapshot
 ): LlmManager {
   const { user } = useUser();
+
+  // Get all user-accessible providers from ChatContext (loaded server-side)
+  // This includes public + all restricted providers user can access via groups
+  const { llmProviders: allUserProviders } = useChatContext();
+
+  // Fetch persona-specific providers to enforce RBAC restrictions per assistant
+  // Only fetch if we have an assistant selected
+  const personaId =
+    liveAssistant?.id !== undefined ? liveAssistant.id : undefined;
+  const {
+    llmProviders: personaProviders,
+    isLoading: isLoadingPersonaProviders,
+  } = useLLMProviders(personaId);
+
+  const llmProviders =
+    personaProviders !== undefined ? personaProviders : allUserProviders;
 
   const [userHasManuallyOverriddenLLM, setUserHasManuallyOverriddenLLM] =
     useState(false);
@@ -593,6 +612,12 @@ export function useLlmManager(
 
   const llmUpdate = () => {
     /* Should be called when the live assistant or current chat session changes */
+
+    // Don't update if providers haven't loaded yet (undefined/null)
+    // Empty arrays are valid (user has no provider access for this assistant)
+    if (llmProviders === undefined || llmProviders === null) {
+      return;
+    }
 
     // separate function so we can `return` to break out
     const _llmUpdate = () => {
@@ -635,9 +660,15 @@ export function useLlmManager(
     setChatSession(currentChatSession || null);
   };
 
-  const getValidLlmDescriptor = (
+  function getValidLlmDescriptor(
     modelName: string | null | undefined
-  ): LlmDescriptor => {
+  ): LlmDescriptor {
+    // Return early if providers haven't loaded yet (undefined/null)
+    // Empty arrays are valid (user has no provider access for this assistant)
+    if (llmProviders === undefined || llmProviders === null) {
+      return { name: "", provider: "", modelName: "" };
+    }
+
     if (modelName) {
       const model = parseLlmDescriptor(modelName);
       if (!(model.modelName && model.modelName.length > 0)) {
@@ -666,7 +697,7 @@ export function useLlmManager(
       }
     }
     return { name: "", provider: "", modelName: "" };
-  };
+  }
 
   const [imageFilesPresent, setImageFilesPresent] = useState(false);
 
@@ -771,6 +802,8 @@ export function useLlmManager(
     updateImageFilesPresent,
     liveAssistant: liveAssistant ?? null,
     maxTemperature,
+    llmProviders,
+    isLoadingProviders: personaId !== undefined && isLoadingPersonaProviders,
   };
 }
 
