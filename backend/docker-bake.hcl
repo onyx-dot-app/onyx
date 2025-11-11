@@ -1,5 +1,5 @@
 variable "REPOSITORY" {
-  default = "onyxdotapp"
+  default = "onyxdotapp/onyx-integration"
 }
 
 variable "TAG" {
@@ -19,6 +19,9 @@ target "integration" {
   contexts = {
     base = "target:backend"
   }
+
+  cache-from = ["type=gha,ref=${REPOSITORY}:integration-test-backend-cache"]
+  cache-to   = ["type=gha,ref=${REPOSITORY}:integration-test-backend-cache,mode=max"]
 
   tags      = ["${REPOSITORY}:${TAG}"]
 }
