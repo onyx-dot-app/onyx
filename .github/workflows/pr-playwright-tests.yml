@@ -267,11 +267,6 @@ jobs:
           name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
 
-      - name: Stop Docker containers
-        run: |
-          cd deployment/docker_compose
-          docker compose down -v
-
 # NOTE: Chromatic UI diff testing is currently disabled.
 # We are using Playwright for local and CI testing without visual regression checks.
 # Chromatic may be reintroduced in the future for UI diff testing if needed.
