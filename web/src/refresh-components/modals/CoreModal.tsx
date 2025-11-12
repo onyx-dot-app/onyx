@@ -2,14 +2,18 @@ import React from "react";
 import ReactDOM from "react-dom";
 import { MODAL_ROOT_ID } from "@/lib/constants";
 import { cn, noProp } from "@/lib/utils";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
 
-export interface CoreModalProps {
+interface CoreModalProps {
+  onClickOutside?: () => void;
   className?: string;
   children?: React.ReactNode;
 }
 
-export default function CoreModal({ className, children }: CoreModalProps) {
+export default function CoreModal({
+  onClickOutside,
+  className,
+  children,
+}: CoreModalProps) {
   const mouseDownOutside = React.useRef(false);
   const modalRef = React.useRef<HTMLDivElement>(null);
 
@@ -20,8 +24,6 @@ export default function CoreModal({ className, children }: CoreModalProps) {
     if (!modalRef.current) return;
     modalRef.current.focus();
   }, []);
-
-  const modal = useModal();
 
   // This must always exist.
   const modalRoot = document.getElementById(MODAL_ROOT_ID);
@@ -35,7 +37,7 @@ export default function CoreModal({ className, children }: CoreModalProps) {
       className="fixed inset-0 z-[2000] flex items-center justify-center bg-mask-03 backdrop-blur-03"
       onMouseDown={() => (mouseDownOutside.current = true)}
       onClick={() => {
-        if (mouseDownOutside.current) modal.toggle(false);
+        if (mouseDownOutside.current) onClickOutside?.();
         mouseDownOutside.current = false;
       }}
     >

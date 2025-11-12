@@ -41,6 +41,8 @@ import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "../../components/modal/FeedbackModal";
+import { usePopup } from "@/components/admin/connectors/Popup";
+import { useFeedbackController } from "../../hooks/useFeedbackController";
 
 export interface AIMessageProps {
   rawPackets: Packet[];
@@ -64,6 +66,8 @@ export default function AIMessage({
   onMessageSelection,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
+  const { popup, setPopup } = usePopup();
+  const { handleFeedbackChange } = useFeedbackController({ setPopup });
 
   const modal = useModalProvider();
   const [feedbackModalProps, setFeedbackModalProps] =
@@ -97,7 +101,7 @@ export default function AIMessage({
       // Toggle logic
       if (currentFeedback === clickedFeedback) {
         // Clicking same button - remove feedback
-        await chatState.handleFeedbackChange(null);
+        await handleFeedbackChange(nodeId, null);
       }
 
       // Clicking like (will automatically clear dislike if it was active).
@@ -114,7 +118,7 @@ export default function AIMessage({
           modal.toggle(true);
         } else {
           // No modal needed - just submit like (this replaces any existing feedback)
-          await chatState.handleFeedbackChange("like");
+          await handleFeedbackChange(nodeId, "like");
         }
       }
 
@@ -362,6 +366,8 @@ export default function AIMessage({
   // Return a list of rendered message components, one for each ind
   return (
     <>
+      {popup}
+
       <modal.Provider>
         <FeedbackModal {...feedbackModalProps!} />
       </modal.Provider>
