@@ -85,7 +85,7 @@ export default function FeedbackModal({
       {popup}
 
       <Modal
-        className="dbg-red flex flex-col gap-1"
+        className="flex flex-col gap-1"
         title="Provide Additional Feedback"
         icon={icon}
         xs
