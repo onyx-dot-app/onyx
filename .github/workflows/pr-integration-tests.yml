@@ -151,7 +151,11 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
-    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-integration-tests", "extras=ecr-cache"]
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-arm64
+      - ${{ format('run-id={0}-integration-tests-job-{1}', github.run_id, strategy['job-index']) }}
+      - extras=ecr-cache
 
     strategy:
       fail-fast: false
