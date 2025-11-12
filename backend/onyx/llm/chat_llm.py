@@ -523,6 +523,9 @@ class LitellmLLM(LLM):
                     ]
                     else {}
                 ),
+                # TODO: Figure out how to configure this
+                # thinking={"type": "enabled", "budget_tokens": 10000},
+                # **{"reasoning_effort": "medium"},
                 **(
                     {"reasoning_effort": "minimal"}
                     if "gpt-5" in self.config.model_name
