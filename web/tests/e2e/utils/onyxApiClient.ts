@@ -373,10 +373,13 @@ export class OnyxApiClient {
    * @returns The user group ID
    * @throws Error if the user group creation fails
    */
-  async createUserGroup(groupName: string): Promise<number> {
+  async createUserGroup(
+    groupName: string,
+    userIds: string[] = []
+  ): Promise<number> {
     const response = await this.post("/manage/admin/user-group", {
       name: groupName,
-      user_ids: [],
+      user_ids: userIds,
       cc_pair_ids: [],
     });
 
@@ -536,27 +539,6 @@ export class OnyxApiClient {
       : null;
   }
 
-  async createUserGroup(
-    name: string,
-    userIds: string[]
-  ): Promise<{ id: string; name: string }> {
-    const response = await this.page.request.post(
-      `${this.baseUrl}/manage/admin/user-group`,
-      {
-        data: {
-          name,
-          user_ids: userIds,
-          cc_pair_ids: [],
-        },
-      }
-    );
-    const data = await this.handleResponse<any>(
-      response,
-      "Failed to create user group"
-    );
-    return { id: data.id, name: data.name };
-  }
-
   async setCuratorStatus(
     userGroupId: string,
     userId: string,
@@ -574,16 +556,6 @@ export class OnyxApiClient {
     await this.handleResponse(
       response,
       `Failed to update curator status for ${userId}`
-    );
-  }
-
-  async deleteUserGroup(userGroupId: string): Promise<void> {
-    const response = await this.page.request.delete(
-      `${this.baseUrl}/manage/admin/user-group/${userGroupId}`
-    );
-    await this.handleResponseSoft(
-      response,
-      `Failed to delete user group ${userGroupId}`
     );
   }
 }
