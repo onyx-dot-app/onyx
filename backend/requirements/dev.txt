@@ -5,7 +5,7 @@ cohere==5.6.1
 faker==37.1.0
 lxml==5.3.0
 mypy-extensions==1.0.0
-mypy==1.13.0
+mypy==1.18.2
 pandas-stubs==2.2.3.241009
 pandas==2.2.3
 posthog==3.7.4
