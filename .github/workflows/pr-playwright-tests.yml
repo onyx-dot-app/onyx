@@ -170,7 +170,7 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-npm
+            ${{ runner.os }}-playwright-npm-
 
       - name: Install playwright browsers
         working-directory: ./web
