@@ -9,9 +9,6 @@ repos:
     rev: v1.7.8
     hooks:
       - id: actionlint
-        env:
-          # TODO: Fix and re-enable.
-          SHELLCHECK_OPTS: "--exclude SC2046 --exclude SC2086 --exclude SC2193"
 
   - repo: https://github.com/psf/black
     rev: 25.1.0
