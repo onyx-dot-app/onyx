@@ -8,7 +8,6 @@ import requests
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.models import ChatMessage
 from onyx.db.models import UserFile
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
@@ -61,39 +60,8 @@ def store_user_file_plaintext(user_file_id: UUID, plaintext_content: str) -> boo
         return False
 
 
-def load_chat_file(file_descriptor: FileDescriptor) -> InMemoryChatFile:
-    file_io = get_default_file_store().read_file(file_descriptor["id"], mode="b")
-    return InMemoryChatFile(
-        file_id=file_descriptor["id"],
-        content=file_io.read(),
-        file_type=file_descriptor["type"],
-        filename=file_descriptor.get("name"),
-    )
-
-
-def load_all_chat_files(
-    chat_messages: list[ChatMessage],
-    file_descriptors: list[FileDescriptor],
-) -> list[InMemoryChatFile]:
-    file_descriptors_for_history: list[FileDescriptor] = []
-    for chat_message in chat_messages:
-        if chat_message.files:
-            file_descriptors_for_history.extend(chat_message.files)
-
-    files = cast(
-        list[InMemoryChatFile],
-        run_functions_tuples_in_parallel(
-            [
-                (load_chat_file, (file,))
-                for file in file_descriptors + file_descriptors_for_history
-            ]
-        ),
-    )
-    return files
-
-
 def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
-    chat_file_type = ChatFileType.USER_KNOWLEDGE
+    # TODO this needs a second look
     status = "not_loaded"
 
     user_file = db_session.query(UserFile).filter(UserFile.id == file_id).first()
@@ -298,6 +266,46 @@ def save_files(urls: list[str], base64_files: list[str]) -> list[str]:
     ]
 
     return run_functions_tuples_in_parallel(funcs)
+
+
+def verify_user_files(
+    user_files: list[FileDescriptor],
+    user_id: UUID | None,
+    db_session: Session,
+) -> None:
+    """
+    Verify that all provided file descriptors belong to the specified user.
+
+    Args:
+        user_files: List of file descriptors to verify
+        user_id: The user ID to check ownership against
+        db_session: The SQLAlchemy database session
+
+    Raises:
+        ValueError: If any file does not belong to the user or is not found
+    """
+    # Extract user_file_ids from the file descriptors
+    user_file_ids = []
+    for file_descriptor in user_files:
+        # Check if this file descriptor has a user_file_id, if it does not, it's a project file
+        # TODO @subash, how do we ensure access is enforced here?
+        if "user_file_id" in file_descriptor and file_descriptor["user_file_id"]:
+            try:
+                user_file_ids.append(UUID(file_descriptor["user_file_id"]))
+            except (ValueError, TypeError):
+                # If the user_file_id is not a valid UUID, skip it
+                logger.warning(
+                    f"Invalid user_file_id in file descriptor: {file_descriptor.get('user_file_id')}"
+                )
+                continue
+
+    # If no user files to verify, return early
+    if not user_file_ids:
+        return
+
+    # Use existing function to verify user has access to all files
+    # This will raise ValueError if user doesn't have access
+    get_user_files_as_user(user_file_ids, user_id, db_session)
 
 
 def build_frontend_file_url(file_id: str) -> str:

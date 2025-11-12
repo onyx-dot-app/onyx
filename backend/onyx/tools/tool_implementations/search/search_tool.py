@@ -91,6 +91,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         # Store session factory instead of session for thread-safety
         # When tools are called in parallel, each thread needs its own session
+        # TODO ensure this works!!!
         self._session_bind = db_session.get_bind()
         self._session_factory = sessionmaker(bind=self._session_bind)
 

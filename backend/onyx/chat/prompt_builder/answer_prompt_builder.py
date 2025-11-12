@@ -1,16 +1,21 @@
 from collections.abc import Callable
 from collections.abc import Sequence
 from typing import cast
+from uuid import UUID
 
 from langchain_core.messages import BaseMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 from pydantic.v1 import BaseModel as BaseModel__v1
+from sqlalchemy.orm import Session
 
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.citations_prompt import compute_max_llm_input_tokens
 from onyx.chat.prompt_builder.utils import translate_history_to_basemessages
+from onyx.db.persona import get_default_persona
+from onyx.db.user_file import calculate_user_files_token_count
+from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
@@ -23,8 +28,15 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
 from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
+from onyx.prompts.chat_prompts import GENERATE_IMAGE_GUIDANCE
+from onyx.prompts.chat_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_PROMPT
+from onyx.prompts.chat_prompts import OPEN_URLS_GUIDANCE
+from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
+from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
 from onyx.prompts.chat_prompts import TOOL_PERSISTENCE_PROMPT
+from onyx.prompts.chat_prompts import TOOL_SECTION_HEADER
+from onyx.prompts.chat_prompts import WEB_SEARCH_GUIDANCE
 from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
 from onyx.prompts.prompt_utils import drop_messages_history_overflow
 from onyx.prompts.prompt_utils import handle_company_awareness
@@ -35,6 +47,146 @@ from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.utils.timing import log_function_time
+
+
+def get_default_base_system_prompt(db_session: Session) -> str:
+    default_persona = get_default_persona(db_session)
+    return (
+        default_persona.system_prompt
+        if default_persona and default_persona.system_prompt
+        else DEFAULT_SYSTEM_PROMPT
+    )
+
+
+@log_function_time(print_only=True)
+def calculate_reserved_tokens(
+    db_session: Session,
+    persona_system_prompt: str,
+    tokenizer_encode_func: Callable[[str], list[int]],
+    files: list[FileDescriptor] | None = None,
+    memories: list[str] | None = None,
+) -> int:
+    """
+    Calculate reserved token count for system prompt and user files.
+
+    This is used for token estimation purposes to reserve space for:
+    - The system prompt (base + custom agent prompt + all guidance)
+    - User files attached to the message
+
+    Args:
+        db_session: Database session
+        persona_system_prompt: Custom agent system prompt (can be empty string)
+        tokenizer_encode_func: Function to encode strings to token lists
+        files: List of file descriptors from the chat message (optional)
+        memories: List of memory strings (optional)
+
+    Returns:
+        Total reserved token count
+    """
+    base_system_prompt = get_default_base_system_prompt(db_session)
+
+    # This is for token estimation purposes
+    fake_system_prompt = build_system_prompt(
+        base_system_prompt=base_system_prompt,
+        datetime_aware=True,
+        memories=memories,
+        tools=None,
+        should_cite_documents=True,
+        include_all_guidance=True,
+    )
+
+    custom_agent_prompt = persona_system_prompt if persona_system_prompt else ""
+
+    reserved_token_count = len(
+        tokenizer_encode_func(
+            custom_agent_prompt + " " + str(fake_system_prompt.content)
+        )
+    )
+
+    # Calculate total token count for files in the last message
+    file_token_count = 0
+    if files:
+        # Extract user_file_id from each file descriptor
+        user_file_ids: list[UUID] = []
+        for file in files:
+            uid = file.get("user_file_id")
+            if not uid:
+                continue
+            try:
+                user_file_ids.append(UUID(uid))
+            except (TypeError, ValueError, AttributeError):
+                # Skip invalid user_file_id values
+                continue
+        if user_file_ids:
+            file_token_count = calculate_user_files_token_count(
+                user_file_ids, db_session
+            )
+
+    reserved_token_count += file_token_count
+
+    return reserved_token_count
+
+
+def build_system_prompt(
+    base_system_prompt: str,
+    datetime_aware: bool = False,
+    memories: list[str] | None = None,
+    tools: Sequence[Tool] | None = None,
+    should_cite_documents: bool = False,
+    include_all_guidance: bool = False,
+) -> SystemMessage:
+    system_prompt = base_system_prompt
+    system_prompt = handle_onyx_date_awareness(system_prompt, datetime_aware)
+    system_prompt = handle_company_awareness(system_prompt)
+    system_prompt = handle_memories(system_prompt, memories)
+
+    if should_cite_documents or include_all_guidance:
+        system_prompt += REQUIRE_CITATION_GUIDANCE
+
+    if include_all_guidance:
+        system_prompt += (
+            TOOL_SECTION_HEADER
+            + TOOL_DESCRIPTION_SEARCH_GUIDANCE
+            + INTERNAL_SEARCH_GUIDANCE
+            + WEB_SEARCH_GUIDANCE
+            + OPEN_URLS_GUIDANCE
+            + GENERATE_IMAGE_GUIDANCE
+        )
+        return SystemMessage(content=system_prompt)
+
+    if tools:
+        system_prompt += TOOL_SECTION_HEADER
+
+        has_web_search = any(isinstance(tool, WebSearchTool) for tool in tools)
+        has_internal_search = any(isinstance(tool, SearchTool) for tool in tools)
+        # TODO: This needs to be refactored out as a separate tool
+        has_open_urls = has_web_search
+        has_generate_image = any(
+            isinstance(tool, ImageGenerationTool) for tool in tools
+        )
+
+        if has_web_search or has_internal_search or include_all_guidance:
+            system_prompt += TOOL_DESCRIPTION_SEARCH_GUIDANCE
+
+        if has_internal_search or include_all_guidance:
+            system_prompt += INTERNAL_SEARCH_GUIDANCE
+
+        if has_web_search or include_all_guidance:
+            system_prompt += WEB_SEARCH_GUIDANCE
+
+        if has_open_urls or include_all_guidance:
+            system_prompt += OPEN_URLS_GUIDANCE
+
+        if has_generate_image or include_all_guidance:
+            system_prompt += GENERATE_IMAGE_GUIDANCE
+
+    return SystemMessage(content=system_prompt)
 
 
 def default_build_system_message_v2(
@@ -58,8 +210,7 @@ def default_build_system_message_v2(
 
     tag_handled_prompt = handle_onyx_date_awareness(
         system_prompt,
-        prompt_config,
-        add_additional_info_if_no_tag=prompt_config.datetime_aware,
+        datetime_aware=prompt_config.datetime_aware,
     )
 
     tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
@@ -113,9 +264,9 @@ def default_build_system_message_v2(
                     tag_handled_prompt += tool.description
 
     if should_cite_documents:
-        from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
+        from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 
-        tag_handled_prompt += "\n\n" + REQUIRE_CITATION_STATEMENT
+        tag_handled_prompt += "\n\n" + REQUIRE_CITATION_GUIDANCE
 
     tag_handled_prompt += "\n\n" + LONG_CONVERSATION_REMINDER_PROMPT
 
@@ -141,9 +292,8 @@ def default_build_system_message(
     ):
         system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
     tag_handled_prompt = handle_onyx_date_awareness(
-        system_prompt,
-        prompt_config,
-        add_additional_info_if_no_tag=prompt_config.datetime_aware,
+        prompt_str=system_prompt,
+        datetime_aware=prompt_config.datetime_aware,
     )
 
     if not tag_handled_prompt:
@@ -180,7 +330,9 @@ def default_build_user_message(
     )
 
     user_prompt = user_prompt.strip()
-    tag_handled_prompt = handle_onyx_date_awareness(user_prompt, prompt_config)
+    tag_handled_prompt = handle_onyx_date_awareness(
+        user_prompt, prompt_config.datetime_aware
+    )
     user_msg = HumanMessage(
         content=(
             build_content_with_imgs(tag_handled_prompt, files)

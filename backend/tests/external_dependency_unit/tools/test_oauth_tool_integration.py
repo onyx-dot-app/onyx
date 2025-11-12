@@ -16,8 +16,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import PromptConfig
-from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.models import OAuthAccount
 from onyx.db.models import OAuthConfig
@@ -184,22 +182,14 @@ class TestOAuthToolIntegrationPriority:
         llm, fast_llm = _get_test_llms()
 
         # Construct tools
-        prompt_config = PromptConfig(
-            default_behavior_system_prompt="Test",
-            custom_instructions=None,
-            reminder="Test",
-            datetime_aware=False,
-        )
         search_tool_config = SearchToolConfig()
 
         tool_dict = construct_tools(
             persona=persona,
-            prompt_config=prompt_config,
             db_session=db_session,
             user=user,
             llm=llm,
             fast_llm=fast_llm,
-            run_search_setting=OptionalSearchSetting.ALWAYS,
             search_tool_config=search_tool_config,
         )
 
@@ -252,21 +242,12 @@ class TestOAuthToolIntegrationPriority:
         llm, fast_llm = _get_test_llms()
 
         # Construct tools
-        prompt_config = PromptConfig(
-            default_behavior_system_prompt="Test",
-            custom_instructions=None,
-            reminder="Test",
-            datetime_aware=False,
-        )
-
         tool_dict = construct_tools(
             persona=persona,
-            prompt_config=prompt_config,
             db_session=db_session,
             user=user,
             llm=llm,
             fast_llm=fast_llm,
-            run_search_setting=OptionalSearchSetting.ALWAYS,
         )
 
         # Verify tool was constructed
@@ -312,22 +293,13 @@ class TestOAuthToolIntegrationPriority:
         llm, fast_llm = _get_test_llms()
 
         # Construct tools
-        prompt_config = PromptConfig(
-            default_behavior_system_prompt="Test",
-            custom_instructions=None,
-            reminder="Test",
-            datetime_aware=False,
-        )
-
         with caplog.at_level("WARNING"):
             tool_dict = construct_tools(
                 persona=persona,
-                prompt_config=prompt_config,
                 db_session=db_session,
                 user=user,
                 llm=llm,
                 fast_llm=fast_llm,
-                run_search_setting=OptionalSearchSetting.ALWAYS,
             )
 
         # Verify warning was logged
@@ -383,21 +355,12 @@ class TestOAuthToolIntegrationPriority:
         llm, fast_llm = _get_test_llms()
 
         # Construct tools
-        prompt_config = PromptConfig(
-            default_behavior_system_prompt="Test",
-            custom_instructions=None,
-            reminder="Test",
-            datetime_aware=False,
-        )
-
         tool_dict = construct_tools(
             persona=persona,
-            prompt_config=prompt_config,
             db_session=db_session,
             user=user,
             llm=llm,
             fast_llm=fast_llm,
-            run_search_setting=OptionalSearchSetting.ALWAYS,
         )
 
         # Verify tool was constructed
@@ -463,21 +426,12 @@ class TestOAuthToolIntegrationPriority:
             mock_post.return_value = mock_response
 
             # Construct tools
-            prompt_config = PromptConfig(
-                default_behavior_system_prompt="Test",
-                custom_instructions=None,
-                reminder="Test",
-                datetime_aware=False,
-            )
-
             tool_dict = construct_tools(
                 persona=persona,
-                prompt_config=prompt_config,
                 db_session=db_session,
                 user=user,
                 llm=llm,
                 fast_llm=fast_llm,
-                run_search_setting=OptionalSearchSetting.ALWAYS,
             )
 
             # Verify token refresh was called
@@ -539,21 +493,12 @@ class TestOAuthToolIntegrationPriority:
         llm, fast_llm = _get_test_llms()
 
         # Construct tools
-        prompt_config = PromptConfig(
-            default_behavior_system_prompt="Test",
-            custom_instructions=None,
-            reminder="Test",
-            datetime_aware=False,
-        )
-
         tool_dict = construct_tools(
             persona=persona,
-            prompt_config=prompt_config,
             db_session=db_session,
             user=user,
             llm=llm,
             fast_llm=fast_llm,
-            run_search_setting=OptionalSearchSetting.ALWAYS,
         )
 
         # Verify tool was constructed
@@ -601,21 +546,12 @@ class TestOAuthToolIntegrationPriority:
         llm, fast_llm = _get_test_llms()
 
         # Construct tools
-        prompt_config = PromptConfig(
-            default_behavior_system_prompt="Test",
-            custom_instructions=None,
-            reminder="Test",
-            datetime_aware=False,
-        )
-
         tool_dict = construct_tools(
             persona=persona,
-            prompt_config=prompt_config,
             db_session=db_session,
             user=user,
             llm=llm,
             fast_llm=fast_llm,
-            run_search_setting=OptionalSearchSetting.ALWAYS,
         )
 
         # Verify tool was constructed

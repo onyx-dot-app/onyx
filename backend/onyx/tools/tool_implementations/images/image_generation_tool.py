@@ -24,6 +24,7 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
+IMAGE_GENERATION_TOOL_NAME = "image_generation"
 
 IMAGE_GENERATION_RESPONSE_ID = "image_generation_response"
 IMAGE_GENERATION_HEARTBEAT_ID = "image_generation_heartbeat"
@@ -68,7 +69,7 @@ class ImageShape(str, Enum):
 
 # override_kwargs is not supported for image generation tools
 class ImageGenerationTool(Tool[None]):
-    _NAME = "run_image_generation"
+    _NAME = IMAGE_GENERATION_TOOL_NAME
     _DESCRIPTION = (
         "NEVER use generate_image unless the user specifically requests an image."
     )

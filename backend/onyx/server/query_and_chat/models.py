@@ -81,12 +81,11 @@ class CreateChatMessageRequest(ChunkContext):
     chat_session_id: UUID
     # This is the primary-key (unique identifier) for the previous message of the tree
     parent_message_id: int | None
+
     # New message contents
     message: str
     # Files that we should attach to this message
     file_descriptors: list[FileDescriptor] = []
-    current_message_files: list[FileDescriptor] = []
-
     # Prompts are embedded in personas, so no separate prompt_id needed
     # If search_doc_ids provided, it should use those docs explicitly
     search_doc_ids: list[int] | None

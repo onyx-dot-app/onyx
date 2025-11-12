@@ -13,6 +13,8 @@ from onyx.background.celery.tasks.kg_processing.kg_indexing import (
 from onyx.background.celery.tasks.kg_processing.kg_indexing import (
     try_creating_kg_source_reset_task,
 )
+from onyx.chat.models import ChatLoadedFile
+from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import ThreadMessage
@@ -36,7 +38,11 @@ from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import Tool
 from onyx.db.models import User
+from onyx.db.models import UserFile
 from onyx.db.search_settings import get_current_search_settings
+from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.models import ChatFileType
+from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGException
 from onyx.kg.setup.kg_default_entity_definitions import (
     populate_missing_default_entity_types__commit,
@@ -51,6 +57,8 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
@@ -219,13 +227,13 @@ def combine_message_thread(
     return "\n\n".join(message_strs)
 
 
-def create_chat_chain(
+def create_chat_history_chain(
     chat_session_id: UUID,
     db_session: Session,
-    prefetch_tool_calls: bool = True,
+    prefetch_top_two_level_tool_calls: bool = True,
     # Optional id at which we finish processing
     stop_at_message_id: int | None = None,
-) -> tuple[ChatMessage, list[ChatMessage]]:
+) -> list[ChatMessage]:
     """Build the linear chain of messages without including the root message"""
     mainline_messages: list[ChatMessage] = []
 
@@ -234,7 +242,7 @@ def create_chat_chain(
         user_id=None,
         db_session=db_session,
         skip_permission_check=True,
-        prefetch_tool_calls=prefetch_tool_calls,
+        prefetch_top_two_level_tool_calls=prefetch_top_two_level_tool_calls,
     )
 
     if not all_chat_messages:
@@ -278,7 +286,7 @@ def create_chat_chain(
     if not mainline_messages:
         raise RuntimeError("Could not trace chat message history")
 
-    return mainline_messages[-1], mainline_messages[:-1]
+    return mainline_messages
 
 
 def combine_message_chain(
@@ -538,3 +546,171 @@ def process_kg_commands(
     elif message == "kg_setup":
         populate_missing_default_entity_types__commit(db_session=db_session)
         raise KGException("KG setup done")
+
+
+@log_function_time(print_only=True)
+def load_chat_file(
+    file_descriptor: FileDescriptor, db_session: Session
+) -> ChatLoadedFile:
+    file_io = get_default_file_store().read_file(file_descriptor["id"], mode="b")
+    content = file_io.read()
+
+    # Extract text content if it's a text file type (not an image)
+    content_text = None
+    file_type = file_descriptor["type"]
+    if file_type.is_text_file():
+        try:
+            content_text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            logger.warning(
+                f"Failed to decode text content for file {file_descriptor['id']}"
+            )
+
+    # Get token count from UserFile if available
+    token_count = 0
+    user_file_id_str = file_descriptor.get("user_file_id")
+    if user_file_id_str:
+        try:
+            user_file_id = UUID(user_file_id_str)
+            user_file = (
+                db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
+            )
+            if user_file and user_file.token_count:
+                token_count = user_file.token_count
+        except (ValueError, TypeError) as e:
+            logger.warning(
+                f"Failed to get token count for file {file_descriptor['id']}: {e}"
+            )
+
+    return ChatLoadedFile(
+        file_id=file_descriptor["id"],
+        content=content,
+        file_type=file_type,
+        filename=file_descriptor.get("name"),
+        content_text=content_text,
+        token_count=token_count,
+    )
+
+
+def load_all_chat_files(
+    chat_messages: list[ChatMessage],
+    db_session: Session,
+) -> list[ChatLoadedFile]:
+    file_descriptors_for_history: list[FileDescriptor] = []
+    for chat_message in chat_messages:
+        if chat_message.files:
+            file_descriptors_for_history.extend(chat_message.files)
+
+    files = cast(
+        list[ChatLoadedFile],
+        run_functions_tuples_in_parallel(
+            [
+                (load_chat_file, (file, db_session))
+                for file in file_descriptors_for_history
+            ]
+        ),
+    )
+    return files
+
+
+def convert_chat_history(
+    chat_history: list[ChatMessage],
+    files: list[ChatLoadedFile],
+) -> list[ChatMessageSimple]:
+    """Convert ChatMessage history to ChatMessageSimple format.
+
+    For user messages: includes attached files (images attached to message, text files as separate messages)
+    For assistant messages: includes tool calls followed by the assistant response
+    """
+    simple_messages: list[ChatMessageSimple] = []
+
+    # Create a mapping of file IDs to loaded files for quick lookup
+    file_map = {str(f.file_id): f for f in files}
+
+    for chat_message in chat_history:
+        if chat_message.message_type == MessageType.USER:
+            # Process files attached to this message
+            text_files: list[ChatLoadedFile] = []
+            image_files: list[ChatLoadedFile] = []
+
+            if chat_message.files:
+                for file_descriptor in chat_message.files:
+                    file_id = file_descriptor["id"]
+                    loaded_file = file_map.get(file_id)
+                    if loaded_file:
+                        if loaded_file.file_type == ChatFileType.IMAGE:
+                            image_files.append(loaded_file)
+                        else:
+                            # Text files (DOC, PLAIN_TEXT, CSV) are added as separate messages
+                            text_files.append(loaded_file)
+
+            # Add text files as separate messages before the user message
+            for text_file in text_files:
+                simple_messages.append(
+                    ChatMessageSimple(
+                        message=text_file.content_text or "",
+                        token_count=text_file.token_count,
+                        message_type=MessageType.USER,
+                        image_files=None,
+                    )
+                )
+
+            # Add the user message with image files attached
+            # Sum token counts from all image files
+            image_token_count = (
+                sum(img.token_count for img in image_files) if image_files else 0
+            )
+            simple_messages.append(
+                ChatMessageSimple(
+                    message=chat_message.message,
+                    token_count=chat_message.token_count + image_token_count,
+                    message_type=MessageType.USER,
+                    image_files=image_files if image_files else None,
+                )
+            )
+
+        elif chat_message.message_type == MessageType.ASSISTANT:
+            # Add tool calls if present
+            # Tool calls should be ordered by turn_number, then by tool_id within each turn
+            if chat_message.tool_calls:
+                # Group tool calls by turn number
+                tool_calls_by_turn: dict[int, list] = {}
+                for tool_call in chat_message.tool_calls:
+                    if tool_call.turn_number not in tool_calls_by_turn:
+                        tool_calls_by_turn[tool_call.turn_number] = []
+                    tool_calls_by_turn[tool_call.turn_number].append(tool_call)
+
+                # Sort turns and process each turn
+                for turn_number in sorted(tool_calls_by_turn.keys()):
+                    turn_tool_calls = tool_calls_by_turn[turn_number]
+                    # Sort by tool_id within the turn for consistent ordering
+                    turn_tool_calls.sort(key=lambda tc: tc.tool_id)
+
+                    # Add each tool call as a separate message with the tool arguments
+                    for tool_call in turn_tool_calls:
+                        # Create a message containing the tool call information
+                        tool_call_message = f"{tool_call.tool_call_arguments}"
+                        simple_messages.append(
+                            ChatMessageSimple(
+                                message=tool_call_message,
+                                token_count=tool_call.tool_call_tokens,
+                                message_type=MessageType.ASSISTANT,
+                                image_files=None,
+                            )
+                        )
+
+            # Add the assistant message itself
+            simple_messages.append(
+                ChatMessageSimple(
+                    message=chat_message.message,
+                    token_count=chat_message.token_count,
+                    message_type=MessageType.ASSISTANT,
+                    image_files=None,
+                )
+            )
+        else:
+            raise ValueError(
+                f"Invalid message type when constructing simple history: {chat_message.message_type}"
+            )
+
+    return simple_messages

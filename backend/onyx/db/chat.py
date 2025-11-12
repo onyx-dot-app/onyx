@@ -14,7 +14,7 @@ from sqlalchemy import Row
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.exc import MultipleResultsFound
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import DocumentRelevance
@@ -30,6 +30,7 @@ from onyx.db.models import ChatSession
 from onyx.db.models import ChatSessionSharedStatus
 from onyx.db.models import SearchDoc
 from onyx.db.models import SearchDoc as DBSearchDoc
+from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.file_store.file_store import get_default_file_store
@@ -501,7 +502,7 @@ def get_chat_messages_by_session(
     user_id: UUID | None,
     db_session: Session,
     skip_permission_check: bool = False,
-    prefetch_tool_calls: bool = False,
+    prefetch_top_two_level_tool_calls: bool = True,
 ) -> list[ChatMessage]:
     if not skip_permission_check:
         # bug if we ever call this expecting the permission check to not be skipped
@@ -515,8 +516,13 @@ def get_chat_messages_by_session(
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
 
-    if prefetch_tool_calls:
-        stmt = stmt.options(joinedload(ChatMessage.tool_calls))
+    if prefetch_top_two_level_tool_calls:
+        # Load tool_calls and their direct children (one level deep)
+        stmt = stmt.options(
+            selectinload(ChatMessage.tool_calls).selectinload(
+                ToolCall.tool_call_children
+            )
+        )
         result = db_session.scalars(stmt).unique().all()
     else:
         result = db_session.scalars(stmt).all()
