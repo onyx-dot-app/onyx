@@ -523,7 +523,8 @@ class LitellmLLM(LLM):
                     ]
                     else {}
                 ),
-                **({"reasoning_effort": reasoning_effort} if reasoning_effort else {}),
+                thinking={"type": "enabled", "budget_tokens": 10000},
+                **{"reasoning_effort": "medium"},
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format

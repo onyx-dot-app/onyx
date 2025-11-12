@@ -2,6 +2,7 @@ from onyx.agents.agent_framework.models import RunItemStreamEvent
 from onyx.agents.agent_framework.models import ToolCallOutputStreamItem
 from onyx.agents.agent_framework.models import ToolCallStreamItem
 from onyx.agents.agent_framework.query import query
+from onyx.llm.message_types import ChatCompletionMessage
 from onyx.llm.model_response import ModelResponseStream
 from tests.unit.onyx.agents.agent_framework.conftest import stream_chunk
 from tests.unit.onyx.agents.agent_framework.conftest import tool_call_chunk
@@ -61,7 +62,9 @@ def test_query_emits_reasoning_and_tool_call_events(
     ]
 
     llm = fake_llm(responses)
-    messages = [{"role": "user", "content": "tell me about the new agent framework"}]
+    messages: list[ChatCompletionMessage] = [
+        {"role": "user", "content": "tell me about the new agent framework"}
+    ]
     context: dict[str, bool] = {}
 
     events = list(
@@ -80,6 +83,16 @@ def test_query_emits_reasoning_and_tool_call_events(
     assert len(model_responses) == 11
     assert len([e for e in run_item_events if e.type == "reasoning_start"]) == 1
     assert len([e for e in run_item_events if e.type == "reasoning_done"]) == 1
+
+    # Verify that reasoning_done comes before tool_call events
+    event_indices = {
+        e.type: i
+        for i, e in enumerate(events)
+        if isinstance(e, RunItemStreamEvent)
+        and e.type in ["reasoning_start", "reasoning_done", "tool_call"]
+    }
+    assert event_indices["reasoning_start"] < event_indices["reasoning_done"]
+    assert event_indices["reasoning_done"] < event_indices["tool_call"]
 
     tool_call_events = [e for e in run_item_events if e.type == "tool_call"]
     assert len(tool_call_events) == 1
@@ -123,10 +136,11 @@ def test_query_emits_message_start_and_done_for_content(fake_llm) -> None:
     ]
 
     llm = fake_llm(responses)
+    messages: list[ChatCompletionMessage] = [{"role": "user", "content": "hello"}]
     events = list(
         query(
             llm,
-            [{"role": "user", "content": "hello"}],
+            messages,
             tools=[],
             context={},
             tool_choice=None,
@@ -205,10 +219,13 @@ def test_query_handles_parallel_tool_calls(
 
     llm = fake_llm(responses)
     context: dict[str, bool] = {}
+    messages: list[ChatCompletionMessage] = [
+        {"role": "user", "content": "search for stuff"}
+    ]
     events = list(
         query(
             llm,
-            [{"role": "user", "content": "search for stuff"}],
+            messages,
             tools=[fake_internal_search_tool, fake_web_search_tool],
             context=context,
             tool_choice=None,
@@ -290,10 +307,11 @@ def test_query_handles_parallel_tool_calls_in_one_event(
 
     llm = fake_llm(responses)
     context: dict[str, bool] = {}
+    messages: list[ChatCompletionMessage] = [{"role": "user", "content": "search"}]
     events = list(
         query(
             llm,
-            [{"role": "user", "content": "search"}],
+            messages,
             tools=[fake_internal_search_tool, fake_web_search_tool],
             context=context,
             tool_choice=None,
@@ -340,3 +358,63 @@ def test_query_handles_parallel_tool_calls_in_one_event(
     assert isinstance(tool_output_events[1].details, ToolCallOutputStreamItem)
     assert tool_output_events[1].details.call_id == call_id_2
     assert tool_output_events[1].details.output == "Web Search results for: cheese"
+
+
+def test_query_emits_reasoning_done_before_message_start(fake_llm) -> None:
+    """Test that query emits reasoning_done before message_start when transitioning from reasoning to message."""
+    stream_id = "chatcmpl-3a248070-d1fb-4ea1-87d5-e3c9d84cd52b"
+
+    responses = [
+        # Reasoning chunks
+        stream_chunk(
+            id=stream_id,
+            created="1762544618",
+            reasoning_content="Let me think about this.",
+            content="",
+        ),
+        stream_chunk(
+            id=stream_id,
+            created="1762544618",
+            reasoning_content=" I should respond.",
+            content="",
+        ),
+        # Transition to message content
+        stream_chunk(id=stream_id, created="1762544618", content="Based"),
+        stream_chunk(id=stream_id, created="1762544618", content=" on"),
+        stream_chunk(id=stream_id, created="1762544618", content=" my"),
+        stream_chunk(id=stream_id, created="1762544618", content=" analysis"),
+        stream_chunk(id=stream_id, created="1762544618", finish_reason="stop"),
+    ]
+
+    llm = fake_llm(responses)
+    messages: list[ChatCompletionMessage] = [{"role": "user", "content": "hello"}]
+    events = list(
+        query(
+            llm,
+            messages,
+            tools=[],
+            context={},
+            tool_choice=None,
+        )
+    )
+
+    model_responses = [e for e in events if isinstance(e, ModelResponseStream)]
+    run_item_events = [e for e in events if isinstance(e, RunItemStreamEvent)]
+
+    assert len(model_responses) == 7
+
+    # Check that we have the expected events
+    assert len([e for e in run_item_events if e.type == "reasoning_start"]) == 1
+    assert len([e for e in run_item_events if e.type == "reasoning_done"]) == 1
+    assert len([e for e in run_item_events if e.type == "message_start"]) == 1
+    assert len([e for e in run_item_events if e.type == "message_done"]) == 1
+
+    # Find the indices of the events
+    event_indices = {
+        e.type: i for i, e in enumerate(events) if isinstance(e, RunItemStreamEvent)
+    }
+
+    # Verify the correct order: reasoning_start < reasoning_done < message_start < message_done
+    assert event_indices["reasoning_start"] < event_indices["reasoning_done"]
+    assert event_indices["reasoning_done"] < event_indices["message_start"]
+    assert event_indices["message_start"] < event_indices["message_done"]

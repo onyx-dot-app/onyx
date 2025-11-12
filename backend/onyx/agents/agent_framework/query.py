@@ -72,6 +72,9 @@ def query(
                 reasoning_started = True
 
         if delta.content:
+            if reasoning_started:
+                yield RunItemStreamEvent(type="reasoning_done")
+                reasoning_started = False
             if not message_started:
                 yield RunItemStreamEvent(type="message_start")
                 message_started = True
@@ -91,9 +94,7 @@ def query(
 
         if not finish_reason:
             continue
-        if reasoning_started:
-            yield RunItemStreamEvent(type="reasoning_done")
-            reasoning_started = False
+
         if message_started:
             yield RunItemStreamEvent(type="message_done")
             message_started = False
