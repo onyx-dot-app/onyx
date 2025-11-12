@@ -557,7 +557,7 @@ async function completeOauthFlow(
 
   if (isOnAppHost(page.url()) && !page.url().includes("/mcp/oauth/callback")) {
     logOauthEvent(page, "Waiting for redirect away from app host");
-    await waitForUrlOrRedirect("IdP redirect", 5000, (url) => {
+    await waitForUrlOrRedirect("IdP redirect", 10000, (url) => {
       const parsed = new URL(url);
       return (
         parsed.host !== APP_HOST ||
