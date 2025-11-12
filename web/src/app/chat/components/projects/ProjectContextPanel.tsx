@@ -24,16 +24,19 @@ import SvgFiles from "@/icons/files";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FileCard } from "../input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
+
+export interface ProjectContextPanelProps {
+  projectTokenCount?: number;
+  availableContextTokens?: number;
+  setPresentingDocument?: (document: MinimalOnyxDocument) => void;
+}
 
 export default function ProjectContextPanel({
   projectTokenCount = 0,
   availableContextTokens = 128_000,
   setPresentingDocument,
-}: {
-  projectTokenCount?: number;
-  availableContextTokens?: number;
-  setPresentingDocument?: (document: MinimalOnyxDocument) => void;
-}) {
+}: ProjectContextPanelProps) {
   const { popup, setPopup } = usePopup();
   const { isOpen, toggleModal } = useChatModal();
   const open = isOpen(ModalIds.ProjectFilesModal);
@@ -94,6 +97,8 @@ export default function ProjectContextPanel({
     },
   });
 
+  const addInstructionsModal = useModalProvider();
+
   if (!currentProjectId) return null; // no selection yet
 
   // Detect if there are any non-image files in the displayed files
@@ -129,7 +134,7 @@ export default function ProjectContextPanel({
         </div>
         <Button
           leftIcon={SvgAddLines}
-          onClick={() => toggleModal(ModalIds.AddInstructionModal, true)}
+          onClick={() => addInstructionsModal.toggle(true)}
           tertiary
         >
           Set Instructions
@@ -263,7 +268,9 @@ export default function ProjectContextPanel({
         )}
       </div>
 
-      <AddInstructionModal />
+      <addInstructionsModal.Provider>
+        <AddInstructionModal />
+      </addInstructionsModal.Provider>
 
       {open && (
         <CoreModal

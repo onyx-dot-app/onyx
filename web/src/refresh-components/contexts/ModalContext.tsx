@@ -16,9 +16,12 @@ export interface ModalProvider {
 export function useModalProvider(): ModalProvider {
   const [isOpen, setIsOpen] = useState(false);
 
-  const toggle = useCallback((state: boolean) => {
-    setIsOpen(state);
-  }, []);
+  const toggle = useCallback(
+    (state: boolean) => {
+      setIsOpen(state);
+    },
+    [setIsOpen]
+  );
 
   const Provider: React.FunctionComponent<CoreModalProps> = useCallback(
     (props: CoreModalProps) => {

@@ -63,6 +63,7 @@ import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import SvgSettings from "@/icons/settings";
 import { useAppFocus } from "@/lib/hooks";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -305,6 +306,8 @@ function AppSidebarInner() {
     ]
   );
 
+  const createProjectModal = useModalProvider();
+
   const { isAdmin, isCurator } = useUser();
   const activeSidebarTab = useAppFocus();
   const newSessionButton = useMemo(
@@ -346,15 +349,15 @@ function AppSidebarInner() {
     () => (
       <SidebarTab
         leftIcon={SvgFolderPlus}
-        onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
-        active={isOpen(ModalIds.CreateProjectModal)}
+        onClick={() => createProjectModal.toggle(true)}
+        active={createProjectModal.isOpen}
         folded={folded}
         lowlight={!folded}
       >
         New Project
       </SidebarTab>
     ),
-    [folded, toggleModal, isOpen]
+    [folded, toggleModal, isOpen, createProjectModal]
   );
   const settingsButton = useMemo(
     () => (
@@ -381,7 +384,10 @@ function AppSidebarInner() {
   return (
     <>
       {popup}
-      <CreateProjectModal />
+
+      <createProjectModal.Provider>
+        <CreateProjectModal />
+      </createProjectModal.Provider>
 
       {showMoveCustomAgentModal && (
         <MoveCustomAgentChatModal
@@ -462,9 +468,7 @@ function AppSidebarInner() {
                       icon={SvgFolderPlus}
                       internal
                       tooltip="New Project"
-                      onClick={() =>
-                        toggleModal(ModalIds.CreateProjectModal, true)
-                      }
+                      onClick={() => createProjectModal.toggle(true)}
                     />
                   }
                 >

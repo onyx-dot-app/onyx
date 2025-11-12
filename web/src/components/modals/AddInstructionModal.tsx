@@ -3,28 +3,22 @@
 import { useEffect, useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import Modal from "@/refresh-components/modals/Modal";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { useKeyPress } from "@/hooks/useKeyPress";
 import SvgAddLines from "@/icons/add-lines";
 import { Textarea } from "@/components/ui/textarea";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
 
 export default function AddInstructionModal() {
-  const { isOpen, toggleModal } = useChatModal();
-  const open = isOpen(ModalIds.AddInstructionModal);
+  const modal = useModal();
   const { currentProjectDetails, upsertInstructions } = useProjectsContext();
   const [instructionText, setInstructionText] = useState("");
 
-  const onClose = () => toggleModal(ModalIds.AddInstructionModal, false);
+  const onClose = () => modal.toggle(false);
 
   useEffect(() => {
-    if (open) {
-      const preset = currentProjectDetails?.project?.instructions ?? "";
-      setInstructionText(preset);
-    }
+    if (!modal.isOpen) return;
+    const preset = currentProjectDetails?.project?.instructions ?? "";
+    setInstructionText(preset);
   }, [open, currentProjectDetails?.project?.instructions]);
 
   async function handleSubmit() {
@@ -34,12 +28,11 @@ export default function AddInstructionModal() {
     } catch (e) {
       console.error("Failed to save instructions", e);
     }
-    toggleModal(ModalIds.AddInstructionModal, false);
+    modal.toggle(false);
   }
 
   return (
     <Modal
-      id={ModalIds.AddInstructionModal}
       icon={SvgAddLines}
       title="Set Project Instructions"
       description="Instruct specific behaviors, focus, tones, or formats for the response in this project."
