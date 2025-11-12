@@ -4,6 +4,13 @@ import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { FOLDED_SIZE } from "@/refresh-components/Logo";
+import { useAppFocus } from "@/lib/hooks";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgShare from "@/icons/share";
+import SvgMoreHorizontal from "@/icons/more-horizontal";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useState } from "react";
+import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
 
 export default function AppLayout({
   className,
@@ -17,40 +24,69 @@ export default function AppLayout({
     settings.enterpriseSettings?.custom_lower_disclaimer_content;
   const customLogo = settings.enterpriseSettings?.use_custom_logo;
 
+  const appFocus = useAppFocus();
+  const isCurrentlyOnAChat =
+    typeof appFocus === "object" && appFocus.type === "chat";
+  const { chatSessions } = useChatContext();
+  const [showShareModal, setShowShareModal] = useState(false);
+
+  const currentChatSession = isCurrentlyOnAChat
+    ? chatSessions.find((session) => session.id === appFocus.id)
+    : undefined;
+
   return (
-    <div className="flex flex-col h-full w-full">
-      {/* Header */}
-      {customHeaderContent && (
-        <header className="w-full flex flex-col items-center py-3">
-          <Text text03>{customHeaderContent}</Text>
-        </header>
+    <>
+      {showShareModal && currentChatSession && (
+        <ShareChatSessionModal
+          chatSession={currentChatSession}
+          onClose={() => setShowShareModal(false)}
+        />
       )}
 
-      <div className={cn("flex-1 overflow-auto", className)} {...rest}>
-        {children}
+      <div className="flex flex-col h-full w-full">
+        {/* Header */}
+        {(customHeaderContent || isCurrentlyOnAChat) && (
+          <header className="w-full flex flex-row justify-center items-center py-3 px-4">
+            <div className="flex-1">
+              <Text text03>{customHeaderContent}</Text>
+            </div>
+            <div className="flex flex-row items-center justify-center px-1">
+              <IconButton
+                icon={SvgShare}
+                tertiary
+                onClick={() => setShowShareModal(true)}
+              />
+              <IconButton icon={SvgMoreHorizontal} tertiary />
+            </div>
+          </header>
+        )}
+
+        <div className={cn("flex-1 overflow-auto", className)} {...rest}>
+          {children}
+        </div>
+
+        {(customLogo || customFooterContent) && (
+          <footer className="w-full flex flex-row justify-center items-center gap-2 py-3">
+            {customLogo && (
+              <img
+                src="/api/enterprise-settings/logo"
+                alt="Logo"
+                style={{
+                  objectFit: "contain",
+                  height: FOLDED_SIZE,
+                  width: FOLDED_SIZE,
+                }}
+                className="flex-shrink-0"
+              />
+            )}
+            {customFooterContent && (
+              <Text text03 secondaryBody>
+                {customFooterContent}
+              </Text>
+            )}
+          </footer>
+        )}
       </div>
-
-      {(customLogo || customFooterContent) && (
-        <footer className="w-full flex flex-row justify-center items-center gap-2 py-3">
-          {customLogo && (
-            <img
-              src="/api/enterprise-settings/logo"
-              alt="Logo"
-              style={{
-                objectFit: "contain",
-                height: FOLDED_SIZE,
-                width: FOLDED_SIZE,
-              }}
-              className="flex-shrink-0"
-            />
-          )}
-          {customFooterContent && (
-            <Text text03 secondaryBody>
-              {customFooterContent}
-            </Text>
-          )}
-        </footer>
-      )}
-    </div>
+    </>
   );
 }
