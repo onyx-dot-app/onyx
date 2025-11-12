@@ -459,7 +459,11 @@ class LitellmLLM(LLM):
                     ]
                     else {}
                 ),
-                **({"reasoning_effort": reasoning_effort} if reasoning_effort else {}),
+                **(
+                    {"reasoning_effort": "minimal"}
+                    if "gpt-5" in self.config.model_name
+                    else {}
+                ),  # TODO: remove once LITELLM has better support/we change API
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format
