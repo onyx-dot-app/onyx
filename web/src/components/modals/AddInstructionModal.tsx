@@ -19,7 +19,7 @@ export default function AddInstructionModal() {
     if (!modal.isOpen) return;
     const preset = currentProjectDetails?.project?.instructions ?? "";
     setInstructionText(preset);
-  }, [open, currentProjectDetails?.project?.instructions]);
+  }, [modal.isOpen, currentProjectDetails?.project?.instructions]);
 
   async function handleSubmit() {
     const value = instructionText.trim();
