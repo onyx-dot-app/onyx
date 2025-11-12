@@ -26,7 +26,7 @@ env:
 
 jobs:
   discover-test-dirs:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-discover-test-dirs"]
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-discover-test-dirs"]
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
@@ -54,7 +54,7 @@ jobs:
           echo "test-dirs=$all_dirs" >> $GITHUB_OUTPUT
 
   build-backend-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
         with:
@@ -86,7 +86,7 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
         with:
@@ -150,7 +150,7 @@ jobs:
       ]
     runs-on:
       - runs-on
-      - runner=8cpu-linux-arm64
+      - runner=4cpu-linux-arm64
       - ${{ format('run-id={0}-integration-tests-mit-job-{1}', github.run_id, strategy['job-index']) }}
       - extras=ecr-cache
 
@@ -323,7 +323,7 @@ jobs:
 
 
   required:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-required"]
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-required"]
     needs: [integration-tests-mit]
     if: ${{ always() }}
     steps:
