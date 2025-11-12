@@ -413,10 +413,6 @@ async function performIdpLogin(page: Page): Promise<void> {
       break;
     }
     logOauthEvent(page, `Password challenge still visible (retry ${retry})`);
-    await logPageStateWithTag(
-      page,
-      `IdP password prompt re-appeared (retry ${retry})`
-    );
     const success = await submitPasswordAttempt(`retry ${retry}`);
     if (!success) {
       break;
@@ -445,7 +441,6 @@ async function completeOauthFlow(
   const returnSubstring = options.expectReturnPathContains;
 
   logOauthEvent(page, `Current page URL: ${page.url()}`);
-  await logPageStateWithTag(page, "Entering completeOauthFlow");
 
   const waitForUrlOrRedirect = async (
     description: string,
@@ -573,15 +568,7 @@ async function completeOauthFlow(
 
   if (!isOnAppHost(page.url())) {
     logOauthEvent(page, "Starting IdP login step");
-    await logPageStateWithTag(
-      page,
-      "Pre-IdP login page dump before credential submission"
-    );
     await performIdpLogin(page);
-    await logPageStateWithTag(
-      page,
-      "Post-IdP login page dump awaiting redirect"
-    );
   } else if (!page.url().includes("/mcp/oauth/callback")) {
     logOauthEvent(page, "Still on app host, waiting for OAuth callback");
     await waitForUrlOrRedirect(
@@ -636,10 +623,6 @@ async function completeOauthFlow(
     );
   }
   logOauthEvent(page, `Returned to ${returnSubstring}`);
-  await logPageStateWithTag(
-    page,
-    `Arrived on ${returnSubstring} after OAuth flow`
-  );
 
   if (options.scrollToBottomOnReturn) {
     await scrollToBottom(page);
@@ -1248,10 +1231,6 @@ test.describe("MCP OAuth flows", () => {
       scrollToBottomOnReturn: true,
     });
     logStep("Completed OAuth flow for MCP server");
-    await logPageStateWithTag(
-      page,
-      "Post-OAuth edit MCP page before listing tools"
-    );
 
     await page.getByRole("button", { name: "List Actions" }).click();
     await page.waitForURL("**listing_tools=true**", { timeout: 15000 });
@@ -1368,10 +1347,6 @@ test.describe("MCP OAuth flows", () => {
           break;
         }
         if (currentUrl.includes("/chat?from=login")) {
-          await logPageStateWithTag(
-            page,
-            "Redirected to /chat?from=login when opening assistant form"
-          );
           await loginAs(page, "admin");
           await verifySessionUser(
             page,
@@ -1467,10 +1442,6 @@ test.describe("MCP OAuth flows", () => {
     );
     await page.waitForURL("**listing_tools=true**", { timeout: 15000 });
     await scrollToBottom(page);
-    await logPageStateWithTag(
-      page,
-      "Verifying MCP server retains tool selection page dump"
-    );
     await expect(page.getByText("Available Tools")).toBeVisible({
       timeout: 15000,
     });

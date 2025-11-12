@@ -51,11 +51,6 @@ export async function loginAs(
 
   console.log(`[loginAs] Navigating to /auth/login as ${userType}`);
   await page.goto("http://localhost:3000/auth/login");
-  await logPageState(
-    page,
-    `[loginAs] Landed on /auth/login (${userType})`,
-    "[login-debug]"
-  );
 
   await fillCredentials("loginAs primary form");
 
@@ -70,11 +65,6 @@ export async function loginAs(
 
   try {
     await page.waitForURL("http://localhost:3000/chat", { timeout: 10000 });
-    await logPageState(
-      page,
-      `[loginAs] After /chat redirect (${userType})`,
-      "[login-debug]"
-    );
     console.log(
       `[loginAs] Redirected to /chat for ${userType}. URL: ${page.url()}`
     );
@@ -97,11 +87,6 @@ export async function loginAs(
 
     try {
       await page.waitForURL("http://localhost:3000/chat", { timeout: 10000 });
-      await logPageState(
-        page,
-        `[loginAs] After fallback /chat redirect (${userType})`,
-        "[login-debug]"
-      );
       console.log(
         `[loginAs] Fallback redirected to /chat for ${userType}. URL: ${page.url()}`
       );
