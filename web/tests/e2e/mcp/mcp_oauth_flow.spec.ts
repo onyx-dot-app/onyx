@@ -1206,6 +1206,7 @@ test.describe("MCP OAuth flows", () => {
       .locator('input[name="description"]')
       .fill("Playwright MCP OAuth server (admin)");
     await page.locator('input[name="server_url"]').fill(runtimeMcpServerUrl);
+    logStep(`Filled server URL: ${runtimeMcpServerUrl}`);
 
     await page.getByTestId("auth-type-select").click();
     await page.getByRole("option", { name: "OAuth" }).click();

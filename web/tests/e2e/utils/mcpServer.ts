@@ -15,39 +15,6 @@ const DEFAULT_HOST = process.env.MCP_TEST_SERVER_HOST || "127.0.0.1";
 const DEFAULT_PORT = Number(process.env.MCP_TEST_SERVER_PORT || "8004");
 const READY_TIMEOUT_MS = 25_000;
 
-/**
- * Find the Python binary to use, preferring the virtual environment
- * in the backend directory if it exists.
- */
-function findPythonBinary(): string {
-  // First check if explicitly set via environment variable
-  if (process.env.MCP_TEST_PYTHON) {
-    return process.env.MCP_TEST_PYTHON;
-  }
-
-  // Try to find the backend venv relative to this file
-  // This file is at: web/tests/e2e/utils/mcpServer.ts
-  // Backend venv is at: backend/.venv/bin/python
-  const repoRoot = path.resolve(__dirname, "../../../..");
-  const venvPaths = [
-    path.join(repoRoot, "backend", ".venv", "bin", "python"),
-    path.join(repoRoot, "backend", ".venv", "bin", "python3"),
-    path.join(repoRoot, ".venv", "bin", "python"),
-    path.join(repoRoot, ".venv", "bin", "python3"),
-  ];
-
-  for (const venvPath of venvPaths) {
-    if (fs.existsSync(venvPath)) {
-      console.log(`[mcp-oauth-server] Using Python from venv: ${venvPath}`);
-      return venvPath;
-    }
-  }
-
-  // Fall back to system python
-  console.log("[mcp-oauth-server] No venv found, using system python3");
-  return "python3";
-}
-
 export class McpServerProcess {
   private process: ChildProcessWithoutNullStreams;
   private host: string;
@@ -138,7 +105,7 @@ export async function startMcpOauthServer(
 ): Promise<McpServerProcess> {
   const host = options.host || DEFAULT_HOST;
   const port = options.port ?? DEFAULT_PORT;
-  const pythonBinary = options.pythonBinary || findPythonBinary();
+  const pythonBinary = options.pythonBinary || "python3";
   const readyTimeout = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
 
   const scriptPath =
