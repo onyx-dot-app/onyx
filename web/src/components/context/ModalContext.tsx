@@ -9,10 +9,6 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 type ModalContextType = {
   showNewTeamModal: boolean;
   setShowNewTeamModal: (show: boolean) => void;
-  newTenantInfo: NewTenantInfo | null;
-  setNewTenantInfo: (info: NewTenantInfo | null) => void;
-  invitationInfo: NewTenantInfo | null;
-  setInvitationInfo: (info: NewTenantInfo | null) => void;
 };
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
@@ -83,10 +79,6 @@ export const ModalProvider: React.FC<{
       value={{
         showNewTeamModal,
         setShowNewTeamModal,
-        newTenantInfo,
-        setNewTenantInfo,
-        invitationInfo,
-        setInvitationInfo,
       }}
     >
       {children}
