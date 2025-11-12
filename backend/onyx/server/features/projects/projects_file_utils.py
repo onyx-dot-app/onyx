@@ -146,7 +146,7 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
                 logger.info(
                     f"Skipping userfile threshold check for tenant: {current_tenant_id}"
                 )
-        except Exception as e:
+        except RuntimeError as e:
             logger.warning(f"Failed to get current tenant ID: {str(e)}")
 
     for upload in files:
