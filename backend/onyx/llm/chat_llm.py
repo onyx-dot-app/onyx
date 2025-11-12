@@ -523,8 +523,11 @@ class LitellmLLM(LLM):
                     ]
                     else {}
                 ),
-                thinking={"type": "enabled", "budget_tokens": 10000},
-                **{"reasoning_effort": "medium"},
+                **(
+                    {"reasoning_effort": "minimal"}
+                    if "gpt-5" in self.config.model_name
+                    else {}
+                ),  # TODO: remove once LITELLM has better support/we change API
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format
