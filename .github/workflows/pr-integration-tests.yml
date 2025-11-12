@@ -329,12 +329,6 @@ jobs:
           path: ${{ github.workspace }}/docker-compose.log
       # ------------------------------------------------------------
 
-      - name: Stop Docker containers
-        if: always()
-        run: |
-          cd deployment/docker_compose
-          docker compose down -v
-
 
   multitenant-tests:
     needs:
