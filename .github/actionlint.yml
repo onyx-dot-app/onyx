@@ -14,13 +14,6 @@ self-hosted-runner:
     - runner=16cpu-linux-arm64
     - runner=16cpu-linux-x64
 
-# TODO: Fix and re-enable.
-rules:
-  shellcheck:
-    exclude:
-      - SC2086  # e.g. double-quote to prevent globbing and word splitting
-      - SC2193  # e.g. quote this to prevent word splitting
-
 # Configuration variables in array of strings defined in your repository or
 # organization. `null` means disabling configuration variables check.
 # Empty array means no configuration variable is allowed.
