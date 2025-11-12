@@ -324,9 +324,29 @@ def rename_chat_session(
         )
         return RenameChatSessionResponse(new_name=name)
 
-    final_msg, history_msgs = create_chat_chain(
-        chat_session_id=chat_session_id, db_session=db_session
-    )
+    try:
+        final_msg, history_msgs = create_chat_chain(
+            chat_session_id=chat_session_id, db_session=db_session
+        )
+    except RuntimeError as exc:
+        error_message = str(exc)
+        if error_message in {
+            "No messages in Chat Session",
+            "Could not trace chat message history",
+        }:
+            chat_session = get_chat_session_by_id(
+                chat_session_id=chat_session_id,
+                user_id=user_id,
+                db_session=db_session,
+            )
+            logger.info(
+                "Skipping auto rename for chat session %s due to insufficient history: %s",
+                chat_session_id,
+                error_message,
+            )
+            return RenameChatSessionResponse(new_name=chat_session.description or "")
+        raise
+
     full_history = history_msgs + [final_msg]
 
     try:
