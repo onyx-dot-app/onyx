@@ -63,7 +63,7 @@ export default function FeedbackModal({
     );
 
     modal.toggle(false);
-  }, [predefinedFeedback, modal.toggle]);
+  }, [predefinedFeedback, feedbackType, handleFeedbackChange, messageId, modal.toggle]);
 
   useEffect(() => {
     if (predefinedFeedback) {
