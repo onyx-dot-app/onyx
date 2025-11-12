@@ -2,12 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Dialog } from "@headlessui/react";
 import Button from "@/refresh-components/buttons/Button";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { Building, ArrowRight, Send, CheckCircle } from "lucide-react";
 import { useUser } from "../user/UserProvider";
-import { useModalContext } from "../context/ModalContext";
+import SvgArrowRight from "@/icons/arrow-right";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import SvgArrowUp from "@/icons/arrow-up";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
+import SvgCheckCircle from "@/icons/check-circle";
+import SvgOrganization from "@/icons/organization";
+import Modal from "@/refresh-components/modals/Modal";
 
 interface TenantByDomainResponse {
   tenant_id: string;
@@ -15,15 +19,14 @@ interface TenantByDomainResponse {
   creator_email: string;
 }
 
-export function NewTeamModal() {
-  const { showNewTeamModal, setShowNewTeamModal } = useModalContext();
+export default function NewTeamModal() {
+  const modal = useModalProvider();
   const [existingTenant, setExistingTenant] =
     useState<TenantByDomainResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasRequestedInvite, setHasRequestedInvite] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const { user } = useUser();
   const appDomain = user?.email.split("@")[1];
   const router = useRouter();
@@ -33,7 +36,7 @@ export function NewTeamModal() {
   useEffect(() => {
     const hasNewTeamParam = searchParams?.has("new_team");
     if (hasNewTeamParam) {
-      setShowNewTeamModal(true);
+      modal.toggle(true);
       fetchTenantInfo();
 
       // Remove the new_team parameter from the URL without page reload
@@ -44,9 +47,9 @@ export function NewTeamModal() {
         (newParams.toString() ? `?${newParams.toString()}` : "");
       window.history.replaceState({}, "", newUrl);
     }
-  }, [searchParams, setShowNewTeamModal]);
+  }, [searchParams, modal.toggle]);
 
-  const fetchTenantInfo = async () => {
+  async function fetchTenantInfo() {
     setIsLoading(true);
     setError(null);
 
@@ -57,7 +60,7 @@ export function NewTeamModal() {
       }
       const responseJson = await response.json();
       if (!responseJson) {
-        setShowNewTeamModal(false);
+        modal.toggle(false);
         setExistingTenant(null);
         return;
       }
@@ -70,9 +73,9 @@ export function NewTeamModal() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
-  const handleRequestInvite = async () => {
+  async function handleRequestInvite() {
     if (!existingTenant) return;
 
     setIsSubmitting(true);
@@ -108,47 +111,28 @@ export function NewTeamModal() {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }
 
-  const handleContinueToNewOrg = () => {
+  function handleContinueToNewOrg() {
     const newUrl = window.location.pathname;
     router.replace(newUrl);
-    setShowNewTeamModal(false);
-  };
+    modal.toggle(false);
+  }
 
-  // Update the close handler to use the context
-  const handleClose = () => {
-    setShowNewTeamModal(false);
-  };
-
-  // Only render if showNewTeamModal is true
-  if (!showNewTeamModal || isLoading) return null;
+  if (!modal.isOpen || isLoading) return null;
 
   return (
-    <Dialog
-      open={showNewTeamModal}
-      onClose={handleClose}
-      className="relative z-[1000]"
-    >
-      {/* Modal backdrop */}
-      <div className="fixed inset-0 bg-[#000]/50" aria-hidden="true" />
-
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="mx-auto w-full max-w-md rounded-lg bg-white dark:bg-neutral-800 p-6 shadow-xl border border-neutral-200 dark:border-neutral-700">
-          <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
-            {hasRequestedInvite ? (
-              <>
-                <CheckCircle className="mr-2 h-5 w-5 text-neutral-900 dark:text-[#fff]" />
-                Join Request Sent
-              </>
-            ) : (
-              <>
-                <Building className="mr-2 h-5 w-5" />
-                We found an existing team for {appDomain}
-              </>
-            )}
-          </Dialog.Title>
-
+    <modal.Provider>
+      <Modal
+        icon={hasRequestedInvite ? SvgCheckCircle : SvgOrganization}
+        title={
+          hasRequestedInvite
+            ? "Join Request Sent"
+            : `We found an existing team for ${appDomain}`
+        }
+        xs
+      >
+        <div className="p-4">
           {isLoading ? (
             <div className="py-8 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900 dark:border-neutral-100 mx-auto mb-4"></div>
@@ -160,10 +144,10 @@ export function NewTeamModal() {
               <div className="flex w-full pt-2">
                 <Button
                   onClick={handleContinueToNewOrg}
-                  className="flex w-full text-center items-center justify-center"
+                  className="w-full"
+                  rightIcon={SvgArrowRight}
                 >
                   Continue with new team
-                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             </div>
@@ -177,10 +161,10 @@ export function NewTeamModal() {
               <div className="flex w-full pt-2">
                 <Button
                   onClick={handleContinueToNewOrg}
-                  className="flex w-full text-center items-center justify-center"
+                  className="w-full"
+                  rightIcon={SvgArrowRight}
                 >
                   Try Onyx while waiting
-                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             </div>
@@ -192,20 +176,13 @@ export function NewTeamModal() {
               <div className="mt-4">
                 <Button
                   onClick={handleRequestInvite}
-                  className="flex w-full items-center justify-center"
+                  className="w-full"
                   disabled={isSubmitting}
+                  leftIcon={isSubmitting ? SimpleLoader : SvgArrowUp}
                 >
-                  {isSubmitting ? (
-                    <span className="flex items-center">
-                      <span className="animate-spin mr-2">⟳</span>
-                      Sending request...
-                    </span>
-                  ) : (
-                    <>
-                      <Send className="mr-2 h-4 w-4" />
-                      Request to join your team
-                    </>
-                  )}
+                  {isSubmitting
+                    ? "Sending request..."
+                    : "Request to join your team"}
                 </Button>
               </div>
               <div
@@ -216,8 +193,8 @@ export function NewTeamModal() {
               </div>
             </div>
           )}
-        </Dialog.Panel>
-      </div>
-    </Dialog>
+        </div>
+      </Modal>
+    </modal.Provider>
   );
 }

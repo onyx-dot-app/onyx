@@ -1,7 +1,6 @@
 "use client";
 
 import React, { createContext, useContext, useState } from "react";
-import { NewTeamModal } from "../modals/NewTeamModal";
 import NewTenantModal from "../modals/NewTenantModal";
 import { User, NewTenantInfo } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -49,9 +48,6 @@ export const ModalProvider: React.FC<{
 
     return (
       <>
-        {/* Modal for users to request to join an existing team */}
-        <NewTeamModal />
-
         {/* Modal for users who've been accepted to a new team */}
         {newTenantInfo && (
           <NewTenantModal
