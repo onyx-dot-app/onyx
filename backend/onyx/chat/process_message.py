@@ -467,6 +467,7 @@ def stream_chat_message_objects(
         )
 
         # Process projects, if all of the files fit in the context, it doesn't need to use RAG
+        # TODO needs to handle image files
         project_file_texts, project_as_filter = _extract_project_file_texts(
             project_id=chat_session.project_id,
             user_id=user_id,
@@ -544,6 +545,7 @@ def stream_chat_message_objects(
             simple_chat_history=simple_chat_history,
             tools=tools,
             custom_agent_prompt=custom_agent_prompt,
+            project_files_texts=project_file_texts,
             persona=persona,
             llm=llm,
             fast_llm=fast_llm,
@@ -585,6 +587,7 @@ def run_agent_loop(
     simple_chat_history: list[ChatMessageSimple],
     tools: list[Tool],
     custom_agent_prompt: str | None,
+    project_files_texts: list[str],
     persona: Persona | None,
     llm: LLM,
     fast_llm: LLM,
