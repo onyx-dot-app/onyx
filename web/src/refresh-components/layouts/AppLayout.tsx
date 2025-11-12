@@ -51,6 +51,7 @@ export default function AppLayout({
             <div className="flex flex-row items-center justify-center px-1">
               <IconButton
                 icon={SvgShare}
+                transient={showShareModal}
                 tertiary
                 onClick={() => setShowShareModal(true)}
               />
