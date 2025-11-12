@@ -110,7 +110,7 @@ export function useModal(): Modal {
 
   if (!context) {
     throw new Error(
-      "useModal must be used within a Modal created by createModalProvider"
+      "useModal must be used within a Provider returned by useModalProvider"
     );
   }
 
