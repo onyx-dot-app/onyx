@@ -293,15 +293,7 @@ export default function AddConnector({
 
   return (
     <Formik
-      initialValues={{
-        ...createConnectorInitialValues(connector),
-        ...Object.fromEntries(
-          connectorConfigs[connector].advanced_values.map((field) => [
-            field.name,
-            field.default || "",
-          ])
-        ),
-      }}
+      initialValues={createConnectorInitialValues(connector)}
       validationSchema={createConnectorValidationSchema(connector)}
       onSubmit={async (values) => {
         const {

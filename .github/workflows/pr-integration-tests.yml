@@ -30,7 +30,7 @@ env:
 
 jobs:
   discover-test-dirs:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "family=m7+c7+r7", "run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}"]
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
@@ -59,7 +59,7 @@ jobs:
 
 
   build-backend-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
@@ -90,7 +90,7 @@ jobs:
 
 
   build-model-server-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
@@ -120,7 +120,7 @@ jobs:
 
 
   build-integration-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
         with:
@@ -460,7 +460,7 @@ jobs:
           docker compose -f docker-compose.multitenant-dev.yml down -v
 
   required:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "family=m7+c7+r7", "run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}"]
     needs: [integration-tests, multitenant-tests]
     if: ${{ always() }}
     steps:

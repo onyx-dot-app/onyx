@@ -1,15 +1,20 @@
+from collections.abc import Callable
+from typing import Any
+
 from onyx.agents.agent_framework.models import RunItemStreamEvent
 from onyx.agents.agent_framework.models import ToolCallOutputStreamItem
 from onyx.agents.agent_framework.models import ToolCallStreamItem
 from onyx.agents.agent_framework.query import query
 from onyx.llm.message_types import ChatCompletionMessage
 from onyx.llm.model_response import ModelResponseStream
+from tests.unit.onyx.agents.agent_framework.conftest import FakeTool
 from tests.unit.onyx.agents.agent_framework.conftest import stream_chunk
 from tests.unit.onyx.agents.agent_framework.conftest import tool_call_chunk
 
 
 def test_query_emits_reasoning_and_tool_call_events(
-    fake_llm, fake_internal_search_tool
+    fake_llm: Callable[[list[ModelResponseStream]], Any],
+    fake_internal_search_tool: FakeTool,
 ) -> None:
     """Test that query emits ReasoningStart, ReasoningDone, ToolCall, and ToolCallOutputStreamItem events."""
     call_id = "toolu_01Xyj1F1fSG9BqjNJZi1JAnx"
@@ -123,7 +128,9 @@ def test_query_emits_reasoning_and_tool_call_events(
     )
 
 
-def test_query_emits_message_start_and_done_for_content(fake_llm) -> None:
+def test_query_emits_message_start_and_done_for_content(
+    fake_llm: Callable[[list[ModelResponseStream]], Any],
+) -> None:
     """Test that query emits MessageStart and MessageDone events for regular message content."""
     stream_id = "chatcmpl-2b136068-c6fb-4af1-97d5-d2c9d84cd52b"
 
@@ -156,7 +163,9 @@ def test_query_emits_message_start_and_done_for_content(fake_llm) -> None:
 
 
 def test_query_handles_parallel_tool_calls(
-    fake_llm, fake_internal_search_tool, fake_web_search_tool
+    fake_llm: Callable[[list[ModelResponseStream]], Any],
+    fake_internal_search_tool: FakeTool,
+    fake_web_search_tool: FakeTool,
 ) -> None:
     """Test that query handles parallel tool calls correctly (Claude-style interleaved)."""
     stream_id = "chatcmpl-32110864-73fa-4ea3-8762-cf431f7959e7"
@@ -275,7 +284,9 @@ def test_query_handles_parallel_tool_calls(
 
 
 def test_query_handles_parallel_tool_calls_in_one_event(
-    fake_llm, fake_internal_search_tool, fake_web_search_tool
+    fake_llm: Callable[[list[ModelResponseStream]], Any],
+    fake_internal_search_tool: FakeTool,
+    fake_web_search_tool: FakeTool,
 ) -> None:
     """Test that query handles Gemini-style parallel tool calls where both tools come in one chunk."""
     stream_id = "Yn4SaajROLXEnvgP5JTN-AQ"

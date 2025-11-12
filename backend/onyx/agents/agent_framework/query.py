@@ -94,7 +94,6 @@ def query(
 
         if not finish_reason:
             continue
-
         if message_started:
             yield RunItemStreamEvent(type="message_done")
             message_started = False
