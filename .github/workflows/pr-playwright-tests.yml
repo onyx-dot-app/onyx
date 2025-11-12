@@ -124,6 +124,8 @@ jobs:
     needs: [build-web-image, build-backend-image, build-model-server-image]
     name: Playwright Tests (${{ matrix.project }})
     runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}", "extras=ecr-cache"]
+    env:
+      PYTHONPATH: ./backend
     strategy:
       fail-fast: false
       matrix:
@@ -175,6 +177,9 @@ jobs:
       - name: Install playwright browsers
         working-directory: ./web
         run: npx playwright install --with-deps
+
+      - name: Setup Python and Install Dependencies
+        uses: ./.github/actions/setup-python-and-install-dependencies
 
       - name: Create .env file for Docker Compose
         run: |
