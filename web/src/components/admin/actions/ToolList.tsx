@@ -98,7 +98,14 @@ export function ToolList({
       // Only auto-trigger for servers that have required form values and a serverId
       handleListActions(values);
     }
-  }, [isListingTools, serverId, values.name, values.server_url, initialDbTools, autoListTriggered]);
+  }, [
+    isListingTools,
+    serverId,
+    values.name,
+    values.server_url,
+    initialDbTools,
+    autoListTriggered,
+  ]);
 
   const handleListActions = async (values: MCPFormValues) => {
     // Check if OAuth needs connection first

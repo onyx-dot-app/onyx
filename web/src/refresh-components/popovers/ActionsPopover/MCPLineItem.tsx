@@ -39,7 +39,6 @@ export interface MCPLineItemProps {
   enabledTools: ToolSnapshot[];
   isAuthenticated: boolean;
   isLoading: boolean;
-  canEdit: boolean;
 }
 
 export default function MCPLineItem({
@@ -78,7 +77,6 @@ export default function MCPLineItem({
   }
 
   const handleClick = noProp(() => {
-    console.log("handleClick", isAuthenticated, tools.length);
     if (isAuthenticated && tools.length > 0) {
       onSelect();
       return;
