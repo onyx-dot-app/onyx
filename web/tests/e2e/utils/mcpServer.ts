@@ -119,7 +119,7 @@ export async function startMcpOauthServer(
 
   const proc = spawn(pythonBinary, [scriptPath, port.toString()], {
     cwd: scriptDir,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["pipe", "pipe", "pipe"],
     env: {
       ...process.env,
       MCP_SERVER_PORT: port.toString(),
