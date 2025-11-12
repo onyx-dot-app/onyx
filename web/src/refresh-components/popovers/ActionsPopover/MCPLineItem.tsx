@@ -57,8 +57,7 @@ export default function MCPLineItem({
     server.auth_type !== MCPAuthenticationType.NONE;
   const showInlineReauth =
     showAuthTrigger && isAuthenticated && tools.length > 0;
-  const showReauthButton =
-    showAuthTrigger && isAuthenticated && !showInlineReauth;
+  const showReauthButton = showAuthTrigger && !showInlineReauth;
 
   function getServerIcon(): React.FunctionComponent<SvgProps> {
     if (isLoading) return SimpleLoader;
@@ -79,6 +78,7 @@ export default function MCPLineItem({
   }
 
   const handleClick = noProp(() => {
+    console.log("handleClick", isAuthenticated, tools.length);
     if (isAuthenticated && tools.length > 0) {
       onSelect();
       return;
@@ -104,32 +104,24 @@ export default function MCPLineItem({
             tools.length > 0 &&
             enabledTools.length > 0 &&
             tools.length !== enabledTools.length && (
-              <Text secondaryBody nowrap>
-                <Text
-                  secondaryBody
-                  nowrap
-                  className="inline text-action-link-05"
-                >
+              <div className="flex flex-row items-center gap-1">
+                <Text secondaryBody nowrap className="text-action-link-05">
                   {enabledTools.length}
                 </Text>
-                {` of ${tools.length}`}
-              </Text>
+                <Text secondaryBody nowrap>
+                  {` of ${tools.length}`}
+                </Text>
+              </div>
             )}
           {showInlineReauth && (
-            <span
-              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border-02 bg-background-tint-01"
-              role="img"
-              aria-label="Re-authentication required"
-            >
-              <SvgKey className="h-3.5 w-3.5 stroke-status-warning-05" />
-            </span>
+            <SvgChevronRight className="h-3.5 w-3.5 stroke-text-03" />
           )}
           {showReauthButton && (
             <span
               className="inline-flex h-6 w-6 items-center justify-center"
               aria-hidden="true"
             >
-              <SvgChevronRight className="h-3.5 w-3.5 stroke-text-03" />
+              <SvgKey className="h-3.5 w-3.5 stroke-text-03" />
             </span>
           )}
         </div>
