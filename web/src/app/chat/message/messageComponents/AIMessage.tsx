@@ -402,7 +402,8 @@ export default function AIMessage({
                           // Simple split: tools vs non-tools
                           const toolGroups = groupedPackets.filter(
                             (group) =>
-                              group.packets[0] && isToolPacket(group.packets[0])
+                              group.packets[0] &&
+                              isToolPacket(group.packets[0], false)
                           ) as { ind: number; packets: Packet[] }[];
 
                           // Non-tools include messages AND image generation

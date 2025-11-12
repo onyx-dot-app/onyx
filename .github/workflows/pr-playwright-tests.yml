@@ -116,8 +116,12 @@ jobs:
 
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
-    name: Playwright Tests
-    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-playwright-tests", "extras=ecr-cache"]
+    name: Playwright Tests (${{ matrix.project }})
+    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}", "extras=ecr-cache"]
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [admin, no-auth]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
         with:
@@ -226,13 +230,13 @@ jobs:
         run: |
           # Create test-results directory to ensure it exists for artifact upload
           mkdir -p test-results
-          npx playwright test
+          npx playwright test --project ${{ matrix.project }}
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         if: always()
         with:
           # Includes test results and trace.zip files
-          name: playwright-test-results-${{ github.run_id }}
+          name: playwright-test-results-${{ matrix.project }}-${{ github.run_id }}
           path: ./web/test-results/
           retention-days: 30
 
@@ -248,7 +252,7 @@ jobs:
         if: success() || failure()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         with:
-          name: docker-logs
+          name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
 
       - name: Stop Docker containers
