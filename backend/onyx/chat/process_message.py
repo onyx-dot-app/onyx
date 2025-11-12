@@ -724,7 +724,7 @@ def stream_chat_message_objects(
                     new_file.to_file_descriptor() for new_file in latest_query_files
                 ],
                 db_session=db_session,
-                commit=False,
+                commit=True, # Может что-то сломать, но может исправить проблемы с переименованием (say1ts)
             )
 
         selected_db_search_docs = None

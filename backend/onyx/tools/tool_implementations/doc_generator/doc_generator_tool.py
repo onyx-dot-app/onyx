@@ -238,14 +238,19 @@ class DocGeneratorTool(Tool):
             logger.info(f"Документ '{output_file_name}' загружен в Minio.")
 
             # 4. получаем URL
-            output_file_url = minio_get_object_url(output_file_path)
-
+            try:
+                output_file_url = minio_get_object_url(output_file_path)
             # 5. отправляем URL пользователю
-            yield ToolResponse(
-                id=DOC_GENERATOR_RESPONSE_SUMMARY_ID,
-                response=DocGeneratorResponseSummary(tool_result={"text": output_file_url}, tool_name=self.name),
-            )
+                yield ToolResponse(
+                    id=DOC_GENERATOR_RESPONSE_SUMMARY_ID,
+                    response=DocGeneratorResponseSummary(tool_result={"text": output_file_url}, tool_name=self.name),
+                )
 
+            except Exception as e:
+                yield ToolResponse(
+                    id=DOC_GENERATOR_RESPONSE_SUMMARY_ID,
+                    response=f'Возникла ошибка {e}'
+                )
             # 6. очистка
             os.remove(output_file_path)
 
