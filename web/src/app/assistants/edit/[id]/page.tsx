@@ -1,6 +1,6 @@
 import { ErrorCallout } from "@/components/ErrorCallout";
 import CardSection from "@/components/admin/CardSection";
-import { AssistantEditor } from "@/app/admin/assistants/AssistantEditor";
+import AssistantEditor from "@/app/admin/assistants/AssistantEditor";
 import { fetchAssistantEditorInfoSS } from "@/lib/assistants/fetchPersonaEditorInfoSS";
 import { ProjectsProvider } from "@/app/chat/projects/ProjectsContext";
 
