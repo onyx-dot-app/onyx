@@ -11,6 +11,7 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
@@ -85,6 +86,14 @@ class WebSearchTool(Tool[None]):
         self, *args: ToolResponse
     ) -> str | list[str | dict[str, Any]]:
         raise ValueError(_GENERIC_ERROR_MESSAGE)
+
+    def run_v2(
+        self,
+        run_context: RunContextWrapper[Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        raise NotImplementedError("WebSearchTool.run_v2 is not implemented.")
 
     def run(
         self, override_kwargs: None = None, **llm_kwargs: str

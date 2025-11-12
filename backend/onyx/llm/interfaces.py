@@ -1,6 +1,7 @@
 import abc
 from collections.abc import Iterator
 from typing import Literal
+from typing import Union
 
 from braintrust import traced
 from langchain.schema.language_model import LanguageModelInput
@@ -8,16 +9,17 @@ from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 
+from onyx.agents.agent_framework.models import ModelResponseStream
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_INDIVIDUAL_MODEL_TOKENS
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.llm.model_response import ModelResponse
-from onyx.llm.model_response import ModelResponseStream
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-ToolChoiceOptions = Literal["required"] | Literal["auto"] | Literal["none"]
+STANDARD_TOOL_CHOICE_OPTIONS = ("required", "auto", "none")
+ToolChoiceOptions = Union[Literal["required", "auto", "none"], str]
 
 
 class LLMConfig(BaseModel):
@@ -167,7 +169,7 @@ class LLM(abc.ABC):
 
     def stream(
         self,
-        prompt: list[dict],
+        prompt: LanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,

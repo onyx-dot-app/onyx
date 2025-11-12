@@ -44,6 +44,10 @@ class ModelResponseStream(BaseModel):
     choice: StreamingChoice
 
 
+if TYPE_CHECKING:
+    from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
+
+
 class Message(BaseModel):
     content: str | None = None
     role: str = "assistant"

@@ -44,7 +44,11 @@ jobs:
   external-dependency-unit-tests:
     needs: discover-test-dirs
     # Use larger runner with more resources for Vespa
-    runs-on: [runs-on, runner=16cpu-linux-x64, "run-id=${{ github.run_id }}", "extras=s3-cache"]
+    runs-on:
+      - runs-on
+      - runner=16cpu-linux-x64
+      - ${{ format('run-id={0}-external-dependency-unit-tests-job-{1}', github.run_id, strategy['job-index']) }}
+      - extras=s3-cache
     strategy:
       fail-fast: false
       matrix:
