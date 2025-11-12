@@ -869,10 +869,14 @@ class ServerToolsResponse(BaseModel):
 
 
 def _ensure_mcp_server_owner_or_admin(server: DbMCPServer, user: User | None) -> None:
+    logger.info(
+        f"Ensuring MCP server owner or admin: {server.name} {user} {user.role if user else None} server.owner={server.owner}"
+    )
     if not user or user.role == UserRole.ADMIN:
         return
 
     user_email = user.email if user else None
+    logger.info(f"User email: {user_email} server.owner={server.owner}")
     if not user_email or server.owner != user_email:
         raise HTTPException(
             status_code=403,

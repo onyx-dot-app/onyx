@@ -125,6 +125,45 @@ function createStepLogger(testName: string) {
   };
 }
 
+async function logoutSession(page: Page, contextLabel: string) {
+  try {
+    const response = await page.request.post(`${APP_BASE_URL}/api/auth/logout`);
+    const status = response.status();
+    if (!response.ok() && status !== 401) {
+      const body = await response.text();
+      console.warn(
+        `[mcp-oauth-test] ${contextLabel}: Logout returned ${status} - ${body}`
+      );
+    } else {
+      console.log(
+        `[mcp-oauth-test] ${contextLabel}: Logout request completed with status ${status}`
+      );
+    }
+  } catch (error) {
+    console.warn(
+      `[mcp-oauth-test] ${contextLabel}: Logout request failed - ${String(
+        error
+      )}`
+    );
+  }
+}
+
+async function verifySessionUser(
+  page: Page,
+  expected: { email: string; role: string },
+  contextLabel: string
+) {
+  const response = await page.request.get(`${APP_BASE_URL}/api/me`);
+  const status = response.status();
+  expect(response.ok()).toBeTruthy();
+  const data = await response.json();
+  expect(data.email).toBe(expected.email);
+  expect(data.role).toBe(expected.role);
+  console.log(
+    `[mcp-oauth-test] ${contextLabel}: Verified session user ${data.email} (${data.role}) via /api/me (status ${status})`
+  );
+}
+
 async function logPageStateWithTag(page: Page, context: string) {
   const elapsed = ((Date.now() - SPEC_START_MS) / 1000).toFixed(1);
   await logPageState(page, `${context} (+${elapsed}s)`, "[mcp-oauth-debug]");
@@ -274,11 +313,11 @@ async function performIdpLogin(page: Page): Promise<void> {
   const passwordSelectorString = passwordSelectors.join(",");
 
   await page
-    .waitForLoadState("domcontentloaded", { timeout: 15000 })
+    .waitForLoadState("domcontentloaded", { timeout: 1000 })
     .catch(() => {});
 
   logOauthEvent(page, "Attempting IdP login");
-  await waitForAnySelector(page, usernameSelectors, { timeout: 8000 });
+  await waitForAnySelector(page, usernameSelectors, { timeout: 1000 });
   const usernameFilled = await fillFirstVisible(
     page,
     usernameSelectors,
@@ -1120,6 +1159,11 @@ test.describe("MCP OAuth flows", () => {
     await page.context().clearCookies();
     logStep("Cleared cookies");
     await loginAs(page, "admin");
+    await verifySessionUser(
+      page,
+      { email: TEST_ADMIN_CREDENTIALS.email, role: "admin" },
+      "AdminFlow primary login"
+    );
     const adminApiClient = new OnyxApiClient(page);
     logStep("Logged in as admin");
 
@@ -1285,6 +1329,11 @@ test.describe("MCP OAuth flows", () => {
             "Redirected to /chat?from=login when opening assistant form"
           );
           await loginAs(page, "admin");
+          await verifySessionUser(
+            page,
+            { email: TEST_ADMIN_CREDENTIALS.email, role: "admin" },
+            "AdminFlow assistant editor relogin"
+          );
           continue;
         }
         await logPageStateWithTag(
@@ -1424,6 +1473,11 @@ test.describe("MCP OAuth flows", () => {
       curatorCredentials!.email,
       curatorCredentials!.password
     );
+    await verifySessionUser(
+      page,
+      { email: curatorCredentials!.email, role: "curator" },
+      "CuratorFlow primary login"
+    );
     logStep("Logged in as curator");
     const curatorApiClient = new OnyxApiClient(page);
 
@@ -1499,6 +1553,8 @@ test.describe("MCP OAuth flows", () => {
         .getByTestId(`tool-checkbox-${TOOL_NAMES.curator}`)
         .click({ force: true });
       logStep("Selected curator tool checkbox");
+
+      await scrollToBottom(page);
 
       await page
         .getByRole("button", { name: /(?:Create|Update) MCP Server Actions/ })
@@ -1594,14 +1650,23 @@ test.describe("MCP OAuth flows", () => {
         toolName: TOOL_NAMES.curator,
       };
 
-      // Verify isolation: second curator must not see first curator's server
+      // Verify isolation: second curator must not be able to edit first curator's server
       const curatorTwoContext = await browser.newContext();
       const curatorTwoPage = await curatorTwoContext.newPage();
-      // await loginWithCredentials(
-      //   curatorTwoPage,
-      //   curatorTwoCredentials!.email,
-      //   curatorTwoCredentials!.password
-      // );
+      await logoutSession(
+        curatorTwoPage,
+        "CuratorFlow secondary pre-login logout"
+      );
+      await loginWithCredentials(
+        curatorTwoPage,
+        curatorTwoCredentials!.email,
+        curatorTwoCredentials!.password
+      );
+      await verifySessionUser(
+        curatorTwoPage,
+        { email: curatorTwoCredentials!.email, role: "curator" },
+        "CuratorFlow secondary login"
+      );
       await curatorTwoPage.goto("http://localhost:3000/admin/actions");
       const serverLocator = curatorTwoPage.getByText(serverName, {
         exact: false,
