@@ -22,7 +22,6 @@ import SvgX from "@/icons/x";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import SvgUser from "@/icons/user";
 import { cn } from "@/lib/utils";
-import { useModalContext } from "@/components/context/ModalContext";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 import UserSettings from "@/app/chat/components/modal/UserSettings";
