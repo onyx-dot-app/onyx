@@ -8,7 +8,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn, noProp } from "@/lib/utils";
-import CoreModal from "@/refresh-components/modals/CoreModal";
 import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
 import {
   ProjectFile,
@@ -26,6 +25,7 @@ import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
 import SvgLoader from "@/icons/loader";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 const getFileExtension = (fileName: string): string => {
   const idx = fileName.lastIndexOf(".");
@@ -186,7 +186,7 @@ export default function FilePickerPopover({
 }: FilePickerPopoverProps) {
   const { allRecentFiles } = useProjectsContext();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [showRecentFiles, setShowRecentFiles] = useState(false);
+  const modal = useModalProvider();
   const [open, setOpen] = useState(false);
   // Snapshot of recent files to avoid re-arranging when the modal is open
   const [recentFilesSnapshot, setRecentFilesSnapshot] = useState<ProjectFile[]>(
@@ -264,6 +264,28 @@ export default function FilePickerPopover({
 
   return (
     <>
+      {popup}
+
+      <modal.Provider>
+        <UserFilesModalContent
+          title="Recent Files"
+          description="Upload files or pick from your recent files."
+          icon={SvgFiles}
+          recentFiles={recentFilesSnapshot}
+          onPickRecent={(file) => {
+            onPickRecent && onPickRecent(file);
+          }}
+          onUnpickRecent={(file) => {
+            onUnpickRecent && onUnpickRecent(file);
+          }}
+          handleUploadChange={handleUploadChange}
+          onView={onFileClick}
+          onClose={() => modal.toggle(false)}
+          selectedFileIds={selectedFileIds}
+          onDelete={handleDeleteFile}
+        />
+      </modal.Provider>
+
       <input
         ref={fileInputRef}
         type="file"
@@ -273,61 +295,33 @@ export default function FilePickerPopover({
         accept={"*/*"}
       />
 
-      <div className={cn("relative")}>
-        {popup}
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            {typeof trigger === "function" ? trigger(open) : trigger}
-          </PopoverTrigger>
-          <PopoverContent align="start" side="bottom">
-            <FilePickerPopoverContents
-              recentFiles={recentFilesSnapshot}
-              onPickRecent={(file) => {
-                onPickRecent && onPickRecent(file);
-                setOpen(false);
-              }}
-              onFileClick={(file) => {
-                onFileClick && onFileClick(file);
-                setOpen(false);
-              }}
-              triggerUploadPicker={() => {
-                triggerUploadPicker();
-                setOpen(false);
-              }}
-              setShowRecentFiles={(show) => {
-                setShowRecentFiles(show);
-                // Close the small popover when opening the dialog
-                if (show) setOpen(false);
-              }}
-            />
-          </PopoverContent>
-        </Popover>
-
-        {showRecentFiles && (
-          <CoreModal
-            className="w-[32rem] border flex flex-col bg-background-tint-00"
-            onClickOutside={() => setShowRecentFiles(false)}
-          >
-            <UserFilesModalContent
-              title="Recent Files"
-              description="Upload files or pick from your recent files."
-              icon={SvgFiles}
-              recentFiles={recentFilesSnapshot}
-              onPickRecent={(file) => {
-                onPickRecent && onPickRecent(file);
-              }}
-              onUnpickRecent={(file) => {
-                onUnpickRecent && onUnpickRecent(file);
-              }}
-              handleUploadChange={handleUploadChange}
-              onView={onFileClick}
-              onClose={() => setShowRecentFiles(false)}
-              selectedFileIds={selectedFileIds}
-              onDelete={handleDeleteFile}
-            />
-          </CoreModal>
-        )}
-      </div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          {typeof trigger === "function" ? trigger(open) : trigger}
+        </PopoverTrigger>
+        <PopoverContent align="start" side="bottom">
+          <FilePickerPopoverContents
+            recentFiles={recentFilesSnapshot}
+            onPickRecent={(file) => {
+              onPickRecent && onPickRecent(file);
+              setOpen(false);
+            }}
+            onFileClick={(file) => {
+              onFileClick && onFileClick(file);
+              setOpen(false);
+            }}
+            triggerUploadPicker={() => {
+              triggerUploadPicker();
+              setOpen(false);
+            }}
+            setShowRecentFiles={(show) => {
+              modal.toggle(show);
+              // Close the small popover when opening the dialog
+              if (show) setOpen(false);
+            }}
+          />
+        </PopoverContent>
+      </Popover>
     </>
   );
 }

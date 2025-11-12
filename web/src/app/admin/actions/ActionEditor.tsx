@@ -29,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { OAuthConfigSelector } from "@/components/oauth/OAuthConfigSelector";
+import OAuthConfigSelector from "@/components/oauth/OAuthConfigSelector";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { KeyedMutator } from "swr";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";

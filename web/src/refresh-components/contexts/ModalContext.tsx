@@ -8,9 +8,10 @@ import { cn, noProp } from "@/lib/utils";
 interface ModalContainerProps {
   className?: string;
   children?: React.ReactNode;
+  onClose?: () => void;
 }
 
-function ModalContainer({ className, children }: ModalContainerProps) {
+function ModalContainer({ className, children, onClose }: ModalContainerProps) {
   const mouseDownOutside = React.useRef(false);
   const modalRef = React.useRef<HTMLDivElement>(null);
 
@@ -36,7 +37,10 @@ function ModalContainer({ className, children }: ModalContainerProps) {
       className="fixed inset-0 z-[2000] flex items-center justify-center bg-mask-03 backdrop-blur-03"
       onMouseDown={() => (mouseDownOutside.current = true)}
       onClick={() => {
-        if (mouseDownOutside.current) modal.toggle(false);
+        if (mouseDownOutside.current) {
+          onClose?.();
+          modal.toggle(false);
+        }
         mouseDownOutside.current = false;
       }}
     >

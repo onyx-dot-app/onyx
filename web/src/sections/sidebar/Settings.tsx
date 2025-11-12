@@ -24,6 +24,8 @@ import SvgUser from "@/icons/user";
 import { cn } from "@/lib/utils";
 import { useModalContext } from "@/components/context/ModalContext";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
+import UserSettings from "@/app/chat/components/modal/UserSettings";
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
@@ -169,7 +171,7 @@ export default function Settings({ folded }: SettingsProps) {
     "Settings" | "Notifications" | undefined
   >(undefined);
   const { user } = useUser();
-  const { setShowUserSettingsModal } = useModalContext();
+  // const { setShowUserSettingsModal } = useModalContext();
 
   const displayName = getDisplayName(user?.email, user?.personalization?.name);
 
@@ -186,45 +188,53 @@ export default function Settings({ folded }: SettingsProps) {
     }
   };
 
+  const userSettingsModal = useModalProvider();
+
   return (
-    <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
-      <PopoverTrigger asChild>
-        <div id="onyx-user-dropdown">
-          <SidebarTab
-            leftIcon={({ className }) => (
-              <Avatar
-                className={cn(
-                  "flex items-center justify-center bg-background-neutral-inverted-00",
-                  className,
-                  "w-5 h-5"
-                )}
-              >
-                <Text inverted secondaryBody>
-                  {displayName[0]?.toUpperCase()}
-                </Text>
-              </Avatar>
-            )}
-            active={!!popupState}
-            folded={folded}
-          >
-            {displayName}
-          </SidebarTab>
-        </div>
-      </PopoverTrigger>
-      <PopoverContent align="end" side="right">
-        {popupState === "Settings" && (
-          <SettingsPopover
-            onUserSettingsClick={() => {
-              setPopupState(undefined);
-              setShowUserSettingsModal(true);
-            }}
-            onNotificationsClick={() => setPopupState("Notifications")}
-          />
-        )}
-        {popupState === "Notifications" && (
-          <NotificationsPopover onClose={() => setPopupState("Settings")} />
-        )}
-      </PopoverContent>
-    </Popover>
+    <>
+      <userSettingsModal.Provider>
+        <UserSettings />
+      </userSettingsModal.Provider>
+
+      <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
+        <PopoverTrigger asChild>
+          <div id="onyx-user-dropdown">
+            <SidebarTab
+              leftIcon={({ className }) => (
+                <Avatar
+                  className={cn(
+                    "flex items-center justify-center bg-background-neutral-inverted-00",
+                    className,
+                    "w-5 h-5"
+                  )}
+                >
+                  <Text inverted secondaryBody>
+                    {displayName[0]?.toUpperCase()}
+                  </Text>
+                </Avatar>
+              )}
+              active={!!popupState}
+              folded={folded}
+            >
+              {displayName}
+            </SidebarTab>
+          </div>
+        </PopoverTrigger>
+        <PopoverContent align="end" side="right">
+          {popupState === "Settings" && (
+            <SettingsPopover
+              onUserSettingsClick={() => {
+                setPopupState(undefined);
+                userSettingsModal.toggle(true);
+              }}
+              onNotificationsClick={() => setPopupState("Notifications")}
+            />
+          )}
+          {popupState === "Notifications" && (
+            <NotificationsPopover onClose={() => setPopupState("Settings")} />
+          )}
+        </PopoverContent>
+      </Popover>
+    </>
   );
 }

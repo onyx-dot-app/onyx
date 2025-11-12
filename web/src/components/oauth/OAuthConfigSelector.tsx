@@ -1,7 +1,6 @@
 import { OAuthConfig } from "@/lib/tools/interfaces";
 import { SelectorFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlusCircle from "@/icons/plus-circle";
 import { useState } from "react";
 import { OAuthConfigForm } from "@/app/admin/oauth-configs/OAuthConfigForm";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -9,8 +8,9 @@ import { useFormikContext } from "formik";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { KeyedMutator } from "swr";
 import SvgEdit from "@/icons/edit";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
-interface OAuthConfigSelectorProps {
+export interface OAuthConfigSelectorProps {
   name: string;
   label?: string;
   oauthConfigs: OAuthConfig[];
@@ -20,7 +20,7 @@ interface OAuthConfigSelectorProps {
   mutateOAuthConfigs?: KeyedMutator<OAuthConfig[]>;
 }
 
-export const OAuthConfigSelector = ({
+export default function OAuthConfigSelector({
   name,
   label = "OAuth Configuration:",
   oauthConfigs,
@@ -28,8 +28,8 @@ export const OAuthConfigSelector = ({
   onConfigCreated,
   setPopup,
   mutateOAuthConfigs,
-}: OAuthConfigSelectorProps) => {
-  const [showModal, setShowModal] = useState(false);
+}: OAuthConfigSelectorProps) {
+  const modal = useModalProvider();
   const [editingConfig, setEditingConfig] = useState<OAuthConfig | null>(null);
   const { setFieldValue, values } = useFormikContext<any>();
 
@@ -72,7 +72,7 @@ export const OAuthConfigSelector = ({
   };
 
   const handleModalClose = () => {
-    setShowModal(false);
+    modal.toggle(false);
     setEditingConfig(null);
   };
 
@@ -85,7 +85,7 @@ export const OAuthConfigSelector = ({
     const config = oauthConfigs.find((c) => c.id === configId);
     if (config) {
       setEditingConfig(config);
-      setShowModal(true);
+      modal.toggle(true);
     }
   };
 
@@ -97,56 +97,58 @@ export const OAuthConfigSelector = ({
     selectedConfigId !== "null";
 
   return (
-    <div className="space-y-2">
-      <SelectorFormField
-        name={name}
-        label={label}
-        options={options}
-        subtext="Select an OAuth configuration for this tool. Users will be prompted to authenticate when using this tool."
-        onSelect={(selected) => {
-          // SelectorFormField passes the value string directly, not an object
-          let configId: number | null;
-          if (
-            !selected ||
-            selected === "null" ||
-            selected === -1 ||
-            selected === "-1"
-          ) {
-            configId = null;
-          } else if (typeof selected === "number") {
-            configId = selected;
-          } else {
-            configId = parseInt(selected);
-          }
-          if (onSelect) {
-            onSelect(configId);
-          }
-        }}
-      />
-      <div className="flex gap-2">
-        <CreateButton onClick={() => setShowModal(true)}>
-          New OAuth Configuration
-        </CreateButton>
-        {hasValidSelection && (
-          <Button
-            onClick={handleEditClick}
-            secondary
-            leftIcon={SvgEdit}
-            type="button"
-          >
-            Edit Configuration
-          </Button>
-        )}
-      </div>
-
-      {showModal && (
+    <>
+      <modal.Provider onClose={handleModalClose}>
         <OAuthConfigForm
           onClose={handleModalClose}
           setPopup={setPopup}
           config={editingConfig || undefined}
           onConfigSubmitted={handleConfigSaved}
         />
-      )}
-    </div>
+      </modal.Provider>
+
+      <div className="space-y-2">
+        <SelectorFormField
+          name={name}
+          label={label}
+          options={options}
+          subtext="Select an OAuth configuration for this tool. Users will be prompted to authenticate when using this tool."
+          onSelect={(selected) => {
+            // SelectorFormField passes the value string directly, not an object
+            let configId: number | null;
+            if (
+              !selected ||
+              selected === "null" ||
+              selected === -1 ||
+              selected === "-1"
+            ) {
+              configId = null;
+            } else if (typeof selected === "number") {
+              configId = selected;
+            } else {
+              configId = parseInt(selected);
+            }
+            if (onSelect) {
+              onSelect(configId);
+            }
+          }}
+        />
+        <div className="flex gap-2">
+          <CreateButton onClick={() => modal.toggle(true)}>
+            New OAuth Configuration
+          </CreateButton>
+          {hasValidSelection && (
+            <Button
+              onClick={handleEditClick}
+              secondary
+              leftIcon={SvgEdit}
+              type="button"
+            >
+              Edit Configuration
+            </Button>
+          )}
+        </div>
+      </div>
+    </>
   );
-};
+}

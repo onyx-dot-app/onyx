@@ -35,7 +35,7 @@ import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import Text from "@/refresh-components/texts/Text";
 import SvgXOctagon from "@/icons/x-octagon";
 import { PATManagement } from "@/components/user/PATManagement";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
 
 type SettingsSection =
   | "settings"
@@ -44,11 +44,7 @@ type SettingsSection =
   | "personalization"
   | "tokens";
 
-interface UserSettingsProps {
-  onClose: () => void;
-}
-
-export function UserSettings({ onClose }: UserSettingsProps) {
+export default function UserSettings() {
   const {
     refreshUser,
     user,
@@ -79,6 +75,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState<number | null>(null);
   const { popup, setPopup } = usePopup();
+  const modal = useModal();
 
   // Fetch federated-connector info so the modal can list/refresh them
   const {
@@ -161,7 +158,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        modal.toggle(false);
       }
     };
     window.addEventListener("keydown", handleEscape);
@@ -183,7 +180,7 @@ export function UserSettings({ onClose }: UserSettingsProps) {
     }
 
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [onClose]);
+  }, [modal.toggle]);
 
   const defaultModelDestructured = defaultModel
     ? parseLlmDescriptor(defaultModel)
