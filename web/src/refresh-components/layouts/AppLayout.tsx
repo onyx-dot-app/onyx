@@ -56,7 +56,6 @@ export default function AppLayout({
                 tertiary
                 onClick={() => setShowShareModal(true)}
               />
-              <IconButton icon={SvgMoreHorizontal} tertiary />
             </div>
           </header>
         )}
