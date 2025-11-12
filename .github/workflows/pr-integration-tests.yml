@@ -157,7 +157,7 @@ jobs:
       ]
     runs-on:
       - runs-on
-      - runner=8cpu-linux-arm64
+      - runner=4cpu-linux-arm64
       - ${{ format('run-id={0}-integration-tests-job-{1}', github.run_id, strategy['job-index']) }}
       - extras=ecr-cache
 
