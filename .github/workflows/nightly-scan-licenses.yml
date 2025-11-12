@@ -46,7 +46,7 @@ jobs:
 
       - name: Check python
         id: license_check_report
-        uses: pilosus/action-pip-license-checker@cc7a461bfa27b44ad187b8578c881ef5138c13fd # ratchet:pilosus/action-pip-license-checker@v2
+        uses: pilosus/action-pip-license-checker@e909b0226ff49d3235c99c4585bc617f49fff16a # ratchet:pilosus/action-pip-license-checker@v2
         with:
           requirements: 'requirements-all.txt'
           fail: 'Copyleft'
