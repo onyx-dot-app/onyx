@@ -7,7 +7,6 @@ import { FOLDED_SIZE } from "@/refresh-components/Logo";
 import { useAppFocus } from "@/lib/hooks";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgShare from "@/icons/share";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useState } from "react";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
@@ -25,14 +24,13 @@ export default function AppLayout({
   const customLogo = settings.enterpriseSettings?.use_custom_logo;
 
   const appFocus = useAppFocus();
-  const isCurrentlyOnAChat =
-    typeof appFocus === "object" && appFocus.type === "chat";
   const { chatSessions } = useChatContext();
   const [showShareModal, setShowShareModal] = useState(false);
 
-  const currentChatSession = isCurrentlyOnAChat
-    ? chatSessions.find((session) => session.id === appFocus.id)
-    : undefined;
+  const currentChatSession =
+    typeof appFocus === "object" && appFocus.type === "chat"
+      ? chatSessions.find((session) => session.id === appFocus.id)
+      : undefined;
 
   return (
     <>
@@ -45,7 +43,7 @@ export default function AppLayout({
 
       <div className="flex flex-col h-full w-full">
         {/* Header */}
-        {(customHeaderContent || isCurrentlyOnAChat) && (
+        {(customHeaderContent || currentChatSession) && (
           <header className="w-full flex flex-row justify-center items-center py-3 px-4">
             <div className="flex-1">
               <Text text03>{customHeaderContent}</Text>
