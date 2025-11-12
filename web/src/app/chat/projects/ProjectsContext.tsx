@@ -396,7 +396,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
             }
             if (nonAccepted.length > 0) {
               detailsParts.push(
-                `Files exceeds the 50k token limit: ${nonAccepted.join(", ")}`
+                `Files exceeds the 100k token limit: ${nonAccepted.join(", ")}`
               );
             }
             setPopup?.({

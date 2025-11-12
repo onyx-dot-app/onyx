@@ -956,3 +956,9 @@ configMap:
   DOMAIN: "localhost"
   # Chat Configs
   HARD_DELETE_CHATS: ""
+  # User File Upload Configuration
+  # Skip the token count threshold check (100,000 tokens) for uploaded files
+  # For self-hosted: set to true to skip for all users
+  SKIP_USERFILE_THRESHOLD: ""
+  # For multi-tenant: comma-separated list of tenant IDs to skip threshold
+  SKIP_USERFILE_THRESHOLD_TENANT_IDS: ""
