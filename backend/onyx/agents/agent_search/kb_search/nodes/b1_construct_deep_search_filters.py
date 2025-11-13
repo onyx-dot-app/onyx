@@ -84,21 +84,21 @@
 #         )
 #     )
 
-#     msg = [
-#         HumanMessage(
-#             content=search_filter_construction_prompt,
-#         )
-#     ]
-#     llm = graph_config.tooling.primary_llm
-#     # Grader
-#     try:
-#         llm_response = run_with_timeout(
-#             KG_FILTER_CONSTRUCTION_TIMEOUT,
-#             llm.invoke,
-#             prompt=msg,
-#             timeout_override=15,
-#             max_tokens=1400,
-#         )
+# msg = [
+#     HumanMessage(
+#         content=search_filter_construction_prompt,
+#     )
+# ]
+# llm = graph_config.tooling.primary_llm
+# # Grader
+# try:
+#     llm_response = run_with_timeout(
+#         KG_FILTER_CONSTRUCTION_TIMEOUT,
+#         llm.invoke_langchain,
+#         prompt=msg,
+#         timeout_override=15,
+#         max_tokens=1400,
+#     )
 
 #         cleaned_response = (
 #             str(llm_response.content)

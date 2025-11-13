@@ -76,11 +76,11 @@
 #     else:
 #         citation_processor = None
 
-#     for message in llm.stream(
-#         prompt,
-#         timeout_override=timeout_override,
-#         max_tokens=max_tokens,
-#     ):
+# for message in llm.stream_langchain(
+#     prompt,
+#     timeout_override=timeout_override,
+#     max_tokens=max_tokens,
+# ):
 
 #         # TODO: in principle, the answer here COULD contain images, but we don't support that yet
 #         content = message.content
@@ -155,18 +155,18 @@
 #         or []
 #     ) and supports_response_schema(llm.config.model_name, llm.config.model_provider)
 
-#     response_content = str(
-#         llm.invoke(
-#             prompt,
-#             tools=tools,
-#             tool_choice=tool_choice,
-#             timeout_override=timeout_override,
-#             max_tokens=max_tokens,
-#             **cast(
-#                 dict, {"structured_response_format": schema} if supports_json else {}
-#             ),
-#         ).content
-#     )
+# response_content = str(
+#     llm.invoke_langchain(
+#         prompt,
+#         tools=tools,
+#         tool_choice=tool_choice,
+#         timeout_override=timeout_override,
+#         max_tokens=max_tokens,
+#         **cast(
+#             dict, {"structured_response_format": schema} if supports_json else {}
+#         ),
+#     ).content
+# )
 
 #     if not supports_json:
 #         # remove newlines as they often lead to json decoding errors
@@ -204,32 +204,32 @@
 #         )
 #     ]
 
-#     if stream:
-#         # TODO - adjust for new UI. This is currently not working for current UI/Basic Search
-#         stream_response, _, _ = run_with_timeout(
-#             timeout,
-#             lambda: stream_llm_answer(
-#                 llm=llm,
-#                 prompt=msg,
-#                 event_name="sub_answers",
-#                 writer=writer,
-#                 agent_answer_level=agent_answer_level,
-#                 agent_answer_question_num=agent_answer_question_num,
-#                 agent_answer_type=agent_answer_type,
-#                 timeout_override=timeout_override,
-#                 max_tokens=max_tokens,
-#             ),
-#         )
-#         content = "".join(stream_response)
-#     else:
-#         llm_response = run_with_timeout(
-#             timeout,
-#             llm.invoke,
+# if stream:
+#     # TODO - adjust for new UI. This is currently not working for current UI/Basic Search
+#     stream_response, _, _ = run_with_timeout(
+#         timeout,
+#         lambda: stream_llm_answer(
+#             llm=llm,
 #             prompt=msg,
+#             event_name="sub_answers",
+#             writer=writer,
+#             agent_answer_level=agent_answer_level,
+#             agent_answer_question_num=agent_answer_question_num,
+#             agent_answer_type=agent_answer_type,
 #             timeout_override=timeout_override,
 #             max_tokens=max_tokens,
-#         )
-#         content = str(llm_response.content)
+#         ),
+#     )
+#     content = "".join(stream_response)
+# else:
+#     llm_response = run_with_timeout(
+#         timeout,
+#         llm.invoke_langchain,
+#         prompt=msg,
+#         timeout_override=timeout_override,
+#         max_tokens=max_tokens,
+#     )
+#     content = str(llm_response.content)
 
 #     cleaned_response = content
 #     if json_string_flag:

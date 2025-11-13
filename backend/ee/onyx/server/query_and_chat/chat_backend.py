@@ -161,7 +161,7 @@ def handle_send_message_simple_with_history(
         persona_id=req.persona_id,
     )
 
-    llm, _ = get_llms_for_persona(persona=chat_session.persona)
+    llm, _ = get_llms_for_persona(persona=chat_session.persona, user=user)
 
     llm_tokenizer = get_tokenizer(
         model_name=llm.config.model_name,

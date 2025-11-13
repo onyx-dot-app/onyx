@@ -5,7 +5,8 @@ import { NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED } from "@/lib/constan
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 
-const FOLDED_SIZE = 24;
+export const FOLDED_SIZE = 24;
+const UNFOLDED_SIZE = 88;
 
 export interface LogoProps {
   folded?: boolean;
@@ -37,23 +38,35 @@ export default function Logo({ folded, className }: LogoProps) {
     [className, settings.enterpriseSettings?.use_custom_logo]
   );
 
-  if (folded) return logo;
-
   return settings.enterpriseSettings?.application_name ? (
     <div className="flex flex-col">
       <div className="flex flex-row items-center gap-2">
         {logo}
-        <Text headingH3 className="break-all line-clamp-2">
+        <Text
+          headingH3
+          className={cn("line-clamp-1 truncate", folded && "invisible")}
+          nowrap
+        >
           {settings.enterpriseSettings?.application_name}
         </Text>
       </div>
       {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
-        <Text secondaryBody text03 className="ml-[33px]">
+        <Text
+          secondaryBody
+          text03
+          className={cn(
+            "ml-[33px] line-clamp-1 truncate",
+            folded && "invisible"
+          )}
+          nowrap
+        >
           Powered by Onyx
         </Text>
       )}
     </div>
+  ) : folded ? (
+    <OnyxIcon size={FOLDED_SIZE} className={cn("flex-shrink-0", className)} />
   ) : (
-    <OnyxLogoTypeIcon size={88} className={className} />
+    <OnyxLogoTypeIcon size={UNFOLDED_SIZE} className={className} />
   );
 }

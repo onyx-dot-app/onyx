@@ -29,9 +29,9 @@ export default async function GalleryPage(props: {
     availableSources,
     ccPairs,
     documentSets,
+    llmProviders,
     availableTools,
     tags,
-    llmProviders,
     defaultAssistantId,
     inputPrompts,
     proSearchToggled,
@@ -41,6 +41,7 @@ export default async function GalleryPage(props: {
     <ChatProvider
       inputPrompts={inputPrompts}
       chatSessions={chatSessions}
+      llmProviders={llmProviders}
       proSearchToggled={proSearchToggled}
       sidebarInitiallyVisible={sidebarInitiallyVisible}
       availableSources={availableSources}
@@ -50,7 +51,6 @@ export default async function GalleryPage(props: {
       tags={tags}
       availableDocumentSets={documentSets}
       availableTags={tags}
-      llmProviders={llmProviders}
       shouldShowWelcomeModal={shouldShowWelcomeModal}
       defaultAssistantId={defaultAssistantId}
     >

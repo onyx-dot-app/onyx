@@ -17,6 +17,7 @@
 # )
 # from onyx.agents.agent_search.dr.enums import DRPath
 # from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
+# from onyx.agents.agent_search.dr.enums import ResearchType
 # from onyx.agents.agent_search.dr.models import ClarificationGenerationResponse
 # from onyx.agents.agent_search.dr.models import DecisionResponse
 # from onyx.agents.agent_search.dr.models import DRPromptPurpose
@@ -166,7 +167,7 @@
 
 #         tool_info = OrchestratorTool(
 #             tool_id=tool.id,
-#             name=tool.name,
+#             name=tool.llm_name,
 #             llm_path=llm_path,
 #             path=path,
 #             description=description,
@@ -176,7 +177,7 @@
 #         )
 
 #         # TODO: handle custom tools with same name as other tools (e.g., CLOSER)
-#         available_tools[tool.name] = tool_info
+#         available_tools[tool.llm_name] = tool_info
 
 #     available_tool_paths = [tool.path for tool in available_tools.values()]
 
@@ -418,7 +419,7 @@
 #     db_session = graph_config.persistence.db_session
 
 #     original_question = graph_config.inputs.prompt_builder.raw_user_query
-#     use_agentic_search = graph_config.behavior.use_agentic_search
+#     research_type = graph_config.behavior.research_type
 
 #     force_use_tool = graph_config.tooling.force_use_tool
 
@@ -551,7 +552,7 @@
 #                 # if there is only one tool (Closer), we don't need to decide. It's an LLM answer
 #                 llm_decision = DecisionResponse(decision="LLM", reasoning="")
 
-#             if llm_decision.decision == "LLM" and not use_agentic_search:
+#             if llm_decision.decision == "LLM" and research_type != ResearchType.DEEP:
 
 #                 write_custom_event(
 #                     current_step_nr,
@@ -679,7 +680,7 @@
 
 #             @traced(name="clarifier stream and process", type="llm")
 #             def stream_and_process() -> BasicSearchProcessedStreamResults:
-#                 stream = graph_config.tooling.primary_llm.stream(
+#                 stream = graph_config.tooling.primary_llm.stream_langchain(
 #                     prompt=create_question_prompt(
 #                         cast(str, system_prompt_to_use),
 #                         cast(str, user_prompt_to_use),
@@ -700,7 +701,7 @@
 #                 )
 
 #             # Deep research always continues to clarification or search
-#             if not use_agentic_search:
+#             if research_type != ResearchType.DEEP:
 #                 full_response = stream_and_process()
 #                 if len(full_response.ai_message_chunk.tool_calls) == 0:
 
@@ -753,7 +754,7 @@
 
 #     clarification = None
 
-#     if use_agentic_search:
+#     if research_type == ResearchType.DEEP:
 #         result = _get_existing_clarification_request(graph_config)
 #         if result is not None:
 #             clarification, original_question, chat_history_string = result
@@ -769,7 +770,7 @@
 
 #             base_clarification_prompt = get_dr_prompt_orchestration_templates(
 #                 DRPromptPurpose.CLARIFICATION,
-#                 use_agentic_search,
+#                 research_type,
 #                 entity_types_string=all_entity_types,
 #                 relationship_types_string=all_relationship_types,
 #                 available_tools=available_tools,
@@ -854,7 +855,7 @@
 #                     is_agentic=graph_config.behavior.use_agentic_search,
 #                     message=clarification_response.clarification_question,
 #                     update_parent_message=True,
-#                     research_type=None,  # research_type is deprecated
+#                     research_type=research_type,
 #                     research_answer_purpose=ResearchAnswerPurpose.CLARIFICATION_REQUEST,
 #                 )
 
@@ -882,7 +883,7 @@
 #             is_agentic=graph_config.behavior.use_agentic_search,
 #             message=clarification.clarification_question,
 #             update_parent_message=True,
-#             research_type=None,  # research_type is deprecated
+#             research_type=research_type,
 #             research_answer_purpose=ResearchAnswerPurpose.CLARIFICATION_REQUEST,
 #         )
 

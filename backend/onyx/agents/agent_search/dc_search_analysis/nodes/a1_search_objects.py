@@ -107,25 +107,25 @@
 #             objects_of_interest=agent_1_output_objective,
 #         )
 
-#     msg = [
-#         HumanMessage(
-#             content=trim_prompt_piece(
-#                 config=graph_config.tooling.primary_llm.config,
-#                 prompt_piece=dc_object_extraction_prompt,
-#                 reserved_str="",
-#             ),
-#         )
-#     ]
-#     primary_llm = graph_config.tooling.primary_llm
-#     # Grader
-#     try:
-#         llm_response = run_with_timeout(
-#             30,
-#             primary_llm.invoke,
-#             prompt=msg,
-#             timeout_override=30,
-#             max_tokens=300,
-#         )
+# msg = [
+#     HumanMessage(
+#         content=trim_prompt_piece(
+#             config=graph_config.tooling.primary_llm.config,
+#             prompt_piece=dc_object_extraction_prompt,
+#             reserved_str="",
+#         ),
+#     )
+# ]
+# primary_llm = graph_config.tooling.primary_llm
+# # Grader
+# try:
+#     llm_response = run_with_timeout(
+#         30,
+#         primary_llm.invoke_langchain,
+#         prompt=msg,
+#         timeout_override=30,
+#         max_tokens=300,
+#     )
 
 #         cleaned_response = (
 #             str(llm_response.content)

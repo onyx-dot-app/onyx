@@ -191,22 +191,22 @@
 #         .replace("---question---", question)
 #     )
 
-#     msg = [
-#         HumanMessage(
-#             content=strategy_generation_prompt,
-#         )
-#     ]
-#     primary_llm = graph_config.tooling.primary_llm
-#     # Grader
-#     try:
-#         llm_response = run_with_timeout(
-#             KG_STRATEGY_GENERATION_TIMEOUT,
-#             # fast_llm.invoke,
-#             primary_llm.invoke,
-#             prompt=msg,
-#             timeout_override=5,
-#             max_tokens=100,
-#         )
+# msg = [
+#     HumanMessage(
+#         content=strategy_generation_prompt,
+#     )
+# ]
+# primary_llm = graph_config.tooling.primary_llm
+# # Grader
+# try:
+#     llm_response = run_with_timeout(
+#         KG_STRATEGY_GENERATION_TIMEOUT,
+#         # fast_llm.invoke,
+#         primary_llm.invoke_langchain,
+#         prompt=msg,
+#         timeout_override=5,
+#         max_tokens=100,
+#     )
 
 #         cleaned_response = (
 #             str(llm_response.content)

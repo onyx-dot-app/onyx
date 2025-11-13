@@ -13,7 +13,7 @@ from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.citations_prompt import compute_max_llm_input_tokens
 from onyx.chat.prompt_builder.utils import translate_history_to_basemessages
-from onyx.db.persona import get_default_persona
+from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
@@ -56,7 +56,7 @@ from onyx.utils.timing import log_function_time
 
 
 def get_default_base_system_prompt(db_session: Session) -> str:
-    default_persona = get_default_persona(db_session)
+    default_persona = get_default_behavior_persona(db_session)
     return (
         default_persona.system_prompt
         if default_persona and default_persona.system_prompt
@@ -263,6 +263,7 @@ def default_build_system_message_v2(
                     )
                     tag_handled_prompt += tool.description
 
+    tag_handled_prompt += "\n# Reminders"
     if should_cite_documents:
         from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 

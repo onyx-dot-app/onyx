@@ -45,13 +45,11 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
 
+DEFAULT_BEHAVIOR_PERSONA_ID = 0
 
-def get_default_persona(db_session: Session) -> Persona | None:
-    """Fetch the persona marked as default (is_default_persona=True).
-    Returns None if no default persona exists."""
-    stmt = select(Persona).where(
-        Persona.is_default_persona.is_(True), Persona.deleted.is_(False)
-    )
+
+def get_default_behavior_persona(db_session: Session) -> Persona | None:
+    stmt = select(Persona).where(Persona.id == DEFAULT_BEHAVIOR_PERSONA_ID)
     return db_session.scalars(stmt).first()
 
 
@@ -952,3 +950,22 @@ def update_default_assistant_configuration(
 
     db_session.commit()
     return persona
+
+
+def user_can_access_persona(
+    db_session: Session, persona_id: int, user: User | None, get_editable: bool = False
+) -> bool:
+    """Check if a user has access to a specific persona.
+
+    Args:
+        db_session: Database session
+        persona_id: ID of the persona to check
+        user: User to check access for
+        get_editable: If True, check for edit access; if False, check for view access
+
+    Returns:
+        True if user can access the persona, False otherwise
+    """
+    stmt = select(Persona).where(Persona.id == persona_id, Persona.deleted.is_(False))
+    stmt = _add_user_filters(stmt, user, get_editable=get_editable)
+    return db_session.scalar(stmt) is not None

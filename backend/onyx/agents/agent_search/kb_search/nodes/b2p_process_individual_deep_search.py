@@ -123,25 +123,25 @@
 
 #     # Run LLM
 
-#     msg = [
-#         HumanMessage(
-#             content=trim_prompt_piece(
-#                 config=graph_config.tooling.primary_llm.config,
-#                 prompt_piece=kg_object_source_research_prompt,
-#                 reserved_str="",
-#             ),
-#         )
-#     ]
-#     primary_llm = graph_config.tooling.primary_llm
-#     # Grader
-#     try:
-#         llm_response = run_with_timeout(
-#             KG_OBJECT_SOURCE_RESEARCH_TIMEOUT,
-#             primary_llm.invoke,
-#             prompt=msg,
-#             timeout_override=KG_OBJECT_SOURCE_RESEARCH_TIMEOUT,
-#             max_tokens=300,
-#         )
+# msg = [
+#     HumanMessage(
+#         content=trim_prompt_piece(
+#             config=graph_config.tooling.primary_llm.config,
+#             prompt_piece=kg_object_source_research_prompt,
+#             reserved_str="",
+#         ),
+#     )
+# ]
+# primary_llm = graph_config.tooling.primary_llm
+# # Grader
+# try:
+#     llm_response = run_with_timeout(
+#         KG_OBJECT_SOURCE_RESEARCH_TIMEOUT,
+#         primary_llm.invoke_langchain,
+#         prompt=msg,
+#         timeout_override=KG_OBJECT_SOURCE_RESEARCH_TIMEOUT,
+#         max_tokens=300,
+#     )
 
 #         object_research_results = str(llm_response.content).replace("```json\n", "")
 

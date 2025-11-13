@@ -56,21 +56,21 @@
 #         f"Tool call start for {generic_internal_tool_name} {iteration_nr}.{parallelization_nr} at {datetime.now()}"
 #     )
 
-#     # get tool call args
-#     tool_args: dict | None = None
-#     if graph_config.tooling.using_tool_calling_llm:
-#         # get tool call args from tool-calling LLM
-#         tool_use_prompt = CUSTOM_TOOL_PREP_PROMPT.build(
-#             query=branch_query,
-#             base_question=base_question,
-#             tool_description=generic_internal_tool_info.description,
-#         )
-#         tool_calling_msg = graph_config.tooling.primary_llm.invoke(
-#             tool_use_prompt,
-#             tools=[generic_internal_tool.tool_definition()],
-#             tool_choice="required",
-#             timeout_override=TF_DR_TIMEOUT_SHORT,
-#         )
+# # get tool call args
+# tool_args: dict | None = None
+# if graph_config.tooling.using_tool_calling_llm:
+#     # get tool call args from tool-calling LLM
+#     tool_use_prompt = CUSTOM_TOOL_PREP_PROMPT.build(
+#         query=branch_query,
+#         base_question=base_question,
+#         tool_description=generic_internal_tool_info.description,
+#     )
+#     tool_calling_msg = graph_config.tooling.primary_llm.invoke_langchain(
+#         tool_use_prompt,
+#         tools=[generic_internal_tool.tool_definition()],
+#         tool_choice="required",
+#         timeout_override=TF_DR_TIMEOUT_SHORT,
+#     )
 
 #         # make sure we got a tool call
 #         if (
@@ -111,9 +111,14 @@
 #         ).content
 #     ).strip()
 
-#     logger.debug(
-#         f"Tool call end for {generic_internal_tool_name} {iteration_nr}.{parallelization_nr} at {datetime.now()}"
-#     )
+# tool_summary_prompt = tool_prompt.build(
+#     query=branch_query, base_question=base_question, tool_response=tool_str
+# )
+# answer_string = str(
+#     graph_config.tooling.primary_llm.invoke_langchain(
+#         tool_summary_prompt, timeout_override=TF_DR_TIMEOUT_SHORT
+#     ).content
+# ).strip()
 
 #     return BranchUpdate(
 #         branch_iteration_responses=[

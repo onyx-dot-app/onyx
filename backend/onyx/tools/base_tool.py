@@ -33,4 +33,5 @@ Now respond to the following:
 
 
 class BaseTool(Tool[None]):
+    # Removed the v2 run method since we're consolidating
     pass

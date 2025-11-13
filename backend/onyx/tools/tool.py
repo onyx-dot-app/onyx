@@ -5,6 +5,8 @@ from typing import Generic
 from typing import TYPE_CHECKING
 from typing import TypeVar
 
+from pydantic import BaseModel
+
 from onyx.utils.special_types import JSON_ro
 
 
@@ -14,6 +16,18 @@ if TYPE_CHECKING:
 
 
 OVERRIDE_T = TypeVar("OVERRIDE_T")
+
+TContext = TypeVar("TContext")
+
+
+class RunContextWrapper(BaseModel, Generic[TContext]):
+    """This wraps the context object that you passed to the agent framework query function.
+
+    NOTE: Contexts are not passed to the LLM. They're a way to pass dependencies and data to code
+    you implement, like tool functions.
+    """
+
+    context: TContext
 
 
 class Tool(abc.ABC, Generic[OVERRIDE_T]):
@@ -56,6 +70,21 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
         """
         This is the full definition of the tool with all of the parameters, settings, etc.
         """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def build_tool_message_content(
+        self, *args: "ToolResponse"
+    ) -> str | list[str | dict[str, Any]]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def run_v2(
+        self,
+        run_context: RunContextWrapper[TContext],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
         raise NotImplementedError
 
     @abc.abstractmethod

@@ -96,21 +96,21 @@
 #         .replace("}}", "}")
 #     )
 
-#     msg = [
-#         HumanMessage(
-#             content=query_extraction_prompt,
-#         )
-#     ]
-#     primary_llm = graph_config.tooling.primary_llm
-#     # Grader
-#     try:
-#         llm_response = run_with_timeout(
-#             KG_ENTITY_EXTRACTION_TIMEOUT,
-#             primary_llm.invoke,
-#             prompt=msg,
-#             timeout_override=15,
-#             max_tokens=300,
-#         )
+# msg = [
+#     HumanMessage(
+#         content=query_extraction_prompt,
+#     )
+# ]
+# primary_llm = graph_config.tooling.primary_llm
+# # Grader
+# try:
+#     llm_response = run_with_timeout(
+#         KG_ENTITY_EXTRACTION_TIMEOUT,
+#         primary_llm.invoke_langchain,
+#         prompt=msg,
+#         timeout_override=15,
+#         max_tokens=300,
+#     )
 
 #         cleaned_response = (
 #             str(llm_response.content)
@@ -166,21 +166,21 @@
 #         .replace("}}", "}")
 #     )
 
-#     msg = [
-#         HumanMessage(
-#             content=query_relationship_extraction_prompt,
-#         )
-#     ]
-#     primary_llm = graph_config.tooling.primary_llm
-#     # Grader
-#     try:
-#         llm_response = run_with_timeout(
-#             KG_RELATIONSHIP_EXTRACTION_TIMEOUT,
-#             primary_llm.invoke,
-#             prompt=msg,
-#             timeout_override=15,
-#             max_tokens=300,
-#         )
+# msg = [
+#     HumanMessage(
+#         content=query_relationship_extraction_prompt,
+#     )
+# ]
+# primary_llm = graph_config.tooling.primary_llm
+# # Grader
+# try:
+#     llm_response = run_with_timeout(
+#         KG_RELATIONSHIP_EXTRACTION_TIMEOUT,
+#         primary_llm.invoke_langchain,
+#         prompt=msg,
+#         timeout_override=15,
+#         max_tokens=300,
+#     )
 
 #         cleaned_response = (
 #             str(llm_response.content)

@@ -179,7 +179,7 @@ def extract_source_filter(
 
     messages = _get_source_filter_messages(query=query, valid_sources=valid_sources)
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-    model_output = message_to_string(llm.invoke(filled_llm_prompt))
+    model_output = message_to_string(llm.invoke_langchain(filled_llm_prompt))
     logger.debug(model_output)
 
     return _extract_source_filters_from_llm_out(model_output)

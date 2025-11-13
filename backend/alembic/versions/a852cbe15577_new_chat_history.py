@@ -1,7 +1,7 @@
 """New Chat History
 
 Revision ID: a852cbe15577
-Revises: 5e1c073d48a3
+Revises: a4f23d6b71c8
 Create Date: 2025-11-08 15:16:37.781308
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "a852cbe15577"
-down_revision = "5e1c073d48a3"
+down_revision = "a4f23d6b71c8"
 branch_labels = None
 depends_on = None
 

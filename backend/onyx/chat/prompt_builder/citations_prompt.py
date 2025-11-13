@@ -9,8 +9,7 @@ from onyx.context.search.models import InferenceChunk
 from onyx.db.models import Persona
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.file_store.models import InMemoryChatFile
-from onyx.llm.factory import get_llms_for_persona
-from onyx.llm.factory import get_main_llm_from_tuple
+from onyx.llm.factory import get_llm_config_for_persona
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import check_number_of_tokens
@@ -93,9 +92,10 @@ def compute_max_document_tokens_for_persona(
     actual_user_input: str | None = None,
 ) -> int:
     # Use the persona directly since prompts are now embedded
+    # Access to persona is assumed to have been verified already
     return compute_max_document_tokens(
         prompt_config=PromptConfig.from_model(persona, db_session=db_session),
-        llm_config=get_main_llm_from_tuple(get_llms_for_persona(persona)).config,
+        llm_config=get_llm_config_for_persona(persona=persona, db_session=db_session),
         actual_user_input=actual_user_input,
     )
 

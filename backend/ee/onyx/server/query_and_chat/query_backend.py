@@ -47,6 +47,14 @@ logger = setup_logger()
 basic_router = APIRouter(prefix="/query")
 
 
+class DocumentSearchPagination(BaseModel):
+    offset: int
+    limit: int
+    returned_count: int
+    has_more: bool
+    next_offset: int | None = None
+
+
 class DocumentSearchResponse(BaseModel):
     top_chunks: list[InferenceChunk]
 
@@ -122,7 +130,7 @@ def get_answer_stream(
             is_for_edit=False,
         )
 
-    llm = get_main_llm_from_tuple(get_llms_for_persona(persona_info))
+    llm = get_main_llm_from_tuple(get_llms_for_persona(persona=persona_info, user=user))
 
     llm_tokenizer = get_tokenizer(
         model_name=llm.config.model_name,
