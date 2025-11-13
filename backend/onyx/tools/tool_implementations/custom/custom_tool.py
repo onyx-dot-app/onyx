@@ -15,11 +15,11 @@ from requests import JSONDecodeError
 
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
-from onyx.tools.base_tool import BaseTool
 from onyx.tools.models import CHAT_SESSION_ID_PLACEHOLDER
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import MESSAGE_ID_PLACEHOLDER
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
@@ -50,7 +50,7 @@ class CustomToolCallSummary(BaseModel):
 
 
 # override_kwargs is not supported for custom tools
-class CustomTool(BaseTool):
+class CustomTool(Tool[None]):
     def __init__(
         self,
         id: int,

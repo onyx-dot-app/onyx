@@ -6,8 +6,8 @@ from typing import cast
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
-from onyx.tools.base_tool import BaseTool
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
 from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
 from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
@@ -27,7 +27,7 @@ MCP_TOOL_RESPONSE_ID = "mcp_tool_response"
 #     server_name: str
 
 
-class MCPTool(BaseTool):
+class MCPTool(Tool[None]):
     """Tool implementation for MCP (Model Context Protocol) servers"""
 
     def __init__(
