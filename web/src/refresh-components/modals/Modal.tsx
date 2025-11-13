@@ -1,27 +1,27 @@
-import React, { useRef } from "react";
+import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import SvgX from "@/icons/x";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
-import CoreModal from "@/refresh-components/modals/CoreModal";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
 
-interface ModalProps {
+const sizeClassNames = {
+  main: ["w-[80dvw]", "h-[80dvh]"],
+  medium: ["w-[60rem]", "h-fit"],
+  small: ["w-[32rem]", "h-[30rem]"],
+  mini: ["w-[32rem]", "h-fit"],
+} as const;
+
+export interface ModalProps {
   // Modal sizes
-  sm?: boolean;
-  xs?: boolean;
-
-  // Modal configurations
-  clickOutsideToClose?: boolean;
+  main?: boolean;
+  medium?: boolean;
+  small?: boolean;
+  mini?: boolean;
 
   // Base modal props
-  id: ModalIds;
-  icon?: React.FunctionComponent<SvgProps>;
-  startAdornment?: React.ReactNode;
+  icon: React.FunctionComponent<SvgProps>;
   title: string;
   description?: string;
   className?: string;
@@ -29,53 +29,41 @@ interface ModalProps {
 }
 
 export default function Modal({
-  sm,
-  xs,
+  main,
+  medium,
+  small,
+  mini,
 
-  clickOutsideToClose = true,
-
-  id,
   icon: Icon,
-  startAdornment,
   title,
   description,
   children,
   className,
 }: ModalProps) {
-  const { isOpen, toggleModal } = useChatModal();
-  const insideModal = useRef(false);
+  const modal = useModal();
 
-  if (!isOpen(id)) return null;
+  if (!modal.isOpen) return null;
+
+  const variant = main
+    ? "main"
+    : medium
+      ? "medium"
+      : small
+        ? "small"
+        : mini
+          ? "mini"
+          : "main";
 
   return (
-    <CoreModal
-      className={cn(
-        "w-[80dvw] h-[80dvh]",
-        sm && "max-w-[60rem]",
-        xs && "max-w-[32rem] h-fit",
-        className
-      )}
-      onClickOutside={
-        clickOutsideToClose
-          ? () => {
-              if (insideModal.current) return;
-              toggleModal(id, false);
-            }
-          : undefined
-      }
-    >
+    <div className={cn(sizeClassNames[variant], className)}>
       <div className="flex flex-col gap-2 p-4">
         <div className="flex flex-row items-center justify-between">
-          {Icon ? (
-            <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
-          ) : (
-            startAdornment
-          )}
+          <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
           <div data-testid="Modal/close-modal">
             <IconButton
               icon={SvgX}
               internal
-              onClick={() => toggleModal(id, false)}
+              onClick={() => modal.toggle(false)}
             />
           </div>
         </div>
@@ -87,6 +75,6 @@ export default function Modal({
         )}
       </div>
       {children}
-    </CoreModal>
+    </div>
   );
 }
