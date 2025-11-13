@@ -1,10 +1,9 @@
+from __future__ import annotations
+
 from typing import Any
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from backend.onyx.tools.tool_implementations.custom.custom_tool import (
-    CustomToolCallSummary,
-)
 from pydantic import BaseModel
 from pydantic import model_validator
 
@@ -17,6 +16,9 @@ from onyx.tools.tool_implementations.web_search.models import WebSearchResultsRe
 
 if TYPE_CHECKING:
     from litellm.utils import ImageResponse
+    from onyx.tools.tool_implementations.custom.custom_tool import (
+        CustomToolCallSummary,
+    )
 
 
 class ToolResponse(BaseModel):

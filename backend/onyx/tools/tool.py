@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 from typing import Any
 from typing import Generic
@@ -72,8 +74,8 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
     @abc.abstractmethod
     def run(
         self,
-        run_context: RunContextWrapper[TContext],
+        run_context: TContext,
         override_kwargs: OVERRIDE_T | None = None,
-        **llm_kwargs: Any
+        **llm_kwargs: Any,
     ) -> ToolResponse:
         raise NotImplementedError
