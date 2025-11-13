@@ -38,15 +38,21 @@ the system can RAG over the project files.
 
 
 ## How documents are represented
-Documents from search or uploaded files are represented as a json so that the LLM can easily understand it.
+Documents from search or uploaded files are represented as a json so that the LLM can easily understand it. It is represented with a prefix to make the
+context clearer to the LLM.
+```
+Here are some documents provided for context, they may not all be relevant:
 {
     documents: [
         {"citation_id": 1, "title": "Hello", "contents": "Foo", "metadata": "status closed"}
         {"citation_id": 2, "title": "World", "contents": "Bar"}
     ]
 }
+```
 Documents are represented with citation_id so that the LLM can easily cite them with a single number. The tool returns have to be richer to be able to
 translate this into links and other UI elements. What the LLM sees is far simpler to reduce noise/hallucinations.
+
+Note that documents included in a single turn should be collapsed into a single user message.
 
 Search tools give URLs to the LLM though so that open_url (a separate tool) can be called on them.
 
