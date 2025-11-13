@@ -88,7 +88,11 @@ def _internal_search_core(
                 if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:
                     response = cast(SearchResponseSummary, tool_response.response)
                     # TODO: just a heuristic to not overload context window -- carried over from existing DR flow
-                    docs_to_feed_llm = 15
+                    # This number might be a little low, but it's good to avoid consuming large amounts of tokens
+                    # and overloading context windows. We're going to rework the search tool anyways so it should be ok
+                    # if it's a small regression in search quality.
+                    # Regardless, if answer quality really depends on feeding such a high number of docs, it's a hack.
+                    docs_to_feed_llm = 5
                     retrieved_sections: list[InferenceSection] = response.top_sections[
                         :docs_to_feed_llm
                     ]
