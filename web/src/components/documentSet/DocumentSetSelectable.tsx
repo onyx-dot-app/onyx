@@ -59,8 +59,9 @@ export function DocumentSetSelectable({
               ))}
             </div>
           </div>
-          <div
-            className="ml-auto my-auto pl-1"
+          <button
+            type="button"
+            className="ml-auto my-auto pl-1 bg-transparent border-none"
             onClick={(event) => {
               if (disabled) {
                 return;
@@ -69,9 +70,11 @@ export function DocumentSetSelectable({
               event.stopPropagation();
               onSelect();
             }}
+            aria-pressed={isSelected}
+            disabled={disabled}
           >
             <CustomCheckbox checked={isSelected} disabled={disabled} />
-          </div>
+          </button>
         </div>
       </div>
     </SimpleTooltip>
