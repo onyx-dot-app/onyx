@@ -9,6 +9,8 @@ import { useRouter } from "next/navigation";
 import { SearchInput } from "./components/SearchInput";
 import { ChatSearchSkeletonList } from "./components/ChatSearchSkeleton";
 import { useIntersectionObserver } from "./hooks/useIntersectionObserver";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 
 interface ChatSearchModalProps {
   open: boolean;
@@ -25,6 +27,9 @@ export function ChatSearchModal({ open, onCloseModal }: ChatSearchModalProps) {
     hasMore,
     fetchMoreChats,
   } = useChatSearch();
+
+  const combinedSettings = useSettingsContext();
+  const { currentAgent } = useAgentsContext();
 
   const onClose = () => {
     setSearchQuery("");
@@ -48,7 +53,14 @@ export function ChatSearchModal({ open, onCloseModal }: ChatSearchModalProps) {
   const handleNewChat = async () => {
     try {
       onClose();
-      router.push(`/chat`);
+      if (
+        combinedSettings?.settings?.disable_default_assistant &&
+        currentAgent
+      ) {
+        router.push(`/chat?assistantId=${currentAgent.id}`);
+      } else {
+        router.push(`/chat`);
+      }
     } catch (error) {
       console.error("Error creating new chat:", error);
     }

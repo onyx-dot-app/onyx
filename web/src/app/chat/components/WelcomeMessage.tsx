@@ -4,14 +4,16 @@ import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import { cn } from "@/lib/utils";
 import AgentIcon from "@/refresh-components/AgentIcon";
 import Text from "@/refresh-components/texts/Text";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useMemo } from "react";
 
-export default function WelcomeMessage() {
-  const { currentAgent } = useAgentsContext();
+interface WelcomeMessageProps {
+  liveAssistant?: MinimalPersonaSnapshot;
+}
 
+export default function WelcomeMessage({ liveAssistant }: WelcomeMessageProps) {
   // If no agent is active OR the current agent is the default one, we show the Onyx logo.
-  const isDefaultAgent = !currentAgent || currentAgent.id === 0;
+  const isDefaultAgent = !liveAssistant || liveAssistant.id === 0;
   const greeting = useMemo(getRandomGreeting, []);
 
   return (
@@ -41,12 +43,12 @@ export default function WelcomeMessage() {
           className="flex flex-col items-center gap-3 w-full max-w-[50rem]"
         >
           <div className="flex flex-row items-center gap-3">
-            <AgentIcon agent={currentAgent} />
-            <Text headingH2>{currentAgent.name}</Text>
+            <AgentIcon agent={liveAssistant} />
+            <Text headingH2>{liveAssistant.name}</Text>
           </div>
-          {currentAgent.description && (
+          {liveAssistant.description && (
             <Text secondaryBody text03>
-              {currentAgent.description}
+              {liveAssistant.description}
             </Text>
           )}
         </div>
