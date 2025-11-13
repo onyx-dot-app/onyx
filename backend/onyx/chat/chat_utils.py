@@ -616,6 +616,7 @@ def load_all_chat_files(
 def convert_chat_history(
     chat_history: list[ChatMessage],
     files: list[ChatLoadedFile],
+    project_image_files: list[ChatLoadedFile],
 ) -> list[ChatMessageSimple]:
     """Convert ChatMessage history to ChatMessageSimple format.
 
@@ -627,7 +628,14 @@ def convert_chat_history(
     # Create a mapping of file IDs to loaded files for quick lookup
     file_map = {str(f.file_id): f for f in files}
 
-    for chat_message in chat_history:
+    # Find the index of the last USER message
+    last_user_message_idx = None
+    for i in range(len(chat_history) - 1, -1, -1):
+        if chat_history[i].message_type == MessageType.USER:
+            last_user_message_idx = i
+            break
+
+    for idx, chat_message in enumerate(chat_history):
         if chat_message.message_type == MessageType.USER:
             # Process files attached to this message
             text_files: list[ChatLoadedFile] = []
@@ -656,6 +664,10 @@ def convert_chat_history(
                 )
 
             # Add the user message with image files attached
+            # If this is the last USER message, also include project_image_files
+            if idx == last_user_message_idx and project_image_files:
+                image_files.extend(project_image_files)
+
             # Sum token counts from all image files
             image_token_count = (
                 sum(img.token_count for img in image_files) if image_files else 0

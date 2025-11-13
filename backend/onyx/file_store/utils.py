@@ -17,6 +17,7 @@ from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.utils.b64 import get_image_type
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
@@ -268,44 +269,84 @@ def save_files(urls: list[str], base64_files: list[str]) -> list[str]:
     return run_functions_tuples_in_parallel(funcs)
 
 
+@log_function_time(print_only=True)
 def verify_user_files(
     user_files: list[FileDescriptor],
     user_id: UUID | None,
     db_session: Session,
+    project_id: int | None = None,
 ) -> None:
     """
     Verify that all provided file descriptors belong to the specified user.
+    For project files (those without user_file_id), verifies access through project ownership.
 
     Args:
         user_files: List of file descriptors to verify
         user_id: The user ID to check ownership against
         db_session: The SQLAlchemy database session
+        project_id: Optional project ID to verify project file access against
 
     Raises:
         ValueError: If any file does not belong to the user or is not found
     """
-    # Extract user_file_ids from the file descriptors
+    from onyx.db.models import Project__UserFile
+    from onyx.db.projects import check_project_ownership
+
+    # Extract user_file_ids and project file_ids from the file descriptors
     user_file_ids = []
+    project_file_ids = []
+
     for file_descriptor in user_files:
-        # Check if this file descriptor has a user_file_id, if it does not, it's a project file
-        # TODO @subash, how do we ensure access is enforced here?
+        # Check if this file descriptor has a user_file_id
         if "user_file_id" in file_descriptor and file_descriptor["user_file_id"]:
             try:
                 user_file_ids.append(UUID(file_descriptor["user_file_id"]))
             except (ValueError, TypeError):
-                # If the user_file_id is not a valid UUID, skip it
                 logger.warning(
                     f"Invalid user_file_id in file descriptor: {file_descriptor.get('user_file_id')}"
                 )
                 continue
+        else:
+            # This is a project file - use the 'id' field which is the file_id
+            if "id" in file_descriptor and file_descriptor["id"]:
+                project_file_ids.append(file_descriptor["id"])
 
-    # If no user files to verify, return early
-    if not user_file_ids:
-        return
+    # Verify user files (existing logic)
+    if user_file_ids:
+        get_user_files_as_user(user_file_ids, user_id, db_session)
 
-    # Use existing function to verify user has access to all files
-    # This will raise ValueError if user doesn't have access
-    get_user_files_as_user(user_file_ids, user_id, db_session)
+    # Verify project files
+    if project_file_ids:
+        if project_id is None:
+            raise ValueError(
+                "Project files provided but no project_id specified for verification"
+            )
+
+        # Verify user owns the project
+        if not check_project_ownership(project_id, user_id, db_session):
+            raise ValueError(
+                f"User {user_id} does not have access to project {project_id}"
+            )
+
+        # Verify all project files belong to the specified project
+        user_files_in_project = (
+            db_session.query(UserFile)
+            .join(Project__UserFile)
+            .filter(
+                Project__UserFile.project_id == project_id,
+                UserFile.file_id.in_(project_file_ids),
+            )
+            .all()
+        )
+
+        # Check if all files were found in the project
+        found_file_ids = {uf.file_id for uf in user_files_in_project}
+        missing_files = set(project_file_ids) - found_file_ids
+
+        if missing_files:
+            raise ValueError(
+                f"Files {missing_files} are not associated with project {project_id}"
+            )
 
 
 def build_frontend_file_url(file_id: str) -> str:
