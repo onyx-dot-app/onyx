@@ -70,6 +70,7 @@ this is questionable value add because anything relevant and useful should be al
 
 
 ## Examples
+```
 S -> System Message
 CA -> Custom Agent as a User Message
 A -> Agent Message response to user
@@ -95,7 +96,7 @@ S, CA, P, F, U1, A1 -- user sends another message -> S, F, U1, A1, CA, P, U2, A2
 Reminders during a single Turn
 S, U1, TC, TR, R -- agent calls another tool -> S, U1, TC, TR, TC, TR, R, A1
 - Reminder moved to the end
-
+```
 
 ## Reasons / Experiments
 Custom Agent instructions being placed in the system prompt is poorly followed. It also degrade performance of the system especially when the instructions
