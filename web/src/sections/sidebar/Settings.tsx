@@ -170,7 +170,6 @@ export default function Settings({ folded }: SettingsProps) {
     "Settings" | "Notifications" | undefined
   >(undefined);
   const { user } = useUser();
-  // const { setShowUserSettingsModal } = useModalContext();
 
   const displayName = getDisplayName(user?.email, user?.personalization?.name);
 
