@@ -5,7 +5,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import InvitedUserTable from "@/components/admin/users/InvitedUserTable";
 import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
-
 import { Modal } from "@/components/Modal";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -26,6 +25,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
 import SvgDownloadCloud from "@/icons/download-cloud";
 import { useAuthType } from "@/lib/hooks";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 interface CountDisplayProps {
   label: string;
@@ -284,8 +284,7 @@ const AddUserButton = ({
   setPopup: (spec: PopupSpec) => void;
 }) => {
   const [bulkAddUsersModal, setBulkAddUsersModal] = useState(false);
-  const [firstUserConfirmationModal, setFirstUserConfirmationModal] =
-    useState(false);
+  const firstUserConfirmationModal = useModalProvider();
   const authType = useAuthType();
 
   const { data: invitedUsers } = useSWR<InvitedUserSnapshot[]>(
@@ -322,14 +321,14 @@ const AddUserButton = ({
 
   const handleInviteClick = () => {
     if (shouldShowFirstInviteWarning) {
-      setFirstUserConfirmationModal(true);
+      firstUserConfirmationModal.toggle(true);
     } else {
       setBulkAddUsersModal(true);
     }
   };
 
   const handleConfirmFirstInvite = () => {
-    setFirstUserConfirmationModal(false);
+    firstUserConfirmationModal.toggle(false);
     setBulkAddUsersModal(true);
   };
 
@@ -339,16 +338,16 @@ const AddUserButton = ({
         Invite Users
       </CreateButton>
 
-      {firstUserConfirmationModal && (
+      <firstUserConfirmationModal.Provider>
         <ConfirmEntityModal
           entityType="First User Invitation"
           entityName="your Access Logic"
-          onClose={() => setFirstUserConfirmationModal(false)}
+          onClose={() => firstUserConfirmationModal.toggle(false)}
           onSubmit={handleConfirmFirstInvite}
           additionalDetails="After inviting the first user, only invited users will be able to join this platform. This is a security measure to control access to your team."
           actionButtonText="Continue"
         />
-      )}
+      </firstUserConfirmationModal.Provider>
 
       {bulkAddUsersModal && (
         <Modal
@@ -369,13 +368,11 @@ const AddUserButton = ({
   );
 };
 
-const Page = () => {
+export default function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle title="Manage Users" icon={<UsersIcon size={32} />} />
       <SearchableTables />
     </div>
   );
-};
-
-export default Page;
+}
