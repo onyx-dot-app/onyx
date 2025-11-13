@@ -1,5 +1,4 @@
 import React, { useMemo, useState, useEffect } from "react";
-
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Form, Formik, FormikProps, useFormikContext } from "formik";
 import { APIFormFieldState } from "@/refresh-components/form/types";
@@ -455,7 +454,7 @@ export default function LLMConnectionModal({
           <ProviderModal
             title={title}
             description={modalContent?.description}
-            startAdornment={icon}
+            icon={() => icon}
             mini
             onSubmit={formikProps.submitForm}
             submitDisabled={

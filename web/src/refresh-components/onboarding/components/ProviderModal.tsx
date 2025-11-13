@@ -1,13 +1,9 @@
-import React from "react";
 import Button from "@/refresh-components/buttons/Button";
 import Modal, { ModalProps } from "@/refresh-components/modals/Modal";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 
 interface ProviderModalProps extends ModalProps {
-  // Base modal props
-  startAdornment?: React.ReactNode;
-
   // Footer props
   onSubmit?: () => void;
   submitDisabled?: boolean;
@@ -17,8 +13,7 @@ interface ProviderModalProps extends ModalProps {
 }
 
 export default function ProviderModal({
-  icon: Icon,
-  startAdornment,
+  icon,
   title,
   description,
   children,
@@ -31,11 +26,7 @@ export default function ProviderModal({
   const modal = useModal();
 
   return (
-    <Modal
-      icon={Icon || (() => startAdornment)}
-      title={title}
-      description={description}
-    >
+    <Modal icon={icon} title={title} description={description}>
       <div className="flex flex-col h-full max-h-[calc(100dvh-9rem)]">
         <div className="flex-1 overflow-scroll">{children}</div>
         {onSubmit && (
