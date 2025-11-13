@@ -193,7 +193,7 @@ class MCPTool(BaseTool):
                 ),
             )
 
-    def final_result(self, *args: ToolResponse) -> JSON_ro:
+    def get_final_result(self, *args: ToolResponse) -> JSON_ro:
         """Return the final result for storage in the database"""
         response = cast(CustomToolCallSummary, args[0].response)
         return response.tool_result

@@ -101,8 +101,6 @@ class CustomTool(BaseTool):
     def display_name(self) -> str:
         return self._name
 
-    """For LLMs which support explicit tool calling"""
-
     def tool_definition(self) -> dict:
         return self._tool_definition
 
@@ -216,7 +214,7 @@ class CustomTool(BaseTool):
             ),
         )
 
-    def final_result(self, *args: ToolResponse) -> JSON_ro:
+    def get_final_result(self, *args: ToolResponse) -> JSON_ro:
         response = cast(CustomToolCallSummary, args[0].response)
         if isinstance(response.tool_result, CustomToolUserFileSnapshot):
             return response.tool_result.model_dump()

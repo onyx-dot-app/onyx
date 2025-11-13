@@ -73,21 +73,6 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def build_tool_message_content(
-        self, *args: "ToolResponse"
-    ) -> str | list[str | dict[str, Any]]:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def run_v2(
-        self,
-        run_context: RunContextWrapper[TContext],
-        *args: Any,
-        **kwargs: Any,
-    ) -> Any:
-        raise NotImplementedError
-
-    @abc.abstractmethod
     def run(
         self, override_kwargs: OVERRIDE_T | None = None, **llm_kwargs: Any
     ) -> Generator["ToolResponse", None, None]:
@@ -104,7 +89,7 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def final_result(self, *args: "ToolResponse") -> JSON_ro:
+    def get_final_result(self, *args: "ToolResponse") -> JSON_ro:
         """
         This is the output of the tool which needs to be stored in the database.
         It will typically contain more information than what is passed back to the LLM
