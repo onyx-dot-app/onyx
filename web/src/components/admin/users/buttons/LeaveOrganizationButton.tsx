@@ -3,23 +3,25 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
 import Button from "@/refresh-components/buttons/Button";
-import { useState } from "react";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { useRouter } from "next/navigation";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
-export const LeaveOrganizationButton = ({
-  user,
-  setPopup,
-  mutate,
-  className,
-  children,
-}: {
+export interface LeaveOrganizationButtonProps {
   user: User;
   setPopup: (spec: PopupSpec) => void;
   mutate: () => void;
   className?: string;
   children?: React.ReactNode;
-}) => {
+}
+
+export default function LeaveOrganizationButton({
+  user,
+  setPopup,
+  mutate,
+  className,
+  children,
+}: LeaveOrganizationButtonProps) {
   const router = useRouter();
   const { trigger, isMutating } = useSWRMutation(
     "/api/tenants/leave-team",
@@ -40,7 +42,7 @@ export const LeaveOrganizationButton = ({
     }
   );
 
-  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const leaveModal = useModalProvider();
 
   const handleLeaveOrganization = async () => {
     await trigger({ user_email: user.email, method: "POST" });
@@ -49,20 +51,20 @@ export const LeaveOrganizationButton = ({
 
   return (
     <>
-      {showLeaveModal && (
+      <leaveModal.Provider>
         <ConfirmEntityModal
           actionButtonText="Leave"
           entityType="team"
           entityName="your team"
-          onClose={() => setShowLeaveModal(false)}
+          onClose={() => leaveModal.toggle(false)}
           onSubmit={handleLeaveOrganization}
           additionalDetails="You will lose access to all team data and resources."
         />
-      )}
+      </leaveModal.Provider>
 
       <Button
         className={className}
-        onClick={() => setShowLeaveModal(true)}
+        onClick={() => leaveModal.toggle(true)}
         disabled={isMutating}
         internal
       >
@@ -70,4 +72,4 @@ export const LeaveOrganizationButton = ({
       </Button>
     </>
   );
-};
+}
