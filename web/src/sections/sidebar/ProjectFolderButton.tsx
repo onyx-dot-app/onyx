@@ -40,8 +40,6 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   const route = useAppRouter();
   const [open, setOpen] = useState(false);
   const deleteConfirmationModal = useModalProvider();
-  // const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
-  //   useState(false);
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
