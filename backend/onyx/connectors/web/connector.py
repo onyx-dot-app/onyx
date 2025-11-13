@@ -746,6 +746,7 @@ class WebConnector(LoadConnector):
                     )
                     time.sleep(delay)
 
+                result: ScrapeResult | None = None
                 try:
                     result = self._do_scrape(index, initial_url, session_ctx)
                 except Exception as e:
@@ -756,6 +757,9 @@ class WebConnector(LoadConnector):
                         logger.warning(
                             f"Giving up on {initial_url} after {self.MAX_RETRIES} attempts due to repeated errors."
                         )
+                    continue
+
+                if result is None:
                     continue
 
                 if result.retry:
