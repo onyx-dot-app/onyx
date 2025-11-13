@@ -42,8 +42,6 @@ export default function Modal({
 }: ModalProps) {
   const modal = useModal();
 
-  if (!modal.isOpen) return null;
-
   const variant = main
     ? "main"
     : medium
