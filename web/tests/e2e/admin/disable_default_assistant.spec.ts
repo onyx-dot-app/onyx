@@ -69,9 +69,12 @@ test.describe("Disable Default Assistant Setting", () => {
     await newSessionButton.click();
     await page.waitForTimeout(1000);
 
-    // Verify URL contains assistantId parameter
-    const currentUrl = page.url();
-    expect(currentUrl).toContain("assistantId=1");
+    // Verify the WelcomeMessage shown is NOT from the default assistant
+    // Default assistant shows onyx-logo, custom assistants show assistant-name-display
+    await expect(page.locator('[data-testid="onyx-logo"]')).not.toBeVisible();
+    await expect(
+      page.locator('[data-testid="assistant-name-display"]')
+    ).toBeVisible();
   });
 
   test("direct navigation to /chat uses first pinned assistant when setting is enabled", async ({
@@ -135,9 +138,10 @@ test.describe("Disable Default Assistant Setting", () => {
     ).toBeVisible();
 
     // Verify link to Settings is present
-    const settingsLink = page.locator('a[href="/admin/settings"]');
-    await expect(settingsLink).toBeVisible();
-    await expect(settingsLink).toContainText("Workspace Settings");
+    const settingsLinks = page.locator('a[href="/admin/settings"]');
+    await expect(settingsLinks).toHaveCount(2);
+    await expect(settingsLinks.first()).toBeVisible();
+    await expect(settingsLinks.nth(1)).toBeVisible();
 
     // Verify actual configuration UI is hidden (Instructions textarea should not be visible)
     await expect(
