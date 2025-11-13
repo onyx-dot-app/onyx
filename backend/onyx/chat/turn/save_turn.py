@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.chat.turn.models import FetchedDocumentCacheEntry
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import CitationDocInfo
 from onyx.db.chat import create_search_doc_from_inference_section
 from onyx.db.chat import update_db_session_with_messages
+from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import Tool
 from onyx.db.models import ToolCall
@@ -21,8 +23,20 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.models import ToolCallInfo
 
 logger = logging.getLogger(__name__)
+
+
+def save_chat_turn(
+    message_text: str,
+    reasoning_tokens: str | None,
+    tool_calls: list[ToolCallInfo],
+    citation_docs_info: list[CitationDocInfo],
+    db_session: Session,
+    assistant_message: ChatMessage,
+) -> None:
+    raise NotImplementedError("Not implemented")
 
 
 def save_turn(
