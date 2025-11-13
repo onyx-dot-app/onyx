@@ -1,13 +1,13 @@
 from collections.abc import Sequence
 
-from backend.onyx.tools.tool_implementations.web_search.models import WebContent
-from backend.onyx.tools.tool_implementations.web_search.models import WebSearchProvider
-from backend.onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from exa_py import Exa
 from exa_py.api import HighlightsContentsOptions
 
 from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.tools.tool_implementations.web_search.models import WebContent
+from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
+from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.utils.retry_wrapper import retry_builder
 
 

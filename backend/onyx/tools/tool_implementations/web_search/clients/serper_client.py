@@ -3,12 +3,12 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
-from backend.onyx.tools.tool_implementations.web_search.models import WebContent
-from backend.onyx.tools.tool_implementations.web_search.models import WebSearchProvider
-from backend.onyx.tools.tool_implementations.web_search.models import WebSearchResult
 
 from onyx.configs.chat_configs import SERPER_API_KEY
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.tools.tool_implementations.web_search.models import WebContent
+from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
+from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.utils.retry_wrapper import retry_builder
 
 SERPER_SEARCH_URL = "https://google.serper.dev/search"
