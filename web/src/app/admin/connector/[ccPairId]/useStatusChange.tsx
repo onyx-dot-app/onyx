@@ -7,12 +7,13 @@ import { buildCCPairInfoUrl } from "./lib";
 import { setCCPairStatus } from "@/lib/ccPair";
 import { useState } from "react";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 // Export the status change functionality separately
-export function useStatusChange(ccPair: CCPairFullInfo | null) {
+export default function useStatusChange(ccPair: CCPairFullInfo | null) {
   const { setPopup } = usePopup();
   const [isUpdating, setIsUpdating] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const confirmModal = useModalProvider();
 
   const updateStatus = async (newStatus: ConnectorCredentialPairStatus) => {
     if (!ccPair) return false;
@@ -44,27 +45,30 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
       ccPair.status === ConnectorCredentialPairStatus.INVALID &&
       newStatus === ConnectorCredentialPairStatus.ACTIVE
     ) {
-      setShowConfirmModal(true);
+      confirmModal.toggle(true);
       return false;
     } else {
       return await updateStatus(newStatus);
     }
   };
 
-  const ConfirmModal =
-    showConfirmModal && ccPair ? (
-      <ConfirmEntityModal
-        entityType="Invalid Connector"
-        entityName={ccPair.name}
-        onClose={() => setShowConfirmModal(false)}
-        onSubmit={() => {
-          setShowConfirmModal(false);
-          updateStatus(ConnectorCredentialPairStatus.ACTIVE);
-        }}
-        additionalDetails="This connector was previously marked as invalid. Please verify that your configuration is correct before re-enabling. Are you sure you want to proceed?"
-        actionButtonText="Re-Enable"
-      />
-    ) : null;
+  const ConfirmModal = (
+    <confirmModal.Provider>
+      {ccPair && (
+        <ConfirmEntityModal
+          entityType="Invalid Connector"
+          entityName={ccPair.name}
+          onClose={() => confirmModal.toggle(false)}
+          onSubmit={() => {
+            confirmModal.toggle(false);
+            updateStatus(ConnectorCredentialPairStatus.ACTIVE);
+          }}
+          additionalDetails="This connector was previously marked as invalid. Please verify that your configuration is correct before re-enabling. Are you sure you want to proceed?"
+          actionButtonText="Re-Enable"
+        />
+      )}
+    </confirmModal.Provider>
+  );
 
   return {
     handleStatusChange,

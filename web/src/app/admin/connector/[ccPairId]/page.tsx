@@ -59,7 +59,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
 import { timeAgo } from "@/lib/time";
-import { useStatusChange } from "./useStatusChange";
+import useStatusChange from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 import Button from "@/refresh-components/buttons/Button";
 import SvgSettings from "@/icons/settings";
