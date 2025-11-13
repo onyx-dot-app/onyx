@@ -14,7 +14,7 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 import OverflowDiv from "@/refresh-components/OverflowDiv";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
-import Modal from "@/refresh-components/modals/Modal";
+import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 
 function getIcon(
   file: ProjectFile,
@@ -143,7 +143,12 @@ export default function UserFilesModalContent({
         />
       )}
 
-      <Modal icon={icon} title={title} description={description} small>
+      <DefaultModalLayout
+        icon={icon}
+        title={title}
+        description={description}
+        small
+      >
         {/* Search bar section */}
         <div className="flex items-center gap-2 p-3">
           <InputTypeIn
@@ -212,7 +217,7 @@ export default function UserFilesModalContent({
             </OverflowDiv>
           )}
         </div>
-      </Modal>
+      </DefaultModalLayout>
     </>
   );
 }

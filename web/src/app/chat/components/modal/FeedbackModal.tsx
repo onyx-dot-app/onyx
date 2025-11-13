@@ -11,7 +11,7 @@ import { useKeyPress } from "@/hooks/useKeyPress";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFeedbackController } from "../../hooks/useFeedbackController";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import Modal from "@/refresh-components/modals/Modal";
+import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 
 const predefinedPositiveFeedbackOptions = process.env
   .NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS
@@ -90,7 +90,7 @@ export default function FeedbackModal({
     <>
       {popup}
 
-      <Modal
+      <DefaultModalLayout
         className="flex flex-col gap-1"
         title="Provide Additional Feedback"
         icon={icon}
@@ -122,7 +122,7 @@ export default function FeedbackModal({
           </Button>
           <Button onClick={handleSubmit}>Submit</Button>
         </div>
-      </Modal>
+      </DefaultModalLayout>
     </>
   );
 }

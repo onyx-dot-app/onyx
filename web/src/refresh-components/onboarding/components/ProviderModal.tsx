@@ -1,5 +1,7 @@
 import Button from "@/refresh-components/buttons/Button";
-import Modal, { ModalProps } from "@/refresh-components/modals/Modal";
+import DefaultModalLayout, {
+  ModalProps,
+} from "@/refresh-components/layouts/DefaultModalLayout";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 
@@ -26,7 +28,7 @@ export default function ProviderModal({
   const modal = useModal();
 
   return (
-    <Modal icon={icon} title={title} description={description}>
+    <DefaultModalLayout icon={icon} title={title} description={description}>
       <div className="flex flex-col h-full max-h-[calc(100dvh-9rem)]">
         <div className="flex-1 overflow-scroll">{children}</div>
         {onSubmit && (
@@ -51,6 +53,6 @@ export default function ProviderModal({
           </div>
         )}
       </div>
-    </Modal>
+    </DefaultModalLayout>
   );
 }

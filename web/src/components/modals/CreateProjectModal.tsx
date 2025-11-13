@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import SvgFolderPlus from "@/icons/folder-plus";
-import Modal from "@/refresh-components/modals/Modal";
+import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { useKeyPress } from "@/hooks/useKeyPress";
 import FieldInput from "@/refresh-components/inputs/FieldInput";
@@ -34,7 +34,7 @@ export default function CreateProjectModal() {
   useKeyPress(handleSubmit, "Enter");
 
   return (
-    <Modal
+    <DefaultModalLayout
       icon={SvgFolderPlus}
       title="Create New Project"
       description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
@@ -53,6 +53,6 @@ export default function CreateProjectModal() {
         </Button>
         <Button onClick={handleSubmit}>Create Project</Button>
       </div>
-    </Modal>
+    </DefaultModalLayout>
   );
 }

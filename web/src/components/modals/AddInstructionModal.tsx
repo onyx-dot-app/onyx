@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
-import Modal from "@/refresh-components/modals/Modal";
+import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import SvgAddLines from "@/icons/add-lines";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,7 +30,7 @@ export default function AddInstructionModal() {
   }
 
   return (
-    <Modal
+    <DefaultModalLayout
       icon={SvgAddLines}
       title="Set Project Instructions"
       description="Instruct specific behaviors, focus, tones, or formats for the response in this project."
@@ -50,6 +50,6 @@ export default function AddInstructionModal() {
         </Button>
         <Button onClick={handleSubmit}>Save Instructions</Button>
       </div>
-    </Modal>
+    </DefaultModalLayout>
   );
 }
