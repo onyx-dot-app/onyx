@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -29,6 +30,11 @@ MAX_METRICS_CONTENT = (
 class QueryExpansions(BaseModel):
     keywords_expansions: list[str] | None = None
     semantic_expansions: list[str] | None = None
+
+
+class QueryExpansionType(Enum):
+    KEYWORD = "keyword"
+    SEMANTIC = "semantic"
 
 
 class RerankingDetails(BaseModel):
@@ -113,11 +119,6 @@ class BaseFilters(BaseModel):
     document_set: list[str] | None = None
     time_cutoff: datetime | None = None
     tags: list[Tag] | None = None
-    kg_entities: list[str] | None = None
-    kg_relationships: list[str] | None = None
-    kg_terms: list[str] | None = None
-    kg_sources: list[str] | None = None
-    kg_chunk_id_zero_only: bool | None = False
 
 
 class UserFileFilters(BaseModel):
@@ -150,6 +151,39 @@ class ChunkContext(BaseModel):
         if value is not None and value < 0:
             raise ValueError(f"{field.name} must be non-negative")
         return value
+
+
+class BasicChunkRequest(BaseModel):
+    query: str
+
+    # In case the caller wants to override the weighting between semantic and keyword search.
+    hybrid_alpha: float | None = None
+
+    # In case some queries favor recency more than other queries.
+    recency_bias_multiplier: float = 1.0
+
+    # Sometimes we may want to extract specific keywords from a more semantic query for
+    # a better keyword search.
+    query_keywords: list[str] | None = None
+
+    # TODO: Currently this is never set
+    limit: int | None = None
+    offset: int | None = None
+
+
+class ChunkSearchRequest(BasicChunkRequest):
+    # Final filters are calculated from these
+    user_selected_filters: BaseFilters | None = None
+
+    # Use with caution!
+    bypass_acl: bool = False
+
+
+# From the Chat Session we know what project (if any) this search should include
+# From the user uploads and persona uploaded files, we know which of those to include
+class ChunkIndexRequest(BasicChunkRequest):
+    # Calculated final filters
+    filters: IndexFilters
 
 
 class SearchRequest(ChunkContext):

@@ -8,8 +8,8 @@ from typing import Union
 from pydantic import BaseModel
 from pydantic import Field
 
-from onyx.agents.agent_search.dr.models import GeneratedImage
 from onyx.context.search.models import SavedSearchDoc
+from onyx.tools.models import GeneratedImage
 
 
 class BaseObj(BaseModel):

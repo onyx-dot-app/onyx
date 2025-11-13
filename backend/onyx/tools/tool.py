@@ -12,10 +12,6 @@ from onyx.utils.special_types import JSON_ro
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
-    from onyx.llm.interfaces import LLM
-    from onyx.llm.models import PreviousMessage
-    from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-    from onyx.tools.message import ToolCallSummary
     from onyx.tools.models import ToolResponse
 
 
@@ -43,6 +39,7 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
     @property
     @abc.abstractmethod
     def name(self) -> str:
+        """Should be the name of the tool passed to the LLM as the json field"""
         raise NotImplementedError
 
     @property
@@ -53,14 +50,8 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
     @property
     @abc.abstractmethod
     def display_name(self) -> str:
+        """Should be the name of the tool displayed to the user"""
         raise NotImplementedError
-
-    # Added to make tools work better with LLMs in prompts. Should be unique
-    # TODO: looks at ways how to best ensure uniqueness.
-    # TODO: extra review regarding coding style
-    @property
-    def llm_name(self) -> str:
-        return self.display_name
 
     @classmethod
     def is_available(cls, db_session: "Session") -> bool:
@@ -74,10 +65,11 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
         """
         return True
 
-    """For LLMs which support explicit tool calling"""
-
     @abc.abstractmethod
     def tool_definition(self) -> dict:
+        """
+        This is the full definition of the tool with all of the parameters, settings, etc.
+        """
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -85,20 +77,6 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
         self, *args: "ToolResponse"
     ) -> str | list[str | dict[str, Any]]:
         raise NotImplementedError
-
-    """For LLMs which do NOT support explicit tool calling"""
-
-    @abc.abstractmethod
-    def get_args_for_non_tool_calling_llm(
-        self,
-        query: str,
-        history: list["PreviousMessage"],
-        llm: "LLM",
-        force_run: bool = False,
-    ) -> dict[str, Any] | None:
-        raise NotImplementedError
-
-    """Actual execution of the tool"""
 
     @abc.abstractmethod
     def run_v2(
@@ -116,22 +94,20 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def final_result(self, *args: "ToolResponse") -> JSON_ro:
+    def get_llm_tool_response(
+        self, *args: "ToolResponse"
+    ) -> str | list[str | dict[str, Any]]:
         """
-        This is the "final summary" result of the tool.
-        It is the result that will be stored in the database.
+        This is the output of the tool which is passed back to the LLM.
+        It should be clean and easy to parse for a language model.
         """
         raise NotImplementedError
 
-    """Some tools may want to modify the prompt based on the tool call summary and tool responses.
-    Default behavior is to continue with just the raw tool call request/result passed to the LLM."""
-
     @abc.abstractmethod
-    def build_next_prompt(
-        self,
-        prompt_builder: "AnswerPromptBuilder",
-        tool_call_summary: "ToolCallSummary",
-        tool_responses: list["ToolResponse"],
-        using_tool_calling_llm: bool,
-    ) -> "AnswerPromptBuilder":
+    def final_result(self, *args: "ToolResponse") -> JSON_ro:
+        """
+        This is the output of the tool which needs to be stored in the database.
+        It will typically contain more information than what is passed back to the LLM
+        via the get_llm_tool_response method.
+        """
         raise NotImplementedError

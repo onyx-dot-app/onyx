@@ -3,14 +3,70 @@ from pydantic import BaseModel
 from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.prompts.constants import QUESTION_PAT
 
-REQUIRE_CITATION_STATEMENT = """
-CRITICAL: If referencing knowledge from searches, cite relevant statements INLINE using the format [1], [3], etc. to reference the document_citation_number. \
-DO NOT provide any links following the citations. Avoid using double brackets like [[1]]. To cite multiple documents, use [1], [3] format instead of [1, 3]. \
+
+TOOL_SECTION_HEADER = "\n\n# Tools\n"
+
+
+TOOL_DESCRIPTION_SEARCH_GUIDANCE = """
+When using any search type tool, do not make any assumptions and stay as faithful to the user's query as possible. \
+Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. \
+If very ambiguious, prioritize internal search or call both tools.
+
+When searching for information, if the initial results cannot fully answer the user's query, try again with different tools or arguments. \
+For knowledge that you already have and that is unlikely to change, answer the user directly without using any tools.
+
+For queries that are short phrases, ambiguous/unclear, or keyword heavy, prioritize internal search.
+"""
+
+
+INTERNAL_SEARCH_GUIDANCE = """
+
+## internal_search
+Use the `internal_search` tool to search connected applications for information. Use `internal_search` when:
+- Internal information: any time where there may be some information stored in internal applications that could help better answer the query.
+- Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, team, process, etc.
+- Keyword Queries: queries that are heavily keyword based are often internal document search queries.
+- Ambiguity: questions about something that is not widely known or understood.
+Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. \
+If very ambiguious, prioritize internal search or call both tools.
+"""
+
+
+WEB_SEARCH_GUIDANCE = """
+
+## web_search
+Use the `web_search` tool to access up-to-date information from the web. Some examples of when to use the `web_search` tool include:
+- Freshness: if up-to-date information on a topic could change or enhance the answer. Very important for topics that are changing or evolving.
+- Niche Information: detailed info not widely known or understood (but that is likely found on the internet).
+- Accuracy: if the cost of outdated information is high, use web sources directly.
+"""
+
+
+OPEN_URLS_GUIDANCE = """
+
+## open_urls
+Use the `open_urls` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches.
+You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources.
+You should almost always use open_urls after a web_search call.
+"""
+
+GENERATE_IMAGE_GUIDANCE = """
+
+## generate_image
+NEVER use generate_image unless the user specifically requests an image.
+"""
+
+
+REQUIRE_CITATION_GUIDANCE = """
+
+CRITICAL: If referencing knowledge from searches, cite relevant statements INLINE using the format [1], [2], [3], etc. to reference the document_id. \
+DO NOT provide any links following the citations. Avoid using double brackets like [[1]]. To cite multiple documents, use [1], [2] format instead of [1, 2]. \
 Cite inline as opposed to leaving all citations until the very end of the response.
-""".strip()
+"""
+
 
 CITATION_REMINDER = """
-Remember to provide inline citations in the format [1], [3], etc.
+Remember to provide inline citations in the format [1], [2], [3], etc.
 """.strip()
 
 OPEN_URL_REMINDER = """
@@ -32,12 +88,6 @@ A set of reminders may appear inside {LONG_CONVERSATION_REMINDER_TAG_OPEN} tags.
 This is added to the end of the person’s message. Behave in accordance with these instructions
 if they are relevant, and continue normally if they are not.
 """
-
-TOOL_DESCRIPTION_SEARCH_GUIDANCE = """
-When using any search type tool, do not make any assumptions and stay as faithful to the user's query as possible.
-When searching for information, if the initial results cannot fully answer the user's query, try again with different tools or arguments. \
-For knowledge that you already have and that is unlikely to change, answer the user directly without using any tools.
-""".strip()
 
 INTERNAL_SEARCH_GUIDANCE = """
 For queries that are short phrases, ambiguous/unclear, or keyword heavy, prioritize internal search.

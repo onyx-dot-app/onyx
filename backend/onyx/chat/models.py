@@ -21,6 +21,7 @@ from onyx.context.search.models import RetrievalDocs
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -345,16 +346,8 @@ class ExtendedToolResponse(ToolResponse, SubQuestionIdentifier):
     pass
 
 
-class RefinedAnswerImprovement(BaseModel):
-    refined_answer_improvement: bool
-
-
 AgentSearchPacket = Union[
-    SubQuestionPiece
-    | AgentAnswerPiece
-    | SubQueryPiece
-    | ExtendedToolResponse
-    | RefinedAnswerImprovement
+    SubQuestionPiece | AgentAnswerPiece | SubQueryPiece | ExtendedToolResponse
 ]
 
 
@@ -402,3 +395,15 @@ class ChatBasicResponse(BaseModel):
     message_id: int
     # this is a map of the citation number to the document id
     cited_documents: dict[int, str]
+
+
+class ChatLoadedFile(InMemoryChatFile):
+    content_text: str | None
+    token_count: int
+
+
+class ChatMessageSimple(BaseModel):
+    message: str
+    token_count: int
+    message_type: MessageType
+    image_files: list[ChatLoadedFile] | None = None

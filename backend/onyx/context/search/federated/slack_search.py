@@ -15,8 +15,8 @@ from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import TextSection
 from onyx.context.search.federated.models import SlackMessage
+from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import SearchQuery
 from onyx.db.document import DocumentSource
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.document_index_utils import (
@@ -77,7 +77,7 @@ def _should_skip_channel(
     return False
 
 
-def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
+def build_slack_queries(query: ChunkIndexRequest, llm: LLM) -> list[str]:
     # get time filter
     time_filter = ""
     time_cutoff = query.filters.time_cutoff
@@ -86,8 +86,8 @@ def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
         time_cutoff = time_cutoff - timedelta(days=1)
         time_filter = f" after:{time_cutoff.strftime('%Y-%m-%d')}"
 
-    # use llm to generate slack queries (use original query to use same keywords as the user)
-    prompt = SLACK_QUERY_EXPANSION_PROMPT.format(query=query.original_query)
+    # use llm to generate slack queries
+    prompt = SLACK_QUERY_EXPANSION_PROMPT.format(query=query)
     try:
         msg = HumanMessage(content=prompt)
         response = llm.invoke_langchain([msg])
@@ -123,7 +123,7 @@ def _is_public_channel(channel_info: dict[str, Any]) -> bool:
 
 def query_slack(
     query_string: str,
-    original_query: SearchQuery,
+    original_query: ChunkIndexRequest,
     access_token: str,
     limit: int | None = None,
     allowed_private_channel: str | None = None,
@@ -376,7 +376,7 @@ def convert_slack_score(slack_score: float) -> float:
 
 @log_function_time(print_only=True)
 def slack_retrieval(
-    query: SearchQuery,
+    query: ChunkIndexRequest,
     access_token: str,
     db_session: Session,
     limit: int | None = None,

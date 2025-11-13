@@ -7,8 +7,6 @@ from typing import Union
 from agents import FunctionTool
 from agents import RunContextWrapper
 
-from onyx.agents.agent_search.dr.models import IterationAnswer
-from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -45,14 +43,6 @@ async def _tool_run_wrapper(
         )
     )
     results = []
-    run_context.context.iteration_instructions.append(
-        IterationInstructions(
-            iteration_nr=index,
-            plan=f"Running {tool.name}",
-            purpose=f"Running {tool.name}",
-            reasoning=f"Running {tool.name}",
-        )
-    )
     for result in tool.run(**args):
         results.append(result)
         # Extract data from CustomToolCallSummary within the ToolResponse
@@ -67,22 +57,6 @@ async def _tool_run_wrapper(
             file_ids = custom_summary.tool_result.file_ids
         else:
             data = custom_summary.tool_result
-        run_context.context.global_iteration_responses.append(
-            IterationAnswer(
-                tool=tool.name,
-                tool_id=tool.id,
-                iteration_nr=index,
-                parallelization_nr=0,
-                question=json.dumps(args) if args else "",
-                reasoning=f"Running {tool.name}",
-                data=data,
-                file_ids=file_ids,
-                cited_documents={},
-                additional_data=None,
-                response_type=custom_summary.response_type,
-                answer=str(data) if data else str(file_ids),
-            )
-        )
         run_context.context.run_dependencies.emitter.emit(
             Packet(
                 ind=index,

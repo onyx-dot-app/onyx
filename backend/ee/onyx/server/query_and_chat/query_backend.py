@@ -24,18 +24,16 @@ from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
-from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
-from onyx.context.search.models import SavedSearchDocWithContent
-from onyx.context.search.models import SearchRequest
-from onyx.context.search.pipeline import SearchPipeline
-from onyx.context.search.utils import dedupe_documents
-from onyx.context.search.utils import drop_llm_indices
-from onyx.context.search.utils import relevant_sections_to_indices
+from onyx.context.search.models import ChunkSearchRequest
+from onyx.context.search.models import InferenceChunk
+from onyx.context.search.pipeline import search_pipeline
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.factory import get_default_document_index
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
@@ -58,33 +56,22 @@ class DocumentSearchPagination(BaseModel):
 
 
 class DocumentSearchResponse(BaseModel):
-    top_documents: list[SavedSearchDocWithContent]
-    llm_indices: list[int]
-    pagination: DocumentSearchPagination
+    top_chunks: list[InferenceChunk]
 
 
-def _normalize_pagination(limit: int | None, offset: int | None) -> tuple[int, int]:
-    if limit is None:
-        resolved_limit = NUM_RETURNED_HITS
-    else:
-        resolved_limit = limit
-
-    if resolved_limit <= 0:
-        raise HTTPException(
-            status_code=400, detail="retrieval_options.limit must be positive"
-        )
-
-    if offset is None:
-        resolved_offset = 0
-    else:
-        resolved_offset = offset
-
-    if resolved_offset < 0:
-        raise HTTPException(
-            status_code=400, detail="retrieval_options.offset cannot be negative"
-        )
-
-    return resolved_limit, resolved_offset
+def _translate_search_request(
+    search_request: DocumentSearchRequest,
+) -> ChunkSearchRequest:
+    return ChunkSearchRequest(
+        query=search_request.query,
+        hybrid_alpha=search_request.hybrid_alpha,
+        recency_bias_multiplier=search_request.recency_bias_multiplier,
+        query_keywords=search_request.query_keywords,
+        limit=search_request.limit,
+        offset=search_request.offset,
+        user_selected_filters=search_request.user_selected_filters,
+        # No bypass_acl, not allowed for this endpoint
+    )
 
 
 @basic_router.post("/document-search")
@@ -94,103 +81,28 @@ def handle_search_request(
     db_session: Session = Depends(get_session),
 ) -> DocumentSearchResponse:
     """Simple search endpoint, does not create a new message or records in the DB"""
-    query = search_request.message
+    query = search_request.query
     logger.notice(f"Received document search query: {query}")
 
-    llm, fast_llm = get_default_llms()
-    pagination_limit, pagination_offset = _normalize_pagination(
-        limit=search_request.retrieval_options.limit,
-        offset=search_request.retrieval_options.offset,
+    llm, _ = get_default_llms()
+
+    search_settings = get_current_search_settings(db_session)
+    document_index = get_default_document_index(
+        search_settings=search_settings,
+        secondary_search_settings=None,
     )
 
-    search_pipeline = SearchPipeline(
-        search_request=SearchRequest(
-            query=query,
-            search_type=search_request.search_type,
-            human_selected_filters=search_request.retrieval_options.filters,
-            enable_auto_detect_filters=search_request.retrieval_options.enable_auto_detect_filters,
-            persona=None,  # For simplicity, default settings should be good for this search
-            offset=pagination_offset,
-            limit=pagination_limit + 1,
-            rerank_settings=search_request.rerank_settings,
-            evaluation_type=search_request.evaluation_type,
-            chunks_above=search_request.chunks_above,
-            chunks_below=search_request.chunks_below,
-            full_doc=search_request.full_doc,
-        ),
+    retrieved_chunks = search_pipeline(
+        chunk_search_request=_translate_search_request(search_request),
+        document_index=document_index,
         user=user,
-        llm=llm,
-        fast_llm=fast_llm,
-        skip_query_analysis=False,
+        persona=None,
         db_session=db_session,
-        bypass_acl=False,
-    )
-    top_sections = search_pipeline.reranked_sections
-    relevance_sections = search_pipeline.section_relevance
-    top_docs = [
-        SavedSearchDocWithContent(
-            document_id=section.center_chunk.document_id,
-            chunk_ind=section.center_chunk.chunk_id,
-            content=section.center_chunk.content,
-            semantic_identifier=section.center_chunk.semantic_identifier or "Unknown",
-            link=(
-                section.center_chunk.source_links.get(0)
-                if section.center_chunk.source_links
-                else None
-            ),
-            blurb=section.center_chunk.blurb,
-            source_type=section.center_chunk.source_type,
-            boost=section.center_chunk.boost,
-            hidden=section.center_chunk.hidden,
-            metadata=section.center_chunk.metadata,
-            score=section.center_chunk.score or 0.0,
-            match_highlights=section.center_chunk.match_highlights,
-            updated_at=section.center_chunk.updated_at,
-            primary_owners=section.center_chunk.primary_owners,
-            secondary_owners=section.center_chunk.secondary_owners,
-            is_internet=False,
-            db_doc_id=0,
-        )
-        for section in top_sections
-    ]
-
-    # Track whether the underlying retrieval produced more items than requested
-    has_more_results = len(top_docs) > pagination_limit
-
-    # Deduping happens at the last step to avoid harming quality by dropping content early on
-    deduped_docs = top_docs
-    dropped_inds = None
-
-    if search_request.retrieval_options.dedupe_docs:
-        deduped_docs, dropped_inds = dedupe_documents(top_docs)
-
-    llm_indices = relevant_sections_to_indices(
-        relevance_sections=relevance_sections, items=deduped_docs
+        auto_detect_filters=False,
+        llm=llm,
     )
 
-    if dropped_inds:
-        llm_indices = drop_llm_indices(
-            llm_indices=llm_indices,
-            search_docs=deduped_docs,
-            dropped_indices=dropped_inds,
-        )
-
-    paginated_docs = deduped_docs[:pagination_limit]
-    llm_indices = [index for index in llm_indices if index < len(paginated_docs)]
-    has_more = has_more_results
-    pagination = DocumentSearchPagination(
-        offset=pagination_offset,
-        limit=pagination_limit,
-        returned_count=len(paginated_docs),
-        has_more=has_more,
-        next_offset=(pagination_offset + pagination_limit) if has_more else None,
-    )
-
-    return DocumentSearchResponse(
-        top_documents=paginated_docs,
-        llm_indices=llm_indices,
-        pagination=pagination,
-    )
+    return DocumentSearchResponse(top_chunks=retrieved_chunks)
 
 
 def get_answer_stream(

@@ -218,7 +218,6 @@ export function SharedChatDisplay({
                               citations: message.citations,
                               setPresentingDocument: setPresentingDocument,
                               regenerate: undefined, // No regeneration in shared chat
-                              overriddenModel: message.overridden_model,
                             }}
                             nodeId={message.nodeId}
                             llmManager={null}

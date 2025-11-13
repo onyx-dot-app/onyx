@@ -29,7 +29,6 @@ from openai.types.responses.response_usage import InputTokensDetails
 from openai.types.responses.response_usage import OutputTokensDetails
 from openai.types.responses.response_usage import ResponseUsage
 
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.turn.infra.emitter import get_default_emitter
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
@@ -569,11 +568,8 @@ class FakeQuery:
                 self.citations: dict[str, Any] = {}
                 self.error = None
                 self.alternate_assistant_id = None
-                self.overridden_model = None
-                self.research_type = "FAST"
                 self.research_plan: dict[str, Any] = {}
                 self.final_documents: list[Any] = []
-                self.research_answer_purpose = "ANSWER"
                 self.parent_message = None
                 self.is_agentic = False
                 self.search_docs: list[Any] = []
@@ -749,33 +745,33 @@ def create_test_inference_section(
     )
 
 
-def create_test_iteration_answer(
-    citation_num: int = 1,
-    document_id: str = "test-doc-1",
-    content: str = "This is test content for citation processing.",
-    link: str = "https://example.com/test-doc",
-    answer: str = "The test content is about citation processing [[1]].",
-) -> Any:
-    """Create a fake IterationAnswer with citations for testing."""
-    from onyx.agents.agent_search.dr.models import IterationAnswer
+# def create_test_iteration_answer(
+#     citation_num: int = 1,
+#     document_id: str = "test-doc-1",
+#     content: str = "This is test content for citation processing.",
+#     link: str = "https://example.com/test-doc",
+#     answer: str = "The test content is about citation processing [[1]].",
+# ) -> Any:
+#     """Create a fake IterationAnswer with citations for testing."""
+#     from onyx.agents.agent_search.dr.models import IterationAnswer
 
-    fake_section = create_test_inference_section(
-        chunk_id=citation_num,
-        document_id=document_id,
-        content=content,
-        link=link,
-    )
+#     fake_section = create_test_inference_section(
+#         chunk_id=citation_num,
+#         document_id=document_id,
+#         content=content,
+#         link=link,
+#     )
 
-    return IterationAnswer(
-        tool="internal_search",
-        tool_id=1,
-        iteration_nr=1,
-        parallelization_nr=1,
-        question="What is test content?",
-        reasoning="Need to search for test content",
-        answer=answer,
-        cited_documents={citation_num: fake_section},
-    )
+#     return IterationAnswer(
+#         tool="internal_search",
+#         tool_id=1,
+#         iteration_nr=1,
+#         parallelization_nr=1,
+#         question="What is test content?",
+#         reasoning="Need to search for test content",
+#         answer=answer,
+#         cited_documents={citation_num: fake_section},
+#     )
 
 
 def create_test_llm_doc(
@@ -811,7 +807,6 @@ def chat_turn_context(
     chat_turn_dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     message_id: int,
-    research_type: ResearchType,
 ) -> ChatTurnContext:
     """Fixture providing a ChatTurnContext with filler arguments for testing."""
     from onyx.chat.turn.models import ChatTurnContext
@@ -819,6 +814,5 @@ def chat_turn_context(
     return ChatTurnContext(
         chat_session_id=chat_session_id,
         message_id=message_id,
-        research_type=research_type,
         run_dependencies=chat_turn_dependencies,
     )

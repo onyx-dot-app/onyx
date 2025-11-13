@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
-from onyx.chat.chat_utils import create_chat_chain
+from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import extract_headers
 from onyx.chat.process_message import stream_chat_message
 from onyx.chat.prompt_builder.citations_prompt import (
@@ -228,7 +228,7 @@ def get_chat_session(
         # `get_chat_session_by_id`, so we can skip it here
         skip_permission_check=True,
         # we need the tool call objs anyways, so just fetch them in a single call
-        prefetch_tool_calls=True,
+        prefetch_top_two_level_tool_calls=True,
     )
 
     # Convert messages to ChatMessageDetail format
@@ -324,10 +324,9 @@ def rename_chat_session(
         )
         return RenameChatSessionResponse(new_name=name)
 
-    final_msg, history_msgs = create_chat_chain(
+    full_history = create_chat_history_chain(
         chat_session_id=chat_session_id, db_session=db_session
     )
-    full_history = history_msgs + [final_msg]
 
     try:
         llm, _ = get_default_llms(

@@ -10,37 +10,16 @@ from typing import Dict
 from typing import List
 
 import requests
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 from requests import JSONDecodeError
 
-from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import PreviousMessage
 from onyx.tools.base_tool import BaseTool
-from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import CHAT_SESSION_ID_PLACEHOLDER
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import MESSAGE_ID_PLACEHOLDER
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import (
-    SHOULD_USE_CUSTOM_TOOL_SYSTEM_PROMPT,
-)
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import (
-    SHOULD_USE_CUSTOM_TOOL_USER_PROMPT,
-)
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import (
-    TOOL_ARG_SYSTEM_PROMPT,
-)
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import (
-    TOOL_ARG_USER_PROMPT,
-)
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import USE_TOOL
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
@@ -49,9 +28,6 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_ur
 from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     validate_openapi_schema,
-)
-from onyx.tools.tool_implementations.custom.prompt import (
-    build_custom_image_generation_user_prompt,
 )
 from onyx.utils.headers import header_list_to_header_dict
 from onyx.utils.headers import HeaderItemDict
@@ -130,7 +106,7 @@ class CustomTool(BaseTool):
     def tool_definition(self) -> dict:
         return self._tool_definition
 
-    def build_tool_message_content(
+    def get_llm_tool_response(
         self, *args: ToolResponse
     ) -> str | list[str | dict[str, Any]]:
         response = cast(CustomToolCallSummary, args[0].response)
@@ -141,71 +117,6 @@ class CustomTool(BaseTool):
 
         # For JSON or other responses, return as-is
         return json.dumps(response.tool_result)
-
-    """For LLMs which do NOT support explicit tool calling"""
-
-    def get_args_for_non_tool_calling_llm(
-        self,
-        query: str,
-        history: list[PreviousMessage],
-        llm: LLM,
-        force_run: bool = False,
-    ) -> dict[str, Any] | None:
-        if not force_run:
-            should_use_result = llm.invoke_langchain(
-                [
-                    SystemMessage(content=SHOULD_USE_CUSTOM_TOOL_SYSTEM_PROMPT),
-                    HumanMessage(
-                        content=SHOULD_USE_CUSTOM_TOOL_USER_PROMPT.format(
-                            history=history,
-                            query=query,
-                            tool_name=self.name,
-                            tool_description=self.description,
-                        )
-                    ),
-                ]
-            )
-            if cast(str, should_use_result.content).strip() != USE_TOOL:
-                return None
-
-        args_result = llm.invoke_langchain(
-            [
-                SystemMessage(content=TOOL_ARG_SYSTEM_PROMPT),
-                HumanMessage(
-                    content=TOOL_ARG_USER_PROMPT.format(
-                        history=history,
-                        query=query,
-                        tool_name=self.name,
-                        tool_description=self.description,
-                        tool_args=self.tool_definition()["function"]["parameters"],
-                    )
-                ),
-            ]
-        )
-        args_result_str = cast(str, args_result.content)
-
-        try:
-            return json.loads(args_result_str.strip())
-        except json.JSONDecodeError:
-            pass
-
-        # try removing ```
-        try:
-            return json.loads(args_result_str.strip("```"))
-        except json.JSONDecodeError:
-            pass
-
-        # try removing ```json
-        try:
-            return json.loads(args_result_str.strip("```").strip("json"))
-        except json.JSONDecodeError:
-            pass
-
-        # pretend like nothing happened if not parse-able
-        logger.error(
-            f"Failed to parse args for '{self.name}' tool. Received: {args_result_str}"
-        )
-        return None
 
     def _save_and_get_file_references(
         self, file_content: bytes | str, content_type: str
@@ -304,60 +215,6 @@ class CustomTool(BaseTool):
                 tool_result=tool_result,
             ),
         )
-
-    def build_next_prompt(
-        self,
-        prompt_builder: AnswerPromptBuilder,
-        tool_call_summary: ToolCallSummary,
-        tool_responses: list[ToolResponse],
-        using_tool_calling_llm: bool,
-    ) -> AnswerPromptBuilder:
-        response = cast(CustomToolCallSummary, tool_responses[0].response)
-
-        # Handle non-file responses using parent class behavior
-        if response.response_type not in ["image", "csv"]:
-            return super().build_next_prompt(
-                prompt_builder,
-                tool_call_summary,
-                tool_responses,
-                using_tool_calling_llm,
-            )
-
-        # Handle image and CSV file responses
-        file_type = (
-            ChatFileType.IMAGE
-            if response.response_type == "image"
-            else ChatFileType.CSV
-        )
-
-        # Load files from storage
-        files = []
-        file_store = get_default_file_store()
-
-        for file_id in response.tool_result.file_ids:
-            try:
-                file_io = file_store.read_file(file_id, mode="b")
-                files.append(
-                    InMemoryChatFile(
-                        file_id=file_id,
-                        filename=file_id,
-                        content=file_io.read(),
-                        file_type=file_type,
-                    )
-                )
-            except Exception:
-                logger.exception(f"Failed to read file {file_id}")
-
-            # Update prompt with file content
-            prompt_builder.update_user_prompt(
-                build_custom_image_generation_user_prompt(
-                    query=prompt_builder.get_user_message_content(),
-                    files=files,
-                    file_type=file_type,
-                )
-            )
-
-        return prompt_builder
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
         response = cast(CustomToolCallSummary, args[0].response)

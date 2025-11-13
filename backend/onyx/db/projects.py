@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from fastapi import UploadFile
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.versioned_apps.client import app as client_app
@@ -204,3 +205,28 @@ def get_project_instructions(db_session: Session, project_id: int | None) -> str
         return instructions or None
     except Exception:
         return None
+
+
+def get_project_token_count(
+    project_id: int | None,
+    user_id: UUID | None,
+    db_session: Session,
+) -> int:
+    """Return sum of token_count for all user files in the given project.
+
+    If project_id is None, returns 0.
+    """
+    if project_id is None:
+        return 0
+
+    total_tokens = (
+        db_session.query(func.coalesce(func.sum(UserFile.token_count), 0))
+        .filter(
+            UserFile.user_id == user_id,
+            UserFile.projects.any(id=project_id),
+        )
+        .scalar()
+        or 0
+    )
+
+    return int(total_tokens)

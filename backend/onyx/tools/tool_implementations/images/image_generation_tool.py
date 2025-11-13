@@ -10,25 +10,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.chat_utils import combine_message_chain
-from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
-from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.db.llm import fetch_existing_llm_providers
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import build_content_with_imgs
-from onyx.llm.utils import message_to_string
-from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.constants import GENERAL_SEP_PAT
-from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
-from onyx.tools.tool_implementations.images.prompt import (
-    build_image_generation_user_prompt,
-)
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -36,6 +24,7 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
+IMAGE_GENERATION_TOOL_NAME = "image_generation"
 
 IMAGE_GENERATION_RESPONSE_ID = "image_generation_response"
 IMAGE_GENERATION_HEARTBEAT_ID = "image_generation_heartbeat"
@@ -80,7 +69,7 @@ class ImageShape(str, Enum):
 
 # override_kwargs is not supported for image generation tools
 class ImageGenerationTool(Tool[None]):
-    _NAME = "run_image_generation"
+    _NAME = IMAGE_GENERATION_TOOL_NAME
     _DESCRIPTION = (
         "NEVER use generate_image unless the user specifically requests an image."
     )
@@ -162,47 +151,7 @@ class ImageGenerationTool(Tool[None]):
             },
         }
 
-    def get_args_for_non_tool_calling_llm(
-        self,
-        query: str,
-        history: list[PreviousMessage],
-        llm: LLM,
-        force_run: bool = False,
-    ) -> dict[str, Any] | None:
-        args = {"prompt": query}
-        if force_run:
-            return args
-
-        history_str = combine_message_chain(
-            messages=history, token_limit=GEN_AI_HISTORY_CUTOFF
-        )
-        prompt = IMAGE_GENERATION_TEMPLATE.format(
-            chat_history=history_str,
-            final_query=query,
-        )
-        use_image_generation_tool_output = message_to_string(
-            llm.invoke_langchain(prompt)
-        )
-
-        logger.debug(
-            f"Evaluated if should use ImageGenerationTool: {use_image_generation_tool_output}"
-        )
-        if (
-            YES_IMAGE_GENERATION.split()[0]
-        ).lower() in use_image_generation_tool_output.lower():
-            return args
-
-        return None
-
-    def run_v2(
-        self,
-        run_context: RunContextWrapper[Any],
-        *args: Any,
-        **kwargs: Any,
-    ) -> Any:
-        raise NotImplementedError("ImageGenerationTool.run_v2 is not implemented.")
-
-    def build_tool_message_content(
+    def get_llm_tool_response(
         self, *args: ToolResponse
     ) -> str | list[str | dict[str, Any]]:
         # Filter out heartbeat responses and find the actual image response
@@ -390,45 +339,3 @@ class ImageGenerationTool(Tool[None]):
                 ]
 
         raise ValueError("No image generation response found")
-
-    def build_next_prompt(
-        self,
-        prompt_builder: AnswerPromptBuilder,
-        tool_call_summary: ToolCallSummary,
-        tool_responses: list[ToolResponse],
-        using_tool_calling_llm: bool,
-    ) -> AnswerPromptBuilder:
-        img_generation_response = cast(
-            list[ImageGenerationResponse] | None,
-            next(
-                (
-                    response.response
-                    for response in tool_responses
-                    if response.id == IMAGE_GENERATION_RESPONSE_ID
-                ),
-                None,
-            ),
-        )
-        if img_generation_response is None:
-            raise ValueError("No image generation response found")
-
-        b64_imgs = [img.image_data for img in img_generation_response]
-
-        user_prompt = build_image_generation_user_prompt(
-            query=prompt_builder.get_user_message_content(),
-            supports_image_input=model_supports_image_input(
-                prompt_builder.llm_config.model_name,
-                prompt_builder.llm_config.model_provider,
-            ),
-            prompts=[
-                prompt
-                for response in img_generation_response
-                for prompt in response.revised_prompt
-            ],
-            img_urls=[],
-            b64_imgs=b64_imgs,
-        )
-
-        prompt_builder.update_user_prompt(user_prompt)
-
-        return prompt_builder

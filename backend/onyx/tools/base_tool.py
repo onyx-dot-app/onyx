@@ -1,19 +1,15 @@
-from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage
 
 from onyx.llm.utils import message_to_prompt_and_imgs
-from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
 
 if TYPE_CHECKING:
-    from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
     from onyx.tools.tool_implementations.custom.custom_tool import (
         CustomToolCallSummary,
     )
-    from onyx.tools.message import ToolCallSummary
     from onyx.tools.models import ToolResponse
 
 
@@ -37,33 +33,5 @@ Now respond to the following:
 
 
 class BaseTool(Tool[None]):
-    def run_v2(
-        self,
-        run_context: RunContextWrapper[Any],
-        *args: Any,
-        **kwargs: Any,
-    ) -> Any:
-        raise NotImplementedError("BaseTool.run_v2 is not implemented.")
-
-    def build_next_prompt(
-        self,
-        prompt_builder: "AnswerPromptBuilder",
-        tool_call_summary: "ToolCallSummary",
-        tool_responses: list["ToolResponse"],
-        using_tool_calling_llm: bool,
-    ) -> "AnswerPromptBuilder":
-        if using_tool_calling_llm:
-            prompt_builder.append_message(tool_call_summary.tool_call_request)
-            prompt_builder.append_message(tool_call_summary.tool_call_result)
-        else:
-            prompt_builder.update_user_prompt(
-                HumanMessage(
-                    content=build_user_message_for_non_tool_calling_llm(
-                        prompt_builder.user_message_and_token_cnt[0],
-                        self.name,
-                        *tool_responses,
-                    )
-                )
-            )
-
-        return prompt_builder
+    # Removed the v2 run method since we're consolidating
+    pass
