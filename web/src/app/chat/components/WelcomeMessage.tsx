@@ -27,25 +27,30 @@ export default function WelcomeMessage() {
         "mb-6"
       )}
     >
-      <div className="flex items-center">
-        {isDefaultAgent ? (
-          <div
-            data-testid="onyx-logo"
-            className="flex flex-row items-center gap-4"
-          >
-            <Logo size="default" />
-            <Text headingH2>{greeting}</Text>
-          </div>
-        ) : (
-          <div
-            data-testid="assistant-name-display"
-            className="flex flex-row items-center justify-center gap-3"
-          >
+      {isDefaultAgent ? (
+        <div
+          data-testid="onyx-logo"
+          className="flex flex-row items-center gap-4"
+        >
+          <Logo size="default" />
+          <Text headingH2>{greeting}</Text>
+        </div>
+      ) : (
+        <div
+          data-testid="assistant-name-display"
+          className="flex flex-col items-center gap-3 w-full max-w-[50rem]"
+        >
+          <div className="flex flex-row items-center gap-3">
             <AgentIcon agent={currentAgent} />
             <Text headingH2>{currentAgent.name}</Text>
           </div>
-        )}
-      </div>
+          {currentAgent.description && (
+            <Text secondaryBody text03>
+              {currentAgent.description}
+            </Text>
+          )}
+        </div>
+      )}
     </div>
   );
 }
