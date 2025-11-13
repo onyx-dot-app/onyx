@@ -1,12 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
-import {
-  ModelConfiguration,
-  WellKnownLLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Form, Formik, FormikProps, useFormikContext } from "formik";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import { MODAL_CONTENT_MAP, PROVIDER_TAB_CONFIG } from "../constants";
@@ -25,17 +18,9 @@ import { LLMConnectionFieldsCustom } from "./LLMConnectionFieldsCustom";
 import { getValidationSchema } from "./llmValidationSchema";
 import { OnboardingActions, OnboardingState } from "../types";
 import ProviderModal from "./ProviderModal";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
 
-type LLMConnectionModalData = {
-  icon: React.ReactNode;
-  title: string;
-  llmDescriptor?: WellKnownLLMProviderDescriptor;
-  isCustomProvider?: boolean;
-  onboardingState: OnboardingState;
-  onboardingActions: OnboardingActions;
-};
-
-type LLMFormikEffectsProps = {
+interface LLMFormikEffectsProps {
   tabConfig: any;
   activeTab: string;
   llmDescriptor?: WellKnownLLMProviderDescriptor;
@@ -46,9 +31,9 @@ type LLMFormikEffectsProps = {
   setModelsApiStatus: (v: APIFormFieldState) => void;
   setShowModelsApiErrorMessage: (v: boolean) => void;
   setApiStatus: (v: APIFormFieldState) => void;
-};
+}
 
-const LLMFormikEffects: React.FC<LLMFormikEffectsProps> = ({
+function LLMFormikEffects({
   tabConfig,
   activeTab,
   llmDescriptor,
@@ -59,7 +44,7 @@ const LLMFormikEffects: React.FC<LLMFormikEffectsProps> = ({
   setModelsApiStatus,
   setShowModelsApiErrorMessage,
   setApiStatus,
-}) => {
+}: LLMFormikEffectsProps) {
   const formikProps = useFormikContext<any>();
 
   useEffect(() => {
@@ -172,22 +157,31 @@ const LLMFormikEffects: React.FC<LLMFormikEffectsProps> = ({
   ]);
 
   return null;
-};
+}
 
-const LLMConnectionModal = () => {
-  const { getModalData, toggleModal } = useChatModal();
-  const data = getModalData<LLMConnectionModalData>();
-  const icon = data?.icon;
-  const title = data?.title ?? "";
-  const llmDescriptor = data?.llmDescriptor;
-  const isCustomProvider = data?.isCustomProvider ?? false;
+export interface LLMConnectionModalProps {
+  icon: React.ReactNode;
+  title: string;
+  llmDescriptor?: WellKnownLLMProviderDescriptor;
+  isCustomProvider?: boolean;
+  onboardingState: OnboardingState;
+  onboardingActions: OnboardingActions;
+}
+
+export default function LLMConnectionModal({
+  icon,
+  title,
+  llmDescriptor,
+  isCustomProvider,
+  onboardingState,
+  onboardingActions,
+}: LLMConnectionModalProps) {
+  const modal = useModal();
   const modalContent = isCustomProvider
     ? MODAL_CONTENT_MAP["custom"]
     : llmDescriptor
       ? MODAL_CONTENT_MAP[llmDescriptor.name]
       : undefined;
-  const onboardingActions = data?.onboardingActions;
-  const onboardingState = data?.onboardingState;
 
   const initialValues = useMemo(
     () => buildInitialValues(llmDescriptor, isCustomProvider),
@@ -208,38 +202,6 @@ const LLMConnectionModal = () => {
     any[]
   >([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Set default tab when llmDescriptor changes
-  useEffect(() => {
-    if (llmDescriptor) {
-      const tabConfig = PROVIDER_TAB_CONFIG[llmDescriptor.name];
-      if (tabConfig?.tabs[0]) {
-        setActiveTab(tabConfig.tabs[0].id);
-      }
-      setFetchedModelConfigurations([]);
-      setShowApiMessage(false);
-      setErrorMessage("");
-      setModelsErrorMessage("");
-      setModelsApiStatus("loading");
-      setShowModelsApiErrorMessage(false);
-      setApiStatus("loading");
-      setIsFetchingModels(false);
-    }
-  }, [llmDescriptor]);
-
-  // Also reset when modal opens with new data
-  useEffect(() => {
-    if (data) {
-      setFetchedModelConfigurations([]);
-      setShowApiMessage(false);
-      setErrorMessage("");
-      setModelsErrorMessage("");
-      setModelsApiStatus("loading");
-      setShowModelsApiErrorMessage(false);
-      setApiStatus("loading");
-      setIsFetchingModels(false);
-    }
-  }, [data]);
 
   const modelOptions = useMemo(
     () => getModelOptions(llmDescriptor, fetchedModelConfigurations as any[]),
@@ -331,8 +293,6 @@ const LLMConnectionModal = () => {
       setApiStatus("error");
     }
   };
-
-  if (!data) return null;
 
   const tabConfig = llmDescriptor
     ? PROVIDER_TAB_CONFIG[llmDescriptor.name]
@@ -457,7 +417,7 @@ const LLMConnectionModal = () => {
         });
         onboardingActions?.setButtonActive(true);
         setIsSubmitting(false);
-        toggleModal(ModalIds.LLMConnectionModal, false);
+        modal.toggle(false);
       }}
     >
       {(formikProps) => {
@@ -492,11 +452,10 @@ const LLMConnectionModal = () => {
 
         return (
           <ProviderModal
-            id={ModalIds.LLMConnectionModal}
             title={title}
             description={modalContent?.description}
-            startAdornment={icon}
-            xs
+            icon={() => icon}
+            mini
             onSubmit={formikProps.submitForm}
             submitDisabled={
               isCustomProvider
@@ -583,6 +542,4 @@ const LLMConnectionModal = () => {
       }}
     </Formik>
   );
-};
-
-export default LLMConnectionModal;
+}
