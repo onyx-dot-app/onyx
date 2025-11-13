@@ -18,6 +18,7 @@ from oauthlib.oauth2 import BackendApplicationClient
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from requests_oauthlib import OAuth2Session  # type:ignore
 from urllib3.exceptions import MaxRetryError
 
@@ -120,6 +121,19 @@ PDF_MIME_TYPES = [
     "text/pdf",
     "text/x-pdf",
 ]
+
+PLAYWRIGHT_LAUNCH_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--disable-features=IsolateOrigins,site-per-process",
+    "--disable-site-isolation-trials",
+]
+PLAYWRIGHT_GPU_FALLBACK_ARGS = [
+    "--disable-gpu",
+    "--disable-gpu-sandbox",
+    "--disable-software-rasterizer",
+    "--disable-accelerated-2d-canvas",
+]
+TARGET_CLOSED_ERROR_MESSAGE = "Target page, context or browser has been closed"
 
 
 class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
@@ -269,65 +283,20 @@ def is_pdf_content(response: requests.Response) -> bool:
     return any(pdf_type in content_type for pdf_type in PDF_MIME_TYPES)
 
 
-def start_playwright() -> Tuple[Playwright, BrowserContext]:
-    playwright = sync_playwright().start()
-
-    # Launch browser with more realistic settings
-    browser = playwright.chromium.launch(
-        headless=True,
-        args=[
-            "--disable-blink-features=AutomationControlled",
-            "--disable-features=IsolateOrigins,site-per-process",
-            "--disable-site-isolation-trials",
-        ],
-    )
-
-    # Create a context with realistic browser properties
-    context = browser.new_context(
-        user_agent=DEFAULT_USER_AGENT,
-        viewport={"width": 1440, "height": 900},
-        device_scale_factor=2.0,
-        locale="en-US",
-        timezone_id="America/Los_Angeles",
-        has_touch=False,
-        java_script_enabled=True,
-        color_scheme="light",
-        # Add more realistic browser properties
-        bypass_csp=True,
-        ignore_https_errors=True,
-    )
-
-    # Set additional headers to mimic a real browser
-    context.set_extra_http_headers(
-        {
-            "Accept": DEFAULT_HEADERS["Accept"],
-            "Accept-Language": DEFAULT_HEADERS["Accept-Language"],
-            "Sec-Fetch-Dest": DEFAULT_HEADERS["Sec-Fetch-Dest"],
-            "Sec-Fetch-Mode": DEFAULT_HEADERS["Sec-Fetch-Mode"],
-            "Sec-Fetch-Site": DEFAULT_HEADERS["Sec-Fetch-Site"],
-            "Sec-Fetch-User": DEFAULT_HEADERS["Sec-Fetch-User"],
-            "Sec-CH-UA": DEFAULT_HEADERS["Sec-CH-UA"],
-            "Sec-CH-UA-Mobile": DEFAULT_HEADERS["Sec-CH-UA-Mobile"],
-            "Sec-CH-UA-Platform": DEFAULT_HEADERS["Sec-CH-UA-Platform"],
-            "Cache-Control": "max-age=0",
-            "DNT": "1",
-        }
-    )
-
-    # Add a script to modify navigator properties to avoid detection
-    context.add_init_script(
-        """
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => undefined
-        });
-        Object.defineProperty(navigator, 'plugins', {
-            get: () => [1, 2, 3, 4, 5]
-        });
-        Object.defineProperty(navigator, 'languages', {
-            get: () => ['en-US', 'en']
-        });
-    """
-    )
+def _build_browser_headers() -> dict[str, str]:
+    headers = {
+        "Accept": DEFAULT_HEADERS["Accept"],
+        "Accept-Language": DEFAULT_HEADERS["Accept-Language"],
+        "Sec-Fetch-Dest": DEFAULT_HEADERS["Sec-Fetch-Dest"],
+        "Sec-Fetch-Mode": DEFAULT_HEADERS["Sec-Fetch-Mode"],
+        "Sec-Fetch-Site": DEFAULT_HEADERS["Sec-Fetch-Site"],
+        "Sec-Fetch-User": DEFAULT_HEADERS["Sec-Fetch-User"],
+        "Sec-CH-UA": DEFAULT_HEADERS["Sec-CH-UA"],
+        "Sec-CH-UA-Mobile": DEFAULT_HEADERS["Sec-CH-UA-Mobile"],
+        "Sec-CH-UA-Platform": DEFAULT_HEADERS["Sec-CH-UA-Platform"],
+        "Cache-Control": "max-age=0",
+        "DNT": "1",
+    }
 
     if (
         WEB_CONNECTOR_OAUTH_CLIENT_ID
@@ -341,11 +310,78 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
             client_id=WEB_CONNECTOR_OAUTH_CLIENT_ID,
             client_secret=WEB_CONNECTOR_OAUTH_CLIENT_SECRET,
         )
-        context.set_extra_http_headers(
-            {"Authorization": "Bearer {}".format(token["access_token"])}
-        )
+        headers["Authorization"] = f"Bearer {token['access_token']}"
 
-    return playwright, context
+    return headers
+
+
+def _create_browser_context(browser: Any) -> BrowserContext:
+    context = browser.new_context(
+        user_agent=DEFAULT_USER_AGENT,
+        viewport={"width": 1440, "height": 900},
+        device_scale_factor=2.0,
+        locale="en-US",
+        timezone_id="America/Los_Angeles",
+        has_touch=False,
+        java_script_enabled=True,
+        color_scheme="light",
+        bypass_csp=True,
+        ignore_https_errors=True,
+    )
+
+    context.set_extra_http_headers(_build_browser_headers())
+
+    context.add_init_script(
+        """
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        });
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5]
+        });
+        Object.defineProperty(navigator, 'languages', {
+            get: () => ['en-US', 'en']
+        });
+    """
+    )
+    return context
+
+
+def _start_playwright_with_args(
+    extra_launch_args: list[str],
+) -> Tuple[Playwright, BrowserContext]:
+    playwright = sync_playwright().start()
+    try:
+        launch_args = PLAYWRIGHT_LAUNCH_ARGS + list(extra_launch_args)
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=launch_args,
+        )
+        context = _create_browser_context(browser)
+        return playwright, context
+    except Exception:
+        playwright.stop()
+        raise
+
+
+def _should_retry_with_gpu_disabled(error: Exception) -> bool:
+    if error.__class__.__name__ == "TargetClosedError":
+        return True
+    return TARGET_CLOSED_ERROR_MESSAGE in str(error)
+
+
+def start_playwright() -> Tuple[Playwright, BrowserContext]:
+    try:
+        return _start_playwright_with_args([])
+    except Exception as exc:
+        if not _should_retry_with_gpu_disabled(exc):
+            raise
+
+        logger.warning(
+            "Playwright Chromium failed to launch with default flags; retrying with GPU disabled.",
+            exc_info=exc,
+        )
+        return _start_playwright_with_args(PLAYWRIGHT_GPU_FALLBACK_ARGS)
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
@@ -518,10 +554,19 @@ class WebConnector(LoadConnector):
         _handle_cookies(session_ctx.playwright_context, initial_url)
 
         # First do a HEAD request to check content type without downloading the entire content
-        head_response = requests.head(
-            initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
-        )
-        is_pdf = is_pdf_content(head_response)
+        head_response: requests.Response | None = None
+        try:
+            head_response = requests.head(
+                initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
+            )
+        except requests.exceptions.SSLError as ssl_error:
+            logger.warning(
+                f"{index}: HEAD request failed with SSL error for {initial_url}, falling back to browser fetch: {ssl_error}"
+            )
+        if head_response is not None:
+            is_pdf = is_pdf_content(head_response)
+        else:
+            is_pdf = False
 
         if is_pdf or initial_url.lower().endswith(".pdf"):
             # PDF files are not checked for links
@@ -580,7 +625,13 @@ class WebConnector(LoadConnector):
                 while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     # wait for the content to load if we scrolled
-                    page.wait_for_load_state("networkidle", timeout=30000)
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=15000)
+                    except PlaywrightTimeoutError as exc:
+                        logger.warning(
+                            f"{index}: Timed out waiting for network idle on {initial_url}, continuing with current DOM: {exc}"
+                        )
+                        break
                     time.sleep(0.5)  # let javascript run
 
                     new_height = page.evaluate("document.body.scrollHeight")
