@@ -43,7 +43,7 @@ import {
   handleMoveOperation,
 } from "@/sections/sidebar/sidebarUtils";
 import ButtonRenaming from "@/sections/sidebar/ButtonRenaming";
-import { useActiveSidebarTab } from "@/lib/hooks";
+import { useAppFocus } from "@/lib/hooks";
 
 // (no local constants; use shared constants/imports)
 
@@ -108,7 +108,7 @@ function ChatButtonInner({
   draggable = false,
 }: ChatButtonProps) {
   const route = useAppRouter();
-  const activeSidebarTab = useActiveSidebarTab();
+  const activeSidebarTab = useAppFocus();
   const active = useMemo(
     () =>
       typeof activeSidebarTab === "object" &&

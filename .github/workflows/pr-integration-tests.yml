@@ -30,7 +30,8 @@ env:
 
 jobs:
   discover-test-dirs:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}"]
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
@@ -59,14 +60,14 @@ jobs:
 
 
   build-backend-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
@@ -78,7 +79,7 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Backend Docker image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -90,14 +91,14 @@ jobs:
 
 
   build-model-server-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
@@ -109,7 +110,7 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Model Server Docker image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -120,16 +121,14 @@ jobs:
 
 
   build-integration-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-build-integration-image", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
-        with:
-          metrics: cpu,memory
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
       - name: Prepare build
         uses: ./.github/actions/prepare-build
@@ -151,7 +150,11 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
-    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-arm64
+      - ${{ format('run-id={0}-integration-tests-job-{1}', github.run_id, strategy['job-index']) }}
+      - extras=ecr-cache
 
     strategy:
       fail-fast: false
@@ -160,8 +163,6 @@ jobs:
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
-        with:
-          metrics: cpu,memory
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
@@ -321,12 +322,6 @@ jobs:
           path: ${{ github.workspace }}/docker-compose.log
       # ------------------------------------------------------------
 
-      - name: Stop Docker containers
-        if: always()
-        run: |
-          cd deployment/docker_compose
-          docker compose down -v
-
 
   multitenant-tests:
     needs:
@@ -335,7 +330,7 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
-    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-multitenant-tests", "extras=ecr-cache"]
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -460,7 +455,8 @@ jobs:
           docker compose -f docker-compose.multitenant-dev.yml down -v
 
   required:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}"]
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
     needs: [integration-tests, multitenant-tests]
     if: ${{ always() }}
     steps:

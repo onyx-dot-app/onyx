@@ -28,7 +28,7 @@ import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import ButtonRenaming from "./ButtonRenaming";
 import { SvgProps } from "@/icons";
-import { useActiveSidebarTab } from "@/lib/hooks";
+import { useAppFocus } from "@/lib/hooks";
 import SvgFolderOpen from "@/icons/folder-open";
 
 interface ProjectFolderProps {
@@ -44,7 +44,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isHoveringIcon, setIsHoveringIcon] = useState(false);
-  const activeSidebar = useActiveSidebarTab();
+  const activeSidebar = useAppFocus();
 
   // Make project droppable
   const dropId = `project-${project.id}`;

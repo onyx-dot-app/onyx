@@ -10,7 +10,7 @@ on:
 jobs:
   quality-checks:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-quality-checks"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4

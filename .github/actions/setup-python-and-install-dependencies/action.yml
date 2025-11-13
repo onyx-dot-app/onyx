@@ -22,10 +22,17 @@ runs:
       with:
         python-version: "3.11"
 
+    - name: Create virtual environment
+      shell: bash
+      run: |
+        uv venv ${{ runner.temp }}/venv
+        echo "VENV_PATH=${{ runner.temp }}/venv" >> $GITHUB_ENV
+        echo "${{ runner.temp }}/venv/bin" >> $GITHUB_PATH
+
     - name: Install Python dependencies with uv
       shell: bash
       run: |
-        uv pip install --system \
+        uv pip install \
           -r backend/requirements/default.txt \
           -r backend/requirements/dev.txt \
           -r backend/requirements/model_server.txt

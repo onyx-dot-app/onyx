@@ -15,7 +15,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=${{ matrix.platform == 'linux/amd64' && '8cpu-linux-x64' || '8cpu-linux-arm64' }}
-      - run-id=${{ github.run_id }}
+      - run-id=${{ format('{0}-build-{1}-job-{2}', github.run_id, matrix.platform == 'linux/amd64' && 'linux-amd64' || 'linux-arm64', strategy['job-index']) }}
       - tag=platform-${{ matrix.platform }}
     strategy:
       fail-fast: false

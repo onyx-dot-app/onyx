@@ -15,7 +15,7 @@ env:
 
 jobs:
   precheck:
-    runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}-precheck"]
     outputs:
       should-run: ${{ steps.set-output.outputs.should-run }}
     steps:
@@ -33,7 +33,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=${{ matrix.platform == 'linux/amd64' && '8cpu-linux-x64' || '8cpu-linux-arm64' }}
-      - run-id=${{ github.run_id }}
+      - run-id=${{ format('{0}-build-{1}-job-{2}', github.run_id, matrix.platform == 'linux/amd64' && 'linux-amd64' || 'linux-arm64', strategy['job-index']) }}
       - tag=platform-${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -122,6 +122,7 @@ jobs:
 
   merge:
     needs:
+      - precheck
       - build
     if: needs.precheck.outputs.should-run == 'true'
     runs-on: ubuntu-latest

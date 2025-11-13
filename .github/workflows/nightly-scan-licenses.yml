@@ -20,7 +20,7 @@ permissions:
 jobs:
   scan-licenses:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}"]
+    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}-scan-licenses"]
 
     steps:
       - name: Checkout code
@@ -46,7 +46,7 @@ jobs:
 
       - name: Check python
         id: license_check_report
-        uses: pilosus/action-pip-license-checker@cc7a461bfa27b44ad187b8578c881ef5138c13fd # ratchet:pilosus/action-pip-license-checker@v2
+        uses: pilosus/action-pip-license-checker@e909b0226ff49d3235c99c4585bc617f49fff16a # ratchet:pilosus/action-pip-license-checker@v3
         with:
           requirements: 'requirements-all.txt'
           fail: 'Copyleft'
@@ -64,7 +64,7 @@ jobs:
         # with a huge amount of items. Work out the issues before enabling upload.
 #       - name: Run Trivy vulnerability scanner in repo mode
 #         if: always()
-#         uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # ratchet:aquasecurity/trivy-action@0.29.0
+#         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # ratchet:aquasecurity/trivy-action@0.33.1
 #         with:
 #           scan-type: fs
 #           scan-ref: .
@@ -81,7 +81,7 @@ jobs:
 
   scan-trivy:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}"]
+    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}-scan-trivy"]
 
     steps:
     - name: Set up Docker Buildx
@@ -98,7 +98,7 @@ jobs:
       run: docker pull onyxdotapp/onyx-backend:latest
 
     - name: Run Trivy vulnerability scanner on backend
-      uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # ratchet:aquasecurity/trivy-action@0.29.0
+      uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # ratchet:aquasecurity/trivy-action@0.33.1
       env:
         TRIVY_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-db:2'
         TRIVY_JAVA_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-java-db:1'
@@ -114,7 +114,7 @@ jobs:
       run: docker pull onyxdotapp/onyx-web-server:latest
 
     - name: Run Trivy vulnerability scanner on web server
-      uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # ratchet:aquasecurity/trivy-action@0.29.0
+      uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # ratchet:aquasecurity/trivy-action@0.33.1
       env:
         TRIVY_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-db:2'
         TRIVY_JAVA_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-java-db:1'
@@ -130,7 +130,7 @@ jobs:
       run: docker pull onyxdotapp/onyx-model-server:latest
 
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # ratchet:aquasecurity/trivy-action@0.29.0
+      uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # ratchet:aquasecurity/trivy-action@0.33.1
       env:
         TRIVY_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-db:2'
         TRIVY_JAVA_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-java-db:1'

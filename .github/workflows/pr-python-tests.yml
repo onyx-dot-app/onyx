@@ -1,4 +1,7 @@
 name: Python Unit Tests
+concurrency:
+  group: Python-Unit-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
 
 on:
   merge_group:
@@ -10,7 +13,7 @@ on:
 jobs:
   backend-check:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-backend-check"]
 
 
     env:

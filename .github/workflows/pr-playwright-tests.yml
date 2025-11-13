@@ -20,11 +20,9 @@ env:
 
 jobs:
   build-web-image:
-    runs-on: [runs-on, runner=4cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=4cpu-linux-arm64, "run-id=${{ github.run_id }}-build-web-image", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
-        with:
-          metrics: cpu,memory
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
@@ -41,7 +39,7 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Web Docker image
-        uses: docker/build-push-action@0a97817b6ade9f46837855d676c4cca3a2471fc9 # ratchet:docker/build-push-action@v4
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
         with:
           context: ./web
           file: ./web/Dockerfile
@@ -53,7 +51,7 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -72,7 +70,7 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Backend Docker image
-        uses: docker/build-push-action@0a97817b6ade9f46837855d676c4cca3a2471fc9 # ratchet:docker/build-push-action@v4
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -84,7 +82,7 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "spot=capacity-optimized", "family=m7+c7+r7", "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -103,7 +101,7 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Model Server Docker image
-        uses: docker/build-push-action@0a97817b6ade9f46837855d676c4cca3a2471fc9 # ratchet:docker/build-push-action@v4
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -116,12 +114,14 @@ jobs:
 
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
-    name: Playwright Tests
-    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}", "extras=ecr-cache"]
+    name: Playwright Tests (${{ matrix.project }})
+    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}", "extras=ecr-cache"]
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [admin, no-auth]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
-        with:
-          metrics: cpu,memory
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
@@ -155,6 +155,14 @@ jobs:
       - name: Install node dependencies
         working-directory: ./web
         run: npm ci
+
+      - name: Cache playwright cache
+        uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-npm-
 
       - name: Install playwright browsers
         working-directory: ./web
@@ -226,13 +234,13 @@ jobs:
         run: |
           # Create test-results directory to ensure it exists for artifact upload
           mkdir -p test-results
-          npx playwright test
+          npx playwright test --project ${{ matrix.project }}
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         if: always()
         with:
           # Includes test results and trace.zip files
-          name: playwright-test-results-${{ github.run_id }}
+          name: playwright-test-results-${{ matrix.project }}-${{ github.run_id }}
           path: ./web/test-results/
           retention-days: 30
 
@@ -248,13 +256,8 @@ jobs:
         if: success() || failure()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         with:
-          name: docker-logs
+          name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
-
-      - name: Stop Docker containers
-        run: |
-          cd deployment/docker_compose
-          docker compose down -v
 
 # NOTE: Chromatic UI diff testing is currently disabled.
 # We are using Playwright for local and CI testing without visual regression checks.

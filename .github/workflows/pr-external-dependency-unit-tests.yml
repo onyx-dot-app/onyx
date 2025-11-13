@@ -1,4 +1,7 @@
 name: External Dependency Unit Tests
+concurrency:
+  group: External-Dependency-Unit-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
 
 on:
   merge_group:
@@ -27,7 +30,8 @@ env:
 
 jobs:
   discover-test-dirs:
-    runs-on: ubuntu-latest
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
@@ -44,7 +48,11 @@ jobs:
   external-dependency-unit-tests:
     needs: discover-test-dirs
     # Use larger runner with more resources for Vespa
-    runs-on: [runs-on, runner=16cpu-linux-x64, "run-id=${{ github.run_id }}", "extras=s3-cache"]
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-arm64
+      - ${{ format('run-id={0}-external-dependency-unit-tests-job-{1}', github.run_id, strategy['job-index']) }}
+      - extras=s3-cache
     strategy:
       fail-fast: false
       matrix:

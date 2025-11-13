@@ -1,4 +1,7 @@
 name: Connector Tests
+concurrency:
+  group: Connector-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
 
 on:
   merge_group:
@@ -119,7 +122,7 @@ env:
 jobs:
   connectors-check:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}", "extras=s3-cache"]
+    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-connectors-check", "extras=s3-cache"]
 
     env:
       PYTHONPATH: ./backend
