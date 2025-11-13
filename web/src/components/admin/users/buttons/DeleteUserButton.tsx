@@ -3,22 +3,24 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
 import Button from "@/refresh-components/buttons/Button";
-import { useState } from "react";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
-const DeleteUserButton = ({
-  user,
-  setPopup,
-  mutate,
-  className,
-  children,
-}: {
+export interface DeleteUserButtonProps {
   user: User;
   setPopup: (spec: PopupSpec) => void;
   mutate: () => void;
   className?: string;
   children?: React.ReactNode;
-}) => {
+}
+
+export default function DeleteUserButton({
+  user,
+  setPopup,
+  mutate,
+  className,
+  children,
+}: DeleteUserButtonProps) {
   const { trigger, isMutating } = useSWRMutation(
     "/api/manage/admin/delete-user",
     userMutationFetcher,
@@ -38,22 +40,22 @@ const DeleteUserButton = ({
     }
   );
 
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const deleteModal = useModalProvider();
   return (
     <>
-      {showDeleteModal && (
+      <deleteModal.Provider>
         <ConfirmEntityModal
           entityType="user"
           entityName={user.email}
-          onClose={() => setShowDeleteModal(false)}
+          onClose={() => deleteModal.toggle(false)}
           onSubmit={() => trigger({ user_email: user.email, method: "DELETE" })}
           additionalDetails="All data associated with this user will be deleted (including personas, tools and chat sessions)."
         />
-      )}
+      </deleteModal.Provider>
 
       <Button
         className={className}
-        onClick={() => setShowDeleteModal(true)}
+        onClick={() => deleteModal.toggle(true)}
         disabled={isMutating}
         danger
       >
@@ -61,6 +63,4 @@ const DeleteUserButton = ({
       </Button>
     </>
   );
-};
-
-export default DeleteUserButton;
+}
