@@ -1,7 +1,7 @@
 import { Form, Formik } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { TextFormField } from "@/components/Field";
-import CoreModal from "@/refresh-components/modals/CoreModal";
+import CoreModal from "@/refresh-components/CoreModal";
 import Button from "@/refresh-components/buttons/Button";
 import { Separator } from "@/components/ui/separator";
 import { Callout } from "@/components/ui/callout";

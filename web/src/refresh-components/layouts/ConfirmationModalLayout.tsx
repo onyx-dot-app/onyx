@@ -2,12 +2,12 @@ import React from "react";
 import { SvgProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
 import SvgX from "@/icons/x";
-import CoreModal from "@/refresh-components/modals/CoreModal";
+import CoreModal from "@/refresh-components/CoreModal";
 import { useEscape } from "@/hooks/useKeyPress";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Button from "@/refresh-components/buttons/Button";
 
-interface ConfirmationModalProps {
+export interface ConfirmationModalProps {
   escapeToClose?: boolean;
   clickOutsideToClose?: boolean;
 
@@ -20,7 +20,7 @@ interface ConfirmationModalProps {
   onClose: () => void;
 }
 
-export default function ConfirmationModal({
+export default function ConfirmationModalLayout({
   escapeToClose = true,
   clickOutsideToClose = true,
 

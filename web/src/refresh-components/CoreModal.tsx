@@ -3,7 +3,7 @@ import ReactDOM from "react-dom";
 import { MODAL_ROOT_ID } from "@/lib/constants";
 import { cn, noProp } from "@/lib/utils";
 
-interface CoreModalProps {
+export interface CoreModalProps {
   onClickOutside?: () => void;
   className?: string;
   children?: React.ReactNode;

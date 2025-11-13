@@ -16,7 +16,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import SvgTrash from "@/icons/trash";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -105,7 +105,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
     >
       {/* Confirmation Modal (only for deletion) */}
       {deleteConfirmationModalOpen && (
-        <ConfirmationModal
+        <ConfirmationModalLayout
           title="Delete Project"
           icon={SvgTrash}
           onClose={() => setDeleteConfirmationModalOpen(false)}
@@ -123,7 +123,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
         >
           Are you sure you want to delete this project? This action cannot be
           undone.
-        </ConfirmationModal>
+        </ConfirmationModalLayout>
       )}
 
       {/* Project Folder */}

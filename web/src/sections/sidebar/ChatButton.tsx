@@ -6,7 +6,7 @@ import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { ChatSession } from "@/app/chat/interfaces";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import SvgTrash from "@/icons/trash";
 import SvgShare from "@/icons/share";
 import SvgEdit from "@/icons/edit";
@@ -395,7 +395,7 @@ function ChatButtonInner({
       {popup}
 
       {deleteConfirmationModalOpen && (
-        <ConfirmationModal
+        <ConfirmationModalLayout
           title="Delete Chat"
           icon={SvgTrash}
           onClose={() => setDeleteConfirmationModalOpen(false)}
@@ -413,7 +413,7 @@ function ChatButtonInner({
         >
           Are you sure you want to delete this chat? This action cannot be
           undone.
-        </ConfirmationModal>
+        </ConfirmationModalLayout>
       )}
 
       {showMoveCustomAgentModal && (
