@@ -34,10 +34,6 @@ import SidebarSection from "@/sections/sidebar/SidebarSection";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
 import SvgFolderPlus from "@/icons/folder-plus";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
@@ -142,7 +138,6 @@ function AppSidebarInner() {
   >(null);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
-  const { isOpen, toggleModal } = useChatModal();
   const { projects } = useProjectsContext();
 
   const [visibleAgents, currentAgentIsPinned] = useMemo(
@@ -357,7 +352,7 @@ function AppSidebarInner() {
         New Project
       </SidebarTab>
     ),
-    [folded, toggleModal, isOpen, createProjectModal]
+    [folded, createProjectModal]
   );
   const settingsButton = useMemo(
     () => (

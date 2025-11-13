@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 
-interface ModalProps {
+export interface ModalProps {
   // Modal sizes
   sm?: boolean;
   xs?: boolean;

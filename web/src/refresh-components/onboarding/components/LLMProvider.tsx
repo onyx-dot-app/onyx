@@ -4,29 +4,29 @@ import { SvgProps } from "@/icons";
 import SvgArrowExchange from "@/icons/arrow-exchange";
 import Truncated from "@/refresh-components/texts/Truncated";
 import SvgServer from "@/icons/server";
-import {
-  useChatModal,
-  ModalIds,
-} from "@/refresh-components/contexts/ChatModalContext";
 import LLMConnectionIcons from "@/refresh-components/onboarding/components/LLMConnectionIcons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import SvgSettings from "@/icons/settings";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgCheckCircle from "@/icons/check-circle";
 import { OnboardingActions, OnboardingState } from "../types";
-import { cn } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { LLMConnectionModalProps } from "./LLMConnectionModal";
 
-type LLMProviderProps = {
+export interface LLMProviderProps {
   title: string;
   subtitle: string;
   icon?: React.FunctionComponent<SvgProps>;
   llmDescriptor?: WellKnownLLMProviderDescriptor;
   disabled?: boolean;
   isConnected?: boolean;
+  onClick: (props: LLMConnectionModalProps) => void;
   onboardingState: OnboardingState;
   onboardingActions: OnboardingActions;
-};
-const LLMProviderInner = ({
+}
+
+function LLMProviderInner({
   title,
   subtitle,
   icon: Icon,
@@ -35,8 +35,9 @@ const LLMProviderInner = ({
   isConnected,
   onboardingState,
   onboardingActions,
-}: LLMProviderProps) => {
-  const { toggleModal } = useChatModal();
+  onClick,
+}: LLMProviderProps) {
+  const modal = useModal();
   const [isHovered, setIsHovered] = useState(false);
 
   const handleCardClick = useCallback(() => {
@@ -53,7 +54,7 @@ const LLMProviderInner = ({
       <SvgServer className="w-6 h-6 stroke-text-04" />
     );
 
-    toggleModal(ModalIds.LLMConnectionModal, true, {
+    onClick({
       icon: <LLMConnectionIcons icon={iconNode} />,
       title: "Set up " + title,
       llmDescriptor,
@@ -61,20 +62,22 @@ const LLMProviderInner = ({
       onboardingState,
       onboardingActions,
     });
+    modal.toggle(true);
   }, [
     Icon,
     llmDescriptor,
     title,
-    toggleModal,
+    modal.toggle,
     onboardingState,
     onboardingActions,
     isConnected,
+    onClick,
   ]);
 
-  const handleSettingsClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    window.location.href = "/admin/configuration/llm";
-  }, []);
+  const handleSettingsClick = useCallback(
+    noProp(() => (window.location.href = "/admin/configuration/llm")),
+    []
+  );
 
   return (
     <button
@@ -135,7 +138,7 @@ const LLMProviderInner = ({
       )}
     </button>
   );
-};
+}
 
 const LLMProvider = memo(LLMProviderInner);
 export default LLMProvider;
