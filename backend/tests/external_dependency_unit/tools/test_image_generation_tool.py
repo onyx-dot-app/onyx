@@ -204,7 +204,7 @@ def test_final_result_filters_heartbeats() -> None:
     )
 
     # Test that final_result returns only image data
-    result = tool.final_result(heartbeat, image_response)
+    result = tool.get_final_result(heartbeat, image_response)
 
     assert isinstance(result, list)
     assert len(result) == 1
