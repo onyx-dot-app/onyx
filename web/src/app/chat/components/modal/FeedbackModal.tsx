@@ -2,18 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FeedbackType } from "@/app/chat/interfaces";
-import Modal from "@/refresh-components/modals/Modal";
-import { FilledLikeIcon } from "@/components/icons/icons";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
 import SvgThumbsUp from "@/icons/thumbs-up";
 import SvgThumbsDown from "@/icons/thumbs-down";
 import Button from "@/refresh-components/buttons/Button";
 import FieldInput from "@/refresh-components/inputs/FieldInput";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useKeyPress } from "@/hooks/useKeyPress";
+import { usePopup } from "@/components/admin/connectors/Popup";
+import { useFeedbackController } from "../../hooks/useFeedbackController";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
+import Modal from "@/refresh-components/modals/Modal";
 
 const predefinedPositiveFeedbackOptions = process.env
   .NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS
@@ -29,32 +27,25 @@ const predefinedNegativeFeedbackOptions = process.env
       "Cited source had incorrect information",
     ];
 
-export const FeedbackModal = () => {
-  const { isOpen, toggleModal, getModalData } = useChatModal();
-  const data = getModalData<{
-    feedbackType: FeedbackType;
-    messageId: number;
-    handleFeedbackChange?: (
-      newFeedback: FeedbackType | null,
-      feedbackText?: string,
-      predefinedFeedback?: string
-    ) => Promise<void>;
-  }>();
+export interface FeedbackModalProps {
+  feedbackType: FeedbackType;
+  messageId: number;
+}
+
+export default function FeedbackModal({
+  feedbackType,
+  messageId,
+}: FeedbackModalProps) {
+  const modal = useModal();
+  // const { isOpen, toggleModal, getModalData } = useChatModal();
   const [predefinedFeedback, setPredefinedFeedback] = useState<
     string | undefined
   >();
+  const { popup, setPopup } = usePopup();
+  const { handleFeedbackChange } = useFeedbackController({ setPopup });
   const fieldInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!isOpen(ModalIds.FeedbackModal)) {
-      setPredefinedFeedback(undefined);
-    }
-  }, [isOpen(ModalIds.FeedbackModal)]);
-
   const handleSubmit = useCallback(async () => {
-    if (!data) return;
-    const { feedbackType, handleFeedbackChange } = data;
-
     if (
       (!predefinedFeedback || predefinedFeedback === "") &&
       (!fieldInputRef.current || fieldInputRef.current.value === "")
@@ -64,15 +55,21 @@ export const FeedbackModal = () => {
     const feedbackText =
       fieldInputRef.current?.value || predefinedFeedback || "";
 
-    if (!handleFeedbackChange) {
-      console.error("handleFeedbackChange is required but not provided");
-      return;
-    }
+    await handleFeedbackChange(
+      messageId,
+      feedbackType,
+      feedbackText,
+      predefinedFeedback
+    );
 
-    await handleFeedbackChange(feedbackType, feedbackText, predefinedFeedback);
-
-    toggleModal(ModalIds.FeedbackModal, false);
-  }, [data, predefinedFeedback, toggleModal]);
+    modal.toggle(false);
+  }, [
+    predefinedFeedback,
+    feedbackType,
+    handleFeedbackChange,
+    messageId,
+    modal.toggle,
+  ]);
 
   useEffect(() => {
     if (predefinedFeedback) {
@@ -82,9 +79,6 @@ export const FeedbackModal = () => {
 
   useKeyPress(handleSubmit, "Enter");
 
-  if (!data) return null;
-  const { feedbackType } = data;
-
   const predefinedFeedbackOptions =
     feedbackType === "like"
       ? predefinedPositiveFeedbackOptions
@@ -93,41 +87,42 @@ export const FeedbackModal = () => {
   const icon = feedbackType === "like" ? SvgThumbsUp : SvgThumbsDown;
 
   return (
-    <Modal
-      id={ModalIds.FeedbackModal}
-      title="Provide Additional Feedback"
-      icon={icon}
-      xs
-    >
-      {predefinedFeedbackOptions.length > 0 && (
-        <div className="flex flex-col p-4 gap-1">
-          {predefinedFeedbackOptions.map((feedback, index) => (
-            <LineItem
-              key={index}
-              onClick={() => setPredefinedFeedback(feedback)}
-            >
-              {feedback}
-            </LineItem>
-          ))}
+    <>
+      {popup}
+
+      <Modal
+        className="flex flex-col gap-1"
+        title="Provide Additional Feedback"
+        icon={icon}
+        mini
+      >
+        {predefinedFeedbackOptions.length > 0 && (
+          <div className="flex flex-col p-4 gap-1">
+            {predefinedFeedbackOptions.map((feedback, index) => (
+              <LineItem
+                key={index}
+                onClick={() => setPredefinedFeedback(feedback)}
+              >
+                {feedback}
+              </LineItem>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-col p-4 items-center justify-center bg-background-tint-01">
+          <FieldInput
+            label="Feedback"
+            placeholder={`What did you ${feedbackType} about this response?`}
+            className="!w-full"
+            ref={fieldInputRef}
+          />
         </div>
-      )}
-      <div className="flex flex-col p-4 items-center justify-center bg-background-tint-01">
-        <FieldInput
-          label="Feedback"
-          placeholder={`What did you ${feedbackType} about this response?`}
-          className="!w-full"
-          ref={fieldInputRef}
-        />
-      </div>
-      <div className="flex flex-row p-4 items-center justify-end w-full gap-2">
-        <Button
-          onClick={() => toggleModal(ModalIds.FeedbackModal, false)}
-          secondary
-        >
-          Cancel
-        </Button>
-        <Button onClick={handleSubmit}>Submit</Button>
-      </div>
-    </Modal>
+        <div className="flex flex-row p-4 items-center justify-end w-full gap-2">
+          <Button onClick={() => modal.toggle(false)} secondary>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit}>Submit</Button>
+        </div>
+      </Modal>
+    </>
   );
-};
+}
