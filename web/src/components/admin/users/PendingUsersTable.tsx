@@ -14,13 +14,13 @@ import { TableHeader } from "@/components/ui/table";
 import Button from "@/refresh-components/buttons/Button";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { FetchError } from "@/lib/fetcher";
-import { CheckIcon } from "lucide-react";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import SvgCheck from "@/icons/check";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 const USERS_PER_PAGE = 10;
 
-interface Props {
+export interface PendingUsersTableProps {
   users: InvitedUserSnapshot[];
   setPopup: (spec: PopupSpec) => void;
   mutate: () => void;
@@ -29,15 +29,16 @@ interface Props {
   q: string;
 }
 
-const PendingUsersTable = ({
+export default function PendingUsersTable({
   users,
   setPopup,
   mutate,
   error,
   isLoading,
   q,
-}: Props) => {
+}: PendingUsersTableProps) {
   const [currentPageNum, setCurrentPageNum] = useState<number>(1);
+  const approveModal = useModalProvider();
   const [userToApprove, setUserToApprove] = useState<string | null>(null);
 
   if (!users.length)
@@ -79,6 +80,7 @@ const PendingUsersTable = ({
         body: JSON.stringify({ email }),
       });
       mutate();
+      approveModal.toggle(false);
       setUserToApprove(null);
     } catch (error) {
       setPopup({
@@ -90,18 +92,24 @@ const PendingUsersTable = ({
 
   return (
     <>
-      {userToApprove && (
-        <ConfirmEntityModal
-          entityType="Join Request"
-          entityName={userToApprove}
-          onClose={() => setUserToApprove(null)}
-          onSubmit={() => handleAcceptRequest(userToApprove)}
-          actionButtonText="Approve"
-          action="approve the join request of"
-          additionalDetails={`${userToApprove} has requested to join the team. Approving will add them as a user in this team.`}
-          removeConfirmationText
-        />
-      )}
+      <approveModal.Provider>
+        {userToApprove && (
+          <ConfirmEntityModal
+            entityType="Join Request"
+            entityName={userToApprove}
+            onClose={() => {
+              approveModal.toggle(false);
+              setUserToApprove(null);
+            }}
+            onSubmit={() => handleAcceptRequest(userToApprove)}
+            actionButtonText="Approve"
+            action="approve the join request of"
+            additionalDetails={`${userToApprove} has requested to join the team. Approving will add them as a user in this team.`}
+            removeConfirmationText
+          />
+        )}
+      </approveModal.Provider>
+
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
@@ -120,7 +128,10 @@ const PendingUsersTable = ({
                   <div className="flex justify-end">
                     <Button
                       secondary
-                      onClick={() => setUserToApprove(user.email)}
+                      onClick={() => {
+                        approveModal.toggle(true);
+                        setUserToApprove(user.email);
+                      }}
                       leftIcon={SvgCheck}
                     >
                       Accept Join Request
@@ -138,6 +149,7 @@ const PendingUsersTable = ({
           )}
         </TableBody>
       </Table>
+
       {totalPages > 1 ? (
         <CenteredPageSelector
           currentPage={currentPageNum}
@@ -147,6 +159,4 @@ const PendingUsersTable = ({
       ) : null}
     </>
   );
-};
-
-export default PendingUsersTable;
+}
