@@ -39,7 +39,6 @@ import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import { ChatSearchModal } from "@/app/chat/chat_search/ChatSearchModal";
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useScreenSize } from "@/hooks/useScreenSize";
 import { DocumentResults } from "@/app/chat/components/documentSidebar/DocumentResults";
 import { useChatController } from "@/app/chat/hooks/useChatController";
@@ -85,7 +84,7 @@ interface ChatPageProps {
   firstMessage?: string;
 }
 
-export function ChatPage({
+export default function ChatPage({
   documentSidebarInitialWidth,
   firstMessage,
 }: ChatPageProps) {
