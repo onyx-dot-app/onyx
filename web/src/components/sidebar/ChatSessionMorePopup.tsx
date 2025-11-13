@@ -17,7 +17,6 @@ import { FiMoreHorizontal } from "react-icons/fi";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useCallback, useState, useMemo } from "react";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
-// PopoverMenu already imported above
 import MenuButton from "@/refresh-components/buttons/MenuButton";
 import SvgShare from "@/icons/share";
 import SvgFolderIn from "@/icons/folder-in";
@@ -27,11 +26,12 @@ import { cn, noProp } from "@/lib/utils";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
 import Button from "@/refresh-components/buttons/Button";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
-// Constants
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
+
 const DEFAULT_PERSONA_ID = 0;
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
 
-interface ChatSessionMorePopupProps {
+export interface ChatSessionMorePopupProps {
   chatSession: ChatSession;
   projectId?: number;
   isRenamingChat: boolean;
@@ -45,7 +45,7 @@ interface ChatSessionMorePopupProps {
   isVisible?: boolean;
 }
 
-export function ChatSessionMorePopup({
+export default function ChatSessionMorePopup({
   chatSession,
   projectId,
   isRenamingChat: _isRenamingChat,
@@ -59,15 +59,14 @@ export function ChatSessionMorePopup({
   isVisible = false,
 }: ChatSessionMorePopupProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const deleteModal = useModalProvider();
   const { refreshChatSessions } = useChatContext();
   const { fetchProjects, projects } = useProjectsContext();
 
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
+  const moveCustomAgentModal = useModalProvider();
 
   const isChatUsingDefaultAssistant =
     chatSession.persona_id === DEFAULT_PERSONA_ID;
@@ -89,11 +88,11 @@ export function ChatSessionMorePopup({
       await deleteChatSession(chatSession.id);
       await refreshChatSessions();
       await fetchProjects();
-      setIsDeleteModalOpen(false);
+      deleteModal.toggle(false);
       setPopoverOpen(false);
       afterDelete?.();
     },
-    [chatSession, refreshChatSessions, fetchProjects, afterDelete]
+    [chatSession, refreshChatSessions, fetchProjects, afterDelete, deleteModal]
   );
 
   const performMove = useCallback(
@@ -117,13 +116,13 @@ export function ChatSessionMorePopup({
 
       if (!isChatUsingDefaultAssistant && !hideModal) {
         setPendingMoveProjectId(targetProjectId);
-        setShowMoveCustomAgentModal(true);
+        moveCustomAgentModal.toggle(true);
         return;
       }
 
       await performMove(targetProjectId);
     },
-    [isChatUsingDefaultAssistant, performMove]
+    [isChatUsingDefaultAssistant, performMove, moveCustomAgentModal]
   );
 
   const handleRemoveChatSessionFromProject = useCallback(async () => {
@@ -175,7 +174,7 @@ export function ChatSessionMorePopup({
         <MenuButton
           key="delete"
           icon={SvgTrash}
-          onClick={noProp(() => setIsDeleteModalOpen(true))}
+          onClick={noProp(() => deleteModal.toggle(true))}
           danger
         >
           Delete
@@ -216,7 +215,46 @@ export function ChatSessionMorePopup({
   ]);
 
   return (
-    <div>
+    <>
+      <deleteModal.Provider>
+        <ConfirmationModal
+          title="Delete Chat"
+          icon={SvgTrash}
+          onClose={() => deleteModal.toggle(false)}
+          submit={
+            <Button danger onClick={handleConfirmDelete}>
+              Delete
+            </Button>
+          }
+        >
+          Are you sure you want to delete this chat? This action cannot be
+          undone.
+        </ConfirmationModal>
+      </deleteModal.Provider>
+
+      <moveCustomAgentModal.Provider>
+        <MoveCustomAgentChatModal
+          onCancel={() => {
+            moveCustomAgentModal.toggle(false);
+            setPendingMoveProjectId(null);
+          }}
+          onConfirm={async (doNotShowAgain: boolean) => {
+            if (doNotShowAgain && typeof window !== "undefined") {
+              window.localStorage.setItem(
+                LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY,
+                "true"
+              );
+            }
+            const target = pendingMoveProjectId;
+            moveCustomAgentModal.toggle(false);
+            setPendingMoveProjectId(null);
+            if (target != null) {
+              await performMove(target);
+            }
+          }}
+        />
+      </moveCustomAgentModal.Provider>
+
       <div className="-my-1">
         <Popover open={popoverOpen} onOpenChange={handlePopoverOpenChange}>
           <PopoverTrigger
@@ -248,44 +286,6 @@ export function ChatSessionMorePopup({
           </PopoverContent>
         </Popover>
       </div>
-      {isDeleteModalOpen && (
-        <ConfirmationModal
-          title="Delete Chat"
-          icon={SvgTrash}
-          onClose={() => setIsDeleteModalOpen(false)}
-          submit={
-            <Button danger onClick={handleConfirmDelete}>
-              Delete
-            </Button>
-          }
-        >
-          Are you sure you want to delete this chat? This action cannot be
-          undone.
-        </ConfirmationModal>
-      )}
-
-      {showMoveCustomAgentModal && (
-        <MoveCustomAgentChatModal
-          onCancel={() => {
-            setShowMoveCustomAgentModal(false);
-            setPendingMoveProjectId(null);
-          }}
-          onConfirm={async (doNotShowAgain: boolean) => {
-            if (doNotShowAgain && typeof window !== "undefined") {
-              window.localStorage.setItem(
-                LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY,
-                "true"
-              );
-            }
-            const target = pendingMoveProjectId;
-            setShowMoveCustomAgentModal(false);
-            setPendingMoveProjectId(null);
-            if (target != null) {
-              await performMove(target);
-            }
-          }}
-        />
-      )}
-    </div>
+    </>
   );
 }

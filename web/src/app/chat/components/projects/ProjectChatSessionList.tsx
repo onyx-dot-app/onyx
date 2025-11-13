@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import Link from "next/link";
-import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup";
+import ChatSessionMorePopup from "@/components/sidebar/ChatSessionMorePopup";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
 import AgentIcon from "@/refresh-components/AgentIcon";
