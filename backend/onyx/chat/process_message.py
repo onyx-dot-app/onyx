@@ -21,6 +21,7 @@ from onyx.chat.chat_utils import load_all_chat_files
 from onyx.chat.memories import get_memories
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import ChatBasicResponse
+from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import MessageResponseIDInfo
@@ -51,6 +52,7 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import get_user_files_from_project
+from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import build_frontend_file_url
@@ -159,7 +161,7 @@ def _build_project_llm_docs(
     return project_llm_docs
 
 
-def _extract_project_file_texts(
+def _extract_project_file_texts_and_images(
     project_id: int | None,
     user_id: UUID | None,
     llm_max_context_window: int,
@@ -170,7 +172,7 @@ def _extract_project_file_texts(
     # 60% of the LLM's max context window. The other benefit is that for projects with
     # more files, this makes it so that we don't throw away the history too quickly every time.
     max_llm_context_percentage: float = 0.6,
-) -> tuple[list[str], int | bool]:
+) -> tuple[list[str], list[ChatLoadedFile], int | bool]:
     """Extract text content from project files if they fit within the context window.
 
     Args:
@@ -183,12 +185,13 @@ def _extract_project_file_texts(
 
     Returns:
         List of text content strings from project files (text files only)
+        List of image files from project (ChatLoadedFile objects)
         Project id if the the project should be provided as a filter in search or None if not.
     """
     # TODO I believe this is not handling all file types correctly.
     project_as_filter = False
     if not project_id:
-        return [], False
+        return [], [], False
 
     max_actual_tokens = (
         llm_max_context_window - reserved_token_count
@@ -205,6 +208,7 @@ def _extract_project_file_texts(
         project_as_filter = True
 
     project_file_texts: list[str] = []
+    project_image_files: list[ChatLoadedFile] = []
     if project_tokens < max_actual_tokens:
         # Load project files into memory using cached plaintext when available
         project_user_files = get_user_files_from_project(
@@ -213,6 +217,9 @@ def _extract_project_file_texts(
             db_session=db_session,
         )
         if project_user_files:
+            # Create a mapping from file_id to UserFile for token count lookup
+            user_file_map = {str(file.id): file for file in project_user_files}
+
             project_file_ids = [file.id for file in project_user_files]
             in_memory_project_files = load_in_memory_chat_files(
                 user_file_ids=project_file_ids,
@@ -231,10 +238,27 @@ def _extract_project_file_texts(
                     except Exception:
                         # Skip files that can't be decoded
                         pass
+                elif file.file_type == ChatFileType.IMAGE:
+                    # Convert InMemoryChatFile to ChatLoadedFile
+                    user_file = user_file_map.get(str(file.file_id))
+                    token_count = (
+                        user_file.token_count
+                        if user_file and user_file.token_count
+                        else 0
+                    )
+                    chat_loaded_file = ChatLoadedFile(
+                        file_id=file.file_id,
+                        content=file.content,
+                        file_type=file.file_type,
+                        filename=file.filename,
+                        content_text=None,  # Images don't have text content
+                        token_count=token_count,
+                    )
+                    project_image_files.append(chat_loaded_file)
     else:
         project_as_filter = True
 
-    return project_file_texts, project_as_filter
+    return project_file_texts, project_image_files, project_as_filter
 
 
 def _translate_citations(
@@ -417,6 +441,7 @@ def stream_chat_message_objects(
             user_files=new_msg_req.file_descriptors,
             user_id=user_id,
             db_session=db_session,
+            project_id=chat_session.project_id,
         )
 
         # Makes sure that the chat session has the right message nodes
@@ -468,13 +493,14 @@ def stream_chat_message_objects(
         )
 
         # Process projects, if all of the files fit in the context, it doesn't need to use RAG
-        # TODO needs to handle image files
-        project_file_texts, project_as_filter = _extract_project_file_texts(
-            project_id=chat_session.project_id,
-            user_id=user_id,
-            llm_max_context_window=llm.config.max_input_tokens,
-            reserved_token_count=reserved_token_count,
-            db_session=db_session,
+        project_file_texts, project_image_files, project_as_filter = (
+            _extract_project_file_texts_and_images(
+                project_id=chat_session.project_id,
+                user_id=user_id,
+                llm_max_context_window=llm.config.max_input_tokens,
+                reserved_token_count=reserved_token_count,
+                db_session=db_session,
+            )
         )
 
         # There are cases where the internal search tool should be disabled
@@ -510,7 +536,6 @@ def stream_chat_message_objects(
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
             disable_internal_search=disable_internal_search,
         )
-
         tools: list[Tool] = []
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
@@ -542,6 +567,7 @@ def stream_chat_message_objects(
         simple_chat_history = convert_chat_history(
             chat_history=chat_history,
             files=files,
+            project_image_files=project_image_files,
         )
 
         yield from run_agent_loop(
