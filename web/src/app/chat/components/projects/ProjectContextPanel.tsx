@@ -15,6 +15,7 @@ import {
 } from "@/refresh-components/contexts/ChatModalContext";
 import AddInstructionModal from "@/components/modals/AddInstructionModal";
 import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { useEscape } from "@/hooks/useKeyPress";
 import CoreModal from "@/refresh-components/modals/CoreModal";
 import Text from "@/refresh-components/texts/Text";
@@ -39,6 +40,7 @@ export default function ProjectContextPanel({
   const open = isOpen(ModalIds.ProjectFilesModal);
   const onClose = () => toggleModal(ModalIds.ProjectFilesModal, false);
   useEscape(onClose, open);
+  const addInstructionModal = useCreateModal();
   // Convert ProjectFile to MinimalOnyxDocument format for viewing
   const handleOnView = useCallback(
     (file: ProjectFile) => {
@@ -129,7 +131,7 @@ export default function ProjectContextPanel({
         </div>
         <Button
           leftIcon={SvgAddLines}
-          onClick={() => toggleModal(ModalIds.AddInstructionModal, true)}
+          onClick={() => addInstructionModal.toggle(true)}
           tertiary
         >
           Set Instructions
@@ -263,7 +265,9 @@ export default function ProjectContextPanel({
         )}
       </div>
 
-      <AddInstructionModal />
+      <addInstructionModal.Modal>
+        <AddInstructionModal />
+      </addInstructionModal.Modal>
 
       {open && (
         <CoreModal
