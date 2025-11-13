@@ -75,5 +75,17 @@ class GeneratedImage(BaseModel):
     shape: str | None = None
 
 
+class ToolCallInfo(BaseModel):
+    parent_tool_call_id: str | None  # None if attached to the Chat Message directly
+    turn_number: int
+    tool_id: int  # DB tool type id
+    tool_call_id: str
+    reasoning_tokens: str | None
+    tool_call_arguments: dict[str, Any]
+    tool_call_response: (
+        Any  # we would like to use JSON_ro, but can't due to its recursive nature
+    )
+
+
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"
 MESSAGE_ID_PLACEHOLDER = "MESSAGE_ID"

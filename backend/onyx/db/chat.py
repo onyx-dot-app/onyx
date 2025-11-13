@@ -568,8 +568,8 @@ def reserve_message_id(
     db_session: Session,
     chat_session_id: UUID,
     parent_message: int,
-    message_type: MessageType,
-) -> int:
+    message_type: MessageType = MessageType.ASSISTANT,
+) -> ChatMessage:
     # Create an empty chat message
     empty_message = ChatMessage(
         chat_session_id=chat_session_id,
@@ -586,10 +586,7 @@ def reserve_message_id(
     # Flush the session to get an ID for the new chat message
     db_session.flush()
 
-    # Get the ID of the newly created message
-    new_id = empty_message.id
-
-    return new_id
+    return empty_message
 
 
 def create_new_chat_message(

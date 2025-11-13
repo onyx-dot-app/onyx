@@ -689,12 +689,12 @@ def convert_chat_history(
                     # Add each tool call as a separate message with the tool arguments
                     for tool_call in turn_tool_calls:
                         # Create a message containing the tool call information
-                        tool_call_message = f"{tool_call.tool_call_arguments}"
+                        tool_call_message = f"{tool_call.tool_call_arguments}"  # TODO ensure this is a valid dict string
                         simple_messages.append(
                             ChatMessageSimple(
                                 message=tool_call_message,
                                 token_count=tool_call.tool_call_tokens,
-                                message_type=MessageType.ASSISTANT,
+                                message_type=MessageType.TOOL_CALL,
                                 image_files=None,
                             )
                         )

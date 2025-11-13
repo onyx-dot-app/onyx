@@ -524,18 +524,20 @@ def stream_chat_message_objects(
         # TODO Need to think of some way to support selected docs from the sidebar
 
         # Reserve a message id for the assistant response for frontend to track packets
-        assistant_response_message_id = reserve_message_id(
+        assistant_response = reserve_message_id(
             db_session=db_session,
             chat_session_id=chat_session_id,
             parent_message=user_message.id,
             message_type=MessageType.ASSISTANT,
         )
+
+        # TODO this may not be needed by the frontend anymore, look into removing potentially
         yield MessageResponseIDInfo(
             user_message_id=user_message.id,
-            reserved_assistant_message_id=assistant_response_message_id,
+            reserved_assistant_message_id=assistant_response.id,
         )
 
-        # Conver the chat history into a simple format that is free of any DB objects
+        # Convert the chat history into a simple format that is free of any DB objects
         # and is easy to parse for the agent loop
         simple_chat_history = convert_chat_history(
             chat_history=chat_history,
@@ -550,6 +552,7 @@ def stream_chat_message_objects(
             persona=persona,
             llm=llm,
             fast_llm=fast_llm,
+            assistant_response=assistant_response,
             db_session=db_session,
         )
 
@@ -592,6 +595,7 @@ def run_agent_loop(
     persona: Persona | None,
     llm: LLM,
     fast_llm: LLM,
+    assistant_response: ChatMessage,
     db_session: Session,
 ) -> Generator[Packet, None, None]:
     raise NotImplementedError("Not implemented")

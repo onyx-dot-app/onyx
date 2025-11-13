@@ -492,6 +492,11 @@ class SavedSearchDoc(SearchDoc):
         return self.score < other.score
 
 
+class CitationDocInfo(BaseModel):
+    inference_chunk: InferenceChunk
+    citation_number: int | None
+
+
 class SavedSearchDocWithContent(SavedSearchDoc):
     """Used for endpoints that need to return the actual contents of the retrieved
     section in addition to the match_highlights."""
