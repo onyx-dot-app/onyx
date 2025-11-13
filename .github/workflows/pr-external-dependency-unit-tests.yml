@@ -30,7 +30,8 @@ env:
 
 jobs:
   discover-test-dirs:
-    runs-on: ubuntu-latest
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
@@ -63,8 +64,6 @@ jobs:
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
-        with:
-          metrics: cpu,memory
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
