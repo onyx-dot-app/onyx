@@ -30,7 +30,7 @@ env:
 
 jobs:
   discover-test-dirs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:

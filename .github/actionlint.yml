@@ -15,6 +15,7 @@ self-hosted-runner:
     - runner=8cpu-linux-x64
     - runner=16cpu-linux-arm64
     - runner=16cpu-linux-x64
+    - ubuntu-slim # Currently in public preview
 
 # Configuration variables in array of strings defined in your repository or
 # organization. `null` means disabling configuration variables check.

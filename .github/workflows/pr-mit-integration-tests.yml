@@ -26,7 +26,7 @@ env:
 
 jobs:
   discover-test-dirs:
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-discover-test-dirs"]
+    runs-on: ubuntu-slim
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
@@ -315,7 +315,7 @@ jobs:
 
 
   required:
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-required"]
+    runs-on: ubuntu-slim
     needs: [integration-tests-mit]
     if: ${{ always() }}
     steps:
