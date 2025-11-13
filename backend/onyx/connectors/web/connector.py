@@ -737,34 +737,42 @@ class WebConnector(LoadConnector):
             index = len(session_ctx.visited_links)
             logger.info(f"{index}: Visiting {initial_url}")
 
-            # Add retry mechanism with exponential backoff
-            retry_count = 0
-
-            while retry_count < self.MAX_RETRIES:
-                if retry_count > 0:
-                    # Add a random delay between retries (exponential backoff)
-                    delay = min(2**retry_count + random.uniform(0, 1), 10)
+            success = False
+            for attempt in range(1, self.MAX_RETRIES + 1):
+                if attempt > 1:
+                    delay = min(2 ** (attempt - 1) + random.uniform(0, 1), 10)
                     logger.info(
-                        f"Retry {retry_count}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay"
+                        f"Retry attempt {attempt}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay"
                     )
                     time.sleep(delay)
 
                 try:
                     result = self._do_scrape(index, initial_url, session_ctx)
-                    if result.retry:
-                        continue
-
-                    if result.doc:
-                        session_ctx.doc_batch.append(result.doc)
                 except Exception as e:
                     session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
                     logger.exception(session_ctx.last_error)
                     session_ctx.initialize()
+                    if attempt == self.MAX_RETRIES:
+                        logger.warning(
+                            f"Giving up on {initial_url} after {self.MAX_RETRIES} attempts due to repeated errors."
+                        )
                     continue
-                finally:
-                    retry_count += 1
 
-                break  # success / don't retry
+                if result.retry:
+                    if attempt == self.MAX_RETRIES:
+                        logger.warning(
+                            f"Giving up on {initial_url} after {self.MAX_RETRIES} attempts due to retry signal."
+                        )
+                    continue
+
+                if result.doc:
+                    session_ctx.doc_batch.append(result.doc)
+
+                success = True
+                break
+
+            if not success:
+                continue
 
             if len(session_ctx.doc_batch) >= self.batch_size:
                 session_ctx.initialize()
