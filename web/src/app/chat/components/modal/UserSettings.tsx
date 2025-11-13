@@ -34,7 +34,7 @@ import { useUserPersonalization } from "@/lib/hooks/useUserPersonalization";
 import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import Text from "@/refresh-components/texts/Text";
 import SvgXOctagon from "@/icons/x-octagon";
-import { PATManagement } from "@/components/user/PATManagement";
+import PATManagement from "@/components/user/PATManagement";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 
 type SettingsSection =

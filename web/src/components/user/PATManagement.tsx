@@ -5,7 +5,6 @@ import useSWR from "swr";
 import SvgTrash from "@/icons/trash";
 import SvgCopy from "@/icons/copy";
 import SvgCheck from "@/icons/check";
-
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@/lib/time";
@@ -21,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 interface PAT {
   id: number;
@@ -36,13 +36,14 @@ interface CreatedTokenState {
   token: string;
 }
 
-export function PATManagement() {
+export default function PATManagement() {
   const [isCreating, setIsCreating] = useState(false);
   const [newTokenName, setNewTokenName] = useState("");
   const [expirationDays, setExpirationDays] = useState<string>("30");
   const [newlyCreatedToken, setNewlyCreatedToken] =
     useState<CreatedTokenState | null>(null);
   const [copiedTokenId, setCopiedTokenId] = useState<number | null>(null);
+  const deleteModal = useModalProvider();
   const [tokenToDelete, setTokenToDelete] = useState<{
     id: number;
     name: string;
@@ -128,6 +129,7 @@ export function PATManagement() {
     } catch (error) {
       setPopup({ message: "Network error deleting token", type: "error" });
     } finally {
+      deleteModal.toggle(false);
       setTokenToDelete(null);
     }
   };
@@ -145,21 +147,27 @@ export function PATManagement() {
 
   return (
     <>
-      {tokenToDelete && (
-        <ConfirmationModal
-          icon={SvgTrash}
-          title="Delete Token"
-          onClose={() => setTokenToDelete(null)}
-          submit={
-            <Button danger onClick={() => deletePAT(tokenToDelete.id)}>
-              Delete
-            </Button>
-          }
-        >
-          Are you sure you want to delete token &quot;{tokenToDelete.name}
-          &quot;? This action cannot be undone.
-        </ConfirmationModal>
-      )}
+      <deleteModal.Provider>
+        {tokenToDelete && (
+          <ConfirmationModal
+            icon={SvgTrash}
+            title="Delete Token"
+            onClose={() => {
+              deleteModal.toggle(false);
+              setTokenToDelete(null);
+            }}
+            submit={
+              <Button danger onClick={() => deletePAT(tokenToDelete.id)}>
+                Delete
+              </Button>
+            }
+          >
+            Are you sure you want to delete token &quot;{tokenToDelete.name}
+            &quot;? This action cannot be undone.
+          </ConfirmationModal>
+        )}
+      </deleteModal.Provider>
+
       <div className="space-y-6">
         {/* Create New Token Form */}
         <div className="space-y-4">
@@ -289,9 +297,10 @@ export function PATManagement() {
                     </div>
                     <IconButton
                       icon={SvgTrash}
-                      onClick={() =>
-                        setTokenToDelete({ id: pat.id, name: pat.name })
-                      }
+                      onClick={() => {
+                        setTokenToDelete({ id: pat.id, name: pat.name });
+                        deleteModal.toggle(true);
+                      }}
                       internal
                       data-testid={`delete-pat-${pat.id}`}
                       aria-label={`Delete token ${pat.name}`}
