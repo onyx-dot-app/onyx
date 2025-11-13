@@ -44,6 +44,7 @@ import {
 } from "@/sections/sidebar/sidebarUtils";
 import ButtonRenaming from "@/sections/sidebar/ButtonRenaming";
 import { useAppFocus } from "@/lib/hooks";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 // (no local constants; use shared constants/imports)
 
@@ -121,10 +122,9 @@ function ChatButtonInner({
     chatSession.name || UNNAMED_CHAT
   );
   const [renaming, setRenaming] = useState(false);
-  const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
-    useState(false);
+  const deleteConfirmationModal = useModalProvider();
   const [showMoveOptions, setShowMoveOptions] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
+  const shareModal = useModalProvider();
   const [searchTerm, setSearchTerm] = useState("");
   const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
   const { refreshChatSessions } = useChatContext();
@@ -139,8 +139,7 @@ function ChatButtonInner({
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
+  const moveCustomAgentModal = useModalProvider();
 
   // Drag and drop setup for chat sessions
   const dragId = `${DRAG_TYPES.CHAT}-${chatSession.id}`;
@@ -198,7 +197,7 @@ function ChatButtonInner({
         <MenuButton
           key="share"
           icon={SvgShare}
-          onClick={noProp(() => setShowShareModal(true))}
+          onClick={noProp(() => shareModal.toggle(true))}
         >
           Share
         </MenuButton>,
@@ -229,7 +228,7 @@ function ChatButtonInner({
         <MenuButton
           key="delete"
           icon={SvgTrash}
-          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+          onClick={noProp(() => deleteConfirmationModal.toggle(true))}
           danger
         >
           Delete
@@ -321,7 +320,7 @@ function ChatButtonInner({
   async function handleChatMove(targetProject: Project) {
     if (shouldShowMoveModal(chatSession)) {
       setPendingMoveProjectId(targetProject.id);
-      setShowMoveCustomAgentModal(true);
+      moveCustomAgentModal.toggle(true);
       return;
     }
     await performMove(targetProject.id);
@@ -394,16 +393,16 @@ function ChatButtonInner({
     <>
       {popup}
 
-      {deleteConfirmationModalOpen && (
+      <deleteConfirmationModal.Provider>
         <ConfirmationModal
           title="Delete Chat"
           icon={SvgTrash}
-          onClose={() => setDeleteConfirmationModalOpen(false)}
+          onClose={() => deleteConfirmationModal.toggle(false)}
           submit={
             <Button
               danger
               onClick={() => {
-                setDeleteConfirmationModalOpen(false);
+                deleteConfirmationModal.toggle(false);
                 handleChatDelete();
               }}
             >
@@ -414,12 +413,12 @@ function ChatButtonInner({
           Are you sure you want to delete this chat? This action cannot be
           undone.
         </ConfirmationModal>
-      )}
+      </deleteConfirmationModal.Provider>
 
-      {showMoveCustomAgentModal && (
+      <moveCustomAgentModal.Provider>
         <MoveCustomAgentChatModal
           onCancel={() => {
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveProjectId(null);
           }}
           onConfirm={async (doNotShowAgain: boolean) => {
@@ -430,21 +429,21 @@ function ChatButtonInner({
               );
             }
             const target = pendingMoveProjectId;
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveProjectId(null);
             if (target != null) {
               await performMove(target);
             }
           }}
         />
-      )}
+      </moveCustomAgentModal.Provider>
 
-      {showShareModal && (
+      <shareModal.Provider>
         <ShareChatSessionModal
           chatSession={chatSession}
-          onClose={() => setShowShareModal(false)}
+          onClose={() => shareModal.toggle(false)}
         />
-      )}
+      </shareModal.Provider>
 
       {draggable ? (
         <div
