@@ -8,8 +8,8 @@ import { useAppFocus } from "@/lib/hooks";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgShare from "@/icons/share";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-import { useState } from "react";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 export default function AppLayout({
   className,
@@ -25,7 +25,7 @@ export default function AppLayout({
 
   const appFocus = useAppFocus();
   const { chatSessions } = useChatContext();
-  const [showShareModal, setShowShareModal] = useState(false);
+  const shareModal = useModalProvider();
 
   const currentChatSession =
     typeof appFocus === "object" && appFocus.type === "chat"
@@ -34,12 +34,14 @@ export default function AppLayout({
 
   return (
     <>
-      {showShareModal && currentChatSession && (
-        <ShareChatSessionModal
-          chatSession={currentChatSession}
-          onClose={() => setShowShareModal(false)}
-        />
-      )}
+      <shareModal.Provider>
+        {currentChatSession && (
+          <ShareChatSessionModal
+            chatSession={currentChatSession}
+            onClose={() => shareModal.toggle(false)}
+          />
+        )}
+      </shareModal.Provider>
 
       <div className="flex flex-col h-full w-full">
         {/* Header */}
@@ -51,9 +53,9 @@ export default function AppLayout({
             <div className="flex flex-row items-center justify-center px-1">
               <IconButton
                 icon={SvgShare}
-                transient={showShareModal}
+                transient={shareModal.isOpen}
                 tertiary
-                onClick={() => setShowShareModal(true)}
+                onClick={() => shareModal.toggle(true)}
               />
             </div>
           </header>
