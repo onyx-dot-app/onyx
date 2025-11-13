@@ -1,16 +1,41 @@
 from typing import Any
+from typing import TYPE_CHECKING
 from uuid import UUID
 
+from backend.onyx.tools.tool_implementations.custom.custom_tool import (
+    CustomToolCallSummary,
+)
 from pydantic import BaseModel
 from pydantic import model_validator
 
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import IndexFilters
+from onyx.context.search.models import SearchDocsResponse
+from onyx.tools.tool_implementations.web_search.models import WebContentResponse
+from onyx.tools.tool_implementations.web_search.models import WebSearchResultsResponse
+
+
+if TYPE_CHECKING:
+    from litellm.utils import ImageResponse
 
 
 class ToolResponse(BaseModel):
-    id: str | None = None
-    response: Any = None
+    # Rich response is for the objects that are returned but not directly used by the LLM
+    # these typically need to be saved to the database to load things in the UI (usually both)
+    rich_response: (
+        # This comes from image generation, image needs to be saved and the packet about it's location needs to be emitted
+        ImageResponse
+        # This comes from internal search, search docs need to be saved, no need to be emitted, already emitted by the tool
+        | SearchDocsResponse
+        # This comes from web search, search results need to be saved
+        | WebSearchResultsResponse
+        # This comes from open url, web content needs to be saved
+        | WebContentResponse
+        # This comes from custom tools, tool result needs to be saved
+        | CustomToolCallSummary
+    )
+    # This is the final string that needs to be wrapped in a tool call response message and concatenated to the history
+    llm_facing_response: str
 
 
 class ToolCallKickoff(BaseModel):

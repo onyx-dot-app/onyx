@@ -1,13 +1,10 @@
 import abc
-from collections.abc import Generator
 from typing import Any
 from typing import Generic
 from typing import TYPE_CHECKING
 from typing import TypeVar
 
 from pydantic import BaseModel
-
-from onyx.utils.special_types import JSON_ro
 
 
 if TYPE_CHECKING:
@@ -74,25 +71,9 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
 
     @abc.abstractmethod
     def run(
-        self, override_kwargs: OVERRIDE_T | None = None, **llm_kwargs: Any
-    ) -> Generator["ToolResponse", None, None]:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def get_llm_tool_response(
-        self, *args: "ToolResponse"
-    ) -> str | list[str | dict[str, Any]]:
-        """
-        This is the output of the tool which is passed back to the LLM.
-        It should be clean and easy to parse for a language model.
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def get_final_result(self, *args: "ToolResponse") -> JSON_ro:
-        """
-        This is the output of the tool which needs to be stored in the database.
-        It will typically contain more information than what is passed back to the LLM
-        via the get_llm_tool_response method.
-        """
+        self,
+        run_context: RunContextWrapper[TContext],
+        override_kwargs: OVERRIDE_T | None = None,
+        **llm_kwargs: Any
+    ) -> ToolResponse:
         raise NotImplementedError

@@ -437,6 +437,10 @@ class SearchDoc(BaseModel):
         return initial_dict
 
 
+class SearchDocsResponse(BaseModel):
+    search_docs: list[SearchDoc]
+
+
 class SavedSearchDoc(SearchDoc):
     db_doc_id: int
     score: float = 0.0
@@ -493,7 +497,7 @@ class SavedSearchDoc(SearchDoc):
 
 
 class CitationDocInfo(BaseModel):
-    inference_chunk: InferenceChunk
+    inference_chunk: SearchDoc
     citation_number: int | None
 
 
