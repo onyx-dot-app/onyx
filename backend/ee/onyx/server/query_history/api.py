@@ -41,7 +41,7 @@ from onyx.server.query_and_chat.models import ChatSessionDetails, ChatSessionsRe
 
 router = APIRouter(tags=["История запросов"])
 
-ONYX_ANONYMIZED_EMAIL = "anonymous@anonymous.invalid"
+SMART_SEARCH_ANONYMIZED_EMAIL = "anonymous@anonymous.invalid"
 
 
 def _get_valid_snapshots(
@@ -233,49 +233,74 @@ def _snapshot_from_chat_session(
     return chat_session_snapshot
 
 
-@router.get("/admin/chat-sessions")
+@router.get(
+    "/admin/chat-sessions",
+    summary="Получение списка чат-сессий конкретного пользователя",
+    response_model=ChatSessionsResponse,
+)
 def get_user_chat_sessions(
     user_id: UUID,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionsResponse:
-    # we specifically don't allow this endpoint if "anonymized" since
-    # this is a direct query on the user id
-    if ONYX_QUERY_HISTORY_TYPE in [
+    """Получение списка чат-сессий конкретного пользователя.
+
+    Эндпоинт недоступен при отключенной или анонимизированной истории запросов,
+    так как выполняет прямой поиск по идентификатору пользователя.
+
+    Args:
+        user_id: Идентификатор пользователя для поиска сессий
+
+    Returns:
+        Список чат-сессий пользователя с основной информацией
+       """
+
+    disabled_history_types = [
         QueryHistoryType.DISABLED,
         QueryHistoryType.ANONYMIZED,
-    ]:
+    ]
+
+    if ONYX_QUERY_HISTORY_TYPE in disabled_history_types:
         raise HTTPException(
             status_code=HTTPStatus.FORBIDDEN,
-            detail="Per user query history has been disabled by the administrator.",
+            detail="История запросов по пользователям отключена администратором.",
         )
 
     try:
-        chat_sessions = get_chat_sessions_by_user(
-            user_id=user_id, deleted=False, db_session=db_session, limit=0
+        user_sessions = get_chat_sessions_by_user(
+            user_id=user_id,
+            deleted=False,
+            db_session=db_session,
+            limit=0,
+        )
+    except ValueError:
+        raise ValueError("Чат-сессия не существует или была удалена")
+
+    sessions_list = []
+    for session in user_sessions:
+        session_time_created = session.time_created.isoformat()
+        session_time_updated = session.time_updated.isoformat()
+        sessions_list.append(
+            ChatSessionDetails(
+                id=session.id,
+                name=session.description,
+                persona_id=session.persona_id,
+                time_created=session_time_created,
+                time_updated=session_time_updated,
+                shared_status=session.shared_status,
+                folder_id=session.folder_id,
+                current_alternate_model=session.current_alternate_model,
+            )
         )
 
-    except ValueError:
-        raise ValueError("Chat session does not exist or has been deleted")
-
-    return ChatSessionsResponse(
-        sessions=[
-            ChatSessionDetails(
-                id=chat.id,
-                name=chat.description,
-                persona_id=chat.persona_id,
-                time_created=chat.time_created.isoformat(),
-                time_updated=chat.time_updated.isoformat(),
-                shared_status=chat.shared_status,
-                folder_id=chat.folder_id,
-                current_alternate_model=chat.current_alternate_model,
-            )
-            for chat in chat_sessions
-        ]
-    )
+    return ChatSessionsResponse(sessions=sessions_list)
 
 
-@router.get("/admin/chat-session-history")
+@router.get(
+    "/admin/chat-session-history",
+    summary="Получение пагинированной истории чат-сессий с фильтрацией",
+    response_model=PaginatedReturn[ChatSessionMinimal],
+)
 def get_chat_session_history(
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1),
@@ -285,13 +310,30 @@ def get_chat_session_history(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[ChatSessionMinimal]:
+    """Получение пагинированной истории чат-сессий с фильтрацией.
+
+    Возвращает список сессий с основной информацией: первые сообщения,
+    тип фидбека, ассистент, длина диалога. Поддерживает фильтрацию
+    по времени и типу фидбека. При анонимизации скрывает email пользователей.
+
+    Args:
+        page_num: Номер страницы (начиная с 0)
+        page_size: Размер страницы
+        feedback_type: Фильтр по типу фидбека
+        start_time: Начало временного диапазона
+        end_time: Конец временного диапазона
+
+    Returns:
+        Пагинированный список чат-сессий с общей статистикой
+    """
     if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.DISABLED:
         raise HTTPException(
             status_code=HTTPStatus.FORBIDDEN,
-            detail="Query history has been disabled by the administrator.",
+            detail="История запросов отключена администратором.",
         )
 
-    page_of_chat_sessions = get_page_of_chat_sessions(
+    # Получаем данные с пагинацией
+    paginated_sessions = get_page_of_chat_sessions(
         page_num=page_num,
         page_size=page_size,
         db_session=db_session,
@@ -307,105 +349,147 @@ def get_chat_session_history(
         feedback_filter=feedback_type,
     )
 
-    minimal_chat_sessions: list[ChatSessionMinimal] = []
+    # Формируем минималистичные представления сессий
+    sessions_list: list[ChatSessionMinimal] = []
+    for session in paginated_sessions:
+        session_minimal = ChatSessionMinimal.from_chat_session(session)
 
-    for chat_session in page_of_chat_sessions:
-        minimal_chat_session = ChatSessionMinimal.from_chat_session(chat_session)
+        # Применяем анонимизацию, если включена
         if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
-            minimal_chat_session.user_email = ONYX_ANONYMIZED_EMAIL
-        minimal_chat_sessions.append(minimal_chat_session)
+            session_minimal.user_email = SMART_SEARCH_ANONYMIZED_EMAIL
+
+        sessions_list.append(session_minimal)
 
     return PaginatedReturn(
-        items=minimal_chat_sessions,
+        items=sessions_list,
         total_items=total_filtered_chat_sessions_count,
     )
 
 
-@router.get("/admin/chat-session-history/{chat_session_id}")
+@router.get(
+    "/admin/chat-session-history/{chat_session_id}",
+    summary="Получение детальной информации о конкретной чат-сессии",
+    response_model=ChatSessionSnapshot,
+)
 def get_chat_session_admin(
     chat_session_id: UUID,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionSnapshot:
+    """Получение детальной информации о конкретной чат-сессии.
+
+    Возвращает полный снимок сессии со всеми сообщениями и метаданными.
+    Доступно только администраторам. При анонимизации скрывает email пользователя.
+
+    Args:
+        chat_session_id: Идентификатор запрашиваемой чат-сессии
+
+    Returns:
+        Полный снимок чат-сессии со всеми сообщениями
+    """
     if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.DISABLED:
         raise HTTPException(
             status_code=HTTPStatus.FORBIDDEN,
-            detail="Query history has been disabled by the administrator.",
+            detail="История запросов отключена администратором.",
         )
 
     try:
         chat_session = get_chat_session_by_id(
             chat_session_id=chat_session_id,
-            user_id=None,  # view chat regardless of user
+            user_id=None,  # просмотр без привязки к пользователю
             db_session=db_session,
             include_deleted=True,
         )
     except ValueError:
         raise HTTPException(
-            400, f"Chat session with id '{chat_session_id}' does not exist."
+            status_code=400,
+            detail=f"Чат-сессия с идентификатором '{chat_session_id}' не существует.",
         )
-    snapshot = _snapshot_from_chat_session(
-        chat_session=chat_session, db_session=db_session
+
+    session_snapshot = _snapshot_from_chat_session(
+        chat_session=chat_session,
+        db_session=db_session,
     )
 
-    if snapshot is None:
+    if session_snapshot is None:
         raise HTTPException(
-            400,
-            f"Could not create snapshot for chat session with id '{chat_session_id}'",
+            status_code=400,
+            detail=f"Не удалось создать снимок для чат-сессии с идентификатором '{chat_session_id}'",
         )
 
+    # Применяем анонимизацию если включена
     if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
-        snapshot.user_email = ONYX_ANONYMIZED_EMAIL
+        session_snapshot.user_email = SMART_SEARCH_ANONYMIZED_EMAIL
 
-    return snapshot
+    return session_snapshot
 
 
-@router.get("/admin/query-history-csv")
+@router.get(
+    "/admin/query-history-csv",
+    summary="Экспорт истории запросов в CSV формате",
+)
 def get_query_history_as_csv(
     _: User | None = Depends(current_admin_user),
     start: datetime | None = None,
     end: datetime | None = None,
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
+    """Экспорт истории запросов в CSV формате.
+
+    Генерирует CSV файл со всеми вопросами и ответами за указанный период.
+    Включает информацию о документах, фидбеках и метаданных сессий.
+    Операция ресурсоемкая, рекомендуется для небольших периодов.
+
+    Args:
+        start: Начало периода экспорта (по умолчанию - вся история)
+        end: Конец периода экспорта (по умолчанию - текущее время)
+
+    Returns:
+        CSV файл с историей запросов для скачивания
+    """
     if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.DISABLED:
         raise HTTPException(
             status_code=HTTPStatus.FORBIDDEN,
-            detail="Query history has been disabled by the administrator.",
+            detail="История запросов отключена администратором.",
         )
 
-    # this call is very expensive and is timing out via endpoint
-    # TODO: optimize call and/or generate via background task
-    complete_chat_session_history = _fetch_and_process_chat_session_history(
+    # Определяем временные границы
+    period_start = start or datetime.fromtimestamp(0, tz=timezone.utc)
+    period_end = end or datetime.now(tz=timezone.utc)
+
+    # Этот вызов очень ресурсоемкий и может вызывать таймауты
+    # TODO: оптимизировать запрос или вынести в фоновую задачу
+    all_chat_sessions = _fetch_and_process_chat_session_history(
         db_session=db_session,
-        start=start or datetime.fromtimestamp(0, tz=timezone.utc),
-        end=end or datetime.now(tz=timezone.utc),
+        start=period_start,
+        end=period_end,
         feedback_type=None,
         limit=None,
     )
 
-    question_answer_pairs: list[QuestionAnswerPairSnapshot] = []
-    for chat_session_snapshot in complete_chat_session_history:
+    qa_pairs: list[QuestionAnswerPairSnapshot] = []
+    for session_snapshot in all_chat_sessions:
+        # Применяем анонимизацию если включена
         if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
-            chat_session_snapshot.user_email = ONYX_ANONYMIZED_EMAIL
+            session_snapshot.user_email = SMART_SEARCH_ANONYMIZED_EMAIL
 
-        question_answer_pairs.extend(
-            QuestionAnswerPairSnapshot.from_chat_session_snapshot(chat_session_snapshot)
-        )
+        session_qa_pairs = QuestionAnswerPairSnapshot.from_chat_session_snapshot(session_snapshot)
+        qa_pairs.extend(session_qa_pairs)
 
-    # Create an in-memory text stream
-    stream = io.StringIO()
-    writer = csv.DictWriter(
-        stream, fieldnames=list(QuestionAnswerPairSnapshot.model_fields.keys())
-    )
-    writer.writeheader()
-    for row in question_answer_pairs:
-        writer.writerow(row.to_json())
+    # Создаем CSV в памяти
+    csv_buffer = io.StringIO()
+    csv_columns = list(QuestionAnswerPairSnapshot.model_fields.keys())
+    csv_writer = csv.DictWriter(csv_buffer, fieldnames=csv_columns)
 
-    # Reset the stream's position to the start
-    stream.seek(0)
+    csv_writer.writeheader()
+    for qa_pair in qa_pairs:
+        csv_writer.writerow(qa_pair.to_json())
+
+    # Сбрасываем позицию потока для чтения
+    csv_buffer.seek(0)
 
     return StreamingResponse(
-        iter([stream.getvalue()]),
+        iter([csv_buffer.getvalue()]),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment;filename=onyx_query_history.csv"},
+        headers={"Content-Disposition": "attachment;filename=smart_search_query_history.csv"},
     )
