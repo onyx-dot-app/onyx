@@ -1,9 +1,5 @@
 # Overview of Context Management
 
-## Other related pointers
-- How messages, files, images are stored can be found in db/models.py
-
-
 ## System Prompt
 The system prompt is a default prompt that comes packaged with the system. Users can edit the default prompt and it will be persisted in the database.
 
@@ -27,8 +23,8 @@ Every file knows how many tokens it is (model agnostic), image files have some a
 
 Image files are attached to User Messages also as point in time inclusions.
 
-Future Extension:
-Files selected from the searched results are also counted as “point in time” inclusions. Files that are too large cannot be selected.
+**Future Extension**:
+Files selected from the search results are also counted as “point in time” inclusions. Files that are too large cannot be selected.
 For these files, the "entire file" does not exist for most connectors, it's pieced back together from the search engine.
 
 
@@ -63,6 +59,16 @@ final message. If a search related tool just ran and the user has reminders, bot
 If a search related tool is called at any point during the turn, the reminder will remain at the end until the turn is over and the agent as responded.
 
 
+## Tool Calls
+As tool call responses can get very long (like an internal search can be many thousands of tokens), tool responses are today replaced with a hardcoded
+string saying it is no longer available. Tool Call details like the search query and other arguments are kept in the history as this is information
+rich and generally very few tokens.
+
+**Possible Future Extension**:
+Instead of dropping the Tool Call response, we might summarize it using an LLM so that it is just 1-2 sentences and captures the main points. That said,
+this is questionable value add because anything relevant and useful should be already captured in the Agent response.
+
+
 ## Examples
 S -> System Message
 CA -> Custom Agent as a User Message
@@ -86,6 +92,27 @@ S, CA, P, F, U1, A1 -- user sends another message -> S, F, U1, A1, CA, P, U2, A2
 - Project files move along the chain as new messages are sent
 - Custom Agent prompt comes before project files which comes before user uploaded files in each turn
 
-Reminders during a turn
+Reminders during a single Turn
 S, U1, TC, TR, R -- agent calls another tool -> S, U1, TC, TR, TC, TR, R, A1
 - Reminder moved to the end
+
+
+## Reasons / Experiments
+Custom Agent instructions being placed in the system prompt is poorly followed. It also degrade performance of the system especially when the instructions
+are orthogonal (or even possibly contradictory) to the system prompt. For weaker models, it causes strange artifacts in tool calls and final responses
+that completely ruins the user experience. Empirically, this way works better across a range of models especially when the history gets longer.
+Having the Custom Agent instructions not move means it fades more as the chat gets long which is also not ok from a UX perspective.
+
+Project files are important to the entire duration of the chat session. If the user has uploaded project files, they are likely very intent on working with
+those files. The LLM is much better at referencing documents close to the end of the context window so keeping it there for ease of access.
+
+Reminder are absolutely necessary to ensure 1-2 specific instructions get followed with a very high probability. It is less detailed than the system prompt
+and should be very targetted for it to work reliably.
+
+User uploaded files are considered relevant for that point in time, it is ok if the Agent forgets about it as the chat gets long. If every uploaded file is
+constantly moved towards the end of the chat, it would degrade quality as these stack up. Even with a single file, there is some cost of making the previous
+User Message further away. This tradeoff is accepted for Projects because of the intent of the feature.
+
+
+## Other related pointers
+- How messages, files, images are stored can be found in db/models.py
