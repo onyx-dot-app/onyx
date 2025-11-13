@@ -63,6 +63,7 @@ import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import SvgSettings from "@/icons/settings";
 import { useAppFocus } from "@/lib/hooks";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -141,7 +142,6 @@ function AppSidebarInner() {
   >(null);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
-  const { isOpen, toggleModal } = useChatModal();
   const { projects } = useProjectsContext();
 
   const [visibleAgents, currentAgentIsPinned] = useMemo(
@@ -307,6 +307,7 @@ function AppSidebarInner() {
 
   const { isAdmin, isCurator } = useUser();
   const activeSidebarTab = useAppFocus();
+  const createProjectModal = useCreateModal();
   const newSessionButton = useMemo(
     () => (
       <div data-testid="AppSidebar/new-session">
@@ -346,15 +347,15 @@ function AppSidebarInner() {
     () => (
       <SidebarTab
         leftIcon={SvgFolderPlus}
-        onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
-        active={isOpen(ModalIds.CreateProjectModal)}
+        onClick={() => createProjectModal.toggle(true)}
+        active={createProjectModal.isOpen}
         folded={folded}
         lowlight={!folded}
       >
         New Project
       </SidebarTab>
     ),
-    [folded, toggleModal, isOpen]
+    [folded, createProjectModal.toggle, createProjectModal.isOpen]
   );
   const settingsButton = useMemo(
     () => (
@@ -381,7 +382,9 @@ function AppSidebarInner() {
   return (
     <>
       {popup}
-      <CreateProjectModal />
+      <createProjectModal.Modal>
+        <CreateProjectModal />
+      </createProjectModal.Modal>
 
       {showMoveCustomAgentModal && (
         <MoveCustomAgentChatModal
@@ -462,9 +465,7 @@ function AppSidebarInner() {
                       icon={SvgFolderPlus}
                       internal
                       tooltip="New Project"
-                      onClick={() =>
-                        toggleModal(ModalIds.CreateProjectModal, true)
-                      }
+                      onClick={() => createProjectModal.toggle(true)}
                     />
                   }
                 >
