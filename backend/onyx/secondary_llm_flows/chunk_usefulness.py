@@ -50,7 +50,7 @@ def llm_eval_section(
 
     messages = _get_usefulness_messages()
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-    model_output = message_to_string(llm.invoke(filled_llm_prompt))
+    model_output = message_to_string(llm.invoke_langchain(filled_llm_prompt))
 
     # NOTE(rkuo): all this does is print "Yes useful" or "Not useful"
     # disabling becuase it's spammy, restore and give more context if this is needed

@@ -47,6 +47,7 @@ export default async function Layout({ children }: LayoutProps) {
     <ChatProvider
       inputPrompts={inputPrompts}
       chatSessions={chatSessions}
+      llmProviders={llmProviders}
       proSearchToggled={proSearchToggled}
       sidebarInitiallyVisible={sidebarInitiallyVisible}
       availableSources={availableSources}
@@ -56,7 +57,6 @@ export default async function Layout({ children }: LayoutProps) {
       tags={tags}
       availableDocumentSets={documentSets}
       availableTags={tags}
-      llmProviders={llmProviders}
       shouldShowWelcomeModal={shouldShowWelcomeModal}
       defaultAssistantId={defaultAssistantId}
     >

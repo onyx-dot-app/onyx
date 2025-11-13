@@ -9,3 +9,12 @@ updates:
       - "jmelahman"
     labels:
       - "dependabot:actions"
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    assignees:
+      - "jmelahman"
+    labels:
+      - "dependabot:python"

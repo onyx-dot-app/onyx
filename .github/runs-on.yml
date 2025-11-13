@@ -1,0 +1,4 @@
+runners:
+  default:
+    family: ["m7", "c7"]
+    spot: price-capacity-optimized

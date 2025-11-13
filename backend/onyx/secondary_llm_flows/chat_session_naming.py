@@ -36,7 +36,7 @@ def get_renamed_conversation_name(
     ]
 
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    new_name_raw = message_to_string(llm.invoke(filled_llm_prompt))
+    new_name_raw = message_to_string(llm.invoke_langchain(filled_llm_prompt))
 
     new_name = new_name_raw.strip().strip(' "')
 

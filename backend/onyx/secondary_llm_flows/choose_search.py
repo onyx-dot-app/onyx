@@ -40,7 +40,7 @@ def check_if_need_search_multi_message(
 
     prompt_msgs.append(HumanMessage(content=f"{last_query}\n\n{REQUIRE_SEARCH_HINT}"))
 
-    model_out = message_to_string(llm.invoke(prompt_msgs))
+    model_out = message_to_string(llm.invoke_langchain(prompt_msgs))
 
     if (NO_SEARCH.split()[0] + " ").lower() in model_out.lower():
         return False
@@ -92,7 +92,7 @@ def check_if_need_search(
     ]
 
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    search_output = message_to_string(llm.invoke(filled_llm_prompt))
+    search_output = message_to_string(llm.invoke_langchain(filled_llm_prompt))
 
     logger.debug(f"{log_message}: {search_output}")
 

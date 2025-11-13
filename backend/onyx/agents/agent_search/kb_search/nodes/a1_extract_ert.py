@@ -106,7 +106,7 @@ def extract_ert(
     try:
         llm_response = run_with_timeout(
             KG_ENTITY_EXTRACTION_TIMEOUT,
-            primary_llm.invoke,
+            primary_llm.invoke_langchain,
             prompt=msg,
             timeout_override=15,
             max_tokens=300,
@@ -176,7 +176,7 @@ def extract_ert(
     try:
         llm_response = run_with_timeout(
             KG_RELATIONSHIP_EXTRACTION_TIMEOUT,
-            primary_llm.invoke,
+            primary_llm.invoke_langchain,
             prompt=msg,
             timeout_override=15,
             max_tokens=300,

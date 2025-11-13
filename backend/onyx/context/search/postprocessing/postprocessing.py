@@ -31,6 +31,7 @@ from onyx.document_index.document_index_utils import (
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
+from onyx.natural_language_processing.exceptions import CohereBillingLimitError
 from onyx.natural_language_processing.search_nlp_models import RerankingModel
 from onyx.secondary_llm_flows.chunk_usefulness import llm_batch_eval_sections
 from onyx.utils.logger import setup_logger
@@ -101,7 +102,7 @@ def update_image_sections_with_query(
                 ),
             ]
 
-            raw_response = llm.invoke(messages)
+            raw_response = llm.invoke_langchain(messages)
 
             answer_text = message_to_string(raw_response).strip()
             return (
@@ -246,7 +247,14 @@ def semantic_reranking(
         f"{chunk.semantic_identifier or chunk.title or ''}\n{chunk.content}"
         for chunk in chunks_to_rerank
     ]
-    sim_scores_floats = cross_encoder.predict(query=query_str, passages=passages)
+    try:
+        sim_scores_floats = cross_encoder.predict(query=query_str, passages=passages)
+    except CohereBillingLimitError:
+        logger.warning(
+            "Skipping reranking for query '%s' because Cohere billing limit was reached.",
+            query_str,
+        )
+        return chunks_to_rerank, list(range(len(chunks_to_rerank)))
 
     # Old logic to handle multiple cross-encoders preserved but not used
     sim_scores = [numpy.array(sim_scores_floats)]

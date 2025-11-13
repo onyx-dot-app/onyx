@@ -6,16 +6,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { getDisplayNameForModel, LlmDescriptor, LlmManager } from "@/lib/hooks";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { modelSupportsImageInput, structureValue } from "@/lib/llm/utils";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/components/user/UserProvider";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import SvgRefreshCw from "@/icons/refresh-cw";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
-
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 export interface LLMPopoverProps {
   llmManager: LlmManager;
   requiresImageGeneration?: boolean;
@@ -33,7 +33,8 @@ export default function LLMPopover({
   currentModelName,
   disabled = false,
 }: LLMPopoverProps) {
-  const { llmProviders } = useChatContext();
+  const llmProviders = llmManager.llmProviders;
+  const isLoadingProviders = llmManager.isLoadingProviders;
 
   const [open, setOpen] = useState(false);
   const { user } = useUser();
@@ -63,62 +64,52 @@ export default function LLMPopover({
     [llmManager]
   );
 
-  // Memoize trigger content to prevent rerendering
-  const triggerContent = useMemo(
-    () => (
-      <SelectButton
-        leftIcon={
-          folded
-            ? SvgRefreshCw
-            : getProviderIcon(
-                llmManager.currentLlm.provider,
-                llmManager.currentLlm.modelName
-              )
-        }
-        onClick={() => setOpen(true)}
-        transient={open}
-        folded={folded}
-        rightChevronIcon
-        disabled={disabled}
-        className={disabled ? "bg-transparent" : ""}
-      >
-        {getDisplayNameForModel(llmManager.currentLlm.modelName)}
-      </SelectButton>
-    ),
-    [
-      llmManager.currentLlm.modelName,
-      llmManager.currentLlm.provider,
-      open,
-      folded,
-    ]
-  );
+  const llmOptionsToChooseFrom = useMemo(() => {
+    if (!llmProviders) {
+      return [];
+    }
 
-  const llmOptionsToChooseFrom = useMemo(
-    () =>
-      llmProviders.flatMap((llmProvider) =>
-        llmProvider.model_configurations
-          .filter(
-            (modelConfiguration) =>
-              modelConfiguration.is_visible ||
-              modelConfiguration.name === currentModelName
-          )
-          .map((modelConfiguration) => ({
-            name: llmProvider.name,
-            provider: llmProvider.provider,
-            modelName: modelConfiguration.name,
-            icon: getProviderIcon(
-              llmProvider.provider,
-              modelConfiguration.name
-            ),
-          }))
-      ),
-    [llmProviders]
-  );
+    const options = llmProviders.flatMap((llmProvider) =>
+      llmProvider.model_configurations
+        .filter(
+          (modelConfiguration) =>
+            modelConfiguration.is_visible ||
+            modelConfiguration.name === currentModelName
+        )
+        .map((modelConfiguration) => ({
+          name: llmProvider.name,
+          provider: llmProvider.provider,
+          modelName: modelConfiguration.name,
+          icon: getProviderIcon(llmProvider.provider, modelConfiguration.name),
+        }))
+    );
+
+    return options;
+  }, [llmProviders, currentModelName]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild disabled={disabled}>
-        <div data-testid="llm-popover-trigger">{triggerContent}</div>
+        <div data-testid="llm-popover-trigger">
+          <SelectButton
+            leftIcon={
+              folded
+                ? SvgRefreshCw
+                : getProviderIcon(
+                    llmManager.currentLlm.provider,
+                    llmManager.currentLlm.modelName
+                  )
+            }
+            onClick={() => setOpen(true)}
+            transient={open}
+            folded={folded}
+            rightChevronIcon
+            disabled={disabled}
+            className={disabled ? "bg-transparent" : ""}
+          >
+            {getDisplayNameForModel(llmManager.currentLlm.modelName)}
+          </SelectButton>
+        </div>
       </PopoverTrigger>
       <PopoverContent side="bottom" align="start">
         <PopoverMenu
@@ -143,32 +134,33 @@ export default function LLMPopover({
             ) : undefined
           }
         >
-          {llmOptionsToChooseFrom.map(
-            ({ modelName, provider, name, icon }, index) => {
-              if (
-                requiresImageGeneration &&
-                !modelSupportsImageInput(llmProviders, modelName, name)
-              )
-                return null;
-              return (
-                <LineItem
-                  key={index}
-                  icon={({ className }) => icon({ size: 16, className })}
-                  onClick={() => {
-                    llmManager.updateCurrentLlm({
-                      modelName,
-                      provider,
-                      name,
-                    } as LlmDescriptor);
-                    onSelect?.(structureValue(name, provider, modelName));
-                    setOpen(false);
-                  }}
-                >
-                  {getDisplayNameForModel(modelName)}
-                </LineItem>
-              );
-            }
-          )}
+          {isLoadingProviders
+            ? [
+                <LineItem key="loading" icon={SimpleLoader}>
+                  Loading models...
+                </LineItem>,
+              ]
+            : llmOptionsToChooseFrom.map(
+                ({ modelName, provider, name, icon }, index) => {
+                  return (
+                    <LineItem
+                      key={index}
+                      icon={({ className }) => icon({ size: 16, className })}
+                      onClick={() => {
+                        llmManager.updateCurrentLlm({
+                          modelName,
+                          provider,
+                          name,
+                        } as LlmDescriptor);
+                        onSelect?.(structureValue(name, provider, modelName));
+                        setOpen(false);
+                      }}
+                    >
+                      {getDisplayNameForModel(modelName)}
+                    </LineItem>
+                  );
+                }
+              )}
         </PopoverMenu>
       </PopoverContent>
     </Popover>

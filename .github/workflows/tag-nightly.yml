@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   create-and-push-tag:
-    runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}-create-and-push-tag"]
 
     steps:
       # actions using GITHUB_TOKEN cannot trigger another workflow, but we do want this to trigger docker pushes

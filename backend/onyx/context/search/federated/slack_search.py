@@ -90,7 +90,7 @@ def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
     prompt = SLACK_QUERY_EXPANSION_PROMPT.format(query=query.original_query)
     try:
         msg = HumanMessage(content=prompt)
-        response = llm.invoke([msg])
+        response = llm.invoke_langchain([msg])
         rephrased_queries = message_to_string(response).split("\n")
     except Exception as e:
         logger.error(f"Error expanding query: {e}")

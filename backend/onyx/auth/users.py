@@ -206,6 +206,10 @@ def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
 
 
 def verify_email_is_invited(email: str) -> None:
+    if AUTH_TYPE in {AuthType.SAML, AuthType.OIDC}:
+        # SSO providers manage membership; allow JIT provisioning regardless of invites
+        return
+
     whitelist = get_invited_users()
     if not whitelist:
         return

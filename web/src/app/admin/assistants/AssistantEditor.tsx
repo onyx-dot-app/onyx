@@ -90,7 +90,7 @@ import CoreModal from "@/refresh-components/modals/CoreModal";
 import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
 import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import {
@@ -207,6 +207,7 @@ export function AssistantEditor({
     [llmProviders.length]
   );
   const isUpdate = existingPersona !== undefined && existingPersona !== null;
+
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
   );
@@ -783,6 +784,14 @@ export function AssistantEditor({
             }
 
             await refreshAgents();
+
+            // Force refetch LLM provider cache for this agent
+            // This ensures the chat page shows the updated provider list
+            await mutate(
+              `/api/llm/persona/${assistantId}/providers`,
+              undefined,
+              { revalidate: true }
+            );
 
             router.push(
               isAdminPage
@@ -1366,7 +1375,7 @@ export function AssistantEditor({
                                 <BooleanFormField
                                   name={`enabled_tools_map.${imageGenerationTool.id}`}
                                   label={imageGenerationTool.display_name}
-                                  subtext="Generate and manipulate images using AI-powered tools"
+                                  subtext="Generate and manipulate images using AI-powered tools."
                                   disabled={!currentLLMSupportsImageOutput}
                                   disabledTooltip={
                                     !currentLLMSupportsImageOutput
@@ -1461,12 +1470,19 @@ export function AssistantEditor({
                   <LLMSelector
                     llmProviders={llmProviders}
                     currentLlm={
-                      values.llm_model_version_override
-                        ? structureValue(
-                            values.llm_model_provider_override,
-                            "",
-                            values.llm_model_version_override
-                          )
+                      values.llm_model_version_override &&
+                      values.llm_model_provider_override
+                        ? (() => {
+                            const provider = llmProviders.find(
+                              (p) =>
+                                p.name === values.llm_model_provider_override
+                            );
+                            return structureValue(
+                              values.llm_model_provider_override,
+                              provider?.provider || "",
+                              values.llm_model_version_override
+                            );
+                          })()
                         : null
                     }
                     requiresImageGeneration={
@@ -1479,7 +1495,7 @@ export function AssistantEditor({
                         setFieldValue("llm_model_version_override", null);
                         setFieldValue("llm_model_provider_override", null);
                       } else {
-                        const { modelName, provider, name } =
+                        const { modelName, name } =
                           parseLlmDescriptor(selected);
                         if (modelName && name) {
                           setFieldValue(

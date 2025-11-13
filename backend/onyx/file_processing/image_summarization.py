@@ -112,7 +112,7 @@ def _summarize_image(
     )
 
     try:
-        return message_to_string(llm.invoke(messages))
+        return message_to_string(llm.invoke_langchain(messages))
 
     except Exception as e:
         error_msg = f"Summarization failed. Messages: {messages}"

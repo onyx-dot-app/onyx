@@ -127,7 +127,7 @@ def filtered_search(
     try:
         llm_response = run_with_timeout(
             KG_FILTERED_SEARCH_TIMEOUT,
-            llm.invoke,
+            llm.invoke_langchain,
             prompt=msg,
             timeout_override=30,
             max_tokens=300,

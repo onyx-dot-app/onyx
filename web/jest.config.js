@@ -18,36 +18,92 @@ const sharedConfig = {
   maxWorkers: "50%",
 
   moduleNameMapper: {
-    // Mock react-markdown and related packages
-    "^react-markdown$": "<rootDir>/tests/setup/__mocks__/react-markdown.tsx",
-    "^remark-gfm$": "<rootDir>/tests/setup/__mocks__/remark-gfm.ts",
-    // Mock UserProvider
-    "^@/components/user/UserProvider$":
-      "<rootDir>/tests/setup/__mocks__/@/components/user/UserProvider.tsx",
-    // Path aliases (must come after specific mocks)
-    "^@/(.*)$": "<rootDir>/src/$1",
-    "^@tests/(.*)$": "<rootDir>/tests/$1",
-    // Mock CSS imports
-    "\\.(css|less|scss|sass)$": "identity-obj-proxy",
+    // Mock CSS files (before path alias resolution)
+    // CSS/static assets cannot be executed in tests and must be mocked
+    "^@/.*\\.(css|less|scss|sass)$": "<rootDir>/tests/setup/mocks/cssMock.js",
+    "^katex/dist/katex.min.css$": "<rootDir>/tests/setup/mocks/cssMock.js",
+    "\\.(css|less|scss|sass)$": "<rootDir>/tests/setup/mocks/cssMock.js",
     // Mock static file imports
     "\\.(jpg|jpeg|png|gif|svg|woff|woff2|ttf|eot)$":
       "<rootDir>/tests/setup/fileMock.js",
+    // Mock specific components that have complex dependencies
+    "^@/components/user/UserProvider$":
+      "<rootDir>/tests/setup/mocks/components/UserProvider.tsx",
+    // Path aliases (must come after specific mocks)
+    "^@/(.*)$": "<rootDir>/src/$1",
+    "^@tests/(.*)$": "<rootDir>/tests/$1",
   },
 
   testPathIgnorePatterns: ["/node_modules/", "/tests/e2e/", "/.next/"],
 
+  // Transform ES Modules in node_modules to CommonJS for Jest compatibility
+  // Add packages here when you encounter: "SyntaxError: Unexpected token 'export'"
+  // These packages ship as ESM and need to be transformed to work in Jest
   transformIgnorePatterns: [
-    "/node_modules/(?!(jose|@radix-ui|@headlessui|@phosphor-icons|msw|until-async|react-markdown|remark-gfm|remark-parse|unified|bail|is-plain-obj|trough|vfile|unist-.*|mdast-.*|micromark.*|decode-named-character-reference|character-entities)/)",
+    "/node_modules/(?!(" +
+      [
+        // Auth & Security
+        "jose",
+        // UI Libraries
+        "@radix-ui",
+        "@headlessui",
+        "@phosphor-icons",
+        // Testing & Mocking
+        "msw",
+        "until-async",
+        // Markdown & Syntax Highlighting
+        "react-markdown",
+        "remark-.*", // All remark packages
+        "rehype-.*", // All rehype packages
+        "unified",
+        "lowlight",
+        "highlight\\.js",
+        // Markdown Utilities
+        "bail",
+        "is-plain-obj",
+        "trough",
+        "vfile",
+        "vfile-.*", // All vfile packages
+        "unist-.*", // All unist packages
+        "mdast-.*", // All mdast packages
+        "hast-.*", // All hast packages
+        "hastscript",
+        "micromark.*", // All micromark packages
+        "decode-named-character-reference",
+        "character-entities",
+        "devlop",
+        "comma-separated-tokens",
+        "property-information",
+        "space-separated-tokens",
+        "html-void-elements",
+        "html-url-attributes",
+        "aria-attributes",
+        "web-namespaces",
+        "svg-tag-names",
+        "style-to-object",
+        "inline-style-parser",
+        "ccount",
+        "escape-string-regexp",
+        "markdown-table",
+        "longest-streak",
+        "zwitch",
+        "trim-lines",
+        "stringify-entities",
+        "estree-.*", // All estree packages
+      ].join("|") +
+      ")/)",
   ],
 
   transform: {
-    "^.+\\.tsx?$": [
+    "^.+\\.(t|j)sx?$": [
       "ts-jest",
       {
         // Performance: Disable type-checking in tests (types are checked by tsc)
         isolatedModules: true,
         tsconfig: {
           jsx: "react-jsx",
+          // Allow ts-jest to process JavaScript files from node_modules
+          allowJs: true,
         },
       },
     ],
