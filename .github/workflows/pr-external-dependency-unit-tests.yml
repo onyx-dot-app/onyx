@@ -30,6 +30,7 @@ env:
 
 jobs:
   discover-test-dirs:
+    # NOTE: Github-hosted runners have about 20s queue times and are preferred here.
     runs-on: ubuntu-slim
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
