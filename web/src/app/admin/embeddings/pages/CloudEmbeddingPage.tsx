@@ -23,18 +23,9 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { AdvancedSearchConfiguration } from "../interfaces";
 import CardSection from "@/components/admin/CardSection";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
-export default function CloudEmbeddingPage({
-  currentModel,
-  embeddingProviderDetails,
-  embeddingModelDetails,
-  setShowTentativeProvider,
-  setChangeCredentialsProvider,
-  setAlreadySelectedModel,
-  setShowTentativeModel,
-  setShowModelInQueue,
-  advancedEmbeddingDetails,
-}: {
+export interface CloudEmbeddingPageProps {
   setShowModelInQueue: Dispatch<SetStateAction<CloudEmbeddingModel | null>>;
   setShowTentativeModel: Dispatch<SetStateAction<CloudEmbeddingModel | null>>;
   currentModel: EmbeddingModelDescriptor | CloudEmbeddingModel;
@@ -48,7 +39,19 @@ export default function CloudEmbeddingPage({
     React.SetStateAction<CloudEmbeddingProvider | null>
   >;
   advancedEmbeddingDetails: AdvancedSearchConfiguration;
-}) {
+}
+
+export default function CloudEmbeddingPage({
+  currentModel,
+  embeddingProviderDetails,
+  embeddingModelDetails,
+  setShowTentativeProvider,
+  setChangeCredentialsProvider,
+  setAlreadySelectedModel,
+  setShowTentativeModel,
+  setShowModelInQueue,
+  advancedEmbeddingDetails,
+}: CloudEmbeddingPageProps) {
   function hasProviderTypeinArray(
     arr: Array<{ provider_type: string }>,
     searchName: string
@@ -405,15 +408,7 @@ export default function CloudEmbeddingPage({
   );
 }
 
-export function CloudModelCard({
-  model,
-  provider,
-  currentModel,
-  setAlreadySelectedModel,
-  setShowTentativeModel,
-  setShowModelInQueue,
-  setShowTentativeProvider,
-}: {
+interface CloudModelCardProps {
   model: CloudEmbeddingModel;
   provider: CloudEmbeddingProviderFull;
   currentModel: EmbeddingModelDescriptor | CloudEmbeddingModel;
@@ -423,9 +418,19 @@ export function CloudModelCard({
   setShowTentativeProvider: React.Dispatch<
     React.SetStateAction<CloudEmbeddingProvider | null>
   >;
-}) {
+}
+
+function CloudModelCard({
+  model,
+  provider,
+  currentModel,
+  setAlreadySelectedModel,
+  setShowTentativeModel,
+  setShowModelInQueue,
+  setShowTentativeProvider,
+}: CloudModelCardProps) {
   const { popup, setPopup } = usePopup();
-  const [showDeleteModel, setShowDeleteModel] = useState(false);
+  const deleteModal = useModalProvider();
   const modelId = typeof model.id === "number" ? model.id : null;
   const currentModelId =
     typeof currentModel.id === "number" ? currentModel.id : null;
@@ -453,7 +458,7 @@ export function CloudModelCard({
 
     if (response.ok) {
       setPopup({ message: "Model deleted successfully", type: "success" });
-      setShowDeleteModel(false);
+      deleteModal.toggle(false);
     } else {
       setPopup({
         message:
@@ -464,82 +469,85 @@ export function CloudModelCard({
   };
 
   return (
-    <div
-      className={`p-4 w-96 border rounded-lg transition-all duration-200 ${
-        enabled
-          ? "border-blue-500 bg-blue-50 dark:bg-blue-950 shadow-md"
-          : "border-background-300 hover:border-blue-300 hover:shadow-sm"
-      } ${!provider.configured && "opacity-80 hover:opacity-100"}`}
-    >
+    <>
       {popup}
-      {showDeleteModel && (
+
+      <deleteModal.Provider>
         <ConfirmEntityModal
           entityName={model.model_name}
           entityType="embedding model configuration"
           onSubmit={() => deleteModel()}
-          onClose={() => setShowDeleteModel(false)}
+          onClose={() => deleteModal.toggle(false)}
         />
-      )}
+      </deleteModal.Provider>
 
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold dark:text-neutral-100 text-lg">
-          {model.model_name}
-        </h3>
-        <div className="flex gap-x-2">
-          {model.provider_type == EmbeddingProvider.LITELLM.toLowerCase() && (
-            <button
-              onClickCapture={() => setShowDeleteModel(true)}
+      <div
+        className={`p-4 w-96 border rounded-lg transition-all duration-200 ${
+          enabled
+            ? "border-blue-500 bg-blue-50 dark:bg-blue-950 shadow-md"
+            : "border-background-300 hover:border-blue-300 hover:shadow-sm"
+        } ${!provider.configured && "opacity-80 hover:opacity-100"}`}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold dark:text-neutral-100 text-lg">
+            {model.model_name}
+          </h3>
+          <div className="flex gap-x-2">
+            {model.provider_type == EmbeddingProvider.LITELLM.toLowerCase() && (
+              <button
+                onClickCapture={() => deleteModal.toggle(true)}
+                onClick={(e) => e.stopPropagation()}
+                className="text-blue-500 hover:text-blue-700 transition-colors duration-200"
+              >
+                <FiTrash size={18} />
+              </button>
+            )}
+            <a
+              href={provider.website}
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               className="text-blue-500 hover:text-blue-700 transition-colors duration-200"
             >
-              <FiTrash size={18} />
-            </button>
-          )}
-          <a
-            href={provider.website}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-blue-500 hover:text-blue-700 transition-colors duration-200"
+              <FiExternalLink size={18} />
+            </a>
+          </div>
+        </div>
+        <p className="text-sm text-text-600 dark:text-neutral-400 mb-2">
+          {model.description}
+        </p>
+        {model?.provider_type?.toLowerCase() !=
+          EmbeddingProvider.LITELLM.toLowerCase() && (
+          <div className="text-xs text-text-500 mb-2">
+            ${model.pricePerMillion}/M tokens
+          </div>
+        )}
+        <div className="mt-3">
+          <button
+            className={`w-full p-2 rounded-lg text-sm ${
+              enabled
+                ? "bg-background-125 border border-border cursor-not-allowed"
+                : "bg-background border border-border hover:bg-accent-background-hovered cursor-pointer"
+            }`}
+            onClick={() => {
+              if (enabled) {
+                setAlreadySelectedModel(model);
+              } else if (
+                provider.configured ||
+                provider.provider_type === EmbeddingProvider.LITELLM
+              ) {
+                setShowTentativeModel(model);
+              } else {
+                setShowModelInQueue(model);
+                setShowTentativeProvider(provider);
+              }
+            }}
+            disabled={enabled}
           >
-            <FiExternalLink size={18} />
-          </a>
+            {enabled ? "Selected Model" : "Select Model"}
+          </button>
         </div>
       </div>
-      <p className="text-sm text-text-600 dark:text-neutral-400 mb-2">
-        {model.description}
-      </p>
-      {model?.provider_type?.toLowerCase() !=
-        EmbeddingProvider.LITELLM.toLowerCase() && (
-        <div className="text-xs text-text-500 mb-2">
-          ${model.pricePerMillion}/M tokens
-        </div>
-      )}
-      <div className="mt-3">
-        <button
-          className={`w-full p-2 rounded-lg text-sm ${
-            enabled
-              ? "bg-background-125 border border-border cursor-not-allowed"
-              : "bg-background border border-border hover:bg-accent-background-hovered cursor-pointer"
-          }`}
-          onClick={() => {
-            if (enabled) {
-              setAlreadySelectedModel(model);
-            } else if (
-              provider.configured ||
-              provider.provider_type === EmbeddingProvider.LITELLM
-            ) {
-              setShowTentativeModel(model);
-            } else {
-              setShowModelInQueue(model);
-              setShowTentativeProvider(provider);
-            }
-          }}
-          disabled={enabled}
-        >
-          {enabled ? "Selected Model" : "Select Model"}
-        </button>
-      </div>
-    </div>
+    </>
   );
 }
