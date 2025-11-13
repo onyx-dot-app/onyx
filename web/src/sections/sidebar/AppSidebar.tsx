@@ -34,10 +34,6 @@ import SidebarSection from "@/sections/sidebar/SidebarSection";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
 import SvgFolderPlus from "@/icons/folder-plus";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
