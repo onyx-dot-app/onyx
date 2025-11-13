@@ -10,10 +10,10 @@ interface BaseSwitchProps
   size?: "sm" | "md" | "lg";
 }
 
-export const Switch = React.forwardRef<
-  React.ComponentRef<typeof SwitchPrimitives.Root>,
-  BaseSwitchProps
->(({ className, size = "sm", ...props }, ref) => {
+function switchInner(
+  { className, size = "sm", ...props }: BaseSwitchProps,
+  ref: React.ForwardedRef<React.ComponentRef<typeof SwitchPrimitives.Root>>
+) {
   const sizeClasses = {
     sm: "h-4 w-8",
     md: "h-5 w-10",
@@ -66,6 +66,11 @@ export const Switch = React.forwardRef<
       />
     </SwitchPrimitives.Root>
   );
-});
+}
+
+export const Switch = React.forwardRef<
+  React.ComponentRef<typeof SwitchPrimitives.Root>,
+  BaseSwitchProps
+>(switchInner);
 
 Switch.displayName = SwitchPrimitives.Root.displayName;
