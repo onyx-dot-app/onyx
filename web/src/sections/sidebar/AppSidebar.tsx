@@ -136,8 +136,7 @@ function AppSidebarInner() {
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
+  const moveCustomAgentModal = useModalProvider();
   const { projects } = useProjectsContext();
 
   const [visibleAgents, currentAgentIsPinned] = useMemo(
@@ -256,7 +255,7 @@ function AppSidebarInner() {
         if (!isChatUsingDefaultAssistant && !hideModal) {
           setPendingMoveChatSession(chatSession);
           setPendingMoveProjectId(targetProject.id);
-          setShowMoveCustomAgentModal(true);
+          moveCustomAgentModal.toggle(true);
           return;
         }
 
@@ -384,10 +383,10 @@ function AppSidebarInner() {
         <CreateProjectModal />
       </createProjectModal.Provider>
 
-      {showMoveCustomAgentModal && (
+      <moveCustomAgentModal.Provider>
         <MoveCustomAgentChatModal
           onCancel={() => {
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveChatSession(null);
             setPendingMoveProjectId(null);
           }}
@@ -400,7 +399,7 @@ function AppSidebarInner() {
             }
             const chat = pendingMoveChatSession;
             const target = pendingMoveProjectId;
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveChatSession(null);
             setPendingMoveProjectId(null);
             if (chat && target != null) {
@@ -415,7 +414,7 @@ function AppSidebarInner() {
             }
           }}
         />
-      )}
+      </moveCustomAgentModal.Provider>
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
         <SidebarBody footer={settingsButton} actionButton={newSessionButton}>
