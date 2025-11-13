@@ -2,7 +2,6 @@
 # modular so easily testable in unit tests and evals [likely injecting some higher
 # level session manager and span sink], potentially has some robustness off the critical path,
 # and promotes clean separation of concerns.
-import json
 import logging
 import re
 from uuid import UUID
@@ -17,8 +16,6 @@ from onyx.db.chat import create_search_doc_from_inference_section
 from onyx.db.chat import update_db_session_with_messages
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessage__SearchDoc
-from onyx.db.models import Tool
-from onyx.db.models import ToolCall
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
@@ -171,118 +168,119 @@ def _save_tool_calls_from_messages(
         - Nested tool calls are not yet supported
         - Reasoning tokens are not yet implemented
     """
+    # TODO delete this when new implementation is out
     # Build a mapping of call_id -> (call_msg, output_msg)
-    tool_call_map: dict[str, dict] = {}
+    # tool_call_map: dict[str, dict] = {}
 
-    for msg in agent_turn_messages:
-        msg_type = msg.get("type")
+    # for msg in agent_turn_messages:
+    #     msg_type = msg.get("type")
 
-        if msg_type == "function_call":
-            call_id = msg["call_id"]
-            if call_id not in tool_call_map:
-                tool_call_map[call_id] = {}
-            tool_call_map[call_id]["call"] = msg
+    #     if msg_type == "function_call":
+    #         call_id = msg["call_id"]
+    #         if call_id not in tool_call_map:
+    #             tool_call_map[call_id] = {}
+    #         tool_call_map[call_id]["call"] = msg
 
-        elif msg_type == "function_call_output":
-            call_id = msg["call_id"]
-            if call_id not in tool_call_map:
-                tool_call_map[call_id] = {}
-            tool_call_map[call_id]["output"] = msg
+    #     elif msg_type == "function_call_output":
+    #         call_id = msg["call_id"]
+    #         if call_id not in tool_call_map:
+    #             tool_call_map[call_id] = {}
+    #         tool_call_map[call_id]["output"] = msg
 
-    # Create ToolCall entries
-    llm_tokenizer = get_tokenizer(
-        model_name=model_name,
-        provider_type=model_provider,
-    )
+    # # Create ToolCall entries
+    # llm_tokenizer = get_tokenizer(
+    #     model_name=model_name,
+    #     provider_type=model_provider,
+    # )
 
-    # TODO: Fix turn_number logic to properly distinguish parallel vs sequential tool calls.
-    # Currently using sequential numbering (0, 1, 2...) but this is incorrect:
-    # - Parallel tool calls should have the SAME turn_number
-    # - Sequential tool calls should have DIFFERENT turn_numbers
-    # For now, treating all as sequential until we have better metadata to distinguish them.
-    turn_number = 0
+    # # TODO: Fix turn_number logic to properly distinguish parallel vs sequential tool calls.
+    # # Currently using sequential numbering (0, 1, 2...) but this is incorrect:
+    # # - Parallel tool calls should have the SAME turn_number
+    # # - Sequential tool calls should have DIFFERENT turn_numbers
+    # # For now, treating all as sequential until we have better metadata to distinguish them.
+    # turn_number = 0
 
-    for call_id, call_data in tool_call_map.items():
-        # Validate we have both call and output
-        if "call" not in call_data:
-            logger.warning(
-                f"Tool call {call_id} missing function_call message - skipping"
-            )
-            continue
+    # for call_id, call_data in tool_call_map.items():
+    #     # Validate we have both call and output
+    #     if "call" not in call_data:
+    #         logger.warning(
+    #             f"Tool call {call_id} missing function_call message - skipping"
+    #         )
+    #         continue
 
-        if "output" not in call_data:
-            logger.warning(
-                f"Tool call {call_id} missing function_call_output message - skipping"
-            )
-            continue
+    #     if "output" not in call_data:
+    #         logger.warning(
+    #             f"Tool call {call_id} missing function_call_output message - skipping"
+    #         )
+    #         continue
 
-        call_msg = call_data["call"]
-        output_msg = call_data["output"]
+    #     call_msg = call_data["call"]
+    #     output_msg = call_data["output"]
 
-        # Parse arguments
-        try:
-            tool_arguments = json.loads(call_msg["arguments"])
-        except json.JSONDecodeError as e:
-            logger.warning(
-                f"Failed to parse tool call arguments for {call_id}: {e}. "
-                f"Storing as raw string."
-            )
-            tool_arguments = {"raw": call_msg["arguments"]}
+    #     # Parse arguments
+    #     try:
+    #         tool_arguments = json.loads(call_msg["arguments"])
+    #     except json.JSONDecodeError as e:
+    #         logger.warning(
+    #             f"Failed to parse tool call arguments for {call_id}: {e}. "
+    #             f"Storing as raw string."
+    #         )
+    #         tool_arguments = {"raw": call_msg["arguments"]}
 
-        # Parse response
-        try:
-            tool_response = json.loads(output_msg["output"])
-        except json.JSONDecodeError as e:
-            logger.warning(
-                f"Failed to parse tool call output for {call_id}: {e}. "
-                f"Storing as raw string."
-            )
-            tool_response = {"raw": output_msg["output"]}
+    #     # Parse response
+    #     try:
+    #         tool_response = json.loads(output_msg["output"])
+    #     except json.JSONDecodeError as e:
+    #         logger.warning(
+    #             f"Failed to parse tool call output for {call_id}: {e}. "
+    #             f"Storing as raw string."
+    #         )
+    #         tool_response = {"raw": output_msg["output"]}
 
-        # Look up tool_id by name
-        tool_name = call_msg["name"]
-        tool = db_session.query(Tool).filter(Tool.name == tool_name).first()
+    #     # Look up tool_id by name
+    #     tool_name = call_msg["name"]
+    #     tool = db_session.query(Tool).filter(Tool.name == tool_name).first()
 
-        if tool is None:
-            logger.warning(
-                f"Tool '{tool_name}' not found in database for call_id {call_id}. "
-                f"Using tool_id=0."
-            )
-            tool_id = 0
-        else:
-            tool_id = tool.id
+    #     if tool is None:
+    #         logger.warning(
+    #             f"Tool '{tool_name}' not found in database for call_id {call_id}. "
+    #             f"Using tool_id=0."
+    #         )
+    #         tool_id = 0
+    #     else:
+    #         tool_id = tool.id
 
-        # Calculate token count for the arguments
-        try:
-            token_count = len(llm_tokenizer.encode(call_msg["arguments"]))
-        except Exception as e:
-            logger.warning(
-                f"Failed to tokenize arguments for {call_id}: {e}. Using length as estimate."
-            )
-            token_count = len(call_msg["arguments"])
+    #     # Calculate token count for the arguments
+    #     try:
+    #         token_count = len(llm_tokenizer.encode(call_msg["arguments"]))
+    #     except Exception as e:
+    #         logger.warning(
+    #             f"Failed to tokenize arguments for {call_id}: {e}. Using length as estimate."
+    #         )
+    #         token_count = len(call_msg["arguments"])
 
-        # Create ToolCall entry
-        tool_call = ToolCall(
-            chat_session_id=chat_session_id,
-            parent_chat_message_id=parent_chat_message_id,
-            parent_tool_call_id=None,  # Top-level tool call (nested not yet supported)
-            turn_number=turn_number,
-            depth=0,  # Top-level depth (nested not yet supported)
-            tool_id=tool_id,
-            tool_call_id=call_id,  # Now correctly stored as string
-            tool_call_arguments=tool_arguments,
-            tool_call_response=tool_response,
-            tool_call_tokens=token_count,
-            reasoning_tokens=None,  # Not yet implemented
-        )
+    #     # Create ToolCall entry
+    #     tool_call = ToolCall(
+    #         chat_session_id=chat_session_id,
+    #         parent_chat_message_id=parent_chat_message_id,
+    #         parent_tool_call_id=None,  # Top-level tool call (nested not yet supported)
+    #         turn_number=turn_number,
+    #         depth=0,  # Top-level depth (nested not yet supported)
+    #         tool_id=tool_id,
+    #         tool_call_id=call_id,  # Now correctly stored as string
+    #         tool_call_arguments=tool_arguments,
+    #         tool_call_response=tool_response,
+    #         tool_call_tokens=token_count,
+    #         reasoning_tokens=None,  # Not yet implemented
+    #     )
 
-        db_session.add(tool_call)
-        turn_number += 1
+    #     db_session.add(tool_call)
+    #     turn_number += 1
 
-    logger.info(
-        f"Saved {turn_number} tool calls for chat session {chat_session_id}, "
-        f"message {parent_chat_message_id}"
-    )
+    # logger.info(
+    #     f"Saved {turn_number} tool calls for chat session {chat_session_id}, "
+    #     f"message {parent_chat_message_id}"
+    # )
 
 
 def extract_final_answer_from_packets(packet_history: list[Packet]) -> str:

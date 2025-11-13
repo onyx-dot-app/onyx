@@ -229,7 +229,7 @@ class TestCustomTool(unittest.TestCase):
             ),
         )
 
-        final_result = tools[0].final_result(mock_response)
+        final_result = tools[0].get_final_result(mock_response)
         self.assertEqual(
             final_result,
             {"id": "789", "name": "Final Assistant"},

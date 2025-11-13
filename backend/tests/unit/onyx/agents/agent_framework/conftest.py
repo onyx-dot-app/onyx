@@ -206,7 +206,7 @@ class FakeTool(Tool):
         raise NotImplementedError
         yield  # Make this a generator
 
-    def final_result(self, *args: Any) -> dict[str, Any]:
+    def get_final_result(self, *args: Any) -> dict[str, Any]:
         return {}
 
     def build_next_prompt(
@@ -219,13 +219,13 @@ class FakeTool(Tool):
         return prompt_builder
 
 
-@pytest.fixture
-def fake_internal_search_tool() -> FakeTool:
-    """Fixture providing a fake internal search tool."""
-    return FakeTool("internal_search", tool_id=1)
+# @pytest.fixture
+# def fake_internal_search_tool() -> FakeTool:
+#     """Fixture providing a fake internal search tool."""
+#     return FakeTool("internal_search", tool_id=1)
 
 
-@pytest.fixture
-def fake_web_search_tool() -> FakeTool:
-    """Fixture providing a fake web search tool."""
-    return FakeTool("web_search", tool_id=2)
+# @pytest.fixture
+# def fake_web_search_tool() -> FakeTool:
+#     """Fixture providing a fake web search tool."""
+#     return FakeTool("web_search", tool_id=2)

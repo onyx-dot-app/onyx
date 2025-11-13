@@ -87,5 +87,5 @@ class WebSearchTool(Tool[None]):
     ) -> Generator[ToolResponse, None, None]:
         raise ValueError(_GENERIC_ERROR_MESSAGE)
 
-    def final_result(self, *args: ToolResponse) -> JSON_ro:
+    def get_final_result(self, *args: ToolResponse) -> JSON_ro:
         raise ValueError(_GENERIC_ERROR_MESSAGE)

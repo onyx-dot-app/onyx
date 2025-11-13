@@ -89,7 +89,7 @@ class KnowledgeGraphTool(Tool[None]):
             "not via tool calling."
         )
 
-    def final_result(self, *args: ToolResponse) -> JSON_ro:
+    def get_final_result(self, *args: ToolResponse) -> JSON_ro:
         raise ValueError(
             "KnowledgeGraphTool should only be used by the Deep Research Agent, "
             "not via tool calling."

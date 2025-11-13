@@ -47,5 +47,5 @@ class ToolRunner(Generic[R]):
         return ToolCallFinalResult(
             tool_name=self.tool.name,
             tool_args=self.args,
-            tool_result=self.tool.final_result(*self.tool_responses()),
+            tool_result=self.tool.get_final_result(*self.tool_responses()),
         )

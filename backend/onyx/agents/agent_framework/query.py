@@ -5,12 +5,10 @@ from typing import Any
 
 from onyx.agents.agent_framework.models import RunItemStreamEvent
 from onyx.agents.agent_framework.models import StreamEvent
-from onyx.agents.agent_framework.models import ToolCallOutputStreamItem
 from onyx.agents.agent_framework.models import ToolCallStreamItem
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.model_response import ModelResponseStream
-from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
 
 
@@ -115,20 +113,22 @@ def query(
                 )
 
                 if name in tools_by_name:
-                    tool = tools_by_name[name]
-                    arguments = json.loads(arguments_str)
+                    tools_by_name[name]
+                    json.loads(arguments_str)
 
-                    run_context = RunContextWrapper(context=context)
+                    # run_context = RunContextWrapper(context=context)
 
                     # TODO: Instead of executing sequentially, execute in parallel
                     # In practice, it's not a must right now since we don't use parallel
                     # tool calls, so kicking the can down the road for now.
-                    output = tool.run_v2(run_context, **arguments)
 
-                    yield RunItemStreamEvent(
-                        type="tool_call_output",
-                        details=ToolCallOutputStreamItem(
-                            call_id=call_id,
-                            output=output,
-                        ),
-                    )
+                    # TODO broken for now, no need for a run_v2
+                    # output = tool.run_v2(run_context, **arguments)
+
+                    # yield RunItemStreamEvent(
+                    #     type="tool_call_output",
+                    #     details=ToolCallOutputStreamItem(
+                    #         call_id=call_id,
+                    #         output=output,
+                    #     ),
+                    # )

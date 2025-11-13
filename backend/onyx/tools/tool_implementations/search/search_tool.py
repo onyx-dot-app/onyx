@@ -211,7 +211,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # Always close the session to release database connections
             db_session.close()
 
-    def final_result(self, *args: ToolResponse) -> JSON_ro:
+    def get_final_result(self, *args: ToolResponse) -> JSON_ro:
         final_docs = cast(
             list[LlmDoc],
             next(arg.response for arg in args if arg.id == FINAL_CONTEXT_DOCUMENTS_ID),
@@ -444,7 +444,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     #         search_tool=self,
     #     )
 
-    # def final_result(self, *args: ToolResponse) -> JSON_ro:
+    # def get_final_result(self, *args: ToolResponse) -> JSON_ro:
     #     final_docs = cast(
     #         list[LlmDoc],
     #         next(arg.response for arg in args if arg.id == FINAL_CONTEXT_DOCUMENTS_ID),
