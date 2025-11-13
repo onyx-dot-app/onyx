@@ -6,10 +6,19 @@ import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 
+const sizeClassNames = {
+  main: ["w-[80dvw]", "h-[80dvh]"],
+  medium: ["w-[60rem]", "h-fit"],
+  small: ["w-[32rem]", "h-[30rem]"],
+  mini: ["w-[32rem]", "h-fit"],
+} as const;
+
 export interface ModalProps {
   // Modal sizes
-  sm?: boolean;
-  xs?: boolean;
+  main?: boolean;
+  medium?: boolean;
+  small?: boolean;
+  mini?: boolean;
 
   // Base modal props
   icon: React.FunctionComponent<SvgProps>;
@@ -20,8 +29,10 @@ export interface ModalProps {
 }
 
 export default function Modal({
-  sm,
-  xs,
+  main,
+  medium,
+  small,
+  mini,
 
   icon: Icon,
   title,
@@ -33,15 +44,18 @@ export default function Modal({
 
   if (!modal.isOpen) return null;
 
+  const variant = main
+    ? "main"
+    : medium
+      ? "medium"
+      : small
+        ? "small"
+        : mini
+          ? "mini"
+          : "main";
+
   return (
-    <div
-      className={cn(
-        "w-[80dvw] h-[80dvh]",
-        sm && "max-w-[60rem]",
-        xs && "max-w-[32rem] h-fit",
-        className
-      )}
-    >
+    <div className={cn(sizeClassNames[variant], className)}>
       <div className="flex flex-col gap-2 p-4">
         <div className="flex flex-row items-center justify-between">
           <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />

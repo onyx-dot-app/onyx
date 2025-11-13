@@ -130,7 +130,7 @@ export default function NewTeamModal() {
             ? "Join Request Sent"
             : `We found an existing team for ${appDomain}`
         }
-        xs
+        mini
       >
         <div className="p-4">
           {isLoading ? (

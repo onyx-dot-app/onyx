@@ -94,7 +94,7 @@ export default function FeedbackModal({
         className="flex flex-col gap-1"
         title="Provide Additional Feedback"
         icon={icon}
-        xs
+        mini
       >
         {predefinedFeedbackOptions.length > 0 && (
           <div className="flex flex-col p-4 gap-1">

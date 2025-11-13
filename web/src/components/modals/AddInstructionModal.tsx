@@ -36,7 +36,7 @@ export default function AddInstructionModal() {
       icon={SvgAddLines}
       title="Set Project Instructions"
       description="Instruct specific behaviors, focus, tones, or formats for the response in this project."
-      xs
+      mini
     >
       <div className="bg-background-tint-01 p-4">
         <Textarea

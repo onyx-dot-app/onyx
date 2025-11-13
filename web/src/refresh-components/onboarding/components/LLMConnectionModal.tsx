@@ -456,7 +456,7 @@ export default function LLMConnectionModal({
             title={title}
             description={modalContent?.description}
             startAdornment={icon}
-            xs
+            mini
             onSubmit={formikProps.submitForm}
             submitDisabled={
               isCustomProvider

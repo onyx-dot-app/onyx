@@ -38,7 +38,7 @@ export default function CreateProjectModal() {
       icon={SvgFolderPlus}
       title="Create New Project"
       description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
-      xs
+      mini
     >
       <div className="flex flex-col p-4 bg-background-tint-01">
         <FieldInput

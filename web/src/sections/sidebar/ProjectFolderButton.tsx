@@ -30,6 +30,7 @@ import ButtonRenaming from "./ButtonRenaming";
 import { SvgProps } from "@/icons";
 import { useAppFocus } from "@/lib/hooks";
 import SvgFolderOpen from "@/icons/folder-open";
+import { useModalProvider } from "@/refresh-components/contexts/ModalContext";
 
 interface ProjectFolderProps {
   project: Project;
@@ -38,8 +39,9 @@ interface ProjectFolderProps {
 function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   const route = useAppRouter();
   const [open, setOpen] = useState(false);
-  const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
-    useState(false);
+  const deleteConfirmationModal = useModalProvider();
+  // const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
+  //   useState(false);
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -88,7 +90,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
     <MenuButton
       key="delete-project"
       icon={SvgTrash}
-      onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+      onClick={noProp(() => deleteConfirmationModal.toggle(true))}
       danger
     >
       Delete Project
@@ -96,24 +98,17 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   ];
 
   return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        "transition-colors duration-200",
-        isOver && "bg-background-tint-03 rounded-08"
-      )}
-    >
-      {/* Confirmation Modal (only for deletion) */}
-      {deleteConfirmationModalOpen && (
+    <>
+      <deleteConfirmationModal.Provider>
         <ConfirmationModal
           title="Delete Project"
           icon={SvgTrash}
-          onClose={() => setDeleteConfirmationModalOpen(false)}
+          onClose={() => deleteConfirmationModal.toggle(false)}
           submit={
             <Button
               danger
               onClick={() => {
-                setDeleteConfirmationModalOpen(false);
+                deleteConfirmationModal.toggle(false);
                 deleteProject(project.id);
               }}
             >
@@ -124,73 +119,81 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
           Are you sure you want to delete this project? This action cannot be
           undone.
         </ConfirmationModal>
-      )}
+      </deleteConfirmationModal.Provider>
 
-      {/* Project Folder */}
-      <Popover onOpenChange={setPopoverOpen}>
-        <PopoverAnchor>
-          <SidebarTab
-            leftIcon={() => (
-              <IconButton
-                onHover={setIsHoveringIcon}
-                icon={getFolderIcon()}
-                internal
-                onClick={noProp(handleIconClick)}
-              />
-            )}
-            active={
-              typeof activeSidebar === "object" &&
-              activeSidebar.type === "project" &&
-              activeSidebar.id === String(project.id)
-            }
-            onClick={noProp(handleTextClick)}
-            focused={isEditing}
-            rightChildren={
-              <>
-                <PopoverTrigger asChild onClick={noProp()}>
-                  <div>
-                    <IconButton
-                      icon={SvgMoreHorizontal}
-                      className={cn(
-                        !popoverOpen && "hidden",
-                        !isEditing && "group-hover/SidebarTab:flex"
-                      )}
-                      transient={popoverOpen}
-                      internal
-                    />
-                  </div>
-                </PopoverTrigger>
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "transition-colors duration-200",
+          isOver && "bg-background-tint-03 rounded-08"
+        )}
+      >
+        {/* Project Folder */}
+        <Popover onOpenChange={setPopoverOpen}>
+          <PopoverAnchor>
+            <SidebarTab
+              leftIcon={() => (
+                <IconButton
+                  onHover={setIsHoveringIcon}
+                  icon={getFolderIcon()}
+                  internal
+                  onClick={noProp(handleIconClick)}
+                />
+              )}
+              active={
+                typeof activeSidebar === "object" &&
+                activeSidebar.type === "project" &&
+                activeSidebar.id === String(project.id)
+              }
+              onClick={noProp(handleTextClick)}
+              focused={isEditing}
+              rightChildren={
+                <>
+                  <PopoverTrigger asChild onClick={noProp()}>
+                    <div>
+                      <IconButton
+                        icon={SvgMoreHorizontal}
+                        className={cn(
+                          !popoverOpen && "hidden",
+                          !isEditing && "group-hover/SidebarTab:flex"
+                        )}
+                        transient={popoverOpen}
+                        internal
+                      />
+                    </div>
+                  </PopoverTrigger>
 
-                <PopoverContent side="right" align="end">
-                  <PopoverMenu>{popoverItems}</PopoverMenu>
-                </PopoverContent>
-              </>
-            }
-          >
-            {isEditing ? (
-              <ButtonRenaming
-                initialName={project.name}
-                onRename={handleRename}
-                onClose={() => setIsEditing(false)}
-              />
-            ) : (
-              project.name
-            )}
-          </SidebarTab>
-        </PopoverAnchor>
-      </Popover>
+                  <PopoverContent side="right" align="end">
+                    <PopoverMenu>{popoverItems}</PopoverMenu>
+                  </PopoverContent>
+                </>
+              }
+            >
+              {isEditing ? (
+                <ButtonRenaming
+                  initialName={project.name}
+                  onRename={handleRename}
+                  onClose={() => setIsEditing(false)}
+                />
+              ) : (
+                project.name
+              )}
+            </SidebarTab>
+          </PopoverAnchor>
+        </Popover>
 
-      {/* Project Chat-Sessions */}
-      {open &&
-        project.chat_sessions.map((chatSession) => (
-          <ChatButton
-            key={chatSession.id}
-            chatSession={chatSession}
-            project={project}
-            draggable
-          />
-        ))}
-    </div>
+        {/* Project Chat-Sessions */}
+        {open &&
+          project.chat_sessions.map((chatSession) => (
+            <ChatButton
+              key={chatSession.id}
+              chatSession={chatSession}
+              project={project}
+              draggable
+            />
+          ))}
+      </div>
+    </>
   );
 }
 

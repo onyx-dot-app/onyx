@@ -143,7 +143,7 @@ export default function UserFilesModalContent({
         />
       )}
 
-      <Modal icon={Icon} title={title} description={description} sm>
+      <Modal icon={Icon} title={title} description={description} small>
         {/* Search bar section */}
         <div className="flex items-center gap-2 p-3">
           <InputTypeIn
