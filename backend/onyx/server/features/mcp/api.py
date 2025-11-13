@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
+from onyx.auth.users import verify_actions_creation_enabled
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -1498,7 +1499,7 @@ def get_mcp_servers_for_admin(
 
 
 @admin_router.get("/server/{server_id}/db-tools")
-def get_mcp_server_db_tools(
+async def get_mcp_server_db_tools(
     server_id: int,
     db: Session = Depends(get_session),
     user: User | None = Depends(current_user),
@@ -1506,6 +1507,7 @@ def get_mcp_server_db_tools(
     """Get existing database tools created for an MCP server"""
     logger.info(f"Getting database tools for MCP server: {server_id}")
 
+    await verify_actions_creation_enabled(user=user)
     try:
         # Verify the server exists
         mcp_server = get_mcp_server_by_id(server_id, db)
@@ -1543,13 +1545,14 @@ def get_mcp_server_db_tools(
 
 
 @admin_router.post("/servers/create", response_model=MCPServerCreateResponse)
-def upsert_mcp_server_with_tools(
+async def upsert_mcp_server_with_tools(
     request: MCPToolCreateRequest,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User | None = Depends(current_user),
 ) -> MCPServerCreateResponse:
     """Create or update an MCP server and associated tools"""
 
+    user = await verify_actions_creation_enabled(user=user)
     # Validate auth_performer for non-none auth types
     if request.auth_type != MCPAuthenticationType.NONE and not request.auth_performer:
         raise HTTPException(

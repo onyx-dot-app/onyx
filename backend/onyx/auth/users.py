@@ -114,6 +114,7 @@ from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
@@ -1446,5 +1447,19 @@ async def api_key_dep(
 
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid API key")
+
+    return user
+
+async def verify_actions_creation_enabled(user: User | None = Depends(current_user)):
+    """
+    check all users actions creation switch, if disabled, only admin can access
+    """
+    settings = load_settings()
+    if not settings.all_users_actions_creation_enabled and (
+        not user or user.role != UserRole.ADMIN
+    ):
+        raise HTTPException(
+            status_code=403, detail="All users actions creation is disabled"
+        )
 
     return user
