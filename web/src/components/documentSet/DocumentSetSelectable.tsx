@@ -59,12 +59,18 @@ export function DocumentSetSelectable({
               ))}
             </div>
           </div>
-          <div className="ml-auto my-auto pl-1">
-            <CustomCheckbox
-              checked={isSelected}
-              onChange={() => null}
-              disabled={disabled}
-            />
+          <div
+            className="ml-auto my-auto pl-1"
+            onClick={(event) => {
+              if (disabled) {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              onSelect();
+            }}
+          >
+            <CustomCheckbox checked={isSelected} disabled={disabled} />
           </div>
         </div>
       </div>
