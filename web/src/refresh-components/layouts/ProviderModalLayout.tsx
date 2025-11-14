@@ -14,21 +14,20 @@ interface ProviderModalProps extends ModalProps {
   cancelLabel?: string;
 }
 
-export default function ProviderModal({
-  icon,
-  title,
-  description,
-  children,
+export default function ProviderModalLayout({
   onSubmit,
   submitDisabled = false,
   isSubmitting = false,
   submitLabel = "Connect",
   cancelLabel = "Cancel",
+
+  children,
+  ...rest
 }: ProviderModalProps) {
   const modal = useModal();
 
   return (
-    <DefaultModalLayout icon={icon} title={title} description={description}>
+    <DefaultModalLayout {...rest}>
       <div className="flex flex-col h-full max-h-[calc(100dvh-9rem)]">
         <div className="flex-1 overflow-scroll">{children}</div>
         {onSubmit && (

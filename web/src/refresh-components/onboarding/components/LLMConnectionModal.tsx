@@ -17,7 +17,7 @@ import { LLMConnectionFieldsBasic } from "./LLMConnectionFieldsBasic";
 import { LLMConnectionFieldsCustom } from "./LLMConnectionFieldsCustom";
 import { getValidationSchema } from "./llmValidationSchema";
 import { OnboardingActions, OnboardingState } from "../types";
-import ProviderModal from "./ProviderModal";
+import ProviderModalLayout from "@/refresh-components/layouts/ProviderModalLayout";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 
 interface LLMFormikEffectsProps {
@@ -451,7 +451,7 @@ export default function LLMConnectionModal({
         };
 
         return (
-          <ProviderModal
+          <ProviderModalLayout
             title={title}
             description={modalContent?.description}
             icon={() => icon}
@@ -537,7 +537,7 @@ export default function LLMConnectionModal({
                 )}
               </div>
             </Form>
-          </ProviderModal>
+          </ProviderModalLayout>
         );
       }}
     </Formik>
