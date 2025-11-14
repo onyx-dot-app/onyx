@@ -114,7 +114,7 @@ export const OnyxApiKeyForm = ({
                 ]}
               />
 
-              <Button disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting}>
                 {isUpdate ? "Update" : "Create"}
               </Button>
             </Form>

@@ -476,7 +476,6 @@ export function CustomLLMProviderUpdateForm({
                 </Button>
                 {existingLlmProvider && (
                   <Button
-                    type="button"
                     danger
                     className="ml-3"
                     leftIcon={SvgTrash}

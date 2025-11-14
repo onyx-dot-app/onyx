@@ -153,7 +153,9 @@ export const CreateRateLimitModal = ({
               type="number"
               placeholder=""
             />
-            <Button disabled={isSubmitting}>Create</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              Create
+            </Button>
           </Form>
         )}
       </Formik>

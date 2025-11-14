@@ -207,7 +207,9 @@ function KGConfiguration({
                 disabled={!props.values.enabled}
               />
             </div>
-            <Button disabled={!props.dirty}>Submit</Button>
+            <Button type="submit" disabled={!props.dirty}>
+              Submit
+            </Button>
           </div>
         </Form>
       )}

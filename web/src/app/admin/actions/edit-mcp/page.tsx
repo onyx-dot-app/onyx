@@ -473,7 +473,6 @@ export default function NewMCPToolPage() {
                     {values.auth_type === MCPAuthenticationType.OAUTH && (
                       <div className="flex items-center gap-2">
                         <Button
-                          type="button"
                           onClick={() => handleOAuthConnect(values)}
                           disabled={
                             checkingOAuthStatus ||

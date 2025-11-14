@@ -1,9 +1,9 @@
 "use client";
 
 import Button from "@/refresh-components/buttons/Button";
-import { FiTrash } from "react-icons/fi";
 import { deleteCustomTool } from "@/lib/tools/edit";
 import { useRouter } from "next/navigation";
+import SvgTrash from "@/icons/trash";
 
 export function DeleteToolButton({ toolId }: { toolId: number }) {
   const router = useRouter();
@@ -19,7 +19,7 @@ export function DeleteToolButton({ toolId }: { toolId: number }) {
           alert(`Failed to delete tool - ${response.error}`);
         }
       }}
-      leftIcon={FiTrash}
+      leftIcon={SvgTrash}
     >
       Delete
     </Button>

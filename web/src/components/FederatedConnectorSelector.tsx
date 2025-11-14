@@ -208,20 +208,10 @@ const EntityConfigDialog = ({
           )}
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button
-              secondary
-              type="button"
-              onClick={onClose}
-              className="!py-1.5 !px-3"
-            >
+            <Button secondary onClick={onClose}>
               Cancel
             </Button>
-            <Button
-              type="button"
-              onClick={handleSave}
-              disabled={isLoading}
-              className="!py-1.5 !px-3"
-            >
+            <Button onClick={handleSave} disabled={isLoading}>
               Save Configuration
             </Button>
           </div>
