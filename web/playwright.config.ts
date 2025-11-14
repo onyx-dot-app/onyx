@@ -44,6 +44,7 @@ export default defineConfig({
         viewport: { width: 1280, height: 720 },
         storageState: "admin_auth.json",
       },
+      grepInvert: /@exclusive/,
     },
     {
       name: "no-auth",
@@ -51,6 +52,17 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 720 },
       },
+      grepInvert: /@exclusive/,
+    },
+    {
+      name: "tests-that-run-independently-and-serially",
+      testMatch: /.*\/tests\/e2e\/.*independently.*\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 720 },
+        storageState: "admin_auth.json",
+      },
+      grep: /@exclusive/,
     },
   ],
 });
