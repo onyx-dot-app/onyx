@@ -33,46 +33,55 @@ logger = setup_logger()
 
 @lru_cache()
 def get_public_key() -> str | None:
-    if JWT_PUBLIC_KEY_URL is None:
-        logger.error("JWT_PUBLIC_KEY_URL is not set")
+    if not JWT_PUBLIC_KEY_URL:
+        logger.error("URL для публичного ключа JWT (JWT_PUBLIC_KEY_URL) не задан.")
         return None
 
-    response = requests.get(JWT_PUBLIC_KEY_URL)
-    response.raise_for_status()
-    return response.text
+    try:
+        resp = requests.get(JWT_PUBLIC_KEY_URL)
+        resp.raise_for_status()
+        return resp.text
+    except requests.RequestException as e:
+        logger.error(f"Ошибка при получении публичного ключа: {e}")
+        return None
 
 
 async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User | None:
-    try:
-        public_key_pem = get_public_key()
-        if public_key_pem is None:
-            logger.error("Failed to retrieve public key")
-            return None
+    pub_key = get_public_key()
+    if not pub_key:
+        logger.error("Не удалось получить публичный ключ для проверки токена.")
+        return None
 
-        payload = jwt_decode(
+    try:
+        token_data = jwt_decode(
             token,
-            public_key_pem,
+            pub_key,
             algorithms=["RS256"],
             audience=None,
         )
-        email = payload.get("email")
-        if email:
-            result = await async_db_session.execute(
-                select(User).where(func.lower(User.email) == func.lower(email))
-            )
-            return result.scalars().first()
+
+        user_email = token_data.get("email")
+        if not user_email:
+            return None
+
+        # Поиск пользователя в БД по email (регистронезависимый)
+        stmt = select(User).where(func.lower(User.email) == func.lower(user_email))
+        result = await async_db_session.execute(stmt)
+        return result.scalars().first()
+
     except InvalidTokenError:
-        logger.error("Invalid JWT token")
+        logger.error("Обнаружен невалидный JWT токен.")
         get_public_key.cache_clear()
-    except PyJWTError as e:
-        logger.error(f"JWT decoding error: {str(e)}")
+    except PyJWTError as jwt_err:
+        logger.error(f"Ошибка декодирования JWT: {jwt_err}")
         get_public_key.cache_clear()
+
     return None
 
 
 def verify_auth_setting() -> None:
-    # All the Auth flows are valid for EE version
-    logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
+    # поддерживаются все потоки аутентификации
+    logger.notice(f"Текущий тип аутентификации: {AUTH_TYPE.value}")
 
 
 async def optional_user_(
@@ -80,30 +89,31 @@ async def optional_user_(
     user: User | None,
     async_db_session: AsyncSession,
 ) -> User | None:
-    # Check if the user has a session cookie from SAML
+    # 1. Попытка аутентификации через SAML cookie
     if AUTH_TYPE == AuthType.SAML:
-        saved_cookie = extract_hashed_cookie(request)
-
-        if saved_cookie:
-            saml_account = await get_saml_account(
-                cookie=saved_cookie, async_db_session=async_db_session
+        if cookie_val := extract_hashed_cookie(request):
+            saml_acc = await get_saml_account(
+                cookie=cookie_val,
+                async_db_session=async_db_session
             )
-            user = saml_account.user if saml_account else None
+            if saml_acc:
+                user = saml_acc.user
 
-    # If user is still None, check for JWT in Authorization header
-    if user is None and JWT_PUBLIC_KEY_URL is not None:
+    # 2. Если пользователь не найден, проверяем JWT в заголовках
+    if not user and JWT_PUBLIC_KEY_URL:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header[len("Bearer ") :].strip()
-            user = await verify_jwt_token(token, async_db_session)
+            jwt_token = auth_header.split(" ", 1)[1].strip()
+            user = await verify_jwt_token(jwt_token, async_db_session)
 
     return user
 
 
 def get_default_admin_user_emails_() -> list[str]:
-    seed_config = get_seed_config()
-    if seed_config and seed_config.admin_user_emails:
-        return seed_config.admin_user_emails
+    seed_conf = get_seed_config()
+    # Возвращаем список админов из конфигурации, если он есть
+    if seed_conf and seed_conf.admin_user_emails:
+        return seed_conf.admin_user_emails
     return []
 
 
@@ -111,26 +121,31 @@ async def current_cloud_superuser(
     request: Request,
     user: User | None = Depends(current_admin_user),
 ) -> User | None:
-    api_key = request.headers.get("Authorization", "").replace("Bearer ", "")
+    # Извлекаем API ключ, убирая префикс Bearer, если он есть
+    raw_header = request.headers.get("Authorization", "")
+    api_key = raw_header.replace("Bearer ", "")
+
     if api_key != SUPER_CLOUD_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    if user and user.email not in SUPER_USERS:
+    # Проверка прав: пользователь должен быть в списке супер-юзеров
+    is_superuser = user and user.email in SUPER_USERS
+    if not is_superuser:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied. User must be a cloud superuser to perform this action.",
         )
+
     return user
 
 
 def generate_anonymous_user_jwt_token(tenant_id: str) -> str:
-    payload = {
+    claims = {
         "tenant_id": tenant_id,
-        # Token does not expire
-        "iat": datetime.utcnow(),  # Issued at time
+        # Токен бессрочный
+        "iat": datetime.utcnow(),
     }
-
-    return jwt.encode(payload, USER_AUTH_SECRET, algorithm="HS256")
+    return jwt.encode(claims, USER_AUTH_SECRET, algorithm="HS256")
 
 
 def decode_anonymous_user_jwt_token(token: str) -> dict:

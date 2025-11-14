@@ -1,82 +1,89 @@
 from collections.abc import Sequence
+from typing import cast
 
-from sqlalchemy import exists
-from sqlalchemy import Row
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import Session
+from sqlalchemy import Row, Select, exists, select
+from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import TokenRateLimitScope
-from onyx.db.models import TokenRateLimit
-from onyx.db.models import TokenRateLimit__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
+from onyx.db.models import TokenRateLimit, TokenRateLimit__UserGroup, User, UserGroup, UserRole, User__UserGroup
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
+
+
+def _apply_admin_access(stmt: Select, current_user: User | None) -> bool:
+    """Проверяет, имеет ли пользователь права администратора."""
+    return (current_user is None and DISABLE_AUTH) or (current_user and current_user.role == UserRole.ADMIN)
+
+
+def _setup_group_aliases() -> tuple:
+    """Инициализирует алиасы для таблиц связей групп."""
+    trl_ug_alias = aliased(TokenRateLimit__UserGroup)
+    user_ug_alias = aliased(User__UserGroup)
+    return trl_ug_alias, user_ug_alias
+
+
+def _build_group_ownership_filter(
+    trl_ug_alias, user_ug_alias, current_user: User, editable: bool
+) -> Select:
+    """Формирует фильтр владения группами для куратора."""
+    group_query = select(User__UserGroup.user_group_id).where(
+        User__UserGroup.user_id == current_user.id
+    )
+    if current_user.role == UserRole.CURATOR:
+        group_query = group_query.where(User__UserGroup.is_curator == True)  # noqa: E712
+    return group_query
+
+
+def _construct_editable_constraint(
+    stmt: Select, trl_ug_alias, user_groups_query: Select
+) -> Select:
+    """Добавляет ограничение редактируемости для групп."""
+    return stmt.where(
+        ~exists()
+        .where(trl_ug_alias.rate_limit_id == TokenRateLimit.id)
+        .where(~trl_ug_alias.user_group_id.in_(user_groups_query))
+        .correlate(TokenRateLimit)
+    )
 
 
 def _add_user_filters(
     stmt: Select, user: User | None, get_editable: bool = True
 ) -> Select:
-    # If user is None and auth is disabled, assume the user is an admin
-    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
+    """
+    Добавляет фильтры доступа на основе роли пользователя.
+    Для анонимов - только глобальные лимиты.
+    """
+    if _apply_admin_access(stmt, user):
         return stmt
 
     stmt = stmt.distinct()
-    TRLimit_UG = aliased(TokenRateLimit__UserGroup)
-    User__UG = aliased(User__UserGroup)
+    trl_group_link, user_group_link = _setup_group_aliases()
 
-    """
-    Here we select token_rate_limits by relation:
-    User -> User__UserGroup -> TokenRateLimit__UserGroup ->
-    TokenRateLimit
-    """
-    stmt = stmt.outerjoin(TRLimit_UG).outerjoin(
-        User__UG,
-        User__UG.user_group_id == TRLimit_UG.user_group_id,
+    stmt = stmt.outerjoin(trl_group_link).outerjoin(
+        user_group_link,
+        user_group_link.user_group_id == trl_group_link.user_group_id,
     )
 
-    """
-    Filter token_rate_limits by:
-    - if the user is in the user_group that owns the token_rate_limit
-    - if the user is not a global_curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out token_rate_limits that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all token_rate_limits in the groups the user curates
-    """
-
-    # If user is None, this is an anonymous user and we should only show public token_rate_limits
     if user is None:
-        where_clause = TokenRateLimit.scope == TokenRateLimitScope.GLOBAL
-        return stmt.where(where_clause)
+        return stmt.where(TokenRateLimit.scope == TokenRateLimitScope.GLOBAL)
 
-    where_clause = User__UG.user_id == user.id
+    base_condition = user_group_link.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:
-        where_clause &= User__UG.is_curator == True  # noqa: E712
-    if get_editable:
-        user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
-        if user.role == UserRole.CURATOR:
-            user_groups = user_groups.where(
-                User__UserGroup.is_curator == True  # noqa: E712
-            )
-        where_clause &= (
-            ~exists()
-            .where(TRLimit_UG.rate_limit_id == TokenRateLimit.id)
-            .where(~TRLimit_UG.user_group_id.in_(user_groups))
-            .correlate(TokenRateLimit)
-        )
+        base_condition &= user_group_link.is_curator == True  # noqa: E712
 
-    return stmt.where(where_clause)
+    if get_editable:
+        allowed_groups = _build_group_ownership_filter(trl_group_link, user_group_link, user, get_editable)
+        stmt = _construct_editable_constraint(stmt, trl_group_link, allowed_groups)
+        base_condition &= True  # Для совместимости с where
+
+    return stmt.where(base_condition)
 
 
 def fetch_all_user_group_token_rate_limits_by_group(
     db_session: Session,
 ) -> Sequence[Row[tuple[TokenRateLimit, str]]]:
-    query = (
+    """Извлекает все лимиты токенов по группам с именами."""
+    base_query = (
         select(TokenRateLimit, UserGroup.name)
         .join(
             TokenRateLimit__UserGroup,
@@ -84,8 +91,7 @@ def fetch_all_user_group_token_rate_limits_by_group(
         )
         .join(UserGroup, UserGroup.id == TokenRateLimit__UserGroup.user_group_id)
     )
-
-    return db_session.execute(query).all()
+    return db_session.execute(base_query).all()
 
 
 def insert_user_group_token_rate_limit(
@@ -93,22 +99,27 @@ def insert_user_group_token_rate_limit(
     token_rate_limit_settings: TokenRateLimitArgs,
     group_id: int,
 ) -> TokenRateLimit:
-    token_limit = TokenRateLimit(
-        enabled=token_rate_limit_settings.enabled,
-        token_budget=token_rate_limit_settings.token_budget,
-        period_hours=token_rate_limit_settings.period_hours,
+    """Создает и сохраняет лимит токенов для группы."""
+    session = db_session
+    settings = token_rate_limit_settings
+    target_group = group_id
+
+    new_limit = TokenRateLimit(
+        enabled=settings.enabled,
+        token_budget=settings.token_budget,
+        period_hours=settings.period_hours,
         scope=TokenRateLimitScope.USER_GROUP,
     )
-    db_session.add(token_limit)
-    db_session.flush()
+    session.add(new_limit)
+    session.flush()
 
-    rate_limit = TokenRateLimit__UserGroup(
-        rate_limit_id=token_limit.id, user_group_id=group_id
+    group_link = TokenRateLimit__UserGroup(
+        rate_limit_id=new_limit.id, user_group_id=target_group
     )
-    db_session.add(rate_limit)
-    db_session.commit()
+    session.add(group_link)
+    session.commit()
 
-    return token_limit
+    return new_limit
 
 
 def fetch_user_group_token_rate_limits_for_user(
@@ -119,14 +130,22 @@ def fetch_user_group_token_rate_limits_for_user(
     ordered: bool = True,
     get_editable: bool = True,
 ) -> Sequence[TokenRateLimit]:
-    stmt = select(TokenRateLimit)
-    stmt = stmt.where(User__UserGroup.user_group_id == group_id)
-    stmt = _add_user_filters(stmt, user, get_editable)
+    """Получает лимиты токенов для группы с учетом доступа пользователя."""
+    session = db_session
+    target_group_id = group_id
+    current_user = user
+    editable_flag = get_editable
+    enabled_flag = enabled_only
+    sort_flag = ordered
 
-    if enabled_only:
-        stmt = stmt.where(TokenRateLimit.enabled.is_(True))
+    base_stmt = select(TokenRateLimit)
+    base_stmt = base_stmt.where(User__UserGroup.user_group_id == target_group_id)
+    base_stmt = _add_user_filters(base_stmt, current_user, editable_flag)
 
-    if ordered:
-        stmt = stmt.order_by(TokenRateLimit.created_at.desc())
+    if enabled_flag:
+        base_stmt = base_stmt.where(TokenRateLimit.enabled.is_(True))
 
-    return db_session.scalars(stmt).all()
+    if sort_flag:
+        base_stmt = base_stmt.order_by(TokenRateLimit.created_at.desc())
+
+    return session.scalars(base_stmt).all()

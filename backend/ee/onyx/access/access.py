@@ -23,8 +23,11 @@ def _get_access_for_document(
     document_id: str,
     db_session: Session,
 ) -> DocumentAccess:
-    id_to_access = _get_access_for_documents([document_id], db_session)
-    if len(id_to_access) == 0:
+    # Получаем права доступа пакетно для одного ID
+    access_map = _get_access_for_documents([document_id], db_session)
+
+    if not access_map:
+        # Возвращаем "пустой" объект доступа, если запись не найдена
         return DocumentAccess.build(
             user_emails=[],
             user_groups=[],
@@ -33,98 +36,108 @@ def _get_access_for_document(
             is_public=False,
         )
 
-    return next(iter(id_to_access.values()))
+    return access_map[document_id]
 
 
 def _get_access_for_documents(
     document_ids: list[str],
     db_session: Session,
 ) -> dict[str, DocumentAccess]:
-    non_ee_access_dict = get_access_for_documents_without_groups(
+    # 1. Получаем базовые права доступа (без учета групп)
+    base_access_map = get_access_for_documents_without_groups(
         document_ids=document_ids,
         db_session=db_session,
     )
-    user_group_info: dict[str, list[str]] = {
-        document_id: group_names
-        for document_id, group_names in fetch_user_groups_for_documents(
+
+    # 2. Извлекаем группы пользователей, привязанные к документам
+    groups_by_doc = {
+        doc_id: groups
+        for doc_id, groups in fetch_user_groups_for_documents(
             db_session=db_session,
             document_ids=document_ids,
         )
     }
+
+    # 3. Загружаем метаданные документов и информацию об источниках
     documents = get_documents_by_ids(
         db_session=db_session,
         document_ids=document_ids,
     )
-    doc_id_map = {doc.id: doc for doc in documents}
+    docs_lookup = {d.id: d for d in documents}
 
-    # Get all sources in one batch
-    doc_id_to_source_map = get_document_sources(
+    sources_lookup = get_document_sources(
         db_session=db_session,
         document_ids=document_ids,
     )
 
-    access_map = {}
-    for document_id, non_ee_access in non_ee_access_dict.items():
-        document = doc_id_map[document_id]
-        source = doc_id_to_source_map.get(document_id)
-        is_only_censored = (
-            source in DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION
-            and source not in DOC_PERMISSIONS_FUNC_MAP
+    final_access = {}
+
+    for doc_id, base_access in base_access_map.items():
+        current_doc = docs_lookup[doc_id]
+        source_type = sources_lookup.get(doc_id)
+
+        # Проверяем, требуется ли цензурирование (censoring) для данного источника
+        # Это актуально, если источник есть в списке цензурируемых, но нет специфичной карты прав
+        requires_censoring = (
+            source_type in DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION
+            and source_type not in DOC_PERMISSIONS_FUNC_MAP
         )
 
-        ext_u_emails = (
-            set(document.external_user_emails)
-            if document.external_user_emails
-            else set()
+        # Формируем наборы внешних email и групп (если они есть)
+        ext_emails = set(current_doc.external_user_emails or [])
+        ext_groups = set(current_doc.external_user_group_ids or [])
+
+        # Определение публичности документа.
+        # Документ считается публичным, если:
+        # - он помечен публичным в Onyx
+        # - он помечен публичным в базовых правах
+        # - он подлежит только цензурированию (доступен при поиске, права проверяются позже)
+        is_public_access = (
+            current_doc.is_public
+            or base_access.is_public
+            or requires_censoring
         )
 
-        ext_u_groups = (
-            set(document.external_user_group_ids)
-            if document.external_user_group_ids
-            else set()
+        # Сборка финального объекта доступа.
+        # Внешние группы и email-ы объединяются с внутренними.
+        final_access[doc_id] = DocumentAccess.build(
+            user_emails=list(base_access.user_emails),
+            user_groups=groups_by_doc.get(doc_id, []),
+            is_public=is_public_access,
+            external_user_emails=list(ext_emails),
+            external_user_group_ids=list(ext_groups),
         )
 
-        # If the document is determined to be "public" externally (through a SYNC connector)
-        # then it's given the same access level as if it were marked public within Onyx
-        # If its censored, then it's public anywhere during the search and then permissions are
-        # applied after the search
-        is_public_anywhere = (
-            document.is_public or non_ee_access.is_public or is_only_censored
-        )
-
-        # To avoid collisions of group namings between connectors, they need to be prefixed
-        access_map[document_id] = DocumentAccess.build(
-            user_emails=list(non_ee_access.user_emails),
-            user_groups=user_group_info.get(document_id, []),
-            is_public=is_public_anywhere,
-            external_user_emails=list(ext_u_emails),
-            external_user_group_ids=list(ext_u_groups),
-        )
-    return access_map
+    return final_access
 
 
 def _get_acl_for_user(user: User | None, db_session: Session) -> set[str]:
-    """Returns a list of ACL entries that the user has access to. This is meant to be
-    used downstream to filter out documents that the user does not have access to. The
-    user should have access to a document if at least one entry in the document's ACL
-    matches one entry in the returned set.
+    """
+    Возвращает набор ACL (Access Control List), доступный пользователю.
+    Используется для фильтрации документов, к которым пользователь не имеет доступа.
+    Доступ разрешен, если хотя бы одна запись в ACL документа совпадает с возвращаемым набором.
 
-    NOTE: is imported in onyx.access.access by `fetch_versioned_implementation`
-    DO NOT REMOVE."""
-    db_user_groups = fetch_user_groups_for_user(db_session, user.id) if user else []
-    prefixed_user_groups = [
-        prefix_user_group(db_user_group.name) for db_user_group in db_user_groups
-    ]
+    ВАЖНО: Функция импортируется в `onyx.access.access` через `fetch_versioned_implementation`.
+    НЕ УДАЛЯТЬ И НЕ МЕНЯТЬ СИГНАТУРУ.
+    """
+    if user:
+        internal_groups = fetch_user_groups_for_user(db_session, user.id)
+        external_groups = fetch_external_groups_for_user(db_session, user.id)
+    else:
+        internal_groups = []
+        external_groups = []
 
-    db_external_groups = (
-        fetch_external_groups_for_user(db_session, user.id) if user else []
+    # Префиксы необходимы для предотвращения коллизий имен групп из разных источников
+    acl_list = [prefix_user_group(g.name) for g in internal_groups]
+    acl_list.extend(
+        prefix_external_group(g.external_user_group_id) for g in external_groups
     )
-    prefixed_external_groups = [
-        prefix_external_group(db_external_group.external_user_group_id)
-        for db_external_group in db_external_groups
-    ]
 
-    user_acl = set(prefixed_user_groups + prefixed_external_groups)
-    user_acl.update(get_acl_for_user_without_groups(user, db_session))
+    # Формируем итоговый сет прав
+    user_acl = set(acl_list)
+
+    # Добавляем права, не связанные с группами
+    base_acl = get_acl_for_user_without_groups(user, db_session)
+    user_acl.update(base_acl)
 
     return user_acl

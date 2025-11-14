@@ -1,13 +1,27 @@
 from datetime import datetime
 from datetime import timezone
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import Document as DbDocument
+
+
+def _prepare_prefixed_groups(
+    group_ids: list[str], source: DocumentSource
+) -> list[str]:
+    """Преобразует ID групп в префиксованные имена для внешнего доступа."""
+    result: list[str] = []
+    idx = 0
+    while idx < len(group_ids):
+        result.append(
+            build_ext_group_name_for_onyx(
+                ext_group_name=group_ids[idx], source=source
+            )
+        )
+        idx += 1
+    return result
 
 
 def upsert_document_external_perms__no_commit(
@@ -17,37 +31,31 @@ def upsert_document_external_perms__no_commit(
     source_type: DocumentSource,
 ) -> None:
     """
-    This sets the permissions for a document in postgres.
-    NOTE: this will replace any existing external access, it will not do a union
+    Устанавливает разрешения для документа в PostgreSQL.
+    Заменяет существующий внешний доступ полностью, без объединения.
     """
-    document = db_session.scalars(
-        select(DbDocument).where(DbDocument.id == doc_id)
-    ).first()
+    session = db_session
+    query = select(DbDocument).where(DbDocument.id == doc_id)
+    doc_record = session.scalars(query).first()
 
-    prefixed_external_groups = [
-        build_ext_group_name_for_onyx(
-            ext_group_name=group_id,
-            source=source_type,
-        )
-        for group_id in external_access.external_user_group_ids
-    ]
+    prefixed_groups = _prepare_prefixed_groups(
+        external_access.external_user_group_ids, source_type
+    )
 
-    if not document:
-        # If the document does not exist, still store the external access
-        # So that if the document is added later, the external access is already stored
-        document = DbDocument(
+    if not doc_record:
+        new_doc = DbDocument(
             id=doc_id,
             semantic_id="",
             external_user_emails=external_access.external_user_emails,
-            external_user_group_ids=prefixed_external_groups,
+            external_user_group_ids=prefixed_groups,
             is_public=external_access.is_public,
         )
-        db_session.add(document)
+        session.add(new_doc)
         return
 
-    document.external_user_emails = list(external_access.external_user_emails)
-    document.external_user_group_ids = prefixed_external_groups
-    document.is_public = external_access.is_public
+    doc_record.external_user_emails = list(external_access.external_user_emails)
+    doc_record.external_user_group_ids = prefixed_groups
+    doc_record.is_public = external_access.is_public
 
 
 def upsert_document_external_perms(
@@ -57,47 +65,45 @@ def upsert_document_external_perms(
     source_type: DocumentSource,
 ) -> bool:
     """
-    This sets the permissions for a document in postgres. Returns True if the
-    a new document was created, False otherwise.
-    NOTE: this will replace any existing external access, it will not do a union
+    Устанавливает разрешения для документа в PostgreSQL.
+    Возвращает True, если создан новый документ, иначе False.
+    Заменяет существующий внешний доступ полностью, без объединения.
     """
-    document = db_session.scalars(
-        select(DbDocument).where(DbDocument.id == doc_id)
-    ).first()
+    session = db_session
+    query = select(DbDocument).where(DbDocument.id == doc_id)
+    doc_record = session.scalars(query).first()
 
-    prefixed_external_groups: set[str] = {
-        build_ext_group_name_for_onyx(
-            ext_group_name=group_id,
-            source=source_type,
+    prefixed_groups_set = set(
+        _prepare_prefixed_groups(
+            external_access.external_user_group_ids, source_type
         )
-        for group_id in external_access.external_user_group_ids
-    }
+    )
 
-    if not document:
-        # If the document does not exist, still store the external access
-        # So that if the document is added later, the external access is already stored
-        # The upsert function in the indexing pipeline does not overwrite the permissions fields
-        document = DbDocument(
+    if not doc_record:
+        new_doc = DbDocument(
             id=doc_id,
             semantic_id="",
             external_user_emails=external_access.external_user_emails,
-            external_user_group_ids=prefixed_external_groups,
+            external_user_group_ids=list(prefixed_groups_set),
             is_public=external_access.is_public,
         )
-        db_session.add(document)
-        db_session.commit()
+        session.add(new_doc)
+        session.commit()
         return True
 
-    # If the document exists, we need to check if the external access has changed
+    existing_emails = set(doc_record.external_user_emails or [])
+    existing_groups = set(doc_record.external_user_group_ids or [])
+
     if (
-        external_access.external_user_emails != set(document.external_user_emails or [])
-        or prefixed_external_groups != set(document.external_user_group_ids or [])
-        or external_access.is_public != document.is_public
+        external_access.external_user_emails != existing_emails
+        or prefixed_groups_set != existing_groups
+        or external_access.is_public != doc_record.is_public
     ):
-        document.external_user_emails = list(external_access.external_user_emails)
-        document.external_user_group_ids = list(prefixed_external_groups)
-        document.is_public = external_access.is_public
-        document.last_modified = datetime.now(timezone.utc)
-        db_session.commit()
+        doc_record.external_user_emails = list(external_access.external_user_emails)
+        doc_record.external_user_group_ids = list(prefixed_groups_set)
+        doc_record.is_public = external_access.is_public
+        doc_record.last_modified = datetime.now(timezone.utc)
+        session.commit()
+        return False
 
     return False

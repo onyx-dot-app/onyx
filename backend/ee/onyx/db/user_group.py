@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.user_group.models import SetCuratorRequest
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupUpdate
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair_from_id,
+)
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import ConnectorCredentialPair
@@ -35,86 +37,79 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _cleanup_user__user_group_relationships__no_commit(
+def _clear_user_group_links__no_commit(
     db_session: Session,
     user_group_id: int,
     user_ids: list[UUID] | None = None,
 ) -> None:
-    """NOTE: does not commit the transaction."""
-    where_clause = User__UserGroup.user_group_id == user_group_id
+    """Удаляет связи User__UserGroup. Не фиксирует транзакцию."""
+    where_condition = User__UserGroup.user_group_id == user_group_id
     if user_ids:
-        where_clause &= User__UserGroup.user_id.in_(user_ids)
+        where_condition &= User__UserGroup.user_id.in_(user_ids)
 
-    user__user_group_relationships = db_session.scalars(
-        select(User__UserGroup).where(where_clause)
-    ).all()
-    for user__user_group_relationship in user__user_group_relationships:
-        db_session.delete(user__user_group_relationship)
+    delete_stmt = delete(User__UserGroup).where(where_condition)
+    db_session.execute(delete_stmt)
 
 
-def _cleanup_credential__user_group_relationships__no_commit(
+def _clear_credential_group_links__no_commit(
     db_session: Session,
     user_group_id: int,
 ) -> None:
-    """NOTE: does not commit the transaction."""
+    """Удаляет связи Credential__UserGroup. Не фиксирует транзакцию."""
     db_session.query(Credential__UserGroup).filter(
         Credential__UserGroup.user_group_id == user_group_id
     ).delete(synchronize_session=False)
 
 
-def _cleanup_llm_provider__user_group_relationships__no_commit(
+def _clear_llm_provider_group_links__no_commit(
     db_session: Session, user_group_id: int
 ) -> None:
-    """NOTE: does not commit the transaction."""
+    """Удаляет связи LLMProvider__UserGroup. Не фиксирует транзакцию."""
     db_session.query(LLMProvider__UserGroup).filter(
         LLMProvider__UserGroup.user_group_id == user_group_id
     ).delete(synchronize_session=False)
 
 
-def _cleanup_persona__user_group_relationships__no_commit(
+def _clear_persona_group_links__no_commit(
     db_session: Session, user_group_id: int
 ) -> None:
-    """NOTE: does not commit the transaction."""
+    """Удаляет связи Persona__UserGroup. Не фиксирует транзакцию."""
     db_session.query(Persona__UserGroup).filter(
         Persona__UserGroup.user_group_id == user_group_id
     ).delete(synchronize_session=False)
 
 
-def _cleanup_token_rate_limit__user_group_relationships__no_commit(
+def _clear_token_limit_group_links__no_commit(
     db_session: Session, user_group_id: int
 ) -> None:
-    """NOTE: does not commit the transaction."""
-    token_rate_limit__user_group_relationships = db_session.scalars(
-        select(TokenRateLimit__UserGroup).where(
-            TokenRateLimit__UserGroup.user_group_id == user_group_id
-        )
-    ).all()
-    for (
-        token_rate_limit__user_group_relationship
-    ) in token_rate_limit__user_group_relationships:
-        db_session.delete(token_rate_limit__user_group_relationship)
+    """Удаляет связи TokenRateLimit__UserGroup. Не фиксирует транзакцию."""
+    delete_stmt = delete(TokenRateLimit__UserGroup).where(
+        TokenRateLimit__UserGroup.user_group_id == user_group_id
+    )
+    db_session.execute(delete_stmt)
 
 
-def _cleanup_user_group__cc_pair_relationships__no_commit(
+def _clear_group_cc_pair_links__no_commit(
     db_session: Session, user_group_id: int, outdated_only: bool
 ) -> None:
-    """NOTE: does not commit the transaction."""
-    stmt = select(UserGroup__ConnectorCredentialPair).where(
+    """Удаляет связи UserGroup__ConnectorCredentialPair. Не фиксирует транзакцию."""
+    query = select(UserGroup__ConnectorCredentialPair).where(
         UserGroup__ConnectorCredentialPair.user_group_id == user_group_id
     )
     if outdated_only:
-        stmt = stmt.where(
+        query = query.where(
             UserGroup__ConnectorCredentialPair.is_current == False  # noqa: E712
         )
-    user_group__cc_pair_relationships = db_session.scalars(stmt)
-    for user_group__cc_pair_relationship in user_group__cc_pair_relationships:
-        db_session.delete(user_group__cc_pair_relationship)
+
+    relationships_to_delete = db_session.scalars(query).all()
+    for rel in relationships_to_delete:
+        db_session.delete(rel)
 
 
-def _cleanup_document_set__user_group_relationships__no_commit(
+def _clear_doc_set_group_links__no_commit(
     db_session: Session, user_group_id: int
 ) -> None:
-    """NOTE: does not commit the transaction."""
+    """Удаляет связи DocumentSet__UserGroup. Не фиксирует транзакцию."""
     db_session.execute(
         delete(DocumentSet__UserGroup).where(
             DocumentSet__UserGroup.user_group_id == user_group_id
@@ -130,101 +125,97 @@ def validate_object_creation_for_user(
     object_is_perm_sync: bool | None = None,
 ) -> None:
     """
-    All users can create/edit permission synced objects if they don't specify a group
-    All admin actions are allowed.
-    Prevents non-admins from creating/editing:
-    - public objects
-    - objects with no groups
-    - objects that belong to a group they don't curate
+    Проверяет, имеет ли пользователь права на создание/редактирование объекта.
+    - Админы могут все.
+    - Пользователи могут управлять объектами с 'perm_sync', если не указаны группы.
+    - Запрещает не-админам создавать публичные объекты или объекты без групп.
+    - Запрещает кураторам управлять группами, которые они не курируют.
     """
-    if object_is_perm_sync and not target_group_ids:
-        return
-
     if not user or user.role == UserRole.ADMIN:
         return
 
-    if object_is_public:
-        detail = "User does not have permission to create public credentials"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
-    if not target_group_ids:
-        detail = "Curators must specify 1+ groups"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
+    if object_is_perm_sync and not target_group_ids:
+        return
 
+    if object_is_public:
+        error_message = (
+            "User does not have permission to create public credentials"
+        )
+        logger.error(error_message)
+        raise HTTPException(status_code=400, detail=error_message)
+
+    if not target_group_ids:
+        error_message = "Curators must specify 1+ groups"
+        logger.error(error_message)
+        raise HTTPException(status_code=400, detail=error_message)
+
+    # Глобальные кураторы могут курировать все группы, в которых состоят
+    is_global_curator = user.role == UserRole.GLOBAL_CURATOR
     user_curated_groups = fetch_user_groups_for_user(
         db_session=db_session,
         user_id=user.id,
-        # Global curators can curate all groups they are member of
-        only_curator_groups=user.role != UserRole.GLOBAL_CURATOR,
+        only_curator_groups=not is_global_curator,
     )
-    user_curated_group_ids = set([group.id for group in user_curated_groups])
+
+    user_curated_group_ids = {group.id for group in user_curated_groups}
     target_group_ids_set = set(target_group_ids)
+
     if not target_group_ids_set.issubset(user_curated_group_ids):
-        detail = "Curators cannot control groups they don't curate"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
+        error_message = "Curators cannot control groups they don't curate"
+        logger.error(error_message)
+        raise HTTPException(status_code=400, detail=error_message)
 
 
-def fetch_user_group(db_session: Session, user_group_id: int) -> UserGroup | None:
-    stmt = select(UserGroup).where(UserGroup.id == user_group_id)
-    return db_session.scalar(stmt)
+def fetch_user_group(
+    db_session: Session, user_group_id: int
+) -> UserGroup | None:
+    query = select(UserGroup).where(UserGroup.id == user_group_id)
+    return db_session.scalar(query)
 
 
 def fetch_user_groups(
     db_session: Session, only_up_to_date: bool = True
 ) -> Sequence[UserGroup]:
     """
-    Fetches user groups from the database.
-
-    This function retrieves a sequence of `UserGroup` objects from the database.
-    If `only_up_to_date` is set to `True`, it filters the user groups to return only those
-    that are marked as up-to-date (`is_up_to_date` is `True`).
+    Извлекает группы пользователей из базы данных.
 
     Args:
-        db_session (Session): The SQLAlchemy session used to query the database.
-        only_up_to_date (bool, optional): Flag to determine whether to filter the results
-            to include only up to date user groups. Defaults to `True`.
+        db_session (Session): Сессия SQLAlchemy.
+        only_up_to_date (bool, optional): Если True, возвращает только группы,
+            помеченные как 'is_up_to_date'. По умолчанию True.
 
     Returns:
-        Sequence[UserGroup]: A sequence of `UserGroup` objects matching the query criteria.
+        Sequence[UserGroup]: Последовательность объектов UserGroup.
     """
-    stmt = select(UserGroup)
+    query = select(UserGroup)
     if only_up_to_date:
-        stmt = stmt.where(UserGroup.is_up_to_date == True)  # noqa: E712
-    return db_session.scalars(stmt).all()
+        query = query.where(UserGroup.is_up_to_date == True)  # noqa: E712
+    return db_session.scalars(query).all()
 
 
 def fetch_user_groups_for_user(
     db_session: Session, user_id: UUID, only_curator_groups: bool = False
 ) -> Sequence[UserGroup]:
-    stmt = (
+    query = (
         select(UserGroup)
         .join(User__UserGroup, User__UserGroup.user_group_id == UserGroup.id)
         .join(User, User.id == User__UserGroup.user_id)  # type: ignore
         .where(User.id == user_id)  # type: ignore
     )
     if only_curator_groups:
-        stmt = stmt.where(User__UserGroup.is_curator == True)  # noqa: E712
-    return db_session.scalars(stmt).all()
+        query = query.where(User__UserGroup.is_curator == True)  # noqa: E712
+    return db_session.scalars(query).all()
 
 
 def construct_document_id_select_by_usergroup(
     user_group_id: int,
 ) -> Select:
-    """This returns a statement that should be executed using
-    .yield_per() to minimize overhead. The primary consumers of this function
-    are background processing task generators."""
-    stmt = (
+    """
+    Возвращает запрос (Select) для ID документов, доступных группе.
+    Этот запрос предназначен для потоковой обработки (yield_per)
+    в фоновых задачах.
+    """
+    base_query = (
         select(Document.id)
         .join(
             DocumentByConnectorCredentialPair,
@@ -241,7 +232,8 @@ def construct_document_id_select_by_usergroup(
         )
         .join(
             UserGroup__ConnectorCredentialPair,
-            UserGroup__ConnectorCredentialPair.cc_pair_id == ConnectorCredentialPair.id,
+            UserGroup__ConnectorCredentialPair.cc_pair_id
+            == ConnectorCredentialPair.id,
         )
         .join(
             UserGroup,
@@ -250,8 +242,8 @@ def construct_document_id_select_by_usergroup(
         .where(UserGroup.id == user_group_id)
         .order_by(Document.id)
     )
-    stmt = stmt.distinct()
-    return stmt
+    base_query = base_query.distinct()
+    return base_query
 
 
 def fetch_documents_for_user_group_paginated(
@@ -260,7 +252,7 @@ def fetch_documents_for_user_group_paginated(
     last_document_id: str | None = None,
     limit: int = 100,
 ) -> tuple[Sequence[Document], str | None]:
-    stmt = (
+    base_query = (
         select(Document)
         .join(
             DocumentByConnectorCredentialPair,
@@ -277,7 +269,8 @@ def fetch_documents_for_user_group_paginated(
         )
         .join(
             UserGroup__ConnectorCredentialPair,
-            UserGroup__ConnectorCredentialPair.cc_pair_id == ConnectorCredentialPair.id,
+            UserGroup__ConnectorCredentialPair.cc_pair_id
+            == ConnectorCredentialPair.id,
         )
         .join(
             UserGroup,
@@ -288,11 +281,12 @@ def fetch_documents_for_user_group_paginated(
         .limit(limit)
     )
     if last_document_id is not None:
-        stmt = stmt.where(Document.id > last_document_id)
-    stmt = stmt.distinct()
+        base_query = base_query.where(Document.id > last_document_id)
+    base_query = base_query.distinct()
 
-    documents = db_session.scalars(stmt).all()
-    return documents, documents[-1].id if documents else None
+    documents = db_session.scalars(base_query).all()
+    next_page_cursor = documents[-1].id if documents else None
+    return documents, next_page_cursor
 
 
 def fetch_user_groups_for_documents(
@@ -300,11 +294,10 @@ def fetch_user_groups_for_documents(
     document_ids: list[str],
 ) -> Sequence[tuple[str, list[str]]]:
     """
-    Fetches all user groups that have access to the given documents.
-
-    NOTE: this doesn't include groups if the cc_pair is access type SYNC
+    Находит все группы, имеющие доступ к документам.
+    ПРИМЕЧАНИЕ: Исключает группы, если cc_pair имеет тип доступа SYNC.
     """
-    stmt = (
+    query = (
         select(Document.id, func.array_agg(UserGroup.name))
         .join(
             UserGroup__ConnectorCredentialPair,
@@ -330,16 +323,19 @@ def fetch_user_groups_for_documents(
         .join(Document, Document.id == DocumentByConnectorCredentialPair.id)
         .where(Document.id.in_(document_ids))
         .where(UserGroup__ConnectorCredentialPair.is_current == True)  # noqa: E712
-        # don't include CC pairs that are being deleted
-        # NOTE: CC pairs can never go from DELETING to any other state -> it's safe to ignore them
-        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
+        # Исключаем пары CC, которые удаляются
+        .where(
+            ConnectorCredentialPair.status
+            != ConnectorCredentialPairStatus.DELETING
+        )
         .group_by(Document.id)
     )
 
-    return db_session.execute(stmt).all()  # type: ignore
+    return db_session.execute(query).all()  # type: ignore
 
 
-def _check_user_group_is_modifiable(user_group: UserGroup) -> None:
+def _assert_group_is_not_syncing(user_group: UserGroup) -> None:
+    """Проверяет, что группа не находится в процессе синхронизации."""
     if not user_group.is_up_to_date:
         raise ValueError(
             "Specified user group is currently syncing. Wait until the current "
@@ -347,173 +343,171 @@ def _check_user_group_is_modifiable(user_group: UserGroup) -> None:
         )
 
 
-def _add_user__user_group_relationships__no_commit(
+def _create_user_group_links__no_commit(
     db_session: Session, user_group_id: int, user_ids: list[UUID]
 ) -> list[User__UserGroup]:
-    """NOTE: does not commit the transaction."""
-    relationships = [
-        User__UserGroup(user_id=user_id, user_group_id=user_group_id)
-        for user_id in user_ids
+    """Создает связи User__UserGroup. Не фиксирует транзакцию."""
+    new_links = [
+        User__UserGroup(user_id=uid, user_group_id=user_group_id)
+        for uid in user_ids
     ]
-    db_session.add_all(relationships)
-    return relationships
+    db_session.add_all(new_links)
+    return new_links
 
 
-def _add_user_group__cc_pair_relationships__no_commit(
+def _create_group_cc_pair_links__no_commit(
     db_session: Session, user_group_id: int, cc_pair_ids: list[int]
 ) -> list[UserGroup__ConnectorCredentialPair]:
-    """NOTE: does not commit the transaction."""
-    relationships = [
+    """Создает связи UserGroup__ConnectorCredentialPair. Не фиксирует транзакцию."""
+    new_bindings = [
         UserGroup__ConnectorCredentialPair(
-            user_group_id=user_group_id, cc_pair_id=cc_pair_id
+            user_group_id=user_group_id, cc_pair_id=pid
         )
-        for cc_pair_id in cc_pair_ids
+        for pid in cc_pair_ids
     ]
-    db_session.add_all(relationships)
-    return relationships
+    db_session.add_all(new_bindings)
+    return new_bindings
 
 
-def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserGroup:
-    db_user_group = UserGroup(
+def insert_user_group(
+    db_session: Session, user_group: UserGroupCreate
+) -> UserGroup:
+    new_group = UserGroup(
         name=user_group.name, time_last_modified_by_user=func.now()
     )
-    db_session.add(db_user_group)
-    db_session.flush()  # give the group an ID
+    db_session.add(new_group)
+    # Получаем ID для новой группы перед созданием связей
+    db_session.flush()
 
-    _add_user__user_group_relationships__no_commit(
+    _create_user_group_links__no_commit(
         db_session=db_session,
-        user_group_id=db_user_group.id,
+        user_group_id=new_group.id,
         user_ids=user_group.user_ids,
     )
-    _add_user_group__cc_pair_relationships__no_commit(
+    _create_group_cc_pair_links__no_commit(
         db_session=db_session,
-        user_group_id=db_user_group.id,
+        user_group_id=new_group.id,
         cc_pair_ids=user_group.cc_pair_ids,
     )
 
     db_session.commit()
-    return db_user_group
+    return new_group
 
 
-def _mark_user_group__cc_pair_relationships_outdated__no_commit(
+def _flag_group_cc_pairs_as_stale__no_commit(
     db_session: Session, user_group_id: int
 ) -> None:
-    """NOTE: does not commit the transaction."""
-    user_group__cc_pair_relationships = db_session.scalars(
+    """Помечает все текущие связи cc_pair для группы как устаревшие. Не фиксирует транзакцию."""
+    links = db_session.scalars(
         select(UserGroup__ConnectorCredentialPair).where(
             UserGroup__ConnectorCredentialPair.user_group_id == user_group_id
         )
     )
-    for user_group__cc_pair_relationship in user_group__cc_pair_relationships:
-        user_group__cc_pair_relationship.is_current = False
+    for link in links:
+        link.is_current = False
 
 
-def _validate_curator_status__no_commit(
+def _update_user_role_based_on_curation__no_commit(
     db_session: Session,
     users: list[User],
 ) -> None:
-    for user in users:
-        # Check if the user is a curator in any of their groups
-        curator_relationships = (
+    """
+    Синхронизирует роль пользователя (CURATOR/BASIC) на основе
+    того, курирует ли он хотя бы одну группу.
+    """
+    for user_instance in users:
+        curator_links = (
             db_session.query(User__UserGroup)
             .filter(
-                User__UserGroup.user_id == user.id,
+                User__UserGroup.user_id == user_instance.id,
                 User__UserGroup.is_curator == True,  # noqa: E712
             )
-            .all()
+            .count()
         )
 
-        # if the user is a curator in any of their groups, set their role to CURATOR
-        # otherwise, set their role to BASIC only if they were previously a CURATOR
-        if curator_relationships:
-            user.role = UserRole.CURATOR
-        elif user.role == UserRole.CURATOR:
-            user.role = UserRole.BASIC
-        db_session.add(user)
+        if curator_links > 0:
+            user_instance.role = UserRole.CURATOR
+        elif user_instance.role == UserRole.CURATOR:
+            # Понижаем роль до BASIC, только если он был CURATOR
+            user_instance.role = UserRole.BASIC
+        db_session.add(user_instance)
 
 
-def remove_curator_status__no_commit(db_session: Session, user: User) -> None:
+def _revoke_curator_role_for_user__no_commit(
+    db_session: Session, user: User
+) -> None:
+    """Снимает флаг 'is_curator' со всех связей пользователя. Не фиксирует транзакцию."""
     stmt = (
         update(User__UserGroup)
         .where(User__UserGroup.user_id == user.id)
         .values(is_curator=False)
     )
     db_session.execute(stmt)
-    _validate_curator_status__no_commit(db_session, [user])
+    _update_user_role_based_on_curation__no_commit(db_session, [user])
 
 
-def _validate_curator_relationship_update_requester(
+def _check_permission_to_modify_curator(
     db_session: Session,
     user_group_id: int,
     user_making_change: User | None = None,
 ) -> None:
     """
-    This function validates that the user making the change has the necessary permissions
-    to update the curator relationship for the target user in the given user group.
+    Проверяет, имеет ли 'user_making_change' права (ADMIN, GLOBAL_CURATOR,
+    или CURATOR этой группы) на изменение статуса куратора.
     """
-
     if user_making_change is None or user_making_change.role == UserRole.ADMIN:
         return
 
-    # check if the user making the change is a curator in the group they are changing the curator relationship for
-    user_making_change_curator_groups = fetch_user_groups_for_user(
+    is_curator_role = user_making_change.role == UserRole.CURATOR
+    requester_curated_groups = fetch_user_groups_for_user(
         db_session=db_session,
         user_id=user_making_change.id,
-        # only check if the user making the change is a curator if they are a curator
-        # otherwise, they are a global_curator and can update the curator relationship
-        # for any group they are a member of
-        only_curator_groups=user_making_change.role == UserRole.CURATOR,
+        # GLOBAL_CURATOR может управлять любой группой, где он состоит
+        only_curator_groups=is_curator_role,
     )
-    requestor_curator_group_ids = [
-        group.id for group in user_making_change_curator_groups
+
+    requester_curator_group_ids = [
+        group.id for group in requester_curated_groups
     ]
-    if user_group_id not in requestor_curator_group_ids:
+    if user_group_id not in requester_curator_group_ids:
         raise ValueError(
-            f"user making change {user_making_change.email} is not a curator,"
-            f" admin, or global_curator for group '{user_group_id}'"
+            f"User {user_making_change.email} is not a relevant curator "
+            f"or admin for group '{user_group_id}'"
         )
 
 
-def _validate_curator_relationship_update_request(
+def _check_validity_of_curator_update(
     db_session: Session,
     user_group_id: int,
     target_user: User,
 ) -> None:
-    """
-    This function validates that the curator_relationship_update request itself is valid.
-    """
+    """Проверяет, что запрос на изменение статуса куратора допустим."""
     if target_user.role == UserRole.ADMIN:
         raise ValueError(
-            f"User '{target_user.email}' is an admin and therefore has all permissions "
-            "of a curator. If you'd like this user to only have curator permissions, "
-            "you must update their role to BASIC then assign them to be CURATOR in the "
-            "appropriate groups."
+            f"User '{target_user.email}' is an admin. "
+            "Admin role includes all curator permissions."
         )
-    elif target_user.role == UserRole.GLOBAL_CURATOR:
+    if target_user.role == UserRole.GLOBAL_CURATOR:
         raise ValueError(
-            f"User '{target_user.email}' is a global_curator and therefore has all "
-            "permissions of a curator for all groups. If you'd like this user to only "
-            "have curator permissions for a specific group, you must update their role "
-            "to BASIC then assign them to be CURATOR in the appropriate groups."
+            f"User '{target_user.email}' is a global_curator. "
+            "This role includes curator permissions for all groups."
         )
-    elif target_user.role not in [UserRole.CURATOR, UserRole.BASIC]:
+    if target_user.role not in [UserRole.CURATOR, UserRole.BASIC]:
         raise ValueError(
-            f"This endpoint can only be used to update the curator relationship for "
-            "users with the CURATOR or BASIC role. \n"
-            f"Target user: {target_user.email} \n"
-            f"Target user role: {target_user.role} \n"
+            f"This endpoint only supports users with CURATOR or BASIC roles. "
+            f"Target user: {target_user.email} (Role: {target_user.role})"
         )
 
-    # check if the target user is in the group they are changing the curator relationship for
-    requested_user_groups = fetch_user_groups_for_user(
+    # Проверяем, состоит ли целевой пользователь в данной группе
+    user_groups = fetch_user_groups_for_user(
         db_session=db_session,
         user_id=target_user.id,
         only_curator_groups=False,
     )
-    group_ids = [group.id for group in requested_user_groups]
+    group_ids = [group.id for group in user_groups]
     if user_group_id not in group_ids:
         raise ValueError(
-            f"target user {target_user.email} is not in group '{user_group_id}'"
+            f"Target user {target_user.email} is not in group '{user_group_id}'"
         )
 
 
@@ -523,29 +517,35 @@ def update_user_curator_relationship(
     set_curator_request: SetCuratorRequest,
     user_making_change: User | None = None,
 ) -> None:
-    target_user = fetch_user_by_id(db_session, set_curator_request.user_id)
-    if not target_user:
-        raise ValueError(f"User with id '{set_curator_request.user_id}' not found")
+    user_to_modify = fetch_user_by_id(
+        db_session, set_curator_request.user_id
+    )
+    if not user_to_modify:
+        raise ValueError(
+            f"User with id '{set_curator_request.user_id}' not found"
+        )
 
-    _validate_curator_relationship_update_request(
+    # 1. Валидация запроса
+    _check_validity_of_curator_update(
         db_session=db_session,
         user_group_id=user_group_id,
-        target_user=target_user,
+        target_user=user_to_modify,
     )
 
-    _validate_curator_relationship_update_requester(
+    # 2. Валидация прав исполнителя
+    _check_permission_to_modify_curator(
         db_session=db_session,
         user_group_id=user_group_id,
         user_making_change=user_making_change,
     )
 
     logger.info(
-        f"user_making_change={user_making_change.email if user_making_change else 'None'} is "
-        f"updating the curator relationship for user={target_user.email} "
-        f"in group={user_group_id} to is_curator={set_curator_request.is_curator}"
+        f"User '{user_making_change.email if user_making_change else 'System'}' "
+        f"is setting is_curator={set_curator_request.is_curator} "
+        f"for user='{user_to_modify.email}' in group={user_group_id}"
     )
 
-    relationship_to_update = (
+    existing_link = (
         db_session.query(User__UserGroup)
         .filter(
             User__UserGroup.user_group_id == user_group_id,
@@ -554,17 +554,21 @@ def update_user_curator_relationship(
         .first()
     )
 
-    if relationship_to_update:
-        relationship_to_update.is_curator = set_curator_request.is_curator
+    if existing_link:
+        existing_link.is_curator = set_curator_request.is_curator
     else:
-        relationship_to_update = User__UserGroup(
+        # Этого не должно случиться, если _check_validity_of_curator_update
+        # отработал, но для надежности
+        new_link = User__UserGroup(
             user_group_id=user_group_id,
             user_id=set_curator_request.user_id,
             is_curator=True,
         )
-        db_session.add(relationship_to_update)
+        db_session.add(new_link)
 
-    _validate_curator_status__no_commit(db_session, [target_user])
+    _update_user_role_based_on_curation__no_commit(
+        db_session, [user_to_modify]
+    )
     db_session.commit()
 
 
@@ -574,134 +578,148 @@ def update_user_group(
     user_group_id: int,
     user_group_update: UserGroupUpdate,
 ) -> UserGroup:
-    """If successful, this can set db_user_group.is_up_to_date = False.
-    That will be processed by check_for_vespa_user_groups_sync_task and trigger
-    a long running background sync to Vespa.
     """
-    stmt = select(UserGroup).where(UserGroup.id == user_group_id)
-    db_user_group = db_session.scalar(stmt)
-    if db_user_group is None:
+    Обновляет группу пользователей.
+    Может установить 'is_up_to_date = False', что вызовет фоновую
+    синхронизацию с Vespa.
+    """
+    group_to_update = db_session.scalar(
+        select(UserGroup).where(UserGroup.id == user_group_id)
+    )
+    if group_to_update is None:
         raise ValueError(f"UserGroup with id '{user_group_id}' not found")
 
-    _check_user_group_is_modifiable(db_user_group)
+    _assert_group_is_not_syncing(group_to_update)
 
-    current_user_ids = set([user.id for user in db_user_group.users])
-    updated_user_ids = set(user_group_update.user_ids)
-    added_user_ids = list(updated_user_ids - current_user_ids)
-    removed_user_ids = list(current_user_ids - updated_user_ids)
+    # Вычисляем изменения в пользователях
+    existing_user_id_set = {user.id for user in group_to_update.users}
+    new_user_id_set = set(user_group_update.user_ids)
+    users_to_add_ids = list(new_user_id_set - existing_user_id_set)
+    users_to_remove_ids = list(existing_user_id_set - new_user_id_set)
 
-    # LEAVING THIS HERE FOR NOW FOR GIVING DIFFERENT ROLES
-    # ACCESS TO DIFFERENT PERMISSIONS
-    # if (removed_user_ids or added_user_ids) and (
-    #     not user or user.role != UserRole.ADMIN
-    # ):
-    #     raise ValueError("Only admins can add or remove users from user groups")
-
-    if removed_user_ids:
-        _cleanup_user__user_group_relationships__no_commit(
+    if users_to_remove_ids:
+        _clear_user_group_links__no_commit(
             db_session=db_session,
             user_group_id=user_group_id,
-            user_ids=removed_user_ids,
+            user_ids=users_to_remove_ids,
         )
 
-    if added_user_ids:
-        _add_user__user_group_relationships__no_commit(
+    if users_to_add_ids:
+        _create_user_group_links__no_commit(
             db_session=db_session,
             user_group_id=user_group_id,
-            user_ids=added_user_ids,
+            user_ids=users_to_add_ids,
         )
 
-    cc_pairs_updated = set([cc_pair.id for cc_pair in db_user_group.cc_pairs]) != set(
-        user_group_update.cc_pair_ids
+    # Вычисляем изменения в парах коннекторов
+    existing_cc_pair_ids = {
+        cc_pair.id for cc_pair in group_to_update.cc_pairs
+    }
+    connector_pairs_changed = (
+        existing_cc_pair_ids != set(user_group_update.cc_pair_ids)
     )
-    if cc_pairs_updated:
-        _mark_user_group__cc_pair_relationships_outdated__no_commit(
+
+    if connector_pairs_changed:
+        _flag_group_cc_pairs_as_stale__no_commit(
             db_session=db_session, user_group_id=user_group_id
         )
-        _add_user_group__cc_pair_relationships__no_commit(
+        _create_group_cc_pair_links__no_commit(
             db_session=db_session,
-            user_group_id=db_user_group.id,
+            user_group_id=group_to_update.id,
             cc_pair_ids=user_group_update.cc_pair_ids,
         )
+        # Требуется синхронизация с Vespa
+        group_to_update.is_up_to_date = False
 
-    # only needs to sync with Vespa if the cc_pairs have been updated
-    if cc_pairs_updated:
-        db_user_group.is_up_to_date = False
+    # Перепроверяем роли удаленных пользователей
+    if users_to_remove_ids:
+        users_removed = db_session.scalars(
+            select(User).where(User.id.in_(users_to_remove_ids))  # type: ignore
+        ).unique()
 
-    removed_users = db_session.scalars(
-        select(User).where(User.id.in_(removed_user_ids))  # type: ignore
-    ).unique()
+        users_for_role_check = [
+            u
+            for u in users_removed
+            if u.role not in [UserRole.ADMIN, UserRole.GLOBAL_CURATOR]
+        ]
 
-    # Filter out admin and global curator users before validating curator status
-    users_to_validate = [
-        user
-        for user in removed_users
-        if user.role not in [UserRole.ADMIN, UserRole.GLOBAL_CURATOR]
-    ]
+        if users_for_role_check:
+            _update_user_role_based_on_curation__no_commit(
+                db_session, users_for_role_check
+            )
 
-    if users_to_validate:
-        _validate_curator_status__no_commit(db_session, users_to_validate)
-
-    # update "time_updated" to now
-    db_user_group.time_last_modified_by_user = func.now()
-
+    group_to_update.time_last_modified_by_user = func.now()
     db_session.commit()
-    return db_user_group
+    return group_to_update
 
 
-def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> None:
-    stmt = select(UserGroup).where(UserGroup.id == user_group_id)
-    db_user_group = db_session.scalar(stmt)
-    if db_user_group is None:
+def prepare_user_group_for_deletion(
+    db_session: Session, user_group_id: int
+) -> None:
+    group_to_delete = db_session.scalar(
+        select(UserGroup).where(UserGroup.id == user_group_id)
+    )
+    if group_to_delete is None:
         raise ValueError(f"UserGroup with id '{user_group_id}' not found")
 
-    _check_user_group_is_modifiable(db_user_group)
+    _assert_group_is_not_syncing(group_to_delete)
 
-    _mark_user_group__cc_pair_relationships_outdated__no_commit(
+    # Помечаем все связи cc_pair как устаревшие (для очистки Vespa)
+    _flag_group_cc_pairs_as_stale__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
 
-    _cleanup_credential__user_group_relationships__no_commit(
+    # Очищаем все FK-связи перед удалением
+    _clear_credential_group_links__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
-    _cleanup_user__user_group_relationships__no_commit(
+    _clear_user_group_links__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
-    _cleanup_token_rate_limit__user_group_relationships__no_commit(
+    _clear_token_limit_group_links__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
-    _cleanup_document_set__user_group_relationships__no_commit(
+    _clear_doc_set_group_links__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
-    _cleanup_persona__user_group_relationships__no_commit(
+    _clear_persona_group_links__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
-    _cleanup_user_group__cc_pair_relationships__no_commit(
+    _clear_group_cc_pair_links__no_commit(
         db_session=db_session,
         user_group_id=user_group_id,
         outdated_only=False,
     )
-    _cleanup_llm_provider__user_group_relationships__no_commit(
+    _clear_llm_provider_group_links__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
 
-    db_user_group.is_up_to_date = False
-    db_user_group.is_up_for_deletion = True
+    group_to_delete.is_up_to_date = False
+    group_to_delete.is_up_for_deletion = True
     db_session.commit()
 
 
 def delete_user_group(db_session: Session, user_group: UserGroup) -> None:
     """
-    This assumes that all the fk cleanup has already been done.
+    Окончательно удаляет группу.
+    Предполагается, что 'prepare_user_group_for_deletion' уже вызван,
+    и Vespa обработала удаление.
     """
     db_session.delete(user_group)
     db_session.commit()
 
 
-def mark_user_group_as_synced(db_session: Session, user_group: UserGroup) -> None:
-    # cleanup outdated relationships
-    _cleanup_user_group__cc_pair_relationships__no_commit(
-        db_session=db_session, user_group_id=user_group.id, outdated_only=True
+def mark_user_group_as_synced(
+    db_session: Session, user_group: UserGroup
+) -> None:
+    """
+    Вызывается после завершения синхронизации Vespa.
+    Очищает устаревшие связи cc_pair.
+    """
+    _clear_group_cc_pair_links__no_commit(
+        db_session=db_session,
+        user_group_id=user_group.id,
+        outdated_only=True,
     )
     user_group.is_up_to_date = True
     db_session.commit()
@@ -710,23 +728,26 @@ def mark_user_group_as_synced(db_session: Session, user_group: UserGroup) -> Non
 def delete_user_group_cc_pair_relationship__no_commit(
     cc_pair_id: int, db_session: Session
 ) -> None:
-    """Deletes all rows from UserGroup__ConnectorCredentialPair where the
-    connector_credential_pair_id matches the given cc_pair_id.
-
-    Should be used very carefully (only for connectors that are being deleted)."""
-    cc_pair = get_connector_credential_pair_from_id(
+    """
+    Удаляет все связи UserGroup__ConnectorCredentialPair для данного cc_pair_id.
+    ИСПОЛЬЗОВАТЬ С ОСТОРОЖНОСТЬЮ: только при удалении коннектора.
+    """
+    connector_pair = get_connector_credential_pair_from_id(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
     )
-    if not cc_pair:
-        raise ValueError(f"Connector Credential Pair '{cc_pair_id}' does not exist")
-
-    if cc_pair.status != ConnectorCredentialPairStatus.DELETING:
+    if not connector_pair:
         raise ValueError(
-            f"Connector Credential Pair '{cc_pair_id}' is not in the DELETING state. status={cc_pair.status}"
+            f"Connector Credential Pair '{cc_pair_id}' does not exist"
         )
 
-    delete_stmt = delete(UserGroup__ConnectorCredentialPair).where(
+    if connector_pair.status != ConnectorCredentialPairStatus.DELETING:
+        raise ValueError(
+            f"Connector Credential Pair '{cc_pair_id}' is not in the DELETING "
+            f"state. status={connector_pair.status}"
+        )
+
+    stmt_delete = delete(UserGroup__ConnectorCredentialPair).where(
         UserGroup__ConnectorCredentialPair.cc_pair_id == cc_pair_id,
     )
-    db_session.execute(delete_stmt)
+    db_session.execute(stmt_delete)
