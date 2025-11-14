@@ -1,5 +1,6 @@
+"use client";
 import { cn } from "@/lib/utils";
-import { MCPActionStatus } from "./MCPActionCard";
+import type { MCPActionStatus } from "./types";
 import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -13,8 +14,8 @@ interface MCPActionCardHeaderProps {
   onEdit?: () => void;
 }
 
-export const MCPActionCardHeader: React.FC<MCPActionCardHeaderProps> =
-  React.memo(({ title, description, icon, status, onEdit }) => {
+const MCPActionCardHeader: React.FC<MCPActionCardHeaderProps> = React.memo(
+  ({ title, description, icon, status, onEdit }) => {
     const isConnected = status === "connected";
     const isPending = status === "pending";
     const isDisconnected = status === "disconnected";
@@ -43,9 +44,14 @@ export const MCPActionCardHeader: React.FC<MCPActionCardHeaderProps> =
                 {title}
               </Text>
             ) : isDisconnected ? (
-              <Text headingH3 text03 className="line-through">
-                {title}
-              </Text>
+              <>
+                <Text headingH3 text03 className="line-through">
+                  {title}
+                </Text>
+                <Text mainUiMuted text02>
+                  (Disconnected)
+                </Text>
+              </>
             ) : null}
             {showEditButton && onEdit && (
               <IconButton
@@ -72,5 +78,7 @@ export const MCPActionCardHeader: React.FC<MCPActionCardHeaderProps> =
         </div>
       </div>
     );
-  });
+  }
+);
 MCPActionCardHeader.displayName = "MCPActionCardHeader";
+export default MCPActionCardHeader;

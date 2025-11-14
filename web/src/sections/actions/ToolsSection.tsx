@@ -9,7 +9,7 @@ interface ToolsSectionProps {
   onViewTools?: () => void;
 }
 
-export const ToolsSection: React.FC<ToolsSectionProps> = React.memo(
+const ToolsSection: React.FC<ToolsSectionProps> = React.memo(
   ({ serverName, toolCount, onViewTools }) => (
     <div className="flex gap-2 items-center justify-end pl-8 w-full">
       <div className="flex flex-1 min-w-0 px-0.5">
@@ -34,3 +34,4 @@ export const ToolsSection: React.FC<ToolsSectionProps> = React.memo(
   )
 );
 ToolsSection.displayName = "ToolsSection";
+export default ToolsSection;

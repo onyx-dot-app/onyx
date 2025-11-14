@@ -3,11 +3,12 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import SvgServer from "@/icons/server";
-import { MCPActionCardHeader } from "./MCPActionCardHeader";
-import { MCPActionCardActions } from "./MCPActionCardActions";
-import { ToolsSection } from "./ToolsSection";
+import MCPActionCardHeader from "./MCPActionCardHeader";
+import MCPActionCardActions from "./MCPActionCardActions";
+import ToolsSection from "./ToolsSection";
 
-export type MCPActionStatus = "connected" | "pending" | "disconnected";
+import type { MCPActionStatus } from "./types";
+import CardSection from "@/components/admin/CardSection";
 
 export interface MCPActionCardProps {
   // Core content
@@ -51,6 +52,8 @@ export default function MCPActionCard({
   className,
 }: MCPActionCardProps) {
   const isConnected = status === "connected";
+  const isPending = status === "pending";
+  const isDisconnected = status === "disconnected";
 
   const icon = isConnected ? (
     logo
@@ -58,11 +61,18 @@ export default function MCPActionCard({
     <SvgServer className="h-5 w-5 stroke-text-04" aria-hidden="true" />
   );
 
+  const backgroundColor = isConnected
+    ? "bg-background-tint-00"
+    : isDisconnected
+      ? "bg-background-neutral-02"
+      : "";
+
   return (
-    <div
+    <CardSection
       className={cn(
         "flex flex-col p-2 w-full",
-        isConnected && "bg-background-tint-00 border-b border-border-01",
+        backgroundColor,
+        "border border-border-01",
         className
       )}
       role="article"
@@ -91,13 +101,14 @@ export default function MCPActionCard({
       </div>
 
       {/* Tools Section (Connected state only) */}
-      {isConnected && (
-        <ToolsSection
-          serverName={title}
-          toolCount={toolCount}
-          onViewTools={onViewTools}
-        />
-      )}
-    </div>
+      {isConnected ||
+        (isDisconnected && (
+          <ToolsSection
+            serverName={title}
+            toolCount={toolCount}
+            onViewTools={onViewTools}
+          />
+        ))}
+    </CardSection>
   );
 }
