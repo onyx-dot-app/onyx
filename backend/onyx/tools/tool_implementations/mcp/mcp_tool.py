@@ -118,7 +118,7 @@ Query: {query}
 
 Answer with 'YES' or 'NO' only.
 """
-            should_use_result = llm.invoke(
+            should_use_result = llm.invoke_langchain(
                 [
                     SystemMessage(
                         content="You are a helpful assistant that determines if a tool should be used."
@@ -141,7 +141,7 @@ Chat history: {history}
 Return ONLY a valid JSON object with the extracted arguments. If no arguments are needed, return {{}}.
 """
 
-        args_result = llm.invoke(
+        args_result = llm.invoke_langchain(
             [
                 SystemMessage(
                     content="You are a helpful assistant that extracts tool arguments from user queries."

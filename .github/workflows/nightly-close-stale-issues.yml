@@ -7,7 +7,7 @@ permissions:
   # contents: write # only for delete-branch option
   issues: write
   pull-requests: write
-  
+
 jobs:
   stale:
     runs-on: ubuntu-latest
@@ -20,4 +20,3 @@ jobs:
           close-pr-message: 'This PR was closed because it has been stalled for 90 days with no activity.'
           days-before-stale: 75
 #           days-before-close: 90  # uncomment after we test stale behavior
-          

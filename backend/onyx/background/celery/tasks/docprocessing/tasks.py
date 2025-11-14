@@ -1,3 +1,5 @@
+import gc
+import os
 import time
 import traceback
 from collections import defaultdict
@@ -21,6 +23,7 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
+from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
 from onyx.background.celery.tasks.docprocessing.heartbeat import stop_heartbeat
@@ -1299,11 +1302,38 @@ def _docprocessing_task(
     # dummy lock to satisfy linter
     per_batch_lock: RedisLock | None = None
     try:
+        # FIX: Monitor memory before loading documents to track problematic batches
+        emit_process_memory(
+            os.getpid(),
+            "docprocessing",
+            {
+                "phase": "before_load",
+                "tenant_id": tenant_id,
+                "cc_pair_id": cc_pair_id,
+                "index_attempt_id": index_attempt_id,
+                "batch_num": batch_num,
+            },
+        )
+
         # Retrieve documents from storage
         documents = storage.get_batch(batch_num)
         if not documents:
             task_logger.error(f"No documents found for batch {batch_num}")
             return
+
+        # FIX: Monitor memory after loading documents
+        emit_process_memory(
+            os.getpid(),
+            "docprocessing",
+            {
+                "phase": "after_load",
+                "tenant_id": tenant_id,
+                "cc_pair_id": cc_pair_id,
+                "index_attempt_id": index_attempt_id,
+                "batch_num": batch_num,
+                "doc_count": len(documents),
+            },
+        )
 
         with get_session_with_current_tenant() as db_session:
             # matches parts of _run_indexing
@@ -1457,6 +1487,25 @@ def _docprocessing_task(
         # Clean up this batch after successful processing
         storage.delete_batch_by_num(batch_num)
 
+        # FIX: Explicitly clear document batch from memory and force garbage collection
+        # This helps prevent memory accumulation across multiple batches
+        del documents
+        gc.collect()
+
+        # FIX: Log final memory usage to track problematic tenants/CC pairs
+        emit_process_memory(
+            os.getpid(),
+            "docprocessing",
+            {
+                "phase": "after_processing",
+                "tenant_id": tenant_id,
+                "cc_pair_id": cc_pair_id,
+                "index_attempt_id": index_attempt_id,
+                "batch_num": batch_num,
+                "chunks_processed": index_pipeline_result.total_chunks,
+            },
+        )
+
         elapsed_time = time.monotonic() - start_time
         task_logger.info(
             f"Completed document batch processing: "
@@ -1464,7 +1513,7 @@ def _docprocessing_task(
             f"cc_pair={cc_pair_id} "
             f"search_settings={index_attempt.search_settings.id} "
             f"batch_num={batch_num} "
-            f"docs={len(documents)} "
+            f"docs={len(index_pipeline_result.failures) + index_pipeline_result.total_docs} "
             f"chunks={index_pipeline_result.total_chunks} "
             f"failures={len(index_pipeline_result.failures)} "
             f"elapsed={elapsed_time:.2f}s"

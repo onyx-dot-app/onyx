@@ -3,7 +3,7 @@ import React, { useRef, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Button from "@/refresh-components/buttons/Button";
-import { updateUserPersonalization } from "@/lib/users/UserSettings";
+import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/components/user/UserProvider";
 
 export default function NonAdminStep() {

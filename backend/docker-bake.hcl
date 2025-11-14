@@ -1,5 +1,5 @@
-variable "REGISTRY" {
-  default = "onyxdotapp"
+variable "REPOSITORY" {
+  default = "onyxdotapp/onyx-integration"
 }
 
 variable "TAG" {
@@ -20,5 +20,8 @@ target "integration" {
     base = "target:backend"
   }
 
-  tags      = ["${REGISTRY}/integration-test-onyx-integration:${TAG}"]
+  cache-from = ["type=registry,ref=${REPOSITORY}:integration-test-backend-cache"]
+  cache-to   = ["type=registry,ref=${REPOSITORY}:integration-test-backend-cache,mode=max"]
+
+  tags      = ["${REPOSITORY}:${TAG}"]
 }

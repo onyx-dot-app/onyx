@@ -17,6 +17,9 @@ import { SubLabel } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import Link from "next/link";
+import { Callout } from "@/components/ui/callout";
 
 interface DefaultAssistantConfiguration {
   tool_ids: number[];
@@ -42,6 +45,7 @@ function DefaultAssistantConfig() {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const { refreshAgents } = useAgentsContext();
+  const combinedSettings = useSettingsContext();
   const [savingTools, setSavingTools] = useState<Set<number>>(new Set());
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [enabledTools, setEnabledTools] = useState<Set<number>>(new Set());
@@ -159,6 +163,28 @@ function DefaultAssistantConfig() {
         errorTitle="Failed to load configuration"
         errorMsg="Unable to fetch the default assistant configuration."
       />
+    );
+  }
+
+  // Show message if default assistant is disabled
+  if (combinedSettings?.settings?.disable_default_assistant) {
+    return (
+      <div>
+        {popup}
+        <Callout type="notice">
+          <p className="mb-3">
+            The default assistant is currently disabled in your workspace
+            settings.
+          </p>
+          <p>
+            To configure the default assistant, you must first enable it in{" "}
+            <Link href="/admin/settings" className="text-link font-medium">
+              Workspace Settings
+            </Link>
+            .
+          </p>
+        </Callout>
+      </div>
     );
   }
 

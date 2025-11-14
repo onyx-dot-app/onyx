@@ -476,6 +476,7 @@ export const connectorConfigs: Record<
         description:
           "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access.",
         name: "exclude_domain_link_only",
+        optional: true,
         default: false,
       },
     ],
@@ -1554,6 +1555,29 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     advanced_values: [],
   },
 };
+type ConnectorField = ConnectionConfiguration["values"][number];
+
+const buildInitialValuesForFields = (
+  fields: ConnectorField[]
+): Record<string, any> =>
+  fields.reduce(
+    (acc, field) => {
+      if (field.type === "select") {
+        acc[field.name] = null;
+      } else if (field.type === "list") {
+        acc[field.name] = field.default || [];
+      } else if (field.type === "multiselect") {
+        acc[field.name] = field.default || [];
+      } else if (field.type === "checkbox") {
+        acc[field.name] = field.default ?? false;
+      } else if (field.default !== undefined) {
+        acc[field.name] = field.default;
+      }
+      return acc;
+    },
+    {} as Record<string, any>
+  );
+
 export function createConnectorInitialValues(
   connector: ConfigurableSources
 ): Record<string, any> & AccessTypeGroupSelectorFormType {
@@ -1563,23 +1587,8 @@ export function createConnectorInitialValues(
     name: "",
     groups: [],
     access_type: "public",
-    ...configuration.values.reduce(
-      (acc, field) => {
-        if (field.type === "select") {
-          acc[field.name] = null;
-        } else if (field.type === "list") {
-          acc[field.name] = field.default || [];
-        } else if (field.type === "multiselect") {
-          acc[field.name] = field.default || [];
-        } else if (field.type === "checkbox") {
-          acc[field.name] = field.default || false;
-        } else if (field.default !== undefined) {
-          acc[field.name] = field.default;
-        }
-        return acc;
-      },
-      {} as { [record: string]: any }
-    ),
+    ...buildInitialValuesForFields(configuration.values),
+    ...buildInitialValuesForFields(configuration.advanced_values),
   };
 }
 

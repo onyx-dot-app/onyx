@@ -53,9 +53,20 @@ def create_slack_channel_persona(
 
     # create/update persona associated with the Slack channel
     persona_name = _build_persona_name(channel_name)
+    persona_id_to_update = existing_persona_id
+    if persona_id_to_update is None:
+        # Reuse any previous Slack persona for this channel (even if the config was
+        # temporarily switched to a different persona) so we don't trip duplicate name
+        # validation inside `upsert_persona`.
+        existing_persona = db_session.scalar(
+            select(Persona).where(Persona.name == persona_name)
+        )
+        if existing_persona:
+            persona_id_to_update = existing_persona.id
+
     persona = upsert_persona(
         user=None,  # Slack channel Personas are not attached to users
-        persona_id=existing_persona_id,
+        persona_id=persona_id_to_update,
         name=persona_name,
         description="",
         system_prompt="",

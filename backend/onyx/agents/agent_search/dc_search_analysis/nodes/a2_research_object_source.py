@@ -155,7 +155,7 @@ def research_object_source(
     try:
         llm_response = run_with_timeout(
             30,
-            primary_llm.invoke,
+            primary_llm.invoke_langchain,
             prompt=msg,
             timeout_override=30,
             max_tokens=300,
