@@ -10,9 +10,11 @@ from uuid import UUID
 
 from agents import Model
 from agents import ModelSettings
+from agents.models.openai_responses import OpenAIResponsesModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_sdk.message_format import base_messages_to_agent_sdk_msgs
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
@@ -89,7 +91,6 @@ from onyx.llm.factory import get_llm_model_and_settings_for_persona
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.llm.interfaces import LLM
-from onyx.llm.message_format import base_messages_to_chat_completion_msgs
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
@@ -933,19 +934,24 @@ def _fast_message_stream(
     model_settings: ModelSettings,
     user_or_none: User | None,
 ) -> Generator[Packet, None, None]:
+    # TODO: clean up this jank
+    is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
     prompt_builder = answer.graph_inputs.prompt_builder
     primary_llm = answer.graph_tooling.primary_llm
     if prompt_builder and primary_llm:
         _reserve_prompt_tokens_for_agent_overhead(
             prompt_builder, primary_llm, tools, prompt_config
         )
-    messages = base_messages_to_chat_completion_msgs(
-        answer.graph_inputs.prompt_builder.build()
+    messages = base_messages_to_agent_sdk_msgs(
+        answer.graph_inputs.prompt_builder.build(), is_responses_api=is_responses_api
     )
     emitter = get_default_emitter()
     return fast_chat_turn.fast_chat_turn(
         messages=messages,
+        # TODO: Maybe we can use some DI framework here?
         dependencies=ChatTurnDependencies(
+            llm_model=llm_model,
+            model_settings=model_settings,
             llm=answer.graph_tooling.primary_llm,
             tools=tools,
             db_session=db_session,
@@ -953,7 +959,6 @@ def _fast_message_stream(
             emitter=emitter,
             user_or_none=user_or_none,
             prompt_config=prompt_config,
-            messages=messages,
         ),
         chat_session_id=chat_session_id,
         message_id=reserved_message_id,
