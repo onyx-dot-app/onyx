@@ -2,27 +2,153 @@
 # modular so easily testable in unit tests and evals [likely injecting some higher
 # level session manager and span sink], potentially has some robustness off the critical path,
 # and promotes clean separation of concerns.
+import json
 import logging
-import re
-from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_sdk.message_types import AgentSDKMessage
-from onyx.chat.turn.models import FetchedDocumentCacheEntry
-from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import CitationDocInfo
-from onyx.db.chat import create_search_doc_from_inference_section
-from onyx.db.chat import update_db_session_with_messages
+from onyx.db.chat import add_search_docs_to_chat_message
+from onyx.db.chat import create_db_search_doc
 from onyx.db.models import ChatMessage
-from onyx.db.models import ChatMessage__SearchDoc
+from onyx.db.models import ToolCall
+from onyx.db.tools import create_tool_call_no_commit
+from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
-from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import ToolCallInfo
 
 logger = logging.getLogger(__name__)
+
+
+def _create_and_link_tool_calls(
+    tool_calls: list[ToolCallInfo],
+    assistant_message: ChatMessage,
+    db_session: Session,
+    default_tokenizer: BaseTokenizer,
+) -> None:
+    """
+    Create ToolCall entries, link parent references, and calculate depths.
+
+    This function handles the complex logic of:
+    1. Creating all ToolCall objects (with temporary parent references)
+    2. Flushing to get DB IDs
+    3. Building mappings and updating parent references
+    4. Calculating depth for each tool call in the tree
+
+    Args:
+        tool_calls: List of tool call information to create
+        assistant_message: The ChatMessage these tool calls belong to
+        db_session: Database session
+        default_tokenizer: Tokenizer for calculating token counts
+    """
+    # Create all ToolCall objects first (without parent_tool_call_id set)
+    # We'll update parent references after flushing to get IDs
+    tool_call_objects: list[ToolCall] = []
+    tool_call_info_map: dict[str, ToolCallInfo] = {}  # tool_call_id -> ToolCallInfo
+
+    for tool_call_info in tool_calls:
+        tool_call_info_map[tool_call_info.tool_call_id] = tool_call_info
+
+        # Calculate tool_call_tokens from arguments
+        try:
+            arguments_json_str = json.dumps(tool_call_info.tool_call_arguments)
+            tool_call_tokens = len(default_tokenizer.encode(arguments_json_str))
+        except Exception as e:
+            logger.warning(
+                f"Failed to tokenize tool call arguments for {tool_call_info.tool_call_id}: {e}. "
+                f"Using length as (over) estimate."
+            )
+            arguments_json_str = json.dumps(tool_call_info.tool_call_arguments)
+            tool_call_tokens = len(arguments_json_str)
+
+        parent_message_id = (
+            assistant_message.id if tool_call_info.parent_tool_call_id is None else None
+        )
+
+        # Create ToolCall DB entry (parent_tool_call_id will be set after flush)
+        # This is needed to get the IDs for the parent pointers
+        tool_call = create_tool_call_no_commit(
+            chat_session_id=assistant_message.chat_session_id,
+            parent_chat_message_id=parent_message_id,
+            turn_number=tool_call_info.turn_number,
+            tool_id=tool_call_info.tool_id,
+            tool_call_id=tool_call_info.tool_call_id,
+            tool_call_arguments=tool_call_info.tool_call_arguments,
+            tool_call_response=tool_call_info.tool_call_response,
+            tool_call_tokens=tool_call_tokens,
+            db_session=db_session,
+            parent_tool_call_id=None,  # Will be updated after flush
+            depth=-1,  # Will be calculated after parent references are set
+            reasoning_tokens=tool_call_info.reasoning_tokens,
+            add_only=True,
+        )
+
+        # Flush to get all of the IDs
+        db_session.flush()
+
+        tool_call_objects.append(tool_call)
+
+    # Build mapping of tool calls (tool_call_id string -> DB id int)
+    tool_call_map: dict[str, int] = {}
+    for tool_call_obj in tool_call_objects:
+        tool_call_map[tool_call_obj.tool_call_id] = tool_call_obj.id
+
+    # Update parent_tool_call_id for all tool calls
+    for tool_call_obj in tool_call_objects:
+        tool_call_info = tool_call_info_map[tool_call_obj.tool_call_id]
+        if tool_call_info.parent_tool_call_id is not None:
+            parent_id = tool_call_map.get(tool_call_info.parent_tool_call_id)
+            if parent_id is not None:
+                tool_call_obj.parent_tool_call_id = parent_id
+            else:
+                # This would cause chat sessions to fail if this function is miscalled with
+                # tool calls that have bad parent pointers but this falls under "fail loudly"
+                raise ValueError(
+                    f"Parent tool call with tool_call_id '{tool_call_info.parent_tool_call_id}' "
+                    f"not found for tool call '{tool_call_obj.tool_call_id}'"
+                )
+
+    # Calculate depth by traversing the tree
+    # Build a mapping from tool_call DB id to tool_call object for quick lookup
+    id_to_tool_call: dict[int, ToolCall] = {}
+    for tc in tool_call_objects:
+        id_to_tool_call[tc.id] = tc
+
+    def get_depth_recursive(
+        tool_call_obj: ToolCall, visited: set[int] | None = None
+    ) -> int:
+        """Calculate depth by traversing up the parent chain."""
+        if visited is None:
+            visited = set[int]()
+        if tool_call_obj.id in visited:
+            # Circular reference detected
+            logger.warning(
+                f"Circular reference detected in tool call tree at {tool_call_obj.tool_call_id}"
+            )
+            return -1
+        visited.add(tool_call_obj.id)
+
+        if tool_call_obj.parent_tool_call_id is None:
+            return 0
+
+        # Find the parent tool call object
+        parent_tool_call = id_to_tool_call.get(tool_call_obj.parent_tool_call_id)
+        if parent_tool_call is None:
+            # Parent not found in current batch - this should not happen
+            logger.warning(
+                f"Parent tool call with id {tool_call_obj.parent_tool_call_id} not found in current batch"
+            )
+            return 0
+
+        # If parent already has depth calculated, use it; otherwise calculate recursively
+        if parent_tool_call.depth >= 0 or parent_tool_call.parent_tool_call_id is None:
+            return parent_tool_call.depth + 1
+        else:
+            return get_depth_recursive(parent_tool_call, visited) + 1
+
+    # Update depth for all tool calls
+    for tool_call_obj in tool_call_objects:
+        tool_call_obj.depth = get_depth_recursive(tool_call_obj)
 
 
 def save_chat_turn(
@@ -33,260 +159,84 @@ def save_chat_turn(
     db_session: Session,
     assistant_message: ChatMessage,
 ) -> None:
-    raise NotImplementedError("Not implemented")
-
-
-def save_turn(
-    db_session: Session,
-    message_id: int,
-    chat_session_id: UUID,
-    final_answer: str,
-    fetched_documents_cache: dict[str, FetchedDocumentCacheEntry],
-    agent_turn_messages: list[AgentSDKMessage],
-    model_name: str,
-    model_provider: str,
-) -> None:
     """
-    Save the complete chat turn including:
-    - Update assistant ChatMessage with final answer
-    - Create ToolCall entries for all tool invocations
-    - Link SearchDocs to the assistant message
+    Save a chat turn by populating the assistant_message and creating related entities.
+
+    Args:
+        message_text: The message content to save
+        reasoning_tokens: Optional reasoning tokens for the message
+        tool_calls: List of tool call information to create ToolCall entries
+        citation_docs_info: List of citation document information to create SearchDoc entries
+        db_session: Database session for persistence
+        assistant_message: The ChatMessage object to populate (should already exist in DB)
     """
-    # 1. Create search docs from inference sections and build mapping
+    # 1. Update ChatMessage with message content, reasoning tokens, and token count
+    assistant_message.message = message_text
+    assistant_message.reasoning_tokens = reasoning_tokens
+
+    # Calculate token count using default tokenizer
+    default_tokenizer = get_tokenizer(None, None)
+    if message_text:
+        assistant_message.token_count = len(default_tokenizer.encode(message_text))
+    else:
+        assistant_message.token_count = 0
+
+    # 2. Create SearchDoc entries from citation_docs_info
     citation_number_to_search_doc_id: dict[int, int] = {}
-    search_docs = []
-    for cache_entry in fetched_documents_cache.values():
-        search_doc = create_search_doc_from_inference_section(
-            inference_section=cache_entry.inference_section,
-            is_internet=cache_entry.inference_section.center_chunk.source_type
-            == DocumentSource.WEB,
+    search_doc_ids: list[int] = []
+
+    for citation_doc_info in citation_docs_info:
+        # Extract SearchDoc pydantic model
+        search_doc_py = citation_doc_info.search_doc
+
+        # Create DB SearchDoc entry using db function
+        db_search_doc = create_db_search_doc(
+            server_search_doc=search_doc_py,
             db_session=db_session,
             commit=False,
         )
-        search_docs.append(search_doc)
-        citation_number_to_search_doc_id[cache_entry.document_citation_number] = (
-            search_doc.id
+
+        search_doc_ids.append(db_search_doc.id)
+
+        # Build mapping from citation number to search doc ID
+        if citation_doc_info.citation_number is not None:
+            citation_number_to_search_doc_id[citation_doc_info.citation_number] = (
+                db_search_doc.id
+            )
+
+    # 3. Link SearchDocs to ChatMessage
+    if search_doc_ids:
+        add_search_docs_to_chat_message(
+            chat_message_id=assistant_message.id,
+            search_doc_ids=search_doc_ids,
+            db_session=db_session,
         )
 
-    # 2. Link search docs to message
-    _insert_chat_message_search_doc_pair(
-        message_id, [doc.id for doc in search_docs], db_session
-    )
-
-    # 3. Calculate token count for final answer
-    llm_tokenizer = get_tokenizer(
-        model_name=model_name,
-        provider_type=model_provider,
-    )
-    num_tokens = len(llm_tokenizer.encode(final_answer or ""))
-
-    # 4. Update the assistant ChatMessage with final answer
-    update_db_session_with_messages(
+    # 4. Create ToolCall entries
+    _create_and_link_tool_calls(
+        tool_calls=tool_calls,
+        assistant_message=assistant_message,
         db_session=db_session,
-        chat_message_id=message_id,
-        chat_session_id=chat_session_id,
-        message=final_answer,
-        token_count=num_tokens,
-        update_parent_message=True,
-        commit=False,
+        default_tokenizer=default_tokenizer,
     )
 
-    # 5. Parse agent_turn_messages to create ToolCall entries
-    _save_tool_calls_from_messages(
-        db_session=db_session,
-        chat_session_id=chat_session_id,
-        parent_chat_message_id=message_id,
-        agent_turn_messages=agent_turn_messages,
-        model_name=model_name,
-        model_provider=model_provider,
-    )
+    # 5. Build citations mapping from citation_docs_info
+    # Any citation_doc_info with a citation_number appeared in the text and should be mapped
+    citations: dict[int, int] = {}
+    for citation_doc_info in citation_docs_info:
+        if citation_doc_info.citation_number is not None:
+            search_doc_id = citation_number_to_search_doc_id.get(
+                citation_doc_info.citation_number
+            )
+            if search_doc_id is not None:
+                citations[citation_doc_info.citation_number] = search_doc_id
+            else:
+                logger.warning(
+                    f"Citation number {citation_doc_info.citation_number} found in citation_docs_info "
+                    f"but no matching search doc ID in mapping"
+                )
 
+    assistant_message.citations = citations if citations else None
+
+    # Finally save the messages, tool calls, and docs
     db_session.commit()
-
-
-def _insert_chat_message_search_doc_pair(
-    message_id: int, search_doc_ids: list[int], db_session: Session
-) -> None:
-    """
-    Insert a pair of message_id and search_doc_id into the chat_message__search_doc table.
-
-    Args:
-        message_id: The ID of the chat message
-        search_doc_id: The ID of the search document
-        db_session: The database session
-    """
-    for search_doc_id in search_doc_ids:
-        chat_message_search_doc = ChatMessage__SearchDoc(
-            chat_message_id=message_id, search_doc_id=search_doc_id
-        )
-        db_session.add(chat_message_search_doc)
-
-
-def _extract_citation_numbers(text: str) -> list[int]:
-    """
-    Extract all citation numbers from text in the format [[<number>]] or [[<number_1>, <number_2>, ...]].
-    Returns a list of all unique citation numbers found.
-    """
-    # Pattern to match [[number]] or [[number1, number2, ...]]
-    pattern = r"\[\[(\d+(?:,\s*\d+)*)\]\]"
-    matches = re.findall(pattern, text)
-
-    cited_numbers = []
-    for match in matches:
-        # Split by comma and extract all numbers
-        numbers = [int(num.strip()) for num in match.split(",")]
-        cited_numbers.extend(numbers)
-
-    return list(set(cited_numbers))  # Return unique numbers
-
-
-def _save_tool_calls_from_messages(
-    db_session: Session,
-    chat_session_id: UUID,
-    parent_chat_message_id: int,
-    agent_turn_messages: list[AgentSDKMessage],
-    model_name: str,
-    model_provider: str,
-) -> None:
-    """
-    Parse agent_turn_messages to extract tool calls and responses,
-    then create ToolCall DB entries.
-
-    Matches FunctionCallMessage with FunctionCallOutputMessage by call_id
-    and creates a ToolCall database entry for each matched pair.
-
-    Args:
-        db_session: Database session for persistence
-        chat_session_id: ID of the chat session
-        parent_chat_message_id: ID of the parent chat message (assistant message)
-        agent_turn_messages: List of agent SDK messages containing tool calls
-        model_name: Name of the LLM model used
-        model_provider: Provider of the LLM model
-
-    Note:
-        - All tool calls created here are top-level (depth=0, parent_tool_call_id=None)
-        - Nested tool calls are not yet supported
-        - Reasoning tokens are not yet implemented
-    """
-    # TODO delete this when new implementation is out
-    # Build a mapping of call_id -> (call_msg, output_msg)
-    # tool_call_map: dict[str, dict] = {}
-
-    # for msg in agent_turn_messages:
-    #     msg_type = msg.get("type")
-
-    #     if msg_type == "function_call":
-    #         call_id = msg["call_id"]
-    #         if call_id not in tool_call_map:
-    #             tool_call_map[call_id] = {}
-    #         tool_call_map[call_id]["call"] = msg
-
-    #     elif msg_type == "function_call_output":
-    #         call_id = msg["call_id"]
-    #         if call_id not in tool_call_map:
-    #             tool_call_map[call_id] = {}
-    #         tool_call_map[call_id]["output"] = msg
-
-    # # Create ToolCall entries
-    # llm_tokenizer = get_tokenizer(
-    #     model_name=model_name,
-    #     provider_type=model_provider,
-    # )
-
-    # # TODO: Fix turn_number logic to properly distinguish parallel vs sequential tool calls.
-    # # Currently using sequential numbering (0, 1, 2...) but this is incorrect:
-    # # - Parallel tool calls should have the SAME turn_number
-    # # - Sequential tool calls should have DIFFERENT turn_numbers
-    # # For now, treating all as sequential until we have better metadata to distinguish them.
-    # turn_number = 0
-
-    # for call_id, call_data in tool_call_map.items():
-    #     # Validate we have both call and output
-    #     if "call" not in call_data:
-    #         logger.warning(
-    #             f"Tool call {call_id} missing function_call message - skipping"
-    #         )
-    #         continue
-
-    #     if "output" not in call_data:
-    #         logger.warning(
-    #             f"Tool call {call_id} missing function_call_output message - skipping"
-    #         )
-    #         continue
-
-    #     call_msg = call_data["call"]
-    #     output_msg = call_data["output"]
-
-    #     # Parse arguments
-    #     try:
-    #         tool_arguments = json.loads(call_msg["arguments"])
-    #     except json.JSONDecodeError as e:
-    #         logger.warning(
-    #             f"Failed to parse tool call arguments for {call_id}: {e}. "
-    #             f"Storing as raw string."
-    #         )
-    #         tool_arguments = {"raw": call_msg["arguments"]}
-
-    #     # Parse response
-    #     try:
-    #         tool_response = json.loads(output_msg["output"])
-    #     except json.JSONDecodeError as e:
-    #         logger.warning(
-    #             f"Failed to parse tool call output for {call_id}: {e}. "
-    #             f"Storing as raw string."
-    #         )
-    #         tool_response = {"raw": output_msg["output"]}
-
-    #     # Look up tool_id by name
-    #     tool_name = call_msg["name"]
-    #     tool = db_session.query(Tool).filter(Tool.name == tool_name).first()
-
-    #     if tool is None:
-    #         logger.warning(
-    #             f"Tool '{tool_name}' not found in database for call_id {call_id}. "
-    #             f"Using tool_id=0."
-    #         )
-    #         tool_id = 0
-    #     else:
-    #         tool_id = tool.id
-
-    #     # Calculate token count for the arguments
-    #     try:
-    #         token_count = len(llm_tokenizer.encode(call_msg["arguments"]))
-    #     except Exception as e:
-    #         logger.warning(
-    #             f"Failed to tokenize arguments for {call_id}: {e}. Using length as estimate."
-    #         )
-    #         token_count = len(call_msg["arguments"])
-
-    #     # Create ToolCall entry
-    #     tool_call = ToolCall(
-    #         chat_session_id=chat_session_id,
-    #         parent_chat_message_id=parent_chat_message_id,
-    #         parent_tool_call_id=None,  # Top-level tool call (nested not yet supported)
-    #         turn_number=turn_number,
-    #         depth=0,  # Top-level depth (nested not yet supported)
-    #         tool_id=tool_id,
-    #         tool_call_id=call_id,  # Now correctly stored as string
-    #         tool_call_arguments=tool_arguments,
-    #         tool_call_response=tool_response,
-    #         tool_call_tokens=token_count,
-    #         reasoning_tokens=None,  # Not yet implemented
-    #     )
-
-    #     db_session.add(tool_call)
-    #     turn_number += 1
-
-    # logger.info(
-    #     f"Saved {turn_number} tool calls for chat session {chat_session_id}, "
-    #     f"message {parent_chat_message_id}"
-    # )
-
-
-def extract_final_answer_from_packets(packet_history: list[Packet]) -> str:
-    """Extract the final answer by concatenating all MessageDelta content."""
-    final_answer = ""
-    for packet in packet_history:
-        if isinstance(packet.obj, MessageDelta) or isinstance(packet.obj, MessageStart):
-            final_answer += packet.obj.content
-    return final_answer

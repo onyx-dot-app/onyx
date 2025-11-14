@@ -497,7 +497,7 @@ class SavedSearchDoc(SearchDoc):
 
 
 class CitationDocInfo(BaseModel):
-    inference_chunk: SearchDoc
+    search_doc: SearchDoc
     citation_number: int | None
 
 

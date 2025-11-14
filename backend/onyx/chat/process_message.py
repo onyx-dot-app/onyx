@@ -35,6 +35,7 @@ from onyx.chat.turn.infra.emitter import get_default_emitter
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
@@ -511,7 +512,7 @@ def stream_chat_message_objects(
         # it should use the search tool with the project filter on
         disable_internal_search = bool(
             chat_session.project_id
-            and persona is None
+            and persona.id is DEFAULT_PERSONA_ID
             and (project_file_texts or not project_as_filter)
         )
 

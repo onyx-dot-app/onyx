@@ -497,6 +497,24 @@ def get_search_docs_for_chat_message(
     return list(db_session.scalars(stmt).all())
 
 
+def add_search_docs_to_chat_message(
+    chat_message_id: int, search_doc_ids: list[int], db_session: Session
+) -> None:
+    """
+    Link SearchDocs to a ChatMessage by creating entries in the chat_message__search_doc junction table.
+
+    Args:
+        chat_message_id: The ID of the chat message
+        search_doc_ids: List of search document IDs to link
+        db_session: The database session
+    """
+    for search_doc_id in search_doc_ids:
+        chat_message_search_doc = ChatMessage__SearchDoc(
+            chat_message_id=chat_message_id, search_doc_id=search_doc_id
+        )
+        db_session.add(chat_message_search_doc)
+
+
 def get_chat_messages_by_session(
     chat_session_id: UUID,
     user_id: UUID | None,
@@ -736,11 +754,12 @@ def update_search_docs_table_with_relevance(
 def create_db_search_doc(
     server_search_doc: ServerSearchDoc,
     db_session: Session,
+    commit: bool = True,
 ) -> SearchDoc:
     db_search_doc = SearchDoc(
         document_id=server_search_doc.document_id,
         chunk_ind=server_search_doc.chunk_ind,
-        semantic_id=server_search_doc.semantic_identifier,
+        semantic_id=server_search_doc.semantic_identifier or "Unknown",
         link=server_search_doc.link,
         blurb=server_search_doc.blurb,
         source_type=server_search_doc.source_type,
@@ -759,7 +778,10 @@ def create_db_search_doc(
     )
 
     db_session.add(db_search_doc)
-    db_session.commit()
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
     return db_search_doc
 
 

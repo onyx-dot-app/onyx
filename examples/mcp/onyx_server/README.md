@@ -22,7 +22,7 @@ flags take precedence):
 - `ONYX_API_BASE_URL` – Base URL for the Onyx API. Defaults to
   `http://localhost:3000/api`.
 - `ONYX_API_KEY` – Bearer token used for Onyx API authentication.
-- `ONYX_DEFAULT_PERSONA_ID` – Persona that should be selected when a new chat
+- `DEFAULT_PERSONA_ID` – Persona that should be selected when a new chat
   session is created. Defaults to `0`.
 
 ## Running the server
