@@ -7,7 +7,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgX from "@/icons/x";
 import SvgCheckCircle from "@/icons/check-circle";
 import { OnboardingStep } from "../types";
-import ProgressSteps from "./ProgressSteps";
+import ProgressSteps from "@/refresh-components/inputs/ProgressSteps";
 
 type OnboardingHeaderProps = {
   state: OnboardingState;

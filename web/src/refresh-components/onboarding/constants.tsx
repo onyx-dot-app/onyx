@@ -1,11 +1,8 @@
 import { OnboardingStep } from "./types";
 import type { ReactNode } from "react";
-import SvgSearchMenu from "@/icons/search-menu";
 import SvgGlobe from "@/icons/globe";
 import SvgImage from "@/icons/image";
 import SvgUsers from "@/icons/users";
-import SvgStep2 from "@/icons/step2";
-import SvgStep3 from "@/icons/step3";
 import { FinalStepItemProps } from "./types";
 import { SvgProps } from "@/icons";
 import { AzureIcon, GeminiIcon } from "@/components/icons/icons";
@@ -15,6 +12,8 @@ import SvgOllama from "@/icons/ollama";
 import SvgOpenai from "@/icons/openai";
 import SvgOpenrouter from "@/icons/openrouter";
 import { LLMProviderName } from "@/app/admin/configuration/llm/interfaces";
+import InlineExternalLink from "../InlineExternalLink";
+
 type StepConfig = {
   index: number;
   title: string;
@@ -103,25 +102,6 @@ export const PROVIDER_ICON_MAP: Record<
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
   [LLMProviderName.OPENROUTER]: SvgOpenrouter,
 };
-
-const InlineExternalLink = ({
-  href,
-  children,
-  className,
-}: {
-  href: string;
-  children: ReactNode;
-  className?: string;
-}) => (
-  <a
-    href={href}
-    target="_blank"
-    rel="noopener noreferrer"
-    className={className ?? "underline"}
-  >
-    {children}
-  </a>
-);
 
 export const MODAL_CONTENT_MAP: Record<string, any> = {
   [LLMProviderName.OPENAI]: {
