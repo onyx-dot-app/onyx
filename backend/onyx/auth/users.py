@@ -1072,10 +1072,11 @@ def _extract_email_from_jwt(payload: dict[str, Any]) -> str | None:
         value = payload.get(key)
         if isinstance(value, str) and value:
             try:
-                email_info = validate_email(value)
+                email_info = validate_email(value, check_deliverability=False)
             except EmailNotValidError:
                 continue
-            return email_info.normalized
+            normalized_email = email_info.normalized or email_info.email
+            return normalized_email.lower()
     return None
 
 
