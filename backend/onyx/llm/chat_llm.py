@@ -41,11 +41,13 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import STANDARD_TOOL_CHOICE_OPTIONS
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
+from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
@@ -460,6 +462,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        is_legacy_langchain: bool = False,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
@@ -486,12 +489,21 @@ class LitellmLLM(LLM):
             self.config.model_name, self.config.model_provider
         )
 
+        # Needed to get reasoning tokens from the model
+        if not is_legacy_langchain and (
+            is_true_openai_model(self.config.model_provider, self.config.model_name)
+            or self.config.model_provider == AZURE_PROVIDER_NAME
+        ):
+            model_provider = f"{self.config.model_provider}/responses"
+        else:
+            model_provider = self.config.model_provider
+
         try:
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice
                 # model="openai/gpt-4",
-                model=f"{self.config.model_provider}/{self.config.deployment_name or self.config.model_name}",
+                model=f"{model_provider}/{self.config.deployment_name or self.config.model_name}",
                 # NOTE: have to pass in None instead of empty string for these
                 # otherwise litellm can have some issues with bedrock
                 api_key=self._api_key or None,
@@ -592,6 +604,7 @@ class LitellmLLM(LLM):
         response = cast(
             ModelResponse,
             self._completion(
+                is_legacy_langchain=True,
                 prompt=[],
                 tools=tools,
                 tool_choice=tool_choice,
@@ -641,6 +654,7 @@ class LitellmLLM(LLM):
         response = cast(
             CustomStreamWrapper,
             self._completion(
+                is_legacy_langchain=True,
                 prompt=[],
                 tools=tools,
                 tool_choice=tool_choice,

@@ -436,10 +436,6 @@ def get_llm(
     if provider_extra_headers:
         extra_headers.update(provider_extra_headers)
 
-    # Needed to get reasoning tokens from the model
-    if is_true_openai_model(provider, model) or provider == AZURE_PROVIDER_NAME:
-        provider = f"{provider}/responses"
-
     return LitellmLLM(
         model_provider=provider,
         model_name=model,
