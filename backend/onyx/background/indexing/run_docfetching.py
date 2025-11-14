@@ -25,6 +25,7 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import UnexpectedValidationError
@@ -101,13 +102,17 @@ def _get_connector_runner(
     of type LOAD_STATE, the list will be considered complete and otherwise incomplete.
     """
     task = attempt.connector_credential_pair.connector.input_type
+    
+    connector_config = attempt.connector_credential_pair.connector.connector_specific_config.copy()
+    if attempt.connector_credential_pair.connector.source == DocumentSource.WEB:
+        connector_config["skip_unchanged_documents"] = not attempt.from_beginning
 
     try:
         runnable_connector = instantiate_connector(
             db_session=db_session,
             source=attempt.connector_credential_pair.connector.source,
             input_type=task,
-            connector_specific_config=attempt.connector_credential_pair.connector.connector_specific_config,
+            connector_specific_config=connector_config,
             credential=attempt.connector_credential_pair.credential,
         )
 

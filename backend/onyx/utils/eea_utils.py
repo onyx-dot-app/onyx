@@ -55,10 +55,12 @@ def list_pages_for_site_eea(site):
         rp = init_robots_txt(site)
     except:
         logger.warning("Failed to load robots.txt")
+    urls_data = {}
     tree = sitemap_tree_for_homepage(site)
-    pages = [page.url for page in tree.all_pages() if test_url(rp, page)]
-    pages = list(dict.fromkeys(pages))
-    return(pages)
+    for page in tree.all_pages():
+        if test_url(rp, page):
+            urls_data[page.url] = page.last_modified
+    return urls_data
 
 def soer_login():
     login_url = "https://www.eea.europa.eu/++api++/@login"
@@ -92,6 +94,8 @@ def soer_login():
     return resp
 
 def read_protected_sitemap(sitemap, auth):
+    urls_data: dict[str, str | None] = {}
+
     cookies = {'auth_token': auth['auth_token'], "__ac__eea": auth['__ac__eea']}
 
     response = requests.get(sitemap, cookies=cookies)
@@ -100,9 +104,14 @@ def read_protected_sitemap(sitemap, auth):
 
     ns = {'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
 
-    urls = [f"{loc.text}?protected=true" for loc in root.findall('.//ns:loc', ns)]
+    for url in root.findall('.//ns:url', ns):
+        loc = url.find('.//ns:loc', ns)
+        lastmod = url.find('.//ns:lastmod', ns)
+        if loc is not None and loc.text:
+            lastmod_value = lastmod.text if lastmod is not None else None
+            urls_data[loc.text] = lastmod_value
 
-    return urls
+    return urls_data
 
 def list_pages_for_protected_site_eea(site: str, auth) -> list[str]:
     """Get list of pages from a site's sitemaps"""

@@ -1058,6 +1058,25 @@ def get_document_updated_at(
     return db_session.execute(stmt).scalar_one_or_none()
 
 
+def get_documents_updated_at_batch(
+    document_ids: list[str],
+    db_session: Session,
+) -> dict[str, datetime | None]:
+    """Retrieves the doc_updated_at timestamps for multiple document IDs in batch.
+    
+    This is more efficient than calling get_document_updated_at for each document individually.
+    """
+    if not document_ids:
+        return {}
+    
+    stmt = select(DbDocument.id, DbDocument.doc_updated_at).where(
+        DbDocument.id.in_(document_ids)
+    )
+    results = db_session.execute(stmt).all()
+    
+    return {doc_id: updated_at for doc_id, updated_at in results}
+
+
 def reset_all_document_kg_stages(db_session: Session) -> int:
     """Reset the KG stage of all documents that are not in NOT_STARTED state to NOT_STARTED.
 
