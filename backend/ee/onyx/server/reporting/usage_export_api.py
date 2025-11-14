@@ -1,65 +1,112 @@
 from collections.abc import Generator
 from datetime import datetime
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Response,
+)
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.usage_export import get_all_usage_reports
-from ee.onyx.db.usage_export import get_usage_report_data
-from ee.onyx.db.usage_export import UsageReportMetadata
+from ee.onyx.db.usage_export import (
+    get_all_usage_reports,
+    get_usage_report_data,
+    UsageReportMetadata,
+)
 from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
+from ee.onyx.server.reporting.usage_export_models import GenerateUsageReportParams
 from onyx.auth.users import current_admin_user
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 
-router = APIRouter()
+router = APIRouter(tags=["Отчёты об использовании системы"])
 
 
-class GenerateUsageReportParams(BaseModel):
-    period_from: str | None = None
-    period_to: str | None = None
-
-
-@router.post("/admin/generate-usage-report")
+@router.post(
+    "/admin/generate-usage-report",
+    summary="Генерация отчета об использовании системы",
+    response_model=UsageReportMetadata,
+)
 def generate_report(
     params: GenerateUsageReportParams,
     user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> UsageReportMetadata:
-    period = None
+    """Генерация комплексного отчета об использовании системы.
+
+    Создает ZIP-архив с двумя CSV файлами:
+        - chat_messages.csv: статистика по сообщениям и сессиям
+        - users.csv: информация о пользователях и их активности
+
+    Отчет сохраняется в файловом хранилище и доступен для скачивания.
+
+    Args:
+        params: Параметры периода для отчета
+        user: Текущий администратор
+
+    Returns:
+        Метаданные созданного отчета
+    """
+    selected_interval = None
     if params.period_from and params.period_to:
         try:
-            period = (
-                datetime.fromisoformat(params.period_from),
-                datetime.fromisoformat(params.period_to),
+            start_point = datetime.fromisoformat(params.period_from)
+            end_point = datetime.fromisoformat(params.period_to)
+            selected_interval = (start_point, end_point)
+        except ValueError as conversion_error:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ошибка формата даты: {conversion_error}"
             )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
 
-    new_report = create_new_usage_report(db_session, user.id if user else None, period)
-    return new_report
+    if user:
+        user_id = user.id
+    else:
+        user_id = None
+
+    report_data = create_new_usage_report(
+        db_session=db_session,
+        user_id=user_id,
+        period=selected_interval,
+    )
+
+    return report_data
 
 
-@router.get("/admin/usage-report/{report_name}")
+@router.get(
+    "/admin/usage-report/{report_name}",
+    summary="Скачивание сгенерированного отчета по использованию системы"
+)
 def read_usage_report(
     report_name: str,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
+    """Скачивание сгенерированного отчета по использованию системы.
+
+    Потоковая передача ZIP-архива с данными отчета. Архив содержит
+    CSV файлы с статистикой сообщений и информацией о пользователях.
+
+    Args:
+        report_name: Название файла отчета для скачивания
+
+    Returns:
+        Потоковый ответ с ZIP-архивом отчета
+    """
     try:
-        file = get_usage_report_data(db_session, report_name)
+        report_file = get_usage_report_data(
+            db_session=db_session,
+            report_name=report_name,
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
     def iterfile() -> Generator[bytes, None, None]:
         while True:
-            chunk = file.read(STANDARD_CHUNK_SIZE)
+            chunk = report_file.read(STANDARD_CHUNK_SIZE)
             if not chunk:
                 break
             yield chunk
@@ -71,12 +118,28 @@ def read_usage_report(
     )
 
 
-@router.get("/admin/usage-report")
+@router.get(
+    "/admin/usage-report",
+    summary="Получение списка всех сгенерированных отчетов по использованию системы",
+    response_model=list[UsageReportMetadata],
+)
 def fetch_usage_reports(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[UsageReportMetadata]:
+    """Получение списка всех сгенерированных отчетов по использованию системы.
+
+    Возвращает метаданные всех доступных отчетов, включая информацию
+    о периоде, создателе и времени формирования каждого отчета.
+
+    Returns:
+        Список метаданных отчетов об использовании системы
+    """
     try:
-        return get_all_usage_reports(db_session)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        reports_collection = get_all_usage_reports(db_session=db_session)
+        return reports_collection
+    except ValueError as error:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Ошибка получения списка отчетов: {error}"
+        )
