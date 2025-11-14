@@ -541,9 +541,9 @@ def yield_search_responses(
         question=query,
         contextual_pruning_config=search_tool.contextual_pruning_config,
     )
-    llm_docs = [llm_doc_from_inference_section(section) for section in pruned_sections]
+    # llm_docs = [llm_doc_from_inference_section(section) for section in pruned_sections]
 
-    yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
+    yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=pruned_sections)
 
 
 T = TypeVar("T")
