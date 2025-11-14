@@ -96,10 +96,12 @@ export const getValidationSchema = (
                 const pathMatch = url.pathname.match(
                   /\/openai\/(deployments\/[^\/]+|responses)/
                 );
-                const hasDeploymentName =
-                  pathMatch && pathMatch[1]?.startsWith("deployments/");
-                const isResponsesPath =
-                  pathMatch && pathMatch[1] === "responses";
+                const hasDeploymentName = Boolean(
+                  pathMatch && pathMatch[1]?.startsWith("deployments/")
+                );
+                const isResponsesPath = Boolean(
+                  pathMatch && pathMatch[1] === "responses"
+                );
                 const hasValidPath = hasDeploymentName || isResponsesPath;
 
                 return hasApiVersion && hasValidPath;

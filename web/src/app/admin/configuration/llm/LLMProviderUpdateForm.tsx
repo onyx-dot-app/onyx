@@ -236,12 +236,12 @@ export function LLMProviderUpdateForm({
                   const pathMatch = url.pathname.match(
                     /\/openai\/deployments\/([^\/]+)/
                   );
-                  const hasDeploymentName = pathMatch && pathMatch[1];
+                  const hasDeploymentName = Boolean(pathMatch && pathMatch[1]);
                   const isResponsesPath =
                     url.pathname.includes("/openai/responses");
 
                   return (
-                    hasApiVersion && (!!hasDeploymentName || isResponsesPath)
+                    hasApiVersion && (hasDeploymentName || isResponsesPath)
                   );
                 } catch {
                   return false;
