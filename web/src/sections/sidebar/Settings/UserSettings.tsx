@@ -157,12 +157,9 @@ export default function UserSettings() {
     const container = containerRef.current;
     const message = messageRef.current;
 
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        modal.toggle(false);
-      }
-    };
-    window.addEventListener("keydown", handleEscape);
+  useEffect(() => {
+    const container = containerRef.current;
+    const message = messageRef.current;
 
     if (container && message) {
       const checkScrollable = () => {
@@ -176,12 +173,9 @@ export default function UserSettings() {
       window.addEventListener("resize", checkScrollable);
       return () => {
         window.removeEventListener("resize", checkScrollable);
-        window.removeEventListener("keydown", handleEscape);
       };
     }
-
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [modal.toggle]);
+  }, []);
 
   const defaultModelDestructured = defaultModel
     ? parseLlmDescriptor(defaultModel)
