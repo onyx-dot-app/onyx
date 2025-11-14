@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "*"
+  workflow_dispatch:
 
 env:
   REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
@@ -76,6 +77,7 @@ jobs:
             network=host
 
       - name: Login to Docker Hub
+        if: github.event_name != 'workflow_dispatch'
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -87,7 +89,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/amd64
-          push: true
+          push: ${{ github.event_name != 'workflow_dispatch' }}
           tags: ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-amd64
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
@@ -126,6 +128,7 @@ jobs:
             network=host
 
       - name: Login to Docker Hub
+        if: github.event_name != 'workflow_dispatch'
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -137,7 +140,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/arm64
-          push: true
+          push: ${{ github.event_name != 'workflow_dispatch' }}
           tags: ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-arm64
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
@@ -150,7 +153,7 @@ jobs:
 
   merge-and-scan:
     needs: [build-amd64, build-arm64, check_model_server_changes]
-    if: needs.check_model_server_changes.outputs.changed == 'true'
+    if: needs.check_model_server_changes.outputs.changed == 'true' && github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Check if stable release version
