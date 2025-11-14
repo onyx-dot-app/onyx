@@ -126,7 +126,7 @@ def query(
                 yield RunItemStreamEvent(type="message_done")
                 message_started = False
 
-            if finish_reason == "tool_calls" and tool_calls_in_progress:
+            if finish_reason and tool_calls_in_progress:
                 sorted_tool_calls = sorted(tool_calls_in_progress.items())
 
                 # Build tool calls for the message and execute tools
@@ -211,7 +211,7 @@ def query(
                             }
                         )
 
-            elif finish_reason == "stop" and content_parts:
+            elif finish_reason and content_parts:
                 new_messages_stateful.append(
                     {
                         "role": "assistant",
