@@ -19,6 +19,8 @@ from oauthlib.oauth2 import BackendApplicationClient
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
+from playwright.sync_api import Route
+from playwright.sync_api import Request
 from requests_oauthlib import OAuth2Session  # type:ignore
 from urllib3.exceptions import MaxRetryError
 
@@ -329,6 +331,13 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
     return playwright, context
 
 
+def abort_unnecessary_resources(route: Route, request: Request) -> None:
+    if request.resource_type in ["image", "stylesheet", "font", "media", "websocket", "manifest", "other"]:
+        route.abort()
+    else:
+        route.continue_()
+
+
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     try:
         response = requests.get(
@@ -472,6 +481,7 @@ class WebConnector(LoadConnector):
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
         remove_by_selector: list = [],
+        timeout: int = 30000,
         **kwargs: Any,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
@@ -479,6 +489,7 @@ class WebConnector(LoadConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.remove_by_selector = remove_by_selector or []
+        self.timeout = timeout
         self.web_connector_type = web_connector_type
 
         if not isinstance(self.remove_by_selector, list):
@@ -580,13 +591,21 @@ class WebConnector(LoadConnector):
             return result
 
         page = session_ctx.playwright_context.new_page()
+        page.route("**/*", abort_unnecessary_resources)
         try:
-            # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
             page_response = page.goto(
                 initial_url,
-                timeout=30000,  # 30 seconds
-                wait_until="domcontentloaded",  # Wait for DOM to be ready
+                timeout=self.timeout,  # 30 seconds
+                wait_until="commit",
             )
+            page.wait_for_function("document.readyState === 'interactive'")
+            page.evaluate("""
+                () => {
+                    const images = document.querySelectorAll('img');
+                    images.forEach(img => img.remove());
+                }
+            """)
+            page.wait_for_function("document.readyState === 'complete'") # wait for domcontentloaded
 
             last_modified = page_response.header_value(
                 "Last-Modified") if page_response else None
@@ -612,7 +631,7 @@ class WebConnector(LoadConnector):
                     page.evaluate(
                         "window.scrollTo(0, document.body.scrollHeight)")
                     # wait for the content to load if we scrolled
-                    page.wait_for_load_state("networkidle", timeout=30000)
+                    page.wait_for_load_state("networkidle", timeout=self.timeout)
                     time.sleep(0.5)  # let javascript run
 
                     new_height = page.evaluate("document.body.scrollHeight")
