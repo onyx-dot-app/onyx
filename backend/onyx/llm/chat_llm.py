@@ -355,28 +355,12 @@ class LitellmLLM(LLM):
         logger.debug(f"Config: {self._safe_model_config()}")
 
     def _record_call(
-        self, prompt: LanguageModelInput | LangChainLanguageModelInput
+        self,
+        prompt: LanguageModelInput | LangChainLanguageModelInput,
+        is_legacy_langchain: bool = False,
     ) -> None:
         if self._long_term_logger:
-            # Handle both LangChain format (needs conversion) and new format (already dict-like)
-            prompt_dict: Any
-            if isinstance(prompt, str):
-                # String prompt - convert to dict format
-                prompt_dict = _prompt_to_dict(prompt)
-            elif (
-                isinstance(prompt, list)
-                and len(prompt) > 0
-                and isinstance(prompt[0], BaseMessage)
-            ):
-                # LangChain BaseMessage format - convert to dict
-                prompt_dict = _prompt_to_dict(prompt)
-            elif hasattr(prompt, "to_messages"):
-                # PromptValue format - convert to dict
-                prompt_dict = _prompt_to_dict(prompt)
-            else:
-                # Already in dict/ChatCompletionMessage format - use as-is
-                prompt_dict = prompt
-
+            prompt_dict = _prompt_to_dict(prompt) if is_legacy_langchain else prompt
             self._long_term_logger.record(
                 {"prompt": prompt_dict, "model": self._safe_model_config()},
                 category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
@@ -386,22 +370,10 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput | LangChainLanguageModelInput,
         model_output: BaseMessage,
+        is_legacy_langchain: bool,
     ) -> None:
         if self._long_term_logger:
-            # Handle both LangChain format (needs conversion) and new format (already dict-like)
-            prompt_dict: Any
-            if isinstance(prompt, str):
-                prompt_dict = _prompt_to_dict(prompt)
-            elif (
-                isinstance(prompt, list)
-                and len(prompt) > 0
-                and isinstance(prompt[0], BaseMessage)
-            ):
-                prompt_dict = _prompt_to_dict(prompt)
-            elif hasattr(prompt, "to_messages"):
-                prompt_dict = _prompt_to_dict(prompt)
-            else:
-                prompt_dict = prompt
+            prompt_dict = _prompt_to_dict(prompt) if is_legacy_langchain else prompt
 
             self._long_term_logger.record(
                 {
@@ -418,23 +390,13 @@ class LitellmLLM(LLM):
             )
 
     def _record_error(
-        self, prompt: LanguageModelInput | LangChainLanguageModelInput, error: Exception
+        self,
+        prompt: LanguageModelInput | LangChainLanguageModelInput,
+        error: Exception,
+        is_legacy_langchain: bool,
     ) -> None:
         if self._long_term_logger:
-            # Handle both LangChain format (needs conversion) and new format (already dict-like)
-            prompt_dict: Any
-            if isinstance(prompt, str):
-                prompt_dict = _prompt_to_dict(prompt)
-            elif (
-                isinstance(prompt, list)
-                and len(prompt) > 0
-                and isinstance(prompt[0], BaseMessage)
-            ):
-                prompt_dict = _prompt_to_dict(prompt)
-            elif hasattr(prompt, "to_messages"):
-                prompt_dict = _prompt_to_dict(prompt)
-            else:
-                prompt_dict = prompt
+            prompt_dict = _prompt_to_dict(prompt) if is_legacy_langchain else prompt
 
             self._long_term_logger.record(
                 {
@@ -469,7 +431,7 @@ class LitellmLLM(LLM):
 
         # Record the original prompt (not the processed one) for logging
         original_prompt = prompt
-        self._record_call(original_prompt)
+        self._record_call(original_prompt, is_legacy_langchain)
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
 
@@ -618,7 +580,7 @@ class LitellmLLM(LLM):
         if hasattr(choice, "message"):
             output = _convert_litellm_message_to_langchain_message(choice.message)
             if output:
-                self._record_result(prompt, output)
+                self._record_result(prompt, output, is_legacy_langchain=True)
             return output
         else:
             raise ValueError("Unexpected response choice type")
@@ -689,7 +651,7 @@ class LitellmLLM(LLM):
             )
 
         if output:
-            self._record_result(prompt, output)
+            self._record_result(prompt, output, is_legacy_langchain=True)
 
         if LOG_ONYX_MODEL_INTERACTIONS and output:
             content = output.content or ""
