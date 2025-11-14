@@ -301,13 +301,19 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             response=selected_sections,
         )
 
+        from onyx.llm.utils import check_number_of_tokens
+
+        # For backwards compatibility with non-v2 flows, use query token count
+        # and pass prompt_config for proper token calculation
+        query_token_count = check_number_of_tokens(query)
+
         final_context_sections = prune_and_merge_sections(
             sections=self.selected_sections,
             section_relevance_list=None,
-            prompt_config=self.prompt_config,
             llm_config=self.llm.config,
-            question=query,
+            existing_input_tokens=query_token_count,
             contextual_pruning_config=self.contextual_pruning_config,
+            prompt_config=self.prompt_config,
         )
 
         llm_docs = [

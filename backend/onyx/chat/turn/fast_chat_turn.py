@@ -64,6 +64,26 @@ if TYPE_CHECKING:
 MAX_ITERATIONS = 10
 
 
+def _extract_user_input_text(messages: list[AgentSDKMessage]) -> str | None:
+    if not messages:
+        return None
+    last_message = messages[-1]
+    if last_message.get("role") != "user":
+        return None
+    content_items = last_message.get("content")
+    if not isinstance(content_items, list):
+        return None
+    text_parts: list[str] = []
+    for content in content_items:
+        if isinstance(content, dict) and content.get("type") == "input_text":
+            text_value = content.get("text")
+            if isinstance(text_value, str) and text_value:
+                text_parts.append(text_value)
+    if not text_parts:
+        return None
+    return "\n".join(text_parts)
+
+
 # TODO -- this can be refactored out and played with in evals + normal demo
 def _run_agent_loop(
     messages: list[AgentSDKMessage],
@@ -116,6 +136,30 @@ def _run_agent_loop(
             + [current_user_message]
         )
         current_messages = previous_messages + agent_turn_messages
+
+        # Update current_input_tokens for context-aware pruning in tools
+        # This represents all input that will be sent to the LLM
+        from onyx.llm.utils import check_number_of_tokens
+
+        total_input_text_parts = []
+        for msg in current_messages:
+            if isinstance(msg, dict):
+                content = msg.get("content")
+                if isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") in [
+                            "input_text",
+                            "output_text",
+                        ]:
+                            text = item.get("text")
+                            if text:
+                                total_input_text_parts.append(text)
+                elif isinstance(content, str):
+                    total_input_text_parts.append(content)
+
+        ctx.current_input_tokens = check_number_of_tokens(
+            "\n".join(total_input_text_parts)
+        )
 
         if not available_tools:
             tool_choice = None
@@ -216,6 +260,7 @@ def _fast_chat_turn_core(
         chat_session_id,
         dependencies.redis_client,
     )
+
     ctx = starter_context or ChatTurnContext(
         run_dependencies=dependencies,
         chat_session_id=chat_session_id,
