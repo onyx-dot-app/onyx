@@ -37,7 +37,7 @@ export default function ConfirmationModalLayout({
       </div>
       <div className="flex flex-row w-full items-center justify-end p-4 gap-2">
         {!hideCancel && (
-          <Button secondary onClick={onClose}>
+          <Button secondary onClick={onClose} type="button">
             Cancel
           </Button>
         )}
