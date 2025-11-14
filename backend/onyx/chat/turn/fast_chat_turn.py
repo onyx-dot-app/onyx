@@ -64,26 +64,6 @@ if TYPE_CHECKING:
 MAX_ITERATIONS = 10
 
 
-def _extract_user_input_text(messages: list[AgentSDKMessage]) -> str | None:
-    if not messages:
-        return None
-    last_message = messages[-1]
-    if last_message.get("role") != "user":
-        return None
-    content_items = last_message.get("content")
-    if not isinstance(content_items, list):
-        return None
-    text_parts: list[str] = []
-    for content in content_items:
-        if isinstance(content, dict) and content.get("type") == "input_text":
-            text_value = content.get("text")
-            if isinstance(text_value, str) and text_value:
-                text_parts.append(text_value)
-    if not text_parts:
-        return None
-    return "\n".join(text_parts)
-
-
 # TODO -- this can be refactored out and played with in evals + normal demo
 def _run_agent_loop(
     messages: list[AgentSDKMessage],

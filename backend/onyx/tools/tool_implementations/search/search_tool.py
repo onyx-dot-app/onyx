@@ -537,6 +537,8 @@ def yield_search_responses(
     final_context_sections = get_final_context_sections()
 
     # Use the section_relevance we already computed above
+    # TODO: In the newer flows, we are not using prune_sections here
+    # but rather pruning after parallel fetches from the search tool
     pruned_sections = prune_sections(
         sections=final_context_sections,
         section_relevance_list=section_relevance_list_impl(
@@ -547,9 +549,9 @@ def yield_search_responses(
         question=query,
         contextual_pruning_config=search_tool.contextual_pruning_config,
     )
-    # llm_docs = [llm_doc_from_inference_section(section) for section in pruned_sections]
+    llm_docs = [llm_doc_from_inference_section(section) for section in pruned_sections]
 
-    yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=pruned_sections)
+    yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
 
 
 T = TypeVar("T")
