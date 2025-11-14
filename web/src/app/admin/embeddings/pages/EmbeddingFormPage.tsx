@@ -43,6 +43,7 @@ import SvgArrowRight from "@/icons/arrow-right";
 
 enum ReindexType {
   REINDEX = "reindex",
+  ACTIVE_ONLY = "active_only",
   INSTANT = "instant",
 }
 
@@ -202,12 +203,18 @@ export default function EmbeddingForm() {
     if (!selectedProvider) {
       return false;
     }
+    const switchoverType =
+      reindexType === ReindexType.REINDEX
+        ? "reindex"
+        : reindexType === ReindexType.ACTIVE_ONLY
+          ? "active_only"
+          : "instant";
     const searchSettings = combineSearchSettings(
       selectedProvider,
       advancedEmbeddingDetails,
       rerankingDetails,
       selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null,
-      reindexType === ReindexType.REINDEX
+      switchoverType
     );
 
     const response = await updateSearchSettings(searchSettings);
@@ -220,7 +227,13 @@ export default function EmbeddingForm() {
       });
       return false;
     }
-  }, [selectedProvider, advancedEmbeddingDetails, rerankingDetails, setPopup]);
+  }, [
+    selectedProvider,
+    advancedEmbeddingDetails,
+    rerankingDetails,
+    reindexType,
+    setPopup,
+  ]);
 
   const handleValidationChange = useCallback(
     (isValid: boolean, errors: Record<string, string>) => {
@@ -268,7 +281,9 @@ export default function EmbeddingForm() {
             >
               {reindexType == ReindexType.REINDEX
                 ? "Re-index"
-                : "Instant Switch"}
+                : reindexType == ReindexType.ACTIVE_ONLY
+                  ? "Active Only"
+                  : "Instant Switch"}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -289,6 +304,17 @@ export default function EmbeddingForm() {
                   <SimpleTooltip tooltip="Re-runs all connectors in the background before switching over. Takes longer but ensures no degredation of search during the switch.">
                     <span className="w-full text-left">
                       (Recommended) Re-index
+                    </span>
+                  </SimpleTooltip>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setReindexType(ReindexType.ACTIVE_ONLY);
+                  }}
+                >
+                  <SimpleTooltip tooltip="Re-runs only active (non-paused) connectors in the background before switching over. Paused connectors won't block the switchover.">
+                    <span className="w-full text-left">
+                      Active Connectors Only
                     </span>
                   </SimpleTooltip>
                 </DropdownMenuItem>
@@ -428,6 +454,13 @@ export default function EmbeddingForm() {
     }
     let searchSettings: SavedSearchSettings;
 
+    const switchoverType =
+      reindexType === ReindexType.REINDEX
+        ? "reindex"
+        : reindexType === ReindexType.ACTIVE_ONLY
+          ? "active_only"
+          : "instant";
+
     if (selectedProvider.provider_type != null) {
       // This is a cloud model
       searchSettings = combineSearchSettings(
@@ -437,7 +470,7 @@ export default function EmbeddingForm() {
         selectedProvider.provider_type
           ?.toLowerCase()
           .split(" ")[0] as EmbeddingProvider | null,
-        reindexType === ReindexType.REINDEX
+        switchoverType
       );
     } else {
       // This is a locally hosted model
@@ -446,7 +479,7 @@ export default function EmbeddingForm() {
         advancedEmbeddingDetails,
         rerankingDetails,
         null,
-        reindexType === ReindexType.REINDEX
+        switchoverType
       );
     }
 

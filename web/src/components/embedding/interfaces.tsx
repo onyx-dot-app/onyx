@@ -55,7 +55,7 @@ export interface EmbeddingModelDescriptor {
   api_version?: string | null;
   deployment_name?: string | null;
   index_name: string | null;
-  background_reindex_enabled?: boolean;
+  switchover_type?: "reindex" | "active_only" | "instant";
 }
 
 export interface CloudEmbeddingModel extends EmbeddingModelDescriptor {

@@ -149,7 +149,7 @@ export default function UpgradingPage({
             </Button>
 
             {connectors && connectors.length > 0 ? (
-              futureEmbeddingModel.background_reindex_enabled ? (
+              futureEmbeddingModel.switchover_type !== "instant" ? (
                 <>
                   {failedIndexingStatus && failedIndexingStatus.length > 0 && (
                     <FailedReIndexAttempts
@@ -159,14 +159,33 @@ export default function UpgradingPage({
                   )}
 
                   <Text className="my-4">
-                    The table below shows the re-indexing progress of all
-                    existing connectors. Once all connectors have been
-                    re-indexed successfully, the new model will be used for all
-                    search queries. Until then, we will use the old model so
-                    that no downtime is necessary during this transition.
-                    <br />
-                    Note: User file re-indexing progress is not shown. You will
-                    see this page until all user files are re-indexed!
+                    {futureEmbeddingModel.switchover_type === "active_only" ? (
+                      <>
+                        The table below shows the re-indexing progress of active
+                        (non-paused) connectors. Once all active connectors have
+                        been re-indexed successfully, the new model will be used
+                        for all search queries. Paused connectors will continue
+                        to be indexed in the background but won&apos;t block the
+                        switchover. Until then, we will use the old model so
+                        that no downtime is necessary during this transition.
+                        <br />
+                        Note: User file re-indexing progress is not shown. You
+                        will see this page until all active connectors are
+                        re-indexed!
+                      </>
+                    ) : (
+                      <>
+                        The table below shows the re-indexing progress of all
+                        existing connectors. Once all connectors have been
+                        re-indexed successfully, the new model will be used for
+                        all search queries. Until then, we will use the old
+                        model so that no downtime is necessary during this
+                        transition.
+                        <br />
+                        Note: User file re-indexing progress is not shown. You
+                        will see this page until all user files are re-indexed!
+                      </>
+                    )}
                   </Text>
 
                   {sortedReindexingProgress ? (

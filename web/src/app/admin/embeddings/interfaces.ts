@@ -50,7 +50,7 @@ export interface SavedSearchSettings
   extends RerankingDetails,
     AdvancedSearchConfiguration {
   provider_type: EmbeddingProvider | null;
-  background_reindex_enabled: boolean;
+  switchover_type?: "reindex" | "active_only" | "instant";
 }
 
 export interface RerankingModel {

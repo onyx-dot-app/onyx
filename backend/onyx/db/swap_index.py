@@ -7,11 +7,14 @@ from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.document import delete_all_documents_for_connector_credential_pair
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexModelStatus
+from onyx.db.enums import SwitchoverType
 from onyx.db.index_attempt import cancel_indexing_attempts_for_search_settings
 from onyx.db.index_attempt import (
-    count_unique_cc_pairs_with_successful_index_attempts,
+    count_unique_active_cc_pairs_with_successful_index_attempts,
 )
+from onyx.db.index_attempt import count_unique_cc_pairs_with_successful_index_attempts
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
@@ -126,9 +129,11 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
     if not secondary_search_settings:
         return None
 
-    # If the secondary search settings are not configured to reindex in the background,
-    # we can just swap over instantly
-    if not secondary_search_settings.background_reindex_enabled:
+    # Handle switchover based on switchover_type
+    switchover_type = secondary_search_settings.switchover_type
+
+    # INSTANT: Swap immediately without waiting
+    if switchover_type == SwitchoverType.INSTANT:
         current_search_settings = get_current_search_settings(db_session)
         _perform_index_swap(
             db_session=db_session,
@@ -141,25 +146,69 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
         )
         return current_search_settings
 
-    unique_cc_indexings = count_unique_cc_pairs_with_successful_index_attempts(
-        search_settings_id=secondary_search_settings.id, db_session=db_session
-    )
-
-    # Index Attempts are cleaned up as well when the cc-pair is deleted so the logic in this
-    # function is correct. The unique_cc_indexings are specifically for the existing cc-pairs
-    old_search_settings = None
-    if unique_cc_indexings > cc_pair_count:
-        logger.error("More unique indexings than cc pairs, should not occur")
-
-    if cc_pair_count == 0 or cc_pair_count == unique_cc_indexings:
-        # Swap indices
-        current_search_settings = get_current_search_settings(db_session)
-        _perform_index_swap(
-            db_session=db_session,
-            current_search_settings=current_search_settings,
-            secondary_search_settings=secondary_search_settings,
-            all_cc_pairs=all_cc_pairs,
+    # REINDEX: Wait for all connectors to complete
+    if switchover_type == SwitchoverType.REINDEX:
+        unique_cc_indexings = count_unique_cc_pairs_with_successful_index_attempts(
+            search_settings_id=secondary_search_settings.id, db_session=db_session
         )
-        old_search_settings = current_search_settings
 
-    return old_search_settings
+        # Index Attempts are cleaned up as well when the cc-pair is deleted so the logic in this
+        # function is correct. The unique_cc_indexings are specifically for the existing cc-pairs
+        old_search_settings = None
+        if unique_cc_indexings > cc_pair_count:
+            logger.error("More unique indexings than cc pairs, should not occur")
+
+        if cc_pair_count == 0 or cc_pair_count == unique_cc_indexings:
+            # Swap indices
+            current_search_settings = get_current_search_settings(db_session)
+            _perform_index_swap(
+                db_session=db_session,
+                current_search_settings=current_search_settings,
+                secondary_search_settings=secondary_search_settings,
+                all_cc_pairs=all_cc_pairs,
+            )
+            old_search_settings = current_search_settings
+
+        return old_search_settings
+
+    # ACTIVE_ONLY: Wait for only non-paused connectors to complete
+    if switchover_type == SwitchoverType.ACTIVE_ONLY:
+        # Count non-paused cc_pairs (excluding the default Ingestion API cc_pair)
+        active_cc_pairs = [
+            cc_pair
+            for cc_pair in all_cc_pairs
+            if cc_pair.status != ConnectorCredentialPairStatus.PAUSED
+        ]
+        active_cc_pair_count = max(len(active_cc_pairs) - 1, 0)
+
+        unique_active_cc_indexings = (
+            count_unique_active_cc_pairs_with_successful_index_attempts(
+                search_settings_id=secondary_search_settings.id, db_session=db_session
+            )
+        )
+
+        old_search_settings = None
+        if unique_active_cc_indexings > active_cc_pair_count:
+            logger.error(
+                "More unique active indexings than active cc pairs, should not occur"
+            )
+
+        if (
+            active_cc_pair_count == 0
+            or active_cc_pair_count == unique_active_cc_indexings
+        ):
+            # Swap indices
+            current_search_settings = get_current_search_settings(db_session)
+            _perform_index_swap(
+                db_session=db_session,
+                current_search_settings=current_search_settings,
+                secondary_search_settings=secondary_search_settings,
+                all_cc_pairs=all_cc_pairs,
+            )
+            old_search_settings = current_search_settings
+
+        return old_search_settings
+
+    # Should not reach here, but handle gracefully
+    logger.error(f"Unknown switchover_type: {switchover_type}")
+    return None

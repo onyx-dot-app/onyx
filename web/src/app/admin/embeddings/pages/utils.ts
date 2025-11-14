@@ -64,13 +64,13 @@ export const combineSearchSettings = (
   advancedEmbeddingDetails: AdvancedSearchConfiguration,
   rerankingDetails: RerankingDetails,
   provider_type: EmbeddingProvider | null,
-  background_reindex_enabled: boolean
+  switchover_type?: "reindex" | "active_only" | "instant"
 ): SavedSearchSettings => {
   return {
     ...selectedProvider,
     ...advancedEmbeddingDetails,
     ...rerankingDetails,
     provider_type: provider_type,
-    background_reindex_enabled,
+    switchover_type,
   };
 };
