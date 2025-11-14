@@ -12,6 +12,7 @@ from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.message_types import ChatCompletionMessage
+from onyx.llm.message_types import ToolCall
 from onyx.llm.model_response import ModelResponseStream
 from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
@@ -21,6 +22,15 @@ from onyx.tools.tool import Tool
 class QueryResult:
     stream: Iterator[StreamEvent]
     new_messages_stateful: list[ChatCompletionMessage]
+
+
+def _serialize_tool_output(output: Any) -> str:
+    if isinstance(output, str):
+        return output
+    try:
+        return json.dumps(output)
+    except TypeError:
+        return str(output)
 
 
 def _update_tool_call_with_delta(
@@ -120,13 +130,16 @@ def query(
                 sorted_tool_calls = sorted(tool_calls_in_progress.items())
 
                 # Build tool calls for the message and execute tools
-                assistant_tool_calls = []
+                assistant_tool_calls: list[ToolCall] = []
                 tool_outputs: dict[str, str] = {}
 
                 for _, tool_call_data in sorted_tool_calls:
                     call_id = tool_call_data["id"]
                     name = tool_call_data["name"]
                     arguments_str = tool_call_data["arguments"]
+
+                    if call_id is None or name is None:
+                        continue
 
                     assistant_tool_calls.append(
                         {
@@ -158,7 +171,7 @@ def query(
                         # In practice, it's not a must right now since we don't use parallel
                         # tool calls, so kicking the can down the road for now.
                         output = tool.run_v2(run_context, **arguments)
-                        tool_outputs[call_id] = output
+                        tool_outputs[call_id] = _serialize_tool_output(output)
 
                         yield RunItemStreamEvent(
                             type="tool_call_output",

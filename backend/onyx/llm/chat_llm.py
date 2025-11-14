@@ -52,6 +52,7 @@ from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
+from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
@@ -238,20 +239,39 @@ def _convert_delta_to_message_chunk(
 
 
 def _prompt_to_dict(
-    prompt: LangChainLanguageModelInput,
-) -> Sequence[str | list[str] | dict[str, Any] | tuple[str, str]]:
+    prompt: LanguageModelInput | LangChainLanguageModelInput,
+) -> LegacyPromptDict:
     # NOTE: this must go first, since it is also a Sequence
     if isinstance(prompt, str):
         return [_convert_message_to_dict(HumanMessage(content=prompt))]
 
     if isinstance(prompt, (list, Sequence)):
-        return [
-            _convert_message_to_dict(msg) if isinstance(msg, BaseMessage) else msg
-            for msg in prompt
-        ]
+        normalized_prompt: list[str | list[str] | dict[str, Any] | tuple[str, str]] = []
+        for msg in prompt:
+            if isinstance(msg, BaseMessage):
+                normalized_prompt.append(_convert_message_to_dict(msg))
+            elif isinstance(msg, dict):
+                normalized_prompt.append(dict(msg))
+            else:
+                normalized_prompt.append(msg)
+        return normalized_prompt
+
+    if isinstance(prompt, BaseMessage):
+        return [_convert_message_to_dict(prompt)]
 
     if isinstance(prompt, PromptValue):
         return [_convert_message_to_dict(message) for message in prompt.to_messages()]
+
+    raise TypeError(f"Unsupported prompt type: {type(prompt)}")
+
+
+def _prompt_as_json(
+    prompt: LanguageModelInput | LangChainLanguageModelInput,
+    *,
+    is_legacy_langchain: bool,
+) -> JSON_ro:
+    prompt_payload = _prompt_to_dict(prompt) if is_legacy_langchain else prompt
+    return cast(JSON_ro, prompt_payload)
 
 
 class LitellmLLM(LLM):
@@ -360,9 +380,14 @@ class LitellmLLM(LLM):
         is_legacy_langchain: bool = False,
     ) -> None:
         if self._long_term_logger:
-            prompt_dict = _prompt_to_dict(prompt) if is_legacy_langchain else prompt
+            prompt_json = _prompt_as_json(
+                prompt, is_legacy_langchain=is_legacy_langchain
+            )
             self._long_term_logger.record(
-                {"prompt": prompt_dict, "model": self._safe_model_config()},
+                {
+                    "prompt": prompt_json,
+                    "model": cast(JSON_ro, self._safe_model_config()),
+                },
                 category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
             )
 
@@ -373,18 +398,18 @@ class LitellmLLM(LLM):
         is_legacy_langchain: bool,
     ) -> None:
         if self._long_term_logger:
-            prompt_dict = _prompt_to_dict(prompt) if is_legacy_langchain else prompt
-
+            prompt_json = _prompt_as_json(
+                prompt, is_legacy_langchain=is_legacy_langchain
+            )
+            tool_calls = (
+                model_output.tool_calls if hasattr(model_output, "tool_calls") else []
+            )
             self._long_term_logger.record(
                 {
-                    "prompt": prompt_dict,
+                    "prompt": prompt_json,
                     "content": model_output.content,
-                    "tool_calls": (
-                        model_output.tool_calls
-                        if hasattr(model_output, "tool_calls")
-                        else []
-                    ),
-                    "model": self._safe_model_config(),
+                    "tool_calls": cast(JSON_ro, tool_calls),
+                    "model": cast(JSON_ro, self._safe_model_config()),
                 },
                 category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
             )
@@ -396,18 +421,19 @@ class LitellmLLM(LLM):
         is_legacy_langchain: bool,
     ) -> None:
         if self._long_term_logger:
-            prompt_dict = _prompt_to_dict(prompt) if is_legacy_langchain else prompt
-
+            prompt_json = _prompt_as_json(
+                prompt, is_legacy_langchain=is_legacy_langchain
+            )
             self._long_term_logger.record(
                 {
-                    "prompt": prompt_dict,
+                    "prompt": prompt_json,
                     "error": str(error),
                     "traceback": "".join(
                         traceback.format_exception(
                             type(error), error, error.__traceback__
                         )
                     ),
-                    "model": self._safe_model_config(),
+                    "model": cast(JSON_ro, self._safe_model_config()),
                 },
                 category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
             )
@@ -427,7 +453,11 @@ class LitellmLLM(LLM):
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
-        processed_prompt = _prompt_to_dict(prompt) if is_legacy_langchain else prompt
+        processed_prompt: LegacyPromptDict | LanguageModelInput
+        if is_legacy_langchain:
+            processed_prompt = _prompt_to_dict(prompt)
+        else:
+            processed_prompt = cast(LanguageModelInput, prompt)
 
         # Record the original prompt (not the processed one) for logging
         original_prompt = prompt
@@ -518,7 +548,7 @@ class LitellmLLM(LLM):
             )
         except Exception as e:
 
-            self._record_error(original_prompt, e)
+            self._record_error(original_prompt, e, is_legacy_langchain)
             # for break pointing
             if isinstance(e, Timeout):
                 raise LLMTimeoutError(e)

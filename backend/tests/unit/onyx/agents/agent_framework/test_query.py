@@ -399,7 +399,9 @@ def test_query_handles_parallel_tool_calls_in_one_event(
     assert result.new_messages_stateful[2]["tool_call_id"] == call_id_2
 
 
-def test_query_emits_reasoning_done_before_message_start(fake_llm) -> None:
+def test_query_emits_reasoning_done_before_message_start(
+    fake_llm: Callable[[list[ModelResponseStream]], Any],
+) -> None:
     """Test that query emits reasoning_done before message_start when transitioning from reasoning to message."""
     stream_id = "chatcmpl-3a248070-d1fb-4ea1-87d5-e3c9d84cd52b"
 

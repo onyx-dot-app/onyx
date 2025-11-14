@@ -98,7 +98,7 @@ class LLM(abc.ABC):
     @traced(name="invoke llm", type="llm")
     def invoke(
         self,
-        prompt: LangChainLanguageModelInput,
+        prompt: LanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
@@ -163,7 +163,7 @@ class LLM(abc.ABC):
     @abc.abstractmethod
     def _invoke_implementation_langchain(
         self,
-        prompt: LanguageModelInput,
+        prompt: LangChainLanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
