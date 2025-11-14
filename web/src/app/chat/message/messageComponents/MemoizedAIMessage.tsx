@@ -25,11 +25,6 @@ interface BaseMemoizedAIMessageProps {
 
 interface InternalMemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
   regenerate?: (modelOverride: LlmDescriptor) => Promise<void>;
-  handleFeedbackChange: (
-    newFeedback: FeedbackType | null,
-    feedbackText?: string,
-    predefinedFeedback?: string
-  ) => Promise<void>;
 }
 
 interface MemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
@@ -38,12 +33,6 @@ interface MemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
     parentMessage: Message;
     forceSearch?: boolean;
   }) => (modelOverRide: LlmDescriptor) => Promise<void>;
-  handleFeedbackChange: (
-    messageId: number,
-    newFeedback: FeedbackType | null,
-    feedbackText?: string,
-    predefinedFeedback?: string
-  ) => Promise<void>;
   messageId: number | undefined;
   parentMessage?: Message;
 }
@@ -51,7 +40,6 @@ interface MemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
 const InternalMemoizedAIMessage = React.memo(
   function InternalMemoizedAIMessage({
     rawPackets,
-    handleFeedbackChange,
     assistant,
     docs,
     citations,
@@ -69,7 +57,6 @@ const InternalMemoizedAIMessage = React.memo(
   }: InternalMemoizedAIMessageProps) {
     const chatState = React.useMemo(
       () => ({
-        handleFeedbackChange,
         assistant,
         docs,
         userFiles: projectFiles || [],
@@ -80,7 +67,6 @@ const InternalMemoizedAIMessage = React.memo(
         researchType,
       }),
       [
-        handleFeedbackChange,
         assistant,
         docs,
         projectFiles,
@@ -109,7 +95,6 @@ const InternalMemoizedAIMessage = React.memo(
 
 export const MemoizedAIMessage = ({
   rawPackets,
-  handleFeedbackChange,
   assistant,
   docs,
   citations,
@@ -143,31 +128,9 @@ export const MemoizedAIMessage = ({
     };
   }, [messageId, parentMessage, createRegenerator]);
 
-  // Wrap handleFeedbackChange to pass messageId
-  const wrappedHandleFeedbackChange = useCallback(
-    async (
-      newFeedback: FeedbackType | null,
-      feedbackText?: string,
-      predefinedFeedback?: string
-    ) => {
-      if (messageId === undefined) {
-        console.error("Message has no messageId");
-        return;
-      }
-      return handleFeedbackChange(
-        messageId,
-        newFeedback,
-        feedbackText,
-        predefinedFeedback
-      );
-    },
-    [handleFeedbackChange, messageId]
-  );
-
   return (
     <InternalMemoizedAIMessage
       rawPackets={rawPackets}
-      handleFeedbackChange={wrappedHandleFeedbackChange}
       assistant={assistant}
       docs={docs}
       citations={citations}

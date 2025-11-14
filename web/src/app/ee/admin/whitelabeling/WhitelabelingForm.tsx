@@ -159,7 +159,6 @@ export function WhitelabelingForm() {
 
                   <Button
                     danger
-                    type="button"
                     className="mb-8"
                     onClick={async () => {
                       const valuesWithoutLogo = {
@@ -304,7 +303,6 @@ export function WhitelabelingForm() {
 
                       <Button
                         danger
-                        type="button"
                         className="mb-8"
                         onClick={async () => {
                           const valuesWithoutLogotype = {

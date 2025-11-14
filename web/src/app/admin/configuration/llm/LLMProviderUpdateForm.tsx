@@ -760,7 +760,7 @@ export function LLMProviderUpdateForm({
             {testError && <Text className="text-error mt-2">{testError}</Text>}
 
             <div className="flex w-full mt-4 gap-2">
-              <Button disabled={isTesting}>
+              <Button type="submit" disabled={isTesting}>
                 {isTesting ? (
                   <Text inverted>
                     <LoadingAnimation text="Testing" />

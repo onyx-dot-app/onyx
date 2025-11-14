@@ -11,6 +11,7 @@ import {
   OpenSourceIcon,
   VoyageIconSVG,
 } from "@/components/icons/icons";
+import { SwitchoverType } from "@/app/admin/embeddings/interfaces";
 
 export enum EmbeddingProvider {
   OPENAI = "openai",
@@ -55,7 +56,7 @@ export interface EmbeddingModelDescriptor {
   api_version?: string | null;
   deployment_name?: string | null;
   index_name: string | null;
-  background_reindex_enabled?: boolean;
+  switchover_type?: SwitchoverType;
 }
 
 export interface CloudEmbeddingModel extends EmbeddingModelDescriptor {

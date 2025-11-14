@@ -98,6 +98,9 @@ export function useChatSessionController({
   const setCurrentSession = useChatSessionStore(
     (state) => state.setCurrentSession
   );
+  const initializeSession = useChatSessionStore(
+    (state) => state.initializeSession
+  );
   const updateHasPerformedInitialScroll = useChatSessionStore(
     (state) => state.updateHasPerformedInitialScroll
   );
@@ -187,6 +190,9 @@ export function useChatSessionController({
 
       // Ensure the current session is set to the actual session ID from the response
       setCurrentSession(chatSession.chat_session_id);
+
+      // Initialize session data including personaId
+      initializeSession(chatSession.chat_session_id, chatSession);
 
       const newMessageMap = processRawChatHistory(
         chatSession.messages,

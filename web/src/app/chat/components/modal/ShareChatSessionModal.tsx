@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useSearchParams } from "next/navigation";
 import { useChatSessionStore } from "@/app/chat/stores/useChatSessionStore";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import SvgShare from "@/icons/share";
 import SvgCopy from "@/icons/copy";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -109,11 +109,11 @@ export default function ShareChatSessionModal({
     <>
       {popup}
 
-      <ConfirmationModal
+      <ConfirmationModalLayout
         icon={SvgShare}
         title="Share Chat"
         onClose={onClose}
-        submit={<Button>Share</Button>}
+        submit={<Button onClick={onClose}>Share</Button>}
       >
         {shareLink ? (
           <div>
@@ -245,7 +245,7 @@ export default function ShareChatSessionModal({
             </Button>
           </div>
         )}
-      </ConfirmationModal>
+      </ConfirmationModalLayout>
     </>
   );
 }

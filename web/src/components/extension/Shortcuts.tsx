@@ -222,11 +222,7 @@ export const NewShortCutModal = ({
               {editingShortcut ? "Save Changes" : "Add Shortcut"}
             </Button>
             {editingShortcut && (
-              <Button
-                type="button"
-                danger
-                onClick={() => onDelete(editingShortcut)}
-              >
+              <Button danger onClick={() => onDelete(editingShortcut)}>
                 Delete
               </Button>
             )}
