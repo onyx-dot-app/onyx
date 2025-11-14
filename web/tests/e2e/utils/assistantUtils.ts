@@ -18,7 +18,7 @@ export async function createAssistant(page: Page, params: AssistantParams) {
   }
 
   // Open Assistants modal/list
-  await page.getByRole("button", { name: "Explore Assistants" }).click();
+  await page.getByTestId("AppSidebar/more-agents").click();
   await page.getByTestId("AgentsPage/new-agent-button").click();
 
   // Fill required fields

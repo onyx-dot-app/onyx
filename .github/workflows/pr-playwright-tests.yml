@@ -6,13 +6,6 @@ concurrency:
 on: push
 
 env:
-  # AWS ECR Configuration
-  AWS_REGION: ${{ secrets.AWS_REGION || 'us-west-2' }}
-  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_ECR }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_ECR }}
-  BUILDX_NO_DEFAULT_ATTESTATIONS: 1
-
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -27,127 +20,17 @@ env:
 
 jobs:
   build-web-image:
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+    runs-on: [runs-on, runner=4cpu-linux-arm64, "run-id=${{ github.run_id }}-build-web-image", "extras=ecr-cache"]
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # ratchet:aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # ratchet:aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
-      - name: Build and push Web Docker image
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
-        with:
-          context: ./web
-          file: ./web/Dockerfile
-          platforms: linux/arm64
-          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }}
-          provenance: false
-          sbom: false
-          push: true
-          outputs: type=registry
-          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
-
-  build-backend-image:
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # ratchet:aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # ratchet:aws-actions/amazon-ecr-login@v2
-
-      - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
-
-      - name: Build and push Backend Docker image
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          platforms: linux/arm64
-          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }}
-          provenance: false
-          sbom: false
-          push: true
-          outputs: type=registry
-          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
-
-  build-model-server-image:
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # ratchet:aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # ratchet:aws-actions/amazon-ecr-login@v2
-
-      - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
-
-      - name: Build and push Model Server Docker image
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile.model_server
-          platforms: linux/arm64
-          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }}
-          provenance: false
-          sbom: false
-          push: true
-          outputs: type=registry
-          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
-
-  playwright-tests:
-    needs: [build-web-image, build-backend-image, build-model-server-image]
-    name: Playwright Tests
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # ratchet:aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # ratchet:aws-actions/amazon-ecr-login@v2
-
-      # needed for pulling Vespa, Redis, Postgres, and Minio images
-      # otherwise, we hit the "Unauthenticated users" limit
+      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
@@ -155,31 +38,131 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
+      - name: Build and push Web Docker image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        with:
+          context: ./web
+          file: ./web/Dockerfile
+          platforms: linux/arm64
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
+          push: true
+          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache,mode=max
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  build-backend-image:
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
+
+      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and push Backend Docker image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/arm64
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
+          push: true
+          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-cache
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-cache,mode=max
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  build-model-server-image:
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
+
+      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and push Model Server Docker image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.model_server
+          platforms: linux/arm64
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
+          push: true
+          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-cache
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-cache,mode=max
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  playwright-tests:
+    needs: [build-web-image, build-backend-image, build-model-server-image]
+    name: Playwright Tests (${{ matrix.project }})
+    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}", "extras=ecr-cache"]
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [admin, no-auth]
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Pull Docker images
         run: |
           # Pull all images from ECR in parallel
           echo "Pulling Docker images in parallel..."
-          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }}) &
-          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }}) &
-          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }}) &
+          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}) &
+          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}) &
+          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}) &
 
           # Wait for all background jobs to complete
           wait
           echo "All Docker images pulled successfully"
 
           # Re-tag with expected names for docker-compose
-          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }} onyxdotapp/onyx-web-server:test
-          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
+          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }} onyxdotapp/onyx-web-server:test
+          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }} onyxdotapp/onyx-backend:test
+          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }} onyxdotapp/onyx-model-server:test
 
       - name: Setup node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # ratchet:actions/setup-node@v4
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # ratchet:actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
+          cache-dependency-path: ./web/package-lock.json
 
       - name: Install node dependencies
         working-directory: ./web
         run: npm ci
+
+      - name: Cache playwright cache
+        uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-npm-
 
       - name: Install playwright browsers
         working-directory: ./web
@@ -196,6 +179,15 @@ jobs:
           DISABLE_TELEMETRY=true
           IMAGE_TAG=test
           EOF
+
+      # needed for pulling Vespa, Redis, Postgres, and Minio images
+      # otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Start Docker containers
         run: |
@@ -242,13 +234,13 @@ jobs:
         run: |
           # Create test-results directory to ensure it exists for artifact upload
           mkdir -p test-results
-          npx playwright test
+          npx playwright test --project ${{ matrix.project }}
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         if: always()
         with:
           # Includes test results and trace.zip files
-          name: playwright-test-results-${{ github.run_id }}
+          name: playwright-test-results-${{ matrix.project }}-${{ github.run_id }}
           path: ./web/test-results/
           retention-days: 30
 
@@ -262,15 +254,10 @@ jobs:
 
       - name: Upload logs
         if: success() || failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         with:
-          name: docker-logs
+          name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
-
-      - name: Stop Docker containers
-        run: |
-          cd deployment/docker_compose
-          docker compose down -v
 
 # NOTE: Chromatic UI diff testing is currently disabled.
 # We are using Playwright for local and CI testing without visual regression checks.
@@ -294,7 +281,7 @@ jobs:
 #         fetch-depth: 0
 
 #     - name: Setup node
-#       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # ratchet:actions/setup-node@v4
+#       uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # ratchet:actions/setup-node@v4
 #       with:
 #         node-version: 22
 

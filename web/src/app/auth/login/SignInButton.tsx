@@ -1,3 +1,5 @@
+"use client";
+
 import Button from "@/refresh-components/buttons/Button";
 import { AuthType } from "@/lib/constants";
 import Link from "next/link";

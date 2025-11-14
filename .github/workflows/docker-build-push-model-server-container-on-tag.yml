@@ -13,7 +13,7 @@ env:
 
   # tag nightly builds with "edge"
   EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}
-  
+
 jobs:
 
 #   Bypassing this for now as the idea of not building is glitching
@@ -26,13 +26,13 @@ jobs:
 #     steps:
 #       - name: Checkout code
 #         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
-# 
+#
 #       - name: Check if relevant files changed
 #         id: check
 #         run: |
 #           # Default to "false"
 #           echo "changed=false" >> $GITHUB_OUTPUT
-# 
+#
 #           # Compare the previous commit (github.event.before) to the current one (github.sha)
 #           # If any file in backend/model_server/** or backend/Dockerfile.model_server is changed,
 #           # set changed=true
@@ -48,15 +48,17 @@ jobs:
     steps:
       - name: Bypass check and set output
         run: echo "changed=true" >> $GITHUB_OUTPUT
-        
+
   build-amd64:
     needs: [check_model_server_changes]
     if: needs.check_model_server_changes.outputs.changed == 'true'
     runs-on:
-      [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-amd64"]
+      [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-amd64", "extras=ecr-cache"]
     env:
       PLATFORM_PAIR: linux-amd64
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
@@ -91,18 +93,22 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
           outputs: type=registry
           provenance: false
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-${{ env.PLATFORM_PAIR }}-cache
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-${{ env.PLATFORM_PAIR }}-cache,mode=max
 #           no-cache: true
 
   build-arm64:
     needs: [check_model_server_changes]
     if: needs.check_model_server_changes.outputs.changed == 'true'
     runs-on:
-      [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-arm64"]
+      [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-arm64", "extras=ecr-cache"]
     env:
       PLATFORM_PAIR: linux-arm64
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 
@@ -137,8 +143,10 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
           outputs: type=registry
           provenance: false
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-${{ env.PLATFORM_PAIR }}-cache
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-${{ env.PLATFORM_PAIR }}-cache,mode=max
 
   merge-and-scan:
     needs: [build-amd64, build-arm64, check_model_server_changes]

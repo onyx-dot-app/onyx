@@ -49,6 +49,7 @@ from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.manage.llm.api import get_valid_model_names_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -377,14 +378,25 @@ def get_persona(
     user: User | None = Depends(current_limited_user),
     db_session: Session = Depends(get_session),
 ) -> FullPersonaSnapshot:
-    return FullPersonaSnapshot.from_model(
-        get_persona_by_id(
-            persona_id=persona_id,
-            user=user,
-            db_session=db_session,
-            is_for_edit=False,
-        )
+    persona = get_persona_by_id(
+        persona_id=persona_id,
+        user=user,
+        db_session=db_session,
+        is_for_edit=False,
     )
+
+    # Validate and fix default model if it's no longer valid for this persona's restrictions
+    if persona.llm_model_version_override:
+        valid_models = get_valid_model_names_for_persona(persona_id, user, db_session)
+
+        # If current default model is not in the valid list, update to first valid or None
+        if persona.llm_model_version_override not in valid_models:
+            persona.llm_model_version_override = (
+                valid_models[0] if valid_models else None
+            )
+            db_session.commit()
+
+    return FullPersonaSnapshot.from_model(persona)
 
 
 @basic_router.post("/assistant-prompt-refresh")

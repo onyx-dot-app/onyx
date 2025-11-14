@@ -19,7 +19,7 @@ import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { AuthTypeMetadata } from "@/lib/userSS";
-import { updateUserPersonalization as persistPersonalization } from "@/lib/users/UserSettings";
+import { updateUserPersonalization as persistPersonalization } from "@/lib/userSettings";
 import { useTheme } from "next-themes";
 
 interface UserContextType {

@@ -46,6 +46,7 @@ from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import SearchQueryInfo
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_utils import llm_doc_to_dict
 from onyx.tools.tool_implementations.search_like_tool_utils import (
@@ -258,6 +259,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         return {QUERY_FIELD: rephrased_query}
 
     """Actual tool execution"""
+
+    def run_v2(
+        self,
+        run_context: RunContextWrapper[Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        raise NotImplementedError("SearchTool.run_v2 is not implemented.")
 
     def _build_response_for_specified_sections(
         self, query: str

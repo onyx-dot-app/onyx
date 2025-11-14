@@ -330,6 +330,10 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     application = FastAPI(
         title="Onyx Backend",
         version=__version__,
+        description="Onyx API for AI-powered chat with search, document indexing, agents, actions, and more",
+        servers=[
+            {"url": f"{WEB_DOMAIN.rstrip('/')}/api", "description": "Onyx API Server"}
+        ],
         lifespan=lifespan_override or lifespan,
     )
     if SENTRY_DSN:
