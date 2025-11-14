@@ -63,15 +63,17 @@ jobs:
             IS_BETA_STANDALONE=true
           fi
 
-          echo "build-web=$BUILD_WEB" >> "$GITHUB_OUTPUT"
-          echo "build-web-cloud=$BUILD_WEB_CLOUD" >> "$GITHUB_OUTPUT"
-          echo "build-backend=$BUILD_BACKEND" >> "$GITHUB_OUTPUT"
-          echo "build-model-server=$BUILD_MODEL_SERVER" >> "$GITHUB_OUTPUT"
-          echo "is-cloud-tag=$IS_CLOUD" >> "$GITHUB_OUTPUT"
-          echo "is-stable=$IS_STABLE" >> "$GITHUB_OUTPUT"
-          echo "is-beta=$IS_BETA" >> "$GITHUB_OUTPUT"
-          echo "is-stable-standalone=$IS_STABLE_STANDALONE" >> "$GITHUB_OUTPUT"
-          echo "is-beta-standalone=$IS_BETA_STANDALONE" >> "$GITHUB_OUTPUT"
+          {
+            echo "build-web=$BUILD_WEB"
+            echo "build-web-cloud=$BUILD_WEB_CLOUD"
+            echo "build-backend=$BUILD_BACKEND"
+            echo "build-model-server=$BUILD_MODEL_SERVER"
+            echo "is-cloud-tag=$IS_CLOUD"
+            echo "is-stable=$IS_STABLE"
+            echo "is-beta=$IS_BETA"
+            echo "is-stable-standalone=$IS_STABLE_STANDALONE"
+            echo "is-beta-standalone=$IS_BETA_STANDALONE"
+          } >> "$GITHUB_OUTPUT"
 
   build-web:
     needs: determine-builds
