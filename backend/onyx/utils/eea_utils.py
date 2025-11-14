@@ -1,14 +1,22 @@
+from datetime import datetime
+import json
+import os
 import requests
 from urllib import robotparser
-from usp.tree import sitemap_tree_for_homepage
-from datetime import datetime
-from onyx.utils.logger import setup_logger
-from onyx.db.models import ChatMessage
-from onyx.configs.constants import DANSWER_API_KEY_PREFIX
-import os
-from langfuse import Langfuse
-import json
+from sqlalchemy.orm import Session
 import xml.etree.ElementTree as ET
+
+from fastapi import Depends
+from langfuse import Langfuse
+from usp.tree import sitemap_tree_for_homepage
+
+from onyx.auth.users import current_curator_or_admin_user
+from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.models import ChatMessage, User
+from onyx.configs.constants import DANSWER_API_KEY_PREFIX, DocumentSource
+from onyx.server.models import StatusResponse
+from onyx.utils.logger import setup_logger
 
 LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY")
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY")
@@ -248,3 +256,29 @@ def remove_by_selector(soup, selector):
                 continue
             for tag in soup.select(s):
                 tag.decompose()
+
+def get_connectors_health(
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> StatusResponse:
+    from onyx.server.documents.connector import get_connector_indexing_status
+    indexing_status = get_connector_indexing_status(user = user, db_session = db_session)
+
+    success = True
+    message = "ok"
+
+    error_cnt = 0
+    connector_cnt = 0
+    for connector_status in indexing_status:
+        if connector_status.cc_pair_status == ConnectorCredentialPairStatus.ACTIVE and \
+            connector_status.connector.source == DocumentSource.WEB and \
+            connector_status.connector.refresh_freq <= 86400:
+            connector_cnt += 1
+            if connector_status.in_repeated_error_state:
+                error_cnt += 1
+    if connector_cnt > 0:
+        if error_cnt == connector_cnt:
+            success = False
+            message = "Indexing failed"
+
+    return StatusResponse(success=success, message=message)

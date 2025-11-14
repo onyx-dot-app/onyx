@@ -19,6 +19,8 @@ from oauthlib.oauth2 import BackendApplicationClient
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
+from playwright.sync_api import Route
+from playwright.sync_api import Request
 from requests_oauthlib import OAuth2Session  # type:ignore
 from urllib3.exceptions import MaxRetryError
 
@@ -332,7 +334,14 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
     return playwright, context
 
 
-def extract_urls_from_sitemap(sitemap_url: str) -> dict[str, str | None]:
+def abort_unnecessary_resources(route: Route, request: Request) -> None:
+    if request.resource_type in ["image", "stylesheet", "font", "media", "websocket", "manifest", "other"]:
+        route.abort()
+    else:
+        route.continue_()
+
+
+def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     try:
         response = requests.get(
             sitemap_url, verify=False, headers=DEFAULT_HEADERS)
@@ -571,6 +580,7 @@ class WebConnector(LoadConnector):
         scroll_before_scraping: bool = False,
         remove_by_selector: list = [],
         skip_unchanged_documents: bool = False,
+        timeout: int = 30000,
         **kwargs: Any,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
@@ -578,6 +588,7 @@ class WebConnector(LoadConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.remove_by_selector = remove_by_selector or []
+        self.timeout = timeout
         self.web_connector_type = web_connector_type
         self.skip_unchanged_documents = skip_unchanged_documents
         self.original_url_count = 0
@@ -679,12 +690,12 @@ class WebConnector(LoadConnector):
             page_text, metadata, images = read_pdf_file(
                 file=io.BytesIO(response.content))
             last_modified = response.headers.get("Last-Modified") or lastmod
-
+            title = metadata.get("Title") or metadata.get("title")
             result.doc = Document(
                 id=initial_url,
                 sections=[TextSection(link=initial_url, text=page_text)],
                 source=DocumentSource.WEB,
-                semantic_identifier=initial_url.split("/")[-3 if "@@download/file" in initial_url else -1],
+                semantic_identifier=title or initial_url.split("/")[-3 if "@@download/file" in initial_url else -1],
                 metadata=metadata,
                 doc_updated_at=(_get_datetime_from_last_modified_header(
                     last_modified) if last_modified else None),
@@ -693,13 +704,21 @@ class WebConnector(LoadConnector):
             return result
 
         page = session_ctx.playwright_context.new_page()
+        page.route("**/*", abort_unnecessary_resources)
         try:
-            # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
             page_response = page.goto(
                 initial_url,
-                timeout=30000,  # 30 seconds
-                wait_until="domcontentloaded",  # Wait for DOM to be ready
+                timeout=self.timeout,  # 30 seconds
+                wait_until="commit",
             )
+            page.wait_for_function("document.readyState === 'interactive'")
+            page.evaluate("""
+                () => {
+                    const images = document.querySelectorAll('img');
+                    images.forEach(img => img.remove());
+                }
+            """)
+            page.wait_for_function("document.readyState === 'complete'") # wait for domcontentloaded
 
             last_modified = (page_response.header_value(
                 "Last-Modified") if page_response else None) or lastmod
@@ -725,7 +744,7 @@ class WebConnector(LoadConnector):
                     page.evaluate(
                         "window.scrollTo(0, document.body.scrollHeight)")
                     # wait for the content to load if we scrolled
-                    page.wait_for_load_state("networkidle", timeout=30000)
+                    page.wait_for_load_state("networkidle", timeout=self.timeout)
                     time.sleep(0.5)  # let javascript run
 
                     new_height = page.evaluate("document.body.scrollHeight")
