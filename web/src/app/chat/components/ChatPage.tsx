@@ -864,7 +864,7 @@ export default function ChatPage({
                       )}
                     >
                       {currentProjectId == null && showCenteredInput && (
-                        <WelcomeMessage />
+                        <WelcomeMessage liveAssistant={liveAssistant} />
                       )}
                       <div
                         className={cn(
