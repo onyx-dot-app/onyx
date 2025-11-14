@@ -74,7 +74,7 @@ def encrypt_string_to_bytes(input_str: str) -> bytes:
 
 def decrypt_bytes_to_string(input_bytes: bytes) -> str:
     impl_decrypt = fetch_versioned_implementation(
-        "onyx.utils.encryption", "_reverse_byte_decryption"
+        "onyx.utils.encryption", "_decrypt_bytes"
     )
     return impl_decrypt(input_bytes)
 
