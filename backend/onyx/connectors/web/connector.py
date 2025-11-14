@@ -577,12 +577,12 @@ class WebConnector(LoadConnector):
             page_text, metadata, images = read_pdf_file(
                 file=io.BytesIO(response.content))
             last_modified = response.headers.get("Last-Modified")
-
+            title = metadata.get("Title") or metadata.get("title")
             result.doc = Document(
                 id=initial_url,
                 sections=[TextSection(link=initial_url, text=page_text)],
                 source=DocumentSource.WEB,
-                semantic_identifier=initial_url.split("/")[-3 if "@@download/file" in initial_url else -1],
+                semantic_identifier=title or initial_url.split("/")[-3 if "@@download/file" in initial_url else -1],
                 metadata=metadata,
                 doc_updated_at=(_get_datetime_from_last_modified_header(
                     last_modified) if last_modified else None),
