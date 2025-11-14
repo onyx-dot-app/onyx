@@ -13,10 +13,10 @@
     <a href="https://docs.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme" target="_blank">
         <img src="https://img.shields.io/badge/docs-view-blue" alt="Documentation" />
     </a>
-    <a href="https://www.onyx.app/" target="_blank">
+    <a href="https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme" target="_blank">
         <img src="https://img.shields.io/website?url=https://www.onyx.app&up_message=visit&up_color=blue" alt="Documentation" />
     </a>
-    <a href="https://github.com/onyx-dot-app/onyx/blob/main/LICENSE?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme" target="_blank">
+    <a href="https://github.com/onyx-dot-app/onyx/blob/main/LICENSE" target="_blank">
         <img src="https://img.shields.io/static/v1?label=license&message=MIT&color=blue" alt="License" />
     </a>
 </p>
@@ -81,7 +81,7 @@ Onyx is built for teams of all sizes, from individual users to the largest globa
 
 
 ## 🚧 Roadmap
-To see ongoing and upcoming projects, check out our [roadmap](https://github.com/orgs/onyx-dot-app/projects/2?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)!
+To see ongoing and upcoming projects, check out our [roadmap](https://github.com/orgs/onyx-dot-app/projects/2)!
 
 
 
