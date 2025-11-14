@@ -5,7 +5,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
-import SimpleModal from "../SimpleModal";
+import RawModal from "../SimpleModal";
 
 const sizeClassNames = {
   main: ["w-[80dvw]", "h-[80dvh]"],
@@ -56,7 +56,7 @@ export default function DefaultModalLayout({
           : "main";
 
   return (
-    <SimpleModal onClose={onClose}>
+    <RawModal onClose={onClose}>
       <div className={cn(sizeClassNames[variant], className)}>
         <div className="flex flex-col gap-2 p-4">
           <div className="flex flex-row items-center justify-between">
@@ -74,6 +74,6 @@ export default function DefaultModalLayout({
         </div>
         {children}
       </div>
-    </SimpleModal>
+    </RawModal>
   );
 }

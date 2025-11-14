@@ -6,7 +6,7 @@ import NewTenantModal from "../modals/NewTenantModal";
 import { User, NewTenantInfo } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { UserSettings } from "@/app/chat/components/modal/UserSettings";
-import SimpleModal from "@/refresh-components/SimpleModal";
+import RawModal from "@/refresh-components/SimpleModal";
 
 type ModalContextType = {
   showNewTeamModal: boolean;
@@ -58,12 +58,12 @@ export const ModalProvider: React.FC<{
       return (
         <>
           {showUserSettingsModal && (
-            <SimpleModal
+            <RawModal
               onClose={() => setShowUserSettingsModal(false)}
               className="w-full max-w-xl mx-4"
             >
               <UserSettings onClose={() => setShowUserSettingsModal(false)} />
-            </SimpleModal>
+            </RawModal>
           )}
         </>
       );
@@ -74,12 +74,12 @@ export const ModalProvider: React.FC<{
         <NewTeamModal />
 
         {showUserSettingsModal && (
-          <SimpleModal
+          <RawModal
             onClose={() => setShowUserSettingsModal(false)}
             className="w-full max-w-xl mx-4"
           >
             <UserSettings onClose={() => setShowUserSettingsModal(false)} />
-          </SimpleModal>
+          </RawModal>
         )}
 
         {/* Modal for users who've been accepted to a new team */}

@@ -10,7 +10,7 @@ export interface SimpleModalProps {
   onClose?: () => void;
 }
 
-export default function SimpleModal({
+export default function RawModal({
   className,
   children,
   onClose,
