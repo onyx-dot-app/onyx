@@ -56,7 +56,6 @@ export default defineConfig({
     },
     {
       name: "tests-that-run-independently-and-serially",
-      testMatch: /.*\/tests\/e2e\/.*independently.*\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 720 },
