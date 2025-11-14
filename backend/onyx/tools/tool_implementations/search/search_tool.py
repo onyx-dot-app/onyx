@@ -544,6 +544,7 @@ def yield_search_responses(
         section_relevance_list=section_relevance_list_impl(
             section_relevance, final_context_sections
         ),
+        existing_input_tokens=0,
         prompt_config=search_tool.prompt_config,
         llm_config=search_tool.llm.config,
         contextual_pruning_config=search_tool.contextual_pruning_config,
