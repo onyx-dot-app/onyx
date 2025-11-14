@@ -1,10 +1,10 @@
-import React from "react";
+import React, { useContext } from "react";
 import Text from "@/refresh-components/texts/Text";
 import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { ModalContext } from "@/refresh-components/contexts/ModalContext";
 
 const sizeClassNames = {
   main: ["w-[80dvw]", "h-[80dvh]"],
@@ -26,6 +26,7 @@ export interface ModalProps {
   description?: string;
   className?: string;
   children?: React.ReactNode;
+  onClose?: () => void;
 }
 
 export default function DefaultModalLayout({
@@ -39,8 +40,16 @@ export default function DefaultModalLayout({
   description,
   children,
   className,
+  onClose: externalOnClose,
 }: ModalProps) {
-  const modal = useModal();
+  const modal = useContext(ModalContext);
+
+  const onClose = modal
+    ? () => {
+        externalOnClose?.();
+        modal.toggle(false);
+      }
+    : externalOnClose;
 
   const variant = main
     ? "main"
@@ -58,11 +67,7 @@ export default function DefaultModalLayout({
         <div className="flex flex-row items-center justify-between">
           <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
           <div data-testid="Modal/close-modal">
-            <IconButton
-              icon={SvgX}
-              internal
-              onClick={() => modal.toggle(false)}
-            />
+            <IconButton icon={SvgX} internal onClick={onClose} />
           </div>
         </div>
         <Text headingH3>{title}</Text>
