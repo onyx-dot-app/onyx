@@ -72,15 +72,14 @@ def test_query_emits_reasoning_and_tool_call_events(
     ]
     context: dict[str, bool] = {}
 
-    events = list(
-        query(
-            llm,
-            messages,
-            tools=[fake_internal_search_tool],
-            context=context,
-            tool_choice=None,
-        )
+    result = query(
+        llm,
+        messages,
+        tools=[fake_internal_search_tool],
+        context=context,
+        tool_choice=None,
     )
+    events = list(result.stream)
 
     model_responses = [e for e in events if isinstance(e, ModelResponseStream)]
     run_item_events = [e for e in events if isinstance(e, RunItemStreamEvent)]
@@ -127,6 +126,23 @@ def test_query_emits_reasoning_and_tool_call_events(
         == "Internal Search results for: new agent framework, agent framework"
     )
 
+    # Verify new_messages contains expected assistant and tool messages
+    assert len(result.new_messages_stateful) == 2
+    assert result.new_messages_stateful[0]["role"] == "assistant"
+    assert result.new_messages_stateful[0]["content"] is None
+    assert len(result.new_messages_stateful[0]["tool_calls"]) == 1
+    assert result.new_messages_stateful[0]["tool_calls"][0]["id"] == call_id
+    assert (
+        result.new_messages_stateful[0]["tool_calls"][0]["function"]["name"]
+        == "internal_search"
+    )
+    assert result.new_messages_stateful[1]["role"] == "tool"
+    assert result.new_messages_stateful[1]["tool_call_id"] == call_id
+    assert (
+        result.new_messages_stateful[1]["content"]
+        == "Internal Search results for: new agent framework, agent framework"
+    )
+
 
 def test_query_emits_message_start_and_done_for_content(
     fake_llm: Callable[[list[ModelResponseStream]], Any],
@@ -144,15 +160,14 @@ def test_query_emits_message_start_and_done_for_content(
 
     llm = fake_llm(responses)
     messages: list[ChatCompletionMessage] = [{"role": "user", "content": "hello"}]
-    events = list(
-        query(
-            llm,
-            messages,
-            tools=[],
-            context={},
-            tool_choice=None,
-        )
+    result = query(
+        llm,
+        messages,
+        tools=[],
+        context={},
+        tool_choice=None,
     )
+    events = list(result.stream)
 
     model_responses = [e for e in events if isinstance(e, ModelResponseStream)]
     run_item_events = [e for e in events if isinstance(e, RunItemStreamEvent)]
@@ -160,6 +175,11 @@ def test_query_emits_message_start_and_done_for_content(
     assert len(model_responses) == 4
     assert len([e for e in run_item_events if e.type == "message_start"]) == 1
     assert len([e for e in run_item_events if e.type == "message_done"]) == 1
+
+    # Verify new_messages contains the assistant's message
+    assert len(result.new_messages_stateful) == 1
+    assert result.new_messages_stateful[0]["role"] == "assistant"
+    assert result.new_messages_stateful[0]["content"] == "What would"
 
 
 def test_query_handles_parallel_tool_calls(
@@ -231,15 +251,14 @@ def test_query_handles_parallel_tool_calls(
     messages: list[ChatCompletionMessage] = [
         {"role": "user", "content": "search for stuff"}
     ]
-    events = list(
-        query(
-            llm,
-            messages,
-            tools=[fake_internal_search_tool, fake_web_search_tool],
-            context=context,
-            tool_choice=None,
-        )
+    result = query(
+        llm,
+        messages,
+        tools=[fake_internal_search_tool, fake_web_search_tool],
+        context=context,
+        tool_choice=None,
     )
+    events = list(result.stream)
 
     model_responses = [e for e in events if isinstance(e, ModelResponseStream)]
     run_item_events = [e for e in events if isinstance(e, RunItemStreamEvent)]
@@ -319,15 +338,14 @@ def test_query_handles_parallel_tool_calls_in_one_event(
     llm = fake_llm(responses)
     context: dict[str, bool] = {}
     messages: list[ChatCompletionMessage] = [{"role": "user", "content": "search"}]
-    events = list(
-        query(
-            llm,
-            messages,
-            tools=[fake_internal_search_tool, fake_web_search_tool],
-            context=context,
-            tool_choice=None,
-        )
+    result = query(
+        llm,
+        messages,
+        tools=[fake_internal_search_tool, fake_web_search_tool],
+        context=context,
+        tool_choice=None,
     )
+    events = list(result.stream)
 
     model_responses = [e for e in events if isinstance(e, ModelResponseStream)]
     run_item_events = [e for e in events if isinstance(e, RunItemStreamEvent)]
@@ -370,6 +388,16 @@ def test_query_handles_parallel_tool_calls_in_one_event(
     assert tool_output_events[1].details.call_id == call_id_2
     assert tool_output_events[1].details.output == "Web Search results for: cheese"
 
+    # Verify new_messages contains expected assistant and tool messages
+    assert len(result.new_messages_stateful) == 3  # 1 assistant + 2 tool responses
+    assert result.new_messages_stateful[0]["role"] == "assistant"
+    assert result.new_messages_stateful[0]["content"] is None
+    assert len(result.new_messages_stateful[0]["tool_calls"]) == 2
+    assert result.new_messages_stateful[1]["role"] == "tool"
+    assert result.new_messages_stateful[1]["tool_call_id"] == call_id_1
+    assert result.new_messages_stateful[2]["role"] == "tool"
+    assert result.new_messages_stateful[2]["tool_call_id"] == call_id_2
+
 
 def test_query_emits_reasoning_done_before_message_start(fake_llm) -> None:
     """Test that query emits reasoning_done before message_start when transitioning from reasoning to message."""
@@ -399,15 +427,14 @@ def test_query_emits_reasoning_done_before_message_start(fake_llm) -> None:
 
     llm = fake_llm(responses)
     messages: list[ChatCompletionMessage] = [{"role": "user", "content": "hello"}]
-    events = list(
-        query(
-            llm,
-            messages,
-            tools=[],
-            context={},
-            tool_choice=None,
-        )
+    result = query(
+        llm,
+        messages,
+        tools=[],
+        context={},
+        tool_choice=None,
     )
+    events = list(result.stream)
 
     model_responses = [e for e in events if isinstance(e, ModelResponseStream)]
     run_item_events = [e for e in events if isinstance(e, RunItemStreamEvent)]
@@ -429,3 +456,8 @@ def test_query_emits_reasoning_done_before_message_start(fake_llm) -> None:
     assert event_indices["reasoning_start"] < event_indices["reasoning_done"]
     assert event_indices["reasoning_done"] < event_indices["message_start"]
     assert event_indices["message_start"] < event_indices["message_done"]
+
+    # Verify new_messages contains the assistant's message
+    assert len(result.new_messages_stateful) == 1
+    assert result.new_messages_stateful[0]["role"] == "assistant"
+    assert result.new_messages_stateful[0]["content"] == "Based on my analysis"

@@ -501,9 +501,7 @@ class LitellmLLM(LLM):
                 # streaming choice
                 stream=stream,
                 # model params
-                temperature=(
-                    1 if "gpt-5" in self.config.model_name else self._temperature
-                ),
+                temperature=(1),
                 timeout=timeout_override or self._timeout,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
@@ -523,14 +521,12 @@ class LitellmLLM(LLM):
                     ]
                     else {}
                 ),
-                # TODO: Figure out how to configure this
-                # thinking={"type": "enabled", "budget_tokens": 10000},
-                # **{"reasoning_effort": "medium"},
                 **(
-                    {"reasoning_effort": "minimal"}
-                    if "gpt-5" in self.config.model_name
+                    {"thinking": {"type": "enabled", "budget_tokens": 10000}}
+                    if reasoning_effort
                     else {}
-                ),  # TODO: remove once LITELLM has better support/we change API
+                ),
+                **({"reasoning_effort": reasoning_effort} if reasoning_effort else {}),
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format
@@ -588,7 +584,7 @@ class LitellmLLM(LLM):
         response = cast(
             ModelResponse,
             self._completion(
-                prompt=prompt,
+                prompt=[],
                 tools=tools,
                 tool_choice=tool_choice,
                 stream=False,
@@ -596,7 +592,7 @@ class LitellmLLM(LLM):
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
                 parallel_tool_calls=False,
-                reasoning_effort="minimal",
+                legacy_prompt=prompt,
             ),
         )
         choice = response.choices[0]
@@ -637,7 +633,7 @@ class LitellmLLM(LLM):
         response = cast(
             CustomStreamWrapper,
             self._completion(
-                prompt=prompt,
+                prompt=[],
                 tools=tools,
                 tool_choice=tool_choice,
                 stream=True,
@@ -646,6 +642,7 @@ class LitellmLLM(LLM):
                 max_tokens=max_tokens,
                 parallel_tool_calls=False,
                 reasoning_effort="minimal",
+                legacy_prompt=prompt,
             ),
         )
         try:
@@ -705,6 +702,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        reasoning_effort: str | None = "medium",
     ) -> ModelResponse:
         from litellm import ModelResponse as LiteLLMModelResponse
 
@@ -724,6 +722,7 @@ class LitellmLLM(LLM):
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
                 parallel_tool_calls=True,
+                reasoning_effort=reasoning_effort,
             ),
         )
 
@@ -737,6 +736,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        reasoning_effort: str | None = "medium",
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from onyx.llm.model_response import from_litellm_model_response_stream
@@ -755,6 +755,7 @@ class LitellmLLM(LLM):
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
                 parallel_tool_calls=True,
+                reasoning_effort=reasoning_effort,
             ),
         )
 
