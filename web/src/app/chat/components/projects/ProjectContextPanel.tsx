@@ -28,9 +28,9 @@ import SvgEdit from "@/icons/edit";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FileCard } from "../input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
-import { useEscapePress } from "@/lib/typingUtils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { FileCardSkeleton } from "@/app/chat/components/input/FileCard";
+import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 
 export default function ProjectContextPanel({
   projectTokenCount = 0,
@@ -49,7 +49,6 @@ export default function ProjectContextPanel({
 
   // Edit project name state
   const [isEditingName, setIsEditingName] = useState(false);
-  const [editingNameValue, setEditingNameValue] = useState("");
   // Convert ProjectFile to MinimalOnyxDocument format for viewing
   const handleOnView = useCallback(
     (file: ProjectFile) => {
@@ -112,40 +111,12 @@ export default function ProjectContextPanel({
   const projectName = currentProject?.name || "Loading project...";
 
   const startEditing = useCallback(() => {
-    setEditingNameValue(projectName);
     setIsEditingName(true);
-  }, [projectName]);
+  }, []);
 
   const cancelEditing = useCallback(() => {
     setIsEditingName(false);
-    setEditingNameValue("");
   }, []);
-
-  const submitRename = useCallback(async () => {
-    const newName = editingNameValue.trim();
-    if (!newName || !currentProjectId || newName === projectName) {
-      cancelEditing();
-      return;
-    }
-
-    // Close immediately for instant feedback
-    cancelEditing();
-
-    // Proceed with the rename operation
-    try {
-      await renameProject(currentProjectId, newName);
-    } catch (error) {
-      console.error("Failed to rename project:", error);
-    }
-  }, [
-    editingNameValue,
-    currentProjectId,
-    projectName,
-    cancelEditing,
-    renameProject,
-  ]);
-
-  useEscapePress(cancelEditing, isEditingName);
 
   if (!currentProjectId) return null; // no selection yet
 
@@ -160,17 +131,15 @@ export default function ProjectContextPanel({
         <SvgFolderOpen className="h-8 w-8 text-text-04" />
         <div className="group flex items-center gap-2">
           {isEditingName ? (
-            <input
-              value={editingNameValue}
-              onChange={(e) => setEditingNameValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.currentTarget.blur();
+            <ButtonRenaming
+              initialName={projectName}
+              onRename={async (newName) => {
+                if (currentProjectId) {
+                  await renameProject(currentProjectId, newName);
                 }
               }}
-              onBlur={submitRename}
-              className="bg-transparent outline-none font-heading-h2 text-text-04 w-full"
-              autoFocus
+              onClose={cancelEditing}
+              className="font-heading-h2 text-text-04"
             />
           ) : (
             <>

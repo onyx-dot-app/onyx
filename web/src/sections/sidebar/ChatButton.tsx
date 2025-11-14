@@ -42,7 +42,7 @@ import {
   showErrorNotification,
   handleMoveOperation,
 } from "@/sections/sidebar/sidebarUtils";
-import ButtonRenaming from "@/sections/sidebar/ButtonRenaming";
+import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { useActiveSidebarTab } from "@/lib/hooks";
 
 // (no local constants; use shared constants/imports)

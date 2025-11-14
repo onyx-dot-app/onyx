@@ -26,7 +26,7 @@ import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { PopoverAnchor } from "@radix-ui/react-popover";
-import ButtonRenaming from "./ButtonRenaming";
+import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { SvgProps } from "@/icons";
 import { useActiveSidebarTab } from "@/lib/hooks";
 import SvgFolderOpen from "@/icons/folder-open";
