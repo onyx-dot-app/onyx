@@ -314,11 +314,6 @@ function AppSidebarInner() {
           leftIcon={SvgEditBig}
           folded={folded}
           onClick={() => {
-            console.log(
-              "combinedSettings?.settings?.disable_default_assistant",
-              combinedSettings?.settings?.disable_default_assistant
-            );
-            console.log("currentAgent", currentAgent);
             if (
               combinedSettings?.settings?.disable_default_assistant &&
               currentAgent

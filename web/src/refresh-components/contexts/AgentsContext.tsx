@@ -96,9 +96,7 @@ export function AgentsProvider({
   const currentAgentId = currentAgentIdRaw ? parseInt(currentAgentIdRaw) : null;
 
   // Get session data from Zustand store
-  console.log("chatId", chatId);
   const chatSessionData = useSession(chatId || "");
-  console.log("sessionData", chatSessionData);
   const sessionPersonaId = chatSessionData?.personaId;
 
   // Fetch chat session if chatId exists but we don't have personaId from store
@@ -114,7 +112,6 @@ export function AgentsProvider({
       return;
     }
   }, [chatId, sessionPersonaId]);
-  console.log("chatSessionPersonaId", chatSessionPersonaId);
 
   // Determine which agent ID to use: prioritize URL assistantId, then fall back to chat session persona_id
   const effectiveAgentId = currentAgentId ?? chatSessionPersonaId;
