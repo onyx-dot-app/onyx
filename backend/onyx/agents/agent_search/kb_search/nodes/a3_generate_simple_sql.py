@@ -169,7 +169,7 @@ def _get_source_documents(
     try:
         llm_response = run_with_timeout(
             KG_SQL_GENERATION_TIMEOUT,
-            llm.invoke,
+            llm.invoke_langchain,
             prompt=msg,
             timeout_override=KG_SQL_GENERATION_TIMEOUT_OVERRIDE,
             max_tokens=KG_SQL_GENERATION_MAX_TOKENS,
@@ -321,7 +321,7 @@ def generate_simple_sql(
         try:
             llm_response = run_with_timeout(
                 KG_SQL_GENERATION_TIMEOUT,
-                primary_llm.invoke,
+                primary_llm.invoke_langchain,
                 prompt=msg,
                 timeout_override=KG_SQL_GENERATION_TIMEOUT_OVERRIDE,
                 max_tokens=KG_SQL_GENERATION_MAX_TOKENS,
@@ -451,7 +451,7 @@ def generate_simple_sql(
             try:
                 llm_response = run_with_timeout(
                     KG_SQL_GENERATION_TIMEOUT,
-                    primary_llm.invoke,
+                    primary_llm.invoke_langchain,
                     prompt=msg,
                     timeout_override=KG_SQL_GENERATION_TIMEOUT_OVERRIDE,
                     max_tokens=KG_SQL_GENERATION_MAX_TOKENS,

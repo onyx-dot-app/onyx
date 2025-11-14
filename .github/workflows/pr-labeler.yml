@@ -27,7 +27,7 @@ jobs:
             echo "::error::❌ Your PR title does not follow the Conventional Commits format.
               This check ensures that all pull requests use clear, consistent titles that help automate changelogs and improve project history.
 
-              Please update your PR title to follow the Conventional Commits style.  
+              Please update your PR title to follow the Conventional Commits style.
               Here is a link to a blog explaining the reason why we've included the Conventional Commits style into our PR titles: https://xfuture-blog.com/working-with-conventional-commits
 
               **Here are some examples of valid PR titles:**

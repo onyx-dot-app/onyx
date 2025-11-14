@@ -162,15 +162,42 @@ TENANT_ID_PREFIX = "tenant_"
 
 DISALLOWED_SLACK_BOT_TENANT_IDS = os.environ.get("DISALLOWED_SLACK_BOT_TENANT_IDS")
 DISALLOWED_SLACK_BOT_TENANT_LIST = (
-    [tenant.strip() for tenant in DISALLOWED_SLACK_BOT_TENANT_IDS.split(",")]
+    [
+        tenant.strip()
+        for tenant in DISALLOWED_SLACK_BOT_TENANT_IDS.split(",")
+        if tenant.strip()
+    ]
     if DISALLOWED_SLACK_BOT_TENANT_IDS
     else None
 )
 
 IGNORED_SYNCING_TENANT_IDS = os.environ.get("IGNORED_SYNCING_TENANT_IDS")
 IGNORED_SYNCING_TENANT_LIST = (
-    [tenant.strip() for tenant in IGNORED_SYNCING_TENANT_IDS.split(",")]
+    [
+        tenant.strip()
+        for tenant in IGNORED_SYNCING_TENANT_IDS.split(",")
+        if tenant.strip()
+    ]
     if IGNORED_SYNCING_TENANT_IDS
+    else None
+)
+
+# Global flag to skip userfile threshold for all users/tenants
+SKIP_USERFILE_THRESHOLD = (
+    os.environ.get("SKIP_USERFILE_THRESHOLD", "").lower() == "true"
+)
+
+# Comma-separated list of specific tenant IDs to skip threshold (multi-tenant only)
+SKIP_USERFILE_THRESHOLD_TENANT_IDS = os.environ.get(
+    "SKIP_USERFILE_THRESHOLD_TENANT_IDS"
+)
+SKIP_USERFILE_THRESHOLD_TENANT_LIST = (
+    [
+        tenant.strip()
+        for tenant in SKIP_USERFILE_THRESHOLD_TENANT_IDS.split(",")
+        if tenant.strip()
+    ]
+    if SKIP_USERFILE_THRESHOLD_TENANT_IDS
     else None
 )
 

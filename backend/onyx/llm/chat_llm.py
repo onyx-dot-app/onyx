@@ -36,10 +36,13 @@ from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import STANDARD_TOOL_CHOICE_OPTIONS
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
+from onyx.llm.model_response import ModelResponse
+from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
@@ -48,7 +51,7 @@ from onyx.utils.long_term_log import LongTermLogger
 logger = setup_logger()
 
 if TYPE_CHECKING:
-    from litellm import ModelResponse, CustomStreamWrapper, Message
+    from litellm import CustomStreamWrapper, Message
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
@@ -244,7 +247,7 @@ def _prompt_to_dict(
         return [_convert_message_to_dict(message) for message in prompt.to_messages()]
 
 
-class DefaultMultiLLM(LLM):
+class LitellmLLM(LLM):
     """Uses Litellm library to allow easy configuration to use a multitude of LLMs
     See https://python.langchain.com/docs/integrations/chat/litellm"""
 
@@ -391,6 +394,8 @@ class DefaultMultiLLM(LLM):
         tools: list[dict] | None,
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
+        parallel_tool_calls: bool,
+        reasoning_effort: str | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -401,6 +406,17 @@ class DefaultMultiLLM(LLM):
         self._record_call(processed_prompt)
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
+
+        tool_choice_formatted: dict[str, Any] | str | None
+        if not tools:
+            tool_choice_formatted = None
+        elif tool_choice and tool_choice not in STANDARD_TOOL_CHOICE_OPTIONS:
+            tool_choice_formatted = {
+                "type": "function",
+                "function": {"name": tool_choice},
+            }
+        else:
+            tool_choice_formatted = tool_choice
 
         try:
             return litellm.completion(
@@ -417,21 +433,19 @@ class DefaultMultiLLM(LLM):
                 # actual input
                 messages=processed_prompt,
                 tools=tools,
-                tool_choice=tool_choice if tools else None,
+                tool_choice=tool_choice_formatted,
                 # streaming choice
                 stream=stream,
                 # model params
                 temperature=(
-                    1
-                    if self.config.model_name in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
-                    else self._temperature
+                    1 if "gpt-5" in self.config.model_name else self._temperature
                 ),
                 timeout=timeout_override or self._timeout,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
                 # or else OpenAI throws an error
                 **(
-                    {"parallel_tool_calls": False}
+                    {"parallel_tool_calls": parallel_tool_calls}
                     if tools
                     and self.config.model_name
                     not in [
@@ -444,15 +458,10 @@ class DefaultMultiLLM(LLM):
                         "o3-mini-2025-01-31",
                     ]
                     else {}
-                ),  # TODO: remove once LITELLM has patched
+                ),
                 **(
                     {"reasoning_effort": "minimal"}
-                    if self.config.model_name
-                    in [
-                        "gpt-5",
-                        "gpt-5-mini",
-                        "gpt-5-nano",
-                    ]
+                    if "gpt-5" in self.config.model_name
                     else {}
                 ),  # TODO: remove once LITELLM has better support/we change API
                 **(
@@ -495,7 +504,7 @@ class DefaultMultiLLM(LLM):
             max_input_tokens=self._max_input_tokens,
         )
 
-    def _invoke_implementation(
+    def _invoke_implementation_langchain(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -519,6 +528,8 @@ class DefaultMultiLLM(LLM):
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
+                parallel_tool_calls=False,
+                reasoning_effort="minimal",
             ),
         )
         choice = response.choices[0]
@@ -530,7 +541,7 @@ class DefaultMultiLLM(LLM):
         else:
             raise ValueError("Unexpected response choice type")
 
-    def _stream_implementation(
+    def _stream_implementation_langchain(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -545,7 +556,7 @@ class DefaultMultiLLM(LLM):
             self.log_model_configs()
 
         if DISABLE_LITELLM_STREAMING:
-            yield self.invoke(
+            yield self.invoke_langchain(
                 prompt,
                 tools,
                 tool_choice,
@@ -566,6 +577,8 @@ class DefaultMultiLLM(LLM):
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
+                parallel_tool_calls=False,
+                reasoning_effort="minimal",
             ),
         )
         try:
@@ -616,3 +629,67 @@ class DefaultMultiLLM(LLM):
                 logger.debug(f"Raw Model Output:\n{log_msg}")
             else:
                 logger.debug(f"Raw Model Output:\n{content}")
+
+    def _invoke_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> ModelResponse:
+        from litellm import ModelResponse as LiteLLMModelResponse
+
+        from onyx.llm.model_response import from_litellm_model_response
+
+        if LOG_ONYX_MODEL_INTERACTIONS:
+            self.log_model_configs()
+
+        response = cast(
+            LiteLLMModelResponse,
+            self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=False,
+                structured_response_format=structured_response_format,
+                timeout_override=timeout_override,
+                max_tokens=max_tokens,
+                parallel_tool_calls=True,
+            ),
+        )
+
+        return from_litellm_model_response(response)
+
+    def _stream_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> Iterator[ModelResponseStream]:
+        from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
+        from onyx.llm.model_response import from_litellm_model_response_stream
+
+        if LOG_ONYX_MODEL_INTERACTIONS:
+            self.log_model_configs()
+
+        response = cast(
+            LiteLLMCustomStreamWrapper,
+            self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=True,
+                structured_response_format=structured_response_format,
+                timeout_override=timeout_override,
+                max_tokens=max_tokens,
+                parallel_tool_calls=True,
+            ),
+        )
+
+        for chunk in response:
+            yield from_litellm_model_response_stream(chunk)

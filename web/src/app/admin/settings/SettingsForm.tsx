@@ -289,6 +289,18 @@ export function SettingsForm() {
         }
       />
 
+      <Checkbox
+        label="Disable Default Assistant"
+        sublabel="When enabled, the 'New Session' button will start a new chat with the current agent instead of the default assistant. The default assistant will be hidden from all users."
+        checked={settings.disable_default_assistant ?? false}
+        onChange={(e) =>
+          handleToggleSettingsField(
+            "disable_default_assistant",
+            e.target.checked
+          )
+        }
+      />
+
       {NEXT_PUBLIC_CLOUD_ENABLED && settings.anonymous_user_enabled && (
         <AnonymousUserPath setPopup={setPopup} />
       )}

@@ -1,9 +1,3 @@
-// Get Onyx Web Version
-const { version: package_version } = require("./package.json"); // version from package.json
-const env_version = process.env.ONYX_VERSION; // version from env variable
-// Use env version if set & valid, otherwise default to package version
-const version = env_version || package_version;
-
 // Always require withSentryConfig
 const { withSentryConfig } = require("@sentry/nextjs");
 
@@ -24,9 +18,6 @@ const cspHeader = `
 const nextConfig = {
   productionBrowserSourceMaps: false,
   output: "standalone",
-  publicRuntimeConfig: {
-    version,
-  },
   transpilePackages: ["@onyx/opal"],
   reactCompiler: true,
   images: {
@@ -66,6 +57,17 @@ const nextConfig = {
             key: "Permissions-Policy",
             value:
               "accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), cross-origin-isolated=(), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=(), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(), midi=(), navigation-override=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(), xr-spatial-tracking=()",
+          },
+        ],
+      },
+      {
+        // Cache static assets (images, icons, fonts, etc.) to prevent refetching and re-renders
+        // This helps eliminate icon flickering and improves performance
+        source: "/_next/static/:path*", // Matches static assets served by Next.js
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable", // Cache for 1 year, mark as immutable
           },
         ],
       },

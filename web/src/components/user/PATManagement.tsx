@@ -13,7 +13,7 @@ import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import {
   Select,
   SelectContent,
@@ -146,7 +146,7 @@ export function PATManagement() {
   return (
     <>
       {tokenToDelete && (
-        <ConfirmationModal
+        <ConfirmationModalLayout
           icon={SvgTrash}
           title="Delete Token"
           onClose={() => setTokenToDelete(null)}
@@ -158,7 +158,7 @@ export function PATManagement() {
         >
           Are you sure you want to delete token &quot;{tokenToDelete.name}
           &quot;? This action cannot be undone.
-        </ConfirmationModal>
+        </ConfirmationModalLayout>
       )}
       <div className="space-y-6">
         {/* Create New Token Form */}

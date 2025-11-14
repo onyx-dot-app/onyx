@@ -9,14 +9,15 @@ on:
 env:
   REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
   DEPLOYMENT: cloud
-  
+
 jobs:
   build:
     runs-on:
       - runs-on
       - runner=${{ matrix.platform == 'linux/amd64' && '8cpu-linux-x64' || '8cpu-linux-arm64' }}
-      - run-id=${{ github.run_id }}
+      - run-id=${{ format('{0}-build-{1}-job-{2}', github.run_id, matrix.platform == 'linux/amd64' && 'linux-amd64' || 'linux-arm64', strategy['job-index']) }}
       - tag=platform-${{ matrix.platform }}
+      - extras=ecr-cache
     strategy:
       fail-fast: false
       matrix:
@@ -25,6 +26,8 @@ jobs:
           - linux/arm64
 
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
       - name: Prepare
         run: |
           platform=${{ matrix.platform }}
@@ -73,8 +76,10 @@ jobs:
             NODE_OPTIONS=--max-old-space-size=8192
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/cloudweb-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/cloudweb-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-${{ env.DEPLOYMENT }}-${{ env.PLATFORM_PAIR }}-cache
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-${{ env.DEPLOYMENT }}-${{ env.PLATFORM_PAIR }}-cache,mode=max
           # no-cache needed due to weird interactions with the builds for different platforms
           # NOTE(rkuo): this may not be true any more with the proper cache prefixing by architecture - currently testing with it off
 
@@ -85,7 +90,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         with:
           name: cloudweb-digests-${{ env.PLATFORM_PAIR }}-${{ github.run_id }}
           path: /tmp/digests/*
@@ -98,7 +103,7 @@ jobs:
       - build
     steps:
       - name: Download digests
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # ratchet:actions/download-artifact@v4
         with:
           path: /tmp/digests
           pattern: cloudweb-digests-*-${{ github.run_id }}

@@ -42,7 +42,7 @@ export interface InputTypeInProps
   // Right section of the input, e.g. password toggle icon
   rightSection?: React.ReactNode;
 
-  placeholder: string;
+  placeholder?: string;
 
   // Controls whether the clear (X) button is shown when there is a value
   showClearButton?: boolean;

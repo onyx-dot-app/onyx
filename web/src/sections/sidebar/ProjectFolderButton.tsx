@@ -16,7 +16,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import SvgTrash from "@/icons/trash";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -28,7 +28,7 @@ import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { SvgProps } from "@/icons";
-import { useActiveSidebarTab } from "@/lib/hooks";
+import { useAppFocus } from "@/lib/hooks";
 import SvgFolderOpen from "@/icons/folder-open";
 
 interface ProjectFolderProps {
@@ -44,7 +44,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isHoveringIcon, setIsHoveringIcon] = useState(false);
-  const activeSidebar = useActiveSidebarTab();
+  const activeSidebar = useAppFocus();
 
   // Make project droppable
   const dropId = `project-${project.id}`;
@@ -105,7 +105,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
     >
       {/* Confirmation Modal (only for deletion) */}
       {deleteConfirmationModalOpen && (
-        <ConfirmationModal
+        <ConfirmationModalLayout
           title="Delete Project"
           icon={SvgTrash}
           onClose={() => setDeleteConfirmationModalOpen(false)}
@@ -123,7 +123,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
         >
           Are you sure you want to delete this project? This action cannot be
           undone.
-        </ConfirmationModal>
+        </ConfirmationModalLayout>
       )}
 
       {/* Project Folder */}

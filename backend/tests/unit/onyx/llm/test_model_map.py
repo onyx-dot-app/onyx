@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import litellm
 
+from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.llm.utils import find_model_obj
 from onyx.llm.utils import get_model_map
 
@@ -77,3 +78,20 @@ def test_no_overwrite_in_model_map() -> None:
         assert result["is_correct"] is True
 
     get_model_map.cache_clear()
+
+
+def test_twelvelabs_pegasus_override_present() -> None:
+    get_model_map.cache_clear()
+    try:
+        model_map = get_model_map()
+        model_obj = find_model_obj(
+            model_map,
+            "twelvelabs",
+            "us.twelvelabs.pegasus-1-2-v1:0",
+        )
+        assert model_obj is not None
+        assert model_obj["max_input_tokens"] == GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+        assert model_obj["max_tokens"] == GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+        assert model_obj["supports_reasoning"] is False
+    finally:
+        get_model_map.cache_clear()

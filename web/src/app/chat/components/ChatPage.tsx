@@ -19,7 +19,6 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
-import { FeedbackModal } from "@/app/chat/components/modal/FeedbackModal";
 import { FiArrowDown } from "react-icons/fi";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -40,14 +39,12 @@ import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import { ChatSearchModal } from "@/app/chat/chat_search/ChatSearchModal";
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useScreenSize } from "@/hooks/useScreenSize";
 import { DocumentResults } from "@/app/chat/components/documentSidebar/DocumentResults";
 import { useChatController } from "@/app/chat/hooks/useChatController";
 import { useAssistantController } from "@/app/chat/hooks/useAssistantController";
 import { useChatSessionController } from "@/app/chat/hooks/useChatSessionController";
 import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
-import { useFeedbackController } from "@/app/chat/hooks/useFeedbackController";
 import {
   useChatSessionStore,
   useMaxTokens,
@@ -87,7 +84,7 @@ interface ChatPageProps {
   firstMessage?: string;
 }
 
-export function ChatPage({
+export default function ChatPage({
   documentSidebarInitialWidth,
   firstMessage,
 }: ChatPageProps) {
@@ -111,14 +108,8 @@ export function ChatPage({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const {
-    chatSessions,
-    ccPairs,
-    tags,
-    documentSets,
-    llmProviders,
-    refreshChatSessions,
-  } = useChatContext();
+  const { chatSessions, ccPairs, tags, documentSets, refreshChatSessions } =
+    useChatContext();
 
   const {
     currentMessageFiles,
@@ -211,18 +202,21 @@ export function ChatPage({
     llmDescriptors,
   } = useOnboardingState();
 
-  // On first render, open onboarding if there are no configured LLM providers.
-  // Intentionally exclude llmProviders from deps to avoid changing the state
-  // when data refreshes.
-  useEffect(() => {
-    setShowOnboarding(llmProviders.length === 0);
-  }, []);
+  const llmManager = useLlmManager(selectedChatSession, liveAssistant);
 
-  const llmManager = useLlmManager(
-    llmProviders,
-    selectedChatSession,
-    liveAssistant
-  );
+  // Track if we've done the initial onboarding check
+  const hasCheckedOnboarding = useRef(false);
+
+  // On first render, open onboarding if there are no configured LLM providers.
+  // Only check once to avoid re-triggering onboarding when data refreshes.
+  useEffect(() => {
+    if (!hasCheckedOnboarding.current) {
+      setShowOnboarding(
+        !llmManager.llmProviders || llmManager.llmProviders.length === 0
+      );
+      hasCheckedOnboarding.current = true;
+    }
+  }, [llmManager.llmProviders]);
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
@@ -280,9 +274,6 @@ export function ChatPage({
 
   const filterManager = useFilters();
   const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
-
-  // Feedback controller with optimistic updates and error handling
-  const { handleFeedbackChange } = useFeedbackController({ setPopup });
 
   const [aboveHorizon, setAboveHorizon] = useState(false);
 
@@ -748,8 +739,6 @@ export function ChatPage({
 
       <ChatPopup />
 
-      <FeedbackModal />
-
       <ChatSearchModal
         open={isChatSearchModalOpen}
         onCloseModal={() => setIsChatSearchModalOpen(false)}
@@ -827,7 +816,6 @@ export function ChatPage({
                       deepResearchEnabled={deepResearchEnabled}
                       currentMessageFiles={currentMessageFiles}
                       setPresentingDocument={setPresentingDocument}
-                      handleFeedbackChange={handleFeedbackChange}
                       onSubmit={onSubmit}
                       onMessageSelection={onMessageSelection}
                       stopGenerating={stopGenerating}
@@ -876,7 +864,7 @@ export function ChatPage({
                       )}
                     >
                       {currentProjectId == null && showCenteredInput && (
-                        <WelcomeMessage />
+                        <WelcomeMessage liveAssistant={liveAssistant} />
                       )}
                       <div
                         className={cn(
@@ -930,8 +918,8 @@ export function ChatPage({
                           textAreaRef={textAreaRef}
                           setPresentingDocument={setPresentingDocument}
                           disabled={
-                            llmProviders.length === 0 ||
-                            (llmProviders.length === 0 &&
+                            llmManager.llmProviders?.length === 0 ||
+                            (llmManager.llmProviders?.length === 0 &&
                               !user?.personalization?.name) ||
                             onboardingState.currentStep !==
                               OnboardingStep.Complete
@@ -951,29 +939,6 @@ export function ChatPage({
                         showCenteredHero && (
                           <div className="mt-6 row-start-3 max-w-[50rem]">
                             <Suggestions onSubmit={onSubmit} />
-                          </div>
-                        )}
-                      {enterpriseSettings &&
-                        enterpriseSettings.custom_lower_disclaimer_content && (
-                          <div className="mobile:hidden mt-4 flex items-center justify-center relative w-[95%] mx-auto">
-                            <div className="text-sm text-text-500 max-w-searchbar-max px-4 text-center">
-                              <MinimalMarkdown
-                                content={
-                                  enterpriseSettings.custom_lower_disclaimer_content
-                                }
-                              />
-                            </div>
-                          </div>
-                        )}
-                      {enterpriseSettings &&
-                        enterpriseSettings.use_custom_logotype && (
-                          <div className="hidden lg:block absolute right-0 bottom-0">
-                            <img
-                              src="/api/enterprise-settings/logotype"
-                              alt="logotype"
-                              style={{ objectFit: "contain" }}
-                              className="w-fit h-8"
-                            />
                           </div>
                         )}
                     </div>
