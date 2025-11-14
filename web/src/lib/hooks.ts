@@ -54,12 +54,16 @@ export function useIsMounted() {
   return mounted;
 }
 
-type ActiveSidebarTab =
+// "AppFocus" is the current part of the main application which is active / focused on.
+// Namely, if the URL is pointing towards a "chat", then a `{ type: "chat", id: "..." }` is returned.
+//
+// This is useful in determining what `SidebarTab` should be active, for example.
+type AppFocus =
   | { type: "agent" | "project" | "chat"; id: string }
   | "new-session"
   | "more-agents";
 
-export function useActiveSidebarTab(): ActiveSidebarTab {
+export function useAppFocus(): AppFocus {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 

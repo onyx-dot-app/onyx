@@ -61,6 +61,12 @@ const EntityConfigDialog = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isOpen) {
+      setEntities(currentEntities || {});
+    }
+  }, [currentEntities, isOpen]);
+
+  useEffect(() => {
     if (isOpen && connectorId) {
       const fetchEntitySchema = async () => {
         setIsLoading(true);

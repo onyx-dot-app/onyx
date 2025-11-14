@@ -32,6 +32,6 @@ types-regex==2023.3.23.1
 types-requests==2.32.0.20250328
 types-retry==0.9.9.3
 types-setuptools==68.0.0.3
-types-urllib3==1.26.25.11
+types-urllib3==1.26.25.14
 voyageai==0.2.3
 ipykernel==6.29.5

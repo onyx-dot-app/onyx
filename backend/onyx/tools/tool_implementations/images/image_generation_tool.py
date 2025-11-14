@@ -24,6 +24,7 @@ from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.prompt import (
     build_image_generation_user_prompt,
@@ -179,7 +180,9 @@ class ImageGenerationTool(Tool[None]):
             chat_history=history_str,
             final_query=query,
         )
-        use_image_generation_tool_output = message_to_string(llm.invoke(prompt))
+        use_image_generation_tool_output = message_to_string(
+            llm.invoke_langchain(prompt)
+        )
 
         logger.debug(
             f"Evaluated if should use ImageGenerationTool: {use_image_generation_tool_output}"
@@ -190,6 +193,14 @@ class ImageGenerationTool(Tool[None]):
             return args
 
         return None
+
+    def run_v2(
+        self,
+        run_context: RunContextWrapper[Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        raise NotImplementedError("ImageGenerationTool.run_v2 is not implemented.")
 
     def build_tool_message_content(
         self, *args: ToolResponse

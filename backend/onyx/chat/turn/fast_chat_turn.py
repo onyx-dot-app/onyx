@@ -168,6 +168,9 @@ def _run_agent_loop(
         )
 
         # 3. Assign citation numbers to tool call outputs
+        # Instead of doing this complex parsing from the tool call response,
+        # I could have just used the ToolCallOutput event from the Agents SDK.
+        # TODO: When agent framework is gone, I can just use our ToolCallOutput event.
         citation_result = assign_citation_numbers_recent_tool_calls(
             agent_turn_messages, ctx
         )

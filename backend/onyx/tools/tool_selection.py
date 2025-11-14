@@ -57,7 +57,7 @@ def select_single_tool_for_non_tool_calling_llm(
     prompt = SINGLE_TOOL_SELECTION_PROMPT.format(
         tool_list=tool_list_str, chat_history=history_str, query=query
     )
-    output = message_to_string(llm.invoke(prompt))
+    output = message_to_string(llm.invoke_langchain(prompt))
     try:
         # First try to match the number
         number_match = re.search(r"\d+", output)

@@ -1,6 +1,7 @@
 import abc
 from collections.abc import Iterator
 from typing import Literal
+from typing import Union
 
 from braintrust import traced
 from langchain.schema.language_model import LanguageModelInput
@@ -8,15 +9,17 @@ from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 
+from onyx.agents.agent_framework.models import ModelResponseStream
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_INDIVIDUAL_MODEL_TOKENS
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
+from onyx.llm.model_response import ModelResponse
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
-ToolChoiceOptions = Literal["required"] | Literal["auto"] | Literal["none"]
+STANDARD_TOOL_CHOICE_OPTIONS = ("required", "auto", "none")
+ToolChoiceOptions = Union[Literal["required", "auto", "none"], str]
 
 
 class LLMConfig(BaseModel):
@@ -96,11 +99,30 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+    ) -> "ModelResponse":
+        return self._invoke_implementation(
+            prompt,
+            tools,
+            tool_choice,
+            structured_response_format,
+            timeout_override,
+            max_tokens,
+        )
+
+    @traced(name="invoke llm", type="llm")
+    def invoke_langchain(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> BaseMessage:
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
         # implementation
-        return self._invoke_implementation(
+        return self._invoke_implementation_langchain(
             prompt,
             tools,
             tool_choice,
@@ -111,6 +133,30 @@ class LLM(abc.ABC):
 
     @abc.abstractmethod
     def _invoke_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> "ModelResponse":
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _stream_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> Iterator[ModelResponseStream]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _invoke_implementation_langchain(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -129,11 +175,29 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+    ) -> Iterator[ModelResponseStream]:
+        return self._stream_implementation(
+            prompt,
+            tools,
+            tool_choice,
+            structured_response_format,
+            timeout_override,
+            max_tokens,
+        )
+
+    def stream_langchain(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> Iterator[BaseMessage]:
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
         # implementation
-        messages = self._stream_implementation(
+        messages = self._stream_implementation_langchain(
             prompt,
             tools,
             tool_choice,
@@ -152,7 +216,7 @@ class LLM(abc.ABC):
             logger.debug(f"Model Tokens: {tokens}")
 
     @abc.abstractmethod
-    def _stream_implementation(
+    def _stream_implementation_langchain(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,

@@ -12,7 +12,7 @@ import { getAgentIcon } from "@/sections/sidebar/utils";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import SvgX from "@/icons/x";
-import { useActiveSidebarTab, useIsMounted } from "@/lib/hooks";
+import { useAppFocus, useIsMounted } from "@/lib/hooks";
 
 interface SortableItemProps {
   id: number;
@@ -50,7 +50,7 @@ interface AgentButtonProps {
 
 function AgentButtonInner({ agent }: AgentButtonProps) {
   const route = useAppRouter();
-  const activeSidebarTab = useActiveSidebarTab();
+  const activeSidebarTab = useAppFocus();
   const { pinnedAgents, togglePinnedAgent } = useAgentsContext();
   const pinned = pinnedAgents.some(
     (pinnedAgent) => pinnedAgent.id === agent.id

@@ -62,7 +62,7 @@ import { ChatSession } from "@/app/chat/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import SvgSettings from "@/icons/settings";
-import { useActiveSidebarTab } from "@/lib/hooks";
+import { useAppFocus } from "@/lib/hooks";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -306,21 +306,32 @@ function AppSidebarInner() {
   );
 
   const { isAdmin, isCurator } = useUser();
-  const activeSidebarTab = useActiveSidebarTab();
+  const activeSidebarTab = useAppFocus();
   const newSessionButton = useMemo(
     () => (
       <div data-testid="AppSidebar/new-session">
         <SidebarTab
           leftIcon={SvgEditBig}
           folded={folded}
-          onClick={() => route({})}
+          onClick={() => {
+            if (
+              combinedSettings?.settings?.disable_default_assistant &&
+              currentAgent
+            ) {
+              // Navigate to new chat with current assistant
+              route({ assistantId: currentAgent.id });
+            } else {
+              // Current behavior - go to default assistant
+              route({});
+            }
+          }}
           active={activeSidebarTab === "new-session"}
         >
           New Session
         </SidebarTab>
       </div>
     ),
-    [folded, route, activeSidebarTab]
+    [folded, route, activeSidebarTab, combinedSettings, currentAgent]
   );
   const moreAgentsButton = useMemo(
     () => (

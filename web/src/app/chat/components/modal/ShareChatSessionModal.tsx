@@ -12,7 +12,6 @@ import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { cn } from "@/lib/utils";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useSearchParams } from "next/navigation";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useChatSessionStore } from "@/app/chat/stores/useChatSessionStore";
 import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
 import SvgShare from "@/icons/share";

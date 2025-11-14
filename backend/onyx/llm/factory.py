@@ -20,7 +20,7 @@ from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Persona
 from onyx.db.models import User
-from onyx.llm.chat_llm import DefaultMultiLLM
+from onyx.llm.chat_llm import LitellmLLM
 from onyx.llm.chat_llm import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.chat_llm import VERTEX_LOCATION_KWARG
 from onyx.llm.exceptions import GenAIDisabledException
@@ -436,7 +436,7 @@ def get_llm(
     if provider_extra_headers:
         extra_headers.update(provider_extra_headers)
 
-    return DefaultMultiLLM(
+    return LitellmLLM(
         model_provider=provider,
         model_name=model,
         deployment_name=deployment_name,
