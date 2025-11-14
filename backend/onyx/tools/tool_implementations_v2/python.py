@@ -47,7 +47,7 @@ def _python_execution_core(
     emitter.emit(
         Packet(
             ind=index,
-            obj=PythonToolStart(type="python_tool_start"),
+            obj=PythonToolStart(type="python_tool_start", code=code),
         )
     )
 

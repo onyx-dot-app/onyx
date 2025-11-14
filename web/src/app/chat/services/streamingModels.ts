@@ -95,6 +95,7 @@ export interface ImageGenerationToolDelta extends BaseObj {
 
 export interface PythonToolStart extends BaseObj {
   type: "python_tool_start";
+  code: string;
 }
 
 export interface PythonToolDelta extends BaseObj {

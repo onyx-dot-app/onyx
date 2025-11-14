@@ -21,6 +21,7 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
     (packet) => packet.obj.type === PacketType.SECTION_END
   )?.obj as SectionEnd | null;
 
+  const code = pythonStart?.code || "";
   const stdout = pythonDeltas
     .map((delta) => delta?.stdout || "")
     .filter((s) => s)
@@ -35,6 +36,7 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
   const hasError = stderr.length > 0;
 
   return {
+    code,
     stdout,
     stderr,
     fileIds,
@@ -50,7 +52,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   renderType,
   children,
 }) => {
-  const { stdout, stderr, fileIds, isExecuting, isComplete, hasError } =
+  const { code, stdout, stderr, fileIds, isExecuting, isComplete, hasError } =
     constructCurrentPythonState(packets);
 
   useEffect(() => {
@@ -109,6 +111,16 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
           : "Python execution completed",
         content: (
           <div className="flex flex-col my-1 space-y-2">
+            {code && (
+              <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 p-3 border border-blue-200 dark:border-blue-800">
+                <div className="text-xs font-semibold mb-1 text-blue-600 dark:text-blue-400">
+                  Code:
+                </div>
+                <pre className="text-sm whitespace-pre-wrap font-mono text-blue-900 dark:text-blue-100">
+                  {code}
+                </pre>
+              </div>
+            )}
             {stdout && (
               <div className="rounded-md bg-gray-100 dark:bg-gray-800 p-3">
                 <div className="text-xs font-semibold mb-1 text-gray-600 dark:text-gray-400">

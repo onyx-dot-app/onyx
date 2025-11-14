@@ -88,6 +88,7 @@ class ImageGenerationToolHeartbeat(BaseObj):
 
 class PythonToolStart(BaseObj):
     type: Literal["python_tool_start"] = "python_tool_start"
+    code: str
 
 
 class PythonToolDelta(BaseObj):
