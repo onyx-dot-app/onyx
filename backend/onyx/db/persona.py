@@ -24,6 +24,7 @@ from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.models import DocumentSet
+from onyx.db.models import LangflowFileNode
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
@@ -37,8 +38,6 @@ from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
 from onyx.db.models import UserGroup
 from onyx.db.models import Validator
-from onyx.db import crud_validator
-from onyx.db.models import LangflowFileNode
 from onyx.db.notification import create_notification
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -528,7 +527,9 @@ def upsert_persona(
             .filter(Validator.id.in_(validator_ids))
             .all()  # загружаем объекты Validator по переданным validator_ids
         )
-        if not validators and validator_ids:  # проверка, что все запрошенные валидаторы существуют
+        if (
+            not validators and validator_ids
+        ):  # проверка, что все запрошенные валидаторы существуют
             raise ValueError("validators not found")
 
         # Проверка подключения к ассистенту валидаторов
@@ -541,7 +542,7 @@ def upsert_persona(
                     detail=(
                         f"Вы пытаетесь подключить несколько типов валидаторов "
                         f"с одинаковой функциональностью: {validator.name}"
-                    )
+                    ),
                 )
             seen.add(validator.validator_type)
 
@@ -624,15 +625,15 @@ def upsert_persona(
             existing_persona.user_folders = user_folders or []
 
         if langflow_file_nodes is not None:
-                    # Удаляем старые связи
-                    db_session.query(LangflowFileNode).filter(
-                        LangflowFileNode.persona_id == existing_persona.id
-                    ).delete(synchronize_session=False)
-                    # Добавляем новые
-                    existing_persona.langflow_file_nodes = [
-                        LangflowFileNode(file_node_id=node["file_node_id"])
-                        for node in langflow_file_nodes
-                    ]
+            # Удаляем старые связи
+            db_session.query(LangflowFileNode).filter(
+                LangflowFileNode.persona_id == existing_persona.id
+            ).delete(synchronize_session=False)
+            # Добавляем новые
+            existing_persona.langflow_file_nodes = [
+                LangflowFileNode(file_node_id=node["file_node_id"])
+                for node in langflow_file_nodes
+            ]
 
         # Если передали validator_ids:
         # - удаляем старые связи ассистента с валидаторами, то есть отвязываем их;
@@ -695,10 +696,14 @@ def upsert_persona(
             pipeline_id=pipeline_id,
             template_file=template_file,
             validators=validators or [],
-            langflow_file_nodes=[
-                LangflowFileNode(file_node_id=node["file_node_id"])
-                for node in langflow_file_nodes
-            ] if langflow_file_nodes else [],
+            langflow_file_nodes=(
+                [
+                    LangflowFileNode(file_node_id=node["file_node_id"])
+                    for node in langflow_file_nodes
+                ]
+                if langflow_file_nodes
+                else []
+            ),
         )
         db_session.add(new_persona)
         persona = new_persona
@@ -782,6 +787,7 @@ def get_persona_by_id(
         .outerjoin(Persona.users)
         .outerjoin(UserGroup.user_group_relationships)
         .where(Persona.id == persona_id)
+        .options(selectinload(Persona.langflow_file_nodes))
     )
 
     if not include_deleted:

@@ -12,10 +12,8 @@ from onyx.db.models import StarterMessage
 from onyx.server.features.document_set.models import DocumentSet
 from onyx.server.features.guardrails.core.schemas_validator import ValidatorResponse
 from onyx.server.features.tool.models import ToolSnapshot
-from onyx.server.models import (
-    MinimalUserSnapshot,
-    MinimalUserGroupSnapshot,
-)
+from onyx.server.models import MinimalUserGroupSnapshot
+from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
 
 
@@ -181,6 +179,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
     prompts: list[PromptSnapshot] = Field(default_factory=list)
     llm_relevance_filter: bool = False
     llm_filter_extraction: bool = False
+    langflow_file_nodes: list[dict[str, str]] = Field(default_factory=list)
 
     @classmethod
     def from_model(
@@ -239,6 +238,14 @@ class FullPersonaSnapshot(PersonaSnapshot):
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
             num_chunks=persona.num_chunks,
+            langflow_file_nodes=(
+                [
+                    {"file_node_id": node.file_node_id}
+                    for node in persona.langflow_file_nodes
+                ]
+                if persona.langflow_file_nodes
+                else []
+            ),
         )
 
 
