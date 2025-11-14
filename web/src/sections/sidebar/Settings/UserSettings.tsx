@@ -34,7 +34,6 @@ import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import Text from "@/refresh-components/texts/Text";
 import SvgXOctagon from "@/icons/x-octagon";
 import { PATManagement } from "@/components/user/PATManagement";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
 import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import SvgSettings from "@/icons/settings";
 
@@ -46,7 +45,6 @@ type SettingsSection =
   | "tokens";
 
 export default function UserSettings() {
-  const modal = useModal();
   const {
     refreshUser,
     user,
@@ -173,9 +171,6 @@ export default function UserSettings() {
     }
   }, []);
 
-  const defaultModelDestructured = defaultModel
-    ? parseLlmDescriptor(defaultModel)
-    : null;
   const modelOptionsByProvider = new Map<
     string,
     { name: string; value: string }[]
@@ -327,6 +322,7 @@ export default function UserSettings() {
       setIsLoading(false);
     }
   };
+
   const pathname = usePathname();
 
   const handleDeleteAllChats = async () => {
