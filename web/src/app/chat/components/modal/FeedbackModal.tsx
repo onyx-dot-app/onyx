@@ -55,14 +55,17 @@ export default function FeedbackModal({
     const feedbackText =
       fieldInputRef.current?.value || predefinedFeedback || "";
 
-    await handleFeedbackChange(
+    const success = await handleFeedbackChange(
       messageId,
       feedbackType,
       feedbackText,
       predefinedFeedback
     );
 
-    modal.toggle(false);
+    // Only close modal if submission was successful
+    if (success) {
+      modal.toggle(false);
+    }
   }, [
     predefinedFeedback,
     feedbackType,
