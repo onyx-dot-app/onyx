@@ -1113,7 +1113,13 @@ async def _get_or_create_user_from_jwt(
         )
         return None
 
-    user_db = SQLAlchemyUserAdminDB(async_db_session, User, OAuthAccount)
+    # Enforce the same allowlist/domain policies as other auth flows
+    verify_email_is_invited(email)
+    verify_email_domain(email)
+
+    user_db: SQLAlchemyUserAdminDB[User, uuid.UUID] = SQLAlchemyUserAdminDB(
+        async_db_session, User, OAuthAccount
+    )
     user_manager = UserManager(user_db)
 
     try:

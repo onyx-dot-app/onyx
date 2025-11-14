@@ -1,5 +1,6 @@
 from datetime import datetime
 from datetime import timezone
+from typing import Any
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 
@@ -14,15 +15,28 @@ async def test_get_or_create_user_updates_expiry(
 ) -> None:
     """Existing web-login users should be returned and their expiry synced."""
     monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", True)
+    invited_checked: dict[str, str] = {}
+
+    def mark_invited(value: str) -> None:
+        invited_checked["email"] = value
+
+    domain_checked: dict[str, str] = {}
+
+    def mark_domain(value: str) -> None:
+        domain_checked["email"] = value
+
+    monkeypatch.setattr(users_module, "verify_email_is_invited", mark_invited)
+    monkeypatch.setattr(users_module, "verify_email_domain", mark_domain)
     email = "jwt-user@example.com"
-    payload = {"email": email, "exp": 1_700_000_000}
+    exp_value = 1_700_000_000
+    payload: dict[str, Any] = {"email": email, "exp": exp_value}
 
     existing_user = MagicMock()
     existing_user.email = email
     existing_user.oidc_expiry = None
     existing_user.role.is_web_login.return_value = True  # type: ignore[attr-defined]
 
-    manager_holder: dict[str, users_module.UserManager] = {}
+    manager_holder: dict[str, Any] = {}
 
     class StubUserManager:
         def __init__(self, _user_db: object) -> None:
@@ -46,7 +60,9 @@ async def test_get_or_create_user_updates_expiry(
     )
 
     assert result is existing_user
-    expected_expiry = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+    assert invited_checked["email"] == email
+    assert domain_checked["email"] == email
+    expected_expiry = datetime.fromtimestamp(exp_value, tz=timezone.utc)
     instance = manager_holder["instance"]
     instance.user_db.update.assert_awaited_once_with(  # type: ignore[attr-defined]
         existing_user, {"oidc_expiry": expected_expiry}
@@ -68,8 +84,10 @@ async def test_get_or_create_user_provisions_new_user(
 
     monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", False)
     monkeypatch.setattr(users_module, "generate_password", lambda: "TempPass123!")
+    monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
+    monkeypatch.setattr(users_module, "verify_email_domain", lambda _: None)
 
-    recorded: dict[str, object] = {}
+    recorded: dict[str, Any] = {}
 
     class StubUserManager:
         def __init__(self, _user_db: object) -> None:
