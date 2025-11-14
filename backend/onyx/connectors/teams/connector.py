@@ -113,6 +113,9 @@ class TeamsConnector(
                 "client-side filtering during data retrieval."
             )
 
+        # Minimal validation: just check if we can access the teams endpoint
+        timeout = 10  # Short timeout for basic validation
+
         try:
             # For validation, do a lightweight check instead of full team search
             logger.info(
@@ -120,15 +123,15 @@ class TeamsConnector(
                 f"Has special chars: {has_special_chars}"
             )
 
-            # Minimal validation: just check if we can access the teams endpoint
-            timeout = 10  # Short timeout for basic validation
             validation_query = self.graph_client.teams.get().top(1)
             run_with_timeout(
                 timeout=timeout,
                 func=lambda: validation_query.execute_query(),
             )
 
-            logger.info("Teams validation successful - Access to teams endpoint confirmed")
+            logger.info(
+                "Teams validation successful - Access to teams endpoint confirmed"
+            )
 
         except TimeoutError as e:
             raise ConnectorValidationError(
@@ -261,7 +264,9 @@ class TeamsConnector(
 
         for team in teams:
             if not team.id:
-                logger.warning(f"Expected a team with an id, instead got no id: {team=}")
+                logger.warning(
+                    f"Expected a team with an id, instead got no id: {team=}"
+                )
                 continue
 
             channels = _collect_all_channels_from_team(
@@ -329,7 +334,9 @@ def _has_odata_incompatible_chars(team_names: list[str] | None) -> bool:
     return any(char in name for name in team_names for char in ["&", "(", ")"])
 
 
-def _can_use_odata_filter(team_names: list[str] | None) -> tuple[bool, list[str], list[str]]:
+def _can_use_odata_filter(
+    team_names: list[str] | None,
+) -> tuple[bool, list[str], list[str]]:
     """Determine which teams can use OData filtering vs client-side filtering.
 
     Microsoft Graph /teams endpoint OData limitations:
@@ -547,7 +554,9 @@ def _collect_all_teams(
         except (ClientRequestException, ValueError) as e:
             # If OData filter fails, fall back to client-side filtering
             if not use_client_side_filtering and odata_filter:
-                logger.warning(f"OData filter failed: {e}. Falling back to client-side filtering.")
+                logger.warning(
+                    f"OData filter failed: {e}. Falling back to client-side filtering."
+                )
                 use_client_side_filtering = True
                 odata_filter = None
                 teams = []
@@ -568,7 +577,9 @@ def _collect_all_teams(
         # For client-side filtering, check if we found all requested teams or hit page limit
         if use_client_side_filtering:
             page_count += 1
-            found_team_names = {team.display_name for team in teams if team.display_name}
+            found_team_names = {
+                team.display_name for team in teams if team.display_name
+            }
             requested_set = set(requested)
 
             # Log progress every 10 pages to avoid excessive logging
@@ -610,13 +621,17 @@ def _normalize_team_name(name: str) -> str:
     return name.lower().strip()
 
 
-def _matches_requested_team(team_display_name: str, requested: list[str]) -> bool:
+def _matches_requested_team(
+    team_display_name: str, requested: list[str] | None
+) -> bool:
     """Check if team display name matches any of the requested team names.
 
     Uses flexible matching to handle slight variations in team names.
     """
     if not requested or not team_display_name:
-        return not requested  # If no teams requested, match all; if no name, don't match
+        return (
+            not requested
+        )  # If no teams requested, match all; if no name, don't match
 
     normalized_team_name = _normalize_team_name(team_display_name)
 
@@ -633,17 +648,23 @@ def _matches_requested_team(team_display_name: str, requested: list[str]) -> boo
         requested_words = set(normalized_requested.split())
 
         # If the requested name has special characters, split on those too
-        for char in ['&', '(', ')']:
+        for char in ["&", "(", ")"]:
             if char in normalized_requested:
                 # Split on special characters and add words
-                parts = normalized_requested.replace(char, ' ').split()
+                parts = normalized_requested.replace(char, " ").split()
                 requested_words.update(parts)
 
         # Remove very short words that aren't meaningful
-        meaningful_requested_words = {word for word in requested_words if len(word) >= 3}
+        meaningful_requested_words = {
+            word for word in requested_words if len(word) >= 3
+        }
 
         # Check if team name contains most of the meaningful words
-        if meaningful_requested_words and len(meaningful_requested_words & team_words) >= len(meaningful_requested_words) * 0.7:
+        if (
+            meaningful_requested_words
+            and len(meaningful_requested_words & team_words)
+            >= len(meaningful_requested_words) * 0.7
+        ):
             return True
 
     return False
