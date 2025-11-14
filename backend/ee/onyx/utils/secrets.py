@@ -6,7 +6,7 @@ from fastapi import Request
 from onyx.configs.constants import SESSION_KEY
 
 
-def _compute_sha256_hash(text: str) -> str:
+def compute_sha256_hash(text: str) -> str:
     """Вычисляет SHA-256 хеш строки."""
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
@@ -16,4 +16,4 @@ def extract_hashed_cookie(request: Request) -> Optional[str]:
     raw_cookie = request.cookies.get(SESSION_KEY)
     if not raw_cookie:
         return None
-    return _compute_sha256_hash(raw_cookie)
+    return compute_sha256_hash(raw_cookie)

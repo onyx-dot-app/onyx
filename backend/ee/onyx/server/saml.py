@@ -19,7 +19,7 @@ from ee.onyx.configs.app_configs import SAML_CONF_DIR
 from ee.onyx.db.saml import expire_saml_account
 from ee.onyx.db.saml import get_saml_account
 from ee.onyx.db.saml import upsert_saml_account
-from ee.onyx.utils.secrets import encrypt_string
+from ee.onyx.utils.secrets import compute_sha256_hash
 from ee.onyx.utils.secrets import extract_hashed_cookie
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
@@ -156,7 +156,7 @@ async def saml_login_callback(
 
     # Generate a random session cookie and Sha256 encrypt before saving
     session_cookie = secrets.token_hex(16)
-    saved_cookie = encrypt_string(session_cookie)
+    saved_cookie = compute_sha256_hash(session_cookie)
 
     upsert_saml_account(user_id=user.id, cookie=saved_cookie, db_session=db_session)
 
