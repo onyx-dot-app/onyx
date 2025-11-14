@@ -17,11 +17,15 @@ FROM base AS builder
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# pull in source code / package.json / package-lock.json
-COPY . .
+# Copy package files first for better layer caching
+# This layer will be cached unless package.json or package-lock.json changes
+COPY package.json package-lock.json ./
 
 # Install dependencies
 RUN npm ci
+
+# pull in source code / package.json / package-lock.json
+COPY . .
 
 # needed to get the `standalone` dir we expect later
 ENV NEXT_PRIVATE_STANDALONE=true
@@ -64,7 +68,7 @@ ARG NEXT_PUBLIC_CLOUD_ENABLED
 ENV NEXT_PUBLIC_CLOUD_ENABLED=${NEXT_PUBLIC_CLOUD_ENABLED}
 
 ARG NEXT_PUBLIC_SENTRY_DSN
-ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN} 
+ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 
 ARG NEXT_PUBLIC_GTM_ENABLED
 ENV NEXT_PUBLIC_GTM_ENABLED=${NEXT_PUBLIC_GTM_ENABLED}
@@ -93,8 +97,8 @@ WORKDIR /app
 # global modules may be outdated and trigger security scans.
 RUN rm -rf /usr/local/lib/node_modules
 
-# Not needed, set by compose 
-# ENV NODE_ENV production  
+# Not needed, set by compose
+# ENV NODE_ENV production
 
 # Disable automatic telemetry collection
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -147,7 +151,7 @@ ARG NEXT_PUBLIC_CLOUD_ENABLED
 ENV NEXT_PUBLIC_CLOUD_ENABLED=${NEXT_PUBLIC_CLOUD_ENABLED}
 
 ARG NEXT_PUBLIC_SENTRY_DSN
-ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN} 
+ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 
 ARG NEXT_PUBLIC_GTM_ENABLED
 ENV NEXT_PUBLIC_GTM_ENABLED=${NEXT_PUBLIC_GTM_ENABLED}
@@ -161,8 +165,8 @@ ENV NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=${NEXT_PUBLIC_INCLUDE_ERROR_POP
 ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 
-# Note: Don't expose ports here, Compose will handle that for us if necessary. 
-# If you want to run this without compose, specify the ports to 
+# Note: Don't expose ports here, Compose will handle that for us if necessary.
+# If you want to run this without compose, specify the ports to
 # expose via cli
 
 CMD ["node", "server.js"]
