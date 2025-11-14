@@ -19,7 +19,6 @@ import {
 import { Loader2, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import Button from "@/refresh-components/buttons/Button";
-import { Input } from "@/components/ui/input";
 import { deleteAllChatSessions } from "@/app/chat/services/lib";
 import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
@@ -36,6 +35,7 @@ import SvgXOctagon from "@/icons/x-octagon";
 import { PATManagement } from "@/components/user/PATManagement";
 import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import SvgSettings from "@/icons/settings";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 
 type SettingsSection =
   | "general"
@@ -531,10 +531,10 @@ export default function UserSettings() {
               </div>
             )}
             {activeSection === "personalization" && (
-              <div className="space-y-6">
+              <div className="flex flex-col gap-4">
                 <div>
                   <h3 className="text-lg font-medium">Name</h3>
-                  <Input
+                  <InputTypeIn
                     value={personalizationValues.name}
                     onChange={(event) =>
                       updatePersonalizationField("name", event.target.value)
@@ -553,7 +553,7 @@ export default function UserSettings() {
                 </div>
                 <div>
                   <h3 className="text-lg font-medium">Role</h3>
-                  <Input
+                  <InputTypeIn
                     value={personalizationValues.role}
                     onChange={(event) =>
                       updatePersonalizationField("role", event.target.value)
@@ -639,7 +639,7 @@ export default function UserSettings() {
                     >
                       Current Password
                     </label>
-                    <Input
+                    <InputTypeIn
                       id="currentPassword"
                       type="password"
                       value={currentPassword}
@@ -655,7 +655,7 @@ export default function UserSettings() {
                     >
                       New Password
                     </label>
-                    <Input
+                    <InputTypeIn
                       id="newPassword"
                       type="password"
                       value={newPassword}
@@ -671,7 +671,7 @@ export default function UserSettings() {
                     >
                       Confirm New Password
                     </label>
-                    <Input
+                    <InputTypeIn
                       id="confirmPassword"
                       type="password"
                       value={confirmPassword}
