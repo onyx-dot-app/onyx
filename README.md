@@ -1,23 +1,23 @@
 <a name="readme-top"></a>
 
 <h2 align="center">
-    <a href="https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme"> <img width="50%" src="https://github.com/onyx-dot-app/onyx/blob/logo/OnyxLogoCropped.jpg?raw=true)" /></a>
+    <a href="https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme"> <img width="50%" src="https://github.com/onyx-dot-app/onyx/blob/logo/OnyxLogoCropped.jpg?raw=true" /></a>
 </h2>
 
 <p align="center">Open Source AI Platform</p>
 
 <p align="center">
     <a href="https://discord.gg/TDJ59cGV2X" target="_blank">
-        <img src="https://img.shields.io/badge/discord-join-blue.svg?logo=discord&logoColor=white" alt="Discord">
+        <img src="https://img.shields.io/badge/discord-join-blue.svg?logo=discord&logoColor=white" alt="Discord" />
     </a>
     <a href="https://docs.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme" target="_blank">
-        <img src="https://img.shields.io/badge/docs-view-blue" alt="Documentation">
+        <img src="https://img.shields.io/badge/docs-view-blue" alt="Documentation" />
     </a>
     <a href="https://www.onyx.app/" target="_blank">
-        <img src="https://img.shields.io/website?url=https://www.onyx.app&up_message=visit&up_color=blue" alt="Documentation">
+        <img src="https://img.shields.io/website?url=https://www.onyx.app&up_message=visit&up_color=blue" alt="Documentation" />
     </a>
     <a href="https://github.com/onyx-dot-app/onyx/blob/main/LICENSE?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme" target="_blank">
-        <img src="https://img.shields.io/static/v1?label=license&message=MIT&color=blue" alt="License">
+        <img src="https://img.shields.io/static/v1?label=license&message=MIT&color=blue" alt="License" />
     </a>
 </p>
 
