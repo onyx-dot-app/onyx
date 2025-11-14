@@ -7,7 +7,7 @@ from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import save_files
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
+from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -98,7 +98,7 @@ def _image_generation_core(
     emitter.emit(
         Packet(
             ind=index,
-            obj=ImageGenerationToolDelta(
+            obj=ImageGenerationFinal(
                 type="image_generation_tool_delta", images=generated_images
             ),
         )

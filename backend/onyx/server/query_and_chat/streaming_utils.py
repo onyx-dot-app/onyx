@@ -18,11 +18,11 @@ from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import EndStepPacketList
-from onyx.server.query_and_chat.streaming_models import FetchToolStart
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
+from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
+from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
@@ -163,7 +163,7 @@ def create_image_generation_packets(
     packets.append(
         Packet(
             ind=step_nr,
-            obj=ImageGenerationToolDelta(images=images),
+            obj=ImageGenerationFinal(images=images),
         ),
     )
 
@@ -205,7 +205,7 @@ def create_fetch_packets(
 ) -> list[Packet]:
     packets: list[Packet] = []
     for fetch in fetches:
-        packets.append(Packet(ind=step_nr, obj=FetchToolStart(documents=fetch)))
+        packets.append(Packet(ind=step_nr, obj=OpenUrlStart(documents=fetch)))
         packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
         step_nr += 1
     return packets
@@ -250,7 +250,7 @@ def translate_db_message_to_packets_simple(
 ) -> EndStepPacketList:
     """
     Translation function for simple agent framework.
-    Includes support for FetchToolStart packets for web fetch operations.
+    Includes support for OpenUrlStart packets for web fetch operations.
     """
     step_nr = start_step_nr
     packet_list: list[Packet] = []
@@ -608,6 +608,7 @@ def translate_db_message_to_packets(
     packet_list.append(Packet(ind=step_nr, obj=OverallStop()))
 
     return EndStepPacketList(
-        end_step_nr=step_nr,
+        turn_index=chat_message.turn_index,
+        depth_index=chat_message.depth_index,
         packet_list=packet_list,
     )

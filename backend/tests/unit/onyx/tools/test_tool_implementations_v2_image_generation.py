@@ -10,7 +10,7 @@
 # from onyx.agents.agent_search.dr.models import IterationAnswer
 # from onyx.agents.agent_search.dr.models import IterationInstructions
 # from onyx.chat.turn.models import ChatTurnContext
-# from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
+# from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 # from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
 # from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 # from onyx.server.query_and_chat.streaming_models import Packet
@@ -185,7 +185,7 @@
 #     # Check the types of emitted events
 #     assert isinstance(emitter.packet_history[0].obj, ImageGenerationToolStart)
 #     assert isinstance(emitter.packet_history[1].obj, ImageGenerationToolHeartbeat)
-#     assert isinstance(emitter.packet_history[2].obj, ImageGenerationToolDelta)
+#     assert isinstance(emitter.packet_history[2].obj, ImageGenerationFinal)
 #     assert isinstance(emitter.packet_history[3].obj, SectionEnd)
 
 #     # Verify save_files was called correctly

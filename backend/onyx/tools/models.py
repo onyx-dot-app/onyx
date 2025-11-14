@@ -4,6 +4,7 @@ from typing import Any
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from backend.onyx.chat.turn.infra.emitter import Emitter
 from pydantic import BaseModel
 from pydantic import model_validator
 
@@ -86,11 +87,17 @@ class SearchQueryInfo(BaseModel):
 
 # None indicates that the default value should be used
 class SearchToolOverrideKwargs(BaseModel):
+    # To know what citation number to start at for constructing the string to the LLM
+    starting_citation_num: int
     # This is needed because the LLM won't be able to do a really detailed semantic query well
     original_query: str | None = None
 
     class Config:
         arbitrary_types_allowed = True
+
+
+class SearchToolRunContext(BaseModel):
+    emitter: Emitter
 
 
 class GeneratedImage(BaseModel):

@@ -8,7 +8,7 @@ from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import FetchedDocumentCacheEntry
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
-from onyx.server.query_and_chat.streaming_models import FetchToolStart
+from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SavedSearchDoc
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
@@ -156,13 +156,13 @@ def _open_url_core(
     # based on number of tool calls
     index = run_context.context.current_run_step
 
-    # Create SavedSearchDoc objects from URLs for the FetchToolStart event
+    # Create SavedSearchDoc objects from URLs for the OpenUrlStart event
     saved_search_docs = [SavedSearchDoc.from_url(url) for url in urls]
 
     run_context.context.run_dependencies.emitter.emit(
         Packet(
             ind=index,
-            obj=FetchToolStart(type="fetch_tool_start", documents=saved_search_docs),
+            obj=OpenUrlStart(type="fetch_tool_start", documents=saved_search_docs),
         )
     )
 

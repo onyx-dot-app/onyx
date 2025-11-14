@@ -19,7 +19,7 @@
 # from onyx.configs.constants import DocumentSource
 # from onyx.context.search.models import InferenceSection
 # from onyx.context.search.models import SavedSearchDoc
-# from onyx.server.query_and_chat.streaming_models import FetchToolStart
+# from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 # from onyx.server.query_and_chat.streaming_models import Packet
 # from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 # from onyx.server.query_and_chat.streaming_models import SearchToolStart
@@ -317,10 +317,10 @@
 #     assert len(emitter.packet_history) == 2
 
 #     # Check the types of emitted events
-#     assert isinstance(emitter.packet_history[0].obj, FetchToolStart)
+#     assert isinstance(emitter.packet_history[0].obj, OpenUrlStart)
 #     assert isinstance(emitter.packet_history[1].obj, SectionEnd)
 
-#     # Verify the FetchToolStart event contains the correct SavedSearchDoc objects
+#     # Verify the OpenUrlStart event contains the correct SavedSearchDoc objects
 #     fetch_start_event = emitter.packet_history[0].obj
 #     assert len(fetch_start_event.documents) == 2
 #     assert fetch_start_event.documents[0].link == "https://example.com/1"
@@ -484,10 +484,10 @@
 #     # Verify that even though an exception was raised, we still emitted the initial events
 #     # and the SectionEnd packet was emitted by the decorator
 #     emitter = test_run_context.context.run_dependencies.emitter  # type: ignore[attr-defined]
-#     assert len(emitter.packet_history) == 2  # FetchToolStart and SectionEnd
+#     assert len(emitter.packet_history) == 2  # OpenUrlStart and SectionEnd
 
 #     # Check the types of emitted events
-#     assert isinstance(emitter.packet_history[0].obj, FetchToolStart)
+#     assert isinstance(emitter.packet_history[0].obj, OpenUrlStart)
 #     assert isinstance(emitter.packet_history[1].obj, SectionEnd)
 
 #     # Verify that the decorator properly handled the exception and updated current_run_step

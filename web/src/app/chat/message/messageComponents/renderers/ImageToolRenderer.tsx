@@ -4,7 +4,7 @@ import {
   PacketType,
   ImageGenerationToolPacket,
   ImageGenerationToolStart,
-  ImageGenerationToolDelta,
+  ImageGenerationFinal,
   SectionEnd,
 } from "../../../services/streamingModels";
 import { MessageRenderer, RenderType } from "../interfaces";
@@ -20,7 +20,7 @@ function constructCurrentImageState(packets: ImageGenerationToolPacket[]) {
     .filter(
       (packet) => packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
     )
-    .map((packet) => packet.obj as ImageGenerationToolDelta);
+    .map((packet) => packet.obj as ImageGenerationFinal);
   const imageEnd = packets.find(
     (packet) => packet.obj.type === PacketType.SECTION_END
   )?.obj as SectionEnd | null;

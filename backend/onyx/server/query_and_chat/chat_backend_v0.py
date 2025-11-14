@@ -31,7 +31,7 @@ from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
+from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
@@ -173,8 +173,8 @@ def transform_packet_to_v0_format(packet: Any) -> dict[str, Any] | None:
                 "tool_args": {},
             }
 
-        # Handle ImageGenerationToolDelta
-        if isinstance(obj, ImageGenerationToolDelta):
+        # Handle ImageGenerationFinal
+        if isinstance(obj, ImageGenerationFinal):
             return {
                 "tool_name": "generate_image",
                 "tool_result": [img.model_dump() for img in obj.images],
