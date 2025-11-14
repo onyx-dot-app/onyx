@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { loginAs } from "../utils/auth";
+import { createAssistant } from "../utils/assistantUtils";
 
 test.describe("Disable Default Assistant Setting", () => {
   test.beforeEach(async ({ page }) => {
@@ -69,8 +70,19 @@ test.describe("Disable Default Assistant Setting", () => {
       await disableDefaultAssistantCheckbox.click();
     }
 
-    // Navigate to chat with a specific assistant (assume ID 1 exists)
-    await page.goto("http://localhost:3000/chat?assistantId=1");
+    // Navigate to chat and create a new assistant to ensure there's one besides the default
+    await page.goto("http://localhost:3000/chat");
+    const assistantName = `Test Assistant ${Date.now()}`;
+    await createAssistant(page, {
+      name: assistantName,
+      description: "Test assistant for new session button test",
+      instructions: "You are a helpful test assistant.",
+    });
+
+    // Extract the assistant ID from the URL
+    const currentUrl = page.url();
+    const assistantIdMatch = currentUrl.match(/assistantId=(\d+)/);
+    expect(assistantIdMatch).toBeTruthy();
 
     // Click the "New Session" button
     const newSessionButton = page.locator(
