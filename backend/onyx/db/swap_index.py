@@ -140,7 +140,6 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
     if switchover_type == SwitchoverType.INSTANT:
         return _perform_index_swap(
             db_session=db_session,
-            current_search_settings=new_search_settings,
             new_search_settings=new_search_settings,
             all_cc_pairs=all_cc_pairs,
             # clean up all DocumentByConnectorCredentialPair / Document rows, since we're
@@ -197,7 +196,7 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
             # Swap indices
             return _perform_index_swap(
                 db_session=db_session,
-                secondary_search_settings=new_search_settings,
+                new_search_settings=new_search_settings,
                 all_cc_pairs=all_cc_pairs,
             )
 
