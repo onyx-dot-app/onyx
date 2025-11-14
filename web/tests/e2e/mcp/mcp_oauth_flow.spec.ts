@@ -1584,16 +1584,32 @@ test.describe("MCP OAuth flows", () => {
         throw new Error(`Invalid server_id ${serverIdParam}`);
       }
 
-      await page
-        .getByTestId(`tool-checkbox-${TOOL_NAMES.curator}`)
-        .click({ force: true });
+      // Click the checkbox and wait for it to be checked
+      const curatorCheckbox = page.getByTestId(
+        `tool-checkbox-${TOOL_NAMES.curator}`
+      );
+      await curatorCheckbox.waitFor({ state: "visible", timeout: 10000 });
+      await curatorCheckbox.click();
+
+      // Verify the checkbox is actually checked
+      await expect(curatorCheckbox).toHaveAttribute("data-state", "checked", {
+        timeout: 10000,
+      });
+
+      // Verify the selection count updated to show 1 tool selected
+      await expect(page.getByText("1 tool selected")).toBeVisible({
+        timeout: 10000,
+      });
       logStep("Selected curator tool checkbox");
 
       await scrollToBottom(page);
 
-      await page
-        .getByRole("button", { name: /(?:Create|Update) MCP Server Actions/ })
-        .click();
+      // Wait for the button to be enabled before clicking
+      const createButton = page.getByRole("button", {
+        name: /(?:Create|Update) MCP Server Actions/,
+      });
+      await expect(createButton).toBeEnabled({ timeout: 10000 });
+      await createButton.click();
       logStep("Created MCP server actions (curator)");
 
       await page.waitForURL("**/admin/actions**", { timeout: 20000 });
