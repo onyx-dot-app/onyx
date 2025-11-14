@@ -69,7 +69,7 @@ export default function EmbeddingForm() {
     rerank_api_url: null,
   });
 
-  const [reindexType, setReindexType] = useState<SwitchoverType>(
+  const [switchoverType, setSwitchoverType] = useState<SwitchoverType>(
     SwitchoverType.REINDEX
   );
 
@@ -198,12 +198,6 @@ export default function EmbeddingForm() {
     if (!selectedProvider) {
       return false;
     }
-    const switchoverType =
-      reindexType === SwitchoverType.REINDEX
-        ? SwitchoverType.REINDEX
-        : reindexType === SwitchoverType.ACTIVE_ONLY
-          ? SwitchoverType.ACTIVE_ONLY
-          : SwitchoverType.INSTANT;
     const searchSettings = combineSearchSettings(
       selectedProvider,
       advancedEmbeddingDetails,
@@ -226,7 +220,7 @@ export default function EmbeddingForm() {
     selectedProvider,
     advancedEmbeddingDetails,
     rerankingDetails,
-    reindexType,
+    switchoverType,
     setPopup,
   ]);
 
@@ -263,7 +257,7 @@ export default function EmbeddingForm() {
           <div className="flex items-center h-fit">
             <Button
               onClick={() => {
-                if (reindexType == SwitchoverType.INSTANT) {
+                if (switchoverType == SwitchoverType.INSTANT) {
                   setShowInstantSwitchConfirm(true);
                 } else {
                   handleReIndex();
@@ -274,9 +268,9 @@ export default function EmbeddingForm() {
               action
               className="rounded-r-none w-32 h-full"
             >
-              {reindexType == SwitchoverType.REINDEX
+              {switchoverType == SwitchoverType.REINDEX
                 ? "Re-index"
-                : reindexType == SwitchoverType.ACTIVE_ONLY
+                : switchoverType == SwitchoverType.ACTIVE_ONLY
                   ? "Active Only"
                   : "Instant Switch"}
             </Button>
@@ -293,7 +287,7 @@ export default function EmbeddingForm() {
               <DropdownMenuContent>
                 <DropdownMenuItem
                   onClick={() => {
-                    setReindexType(SwitchoverType.REINDEX);
+                    setSwitchoverType(SwitchoverType.REINDEX);
                   }}
                 >
                   <SimpleTooltip tooltip="Re-runs all connectors in the background before switching over. Takes longer but ensures no degredation of search during the switch.">
@@ -304,7 +298,7 @@ export default function EmbeddingForm() {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
-                    setReindexType(SwitchoverType.ACTIVE_ONLY);
+                    setSwitchoverType(SwitchoverType.ACTIVE_ONLY);
                   }}
                 >
                   <SimpleTooltip tooltip="Re-runs only active (non-paused) connectors in the background before switching over. Paused connectors won't block the switchover.">
@@ -315,7 +309,7 @@ export default function EmbeddingForm() {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
-                    setReindexType(SwitchoverType.INSTANT);
+                    setSwitchoverType(SwitchoverType.INSTANT);
                   }}
                 >
                   <SimpleTooltip tooltip="Immediately switches to new settings without re-indexing. Searches will be degraded until the re-indexing is complete.">
@@ -423,7 +417,7 @@ export default function EmbeddingForm() {
     };
     ReIndexingButtonComponent.displayName = "ReIndexingButton";
     return ReIndexingButtonComponent;
-  }, [needsReIndex, reindexType, isOverallFormValid, combinedFormErrors]);
+  }, [needsReIndex, switchoverType, isOverallFormValid, combinedFormErrors]);
 
   if (!selectedProvider) {
     return <ThreeDotsLoader />;
@@ -448,13 +442,6 @@ export default function EmbeddingForm() {
       return;
     }
     let searchSettings: SavedSearchSettings;
-
-    const switchoverType =
-      reindexType === SwitchoverType.REINDEX
-        ? SwitchoverType.REINDEX
-        : reindexType === SwitchoverType.ACTIVE_ONLY
-          ? SwitchoverType.ACTIVE_ONLY
-          : SwitchoverType.INSTANT;
 
     if (selectedProvider.provider_type != null) {
       // This is a cloud model
