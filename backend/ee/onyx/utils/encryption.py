@@ -67,7 +67,7 @@ def _decrypt_bytes(ciphered_input: bytes) -> str:
 
 def encrypt_string_to_bytes(input_str: str) -> bytes:
     impl_encrypt = fetch_versioned_implementation(
-        "onyx.utils.encryption", "_apply_string_encryption"
+        "onyx.utils.encryption", "_encrypt_string"
     )
     return impl_encrypt(input_str)
 
