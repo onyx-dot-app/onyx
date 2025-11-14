@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { loginAs } from "../utils/auth";
 import { createAssistant } from "../utils/assistantUtils";
 
-test.describe("Disable Default Assistant Setting", () => {
+test.describe("Disable Default Assistant Setting @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     // Log in as admin
     await page.context().clearCookies();
