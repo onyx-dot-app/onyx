@@ -588,7 +588,7 @@ class LitellmLLM(LLM):
 
     def _invoke_implementation_langchain(
         self,
-        prompt: LanguageModelInput,
+        prompt: LangChainLanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
@@ -604,7 +604,7 @@ class LitellmLLM(LLM):
             ModelResponse,
             self._completion(
                 is_legacy_langchain=True,
-                prompt=[],
+                prompt=prompt,
                 tools=tools,
                 tool_choice=tool_choice,
                 stream=False,
@@ -625,7 +625,7 @@ class LitellmLLM(LLM):
 
     def _stream_implementation_langchain(
         self,
-        prompt: LanguageModelInput,
+        prompt: LangChainLanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
@@ -653,7 +653,7 @@ class LitellmLLM(LLM):
             CustomStreamWrapper,
             self._completion(
                 is_legacy_langchain=True,
-                prompt=[],
+                prompt=prompt,
                 tools=tools,
                 tool_choice=tool_choice,
                 stream=True,
