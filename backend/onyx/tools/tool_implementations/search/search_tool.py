@@ -546,7 +546,6 @@ def yield_search_responses(
         ),
         prompt_config=search_tool.prompt_config,
         llm_config=search_tool.llm.config,
-        question=query,
         contextual_pruning_config=search_tool.contextual_pruning_config,
     )
     llm_docs = [llm_doc_from_inference_section(section) for section in pruned_sections]

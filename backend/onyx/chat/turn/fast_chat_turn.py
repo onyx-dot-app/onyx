@@ -64,6 +64,8 @@ if TYPE_CHECKING:
 MAX_ITERATIONS = 10
 
 
+# TODO: We should be able to do this a bit more cleanly since we know the schema
+# ahead of time. I'll make sure to do that for when we replace AgentSDKMessage.
 def _extract_tokens_from_messages(messages: list[AgentSDKMessage]) -> int:
     from onyx.llm.utils import check_number_of_tokens
 
