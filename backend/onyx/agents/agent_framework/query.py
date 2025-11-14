@@ -67,7 +67,6 @@ def query(
 
         tool_calls_in_progress: dict[int, dict[str, Any]] = {}
 
-        # Accumulate the assistant message content
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
 
@@ -169,7 +168,6 @@ def query(
                             ),
                         )
 
-                # Add assistant message with tool calls
                 new_messages_stateful.append(
                     {
                         "role": "assistant",
@@ -178,7 +176,6 @@ def query(
                     }
                 )
 
-                # Add tool response messages
                 for _, tool_call_data in sorted_tool_calls:
                     call_id = tool_call_data["id"]
 
@@ -192,7 +189,6 @@ def query(
                         )
 
             elif finish_reason == "stop" and content_parts:
-                # Add assistant message with content
                 new_messages_stateful.append(
                     {
                         "role": "assistant",
