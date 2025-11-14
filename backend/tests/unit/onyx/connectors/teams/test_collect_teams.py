@@ -6,48 +6,41 @@ from onyx.connectors.teams.connector import _collect_all_teams
 
 
 def test_special_characters_in_team_names() -> None:
-    """Test that team names with special characters skip OData and use get_all()."""
+    """Test that team names with special characters use client-side filtering."""
     mock_graph_client = MagicMock()
 
-    # Mock successful responses
+    # Mock team with special characters
+    mock_team = MagicMock()
+    mock_team.id = "test-id"
+    mock_team.display_name = "Research & Development (R&D) Team"
+    mock_team.properties = {}
+
+    # Mock successful responses for client-side filtering
     mock_team_collection = MagicMock()
     mock_team_collection.has_next = False
-    mock_team_collection.__iter__ = lambda self: iter([])
-
-    mock_get_all_query = MagicMock()
-    mock_get_all_query.execute_query.return_value = mock_team_collection
-    mock_graph_client.teams.get_all = MagicMock(return_value=mock_get_all_query)
+    mock_team_collection.__iter__ = lambda self: iter([mock_team])
 
     mock_get_query = MagicMock()
-    mock_filter_query = MagicMock()
-    mock_filter_query.execute_query.return_value = mock_team_collection
-    mock_get_query.filter.return_value = mock_filter_query
+    mock_top_query = MagicMock()
+    mock_top_query.execute_query.return_value = mock_team_collection
+    mock_get_query.top.return_value = mock_top_query
     mock_graph_client.teams.get = MagicMock(return_value=mock_get_query)
 
-    # Test with the actual customer's problematic team name (has &, parentheses, spaces)
-    # This should skip OData filtering entirely and use get_all() for client-side filtering
-    _collect_all_teams(mock_graph_client, ["Grainger Data & Analytics (GDA) Users"])
+    # Test with team name containing special characters (has &, parentheses)
+    # This should use client-side filtering (get().top()) instead of OData filtering
+    result = _collect_all_teams(mock_graph_client, ["Research & Development (R&D) Team"])
 
-    # Verify that get_all() was called (NOT get().filter())
-    # because special characters are not supported in OData string literals
-    mock_graph_client.teams.get_all.assert_called()
-    mock_graph_client.teams.get.assert_not_called()
+    # Verify that get().top() was called for client-side filtering
+    mock_graph_client.teams.get.assert_called()
+    mock_get_query.top.assert_called_with(50)
 
-    # Reset mocks
-    mock_graph_client.reset_mock()
-    mock_get_all_query.execute_query.return_value = mock_team_collection
-    mock_filter_query.execute_query.return_value = mock_team_collection
-
-    # Test that OData filter failure falls back to get_all()
-    mock_filter_query.execute_query.side_effect = ValueError(
-        "OData query parsing error"
-    )
-    _collect_all_teams(mock_graph_client, ["Simple Team"])
-    mock_graph_client.teams.get_all.assert_called()
+    # Verify the team was found through client-side filtering
+    assert len(result) == 1
+    assert result[0].display_name == "Research & Development (R&D) Team"
 
 
 def test_single_quote_escaping() -> None:
-    """Test that team names with single quotes are properly escaped for OData."""
+    """Test that team names with single quotes use OData filtering with proper escaping."""
     mock_graph_client = MagicMock()
 
     # Mock successful responses
@@ -57,14 +50,15 @@ def test_single_quote_escaping() -> None:
 
     mock_get_query = MagicMock()
     mock_filter_query = MagicMock()
+    mock_filter_query.before_execute = MagicMock(return_value=mock_filter_query)
     mock_filter_query.execute_query.return_value = mock_team_collection
     mock_get_query.filter.return_value = mock_filter_query
     mock_graph_client.teams.get = MagicMock(return_value=mock_get_query)
 
-    # Test with a team name containing a single quote
+    # Test with a team name containing a single quote (no &, (, ) so uses OData)
     _collect_all_teams(mock_graph_client, ["Team's Group"])
 
-    # Verify OData filter was used
+    # Verify OData filter was used (since no special characters)
     mock_graph_client.teams.get.assert_called()
     mock_get_query.filter.assert_called_once()
 
@@ -74,3 +68,29 @@ def test_single_quote_escaping() -> None:
     assert (
         filter_arg == expected_filter
     ), f"Expected: {expected_filter}, Got: {filter_arg}"
+
+
+def test_helper_functions() -> None:
+    """Test the helper functions for team name processing."""
+    from onyx.connectors.teams.connector import (
+        _escape_odata_string,
+        _has_odata_incompatible_chars,
+        _can_use_odata_filter,
+    )
+
+    # Test OData string escaping
+    assert _escape_odata_string("Team's Group") == "Team''s Group"
+    assert _escape_odata_string("Normal Team") == "Normal Team"
+
+    # Test special character detection
+    assert _has_odata_incompatible_chars(["R&D Team"]) == True
+    assert _has_odata_incompatible_chars(["Team (Alpha)"]) == True
+    assert _has_odata_incompatible_chars(["Normal Team"]) == False
+    assert _has_odata_incompatible_chars([]) == False
+    assert _has_odata_incompatible_chars(None) == False
+
+    # Test filtering strategy determination
+    can_use, safe, problematic = _can_use_odata_filter(["Normal Team", "R&D Team"])
+    assert can_use == True
+    assert "Normal Team" in safe
+    assert "R&D Team" in problematic
