@@ -20,6 +20,7 @@ WORKDIR /app
 # Copy package files first for better layer caching
 # This layer will be cached unless package.json or package-lock.json changes
 COPY package.json package-lock.json ./
+COPY lib/opal/package.json ./lib/opal/
 
 # Install dependencies
 RUN npm ci
