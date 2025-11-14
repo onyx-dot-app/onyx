@@ -26,19 +26,15 @@ test.describe("Disable Default Assistant Setting", () => {
     // Toggle it on
     if (!initialState) {
       await disableDefaultAssistantCheckbox.click();
-      // Wait for settings to update
-      await page.waitForTimeout(1000);
       await expect(disableDefaultAssistantCheckbox).toBeChecked();
     }
 
     // Toggle it off
     await disableDefaultAssistantCheckbox.click();
-    await page.waitForTimeout(1000);
     await expect(disableDefaultAssistantCheckbox).not.toBeChecked();
 
     // Toggle it back on for subsequent tests
     await disableDefaultAssistantCheckbox.click();
-    await page.waitForTimeout(1000);
     await expect(disableDefaultAssistantCheckbox).toBeChecked();
   });
 
@@ -55,19 +51,16 @@ test.describe("Disable Default Assistant Setting", () => {
     const isEnabled = await disableDefaultAssistantCheckbox.isChecked();
     if (!isEnabled) {
       await disableDefaultAssistantCheckbox.click();
-      await page.waitForTimeout(1000);
     }
 
     // Navigate to chat with a specific assistant (assume ID 1 exists)
     await page.goto("http://localhost:3000/chat?assistantId=1");
-    await page.waitForTimeout(2000);
 
     // Click the "New Session" button
     const newSessionButton = page.locator(
       '[data-testid="AppSidebar/new-session"]'
     );
     await newSessionButton.click();
-    await page.waitForTimeout(1000);
 
     // Verify the WelcomeMessage shown is NOT from the default assistant
     // Default assistant shows onyx-logo, custom assistants show assistant-name-display
@@ -90,12 +83,10 @@ test.describe("Disable Default Assistant Setting", () => {
     const isEnabled = await disableDefaultAssistantCheckbox.isChecked();
     if (!isEnabled) {
       await disableDefaultAssistantCheckbox.click();
-      await page.waitForTimeout(1000);
     }
 
     // Navigate directly to /chat
     await page.goto("http://localhost:3000/chat");
-    await page.waitForTimeout(2000);
 
     // Verify that we didn't land on the default assistant (ID 0)
     // The assistant selection should be a pinned or available assistant (not ID 0)
@@ -119,7 +110,6 @@ test.describe("Disable Default Assistant Setting", () => {
     const isEnabled = await disableDefaultAssistantCheckbox.isChecked();
     if (!isEnabled) {
       await disableDefaultAssistantCheckbox.click();
-      await page.waitForTimeout(1000);
     }
 
     // Navigate to default assistant configuration page
@@ -162,12 +152,10 @@ test.describe("Disable Default Assistant Setting", () => {
     const isEnabled = await disableDefaultAssistantCheckbox.isChecked();
     if (isEnabled) {
       await disableDefaultAssistantCheckbox.click();
-      await page.waitForTimeout(1000);
     }
 
     // Navigate directly to /chat without parameters
     await page.goto("http://localhost:3000/chat");
-    await page.waitForTimeout(2000);
 
     // The default assistant (ID 0) should be available
     // We can verify this by checking that the chat loads successfully
@@ -181,7 +169,6 @@ test.describe("Disable Default Assistant Setting", () => {
       '[data-testid="AppSidebar/new-session"]'
     );
     await newSessionButton.click();
-    await page.waitForTimeout(1000);
 
     // Should navigate to /chat without assistantId parameter
     const newUrl = page.url();
@@ -201,7 +188,6 @@ test.describe("Disable Default Assistant Setting", () => {
     const isEnabled = await disableDefaultAssistantCheckbox.isChecked();
     if (isEnabled) {
       await disableDefaultAssistantCheckbox.click();
-      await page.waitForTimeout(1000);
     }
 
     // Navigate to default assistant configuration page
