@@ -102,14 +102,6 @@ export const getValidationSchema = (
                   pathMatch && pathMatch[1] === "responses";
                 const hasValidPath = hasDeploymentName || isResponsesPath;
 
-                console.log("Validation details:", {
-                  hasApiVersion,
-                  hasValidPath,
-                  hasDeploymentName,
-                  isResponsesPath,
-                  pathname: url.pathname,
-                });
-
                 return hasApiVersion && hasValidPath;
               } catch (error) {
                 console.error("URL parsing error:", error);
