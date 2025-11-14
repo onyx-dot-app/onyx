@@ -39,8 +39,6 @@ from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.chat.turn.prompts.custom_instruction import build_custom_instructions
-from onyx.chat.turn.save_turn import extract_final_answer_from_packets
-from onyx.chat.turn.save_turn import save_turn
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
@@ -61,6 +59,15 @@ if TYPE_CHECKING:
     from litellm import ResponseFunctionToolCall
 
 MAX_ITERATIONS = 10
+
+
+def _extract_final_answer_from_packets(packet_history: list[Packet]) -> str:
+    """Extract the final answer by concatenating all MessageDelta content."""
+    final_answer = ""
+    for packet in packet_history:
+        if isinstance(packet.obj, MessageDelta) or isinstance(packet.obj, MessageStart):
+            final_answer += packet.obj.content
+    return final_answer
 
 
 # TODO -- this can be refactored out and played with in evals + normal demo
@@ -235,7 +242,7 @@ def _fast_chat_turn_core(
         dependencies=dependencies,
         ctx=ctx,
     )
-    final_answer = extract_final_answer_from_packets(
+    final_answer = _extract_final_answer_from_packets(
         dependencies.emitter.packet_history
     )
     # TODO: Make this error handling more robust and not so specific to the qwen ollama cloud case
@@ -251,16 +258,16 @@ def _fast_chat_turn_core(
             content packets.
             """
         )
-    save_turn(
-        db_session=dependencies.db_session,
-        message_id=message_id,
-        chat_session_id=chat_session_id,
-        model_name=dependencies.llm.config.model_name,
-        model_provider=dependencies.llm.config.model_provider,
-        final_answer=final_answer,
-        fetched_documents_cache=ctx.fetched_documents_cache,
-        agent_turn_messages=ctx.agent_turn_messages,
-    )
+    # save_chat_turn(
+    #     db_session=dependencies.db_session,
+    #     message_id=message_id,
+    #     chat_session_id=chat_session_id,
+    #     model_name=dependencies.llm.config.model_name,
+    #     model_provider=dependencies.llm.config.model_provider,
+    #     final_answer=final_answer,
+    #     fetched_documents_cache=ctx.fetched_documents_cache,
+    #     agent_turn_messages=ctx.agent_turn_messages,
+    # )
     dependencies.emitter.emit(
         Packet(ind=ctx.current_run_step, obj=OverallStop(type="stop"))
     )

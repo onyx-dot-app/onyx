@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from onyx.db.constants import UNSET
 from onyx.db.constants import UnsetType
 from onyx.db.models import Tool
+from onyx.db.models import ToolCall
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.utils.headers import HeaderItemDict
@@ -163,3 +164,62 @@ def get_builtin_tool(
         raise RuntimeError(f"Tool type {tool_type.__name__} not found in the database.")
 
     return db_tool
+
+
+def create_tool_call_no_commit(
+    chat_session_id: UUID,
+    parent_chat_message_id: int | None,
+    turn_number: int,
+    tool_id: int,
+    tool_call_id: str,
+    tool_call_arguments: dict[str, Any],
+    tool_call_response: Any,
+    tool_call_tokens: int,
+    db_session: Session,
+    *,
+    parent_tool_call_id: int | None = None,
+    depth: int = -1,
+    reasoning_tokens: str | None = None,
+    add_only: bool = True,
+) -> ToolCall:
+    """
+    Create a ToolCall entry in the database.
+
+    Args:
+        chat_session_id: The chat session ID
+        parent_chat_message_id: The parent chat message ID
+        turn_number: The turn number for this tool call
+        tool_id: The tool ID
+        tool_call_id: The tool call ID (string identifier from LLM)
+        tool_call_arguments: The tool call arguments
+        tool_call_response: The tool call response
+        tool_call_tokens: The number of tokens in the tool call arguments
+        db_session: The database session
+        parent_tool_call_id: Optional parent tool call ID (for nested tool calls)
+        depth: The depth in the tool call tree (default -1, should be calculated after parent references are set)
+        reasoning_tokens: Optional reasoning tokens
+        commit: If True, commit the transaction; if False, flush only
+
+    Returns:
+        The created ToolCall object
+    """
+    tool_call = ToolCall(
+        chat_session_id=chat_session_id,
+        parent_chat_message_id=parent_chat_message_id,
+        parent_tool_call_id=parent_tool_call_id,
+        turn_number=turn_number,
+        depth=depth,
+        tool_id=tool_id,
+        tool_call_id=tool_call_id,
+        reasoning_tokens=reasoning_tokens,
+        tool_call_arguments=tool_call_arguments,
+        tool_call_response=tool_call_response,
+        tool_call_tokens=tool_call_tokens,
+    )
+
+    db_session.add(tool_call)
+    if not add_only:
+        db_session.add(tool_call)
+    else:
+        db_session.flush()
+    return tool_call

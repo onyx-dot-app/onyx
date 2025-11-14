@@ -20,6 +20,7 @@ from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSI
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
@@ -45,11 +46,9 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
 
-DEFAULT_BEHAVIOR_PERSONA_ID = 0
-
 
 def get_default_behavior_persona(db_session: Session) -> Persona | None:
-    stmt = select(Persona).where(Persona.id == DEFAULT_BEHAVIOR_PERSONA_ID)
+    stmt = select(Persona).where(Persona.id == DEFAULT_PERSONA_ID)
     return db_session.scalars(stmt).first()
 
 
