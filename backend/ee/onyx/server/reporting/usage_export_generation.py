@@ -20,56 +20,132 @@ from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 
 
+"""
+Формирование CSV-отчёта о сообщениях
+"""
+
+
+def _prepare_report_period(
+    period: tuple[datetime, datetime] | None
+) -> tuple[datetime, datetime]:
+    """Подготавливает временной период для отчета о сообщениях"""
+
+    if period is None:
+        # Если период не указан, берем всю историю
+        start_time = datetime.fromtimestamp(0, tz=timezone.utc)
+        end_time = datetime.now(tz=timezone.utc)
+    else:
+        # Корректируем конечное время для включения всего дня
+        start_time = period[0]
+        end_time = period[1] + timedelta(days=1)
+
+    return start_time, end_time
+
+
+def _write_chat_messages_to_csv(
+    temp_file: tempfile.SpooledTemporaryFile,
+    db_session: Session,
+    report_period: tuple[datetime, datetime]
+) -> None:
+    """Записывает данные о сообщениях в CSV файл"""
+
+    csv_writer = csv.writer(temp_file, delimiter=",")
+
+    # Колонки CSV
+    column_headers = ["session_id", "user_id", "flow_type", "time_sent"]
+    csv_writer.writerow(column_headers)
+
+    # Построчная запись данных
+    message_batches = get_all_empty_chat_message_entries(
+        db_session=db_session,
+        period=report_period,
+    )
+    for message_batch in message_batches:
+        for message_entry in message_batch:
+            csv_writer.writerow([
+                message_entry.chat_session_id,
+                message_entry.user_id,
+                message_entry.flow_type,
+                message_entry.time_sent.isoformat(),
+            ])
+
+
 def generate_chat_messages_report(
     db_session: Session,
     file_store: FileStore,
     report_id: str,
     period: tuple[datetime, datetime] | None,
 ) -> str:
-    file_name = f"{report_id}_chat_sessions"
+    """Генерирует CSV отчет по сообщениям чата за указанный период.
 
-    if period is None:
-        period = (
-            datetime.fromtimestamp(0, tz=timezone.utc),
-            datetime.now(tz=timezone.utc),
-        )
-    else:
-        # time-picker sends a time which is at the beginning of the day
-        # so we need to add one day to the end time to make it inclusive
-        period = (
-            period[0],
-            period[1] + timedelta(days=1),
-        )
+    Создает файл с информацией о сессиях, пользователях, типах потоков
+    и времени отправки сообщений.
+
+    Args:
+        db_session: Сессия базы данных
+        file_store: Хранилище файлов
+        report_id: Идентификатор отчета
+        period: Временной период (начало, конец)
+
+    Returns:
+        Название сохраненного файла
+    """
+    message_report_file_name = f"{report_id}_chat_sessions"
+
+    # Подготовка временного диапазона
+    report_period = _prepare_report_period(period)
 
     with tempfile.SpooledTemporaryFile(
-        max_size=MAX_IN_MEMORY_SIZE, mode="w+"
-    ) as temp_file:
-        csvwriter = csv.writer(temp_file, delimiter=",")
-        csvwriter.writerow(["session_id", "user_id", "flow_type", "time_sent"])
-        for chat_message_skeleton_batch in get_all_empty_chat_message_entries(
-            db_session, period
-        ):
-            for chat_message_skeleton in chat_message_skeleton_batch:
-                csvwriter.writerow(
-                    [
-                        chat_message_skeleton.chat_session_id,
-                        chat_message_skeleton.user_id,
-                        chat_message_skeleton.flow_type,
-                        chat_message_skeleton.time_sent.isoformat(),
-                    ]
-                )
+        max_size=MAX_IN_MEMORY_SIZE,
+        mode="w+",
+    ) as temp_csv:
 
-        # after writing seek to begining of buffer
-        temp_file.seek(0)
+        # Запись данных в CSV
+        _write_chat_messages_to_csv(
+            temp_file=temp_csv,
+            db_session=db_session,
+            report_period=report_period,
+        )
+
+        # Сброс позиции для чтения
+        temp_csv.seek(0)
+
+        # Сохранение в хранилище
         file_store.save_file(
-            file_name=file_name,
-            content=temp_file,
-            display_name=file_name,
+            file_name=message_report_file_name,
+            content=temp_csv,
+            display_name=message_report_file_name,
             file_origin=FileOrigin.OTHER,
             file_type="text/csv",
         )
 
-    return file_name
+    return message_report_file_name
+
+
+"""
+Формирование CSV-отчёта о пользователях
+"""
+
+
+def _write_users_to_csv(
+    temp_file: tempfile.SpooledTemporaryFile,
+    users_data,
+) -> None:
+    """Записывает данные о пользователях в CSV файл"""
+
+    csv_writer = csv.writer(temp_file, delimiter=",")
+
+    # Колонки CSV
+    column_headers = ["user_id", "is_active"]
+    csv_writer.writerow(column_headers)
+
+    # Запись данных пользователей
+    for user_record in users_data:
+        user_info = UserSkeleton(
+            user_id=str(user_record.id),
+            is_active=user_record.is_active,
+        )
+        csv_writer.writerow([user_info.user_id, user_info.is_active])
 
 
 def generate_user_report(
@@ -77,88 +153,168 @@ def generate_user_report(
     file_store: FileStore,
     report_id: str,
 ) -> str:
-    file_name = f"{report_id}_users"
+    """Генерирует CSV отчет по пользователям системы.
+
+    Создает файл с базовой информацией о пользователях:
+    идентификаторы и статус активности.
+
+    Args:
+        db_session: Сессия базы данных
+        file_store: Хранилище файлов
+        report_id: Идентификатор отчета
+
+    Returns:
+        Название сохраненного файла
+    """
+    user_report_file_name = f"{report_id}_users"
+
+    # Получение данных пользователей
+    users_collection = get_all_users(db_session)
 
     with tempfile.SpooledTemporaryFile(
-        max_size=MAX_IN_MEMORY_SIZE, mode="w+"
-    ) as temp_file:
-        csvwriter = csv.writer(temp_file, delimiter=",")
-        csvwriter.writerow(["user_id", "is_active"])
+        max_size=MAX_IN_MEMORY_SIZE,
+        mode="w+",
+    ) as temp_csv:
 
-        users = get_all_users(db_session)
-        for user in users:
-            user_skeleton = UserSkeleton(
-                user_id=str(user.id),
-                is_active=user.is_active,
-            )
-            csvwriter.writerow([user_skeleton.user_id, user_skeleton.is_active])
+        # Запись данных в CSV
+        _write_users_to_csv(
+            temp_file=temp_csv,
+            users_data=users_collection,
+        )
 
-        temp_file.seek(0)
+        # Сброс позиции для чтения
+        temp_csv.seek(0)
+
+        # Сохранение в хранилище
         file_store.save_file(
-            file_name=file_name,
-            content=temp_file,
-            display_name=file_name,
+            file_name=user_report_file_name,
+            content=temp_csv,
+            display_name=user_report_file_name,
             file_origin=FileOrigin.OTHER,
             file_type="text/csv",
         )
 
-    return file_name
+    return user_report_file_name
+
+
+"""
+Создание отчёта о пользователях и сообщениях системы
+"""
+
+
+def _save_zip_to_storage(
+    storage: FileStore,
+    filename: str,
+    zip_data: tempfile.SpooledTemporaryFile
+) -> None:
+    """Сохраняет ZIP архив в файловое хранилище"""
+
+    storage.save_file(
+        file_name=filename,
+        content=zip_data,
+        display_name=filename,
+        file_origin=FileOrigin.GENERATED_REPORT,
+        file_type="application/zip",
+    )
+
+
+def _generate_report_filename(report_idx: str) -> str:
+    """Генерирует имя файла для отчета"""
+
+    current_date = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
+    report_filename = f"{current_date}_{report_idx}_usage_report.zip"
+
+    return report_filename
+
+
+def _build_report_metadata(report) -> UsageReportMetadata:
+    """Создает объект метаданных отчета"""
+
+    requestor_id = None
+    if report.requestor_user_id:
+        requestor_id = str(report.requestor_user_id)
+
+    return UsageReportMetadata(
+        report_name=report.report_name,
+        requestor=requestor_id,
+        time_created=report.time_created,
+        period_from=report.period_from,
+        period_to=report.period_to,
+    )
 
 
 def create_new_usage_report(
     db_session: Session,
-    user_id: UUID_ID | None,  # None = auto-generated
+    user_id: UUID_ID | None,
     period: tuple[datetime, datetime] | None,
 ) -> UsageReportMetadata:
-    report_id = str(uuid.uuid4())
-    file_store = get_default_file_store(db_session)
+    """Создает новый отчет об использовании системы
+    и сохраняет его в хранилище.
 
+    Генерирует два CSV файла (сообщения и пользователи), упаковывает в ZIP архив
+    и сохраняет в файловом хранилище. Возвращает метаданные созданного отчета.
+
+    Args:
+        db_session: Сессия базы данных
+        user_id: Идентификатор пользователя, запросившего отчет
+        period: Временной период отчета (начало, конец)
+
+    Returns:
+        Метаданные созданного отчета
+    """
+    # Генерация уникального идентификатора отчета
+    report_idx = str(uuid.uuid4())
+    file_storage = get_default_file_store(db_session=db_session)
+
+    # Формирование CSV файла с данными о сообщениях
     messages_filename = generate_chat_messages_report(
-        db_session, file_store, report_id, period
+        db_session=db_session,
+        file_store=file_storage,
+        report_id=report_idx,
+        period=period,
     )
-    users_filename = generate_user_report(db_session, file_store, report_id)
+    # Формирование CSV файла с данными о пользователях
+    users_filename = generate_user_report(
+        db_session=db_session,
+        file_store=file_storage,
+        report_id=report_idx,
+    )
 
+    # Создание ZIP архива с отчетами
     with tempfile.SpooledTemporaryFile(max_size=MAX_IN_MEMORY_SIZE) as zip_buffer:
         with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zip_file:
-            # write messages
-            chat_messages_tmpfile = file_store.read_file(
-                messages_filename, mode="b", use_tempfile=True
+            # Добавление файла с сообщениями
+            chat_messages_tmpfile = file_storage.read_file(
+                messages_filename,
+                mode="b",
+                use_tempfile=True,
             )
-            zip_file.writestr(
-                "chat_messages.csv",
-                chat_messages_tmpfile.read(),
-            )
+            zip_file.writestr("chat_messages.csv", chat_messages_tmpfile.read())
 
-            # write users
-            users_tmpfile = file_store.read_file(
-                users_filename, mode="b", use_tempfile=True
+            # Добавление файла с пользователями
+            users_tmpfile = file_storage.read_file(
+                users_filename,
+                mode="b",
+                use_tempfile=True,
             )
             zip_file.writestr("users.csv", users_tmpfile.read())
 
         zip_buffer.seek(0)
 
-        # store zip blob to file_store
-        report_name = (
-            f"{datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')}"
-            f"_{report_id}_usage_report.zip"
-        )
-        file_store.save_file(
-            file_name=report_name,
-            content=zip_buffer,
-            display_name=report_name,
-            file_origin=FileOrigin.GENERATED_REPORT,
-            file_type="application/zip",
+        # Создание названия файла и сохранение
+        report_archive_filename = _generate_report_filename(report_idx=report_idx)
+        _save_zip_to_storage(
+            storage=file_storage,
+            filename=report_archive_filename,
+            zip_data=zip_buffer
         )
 
-    # add report after zip file is written
-    new_report = write_usage_report(db_session, report_name, user_id, period)
-
-    return UsageReportMetadata(
-        report_name=new_report.report_name,
-        requestor=(
-            str(new_report.requestor_user_id) if new_report.requestor_user_id else None
-        ),
-        time_created=new_report.time_created,
-        period_from=new_report.period_from,
-        period_to=new_report.period_to,
+    # Запись метаданных отчета в базу
+    report_record_db = write_usage_report(
+        db_session=db_session,
+        report_name=report_archive_filename,
+        user_id=user_id,
+        period=period,
     )
+
+    return _build_report_metadata(report_record_db)
