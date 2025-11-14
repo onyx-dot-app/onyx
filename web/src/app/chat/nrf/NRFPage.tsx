@@ -324,7 +324,8 @@ export default function NRFPage({
                 Welcome to Onyx
               </h2>
               <Button
-                className="bg-agent w-full hover:bg-accent-hover text-white"
+                className="w-full"
+                secondary
                 onClick={() => {
                   if (window.top) {
                     window.top.location.href = "/auth/login";

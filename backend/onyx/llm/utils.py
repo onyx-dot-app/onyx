@@ -1,6 +1,7 @@
 import copy
 import io
 import json
+import re
 from collections.abc import Callable
 from collections.abc import Iterator
 from functools import lru_cache
@@ -914,3 +915,24 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
             f"Failed to determine if {model_provider}/{model_name} is a true OpenAI model"
         )
         return False
+
+
+def model_needs_formatting_reenabled(model_name: str) -> bool:
+    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
+    # for OpenAI reasoning models to have correct markdown generation
+
+    # Models that need formatting re-enabled
+    model_names = ["gpt-5.1", "gpt-5", "o3", "o1"]
+
+    # Pattern matches if any of these model names appear with word boundaries
+    # Word boundaries include: start/end of string, space, hyphen, or forward slash
+    pattern = (
+        r"(?:^|[\s\-/])("
+        + "|".join(re.escape(name) for name in model_names)
+        + r")(?:$|[\s\-/])"
+    )
+
+    if re.search(pattern, model_name):
+        return True
+
+    return False

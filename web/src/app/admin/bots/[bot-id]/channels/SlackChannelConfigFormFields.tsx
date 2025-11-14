@@ -621,7 +621,7 @@ export function SlackChannelConfigFormFields({
           </TooltipProvider>
         )}
         <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
-        <Button type="button" secondary onClick={() => router.back()}>
+        <Button secondary onClick={() => router.back()}>
           Cancel
         </Button>
       </div>

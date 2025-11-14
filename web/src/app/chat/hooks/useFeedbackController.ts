@@ -27,7 +27,7 @@ export function useFeedbackController({
       newFeedback: FeedbackType | null,
       feedbackText?: string,
       predefinedFeedback?: string
-    ) => {
+    ): Promise<boolean> => {
       // Get current feedback state for rollback on error
       const { currentSessionId, sessions } = useChatSessionStore.getState();
       const messageTree = currentSessionId
@@ -54,6 +54,7 @@ export function useFeedbackController({
               }`,
               type: "error",
             });
+            return false;
           }
         } else {
           // Add/update feedback
@@ -73,8 +74,10 @@ export function useFeedbackController({
               }`,
               type: "error",
             });
+            return false;
           }
         }
+        return true;
       } catch (error) {
         // Rollback on network error
         updateCurrentMessageFeedback(messageId, previousFeedback);
@@ -82,6 +85,7 @@ export function useFeedbackController({
           message: "Failed to submit feedback - network error",
           type: "error",
         });
+        return false;
       }
     },
     [updateCurrentMessageFeedback, setPopup]

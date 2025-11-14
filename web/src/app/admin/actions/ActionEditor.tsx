@@ -374,6 +374,7 @@ function ActionForm({
 
       <div className="flex">
         <Button
+          type="submit"
           className="mx-auto"
           disabled={isSubmitting || !!definitionError}
         >

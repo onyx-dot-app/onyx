@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useContext, useState } from "react";
+import { useContext, useState } from "react";
 import { Modal } from "@/components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { SourceIcon } from "@/components/SourceIcon";

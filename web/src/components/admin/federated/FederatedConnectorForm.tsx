@@ -488,7 +488,7 @@ export function FederatedConnectorForm({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <div>
-                  <Button secondary className="flex" leftIcon={SvgSettings}>
+                  <Button secondary leftIcon={SvgSettings}>
                     Manage
                   </Button>
                 </div>

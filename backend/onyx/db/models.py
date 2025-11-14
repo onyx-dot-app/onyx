@@ -67,6 +67,7 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPTransport,
     ThemePreference,
+    SwitchoverType,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -1609,9 +1610,13 @@ class SearchSettings(Base):
         ForeignKey("embedding_provider.provider_type"), nullable=True
     )
 
-    # Whether switching to this model should re-index all connectors in the background
-    # if no re-index is needed, will be ignored. Only used during the switch-over process.
-    background_reindex_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Type of switchover to perform when switching embedding models
+    # REINDEX: waits for all connectors to complete
+    # ACTIVE_ONLY: waits for only non-paused connectors to complete
+    # INSTANT: swaps immediately without waiting
+    switchover_type: Mapped[SwitchoverType] = mapped_column(
+        Enum(SwitchoverType, native_enum=False), default=SwitchoverType.REINDEX
+    )
 
     # allows for quantization -> less memory usage for a small performance hit
     embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
