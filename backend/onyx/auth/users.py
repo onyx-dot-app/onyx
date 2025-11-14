@@ -1070,8 +1070,12 @@ def _extract_email_from_jwt(payload: dict[str, Any]) -> str | None:
     """Return the best-effort email/username from a decoded JWT payload."""
     for key in _JWT_EMAIL_CLAIM_KEYS:
         value = payload.get(key)
-        if isinstance(value, str) and value and "@" in value:
-            return value
+        if isinstance(value, str) and value:
+            try:
+                email_info = validate_email(value)
+            except EmailNotValidError:
+                continue
+            return email_info.normalized
     return None
 
 
@@ -1142,6 +1146,18 @@ async def _get_or_create_user_from_jwt(
             )
         except exceptions.UserAlreadyExists:
             user = await user_manager.get_by_email(email)
+            if not user.is_active:
+                logger.warning(
+                    "Inactive user %s attempted JWT login during provisioning race; skipping",
+                    email,
+                )
+                return None
+            if not user.role.is_web_login():
+                logger.warning(
+                    "Non-web-login user %s attempted JWT login during provisioning race; skipping",
+                    email,
+                )
+                return None
 
     await _sync_jwt_oidc_expiry(user_manager, user, payload)
     return user

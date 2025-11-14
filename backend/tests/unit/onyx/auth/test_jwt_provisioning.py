@@ -9,6 +9,15 @@ import pytest
 from onyx.auth import users as users_module
 
 
+def test_extract_email_requires_valid_format() -> None:
+    """Helper should validate email format before returning value."""
+    assert users_module._extract_email_from_jwt({"email": "invalid@"}) is None
+    result = users_module._extract_email_from_jwt(
+        {"preferred_username": "ValidUser@Example.COM"}
+    )
+    assert result == "validuser@example.com"
+
+
 @pytest.mark.asyncio
 async def test_get_or_create_user_updates_expiry(
     monkeypatch: pytest.MonkeyPatch,
@@ -95,6 +104,54 @@ async def test_get_or_create_user_skips_inactive(
         async def get_by_email(self, email_arg: str) -> MagicMock:
             assert email_arg == email
             return existing_user
+
+    monkeypatch.setattr(users_module, "UserManager", StubUserManager)
+    monkeypatch.setattr(
+        users_module,
+        "SQLAlchemyUserAdminDB",
+        lambda *args, **kwargs: MagicMock(),
+    )
+
+    result = await users_module._get_or_create_user_from_jwt(
+        payload, MagicMock(), MagicMock()
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_user_handles_race_conditions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If provisioning races, newly inactive users should still be blocked."""
+    monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", True)
+    monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
+    monkeypatch.setattr(users_module, "verify_email_domain", lambda _: None)
+
+    email = "race@example.com"
+    payload: dict[str, Any] = {"email": email}
+
+    inactive_user = MagicMock()
+    inactive_user.email = email
+    inactive_user.is_active = False
+    inactive_user.role.is_web_login.return_value = True  # type: ignore[attr-defined]
+
+    class StubUserManager:
+        def __init__(self, _user_db: object) -> None:
+            self.user_db = MagicMock()
+            self.user_db.update = AsyncMock()
+            self.get_calls = 0
+
+        async def get_by_email(self, email_arg: str) -> MagicMock:
+            assert email_arg == email
+            if self.get_calls == 0:
+                self.get_calls += 1
+                raise users_module.exceptions.UserNotExists()
+            self.get_calls += 1
+            return inactive_user
+
+        async def create(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            raise users_module.exceptions.UserAlreadyExists()
 
     monkeypatch.setattr(users_module, "UserManager", StubUserManager)
     monkeypatch.setattr(
