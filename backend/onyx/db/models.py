@@ -194,6 +194,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
     personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
     use_memories: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    cheat_sheet_context: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True, default=None
+    )
 
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
@@ -3952,3 +3955,23 @@ class ExternalGroupPermissionSyncAttempt(Base):
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+
+# EXPLORATION TESTING
+class TemporaryUserCheatSheetContext(Base):
+    """
+    Represents the context of a user's cheat sheet. Replace with column in user table once
+    login is working again.
+    """
+
+    __tablename__ = "temporary_user_cheat_sheet_context"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"))
+    context: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB())
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

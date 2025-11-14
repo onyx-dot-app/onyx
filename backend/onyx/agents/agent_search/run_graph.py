@@ -12,6 +12,10 @@ from onyx.agents.agent_search.dc_search_analysis.graph_builder import (
 from onyx.agents.agent_search.dc_search_analysis.states import MainInput as DCMainInput
 from onyx.agents.agent_search.dr.graph_builder import dr_graph_builder
 from onyx.agents.agent_search.dr.states import MainInput as DRMainInput
+from onyx.agents.agent_search.exploration.graph_builder import exploration_graph_builder
+from onyx.agents.agent_search.exploration.states import (
+    MainInput as ExplorationMainInput,
+)
 from onyx.agents.agent_search.kb_search.graph_builder import kb_graph_builder
 from onyx.agents.agent_search.kb_search.states import MainInput as KBMainInput
 from onyx.agents.agent_search.models import GraphConfig
@@ -77,6 +81,16 @@ def run_dr_graph(
     graph = dr_graph_builder()
     compiled_graph = graph.compile()
     input = DRMainInput(log_messages=[])
+
+    yield from run_graph(compiled_graph, config, input)
+
+
+def run_exploration_graph(
+    config: GraphConfig,
+) -> AnswerStream:
+    graph = exploration_graph_builder()
+    compiled_graph = graph.compile()
+    input = ExplorationMainInput(log_messages=[])
 
     yield from run_graph(compiled_graph, config, input)
 

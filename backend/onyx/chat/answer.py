@@ -5,12 +5,13 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.enums import ResearchType
+from onyx.agents.agent_search.exploration.enums import ResearchType as ExpResearchType
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.models import GraphInputs
 from onyx.agents.agent_search.models import GraphPersistence
 from onyx.agents.agent_search.models import GraphSearchConfig
 from onyx.agents.agent_search.models import GraphTooling
-from onyx.agents.agent_search.run_graph import run_dr_graph
+from onyx.agents.agent_search.run_graph import run_exploration_graph
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStreamPart
 from onyx.chat.models import AnswerStyleConfig
@@ -32,6 +33,7 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.gpu_utils import fast_gpu_status_request
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import EXPLORATION_TEST_TYPE
 
 logger = setup_logger()
 
@@ -60,7 +62,7 @@ class Answer:
         skip_gen_ai_answer_generation: bool = False,
         is_connected: Callable[[], bool] | None = None,
         use_agentic_search: bool = False,
-        research_type: ResearchType | None = None,
+        research_type: ResearchType | ExpResearchType | None = None,
         research_plan: dict[str, Any] | None = None,
         project_instructions: str | None = None,
     ) -> None:
@@ -121,6 +123,9 @@ class Answer:
         else:
             research_type = ResearchType.THOUGHTFUL
 
+        if EXPLORATION_TEST_TYPE != "not_explicitly_set":
+            research_type = ExpResearchType(research_type)
+
         self.search_behavior_config = GraphSearchConfig(
             use_agentic_search=use_agentic_search,
             skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
@@ -144,7 +149,8 @@ class Answer:
             return
 
         # TODO: add toggle in UI with customizable TimeBudget
-        stream = run_dr_graph(self.graph_config)
+        # stream = run_dr_graph(self.graph_config)
+        stream = run_exploration_graph(self.graph_config)
 
         processed_stream: list[AnswerStreamPart] = []
         for packet in stream:

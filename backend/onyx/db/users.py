@@ -342,3 +342,19 @@ def delete_user_from_db(
     # NOTE: edge case may exist with race conditions
     # with this `invited user` scheme generally.
     remove_user_from_invited_users(user_to_delete.email)
+
+
+# EXPLORATION TESTING
+
+
+def get_user_cheat_sheet_context(
+    user: User, db_session: Session
+) -> dict[str, Any] | None:
+    return user.cheat_sheet_context
+
+
+def update_user_cheat_sheet_context(
+    user: User, new_cheat_sheet_context: dict[str, Any], db_session: Session
+) -> None:
+    user.cheat_sheet_context = new_cheat_sheet_context
+    db_session.flush()  # Make the change visible to subsequent queries in the same transaction

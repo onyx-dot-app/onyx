@@ -220,3 +220,5 @@ INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH = int(
 )
 
 ENVIRONMENT = os.environ.get("ENVIRONMENT") or "not_explicitly_set"
+
+EXPLORATION_TEST_TYPE = os.environ.get("EXPLORATION_TEST_TYPE") or "not_explicitly_set"
