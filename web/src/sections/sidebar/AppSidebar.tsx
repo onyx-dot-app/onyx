@@ -29,7 +29,7 @@ import {
 } from "@dnd-kit/modifiers";
 import SvgEditBig from "@/icons/edit-big";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
-import Settings from "@/sections/sidebar/Settings";
+import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";

@@ -24,7 +24,7 @@ import SvgUser from "@/icons/user";
 import { cn } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import UserSettings from "@/app/chat/components/modal/UserSettings";
+import UserSettings from "@/sections/sidebar/Settings/UserSettings";
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
