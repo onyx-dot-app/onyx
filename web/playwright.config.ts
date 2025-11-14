@@ -59,7 +59,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 720 },
-        storageState: "admin_auth2.json",
+        storageState: "admin_auth.json",
       },
       grep: /@exclusive/,
     },
