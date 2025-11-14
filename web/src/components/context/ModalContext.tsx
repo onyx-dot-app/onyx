@@ -13,7 +13,6 @@ type ModalContextType = {
   setNewTenantInfo: (info: NewTenantInfo | null) => void;
   invitationInfo: NewTenantInfo | null;
   setInvitationInfo: (info: NewTenantInfo | null) => void;
-  setShowUserSettingsModal: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
