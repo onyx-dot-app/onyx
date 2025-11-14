@@ -9,8 +9,8 @@ test.describe("Disable Default Assistant Setting", () => {
     await loginAs(page, "admin");
   });
 
-  test.afterEach(async ({ page }) => {
-    // Ensure default assistant is enabled (checkbox unchecked) after each test
+  test.afterAll(async ({ page }) => {
+    // Ensure default assistant is enabled (checkbox unchecked) after all test
     // to avoid interfering with other tests
     await page.goto("http://localhost:3000/admin/settings");
     await page.waitForURL("http://localhost:3000/admin/settings");
