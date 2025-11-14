@@ -452,12 +452,11 @@ class LitellmLLM(LLM):
 
     def _completion(
         self,
-        prompt: LanguageModelInput,
+        prompt: LanguageModelInput | LangChainLanguageModelInput,
         tools: list[dict] | None,
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
         parallel_tool_calls: bool,
-        legacy_prompt: LangChainLanguageModelInput | None = None,
         reasoning_effort: str | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
@@ -466,10 +465,10 @@ class LitellmLLM(LLM):
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
-        processed_prompt = _prompt_to_dict(legacy_prompt) if legacy_prompt else prompt
+        processed_prompt = _prompt_to_dict(prompt) if is_legacy_langchain else prompt
 
         # Record the original prompt (not the processed one) for logging
-        original_prompt = legacy_prompt if legacy_prompt else prompt
+        original_prompt = prompt
         self._record_call(original_prompt)
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
@@ -613,7 +612,6 @@ class LitellmLLM(LLM):
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
                 parallel_tool_calls=False,
-                legacy_prompt=prompt,
             ),
         )
         choice = response.choices[0]
@@ -664,7 +662,6 @@ class LitellmLLM(LLM):
                 max_tokens=max_tokens,
                 parallel_tool_calls=False,
                 reasoning_effort="minimal",
-                legacy_prompt=prompt,
             ),
         )
         try:
