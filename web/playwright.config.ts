@@ -62,6 +62,7 @@ export default defineConfig({
         storageState: "admin_auth.json",
       },
       grep: /@exclusive/,
+      workers: 1,
     },
   ],
 });
