@@ -482,6 +482,10 @@ class LitellmLLM(LLM):
         else:
             tool_choice_formatted = tool_choice
 
+        is_reasoning = model_is_reasoning_model(
+            self.config.model_name, self.config.model_provider
+        )
+
         try:
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
@@ -501,7 +505,7 @@ class LitellmLLM(LLM):
                 # streaming choice
                 stream=stream,
                 # model params
-                temperature=(1),
+                temperature=(1 if is_reasoning else self._temperature),
                 timeout=timeout_override or self._timeout,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
@@ -523,10 +527,14 @@ class LitellmLLM(LLM):
                 ),
                 **(
                     {"thinking": {"type": "enabled", "budget_tokens": 10000}}
-                    if reasoning_effort
+                    if reasoning_effort and is_reasoning
                     else {}
                 ),
-                **({"reasoning_effort": reasoning_effort} if reasoning_effort else {}),
+                **(
+                    {"reasoning_effort": reasoning_effort}
+                    if reasoning_effort and is_reasoning
+                    else {}
+                ),
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format
