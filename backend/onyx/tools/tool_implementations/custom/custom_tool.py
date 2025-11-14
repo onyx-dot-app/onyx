@@ -1,21 +1,24 @@
 import csv
 import json
 import uuid
-from collections.abc import Generator
 from io import BytesIO
 from io import StringIO
 from typing import Any
-from typing import cast
 from typing import Dict
 from typing import List
 
 import requests
-from pydantic import BaseModel
 from requests import JSONDecodeError
 
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.query_and_chat.streaming_models import CustomToolDelta
+from onyx.server.query_and_chat.streaming_models import CustomToolStart
+from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import CHAT_SESSION_ID_PLACEHOLDER
+from onyx.tools.models import CustomToolCallSummary
+from onyx.tools.models import CustomToolRunContext
+from onyx.tools.models import CustomToolUserFileSnapshot
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import MESSAGE_ID_PLACEHOLDER
 from onyx.tools.models import ToolResponse
@@ -32,25 +35,12 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 from onyx.utils.headers import header_list_to_header_dict
 from onyx.utils.headers import HeaderItemDict
 from onyx.utils.logger import setup_logger
-from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
-CUSTOM_TOOL_RESPONSE_ID = "custom_tool_response"
-
-
-class CustomToolUserFileSnapshot(BaseModel):
-    file_ids: List[str]  # References to saved images or CSVs
-
-
-class CustomToolCallSummary(BaseModel):
-    tool_name: str
-    response_type: str  # e.g., 'json', 'image', 'csv', 'graph'
-    tool_result: Any  # The response data
-
 
 # override_kwargs is not supported for custom tools
-class CustomTool(Tool[None]):
+class CustomTool(Tool[None, CustomToolRunContext]):
     def __init__(
         self,
         id: int,
@@ -104,18 +94,6 @@ class CustomTool(Tool[None]):
     def tool_definition(self) -> dict:
         return self._tool_definition
 
-    def get_llm_tool_response(
-        self, *args: ToolResponse
-    ) -> str | list[str | dict[str, Any]]:
-        response = cast(CustomToolCallSummary, args[0].response)
-
-        if response.response_type == "image" or response.response_type == "csv":
-            image_response = cast(CustomToolUserFileSnapshot, response.tool_result)
-            return json.dumps({"file_ids": image_response.file_ids})
-
-        # For JSON or other responses, return as-is
-        return json.dumps(response.tool_result)
-
     def _save_and_get_file_references(
         self, file_content: bytes | str, content_type: str
     ) -> List[str]:
@@ -150,24 +128,40 @@ class CustomTool(Tool[None]):
     """Actual execution of the tool"""
 
     def run(
-        self, override_kwargs: dict[str, Any] | None = None, **kwargs: Any
-    ) -> Generator[ToolResponse, None, None]:
-        request_body = kwargs.get(REQUEST_BODY)
+        self,
+        run_context: CustomToolRunContext,
+        turn_index: int,
+        depth_index: int,
+        override_kwargs: None,
+        **llm_kwargs: Any,
+    ) -> ToolResponse:
+        request_body = llm_kwargs.get(REQUEST_BODY)
 
         path_params = {}
 
         for path_param_schema in self._method_spec.get_path_param_schemas():
-            path_params[path_param_schema["name"]] = kwargs[path_param_schema["name"]]
+            path_params[path_param_schema["name"]] = llm_kwargs[
+                path_param_schema["name"]
+            ]
 
         query_params = {}
         for query_param_schema in self._method_spec.get_query_param_schemas():
-            if query_param_schema["name"] in kwargs:
-                query_params[query_param_schema["name"]] = kwargs[
+            if query_param_schema["name"] in llm_kwargs:
+                query_params[query_param_schema["name"]] = llm_kwargs[
                     query_param_schema["name"]
                 ]
 
         url = self._method_spec.build_url(self._base_url, path_params, query_params)
         method = self._method_spec.method
+
+        # Emit CustomToolStart packet
+        run_context.emitter.emit(
+            Packet(
+                turn_index=turn_index,
+                depth_index=depth_index,
+                obj=CustomToolStart(tool_name=self._name),
+            )
+        )
 
         response = requests.request(
             method, url, json=request_body, headers=self.headers
@@ -176,6 +170,9 @@ class CustomTool(Tool[None]):
 
         tool_result: Any
         response_type: str
+        file_ids: List[str] | None = None
+        data: dict | list | str | int | float | bool | None = None
+
         if "text/csv" in content_type:
             file_ids = self._save_and_get_file_references(
                 response.content, content_type
@@ -194,31 +191,43 @@ class CustomTool(Tool[None]):
             try:
                 tool_result = response.json()
                 response_type = "json"
+                data = tool_result
             except JSONDecodeError:
                 logger.exception(
                     f"Failed to parse response as JSON for tool '{self._name}'"
                 )
                 tool_result = response.text
                 response_type = "text"
+                data = tool_result
 
         logger.info(
             f"Returning tool response for {self._name} with type {response_type}"
         )
 
-        yield ToolResponse(
-            id=CUSTOM_TOOL_RESPONSE_ID,
-            response=CustomToolCallSummary(
+        # Emit CustomToolDelta packet
+        run_context.emitter.emit(
+            Packet(
+                turn_index=turn_index,
+                depth_index=depth_index,
+                obj=CustomToolDelta(
+                    tool_name=self._name,
+                    response_type=response_type,
+                    data=data,
+                    file_ids=file_ids,
+                ),
+            )
+        )
+
+        llm_facing_response = json.dumps(tool_result)
+
+        return ToolResponse(
+            rich_response=CustomToolCallSummary(
                 tool_name=self._name,
                 response_type=response_type,
                 tool_result=tool_result,
             ),
+            llm_facing_response=llm_facing_response,
         )
-
-    def get_final_result(self, *args: ToolResponse) -> JSON_ro:
-        response = cast(CustomToolCallSummary, args[0].response)
-        if isinstance(response.tool_result, CustomToolUserFileSnapshot):
-            return response.tool_result.model_dump()
-        return response.tool_result
 
 
 def build_custom_tools_from_openapi_schema_and_headers(
@@ -328,7 +337,6 @@ if __name__ == "__main__":
         print(choice.message.tool_calls)
         tool_call = choice.message.tool_calls[0]
         if isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
-            for tool_response in tools[0].run(
-                **json.loads(tool_call.function.arguments)
-            ):
-                print(tool_response)
+            # Note: This example code would need a proper run_context with emitter
+            # For testing purposes, this would need to be updated
+            print("Tool execution requires run_context with emitter")

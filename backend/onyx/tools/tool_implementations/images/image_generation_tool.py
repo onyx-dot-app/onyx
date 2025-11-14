@@ -1,74 +1,46 @@
 import json
 import threading
-from collections.abc import Generator
-from enum import Enum
 from typing import Any
 from typing import cast
 
 import requests
-from pydantic import BaseModel
+from backend.onyx.tools.tool_implementations.images.models import (
+    FinalImageGenerationResponse,
+)
+from backend.onyx.tools.tool_implementations.images.models import (
+    ImageGenerationResponse,
+)
+from backend.onyx.tools.tool_implementations.images.models import ImageShape
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.db.llm import fetch_existing_llm_providers
+from onyx.file_store.utils import build_frontend_file_url
+from onyx.file_store.utils import save_files
 from onyx.llm.utils import build_content_with_imgs
-from onyx.prompts.constants import GENERAL_SEP_PAT
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
+from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
+from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
+from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
+from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.models import ImageGenerationToolRunContext
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
-from onyx.utils.special_types import JSON_ro
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 
 logger = setup_logger()
 
 IMAGE_GENERATION_TOOL_NAME = "image_generation"
-
-IMAGE_GENERATION_RESPONSE_ID = "image_generation_response"
-IMAGE_GENERATION_HEARTBEAT_ID = "image_generation_heartbeat"
-
-YES_IMAGE_GENERATION = "Yes Image Generation"
-SKIP_IMAGE_GENERATION = "Skip Image Generation"
-
 # Heartbeat interval in seconds to prevent timeouts
 HEARTBEAT_INTERVAL = 5.0
 
-IMAGE_GENERATION_TEMPLATE = f"""
-Given the conversation history and a follow up query, determine if the system should call \
-an external image generation tool to better answer the latest user input.
-Your default response is {SKIP_IMAGE_GENERATION}.
-
-Respond "{YES_IMAGE_GENERATION}" if:
-- The user is asking for an image to be generated.
-
-Conversation History:
-{GENERAL_SEP_PAT}
-{{chat_history}}
-{GENERAL_SEP_PAT}
-
-If you are at all unsure, respond with {SKIP_IMAGE_GENERATION}.
-Respond with EXACTLY and ONLY "{YES_IMAGE_GENERATION}" or "{SKIP_IMAGE_GENERATION}"
-
-Follow Up Input:
-{{final_query}}
-""".strip()
-
-
-class ImageGenerationResponse(BaseModel):
-    revised_prompt: str
-    image_data: str
-
-
-class ImageShape(str, Enum):
-    SQUARE = "square"
-    PORTRAIT = "portrait"
-    LANDSCAPE = "landscape"
-
 
 # override_kwargs is not supported for image generation tools
-class ImageGenerationTool(Tool[None]):
+class ImageGenerationTool(Tool[None, ImageGenerationToolRunContext]):
     _NAME = IMAGE_GENERATION_TOOL_NAME
     _DESCRIPTION = (
         "NEVER use generate_image unless the user specifically requests an image."
@@ -151,37 +123,9 @@ class ImageGenerationTool(Tool[None]):
             },
         }
 
-    def get_llm_tool_response(
-        self, *args: ToolResponse
-    ) -> str | list[str | dict[str, Any]]:
-        # Filter out heartbeat responses and find the actual image response
-        generation_response = None
-        for response in args:
-            if response.id == IMAGE_GENERATION_RESPONSE_ID:
-                generation_response = response
-                break
-
-        if generation_response is None:
-            raise ValueError("No image generation response found")
-
-        image_generations = cast(
-            list[ImageGenerationResponse], generation_response.response
-        )
-
-        return build_content_with_imgs(
-            message=json.dumps(
-                [
-                    {
-                        "revised_prompt": image_generation.revised_prompt,
-                    }
-                    for image_generation in image_generations
-                ]
-            ),
-        )
-
     def _generate_image(
         self, prompt: str, shape: ImageShape
-    ) -> ImageGenerationResponse:
+    ) -> tuple[ImageGenerationResponse, Any]:
         from litellm import image_generation  # type: ignore
 
         if shape == ImageShape.LANDSCAPE:
@@ -223,9 +167,12 @@ class ImageGenerationTool(Tool[None]):
             if revised_prompt is None:
                 revised_prompt = prompt
 
-            return ImageGenerationResponse(
-                revised_prompt=revised_prompt,
-                image_data=image_data,
+            return (
+                ImageGenerationResponse(
+                    revised_prompt=revised_prompt,
+                    image_data=image_data,
+                ),
+                response,
             )
 
         except requests.RequestException as e:
@@ -255,20 +202,36 @@ class ImageGenerationTool(Tool[None]):
             )
 
     def run(
-        self, override_kwargs: None = None, **kwargs: str
-    ) -> Generator[ToolResponse, None, None]:
-        prompt = cast(str, kwargs["prompt"])
-        shape = ImageShape(kwargs.get("shape", ImageShape.SQUARE))
+        self,
+        run_context: ImageGenerationToolRunContext,
+        turn_index: int,
+        depth_index: int,
+        override_kwargs: None,
+        **llm_kwargs: Any,
+    ) -> ToolResponse:
+        prompt = cast(str, llm_kwargs["prompt"])
+        shape = ImageShape(llm_kwargs.get("shape", ImageShape.SQUARE.value))
 
-        # Use threading to generate images in parallel while yielding heartbeats
-        results: list[ImageGenerationResponse | None] = [None] * self.num_imgs
+        # Emit start packet
+        run_context.emitter.emit(
+            Packet(
+                turn_index=turn_index,
+                depth_index=depth_index,
+                obj=ImageGenerationToolStart(),
+            )
+        )
+
+        # Use threading to generate images in parallel while emitting heartbeats
+        results: list[tuple[ImageGenerationResponse, Any] | None] = [
+            None
+        ] * self.num_imgs
         completed = threading.Event()
         error_holder: list[Exception | None] = [None]
 
         def generate_all_images() -> None:
             try:
                 generated_results = cast(
-                    list[ImageGenerationResponse],
+                    list[tuple[ImageGenerationResponse, Any]],
                     run_functions_tuples_in_parallel(
                         [
                             (
@@ -293,16 +256,16 @@ class ImageGenerationTool(Tool[None]):
         generation_thread = threading.Thread(target=generate_all_images)
         generation_thread.start()
 
-        # Yield heartbeat packets while waiting for completion
+        # Emit heartbeat packets while waiting for completion
         heartbeat_count = 0
         while not completed.is_set():
-            # Yield a heartbeat packet to prevent timeout
-            yield ToolResponse(
-                id=IMAGE_GENERATION_HEARTBEAT_ID,
-                response={
-                    "status": "generating",
-                    "heartbeat": heartbeat_count,
-                },
+            # Emit a heartbeat packet to prevent timeout
+            run_context.emitter.emit(
+                Packet(
+                    turn_index=turn_index,
+                    depth_index=depth_index,
+                    obj=ImageGenerationToolHeartbeat(),
+                )
             )
             heartbeat_count += 1
 
@@ -320,22 +283,53 @@ class ImageGenerationTool(Tool[None]):
         # Filter out None values (shouldn't happen, but safety check)
         valid_results = [r for r in results if r is not None]
 
-        # Yield the final results
-        yield ToolResponse(
-            id=IMAGE_GENERATION_RESPONSE_ID,
-            response=valid_results,
+        if not valid_results:
+            raise ValueError("No images were generated")
+
+        # Extract ImageGenerationResponse objects
+        image_generation_responses = [r[0] for r in valid_results]
+
+        # Save files and create GeneratedImage objects
+        file_ids = save_files(
+            urls=[],
+            base64_files=[img.image_data for img in image_generation_responses],
+        )
+        generated_images = [
+            GeneratedImage(
+                file_id=file_id,
+                url=build_frontend_file_url(file_id),
+                revised_prompt=img.revised_prompt,
+                shape=shape.value,
+            )
+            for img, file_id in zip(image_generation_responses, file_ids)
+        ]
+
+        # Emit final packet with generated images
+        run_context.emitter.emit(
+            Packet(
+                turn_index=turn_index,
+                depth_index=depth_index,
+                obj=ImageGenerationFinal(images=generated_images),
+            )
         )
 
-    def get_final_result(self, *args: ToolResponse) -> JSON_ro:
-        # Filter out heartbeat responses and find the actual image response
-        for response in args:
-            if response.id == IMAGE_GENERATION_RESPONSE_ID:
-                image_generation_responses = cast(
-                    list[ImageGenerationResponse], response.response
-                )
-                return [
-                    image_generation_response.model_dump()
-                    for image_generation_response in image_generation_responses
-                ]
+        final_image_generation_response = FinalImageGenerationResponse(
+            images=image_generation_responses
+        )
 
-        raise ValueError("No image generation response found")
+        # Create llm_facing_response
+        llm_facing_response = build_content_with_imgs(
+            message=json.dumps(
+                [
+                    {
+                        "revised_prompt": img.revised_prompt,
+                    }
+                    for img in image_generation_responses
+                ]
+            ),
+        )
+
+        return ToolResponse(
+            rich_response=final_image_generation_response,
+            llm_facing_response=cast(str, llm_facing_response),
+        )

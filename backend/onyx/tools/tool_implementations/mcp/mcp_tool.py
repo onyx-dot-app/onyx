@@ -27,7 +27,7 @@ MCP_TOOL_RESPONSE_ID = "mcp_tool_response"
 #     server_name: str
 
 
-class MCPTool(Tool[None]):
+class MCPTool(Tool[None, None]):
     """Tool implementation for MCP (Model Context Protocol) servers"""
 
     def __init__(

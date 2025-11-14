@@ -17,7 +17,7 @@ from onyx.server.documents.models import DocumentSource
 from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import IndexingStatus
 from onyx.server.documents.models import InputType
-from onyx.tools.models import GeneratedImage
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
 
 """
 These data models are used to represent the data on the testing side of things.

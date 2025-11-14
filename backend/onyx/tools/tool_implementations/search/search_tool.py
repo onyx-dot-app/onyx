@@ -1,3 +1,4 @@
+import json
 from typing import Any
 from typing import cast
 
@@ -6,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkSearchRequest
+from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.pipeline import merge_individual_chunks
@@ -32,6 +34,74 @@ logger = setup_logger()
 
 SEARCH_EVALUATION_ID = "llm_doc_eval"
 QUERY_FIELD = "query"
+
+
+def _convert_search_docs_to_llm_string(
+    top_sections: list[InferenceSection],
+    citation_start: int = 1,
+    limit: int | None = None,
+) -> str:
+    """Convert a list of InferenceSection objects to a JSON string for LLM consumption.
+
+    Args:
+        top_sections: List of InferenceSection objects to convert (contains full combined content)
+        citation_start: Starting citation number (default: 1)
+        limit: Maximum number of sections to include (None for no limit)
+
+    Returns:
+        JSON string with the structure:
+        {
+            "results": [
+                {
+                    "citation_id": int,
+                    "title": str,  # semantic_identifier
+                    "content": str,  # combined_content (full content)
+                    "source_type": str,
+                    "authors": list[str] | None,
+                    "updated_at": str | None,  # ISO format
+                    "metadata": str  # JSON string
+                }
+            ]
+        }
+    """
+    # Apply limit if specified
+    if limit is not None:
+        top_sections = top_sections[:limit]
+
+    results = []
+
+    for idx, section in enumerate(top_sections):
+        chunk = section.center_chunk
+
+        # Combine primary and secondary owners for authors
+        authors = None
+        if chunk.primary_owners or chunk.secondary_owners:
+            authors = []
+            if chunk.primary_owners:
+                authors.extend(chunk.primary_owners)
+            if chunk.secondary_owners:
+                authors.extend(chunk.secondary_owners)
+
+        # Format updated_at as ISO string if available
+        updated_at_str = None
+        if chunk.updated_at:
+            updated_at_str = chunk.updated_at.isoformat()
+
+        # Convert metadata to JSON string
+        metadata_str = json.dumps(chunk.metadata)
+
+        result = {
+            "citation_id": citation_start + idx,
+            "title": chunk.semantic_identifier,
+            "content": section.combined_content,
+            "source_type": str(chunk.source_type),
+            "authors": authors,
+            "updated_at": updated_at_str,
+            "metadata": metadata_str,
+        }
+        results.append(result)
+
+    return json.dumps({"results": results}, indent=4)
 
 
 SEARCH_TOOL_DESCRIPTION = """
@@ -150,7 +220,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
         run_context: SearchToolRunContext,
         turn_index: int,
         depth_index: int,
-        override_kwargs: SearchToolOverrideKwargs | None = None,
+        override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         # Create a new thread-safe session for this execution
@@ -158,8 +228,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
         db_session = self._get_thread_safe_session()
         try:
             query = cast(str, llm_kwargs[QUERY_FIELD])
-            if not override_kwargs:
-                raise RuntimeError("No override kwargs provided for search tool")
 
             # TODO this should be also passed in the history up to this point.
 
@@ -171,9 +239,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
                 Packet(
                     turn_index=turn_index,
                     depth_index=depth_index,
-                    obj=SearchToolStart(
-                        type="internal_search_tool_start", is_internet_search=False
-                    ),
+                    obj=SearchToolStart(),
                 )
             )
 
@@ -196,6 +262,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
                     query=query,
                     user_selected_filters=self.user_selected_filters,
                     bypass_acl=self.bypass_acl,
+                    limit=override_kwargs.num_hits,
                 ),
                 project_id=self.project_id,
                 document_index=self.document_index,
@@ -224,9 +291,17 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
             # Convert InferenceSections to SearchDoc objects for the return value
             search_docs = SearchDoc.from_chunks_or_sections(top_sections)
 
+            docs_str = _convert_search_docs_to_llm_string(
+                top_sections=top_sections,
+                citation_start=override_kwargs.starting_citation_num,
+                limit=override_kwargs.max_llm_chunks,
+            )
+
             return ToolResponse(
+                # Typically the rich response will give more docs in case it needs to be displayed in the UI
                 rich_response=SearchDocsResponse(search_docs=search_docs),
-                llm_facing_response="some fake doc, ignore this for now",
+                # The LLM facing response typically includes less docs to cut down on noise and token usage
+                llm_facing_response=docs_str,
             )
 
         finally:

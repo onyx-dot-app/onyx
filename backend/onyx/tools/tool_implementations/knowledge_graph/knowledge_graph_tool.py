@@ -1,22 +1,18 @@
-from collections.abc import Generator
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
-from onyx.utils.special_types import JSON_ro
-
 
 logger = setup_logger()
 
 QUERY_FIELD = "query"
 
 
-class KnowledgeGraphTool(Tool[None]):
+class KnowledgeGraphTool(Tool[None, None]):
     _NAME = "run_kg_search"
     _DESCRIPTION = "Search the knowledge graph for information. Never call this tool."
     _DISPLAY_NAME = "Knowledge Graph Search"
@@ -65,32 +61,12 @@ class KnowledgeGraphTool(Tool[None]):
             },
         }
 
-    def get_llm_tool_response(
-        self, *args: ToolResponse
-    ) -> str | list[str | dict[str, Any]]:
-        raise ValueError(
-            "KnowledgeGraphTool should only be used by the Deep Research Agent, "
-            "not via tool calling."
-        )
-
-    def run_v2(
-        self,
-        run_context: RunContextWrapper[Any],
-        *args: Any,
-        **kwargs: Any,
-    ) -> Any:
-        raise NotImplementedError("KnowledgeGraphTool.run_v2 is not implemented.")
-
     def run(
-        self, override_kwargs: None = None, **kwargs: str
-    ) -> Generator[ToolResponse, None, None]:
-        raise ValueError(
-            "KnowledgeGraphTool should only be used by the Deep Research Agent, "
-            "not via tool calling."
-        )
-
-    def get_final_result(self, *args: ToolResponse) -> JSON_ro:
-        raise ValueError(
-            "KnowledgeGraphTool should only be used by the Deep Research Agent, "
-            "not via tool calling."
-        )
+        self,
+        run_context: None,
+        turn_index: int,
+        depth_index: int,
+        override_kwargs: None,
+        **llm_kwargs: Any,
+    ) -> ToolResponse:
+        raise NotImplementedError("KnowledgeGraphTool.run is not implemented.")

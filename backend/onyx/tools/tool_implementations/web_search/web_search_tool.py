@@ -20,7 +20,7 @@ QUERY_FIELD = "query"
 _GENERIC_ERROR_MESSAGE = "WebSearchTool should only be used by the Deep Research Agent, not via tool calling."
 
 
-class WebSearchTool(Tool[None]):
+class WebSearchTool(Tool[None, None]):
     _NAME = "run_web_search"
     _DESCRIPTION = "Search the web for information. Never call this tool."
     _DISPLAY_NAME = "Web Search"

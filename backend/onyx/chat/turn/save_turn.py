@@ -27,16 +27,17 @@ def _create_and_link_tool_calls(
     default_tokenizer: BaseTokenizer,
 ) -> None:
     """
-    Create ToolCall entries, link parent references, and calculate depths.
+    Create ToolCall entries and link parent references.
 
-    This function handles the complex logic of:
+    This function handles the logic of:
     1. Creating all ToolCall objects (with temporary parent references)
     2. Flushing to get DB IDs
     3. Building mappings and updating parent references
-    4. Calculating depth for each tool call in the tree
+
+    Note: Depth is now passed in via tool_call_info.depth_index and does not need to be calculated.
 
     Args:
-        tool_calls: List of tool call information to create
+        tool_calls: List of tool call information to create (depth_index is expected to be set)
         assistant_message: The ChatMessage these tool calls belong to
         db_session: Database session
         default_tokenizer: Tokenizer for calculating token counts
@@ -44,7 +45,7 @@ def _create_and_link_tool_calls(
     # Create all ToolCall objects first (without parent_tool_call_id set)
     # We'll update parent references after flushing to get IDs
     tool_call_objects: list[ToolCall] = []
-    tool_call_info_map: dict[str, ToolCallInfo] = {}  # tool_call_id -> ToolCallInfo
+    tool_call_info_map: dict[str, ToolCallInfo] = {}
 
     for tool_call_info in tool_calls:
         tool_call_info_map[tool_call_info.tool_call_id] = tool_call_info
@@ -70,7 +71,7 @@ def _create_and_link_tool_calls(
         tool_call = create_tool_call_no_commit(
             chat_session_id=assistant_message.chat_session_id,
             parent_chat_message_id=parent_message_id,
-            turn_number=tool_call_info.turn_number,
+            turn_number=tool_call_info.turn_index,
             tool_id=tool_call_info.tool_id,
             tool_call_id=tool_call_info.tool_call_id,
             tool_call_arguments=tool_call_info.tool_call_arguments,
@@ -78,7 +79,7 @@ def _create_and_link_tool_calls(
             tool_call_tokens=tool_call_tokens,
             db_session=db_session,
             parent_tool_call_id=None,  # Will be updated after flush
-            depth=-1,  # Will be calculated after parent references are set
+            depth=tool_call_info.depth_index,
             reasoning_tokens=tool_call_info.reasoning_tokens,
             add_only=True,
         )
@@ -107,48 +108,6 @@ def _create_and_link_tool_calls(
                     f"Parent tool call with tool_call_id '{tool_call_info.parent_tool_call_id}' "
                     f"not found for tool call '{tool_call_obj.tool_call_id}'"
                 )
-
-    # Calculate depth by traversing the tree
-    # Build a mapping from tool_call DB id to tool_call object for quick lookup
-    id_to_tool_call: dict[int, ToolCall] = {}
-    for tc in tool_call_objects:
-        id_to_tool_call[tc.id] = tc
-
-    def get_depth_recursive(
-        tool_call_obj: ToolCall, visited: set[int] | None = None
-    ) -> int:
-        """Calculate depth by traversing up the parent chain."""
-        if visited is None:
-            visited = set[int]()
-        if tool_call_obj.id in visited:
-            # Circular reference detected
-            logger.warning(
-                f"Circular reference detected in tool call tree at {tool_call_obj.tool_call_id}"
-            )
-            return -1
-        visited.add(tool_call_obj.id)
-
-        if tool_call_obj.parent_tool_call_id is None:
-            return 0
-
-        # Find the parent tool call object
-        parent_tool_call = id_to_tool_call.get(tool_call_obj.parent_tool_call_id)
-        if parent_tool_call is None:
-            # Parent not found in current batch - this should not happen
-            logger.warning(
-                f"Parent tool call with id {tool_call_obj.parent_tool_call_id} not found in current batch"
-            )
-            return 0
-
-        # If parent already has depth calculated, use it; otherwise calculate recursively
-        if parent_tool_call.depth >= 0 or parent_tool_call.parent_tool_call_id is None:
-            return parent_tool_call.depth + 1
-        else:
-            return get_depth_recursive(parent_tool_call, visited) + 1
-
-    # Update depth for all tool calls
-    for tool_call_obj in tool_call_objects:
-        tool_call_obj.depth = get_depth_recursive(tool_call_obj)
 
 
 def save_chat_turn(

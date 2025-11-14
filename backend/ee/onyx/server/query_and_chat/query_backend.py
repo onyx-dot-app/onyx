@@ -188,7 +188,7 @@ def get_answer_with_citation(
             chat_message_id=answer.message_id,
             error_msg=answer.error_msg,
             citations=[
-                CitationInfo(citation_num=i, document_id=doc_id)
+                CitationInfo(citation_number=i, document_id=doc_id)
                 for i, doc_id in answer.cited_documents.items()
             ],
             docs=QADocsResponse(

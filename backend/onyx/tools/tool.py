@@ -83,7 +83,7 @@ class Tool(abc.ABC, Generic[TOverride, TContext]):
         depth_index: int,
         # Specific tool override arguments that are not provided by the LLM
         # For example when calling the internal search tool, the original user query is passed along too (but not by the LLM)
-        override_kwargs: TOverride | None = None,
+        override_kwargs: TOverride,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         raise NotImplementedError

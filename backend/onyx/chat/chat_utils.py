@@ -334,14 +334,14 @@ def reorganize_citations(
                 continue
 
             matching_citation = next(
-                iter([c for c in citations if c.citation_num == int(citation_num)]),
+                iter([c for c in citations if c.citation_number == int(citation_num)]),
                 None,
             )
             if matching_citation is None:
                 continue
 
             new_citation_info[citation_num] = CitationInfo(
-                citation_num=len(new_citation_info) + 1,
+                citation_number=len(new_citation_info) + 1,
                 document_id=matching_citation.document_id,
             )
         except Exception:
@@ -353,7 +353,7 @@ def reorganize_citations(
         try:
             citation_num = int(link_text)
             if citation_num in new_citation_info:
-                link_text = new_citation_info[citation_num].citation_num
+                link_text = new_citation_info[citation_num].citation_number
         except Exception:
             pass
 
@@ -365,8 +365,8 @@ def reorganize_citations(
 
     # if any citations weren't parsable, just add them back to be safe
     for citation in citations:
-        if citation.citation_num not in new_citation_info:
-            new_citation_info[citation.citation_num] = citation
+        if citation.citation_number not in new_citation_info:
+            new_citation_info[citation.citation_number] = citation
 
     return new_answer, list(new_citation_info.values())
 
@@ -387,10 +387,10 @@ def build_citation_map_from_infos(
 
     citation_to_saved_doc_id_map: dict[int, int] = {}
     for citation in citations_list:
-        if citation.citation_num not in citation_to_saved_doc_id_map:
+        if citation.citation_number not in citation_to_saved_doc_id_map:
             saved_id = doc_id_to_saved_doc_id_map.get(citation.document_id)
             if saved_id is not None:
-                citation_to_saved_doc_id_map[citation.citation_num] = saved_id
+                citation_to_saved_doc_id_map[citation.citation_number] = saved_id
 
     return citation_to_saved_doc_id_map
 
