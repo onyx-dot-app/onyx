@@ -20,7 +20,6 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import Link from "next/link";
 import { Callout } from "@/components/ui/callout";
-import { Info } from "lucide-react";
 
 interface DefaultAssistantConfiguration {
   tool_ids: number[];
@@ -172,17 +171,14 @@ function DefaultAssistantConfig() {
     return (
       <div>
         {popup}
-        <Callout type="notice" icon={<Info />}>
+        <Callout type="notice">
           <p className="mb-3">
             The default assistant is currently disabled in your workspace
             settings.
           </p>
           <p>
             To configure the default assistant, you must first enable it in{" "}
-            <Link
-              href="/admin/settings"
-              className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
-            >
+            <Link href="/admin/settings" className="text-link font-medium">
               Workspace Settings
             </Link>
             .
