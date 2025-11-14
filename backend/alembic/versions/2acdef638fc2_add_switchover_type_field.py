@@ -37,8 +37,8 @@ def upgrade() -> None:
         """
         UPDATE search_settings
         SET switchover_type = CASE
-            WHEN background_reindex_enabled = true THEN 'reindex'
-            ELSE 'instant'
+            WHEN background_reindex_enabled = true THEN 'REINDEX'
+            ELSE 'INSTANT'
         END
         """
     )
@@ -63,7 +63,7 @@ def downgrade() -> None:
         """
         UPDATE search_settings
         SET background_reindex_enabled = CASE
-            WHEN switchover_type = 'instant' THEN false
+            WHEN switchover_type = 'INSTANT' THEN false
             ELSE true
         END
         """
