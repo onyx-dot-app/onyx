@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getDisplayNameForModel, useAuthType } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
-import { setUserDefaultModel } from "@/lib/users/UserSettings";
+import { setUserDefaultModel } from "@/lib/userSettings";
 import { usePathname, useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
