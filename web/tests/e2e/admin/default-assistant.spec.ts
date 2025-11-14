@@ -275,8 +275,10 @@ test.describe("Default Assistant Admin Page", () => {
     // Get initial value
     const initialValue = await textarea.inputValue();
 
-    // Clear and enter new text
-    const testPrompt = "This is a test system prompt for the E2E test.";
+    // Clear and enter new text with random suffix to ensure uniqueness
+    const testPrompt = `This is a test system prompt for the E2E test. ${Math.floor(
+      Math.random() * 1000000
+    )}`;
     await textarea.fill(testPrompt);
 
     // Save changes
