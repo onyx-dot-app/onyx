@@ -378,9 +378,9 @@ function AppSidebarInner() {
   return (
     <>
       {popup}
-      <createProjectModal.Modal>
+      <createProjectModal.Provider>
         <CreateProjectModal />
-      </createProjectModal.Modal>
+      </createProjectModal.Provider>
 
       {showMoveCustomAgentModal && (
         <MoveCustomAgentChatModal

@@ -272,7 +272,7 @@ export default function FilePickerPopover({
         accept={"*/*"}
       />
 
-      <recentFilesModal.Modal>
+      <recentFilesModal.Provider>
         <UserFilesModalContent
           title="Recent Files"
           description="Upload files or pick from your recent files."
@@ -290,7 +290,7 @@ export default function FilePickerPopover({
           selectedFileIds={selectedFileIds}
           onDelete={handleDeleteFile}
         />
-      </recentFilesModal.Modal>
+      </recentFilesModal.Provider>
 
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>

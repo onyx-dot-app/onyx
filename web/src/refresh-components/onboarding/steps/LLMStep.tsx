@@ -102,11 +102,11 @@ const LLMStepInner = ({
   ) {
     return (
       <>
-        <modal.Modal>
+        <modal.Provider>
           {llmConnectionModalProps && (
             <LLMConnectionModal {...llmConnectionModalProps} />
           )}
-        </modal.Modal>
+        </modal.Provider>
 
         <div
           className={cn(

@@ -1,18 +1,17 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback } from "react";
-import SimpleModal, {
-  SimpleModalProps,
-} from "@/refresh-components/SimpleModal";
 
-type ModalProps = Omit<SimpleModalProps, "onClose">;
+const ModalContext = createContext<ModalInterface | null>(null);
 
-export const ModalContext = createContext<ModalInterface | null>(null);
+export interface ProviderProps {
+  children?: React.ReactNode;
+}
 
 export interface ModalCreationInterface {
   isOpen: boolean;
   toggle: (state: boolean) => void;
-  Modal: React.FunctionComponent<ModalProps>;
+  Provider: React.FunctionComponent<ProviderProps>;
 }
 
 export function useCreateModal(): ModalCreationInterface {
@@ -25,20 +24,20 @@ export function useCreateModal(): ModalCreationInterface {
     [setIsOpen]
   );
 
-  const ModalWrapper: React.FunctionComponent<ModalProps> = useCallback(
-    (props: ModalProps) => {
+  const Provider: React.FunctionComponent<ProviderProps> = useCallback(
+    ({ children }: ProviderProps) => {
       if (!isOpen) return null;
 
       return (
         <ModalContext.Provider value={{ isOpen, toggle }}>
-          <SimpleModal {...props} onClose={() => toggle(false)} />
+          {children}
         </ModalContext.Provider>
       );
     },
     [isOpen, toggle]
   );
 
-  return { isOpen, toggle, Modal: ModalWrapper };
+  return { isOpen, toggle, Provider };
 }
 
 export interface ModalInterface {
@@ -56,4 +55,15 @@ export function useModal(): ModalInterface {
   }
 
   return context;
+}
+
+export function useModalClose(onClose?: () => void): (() => void) | undefined {
+  const context = useContext(ModalContext);
+
+  return context
+    ? () => {
+        context.toggle(false);
+        onClose?.();
+      }
+    : onClose;
 }

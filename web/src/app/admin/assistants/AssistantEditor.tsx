@@ -846,7 +846,7 @@ export default function AssistantEditor({
 
           return (
             <>
-              <userFilesModal.Modal>
+              <userFilesModal.Provider>
                 <UserFilesModalContent
                   title="User Files"
                   description="All files selected for this assistant"
@@ -875,7 +875,7 @@ export default function AssistantEditor({
                   }}
                   onClose={() => userFilesModal.toggle(false)}
                 />
-              </userFilesModal.Modal>
+              </userFilesModal.Provider>
 
               <Form className="w-full text-text-950 assistant-editor">
                 <FormErrorFocus />

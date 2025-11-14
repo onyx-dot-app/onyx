@@ -101,11 +101,11 @@ export default function ProjectContextPanel({
     <>
       {popup}
 
-      <addInstructionModal.Modal>
+      <addInstructionModal.Provider>
         <AddInstructionModal />
-      </addInstructionModal.Modal>
+      </addInstructionModal.Provider>
 
-      <projectFilesModal.Modal>
+      <projectFilesModal.Provider>
         <UserFilesModalContent
           title="Project files"
           description="Sessions in this project can access the files here."
@@ -119,7 +119,7 @@ export default function ProjectContextPanel({
           }}
           onClose={() => projectFilesModal.toggle(false)}
         />
-      </projectFilesModal.Modal>
+      </projectFilesModal.Provider>
 
       <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
         <div className="flex flex-col gap-1 text-text-04">

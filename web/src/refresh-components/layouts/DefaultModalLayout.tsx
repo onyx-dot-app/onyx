@@ -1,10 +1,11 @@
-import React, { useContext } from "react";
+import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
-import { ModalContext } from "@/refresh-components/contexts/ModalContext";
+import { useModalClose } from "@/refresh-components/contexts/ModalContext";
+import SimpleModal from "../SimpleModal";
 
 const sizeClassNames = {
   main: ["w-[80dvw]", "h-[80dvh]"],
@@ -42,14 +43,7 @@ export default function DefaultModalLayout({
   className,
   onClose: externalOnClose,
 }: ModalProps) {
-  const modal = useContext(ModalContext);
-
-  const onClose = modal
-    ? () => {
-        externalOnClose?.();
-        modal.toggle(false);
-      }
-    : externalOnClose;
+  const onClose = useModalClose(externalOnClose);
 
   const variant = main
     ? "main"
@@ -62,22 +56,24 @@ export default function DefaultModalLayout({
           : "main";
 
   return (
-    <div className={cn(sizeClassNames[variant], className)}>
-      <div className="flex flex-col gap-2 p-4">
-        <div className="flex flex-row items-center justify-between">
-          <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
-          <div data-testid="Modal/close-modal">
-            <IconButton icon={SvgX} internal onClick={onClose} />
+    <SimpleModal onClose={onClose}>
+      <div className={cn(sizeClassNames[variant], className)}>
+        <div className="flex flex-col gap-2 p-4">
+          <div className="flex flex-row items-center justify-between">
+            <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
+            <div data-testid="Modal/close-modal">
+              <IconButton icon={SvgX} internal onClick={onClose} />
+            </div>
           </div>
+          <Text headingH3>{title}</Text>
+          {description && (
+            <Text secondaryBody text02>
+              {description}
+            </Text>
+          )}
         </div>
-        <Text headingH3>{title}</Text>
-        {description && (
-          <Text secondaryBody text02>
-            {description}
-          </Text>
-        )}
+        {children}
       </div>
-      {children}
-    </div>
+    </SimpleModal>
   );
 }

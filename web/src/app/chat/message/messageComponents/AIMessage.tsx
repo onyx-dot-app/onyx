@@ -368,9 +368,9 @@ export default function AIMessage({
     <>
       {popup}
 
-      <modal.Modal>
+      <modal.Provider>
         <FeedbackModal {...feedbackModalProps!} />
-      </modal.Modal>
+      </modal.Provider>
 
       <div
         // for e2e tests
