@@ -3,7 +3,7 @@ import { FiGlobe } from "react-icons/fi";
 import {
   PacketType,
   FetchToolPacket,
-  FetchToolStart,
+  OpenUrlStart,
   SectionEnd,
 } from "../../../services/streamingModels";
 import { MessageRenderer } from "../interfaces";
@@ -29,7 +29,7 @@ const constructCurrentFetchState = (
   // Check for fetch tool start packet
   const fetchStart = packets.find(
     (packet) => packet.obj.type === PacketType.FETCH_TOOL_START
-  )?.obj as FetchToolStart | null;
+  )?.obj as OpenUrlStart | null;
   const fetchEnd = packets.find(
     (packet) => packet.obj.type === PacketType.SECTION_END
   )?.obj as SectionEnd | null;

@@ -16,7 +16,7 @@
 # from onyx.db.models import User
 # from onyx.feature_flags.feature_flags_keys import DISABLE_SIMPLE_AGENT_FRAMEWORK
 # from onyx.feature_flags.interface import FeatureFlagProvider
-# from onyx.server.query_and_chat.streaming_models import FetchToolStart
+# from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 # from onyx.server.query_and_chat.streaming_models import SearchToolStart
 # from onyx.server.query_and_chat.streaming_utils import translate_db_message_to_packets
 # from tests.external_dependency_unit.conftest import create_test_user
@@ -43,7 +43,7 @@
 #     """
 #     Test that when feature flag is off (default),
 #     the translate_db_message_to_packets function returns packets with
-#     SearchToolStart followed by FetchToolStart for web fetch operations.
+#     SearchToolStart followed by OpenUrlStart for web fetch operations.
 #     """
 #     # Create a test user
 #     test_user: User = create_test_user(db_session, email_prefix="test_simple_agent")
@@ -188,11 +188,11 @@
 #     # Verify packets were created
 #     assert len(result.packet_list) > 0
 
-#     # Find SearchToolStart and FetchToolStart packets
+#     # Find SearchToolStart and OpenUrlStart packets
 #     search_packets = [
 #         p for p in result.packet_list if isinstance(p.obj, SearchToolStart)
 #     ]
-#     fetch_packets = [p for p in result.packet_list if isinstance(p.obj, FetchToolStart)]
+#     fetch_packets = [p for p in result.packet_list if isinstance(p.obj, OpenUrlStart)]
 
 #     # Verify we have both types of packets
 #     assert (
@@ -200,15 +200,15 @@
 #     ), "Should have at least one SearchToolStart packet for regular search."
 #     assert (
 #         len(fetch_packets) > 0
-#     ), "Should have at least one FetchToolStart packet for web fetch"
+#     ), "Should have at least one OpenUrlStart packet for web fetch"
 
-#     # Verify SearchToolStart comes before FetchToolStart (based on step number)
+#     # Verify SearchToolStart comes before OpenUrlStart (based on step number)
 #     search_indices = [result.packet_list.index(p) for p in search_packets]
 #     fetch_indices = [result.packet_list.index(p) for p in fetch_packets]
 
 #     assert min(search_indices) < min(
 #         fetch_indices
-#     ), "SearchToolStart should come before FetchToolStart"
+#     ), "SearchToolStart should come before OpenUrlStart"
 
 
 # def test_deep_research_ignores_simple_agent(
@@ -217,7 +217,7 @@
 # ) -> None:
 #     """
 #     Test that even with feature flag off (simple agent enabled), DEEP research type
-#     uses the old translation logic (no FetchToolStart packets).
+#     uses the old translation logic (no OpenUrlStart packets).
 #     """
 #     # Create a test user
 #     test_user: User = create_test_user(db_session, email_prefix="test_deep_research")
@@ -328,13 +328,13 @@
 #     # Verify packets were created
 #     assert len(result.packet_list) > 0
 
-#     # Find FetchToolStart packets
-#     fetch_packets = [p for p in result.packet_list if isinstance(p.obj, FetchToolStart)]
+#     # Find OpenUrlStart packets
+#     fetch_packets = [p for p in result.packet_list if isinstance(p.obj, OpenUrlStart)]
 
-#     # Verify we have NO FetchToolStart packets (should use old logic for DEEP)
+#     # Verify we have NO OpenUrlStart packets (should use old logic for DEEP)
 #     assert (
 #         len(fetch_packets) == 0
-#     ), "DEEP research should not produce FetchToolStart packets even with simple agent framework enabled"
+#     ), "DEEP research should not produce OpenUrlStart packets even with simple agent framework enabled"
 
 #     # Verify we have SearchToolStart packets instead
 #     search_packets = [

@@ -10,7 +10,7 @@
 #     get_langgraph_node_log_string,
 # )
 # from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-# from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
+# from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 # from onyx.server.query_and_chat.streaming_models import SectionEnd
 # from onyx.utils.logger import setup_logger
 
@@ -44,7 +44,7 @@
 #     # Write the results to the stream
 #     write_custom_event(
 #         current_step_nr,
-#         ImageGenerationToolDelta(
+#         ImageGenerationFinal(
 #             images=generated_images,
 #         ),
 #         writer,

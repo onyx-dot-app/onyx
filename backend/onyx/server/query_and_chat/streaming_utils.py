@@ -12,25 +12,24 @@ from onyx.db.chat import translate_db_search_doc_to_server_search_doc
 from onyx.db.models import ChatMessage
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.feature_flags_keys import DISABLE_SIMPLE_AGENT_FRAMEWORK
-from onyx.server.query_and_chat.streaming_models import CitationDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import EndStepPacketList
-from onyx.server.query_and_chat.streaming_models import FetchToolStart
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
+from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
+from onyx.server.query_and_chat.streaming_models import OpenUrl
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
-from onyx.server.query_and_chat.streaming_models import SearchToolDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.tools.models import GeneratedImage
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -65,16 +64,17 @@ def _replace_d_citations_with_links(
 def create_message_packets(
     message_text: str,
     final_documents: list[SavedSearchDoc] | None,
-    step_nr: int,
+    turn_index: int,
+    depth_index: int,
     is_legacy_agentic: bool = False,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
     packets.append(
         Packet(
-            ind=step_nr,
-            obj=MessageStart(
-                content="",
+            turn_index=turn_index,
+            depth_index=depth_index,
+            obj=AgentResponseStart(
                 final_documents=final_documents,
             ),
         )
@@ -94,8 +94,9 @@ def create_message_packets(
 
     packets.append(
         Packet(
-            ind=step_nr,
-            obj=MessageDelta(
+            turn_index=turn_index,
+            depth_index=depth_index,
+            obj=AgentResponseDelta(
                 content=adjusted_message_text,
             ),
         ),
@@ -103,10 +104,9 @@ def create_message_packets(
 
     packets.append(
         Packet(
-            ind=step_nr,
-            obj=SectionEnd(
-                type="section_end",
-            ),
+            turn_index=turn_index,
+            depth_index=depth_index,
+            obj=SectionEnd(),
         )
     )
 
@@ -114,60 +114,77 @@ def create_message_packets(
 
 
 def create_citation_packets(
-    citation_info_list: list[CitationInfo], step_nr: int
+    citation_info_list: list[CitationInfo], turn_index: int, depth_index: int
 ) -> list[Packet]:
     packets: list[Packet] = []
 
-    packets.append(Packet(ind=step_nr, obj=CitationStart()))
+    # Emit each citation as a separate CitationInfo packet
+    for citation_info in citation_info_list:
+        packets.append(
+            Packet(
+                turn_index=turn_index,
+                depth_index=depth_index,
+                obj=citation_info,
+            )
+        )
 
     packets.append(
-        Packet(
-            ind=step_nr,
-            obj=CitationDelta(
-                citations=citation_info_list,
-            ),
-        ),
+        Packet(turn_index=turn_index, depth_index=depth_index, obj=SectionEnd())
     )
-
-    packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
 
     return packets
 
 
-def create_reasoning_packets(reasoning_text: str, step_nr: int) -> list[Packet]:
+def create_reasoning_packets(
+    reasoning_text: str, turn_index: int, depth_index: int
+) -> list[Packet]:
     packets: list[Packet] = []
 
-    packets.append(Packet(ind=step_nr, obj=ReasoningStart()))
+    packets.append(
+        Packet(turn_index=turn_index, depth_index=depth_index, obj=ReasoningStart())
+    )
 
     packets.append(
         Packet(
-            ind=step_nr,
+            turn_index=turn_index,
+            depth_index=depth_index,
             obj=ReasoningDelta(
                 reasoning=reasoning_text,
             ),
         ),
     )
 
-    packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+    packets.append(
+        Packet(turn_index=turn_index, depth_index=depth_index, obj=SectionEnd())
+    )
 
     return packets
 
 
 def create_image_generation_packets(
-    images: list[GeneratedImage], step_nr: int
+    images: list[GeneratedImage], turn_index: int, depth_index: int
 ) -> list[Packet]:
     packets: list[Packet] = []
 
-    packets.append(Packet(ind=step_nr, obj=ImageGenerationToolStart()))
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            depth_index=depth_index,
+            obj=ImageGenerationToolStart(),
+        )
+    )
 
     packets.append(
         Packet(
-            ind=step_nr,
-            obj=ImageGenerationToolDelta(images=images),
+            turn_index=turn_index,
+            depth_index=depth_index,
+            obj=ImageGenerationFinal(images=images),
         ),
     )
 
-    packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+    packets.append(
+        Packet(turn_index=turn_index, depth_index=depth_index, obj=SectionEnd())
+    )
 
     return packets
 
@@ -175,17 +192,25 @@ def create_image_generation_packets(
 def create_custom_tool_packets(
     tool_name: str,
     response_type: str,
-    step_nr: int,
+    turn_index: int,
+    depth_index: int,
     data: dict | list | str | int | float | bool | None = None,
     file_ids: list[str] | None = None,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
-    packets.append(Packet(ind=step_nr, obj=CustomToolStart(tool_name=tool_name)))
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            depth_index=depth_index,
+            obj=CustomToolStart(tool_name=tool_name),
+        )
+    )
 
     packets.append(
         Packet(
-            ind=step_nr,
+            turn_index=turn_index,
+            depth_index=depth_index,
             obj=CustomToolDelta(
                 tool_name=tool_name,
                 response_type=response_type,
@@ -195,19 +220,30 @@ def create_custom_tool_packets(
         ),
     )
 
-    packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+    packets.append(
+        Packet(turn_index=turn_index, depth_index=depth_index, obj=SectionEnd())
+    )
 
     return packets
 
 
 def create_fetch_packets(
-    fetches: list[list[SavedSearchDoc]], step_nr: int
+    fetches: list[list[SavedSearchDoc]], turn_index: int, depth_index: int
 ) -> list[Packet]:
     packets: list[Packet] = []
+    current_depth = depth_index
     for fetch in fetches:
-        packets.append(Packet(ind=step_nr, obj=FetchToolStart(documents=fetch)))
-        packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
-        step_nr += 1
+        packets.append(
+            Packet(
+                turn_index=turn_index,
+                depth_index=current_depth,
+                obj=OpenUrl(documents=fetch),
+            )
+        )
+        packets.append(
+            Packet(turn_index=turn_index, depth_index=current_depth, obj=SectionEnd())
+        )
+        current_depth += 1
     return packets
 
 
@@ -215,30 +251,44 @@ def create_search_packets(
     search_queries: list[str],
     saved_search_docs: list[SavedSearchDoc],
     is_internet_search: bool,
-    step_nr: int,
+    turn_index: int,
+    depth_index: int,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
     packets.append(
         Packet(
-            ind=step_nr,
+            turn_index=turn_index,
+            depth_index=depth_index,
             obj=SearchToolStart(
                 is_internet_search=is_internet_search,
             ),
         )
     )
 
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=SearchToolDelta(
-                queries=search_queries,
-                documents=saved_search_docs,
+    # Emit queries if present
+    if search_queries:
+        packets.append(
+            Packet(
+                turn_index=turn_index,
+                depth_index=depth_index,
+                obj=SearchToolQueriesDelta(queries=search_queries),
             ),
-        ),
-    )
+        )
 
-    packets.append(Packet(ind=step_nr, obj=SectionEnd()))
+    # Emit documents if present
+    if saved_search_docs:
+        packets.append(
+            Packet(
+                turn_index=turn_index,
+                depth_index=depth_index,
+                obj=SearchToolDocumentsDelta(documents=saved_search_docs),
+            ),
+        )
+
+    packets.append(
+        Packet(turn_index=turn_index, depth_index=depth_index, obj=SectionEnd())
+    )
 
     return packets
 
@@ -250,7 +300,7 @@ def translate_db_message_to_packets_simple(
 ) -> EndStepPacketList:
     """
     Translation function for simple agent framework.
-    Includes support for FetchToolStart packets for web fetch operations.
+    Includes support for OpenUrlStart packets for web fetch operations.
     """
     step_nr = start_step_nr
     packet_list: list[Packet] = []
@@ -265,7 +315,7 @@ def translate_db_message_to_packets_simple(
                 if search_doc:
                     citation_info_list.append(
                         CitationInfo(
-                            citation_num=citation_num,
+                            citation_number=citation_num,
                             document_id=search_doc.document_id,
                         )
                     )
@@ -372,6 +422,9 @@ def translate_db_message_to_packets_simple(
         #                 )
         #                 step_nr += 1
 
+        turn_index = getattr(chat_message, "turn_index", 0)
+        depth_index = step_nr
+
         if chat_message.message:
             packet_list.extend(
                 create_message_packets(
@@ -380,7 +433,8 @@ def translate_db_message_to_packets_simple(
                         translate_db_search_doc_to_server_search_doc(doc)
                         for doc in chat_message.search_docs
                     ],
-                    step_nr=step_nr,
+                    turn_index=turn_index,
+                    depth_index=depth_index,
                     is_legacy_agentic=False,
                 )
             )
@@ -398,15 +452,21 @@ def translate_db_message_to_packets_simple(
                     )
 
             packet_list.extend(
-                create_search_packets([], saved_search_docs, False, step_nr)
+                create_search_packets([], saved_search_docs, False, turn_index, step_nr)
             )
 
             step_nr += 1
 
-        packet_list.extend(create_citation_packets(citation_info_list, step_nr))
+        packet_list.extend(
+            create_citation_packets(citation_info_list, turn_index, step_nr)
+        )
         step_nr += 1
 
-    return EndStepPacketList(packet_list=packet_list, end_step_nr=step_nr)
+    return EndStepPacketList(
+        turn_index=getattr(chat_message, "turn_index", 0),
+        depth_index=step_nr,
+        packet_list=packet_list,
+    )
 
 
 def translate_db_message_to_packets(
@@ -443,7 +503,7 @@ def translate_db_message_to_packets(
                 if search_doc:
                     citation_info_list.append(
                         CitationInfo(
-                            citation_num=citation_num,
+                            citation_number=citation_num,
                             document_id=search_doc.document_id,
                         )
                     )
@@ -451,7 +511,7 @@ def translate_db_message_to_packets(
             for i, search_doc in enumerate(chat_message.search_docs):
                 citation_info_list.append(
                     CitationInfo(
-                        citation_num=i,
+                        citation_number=i,
                         document_id=search_doc.document_id,
                     )
                 )
@@ -570,6 +630,9 @@ def translate_db_message_to_packets(
         #                 )
         #                 step_nr += 1
 
+        turn_index = getattr(chat_message, "turn_index", 0)
+        depth_index = step_nr
+
         if chat_message.message:
             packet_list.extend(
                 create_message_packets(
@@ -578,7 +641,8 @@ def translate_db_message_to_packets(
                         translate_db_search_doc_to_server_search_doc(doc)
                         for doc in chat_message.search_docs
                     ],
-                    step_nr=step_nr,
+                    turn_index=turn_index,
+                    depth_index=depth_index,
                     is_legacy_agentic=False,
                 )
             )
@@ -596,18 +660,24 @@ def translate_db_message_to_packets(
                     )
 
             packet_list.extend(
-                create_search_packets([], saved_search_docs, False, step_nr)
+                create_search_packets([], saved_search_docs, False, turn_index, step_nr)
             )
 
             step_nr += 1
 
-        packet_list.extend(create_citation_packets(citation_info_list, step_nr))
+        packet_list.extend(
+            create_citation_packets(citation_info_list, turn_index, step_nr)
+        )
 
         step_nr += 1
 
-    packet_list.append(Packet(ind=step_nr, obj=OverallStop()))
+    turn_index = getattr(chat_message, "turn_index", 0)
+    packet_list.append(
+        Packet(turn_index=turn_index, depth_index=step_nr, obj=OverallStop())
+    )
 
     return EndStepPacketList(
-        end_step_nr=step_nr,
+        turn_index=getattr(chat_message, "turn_index", 0),
+        depth_index=getattr(chat_message, "depth_index", step_nr),
         packet_list=packet_list,
     )

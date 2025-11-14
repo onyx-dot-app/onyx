@@ -64,10 +64,9 @@ from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.streaming_models import CitationDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.utils import get_json_line
 from onyx.tools.tool import Tool
@@ -274,8 +273,8 @@ def _translate_citations(
 
     citation_to_saved_doc_id_map: dict[int, int] = {}
     for citation in citations_list:
-        if citation.citation_num not in citation_to_saved_doc_id_map:
-            citation_to_saved_doc_id_map[citation.citation_num] = (
+        if citation.citation_number not in citation_to_saved_doc_id_map:
+            citation_to_saved_doc_id_map[citation.citation_number] = (
                 doc_id_to_saved_doc_id_map[citation.document_id]
             )
 
@@ -755,20 +754,17 @@ def gather_stream(
     for packet in packets:
         if isinstance(packet, Packet):
             # Handle the different packet object types
-            if isinstance(packet.obj, MessageStart):
-                # MessageStart contains the initial content and final documents
-                if packet.obj.content:
-                    answer += packet.obj.content
+            if isinstance(packet.obj, AgentResponseStart):
+                # AgentResponseStart contains the final documents
                 if packet.obj.final_documents:
                     top_documents = packet.obj.final_documents
-            elif isinstance(packet.obj, MessageDelta):
-                # MessageDelta contains incremental content updates
+            elif isinstance(packet.obj, AgentResponseDelta):
+                # AgentResponseDelta contains incremental content updates
                 if packet.obj.content:
                     answer += packet.obj.content
-            elif isinstance(packet.obj, CitationDelta):
-                # CitationDelta contains citation information
-                if packet.obj.citations:
-                    citations.extend(packet.obj.citations)
+            elif isinstance(packet.obj, CitationInfo):
+                # CitationInfo contains citation information
+                citations.append(packet.obj)
         elif isinstance(packet, StreamingError):
             error_msg = packet.error
         elif isinstance(packet, MessageResponseIDInfo):
@@ -781,7 +777,7 @@ def gather_stream(
         answer=answer,
         answer_citationless=remove_answer_citations(answer),
         cited_documents={
-            citation.citation_num: citation.document_id for citation in citations
+            citation.citation_number: citation.document_id for citation in citations
         },
         message_id=message_id,
         error_msg=error_msg,

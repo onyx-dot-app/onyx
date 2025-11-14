@@ -68,7 +68,8 @@ def _convert_db_doc_id_to_document_ids(
             if matching_doc:
                 citation_list_with_document_id.append(
                     CitationInfo(
-                        citation_num=citation_num, document_id=matching_doc.document_id
+                        citation_number=citation_num,
+                        document_id=matching_doc.document_id,
                     )
                 )
     return citation_list_with_document_id

@@ -86,12 +86,12 @@ export interface ImageGenerationToolStart extends BaseObj {
   type: "image_generation_tool_start";
 }
 
-export interface ImageGenerationToolDelta extends BaseObj {
+export interface ImageGenerationFinal extends BaseObj {
   type: "image_generation_tool_delta";
   images: GeneratedImage[];
 }
 
-export interface FetchToolStart extends BaseObj {
+export interface OpenUrlStart extends BaseObj {
   type: "fetch_tool_start";
   queries: string[] | null;
   documents: OnyxDocument[] | null;
@@ -146,9 +146,9 @@ export type SectionEndObj = SectionEnd;
 export type SearchToolObj = SearchToolStart | SearchToolDelta | SectionEnd;
 export type ImageGenerationToolObj =
   | ImageGenerationToolStart
-  | ImageGenerationToolDelta
+  | ImageGenerationFinal
   | SectionEnd;
-export type FetchToolObj = FetchToolStart | SectionEnd;
+export type FetchToolObj = OpenUrlStart | SectionEnd;
 export type CustomToolObj = CustomToolStart | CustomToolDelta | SectionEnd;
 export type NewToolObj =
   | SearchToolObj

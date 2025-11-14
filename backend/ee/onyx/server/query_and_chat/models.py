@@ -18,7 +18,6 @@ from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.server.manage.models import StandardAnswer
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import SubQuestionIdentifier
 
 
 class StandardAnswerRequest(BaseModel):
@@ -95,17 +94,17 @@ class SimpleDoc(BaseModel):
     metadata: dict | None
 
 
-class AgentSubQuestion(SubQuestionIdentifier):
+class AgentSubQuestion(BaseModel):
     sub_question: str
     document_ids: list[str]
 
 
-class AgentAnswer(SubQuestionIdentifier):
+class AgentAnswer(BaseModel):
     answer: str
     answer_type: Literal["agent_sub_answer", "agent_level_answer"]
 
 
-class AgentSubQuery(SubQuestionIdentifier):
+class AgentSubQuery(BaseModel):
     sub_query: str
     query_id: int
 

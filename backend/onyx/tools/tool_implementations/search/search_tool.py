@@ -1,18 +1,18 @@
 import json
-from collections.abc import Generator
 from typing import Any
 from typing import cast
-from typing import TypeVar
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
-from onyx.chat.chat_utils import llm_doc_from_inference_section
-from onyx.chat.models import LlmDoc
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkSearchRequest
+from onyx.context.search.models import InferenceSection
+from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.pipeline import merge_individual_chunks
 from onyx.context.search.pipeline import search_pipeline
+from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import check_federated_connectors_exist
 from onyx.db.models import Persona
@@ -20,27 +20,88 @@ from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.interfaces import LLM
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import SearchToolRunContext
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
-from onyx.tools.tool_implementations.search.search_utils import llm_doc_to_dict
-from onyx.tools.tool_implementations.search_like_tool_utils import (
-    FINAL_CONTEXT_DOCUMENTS_ID,
-)
-from onyx.tools.tool_implementations.search_like_tool_utils import (
-    FINAL_SEARCH_QUERIES_ID,
-)
-from onyx.tools.tool_implementations.search_like_tool_utils import (
-    SEARCH_INFERENCE_SECTIONS_ID,
-)
 from onyx.utils.logger import setup_logger
-from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
 SEARCH_EVALUATION_ID = "llm_doc_eval"
 QUERY_FIELD = "query"
+
+
+def _convert_search_docs_to_llm_string(
+    top_sections: list[InferenceSection],
+    citation_start: int = 1,
+    limit: int | None = None,
+) -> str:
+    """Convert a list of InferenceSection objects to a JSON string for LLM consumption.
+
+    Args:
+        top_sections: List of InferenceSection objects to convert (contains full combined content)
+        citation_start: Starting citation number (default: 1)
+        limit: Maximum number of sections to include (None for no limit)
+
+    Returns:
+        JSON string with the structure:
+        {
+            "results": [
+                {
+                    "citation_id": int,
+                    "title": str,  # semantic_identifier
+                    "content": str,  # combined_content (full content)
+                    "source_type": str,
+                    "authors": list[str] | None,
+                    "updated_at": str | None,  # ISO format
+                    "metadata": str  # JSON string
+                }
+            ]
+        }
+    """
+    # Apply limit if specified
+    if limit is not None:
+        top_sections = top_sections[:limit]
+
+    results = []
+
+    for idx, section in enumerate(top_sections):
+        chunk = section.center_chunk
+
+        # Combine primary and secondary owners for authors
+        authors = None
+        if chunk.primary_owners or chunk.secondary_owners:
+            authors = []
+            if chunk.primary_owners:
+                authors.extend(chunk.primary_owners)
+            if chunk.secondary_owners:
+                authors.extend(chunk.secondary_owners)
+
+        # Format updated_at as ISO string if available
+        updated_at_str = None
+        if chunk.updated_at:
+            updated_at_str = chunk.updated_at.isoformat()
+
+        # Convert metadata to JSON string
+        metadata_str = json.dumps(chunk.metadata)
+
+        result = {
+            "citation_id": citation_start + idx,
+            "title": chunk.semantic_identifier,
+            "content": section.combined_content,
+            "source_type": str(chunk.source_type),
+            "authors": authors,
+            "updated_at": updated_at_str,
+            "metadata": metadata_str,
+        }
+        results.append(result)
+
+    return json.dumps({"results": results}, indent=4)
 
 
 SEARCH_TOOL_DESCRIPTION = """
@@ -56,7 +117,7 @@ web pages. If very ambiguious, prioritize internal search or call both tools.
 """
 
 
-class SearchTool(Tool[SearchToolOverrideKwargs]):
+class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
     _NAME = "internal_search"
     _DISPLAY_NAME = "Internal Search"
     _DESCRIPTION = SEARCH_TOOL_DESCRIPTION
@@ -155,25 +216,42 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         }
 
     def run(
-        self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
-    ) -> Generator[ToolResponse, None, None]:
+        self,
+        run_context: SearchToolRunContext,
+        turn_index: int,
+        depth_index: int,
+        override_kwargs: SearchToolOverrideKwargs,
+        **llm_kwargs: Any,
+    ) -> ToolResponse:
         # Create a new thread-safe session for this execution
         # This prevents transaction conflicts when multiple search tools run in parallel
         db_session = self._get_thread_safe_session()
         try:
             query = cast(str, llm_kwargs[QUERY_FIELD])
-            if not override_kwargs:
-                raise RuntimeError("No override kwargs provided for search tool")
 
             # TODO this should be also passed in the history up to this point.
 
             # TODO use the original query.
             override_kwargs.original_query
 
-            # Yield the queries early so the UI can display them immediately
-            yield ToolResponse(
-                id=FINAL_SEARCH_QUERIES_ID,
-                response=["query"],
+            # Emit SearchToolStart packet at the beginning
+            run_context.emitter.emit(
+                Packet(
+                    turn_index=turn_index,
+                    depth_index=depth_index,
+                    obj=SearchToolStart(),
+                )
+            )
+
+            # Emit the queries early so the UI can display them immediately
+            run_context.emitter.emit(
+                Packet(
+                    turn_index=turn_index,
+                    depth_index=depth_index,
+                    obj=SearchToolQueriesDelta(
+                        queries=[query],
+                    ),
+                )
             )
 
             # If needed, hybrid alpha, recency bias, etc. can be added here.
@@ -184,6 +262,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     query=query,
                     user_selected_filters=self.user_selected_filters,
                     bypass_acl=self.bypass_acl,
+                    limit=override_kwargs.num_hits,
                 ),
                 project_id=self.project_id,
                 document_index=self.document_index,
@@ -193,286 +272,38 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             top_sections = merge_individual_chunks(top_chunks)
 
-            # Yield the inference sections for consumers that need them
-            yield ToolResponse(
-                id=SEARCH_INFERENCE_SECTIONS_ID,
-                response=top_sections,
+            # Convert InferenceSections to SavedSearchDocs for emission
+            saved_search_docs = convert_inference_sections_to_search_docs(
+                top_sections, is_internet=False
             )
 
-            llm_docs = [
-                llm_doc_from_inference_section(section) for section in top_sections
-            ]
-
-            yield ToolResponse(
-                id=FINAL_CONTEXT_DOCUMENTS_ID,
-                response=llm_docs,
+            # Emit the documents
+            run_context.emitter.emit(
+                Packet(
+                    turn_index=turn_index,
+                    depth_index=depth_index,
+                    obj=SearchToolDocumentsDelta(
+                        documents=saved_search_docs,
+                    ),
+                )
             )
+
+            # Convert InferenceSections to SearchDoc objects for the return value
+            search_docs = SearchDoc.from_chunks_or_sections(top_sections)
+
+            docs_str = _convert_search_docs_to_llm_string(
+                top_sections=top_sections,
+                citation_start=override_kwargs.starting_citation_num,
+                limit=override_kwargs.max_llm_chunks,
+            )
+
+            return ToolResponse(
+                # Typically the rich response will give more docs in case it needs to be displayed in the UI
+                rich_response=SearchDocsResponse(search_docs=search_docs),
+                # The LLM facing response typically includes less docs to cut down on noise and token usage
+                llm_facing_response=docs_str,
+            )
+
         finally:
             # Always close the session to release database connections
             db_session.close()
-
-    def get_final_result(self, *args: ToolResponse) -> JSON_ro:
-        final_docs = cast(
-            list[LlmDoc],
-            next(arg.response for arg in args if arg.id == FINAL_CONTEXT_DOCUMENTS_ID),
-        )
-        # NOTE: need to do this json.loads(doc.json()) stuff because there are some
-        # subfields that are not serializable by default (datetime)
-        # this forces pydantic to make them JSON serializable for us
-        return [json.loads(doc.model_dump_json()) for doc in final_docs]
-
-    def get_llm_tool_response(
-        self, *args: ToolResponse
-    ) -> str | list[str | dict[str, Any]]:
-        final_context_docs_response = next(
-            response for response in args if response.id == FINAL_CONTEXT_DOCUMENTS_ID
-        )
-        final_context_docs = cast(list[LlmDoc], final_context_docs_response.response)
-
-        return json.dumps(
-            {
-                "search_results": [
-                    llm_doc_to_dict(doc, ind)
-                    for ind, doc in enumerate(final_context_docs)
-                ]
-            }
-        )
-
-    def run_v2(
-        self,
-        run_context: RunContextWrapper[Any],
-        *args: Any,
-        **kwargs: Any,
-    ) -> Any:
-        raise NotImplementedError("SearchTool.run_v2 is not implemented.")
-
-    # def _build_response_for_specified_sections(
-    #     self, query: str
-    # ) -> Generator[ToolResponse, None, None]:
-    #     if self.selected_sections is None:
-    #         raise ValueError("Sections must be specified")
-
-    #     yield ToolResponse(
-    #         id=SEARCH_RESPONSE_SUMMARY_ID,
-    #         response=SearchResponseSummary(
-    #             rephrased_query=None,
-    #             top_sections=[],
-    #             predicted_flow=None,
-    #             predicted_search=None,
-    #             final_filters=IndexFilters(access_control_list=None),  # dummy filters
-    #             recency_bias_multiplier=1.0,
-    #         ),
-    #     )
-
-    #     # Build selected sections for specified documents
-    #     selected_sections = [
-    #         SectionRelevancePiece(
-    #             relevant=True,
-    #             document_id=section.center_chunk.document_id,
-    #             chunk_id=section.center_chunk.chunk_id,
-    #         )
-    #         for section in self.selected_sections
-    #     ]
-
-    #     yield ToolResponse(
-    #         id=SECTION_RELEVANCE_LIST_ID,
-    #         response=selected_sections,
-    #     )
-
-    #     final_context_sections = prune_and_merge_sections(
-    #         sections=self.selected_sections,
-    #         section_relevance_list=None,
-    #         prompt_config=self.prompt_config,
-    #         llm_config=self.llm.config,
-    #         question=query,
-    #         contextual_pruning_config=self.contextual_pruning_config,
-    #     )
-
-    #     llm_docs = [
-    #         llm_doc_from_inference_section(section)
-    #         for section in final_context_sections
-    #     ]
-
-    #     yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
-
-    # def run(
-    #     self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
-    # ) -> Generator[ToolResponse, None, None]:
-    #     query = cast(str, llm_kwargs[QUERY_FIELD])
-    #     original_query = query
-    #     precomputed_query_embedding = None
-    #     precomputed_is_keyword = None
-    #     precomputed_keywords = None
-    #     force_no_rerank = False
-    #     alternate_db_session = None
-    #     retrieved_sections_callback = None
-    #     skip_query_analysis = False
-    #     user_file_ids = None
-    #     project_id = None
-    #     document_sources = None
-    #     time_cutoff = None
-    #     expanded_queries = None
-    #     kg_entities = None
-    #     kg_relationships = None
-    #     kg_terms = None
-    #     kg_sources = None
-    #     kg_chunk_id_zero_only = False
-    #     if override_kwargs:
-    #         original_query = override_kwargs.original_query or query
-    #         precomputed_is_keyword = override_kwargs.precomputed_is_keyword
-    #         precomputed_keywords = override_kwargs.precomputed_keywords
-    #         precomputed_query_embedding = override_kwargs.precomputed_query_embedding
-    #         force_no_rerank = use_alt_not_None(override_kwargs.force_no_rerank, False)
-    #         alternate_db_session = override_kwargs.alternate_db_session
-    #         retrieved_sections_callback = override_kwargs.retrieved_sections_callback
-    #         skip_query_analysis = use_alt_not_None(
-    #             override_kwargs.skip_query_analysis, False
-    #         )
-    #         user_file_ids = override_kwargs.user_file_ids
-    #         project_id = override_kwargs.project_id
-    #         document_sources = override_kwargs.document_sources
-    #         time_cutoff = override_kwargs.time_cutoff
-    #         expanded_queries = override_kwargs.expanded_queries
-    #         kg_entities = override_kwargs.kg_entities
-    #         kg_relationships = override_kwargs.kg_relationships
-    #         kg_terms = override_kwargs.kg_terms
-    #         kg_sources = override_kwargs.kg_sources
-    #         kg_chunk_id_zero_only = override_kwargs.kg_chunk_id_zero_only or False
-
-    #     if self.selected_sections:
-    #         yield from self._build_response_for_specified_sections(query)
-    #         return
-
-    #     retrieval_options = copy.deepcopy(self.retrieval_options) or RetrievalDetails()
-    #     if document_sources or time_cutoff:
-    #         # if empty, just start with an empty filters object
-    #         if not retrieval_options.filters:
-    #             retrieval_options.filters = BaseFilters()
-
-    #         # Handle document sources
-    #         if document_sources:
-    #             source_types = retrieval_options.filters.source_type or []
-    #             retrieval_options.filters.source_type = list(
-    #                 set(source_types + document_sources)
-    #             )
-
-    #         # Handle time cutoff
-    #         if time_cutoff:
-    #             # Overwrite time-cutoff should supercede existing time-cutoff, even if defined
-    #             retrieval_options.filters.time_cutoff = time_cutoff
-
-    #     retrieval_options = copy.deepcopy(retrieval_options) or RetrievalDetails()
-    #     retrieval_options.filters = retrieval_options.filters or BaseFilters()
-    #     if kg_entities:
-    #         retrieval_options.filters.kg_entities = kg_entities
-    #     if kg_relationships:
-    #         retrieval_options.filters.kg_relationships = kg_relationships
-    #     if kg_terms:
-    #         retrieval_options.filters.kg_terms = kg_terms
-    #     if kg_sources:
-    #         retrieval_options.filters.kg_sources = kg_sources
-    #     if kg_chunk_id_zero_only:
-    #         retrieval_options.filters.kg_chunk_id_zero_only = kg_chunk_id_zero_only
-
-    #     search_pipeline = SearchPipeline(
-    #         search_request=SearchRequest(
-    #             query=query,
-    #             evaluation_type=(
-    #                 LLMEvaluationType.SKIP if force_no_rerank else self.evaluation_type
-    #             ),
-    #             human_selected_filters=(
-    #                 retrieval_options.filters if retrieval_options else None
-    #             ),
-    #             user_file_filters=UserFileFilters(
-    #                 user_file_ids=user_file_ids,
-    #                 project_id=project_id,
-    #             ),
-    #             persona=self.persona,
-    #             offset=(retrieval_options.offset if retrieval_options else None),
-    #             limit=retrieval_options.limit if retrieval_options else None,
-    #             rerank_settings=(
-    #                 RerankingDetails(
-    #                     rerank_model_name=None,
-    #                     rerank_api_url=None,
-    #                     rerank_provider_type=None,
-    #                     rerank_api_key=None,
-    #                     num_rerank=0,
-    #                     disable_rerank_for_streaming=True,
-    #                 )
-    #                 if force_no_rerank
-    #                 else self.rerank_settings
-    #             ),
-    #             chunks_above=self.chunks_above,
-    #             chunks_below=self.chunks_below,
-    #             full_doc=self.full_doc,
-    #             enable_auto_detect_filters=(
-    #                 retrieval_options.enable_auto_detect_filters
-    #                 if retrieval_options
-    #                 else None
-    #             ),
-    #             precomputed_query_embedding=precomputed_query_embedding,
-    #             precomputed_is_keyword=precomputed_is_keyword,
-    #             precomputed_keywords=precomputed_keywords,
-    #             # add expanded queries
-    #             expanded_queries=expanded_queries,
-    #             original_query=original_query,
-    #         ),
-    #         user=self.user,
-    #         llm=self.llm,
-    #         fast_llm=self.fast_llm,
-    #         skip_query_analysis=skip_query_analysis,
-    #         bypass_acl=self.bypass_acl,
-    #         db_session=alternate_db_session or self.db_session,
-    #         prompt_config=self.prompt_config,
-    #         retrieved_sections_callback=retrieved_sections_callback,
-    #         contextual_pruning_config=self.contextual_pruning_config,
-    #         slack_context=self.slack_context,  # Pass Slack context
-    #     )
-
-    #     search_query_info = SearchQueryInfo(
-    #         predicted_search=search_pipeline.search_query.search_type,
-    #         final_filters=search_pipeline.search_query.filters,
-    #         recency_bias_multiplier=search_pipeline.search_query.recency_bias_multiplier,
-    #     )
-    #     yield from yield_search_responses(
-    #         query=query,
-    #         # give back the merged sections to prevent duplicate docs from appearing in the UI
-    #         get_retrieved_sections=lambda: search_pipeline.merged_retrieved_sections,
-    #         get_final_context_sections=lambda: search_pipeline.final_context_sections,
-    #         search_query_info=search_query_info,
-    #         get_section_relevance=lambda: search_pipeline.section_relevance,
-    #         search_tool=self,
-    #     )
-
-    # def get_final_result(self, *args: ToolResponse) -> JSON_ro:
-    #     final_docs = cast(
-    #         list[LlmDoc],
-    #         next(arg.response for arg in args if arg.id == FINAL_CONTEXT_DOCUMENTS_ID),
-    #     )
-    #     # NOTE: need to do this json.loads(doc.json()) stuff because there are some
-    #     # subfields that are not serializable by default (datetime)
-    #     # this forces pydantic to make them JSON serializable for us
-    #     return [json.loads(doc.model_dump_json()) for doc in final_docs]
-
-    # def build_next_prompt(
-    #     self,
-    #     prompt_builder: AnswerPromptBuilder,
-    #     tool_call_summary: ToolCallSummary,
-    #     tool_responses: list[ToolResponse],
-    #     using_tool_calling_llm: bool,
-    # ) -> AnswerPromptBuilder:
-    #     return build_next_prompt_for_search_like_tool(
-    #         prompt_builder=prompt_builder,
-    #         tool_call_summary=tool_call_summary,
-    #         tool_responses=tool_responses,
-    #         using_tool_calling_llm=using_tool_calling_llm,
-    #         answer_style_config=self.answer_style_config,
-    #         prompt_config=self.prompt_config,
-    #     )
-
-
-T = TypeVar("T")
-
-
-def use_alt_not_None(value: T | None, alt: T) -> T:
-    return value if value is not None else alt

@@ -14,8 +14,7 @@ if TYPE_CHECKING:
     from onyx.tools.models import ToolResponse
 
 
-OVERRIDE_T = TypeVar("OVERRIDE_T")
-
+TOverride = TypeVar("TOverride")
 TContext = TypeVar("TContext")
 
 
@@ -29,7 +28,7 @@ class RunContextWrapper(BaseModel, Generic[TContext]):
     context: TContext
 
 
-class Tool(abc.ABC, Generic[OVERRIDE_T]):
+class Tool(abc.ABC, Generic[TOverride, TContext]):
     @property
     @abc.abstractmethod
     def id(self) -> int:
@@ -74,8 +73,17 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
     @abc.abstractmethod
     def run(
         self,
+        # Shared context and dependencies necessary for the tool to run
+        # May acrrue bad state/mutations if not used carefully
+        # Typically includes things like the packet emitter, redis client, etc.
         run_context: TContext,
-        override_kwargs: OVERRIDE_T | None = None,
+        # The run must know its turn and depth because the "Tool" may actually be more of an "Agent" which can call
+        # other tools and must pass in this information potentially deeper down.
+        turn_index: int,
+        depth_index: int,
+        # Specific tool override arguments that are not provided by the LLM
+        # For example when calling the internal search tool, the original user query is passed along too (but not by the LLM)
+        override_kwargs: TOverride,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         raise NotImplementedError

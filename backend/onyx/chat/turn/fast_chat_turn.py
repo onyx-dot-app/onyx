@@ -39,11 +39,9 @@ from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.chat.turn.prompts.custom_instruction import build_custom_instructions
-from onyx.server.query_and_chat.streaming_models import CitationDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import CitationStart
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
@@ -62,10 +60,10 @@ MAX_ITERATIONS = 10
 
 
 def _extract_final_answer_from_packets(packet_history: list[Packet]) -> str:
-    """Extract the final answer by concatenating all MessageDelta content."""
+    """Extract the final answer by concatenating all AgentResponseDelta content."""
     final_answer = ""
     for packet in packet_history:
-        if isinstance(packet.obj, MessageDelta) or isinstance(packet.obj, MessageStart):
+        if isinstance(packet.obj, AgentResponseDelta):
             final_answer += packet.obj.content
     return final_answer
 
@@ -248,7 +246,7 @@ def _fast_chat_turn_core(
     # TODO: Make this error handling more robust and not so specific to the qwen ollama cloud case
     # where if it happens to any cloud questions, it hangs on read url
     has_image_generation = any(
-        packet.obj.type == "image_generation_tool_delta"
+        packet.obj.type == "image_generation_final"
         for packet in dependencies.emitter.packet_history
     )
     # Allow empty final answer if image generation tool was used (it produces images, not text)
@@ -269,7 +267,11 @@ def _fast_chat_turn_core(
     #     agent_turn_messages=ctx.agent_turn_messages,
     # )
     dependencies.emitter.emit(
-        Packet(ind=ctx.current_run_step, obj=OverallStop(type="stop"))
+        Packet(
+            turn_index=ctx.message_id,
+            depth_index=ctx.current_run_step,
+            obj=OverallStop(type="stop"),
+        )
     )
 
 
@@ -343,14 +345,17 @@ def _emit_clean_up_packets(
     ):
         dependencies.emitter.emit(
             Packet(
-                ind=ctx.current_run_step,
-                obj=MessageStart(
-                    type="message_start", content="Cancelled", final_documents=None
-                ),
+                turn_index=ctx.message_id,
+                depth_index=ctx.current_run_step,
+                obj=AgentResponseStart(type="message_start", final_documents=None),
             )
         )
     dependencies.emitter.emit(
-        Packet(ind=ctx.current_run_step, obj=SectionEnd(type="section_end"))
+        Packet(
+            turn_index=ctx.message_id,
+            depth_index=ctx.current_run_step,
+            obj=SectionEnd(type="section_end"),
+        )
     )
 
 
@@ -360,14 +365,22 @@ def _emit_citations_for_final_answer(
 ) -> None:
     index = ctx.current_run_step + 1
     if ctx.citations:
-        dependencies.emitter.emit(Packet(ind=index, obj=CitationStart()))
+        # Emit each citation as a CitationInfo packet
+        for citation in ctx.citations:
+            dependencies.emitter.emit(
+                Packet(
+                    turn_index=ctx.message_id,
+                    depth_index=index,
+                    obj=citation,
+                )
+            )
         dependencies.emitter.emit(
             Packet(
-                ind=index,
-                obj=CitationDelta(citations=ctx.citations),
+                turn_index=ctx.message_id,
+                depth_index=index,
+                obj=SectionEnd(type="section_end"),
             )
         )
-        dependencies.emitter.emit(Packet(ind=index, obj=SectionEnd(type="section_end")))
     ctx.current_run_step = index
 
 
@@ -397,23 +410,36 @@ def _default_packet_translation(
         # Reasoning packets
         # ------------------------------------------------------------
         if isinstance(ev.data, ResponseReasoningSummaryPartAddedEvent):
-            packets.append(Packet(ind=ctx.current_run_step, obj=ReasoningStart()))
+            packets.append(
+                Packet(
+                    turn_index=ctx.message_id,
+                    depth_index=ctx.current_run_step,
+                    obj=ReasoningStart(),
+                )
+            )
             ctx.current_output_index = output_index
         elif isinstance(ev.data, ResponseReasoningSummaryTextDeltaEvent):
             packets.append(
                 Packet(
-                    ind=ctx.current_run_step,
+                    turn_index=ctx.message_id,
+                    depth_index=ctx.current_run_step,
                     obj=ReasoningDelta(reasoning=ev.data.delta),
                 )
             )
         elif isinstance(ev.data, ResponseReasoningSummaryPartDoneEvent):
             # only do anything if we haven't already "gone past" this step
-            # (e.g. if we've already sent the MessageStart / MessageDelta packets, then we
+            # (e.g. if we've already sent the AgentResponseStart / AgentResponseDelta packets, then we
             # shouldn't do anything)
             if ctx.current_output_index == output_index:
                 ctx.current_run_step += 1
                 ctx.current_output_index = None
-                packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
+                packets.append(
+                    Packet(
+                        turn_index=ctx.message_id,
+                        depth_index=ctx.current_run_step,
+                        obj=SectionEnd(),
+                    )
+                )
 
         # ------------------------------------------------------------
         # Message packets
@@ -435,9 +461,9 @@ def _default_packet_translation(
                         ctx.citations.append(response_part)
                     else:
                         final_answer_piece += response_part.answer_piece or ""
-                obj = MessageDelta(content=final_answer_piece)
+                obj = AgentResponseDelta(content=final_answer_piece)
             else:
-                obj = MessageDelta(content=ev.data.delta)
+                obj = AgentResponseDelta(content=ev.data.delta)
 
             needs_start = has_had_message_start(packet_history, ctx.current_run_step)
             if needs_start:
@@ -450,16 +476,28 @@ def _default_packet_translation(
                 )
                 packets.append(
                     Packet(
-                        ind=ctx.current_run_step,
-                        obj=MessageStart(
-                            content="", final_documents=retrieved_search_docs
-                        ),
+                        turn_index=ctx.message_id,
+                        depth_index=ctx.current_run_step,
+                        obj=AgentResponseStart(final_documents=retrieved_search_docs),
                     )
                 )
 
-            packets.append(Packet(ind=ctx.current_run_step, obj=obj))
+            if obj is not None:
+                packets.append(
+                    Packet(
+                        turn_index=ctx.message_id,
+                        depth_index=ctx.current_run_step,
+                        obj=obj,
+                    )
+                )
         elif ev.data.type == "response.content_part.done":
-            packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
+            packets.append(
+                Packet(
+                    turn_index=ctx.message_id,
+                    depth_index=ctx.current_run_step,
+                    obj=SectionEnd(),
+                )
+            )
             ctx.current_output_index = None
 
     return packets

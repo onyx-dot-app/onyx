@@ -10,7 +10,7 @@ NUM_RETURNED_HITS = 50
 NUM_POSTPROCESSED_RESULTS = 20
 
 # May be less depending on model
-MAX_CHUNKS_FED_TO_CHAT = float(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 10.0)
+MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 10)
 # For Chat, need to keep enough space for history and other prompt pieces
 # ~3k input, half for docs, half for chat history + prompts
 CHAT_TARGET_CHUNK_PERCENTAGE = 512 * 3 / 3072

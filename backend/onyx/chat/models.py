@@ -25,7 +25,6 @@ from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import SubQuestionIdentifier
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
@@ -59,7 +58,7 @@ class LlmDoc(BaseModel):
 
 
 # First chunk of info for streaming QA
-class QADocsResponse(RetrievalDocs, SubQuestionIdentifier):
+class QADocsResponse(RetrievalDocs):
     rephrased_query: str | None = None
     predicted_flow: QueryFlow | None
     predicted_search: SearchType | None
@@ -88,7 +87,7 @@ class StreamType(Enum):
     MAIN_ANSWER = "main_answer"
 
 
-class StreamStopInfo(SubQuestionIdentifier):
+class StreamStopInfo(BaseModel):
     stop_reason: StreamStopReason
 
     stream_type: StreamType = StreamType.MAIN_ANSWER
@@ -326,23 +325,23 @@ class PromptConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
-class SubQueryPiece(SubQuestionIdentifier):
+class SubQueryPiece(BaseModel):
     sub_query: str
     query_id: int
 
 
-class AgentAnswerPiece(SubQuestionIdentifier):
+class AgentAnswerPiece(BaseModel):
     answer_piece: str
     answer_type: Literal["agent_sub_answer", "agent_level_answer"]
 
 
-class SubQuestionPiece(SubQuestionIdentifier):
+class SubQuestionPiece(BaseModel):
     """Refined sub questions generated from the initial user question."""
 
     sub_question: str
 
 
-class ExtendedToolResponse(ToolResponse, SubQuestionIdentifier):
+class ExtendedToolResponse(ToolResponse):
     pass
 
 

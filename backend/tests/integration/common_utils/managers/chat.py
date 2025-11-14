@@ -191,7 +191,7 @@ class ChatSessionManager:
                     full_message += data_obj.get("content", "")
                 elif packet_type == "message_delta":
                     full_message += data_obj["content"]
-                elif packet_type == "internal_search_tool_start":
+                elif packet_type == "search_tool_start":
                     tool_name = (
                         ToolName.INTERNET_SEARCH
                         if data_obj.get("is_internet_search", False)
@@ -200,14 +200,14 @@ class ChatSessionManager:
                     ind_to_tool_use[ind] = ToolResult(
                         tool_name=tool_name,
                     )
-                elif packet_type == "image_generation_tool_start":
+                elif packet_type == "image_generation_start":
                     ind_to_tool_use[ind] = ToolResult(
                         tool_name=ToolName.IMAGE_GENERATION,
                     )
-                elif packet_type == "image_generation_tool_heartbeat":
+                elif packet_type == "image_generation_heartbeat":
                     # Track heartbeat packets for debugging/testing
                     heartbeat_packets.append(data)
-                elif packet_type == "image_generation_tool_delta":
+                elif packet_type == "image_generation_delta":
                     from tests.integration.common_utils.test_models import (
                         GeneratedImage,
                     )
@@ -216,7 +216,7 @@ class ChatSessionManager:
                     ind_to_tool_use[ind].images.extend(
                         [GeneratedImage(**img) for img in images]
                     )
-                elif packet_type == "internal_search_tool_delta":
+                elif packet_type == "search_tool_delta":
                     ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
 
                     documents = data_obj.get("documents", [])

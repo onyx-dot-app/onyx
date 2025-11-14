@@ -166,9 +166,8 @@ class BasicChunkRequest(BaseModel):
     # a better keyword search.
     query_keywords: list[str] | None = None
 
-    # TODO: Currently this is never set
     limit: int | None = None
-    offset: int | None = None
+    offset: int | None = None  # This one is not set currently
 
 
 class ChunkSearchRequest(BasicChunkRequest):
