@@ -8,8 +8,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn, noProp } from "@/lib/utils";
-import CoreModal from "@/refresh-components/modals/CoreModal";
-import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
+import UserFilesModal from "@/components/modals/UserFilesModal";
 import {
   ProjectFile,
   UserFileStatus,
@@ -303,30 +302,24 @@ export default function FilePickerPopover({
           </PopoverContent>
         </Popover>
 
-        {showRecentFiles && (
-          <CoreModal
-            className="w-[32rem] border flex flex-col bg-background-tint-00"
-            onClickOutside={() => setShowRecentFiles(false)}
-          >
-            <UserFilesModalContent
-              title="Recent Files"
-              description="Upload files or pick from your recent files."
-              icon={SvgFiles}
-              recentFiles={recentFilesSnapshot}
-              onPickRecent={(file) => {
-                onPickRecent && onPickRecent(file);
-              }}
-              onUnpickRecent={(file) => {
-                onUnpickRecent && onUnpickRecent(file);
-              }}
-              handleUploadChange={handleUploadChange}
-              onView={onFileClick}
-              onClose={() => setShowRecentFiles(false)}
-              selectedFileIds={selectedFileIds}
-              onDelete={handleDeleteFile}
-            />
-          </CoreModal>
-        )}
+        <UserFilesModal
+          open={showRecentFiles}
+          onOpenChange={setShowRecentFiles}
+          title="Recent Files"
+          description="Upload files or pick from your recent files."
+          icon={SvgFiles}
+          recentFiles={recentFilesSnapshot}
+          onPickRecent={(file) => {
+            onPickRecent && onPickRecent(file);
+          }}
+          onUnpickRecent={(file) => {
+            onUnpickRecent && onUnpickRecent(file);
+          }}
+          handleUploadChange={handleUploadChange}
+          onView={onFileClick}
+          selectedFileIds={selectedFileIds}
+          onDelete={handleDeleteFile}
+        />
       </div>
     </>
   );
