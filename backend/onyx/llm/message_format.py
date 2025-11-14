@@ -23,6 +23,7 @@ def _base_message_to_chat_completion_msg(msg: BaseMessage) -> ChatCompletionMess
         "human": "user",
         "system": "system",
         "ai": "assistant",
+        "tool": "tool",
     }
     role = message_type_to_role[msg.type]
 
