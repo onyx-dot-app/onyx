@@ -216,7 +216,9 @@ class CloudEmbedding:
         client = CohereAsyncClient(api_key=self.api_key)
 
         final_embeddings: list[Embedding] = []
-        for text_batch in batch_list(texts, _COHERE_MAX_INPUT_LEN):
+        batches = list(batch_list(texts, _COHERE_MAX_INPUT_LEN))
+
+        for batch_idx, text_batch in enumerate(batches, start=1):
             # Does not use the same tokenizer as the Onyx API server but it's approximately the same
             # empirically it's only off by a very few tokens so it's not a big deal
             response = await client.embed(
@@ -225,7 +227,15 @@ class CloudEmbedding:
                 input_type=embedding_type,
                 truncate="END",
             )
-            final_embeddings.extend(cast(list[Embedding], response.embeddings))
+            # Extract embeddings immediately and release response
+            batch_embeddings = cast(list[Embedding], response.embeddings)
+            final_embeddings.extend(batch_embeddings)
+
+            # Release references to help GC
+            del response
+            del batch_embeddings
+            del text_batch
+
         return final_embeddings
 
     async def _embed_voyage(
@@ -695,6 +705,8 @@ class EmbeddingModel:
         tenant_id: str | None = None,
         request_id: str | None = None,
     ) -> list[Embedding]:
+        import gc
+
         text_batches = batch_list(texts, batch_size)
 
         logger.debug(f"Encoding {len(texts)} texts in {len(text_batches)} batches")
@@ -758,7 +770,12 @@ class EmbeddingModel:
                 f"EmbeddingModel.process_batch: Batch {batch_idx}/{batch_len} processing time: {processing_time:.2f} seconds"
             )
 
-            return batch_idx, response.embeddings
+            # Extract embeddings immediately and release response object
+            result_embeddings = response.embeddings
+            del response
+            del embed_request
+
+            return batch_idx, result_embeddings
 
         # only multi thread if:
         #   1. num_threads is greater than 1
@@ -780,20 +797,33 @@ class EmbeddingModel:
                     for idx, batch in enumerate(text_batches, start=1)
                 }
 
-                # Collect results in order
-                batch_results: list[tuple[int, list[Embedding]]] = []
+                # Process results in order to release memory as we go
+                # Pre-allocate list to avoid dynamic resizing
+                batch_results: list[tuple[int, list[Embedding]] | None] = [None] * len(
+                    text_batches
+                )
                 for future in as_completed(future_to_batch):
                     try:
-                        result = future.result()
-                        batch_results.append(result)
+                        batch_idx, batch_embeddings = future.result()
+                        # Store in pre-allocated list by index
+                        batch_results[batch_idx - 1] = (batch_idx, batch_embeddings)
+                        # Don't hold onto the future
+                        del future
                     except Exception as e:
                         logger.exception("Embedding model failed to process batch")
                         raise e
 
-                # Sort by batch index and extend embeddings
-                batch_results.sort(key=lambda x: x[0])
-                for _, batch_embeddings in batch_results:
-                    embeddings.extend(batch_embeddings)
+                # Extend embeddings in order and release each batch immediately
+                for result in batch_results:
+                    if result is not None:
+                        _, batch_embeddings = result
+                        embeddings.extend(batch_embeddings)
+                        # Release batch embeddings after extending
+                        del batch_embeddings
+
+                # Clean up batch results list
+                del batch_results
+                gc.collect()
         else:
             # Original sequential processing
             for idx, text_batch in enumerate(text_batches, start=1):
@@ -805,6 +835,12 @@ class EmbeddingModel:
                     request_id=request_id,
                 )
                 embeddings.extend(batch_embeddings)
+                # Release batch embeddings immediately after extending
+                del batch_embeddings
+
+                # Force GC every 10 batches to avoid accumulation
+                if idx % 10 == 0:
+                    gc.collect()
 
         return embeddings
 

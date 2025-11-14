@@ -119,6 +119,8 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         """Adds embeddings to the chunks, the title and metadata suffixes are added to the chunk as well
         if they exist. If there is no space for it, it would have been thrown out at the chunking step.
         """
+        import gc
+
         # All chunks at this point must have some non-empty content
         flat_chunk_texts: list[str] = []
         large_chunks_present = False
@@ -144,6 +146,11 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                     raise RuntimeError("Large chunk contains mini chunks")
                 flat_chunk_texts.extend(chunk.mini_chunk_texts)
 
+        logger.info(
+            f"Starting embedding for {len(chunks)} chunks ({len(flat_chunk_texts)} texts total) "
+            f"tenant_id={tenant_id}"
+        )
+
         embeddings = self.embedding_model.encode(
             texts=flat_chunk_texts,
             text_type=EmbedTextType.PASSAGE,
@@ -151,6 +158,14 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             tenant_id=tenant_id,
             request_id=request_id,
         )
+
+        logger.info(
+            f"Completed embedding for {len(embeddings)} embeddings, releasing flat_chunk_texts"
+        )
+
+        # Release chunk texts immediately after embedding
+        del flat_chunk_texts
+        gc.collect()
 
         chunk_titles = {
             chunk.source_document.get_title_for_document_index() for chunk in chunks
@@ -176,6 +191,8 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                     for title, vector in zip(chunk_titles_list, title_embeddings)
                 }
             )
+            # Release title embeddings list after storing in dict
+            del title_embeddings
 
         # Mapping embeddings to chunks
         embedded_chunks: list[IndexChunk] = []
@@ -217,6 +234,14 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             )
             embedded_chunks.append(new_embedded_chunk)
             embedding_ind_start += num_embeddings
+
+        # Release source embeddings list after all chunks are created
+        logger.info(
+            f"Created {len(embedded_chunks)} embedded chunks, releasing source embeddings"
+        )
+        del embeddings
+        del title_embed_dict
+        gc.collect()
 
         return embedded_chunks
 
