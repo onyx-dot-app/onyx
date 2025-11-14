@@ -465,8 +465,8 @@ export default function UserSettings() {
                     currentLlm={
                       displayModel
                         ? structureValue(
-                            parseLlmDescriptor(displayModel).provider,
                             parseLlmDescriptor(displayModel).name,
+                            parseLlmDescriptor(displayModel).provider,
                             parseLlmDescriptor(displayModel).modelName
                           )
                         : null
