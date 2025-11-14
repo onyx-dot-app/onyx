@@ -18,6 +18,8 @@ import {
   UserSpecificAssistantPreferences,
 } from "@/lib/types";
 import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
+import { useSession } from "@/app/chat/stores/useChatSessionStore";
+import { BackendChatSession } from "@/app/chat/interfaces";
 
 async function fetchAllAgents(): Promise<MinimalPersonaSnapshot[]> {
   try {
@@ -83,17 +85,46 @@ export function AgentsProvider({
   const { assistantPreferences, setSpecificAssistantPreferences } =
     useAssistantPreferences();
   const [forcedToolIds, setForcedToolIds] = useState<number[]>([]);
+  const [chatSessionPersonaId, setChatSessionPersonaId] = useState<
+    number | null
+  >(null);
 
   const isInitialMount = useRef(true);
   const searchParams = useSearchParams();
+  const chatId = searchParams?.get(SEARCH_PARAM_NAMES.CHAT_ID);
   const currentAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
   const currentAgentId = currentAgentIdRaw ? parseInt(currentAgentIdRaw) : null;
+
+  // Get session data from Zustand store
+  console.log("chatId", chatId);
+  const chatSessionData = useSession(chatId || "");
+  console.log("sessionData", chatSessionData);
+  const sessionPersonaId = chatSessionData?.personaId;
+
+  // Fetch chat session if chatId exists but we don't have personaId from store
+  useEffect(() => {
+    if (!chatId) {
+      setChatSessionPersonaId(null);
+      return;
+    }
+
+    // If session data exists and has personaId, use it
+    if (sessionPersonaId && !currentAgentId) {
+      setChatSessionPersonaId(sessionPersonaId);
+      return;
+    }
+  }, [chatId, sessionPersonaId]);
+  console.log("chatSessionPersonaId", chatSessionPersonaId);
+
+  // Determine which agent ID to use: prioritize URL assistantId, then fall back to chat session persona_id
+  const effectiveAgentId = currentAgentId ?? chatSessionPersonaId;
+
   const currentAgent = useMemo(
     () =>
-      currentAgentId
-        ? agents.find((agent) => agent.id === currentAgentId) || null
+      effectiveAgentId
+        ? agents.find((agent) => agent.id === effectiveAgentId) || null
         : null,
-    [agents, currentAgentId]
+    [agents, effectiveAgentId]
   );
 
   async function refreshAgents() {
