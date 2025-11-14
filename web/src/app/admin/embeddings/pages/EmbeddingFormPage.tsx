@@ -200,10 +200,10 @@ export default function EmbeddingForm() {
     }
     const switchoverType =
       reindexType === SwitchoverType.REINDEX
-        ? "reindex"
+        ? SwitchoverType.REINDEX
         : reindexType === SwitchoverType.ACTIVE_ONLY
-          ? "active_only"
-          : "instant";
+          ? SwitchoverType.ACTIVE_ONLY
+          : SwitchoverType.INSTANT;
     const searchSettings = combineSearchSettings(
       selectedProvider,
       advancedEmbeddingDetails,
@@ -451,10 +451,10 @@ export default function EmbeddingForm() {
 
     const switchoverType =
       reindexType === SwitchoverType.REINDEX
-        ? "reindex"
+        ? SwitchoverType.REINDEX
         : reindexType === SwitchoverType.ACTIVE_ONLY
-          ? "active_only"
-          : "instant";
+          ? SwitchoverType.ACTIVE_ONLY
+          : SwitchoverType.INSTANT;
 
     if (selectedProvider.provider_type != null) {
       // This is a cloud model
