@@ -35,6 +35,7 @@ jobs:
       - runner=${{ matrix.platform == 'linux/amd64' && '8cpu-linux-x64' || '8cpu-linux-arm64' }}
       - run-id=${{ format('{0}-build-{1}-job-{2}', github.run_id, matrix.platform == 'linux/amd64' && 'linux-amd64' || 'linux-arm64', strategy['job-index']) }}
       - tag=platform-${{ matrix.platform }}
+      - extras=ecr-cache
     strategy:
       fail-fast: false
       matrix:
@@ -43,6 +44,8 @@ jobs:
           - linux/arm64
 
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
       - name: Prepare
         run: |
           platform=${{ matrix.platform }}
@@ -101,8 +104,10 @@ jobs:
 
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/web-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/web-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-${{ env.DEPLOYMENT }}-${{ env.PLATFORM_PAIR }}-cache
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-${{ env.DEPLOYMENT }}-${{ env.PLATFORM_PAIR }}-cache,mode=max
           # no-cache needed due to weird interactions with the builds for different platforms
           # NOTE(rkuo): this may not be true any more with the proper cache prefixing by architecture - currently testing with it off
 
