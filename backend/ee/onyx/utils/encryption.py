@@ -13,7 +13,7 @@ logger = setup_logger()
 
 
 @lru_cache(maxsize=1)
-def _prepare_cipher_key(secret: str) -> bytes:
+def _get_trimmed_key(secret: str) -> bytes:
     """Подготавливает ключ шифрования, обрезая до допустимой длины AES."""
     raw_bytes = secret.encode('utf-8')
     byte_size = len(raw_bytes)
@@ -29,12 +29,12 @@ def _prepare_cipher_key(secret: str) -> bytes:
     return raw_bytes[:closest_size]
 
 
-def _apply_string_encryption(plain_text: str) -> bytes:
+def _encrypt_string(plain_text: str) -> bytes:
     """Шифрует строку с использованием AES-CBC и PKCS7."""
     if not ENCRYPTION_KEY_SECRET:
         return plain_text.encode('utf-8')
 
-    cipher_key = _prepare_cipher_key(ENCRYPTION_KEY_SECRET)
+    cipher_key = _get_trimmed_key(ENCRYPTION_KEY_SECRET)
     init_vector = urandom(16)
     data_padder = padding.PKCS7(algorithms.AES.block_size).padder()
     padded_plain = data_padder.update(plain_text.encode('utf-8')) + data_padder.finalize()
@@ -46,12 +46,12 @@ def _apply_string_encryption(plain_text: str) -> bytes:
     return init_vector + ciphered_output
 
 
-def _reverse_byte_decryption(ciphered_input: bytes) -> str:
+def _decrypt_bytes(ciphered_input: bytes) -> str:
     """Дешифрует байты обратно в строку с удалением padding."""
     if not ENCRYPTION_KEY_SECRET:
         return ciphered_input.decode('utf-8')
 
-    cipher_key = _prepare_cipher_key(ENCRYPTION_KEY_SECRET)
+    cipher_key = _get_trimmed_key(ENCRYPTION_KEY_SECRET)
     init_vector = ciphered_input[:16]
     ciphered_payload = ciphered_input[16:]
 
