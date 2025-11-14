@@ -1124,6 +1124,9 @@ async def _get_or_create_user_from_jwt(
 
     try:
         user = await user_manager.get_by_email(email)
+        if not user.is_active:
+            logger.warning("Inactive user %s attempted JWT login; skipping", email)
+            return None
         if not user.role.is_web_login():
             raise exceptions.UserNotExists()
     except exceptions.UserNotExists:

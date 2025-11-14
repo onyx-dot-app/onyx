@@ -71,6 +71,46 @@ async def test_get_or_create_user_updates_expiry(
 
 
 @pytest.mark.asyncio
+async def test_get_or_create_user_skips_inactive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Inactive users should not be re-authenticated via JWT."""
+    monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", True)
+    monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
+    monkeypatch.setattr(users_module, "verify_email_domain", lambda _: None)
+
+    email = "inactive@example.com"
+    payload: dict[str, Any] = {"email": email}
+
+    existing_user = MagicMock()
+    existing_user.email = email
+    existing_user.is_active = False
+    existing_user.role.is_web_login.return_value = True  # type: ignore[attr-defined]
+
+    class StubUserManager:
+        def __init__(self, _user_db: object) -> None:
+            self.user_db = MagicMock()
+            self.user_db.update = AsyncMock()
+
+        async def get_by_email(self, email_arg: str) -> MagicMock:
+            assert email_arg == email
+            return existing_user
+
+    monkeypatch.setattr(users_module, "UserManager", StubUserManager)
+    monkeypatch.setattr(
+        users_module,
+        "SQLAlchemyUserAdminDB",
+        lambda *args, **kwargs: MagicMock(),
+    )
+
+    result = await users_module._get_or_create_user_from_jwt(
+        payload, MagicMock(), MagicMock()
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_get_or_create_user_provisions_new_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
