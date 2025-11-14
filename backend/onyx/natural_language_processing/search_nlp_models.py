@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import json
 import threading
 import time
@@ -216,7 +217,8 @@ class CloudEmbedding:
         client = CohereAsyncClient(api_key=self.api_key)
 
         final_embeddings: list[Embedding] = []
-        for text_batch in batch_list(texts, _COHERE_MAX_INPUT_LEN):
+        batches = list(batch_list(texts, _COHERE_MAX_INPUT_LEN))
+        for batch_idx, text_batch in enumerate(batches):
             # Does not use the same tokenizer as the Onyx API server but it's approximately the same
             # empirically it's only off by a very few tokens so it's not a big deal
             response = await client.embed(
@@ -225,7 +227,13 @@ class CloudEmbedding:
                 input_type=embedding_type,
                 truncate="END",
             )
-            final_embeddings.extend(cast(list[Embedding], response.embeddings))
+            batch_embeddings = cast(list[Embedding], response.embeddings)
+            final_embeddings.extend(batch_embeddings)
+            del response
+            del batch_embeddings
+            batches[batch_idx] = None
+            del text_batch
+        del batches
         return final_embeddings
 
     async def _embed_voyage(
@@ -696,8 +704,9 @@ class EmbeddingModel:
         request_id: str | None = None,
     ) -> list[Embedding]:
         text_batches = batch_list(texts, batch_size)
+        total_batches = len(text_batches)
 
-        logger.debug(f"Encoding {len(texts)} texts in {len(text_batches)} batches")
+        logger.debug(f"Encoding {len(texts)} texts in {total_batches} batches")
 
         embeddings: list[Embedding] = []
 
@@ -707,7 +716,7 @@ class EmbeddingModel:
             text_batch: list[str],
             tenant_id: str | None = None,
             request_id: str | None = None,
-        ) -> tuple[int, list[Embedding]]:
+        ) -> list[Embedding]:
             if self.callback:
                 if self.callback.should_stop():
                     raise ConnectorStopSignal(
@@ -758,20 +767,24 @@ class EmbeddingModel:
                 f"EmbeddingModel.process_batch: Batch {batch_idx}/{batch_len} processing time: {processing_time:.2f} seconds"
             )
 
-            return batch_idx, response.embeddings
+            result_embeddings = response.embeddings
+            del response
+            del embed_request
+            return result_embeddings
 
         # only multi thread if:
         #   1. num_threads is greater than 1
         #   2. we are using an API-based embedding model (provider_type is not None)
         #   3. there are more than 1 batch (no point in threading if only 1)
-        if num_threads >= 1 and self.provider_type and len(text_batches) > 1:
+        if num_threads > 1 and self.provider_type and total_batches > 1:
+            batch_results: list[list[Embedding] | None] = [None] * total_batches
             with ThreadPoolExecutor(max_workers=num_threads) as executor:
                 future_to_batch = {
                     executor.submit(
                         partial(
                             process_batch,
                             idx,
-                            len(text_batches),
+                            total_batches,
                             batch,
                             tenant_id=tenant_id,
                             request_id=request_id,
@@ -780,32 +793,47 @@ class EmbeddingModel:
                     for idx, batch in enumerate(text_batches, start=1)
                 }
 
-                # Collect results in order
-                batch_results: list[tuple[int, list[Embedding]]] = []
+                for idx in range(total_batches):
+                    text_batches[idx] = None
+
                 for future in as_completed(future_to_batch):
+                    batch_idx = future_to_batch.pop(future)
                     try:
-                        result = future.result()
-                        batch_results.append(result)
+                        batch_results[batch_idx - 1] = future.result()
                     except Exception as e:
                         logger.exception("Embedding model failed to process batch")
                         raise e
+                    finally:
+                        del future
 
-                # Sort by batch index and extend embeddings
-                batch_results.sort(key=lambda x: x[0])
-                for _, batch_embeddings in batch_results:
-                    embeddings.extend(batch_embeddings)
+                del future_to_batch
+
+            for batch_embeddings in batch_results:
+                if batch_embeddings is None:
+                    continue
+                embeddings.extend(batch_embeddings)
+                del batch_embeddings
+            del batch_results
+            gc.collect()
         else:
             # Original sequential processing
             for idx, text_batch in enumerate(text_batches, start=1):
-                _, batch_embeddings = process_batch(
+                batch_embeddings = process_batch(
                     idx,
-                    len(text_batches),
+                    total_batches,
                     text_batch,
                     tenant_id=tenant_id,
                     request_id=request_id,
                 )
                 embeddings.extend(batch_embeddings)
+                text_batches[idx - 1] = None
+                del batch_embeddings
+                del text_batch
+                if idx % 10 == 0:
+                    gc.collect()
+            gc.collect()
 
+        del text_batches
         return embeddings
 
     def encode(
