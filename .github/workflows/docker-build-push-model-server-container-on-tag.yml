@@ -14,6 +14,7 @@ env:
 
   # tag nightly builds with "edge"
   EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}
+  IS_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' }}
 
 jobs:
 
@@ -77,7 +78,7 @@ jobs:
             network=host
 
       - name: Login to Docker Hub
-        if: github.event_name != 'workflow_dispatch'
+        if: env.IS_DRY_RUN != 'true'
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -89,11 +90,11 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/amd64
-          push: ${{ github.event_name != 'workflow_dispatch' }}
+          push: ${{ env.IS_DRY_RUN != 'true' }}
           tags: ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-amd64
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-          outputs: type=registry
+          outputs: ${{ env.IS_DRY_RUN != 'true' && 'type=registry' || 'type=docker' }}
           provenance: false
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-${{ env.PLATFORM_PAIR }}-cache
@@ -128,7 +129,7 @@ jobs:
             network=host
 
       - name: Login to Docker Hub
-        if: github.event_name != 'workflow_dispatch'
+        if: env.IS_DRY_RUN != 'true'
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -140,11 +141,11 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/arm64
-          push: ${{ github.event_name != 'workflow_dispatch' }}
+          push: ${{ env.IS_DRY_RUN != 'true' }}
           tags: ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}-arm64
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-          outputs: type=registry
+          outputs: ${{ env.IS_DRY_RUN != 'true' && 'type=registry' || 'type=docker' }}
           provenance: false
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-${{ env.PLATFORM_PAIR }}-cache

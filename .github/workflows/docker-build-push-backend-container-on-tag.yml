@@ -12,6 +12,7 @@ env:
 
   # tag nightly builds with "edge"
   EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}
+  IS_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' }}
 
 jobs:
   build-and-push:
@@ -72,7 +73,7 @@ jobs:
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
-        if: github.event_name != 'workflow_dispatch'
+        if: env.IS_DRY_RUN != 'true'
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -85,11 +86,11 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: ${{ matrix.platform }}
-          push: ${{ github.event_name != 'workflow_dispatch' }}
+          push: ${{ env.IS_DRY_RUN != 'true' }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: ${{ env.IS_DRY_RUN != 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.REGISTRY_IMAGE) || format('type=docker,name={0}', env.REGISTRY_IMAGE) }}
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-${{ env.DEPLOYMENT }}-${{ env.PLATFORM_PAIR }}-cache
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -102,7 +103,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        if: github.event_name != 'workflow_dispatch'
+        if: env.IS_DRY_RUN != 'true'
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         with:
           name: backend-digests-${{ env.PLATFORM_PAIR }}-${{ github.run_id }}
