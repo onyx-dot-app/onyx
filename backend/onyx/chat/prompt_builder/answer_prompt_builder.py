@@ -13,11 +13,11 @@ from onyx.chat.prompt_builder.citations_prompt import compute_max_llm_input_toke
 from onyx.chat.prompt_builder.utils import translate_history_to_basemessages
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import check_message_tokens
 from onyx.llm.utils import message_to_prompt_and_imgs
+from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.llm.utils import model_supports_image_input
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
@@ -48,12 +48,9 @@ def default_build_system_message_v2(
         prompt_config.default_behavior_system_prompt or DEFAULT_SYSTEM_PROMPT
     )
 
-    # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
-    # for o-series markdown generation
-    if (
-        llm_config.model_provider == OPENAI_PROVIDER_NAME
-        and llm_config.model_name.startswith("o")
-    ):
+    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
+    # for OpenAI reasoning models to have correct markdown generation
+    if model_needs_formatting_reenabled(llm_config.model_name):
         system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
 
     tag_handled_prompt = handle_onyx_date_awareness(
@@ -134,13 +131,11 @@ def default_build_system_message(
         prompt_config.custom_instructions
         or prompt_config.default_behavior_system_prompt
     )
-    # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
-    # for o-series markdown generation
-    if (
-        llm_config.model_provider == OPENAI_PROVIDER_NAME
-        and llm_config.model_name.startswith("o")
-    ):
+    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
+    # for OpenAI reasoning models to have correct markdown generation
+    if model_needs_formatting_reenabled(llm_config.model_name):
         system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
+
     tag_handled_prompt = handle_onyx_date_awareness(
         system_prompt,
         prompt_config,
