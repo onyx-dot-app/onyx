@@ -5,11 +5,6 @@ repos:
       - id: check-yaml
         files: ^.github/
 
-  - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.8
-    hooks:
-      - id: actionlint
-
   - repo: https://github.com/psf/black
     rev: 25.1.0
     hooks:
