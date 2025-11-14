@@ -11,6 +11,7 @@ const sizeClassNames = {
   main: ["w-[80dvw]", "h-[80dvh]"],
   medium: ["w-[60rem]", "h-fit"],
   small: ["w-[32rem]", "h-[30rem]"],
+  tall: ["w-[32rem]"],
   mini: ["w-[32rem]", "h-fit"],
 } as const;
 
@@ -19,6 +20,7 @@ export interface ModalProps {
   main?: boolean;
   medium?: boolean;
   small?: boolean;
+  tall?: boolean;
   mini?: boolean;
 
   // Base modal props
@@ -34,6 +36,7 @@ export default function DefaultModalLayout({
   main,
   medium,
   small,
+  tall,
   mini,
 
   icon: Icon,
@@ -51,9 +54,11 @@ export default function DefaultModalLayout({
       ? "medium"
       : small
         ? "small"
-        : mini
-          ? "mini"
-          : "main";
+        : tall
+          ? "tall"
+          : mini
+            ? "mini"
+            : "main";
 
   return (
     <RawModal onClose={onClose}>

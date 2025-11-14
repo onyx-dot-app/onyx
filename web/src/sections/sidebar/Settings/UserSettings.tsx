@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getDisplayNameForModel, useAuthType } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/users/UserSettings";
@@ -8,7 +8,6 @@ import { useUser } from "@/components/user/UserProvider";
 import { ThemePreference } from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
 import { SubLabel } from "@/components/Field";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import {
   Select,
@@ -36,10 +35,11 @@ import Text from "@/refresh-components/texts/Text";
 import SvgXOctagon from "@/icons/x-octagon";
 import { PATManagement } from "@/components/user/PATManagement";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import RawModal from "@/refresh-components/RawModal";
+import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
+import SvgSettings from "@/icons/settings";
 
 type SettingsSection =
-  | "settings"
+  | "general"
   | "password"
   | "connectors"
   | "personalization"
@@ -68,7 +68,7 @@ export default function UserSettings() {
   const [isLoading, setIsLoading] = useState(false);
   const [isModelUpdating, setIsModelUpdating] = useState(false);
   const [activeSection, setActiveSection] =
-    useState<SettingsSection>("settings");
+    useState<SettingsSection>("general");
   // show updates in the UI instantly without waiting for an API call to finish
   const [currentDefaultModel, setCurrentDefaultModel] = useState<string | null>(
     null
@@ -130,7 +130,7 @@ export default function UserSettings() {
 
   const sections = useMemo(() => {
     const visibleSections: { id: SettingsSection; label: string }[] = [
-      { id: "settings", label: "Settings" },
+      { id: "general", label: "General" },
       { id: "personalization", label: "Personalization" },
     ];
 
@@ -149,7 +149,7 @@ export default function UserSettings() {
 
   useEffect(() => {
     if (!sections.some((section) => section.id === activeSection)) {
-      setActiveSection(sections[0]?.id ?? "settings");
+      setActiveSection(sections[0]?.id ?? "general");
     }
   }, [sections, activeSection]);
 
@@ -295,8 +295,6 @@ export default function UserSettings() {
     }
   };
 
-  const settings = useContext(SettingsContext);
-
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
@@ -372,519 +370,536 @@ export default function UserSettings() {
     <>
       {popup}
 
-      <RawModal className="flex flex-col gap-6 p-6">
-        {sections.length > 1 && (
-          <nav>
-            <ul className="flex space-x-2">
-              {sections.map(({ id, label }) => (
-                <li key={id}>
-                  <Button
-                    tertiary
-                    transient={activeSection === id}
-                    disabled={
-                      id === "connectors" &&
-                      (isLoadingConnectors || !hasConnectors)
-                    }
-                    onClick={() => setActiveSection(id)}
-                  >
-                    {label}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        )}
-
-        <div className="w-full overflow-y-auto px-1">
-          {activeSection === "settings" && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-medium">Theme</h3>
-                <Select
-                  value={theme}
-                  onValueChange={(value) => {
-                    setTheme(value);
-                    updateUserThemePreference(value as ThemePreference);
-                  }}
-                >
-                  <SelectTrigger className="w-full mt-2">
-                    <SelectValue placeholder="Select theme" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem
-                      value={ThemePreference.SYSTEM}
-                      icon={<Monitor className="h-4 w-4" />}
-                    >
-                      System
-                    </SelectItem>
-                    <SelectItem
-                      value={ThemePreference.LIGHT}
-                      icon={<Sun className="h-4 w-4" />}
-                    >
-                      Light
-                    </SelectItem>
-                    <SelectItem icon={<Moon />} value={ThemePreference.DARK}>
-                      Dark
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-medium">Auto-scroll</h3>
-                  <SubLabel>Automatically scroll to new content</SubLabel>
-                </div>
-                <Switch
-                  checked={user?.preferences.auto_scroll}
-                  onCheckedChange={(checked) => {
-                    updateUserAutoScroll(checked);
-                  }}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-medium">Temperature override</h3>
-                  <SubLabel>Set the temperature for the LLM</SubLabel>
-                </div>
-                <Switch
-                  checked={user?.preferences.temperature_override_enabled}
-                  onCheckedChange={(checked) => {
-                    updateUserTemperatureOverrideEnabled(checked);
-                  }}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-medium">Prompt Shortcuts</h3>
-                  <SubLabel>Enable keyboard shortcuts for prompts</SubLabel>
-                </div>
-                <Switch
-                  checked={user?.preferences?.shortcut_enabled}
-                  onCheckedChange={(checked) => {
-                    updateUserShortcuts(checked);
-                  }}
-                />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-lg font-medium">Default Model</h3>
-                  {isModelUpdating && (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-                <LLMSelector
-                  userSettings
-                  llmProviders={llmProviders ?? []}
-                  currentLlm={
-                    displayModel
-                      ? structureValue(
-                          parseLlmDescriptor(displayModel).provider,
-                          parseLlmDescriptor(displayModel).name,
-                          parseLlmDescriptor(displayModel).modelName
-                        )
-                      : null
-                  }
-                  requiresImageGeneration={false}
-                  onSelect={(selected) => {
-                    if (selected === null) {
-                      handleChangedefaultModel(null);
-                    } else {
-                      const { modelName, provider, name } =
-                        parseLlmDescriptor(selected);
-                      if (modelName && name) {
-                        handleChangedefaultModel(
-                          structureValue(name, provider, modelName)
-                        );
-                      }
-                    }
-                  }}
-                />
-              </div>
-              <div className="pt-4 border-t border-border">
-                {!showDeleteConfirmation ? (
-                  <div className="space-y-3">
-                    <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                      This will permanently delete all your chat sessions and
-                      cannot be undone.
-                    </p>
+      <DefaultModalLayout icon={SvgSettings} title="Settings" tall>
+        <div className="flex flex-col gap-4 px-4 pb-4">
+          {sections.length > 1 && (
+            <nav>
+              <ul className="flex flex-row gap-1">
+                {sections.map(({ id, label }) => (
+                  <li key={id}>
                     <Button
-                      danger
-                      onClick={() => setShowDeleteConfirmation(true)}
-                      leftIcon={SvgTrash}
+                      tertiary
+                      transient={activeSection === id}
+                      disabled={
+                        id === "connectors" &&
+                        (isLoadingConnectors || !hasConnectors)
+                      }
+                      onClick={() => setActiveSection(id)}
                     >
-                      Delete All Chats
+                      {label}
                     </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                      Are you sure you want to delete all your chat sessions?
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        danger
-                        onClick={handleDeleteAllChats}
-                        disabled={isDeleteAllLoading}
-                      >
-                        {isDeleteAllLoading ? "Deleting..." : "Yes, Delete All"}
-                      </Button>
-                      <Button
-                        secondary
-                        onClick={() => setShowDeleteConfirmation(false)}
-                        disabled={isDeleteAllLoading}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+                  </li>
+                ))}
+              </ul>
+            </nav>
           )}
-          {activeSection === "personalization" && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-medium">Name</h3>
-                <Input
-                  value={personalizationValues.name}
-                  onChange={(event) =>
-                    updatePersonalizationField("name", event.target.value)
-                  }
-                  placeholder="Set how Onyx should refer to you"
-                  className="mt-2"
-                />
-                {personalizationValues.name.length === 0 && (
-                  <div className="flex items-center gap-1 mt-1">
-                    <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />
-                    <Text text03 secondaryBody>
-                      Please enter a name to continue.
-                    </Text>
-                  </div>
-                )}
-              </div>
-              <div>
-                <h3 className="text-lg font-medium">Role</h3>
-                <Input
-                  value={personalizationValues.role}
-                  onChange={(event) =>
-                    updatePersonalizationField("role", event.target.value)
-                  }
-                  placeholder="Share your role to tailor responses"
-                  className="mt-2"
-                />
-              </div>
-              <div className="flex items-center justify-between">
+
+          <div className="w-full overflow-y-auto">
+            {activeSection === "general" && (
+              <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-medium">Use memories</h3>
-                  <SubLabel>
-                    Allow Onyx to reference stored memories in future chats.
-                  </SubLabel>
+                  <h3 className="text-lg font-medium">Theme</h3>
+                  <Select
+                    value={theme}
+                    onValueChange={(value) => {
+                      setTheme(value);
+                      updateUserThemePreference(value as ThemePreference);
+                    }}
+                  >
+                    <SelectTrigger className="w-full mt-2">
+                      <SelectValue placeholder="Select theme" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        value={ThemePreference.SYSTEM}
+                        icon={<Monitor className="h-4 w-4" />}
+                      >
+                        System
+                      </SelectItem>
+                      <SelectItem
+                        value={ThemePreference.LIGHT}
+                        icon={<Sun className="h-4 w-4" />}
+                      >
+                        Light
+                      </SelectItem>
+                      <SelectItem icon={<Moon />} value={ThemePreference.DARK}>
+                        Dark
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Switch
-                  checked={personalizationValues.use_memories}
-                  onCheckedChange={(checked) => toggleUseMemories(checked)}
-                />
-              </div>
-              <div className="border-t border-border pt-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-medium">Memories</h3>
+                    <h3 className="text-lg font-medium">Auto-scroll</h3>
+                    <SubLabel>Automatically scroll to new content</SubLabel>
+                  </div>
+                  <Switch
+                    checked={user?.preferences.auto_scroll}
+                    onCheckedChange={(checked) => {
+                      updateUserAutoScroll(checked);
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium">
+                      Temperature override
+                    </h3>
+                    <SubLabel>Set the temperature for the LLM</SubLabel>
+                  </div>
+                  <Switch
+                    checked={user?.preferences.temperature_override_enabled}
+                    onCheckedChange={(checked) => {
+                      updateUserTemperatureOverrideEnabled(checked);
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium">Prompt Shortcuts</h3>
+                    <SubLabel>Enable keyboard shortcuts for prompts</SubLabel>
+                  </div>
+                  <Switch
+                    checked={user?.preferences?.shortcut_enabled}
+                    onCheckedChange={(checked) => {
+                      updateUserShortcuts(checked);
+                    }}
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-lg font-medium">Default Model</h3>
+                    {isModelUpdating && (
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                  <LLMSelector
+                    userSettings
+                    llmProviders={llmProviders ?? []}
+                    currentLlm={
+                      displayModel
+                        ? structureValue(
+                            parseLlmDescriptor(displayModel).provider,
+                            parseLlmDescriptor(displayModel).name,
+                            parseLlmDescriptor(displayModel).modelName
+                          )
+                        : null
+                    }
+                    requiresImageGeneration={false}
+                    onSelect={(selected) => {
+                      if (selected === null) {
+                        handleChangedefaultModel(null);
+                      } else {
+                        const { modelName, provider, name } =
+                          parseLlmDescriptor(selected);
+                        if (modelName && name) {
+                          handleChangedefaultModel(
+                            structureValue(name, provider, modelName)
+                          );
+                        }
+                      }
+                    }}
+                  />
+                </div>
+                <div className="pt-4 border-t border-border">
+                  {!showDeleteConfirmation ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                        This will permanently delete all your chat sessions and
+                        cannot be undone.
+                      </p>
+                      <Button
+                        danger
+                        onClick={() => setShowDeleteConfirmation(true)}
+                        leftIcon={SvgTrash}
+                      >
+                        Delete All Chats
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                        Are you sure you want to delete all your chat sessions?
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          danger
+                          onClick={handleDeleteAllChats}
+                          disabled={isDeleteAllLoading}
+                        >
+                          {isDeleteAllLoading
+                            ? "Deleting..."
+                            : "Yes, Delete All"}
+                        </Button>
+                        <Button
+                          secondary
+                          onClick={() => setShowDeleteConfirmation(false)}
+                          disabled={isDeleteAllLoading}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {activeSection === "personalization" && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium">Name</h3>
+                  <Input
+                    value={personalizationValues.name}
+                    onChange={(event) =>
+                      updatePersonalizationField("name", event.target.value)
+                    }
+                    placeholder="Set how Onyx should refer to you"
+                    className="mt-2"
+                  />
+                  {personalizationValues.name.length === 0 && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />
+                      <Text text03 secondaryBody>
+                        Please enter a name to continue.
+                      </Text>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium">Role</h3>
+                  <Input
+                    value={personalizationValues.role}
+                    onChange={(event) =>
+                      updatePersonalizationField("role", event.target.value)
+                    }
+                    placeholder="Share your role to tailor responses"
+                    className="mt-2"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium">Use memories</h3>
                     <SubLabel>
-                      Keep personal notes that should inform future chats.
+                      Allow Onyx to reference stored memories in future chats.
                     </SubLabel>
                   </div>
-                  <Button tertiary onClick={addMemory}>
-                    Add Memory
+                  <Switch
+                    checked={personalizationValues.use_memories}
+                    onCheckedChange={(checked) => toggleUseMemories(checked)}
+                  />
+                </div>
+                <div className="border-t border-border pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-medium">Memories</h3>
+                      <SubLabel>
+                        Keep personal notes that should inform future chats.
+                      </SubLabel>
+                    </div>
+                    <Button tertiary onClick={addMemory}>
+                      Add Memory
+                    </Button>
+                  </div>
+                  {personalizationValues.memories.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No memories saved yet.
+                    </p>
+                  ) : (
+                    <div className="max-h-64 overflow-y-auto flex flex-col gap-3 pr-1">
+                      {personalizationValues.memories.map((memory, index) => (
+                        <AutoResizeTextarea
+                          key={index}
+                          value={memory}
+                          placeholder="Write something Onyx should remember"
+                          onChange={(value) =>
+                            updateMemoryAtIndex(index, value)
+                          }
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    onClick={() => {
+                      void handleSavePersonalization();
+                    }}
+                    disabled={
+                      isSavingPersonalization ||
+                      personalizationValues.name.length === 0
+                    }
+                  >
+                    {isSavingPersonalization
+                      ? "Saving Personalization..."
+                      : "Save Personalization"}
                   </Button>
                 </div>
-                {personalizationValues.memories.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No memories saved yet.
+              </div>
+            )}
+            {activeSection === "password" && (
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <h3 className="text-lg font-medium">Change Password</h3>
+                  <SubLabel>
+                    Enter your current password and new password to change your
+                    password.
+                  </SubLabel>
+                </div>
+                <form onSubmit={handleChangePassword} className="w-full">
+                  <div className="w-full">
+                    <label
+                      htmlFor="currentPassword"
+                      className="text-sm font-medium"
+                    >
+                      Current Password
+                    </label>
+                    <Input
+                      id="currentPassword"
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      required
+                      className="mt-2"
+                    />
+                  </div>
+                  <div className="w-full">
+                    <label
+                      htmlFor="newPassword"
+                      className="text-sm font-medium"
+                    >
+                      New Password
+                    </label>
+                    <Input
+                      id="newPassword"
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                      className="mt-2"
+                    />
+                  </div>
+                  <div className="w-full">
+                    <label
+                      htmlFor="confirmPassword"
+                      className="text-sm font-medium"
+                    >
+                      Confirm New Password
+                    </label>
+                    <Input
+                      id="confirmPassword"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      className="mt-2"
+                    />
+                  </div>
+                  <div className="flex justify-end w-full">
+                    <Button disabled={isLoading}>
+                      {isLoading ? "Changing..." : "Change Password"}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            )}
+            {activeSection === "connectors" && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium mb-4">
+                    Connected Services
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Manage your connected services to search across all your
+                    content.
                   </p>
-                ) : (
-                  <div className="max-h-64 overflow-y-auto flex flex-col gap-3 pr-1">
-                    {personalizationValues.memories.map((memory, index) => (
-                      <AutoResizeTextarea
-                        key={index}
-                        value={memory}
-                        placeholder="Write something Onyx should remember"
-                        onChange={(value) => updateMemoryAtIndex(index, value)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  onClick={() => {
-                    void handleSavePersonalization();
-                  }}
-                  disabled={
-                    isSavingPersonalization ||
-                    personalizationValues.name.length === 0
-                  }
-                >
-                  {isSavingPersonalization
-                    ? "Saving Personalization..."
-                    : "Save Personalization"}
-                </Button>
-              </div>
-            </div>
-          )}
-          {activeSection === "password" && (
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <h3 className="text-lg font-medium">Change Password</h3>
-                <SubLabel>
-                  Enter your current password and new password to change your
-                  password.
-                </SubLabel>
-              </div>
-              <form onSubmit={handleChangePassword} className="w-full">
-                <div className="w-full">
-                  <label
-                    htmlFor="currentPassword"
-                    className="text-sm font-medium"
-                  >
-                    Current Password
-                  </label>
-                  <Input
-                    id="currentPassword"
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    required
-                    className="mt-2"
-                  />
-                </div>
-                <div className="w-full">
-                  <label htmlFor="newPassword" className="text-sm font-medium">
-                    New Password
-                  </label>
-                  <Input
-                    id="newPassword"
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                    className="mt-2"
-                  />
-                </div>
-                <div className="w-full">
-                  <label
-                    htmlFor="confirmPassword"
-                    className="text-sm font-medium"
-                  >
-                    Confirm New Password
-                  </label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    className="mt-2"
-                  />
-                </div>
-                <div className="flex justify-end w-full">
-                  <Button disabled={isLoading}>
-                    {isLoading ? "Changing..." : "Change Password"}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          )}
-          {activeSection === "connectors" && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-medium mb-4">Connected Services</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Manage your connected services to search across all your
-                  content.
-                </p>
 
-                {/* Indexed Connectors Section */}
-                {ccPairs && ccPairs.length > 0 && (
-                  <div className="space-y-3 mb-6">
-                    <h4 className="text-md font-medium text-muted-foreground">
-                      Indexed Connectors
-                    </h4>
-                    {(() => {
-                      // Group connectors by source
-                      const groupedConnectors = ccPairs.reduce(
-                        (acc, ccPair) => {
-                          const source = ccPair.source;
-                          if (!acc[source]) {
-                            acc[source] = {
-                              source,
-                              count: 0,
-                              hasSuccessfulRun: false,
-                            };
-                          }
-                          acc[source]!.count++;
-                          if (ccPair.has_successful_run) {
-                            acc[source]!.hasSuccessfulRun = true;
-                          }
-                          return acc;
-                        },
-                        {} as Record<
-                          string,
-                          {
-                            source: ValidSources;
-                            count: number;
-                            hasSuccessfulRun: boolean;
-                          }
-                        >
-                      );
-
-                      // Helper function to format source names
-                      const formatSourceName = (source: string) => {
-                        return source
-                          .split("_")
-                          .map(
-                            (word) =>
-                              word.charAt(0).toUpperCase() + word.slice(1)
-                          )
-                          .join(" ");
-                      };
-
-                      return Object.values(groupedConnectors).map((group) => (
-                        <div
-                          key={group.source}
-                          className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30"
-                        >
-                          <div className="flex items-center gap-3">
-                            <SourceIcon
-                              sourceType={group.source}
-                              iconSize={24}
-                            />
-                            <div>
-                              <p className="font-medium">
-                                {formatSourceName(group.source)}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {group.count > 1
-                                  ? `${group.count} connectors`
-                                  : "Connected"}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-sm text-muted-foreground font-medium">
-                            Active
-                          </div>
-                        </div>
-                      ));
-                    })()}
-                  </div>
-                )}
-
-                {/* Federated Search Section */}
-                {federatedConnectors && federatedConnectors.length > 0 && (
-                  <div className="space-y-3">
-                    <h4 className="text-md font-medium text-muted-foreground">
-                      Federated Connectors
-                    </h4>
-                    {(() => {
-                      // Helper function to format source names
-                      const formatSourceName = (source: string) => {
-                        return source
-                          .split("_")
-                          .map(
-                            (word) =>
-                              word.charAt(0).toUpperCase() + word.slice(1)
-                          )
-                          .join(" ");
-                      };
-
-                      return federatedConnectors.map((connector) => {
-                        const sourceMetadata = getSourceMetadata(
-                          connector.source as ValidSources
+                  {/* Indexed Connectors Section */}
+                  {ccPairs && ccPairs.length > 0 && (
+                    <div className="space-y-3 mb-6">
+                      <h4 className="text-md font-medium text-muted-foreground">
+                        Indexed Connectors
+                      </h4>
+                      {(() => {
+                        // Group connectors by source
+                        const groupedConnectors = ccPairs.reduce(
+                          (acc, ccPair) => {
+                            const source = ccPair.source;
+                            if (!acc[source]) {
+                              acc[source] = {
+                                source,
+                                count: 0,
+                                hasSuccessfulRun: false,
+                              };
+                            }
+                            acc[source]!.count++;
+                            if (ccPair.has_successful_run) {
+                              acc[source]!.hasSuccessfulRun = true;
+                            }
+                            return acc;
+                          },
+                          {} as Record<
+                            string,
+                            {
+                              source: ValidSources;
+                              count: number;
+                              hasSuccessfulRun: boolean;
+                            }
+                          >
                         );
-                        return (
+
+                        // Helper function to format source names
+                        const formatSourceName = (source: string) => {
+                          return source
+                            .split("_")
+                            .map(
+                              (word) =>
+                                word.charAt(0).toUpperCase() + word.slice(1)
+                            )
+                            .join(" ");
+                        };
+
+                        return Object.values(groupedConnectors).map((group) => (
                           <div
-                            key={connector.federated_connector_id}
-                            className="flex items-center justify-between p-4 rounded-lg border border-border"
+                            key={group.source}
+                            className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30"
                           >
                             <div className="flex items-center gap-3">
                               <SourceIcon
-                                sourceType={sourceMetadata.internalName}
+                                sourceType={group.source}
                                 iconSize={24}
                               />
                               <div>
                                 <p className="font-medium">
-                                  {formatSourceName(sourceMetadata.displayName)}
+                                  {formatSourceName(group.source)}
                                 </p>
                                 <p className="text-sm text-muted-foreground">
-                                  {connector.has_oauth_token
-                                    ? "Connected"
-                                    : "Not connected"}
+                                  {group.count > 1
+                                    ? `${group.count} connectors`
+                                    : "Connected"}
                                 </p>
                               </div>
                             </div>
-                            <div>
-                              {connector.has_oauth_token ? (
-                                <Button
-                                  secondary
-                                  onClick={() =>
-                                    handleDisconnectOAuth(
-                                      connector.federated_connector_id
-                                    )
-                                  }
-                                  disabled={
-                                    isDisconnecting ===
-                                    connector.federated_connector_id
-                                  }
-                                >
-                                  {isDisconnecting ===
-                                  connector.federated_connector_id
-                                    ? "Disconnecting..."
-                                    : "Disconnect"}
-                                </Button>
-                              ) : (
-                                <Button
-                                  onClick={() => {
-                                    if (connector.authorize_url) {
-                                      handleConnectOAuth(
-                                        connector.authorize_url
-                                      );
-                                    }
-                                  }}
-                                  disabled={!connector.authorize_url}
-                                  leftIcon={SvgExternalLink}
-                                >
-                                  Connect
-                                </Button>
-                              )}
+                            <div className="text-sm text-muted-foreground font-medium">
+                              Active
                             </div>
                           </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                )}
+                        ));
+                      })()}
+                    </div>
+                  )}
 
-                {!hasConnectors && (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-muted-foreground">
-                      No connectors available.
-                    </p>
-                  </div>
-                )}
+                  {/* Federated Search Section */}
+                  {federatedConnectors && federatedConnectors.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-md font-medium text-muted-foreground">
+                        Federated Connectors
+                      </h4>
+                      {(() => {
+                        // Helper function to format source names
+                        const formatSourceName = (source: string) => {
+                          return source
+                            .split("_")
+                            .map(
+                              (word) =>
+                                word.charAt(0).toUpperCase() + word.slice(1)
+                            )
+                            .join(" ");
+                        };
+
+                        return federatedConnectors.map((connector) => {
+                          const sourceMetadata = getSourceMetadata(
+                            connector.source as ValidSources
+                          );
+                          return (
+                            <div
+                              key={connector.federated_connector_id}
+                              className="flex items-center justify-between p-4 rounded-lg border border-border"
+                            >
+                              <div className="flex items-center gap-3">
+                                <SourceIcon
+                                  sourceType={sourceMetadata.internalName}
+                                  iconSize={24}
+                                />
+                                <div>
+                                  <p className="font-medium">
+                                    {formatSourceName(
+                                      sourceMetadata.displayName
+                                    )}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {connector.has_oauth_token
+                                      ? "Connected"
+                                      : "Not connected"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div>
+                                {connector.has_oauth_token ? (
+                                  <Button
+                                    secondary
+                                    onClick={() =>
+                                      handleDisconnectOAuth(
+                                        connector.federated_connector_id
+                                      )
+                                    }
+                                    disabled={
+                                      isDisconnecting ===
+                                      connector.federated_connector_id
+                                    }
+                                  >
+                                    {isDisconnecting ===
+                                    connector.federated_connector_id
+                                      ? "Disconnecting..."
+                                      : "Disconnect"}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    onClick={() => {
+                                      if (connector.authorize_url) {
+                                        handleConnectOAuth(
+                                          connector.authorize_url
+                                        );
+                                      }
+                                    }}
+                                    disabled={!connector.authorize_url}
+                                    leftIcon={SvgExternalLink}
+                                  >
+                                    Connect
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
+
+                  {!hasConnectors && (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground">
+                        No connectors available.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-          {activeSection === "tokens" && (
-            <div>
-              <h2 className="text-xl font-bold mb-4">Personal Access Tokens</h2>
-              <p className="text-sm text-text-03 mb-4">
-                Create tokens to authenticate API requests. Tokens inherit all
-                your permissions.
-              </p>
-              <PATManagement />
-            </div>
-          )}
+            )}
+            {activeSection === "tokens" && (
+              <div>
+                <h2 className="text-xl font-bold mb-4">
+                  Personal Access Tokens
+                </h2>
+                <p className="text-sm text-text-03 mb-4">
+                  Create tokens to authenticate API requests. Tokens inherit all
+                  your permissions.
+                </p>
+                <PATManagement />
+              </div>
+            )}
+          </div>
         </div>
-      </RawModal>
+      </DefaultModalLayout>
     </>
   );
 }
