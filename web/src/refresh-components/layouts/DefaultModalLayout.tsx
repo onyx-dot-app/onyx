@@ -5,7 +5,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
-import RawModal from "../SimpleModal";
+import RawModal from "@/refresh-components/RawModal";
 
 const sizeClassNames = {
   main: ["w-[80dvw]", "h-[80dvh]"],

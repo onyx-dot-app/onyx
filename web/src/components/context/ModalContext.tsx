@@ -6,7 +6,7 @@ import NewTenantModal from "../modals/NewTenantModal";
 import { User, NewTenantInfo } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { UserSettings } from "@/app/chat/components/modal/UserSettings";
-import RawModal from "@/refresh-components/SimpleModal";
+import RawModal from "@/refresh-components/RawModal";
 
 type ModalContextType = {
   showNewTeamModal: boolean;
