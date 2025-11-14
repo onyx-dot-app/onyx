@@ -15,6 +15,12 @@ export interface RerankingDetails {
   rerank_api_url: string | null;
 }
 
+export enum SwitchoverType {
+  REINDEX = "reindex",
+  ACTIVE_ONLY = "active_only",
+  INSTANT = "instant",
+}
+
 export enum RerankerProvider {
   COHERE = "cohere",
   LITELLM = "litellm",
@@ -50,7 +56,7 @@ export interface SavedSearchSettings
   extends RerankingDetails,
     AdvancedSearchConfiguration {
   provider_type: EmbeddingProvider | null;
-  switchover_type?: "reindex" | "active_only" | "instant";
+  switchover_type?: SwitchoverType;
 }
 
 export interface RerankingModel {

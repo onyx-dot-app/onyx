@@ -22,6 +22,7 @@ import {
   EmbeddingPrecision,
   RerankingDetails,
   SavedSearchSettings,
+  SwitchoverType,
 } from "../interfaces";
 import RerankingDetailsForm from "../RerankingFormPage";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
@@ -40,12 +41,6 @@ import {
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import SvgArrowLeft from "@/icons/arrow-left";
 import SvgArrowRight from "@/icons/arrow-right";
-
-enum ReindexType {
-  REINDEX = "reindex",
-  ACTIVE_ONLY = "active_only",
-  INSTANT = "instant",
-}
 
 export default function EmbeddingForm() {
   const { formStep, nextFormStep, prevFormStep } = useEmbeddingFormContext();
@@ -74,8 +69,8 @@ export default function EmbeddingForm() {
     rerank_api_url: null,
   });
 
-  const [reindexType, setReindexType] = useState<ReindexType>(
-    ReindexType.REINDEX
+  const [reindexType, setReindexType] = useState<SwitchoverType>(
+    SwitchoverType.REINDEX
   );
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -204,9 +199,9 @@ export default function EmbeddingForm() {
       return false;
     }
     const switchoverType =
-      reindexType === ReindexType.REINDEX
+      reindexType === SwitchoverType.REINDEX
         ? "reindex"
-        : reindexType === ReindexType.ACTIVE_ONLY
+        : reindexType === SwitchoverType.ACTIVE_ONLY
           ? "active_only"
           : "instant";
     const searchSettings = combineSearchSettings(
@@ -268,7 +263,7 @@ export default function EmbeddingForm() {
           <div className="flex items-center h-fit">
             <Button
               onClick={() => {
-                if (reindexType == ReindexType.INSTANT) {
+                if (reindexType == SwitchoverType.INSTANT) {
                   setShowInstantSwitchConfirm(true);
                 } else {
                   handleReIndex();
@@ -279,9 +274,9 @@ export default function EmbeddingForm() {
               action
               className="rounded-r-none w-32 h-full"
             >
-              {reindexType == ReindexType.REINDEX
+              {reindexType == SwitchoverType.REINDEX
                 ? "Re-index"
-                : reindexType == ReindexType.ACTIVE_ONLY
+                : reindexType == SwitchoverType.ACTIVE_ONLY
                   ? "Active Only"
                   : "Instant Switch"}
             </Button>
@@ -298,7 +293,7 @@ export default function EmbeddingForm() {
               <DropdownMenuContent>
                 <DropdownMenuItem
                   onClick={() => {
-                    setReindexType(ReindexType.REINDEX);
+                    setReindexType(SwitchoverType.REINDEX);
                   }}
                 >
                   <SimpleTooltip tooltip="Re-runs all connectors in the background before switching over. Takes longer but ensures no degredation of search during the switch.">
@@ -309,7 +304,7 @@ export default function EmbeddingForm() {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
-                    setReindexType(ReindexType.ACTIVE_ONLY);
+                    setReindexType(SwitchoverType.ACTIVE_ONLY);
                   }}
                 >
                   <SimpleTooltip tooltip="Re-runs only active (non-paused) connectors in the background before switching over. Paused connectors won't block the switchover.">
@@ -320,7 +315,7 @@ export default function EmbeddingForm() {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
-                    setReindexType(ReindexType.INSTANT);
+                    setReindexType(SwitchoverType.INSTANT);
                   }}
                 >
                   <SimpleTooltip tooltip="Immediately switches to new settings without re-indexing. Searches will be degraded until the re-indexing is complete.">
@@ -455,9 +450,9 @@ export default function EmbeddingForm() {
     let searchSettings: SavedSearchSettings;
 
     const switchoverType =
-      reindexType === ReindexType.REINDEX
+      reindexType === SwitchoverType.REINDEX
         ? "reindex"
-        : reindexType === ReindexType.ACTIVE_ONLY
+        : reindexType === SwitchoverType.ACTIVE_ONLY
           ? "active_only"
           : "instant";
 

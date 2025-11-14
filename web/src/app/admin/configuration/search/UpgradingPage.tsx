@@ -149,7 +149,21 @@ export default function UpgradingPage({
             </Button>
 
             {connectors && connectors.length > 0 ? (
-              futureEmbeddingModel.switchover_type !== "instant" ? (
+              futureEmbeddingModel.switchover_type === "instant" ? (
+                <div className="mt-8">
+                  <h3 className="text-lg font-semibold mb-2">
+                    Switching Embedding Models
+                  </h3>
+                  <p className="mb-4 text-text-800">
+                    You&apos;re currently switching embedding models, and
+                    you&apos;ve selected the instant switch option. The
+                    transition will complete shortly.
+                  </p>
+                  <p className="text-text-600">
+                    The new model will be active soon.
+                  </p>
+                </div>
+              ) : (
                 <>
                   {failedIndexingStatus && failedIndexingStatus.length > 0 && (
                     <FailedReIndexAttempts
@@ -196,20 +210,6 @@ export default function UpgradingPage({
                     <ErrorCallout errorTitle="Failed to fetch re-indexing progress" />
                   )}
                 </>
-              ) : (
-                <div className="mt-8">
-                  <h3 className="text-lg font-semibold mb-2">
-                    Switching Embedding Models
-                  </h3>
-                  <p className="mb-4 text-text-800">
-                    You&apos;re currently switching embedding models, and
-                    you&apos;ve selected the instant switch option. The
-                    transition will complete shortly.
-                  </p>
-                  <p className="text-text-600">
-                    The new model will be active soon.
-                  </p>
-                </div>
               )
             ) : (
               <div className="mt-8 p-6 bg-background-100 border border-border-strong rounded-lg max-w-2xl">
