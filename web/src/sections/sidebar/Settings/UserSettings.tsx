@@ -157,10 +157,6 @@ export default function UserSettings() {
     const container = containerRef.current;
     const message = messageRef.current;
 
-  useEffect(() => {
-    const container = containerRef.current;
-    const message = messageRef.current;
-
     if (container && message) {
       const checkScrollable = () => {
         if (container.scrollHeight > container.clientHeight) {
