@@ -1,18 +1,23 @@
 import { cn } from "@/lib/utils";
 
-export interface CardSectionProps {
+export interface CardSectionProps extends React.HTMLAttributes<HTMLDivElement> {
   className?: string;
   children?: React.ReactNode;
 }
 
 // Used for all admin page sections
-export default function CardSection({ children, className }: CardSectionProps) {
+export default function CardSection({
+  children,
+  className,
+  ...props
+}: CardSectionProps) {
   return (
     <div
       className={cn(
         "p-6 bg-background-neutral-00 rounded-16 border",
         className
       )}
+      {...props}
     >
       {children}
     </div>
