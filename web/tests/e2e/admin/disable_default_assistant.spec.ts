@@ -8,6 +8,22 @@ test.describe("Disable Default Assistant Setting", () => {
     await loginAs(page, "admin");
   });
 
+  test.afterEach(async ({ page }) => {
+    // Ensure default assistant is enabled (checkbox unchecked) after each test
+    // to avoid interfering with other tests
+    await page.goto("http://localhost:3000/admin/settings");
+    await page.waitForURL("http://localhost:3000/admin/settings");
+
+    const disableDefaultAssistantCheckbox = page.locator(
+      'label:has-text("Disable Default Assistant") input[type="checkbox"]'
+    );
+    const isChecked = await disableDefaultAssistantCheckbox.isChecked();
+    if (isChecked) {
+      await disableDefaultAssistantCheckbox.click();
+      await expect(disableDefaultAssistantCheckbox).not.toBeChecked();
+    }
+  });
+
   test("admin can enable and disable the setting in workspace settings", async ({
     page,
   }) => {
