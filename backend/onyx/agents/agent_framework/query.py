@@ -180,6 +180,16 @@ def query(
                                 output=output,
                             ),
                         )
+                    else:
+                        not_found_output = f"Tool {name} not found"
+                        tool_outputs[call_id] = _serialize_tool_output(not_found_output)
+                        yield RunItemStreamEvent(
+                            type="tool_call_output",
+                            details=ToolCallOutputStreamItem(
+                                call_id=call_id,
+                                output=not_found_output,
+                            ),
+                        )
 
                 new_messages_stateful.append(
                     {
