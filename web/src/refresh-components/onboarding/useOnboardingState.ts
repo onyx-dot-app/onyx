@@ -8,7 +8,7 @@ import {
   OnboardingStep,
 } from "./types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { updateUserPersonalization } from "@/lib/users/UserSettings";
+import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/components/user/UserProvider";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 

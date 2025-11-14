@@ -29,15 +29,11 @@ import {
 } from "@dnd-kit/modifiers";
 import SvgEditBig from "@/icons/edit-big";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
-import Settings from "@/sections/sidebar/Settings";
+import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
 import SvgFolderPlus from "@/icons/folder-plus";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
@@ -63,6 +59,7 @@ import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import SvgSettings from "@/icons/settings";
 import { useAppFocus } from "@/lib/hooks";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -141,7 +138,6 @@ function AppSidebarInner() {
   >(null);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
-  const { isOpen, toggleModal } = useChatModal();
   const { projects } = useProjectsContext();
 
   const [visibleAgents, currentAgentIsPinned] = useMemo(
@@ -307,6 +303,7 @@ function AppSidebarInner() {
 
   const { isAdmin, isCurator } = useUser();
   const activeSidebarTab = useAppFocus();
+  const createProjectModal = useCreateModal();
   const newSessionButton = useMemo(
     () => (
       <div data-testid="AppSidebar/new-session">
@@ -357,15 +354,15 @@ function AppSidebarInner() {
     () => (
       <SidebarTab
         leftIcon={SvgFolderPlus}
-        onClick={() => toggleModal(ModalIds.CreateProjectModal, true)}
-        active={isOpen(ModalIds.CreateProjectModal)}
+        onClick={() => createProjectModal.toggle(true)}
+        active={createProjectModal.isOpen}
         folded={folded}
         lowlight={!folded}
       >
         New Project
       </SidebarTab>
     ),
-    [folded, toggleModal, isOpen]
+    [folded, createProjectModal.toggle, createProjectModal.isOpen]
   );
   const settingsButton = useMemo(
     () => (
@@ -392,7 +389,9 @@ function AppSidebarInner() {
   return (
     <>
       {popup}
-      <CreateProjectModal />
+      <createProjectModal.Provider>
+        <CreateProjectModal />
+      </createProjectModal.Provider>
 
       {showMoveCustomAgentModal && (
         <MoveCustomAgentChatModal
@@ -473,9 +472,7 @@ function AppSidebarInner() {
                       icon={SvgFolderPlus}
                       internal
                       tooltip="New Project"
-                      onClick={() =>
-                        toggleModal(ModalIds.CreateProjectModal, true)
-                      }
+                      onClick={() => createProjectModal.toggle(true)}
                     />
                   }
                 >

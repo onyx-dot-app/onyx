@@ -24,7 +24,7 @@ import SvgFolderIn from "@/icons/folder-in";
 import SvgTrash from "@/icons/trash";
 import SvgFolder from "@/icons/folder";
 import { cn, noProp } from "@/lib/utils";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 // Constants
@@ -249,7 +249,7 @@ export function ChatSessionMorePopup({
         </Popover>
       </div>
       {isDeleteModalOpen && (
-        <ConfirmationModal
+        <ConfirmationModalLayout
           title="Delete Chat"
           icon={SvgTrash}
           onClose={() => setIsDeleteModalOpen(false)}
@@ -261,7 +261,7 @@ export function ChatSessionMorePopup({
         >
           Are you sure you want to delete this chat? This action cannot be
           undone.
-        </ConfirmationModal>
+        </ConfirmationModalLayout>
       )}
 
       {showMoveCustomAgentModal && (

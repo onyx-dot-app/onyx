@@ -86,9 +86,9 @@ import {
 import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
 import { FileCard } from "@/app/chat/components/input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
-import CoreModal from "@/refresh-components/modals/CoreModal";
 import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
 import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -141,16 +141,7 @@ function SubLabel({ children }: { children: string | JSX.Element }) {
   );
 }
 
-export function AssistantEditor({
-  existingPersona,
-  ccPairs,
-  documentSets,
-  user,
-  defaultPublic,
-  llmProviders,
-  tools,
-  shouldAddAssistantToUserPreferences,
-}: {
+export interface AssistantEditorProps {
   existingPersona?: FullPersona | null;
   ccPairs: CCPairBasicInfo[];
   documentSets: DocumentSetSummary[];
@@ -159,7 +150,18 @@ export function AssistantEditor({
   llmProviders: LLMProviderView[];
   tools: ToolSnapshot[];
   shouldAddAssistantToUserPreferences?: boolean;
-}) {
+}
+
+export default function AssistantEditor({
+  existingPersona,
+  ccPairs,
+  documentSets,
+  user,
+  defaultPublic,
+  llmProviders,
+  tools,
+  shouldAddAssistantToUserPreferences,
+}: AssistantEditorProps) {
   // NOTE: assistants = agents
   // TODO: rename everything to agents
   const { refreshAgents } = useAgentsContext();
@@ -185,7 +187,7 @@ export function AssistantEditor({
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  const [showAllUserFiles, setShowAllUserFiles] = useState(false);
+  const userFilesModal = useCreateModal();
 
   // both `defautIconColor` and `defaultIconShape` are state so that they
   // persist across formik reformatting
@@ -844,6 +846,37 @@ export function AssistantEditor({
 
           return (
             <>
+              <userFilesModal.Provider>
+                <UserFilesModalContent
+                  title="User Files"
+                  description="All files selected for this assistant"
+                  icon={SvgFiles}
+                  recentFiles={values.user_file_ids.map(
+                    (userFileId: string) => {
+                      const rf = allRecentFiles.find(
+                        (f) => f.id === userFileId
+                      );
+                      return (
+                        rf || {
+                          id: userFileId,
+                          name: `File ${userFileId.slice(0, 8)}`,
+                          status: "completed" as const,
+                        }
+                      );
+                    }
+                  )}
+                  onDelete={(file) => {
+                    setFieldValue(
+                      "user_file_ids",
+                      values.user_file_ids.filter(
+                        (id: string) => id !== file.id
+                      )
+                    );
+                  }}
+                  onClose={() => userFilesModal.toggle(false)}
+                />
+              </userFilesModal.Provider>
+
               <Form className="w-full text-text-950 assistant-editor">
                 <FormErrorFocus />
                 {/* Refresh starter messages when name or description changes */}
@@ -1155,7 +1188,9 @@ export function AssistantEditor({
                                     <button
                                       type="button"
                                       className="rounded-xl px-3 py-1 text-left transition-colors hover:bg-background-tint-02"
-                                      onClick={() => setShowAllUserFiles(true)}
+                                      onClick={() =>
+                                        userFilesModal.toggle(true)
+                                      }
                                     >
                                       <div className="flex flex-col overflow-hidden h-12 p-1">
                                         <div className="flex items-center justify-between gap-2 w-full">
@@ -1920,41 +1955,6 @@ export function AssistantEditor({
                   </div>
                 </div>
               </Form>
-              {showAllUserFiles && (
-                <CoreModal
-                  className="w-full max-w-lg"
-                  onClickOutside={() => setShowAllUserFiles(false)}
-                >
-                  <UserFilesModalContent
-                    title="User Files"
-                    description="All files selected for this assistant"
-                    icon={SvgFiles}
-                    recentFiles={values.user_file_ids.map(
-                      (userFileId: string) => {
-                        const rf = allRecentFiles.find(
-                          (f) => f.id === userFileId
-                        );
-                        return (
-                          rf || {
-                            id: userFileId,
-                            name: `File ${userFileId.slice(0, 8)}`,
-                            status: "completed" as const,
-                          }
-                        );
-                      }
-                    )}
-                    onDelete={(file) => {
-                      setFieldValue(
-                        "user_file_ids",
-                        values.user_file_ids.filter(
-                          (id: string) => id !== file.id
-                        )
-                      );
-                    }}
-                    onClose={() => setShowAllUserFiles(false)}
-                  />
-                </CoreModal>
-              )}
             </>
           );
         }}
