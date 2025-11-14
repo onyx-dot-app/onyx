@@ -218,7 +218,7 @@ export default function ProjectContextPanel({
               <div className="hidden sm:flex gap-1 relative">
                 {(() => {
                   return allCurrentProjectFiles.slice(0, 4).map((f) => (
-                    <div key={f.id} className="w-40">
+                    <div key={f.id}>
                       <FileCard
                         file={f}
                         removeFile={async (fileId: string) => {

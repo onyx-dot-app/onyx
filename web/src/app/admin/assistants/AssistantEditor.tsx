@@ -1170,7 +1170,7 @@ export default function AssistantEditor({
 
                                     return displayedFiles.map((fileData) => {
                                       return (
-                                        <div key={fileData.id} className="w-40">
+                                        <div key={fileData.id}>
                                           <FileCard
                                             file={fileData as ProjectFile}
                                             hideProcessingState
