@@ -4,6 +4,7 @@ services:
   mcp_oauth_server:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     restart: on-failure
+    working_dir: /workspace
     environment:
       - MCP_OAUTH_CLIENT_ID=${MCP_OAUTH_CLIENT_ID:-}
       - MCP_OAUTH_CLIENT_SECRET=${MCP_OAUTH_CLIENT_SECRET:-}
@@ -19,9 +20,10 @@ services:
       - MCP_SERVER_PUBLIC_URL=${MCP_SERVER_PUBLIC_URL:-}
     command: >
       /bin/sh -c "
-      cd /app &&
       python backend/tests/integration/mock_services/mcp_test_server/run_mcp_server_oauth.py ${MCP_TEST_SERVER_PORT:-8004}
       "
     ports:
       - "${MCP_TEST_SERVER_PORT:-8004}:${MCP_TEST_SERVER_PORT:-8004}"
+    volumes:
+      - ../..:/workspace:ro
 
