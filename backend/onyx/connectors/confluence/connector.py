@@ -655,10 +655,21 @@ class ConfluenceConnector(
             space_level_access_info = get_all_space_permissions(
                 self.confluence_client, self.is_cloud
             )
+            if not space_level_access_info:
+                raise ValueError(
+                    "No space level access info found. Likely missing "
+                    "permissions to retrieve spaces/space permissions."
+                )
 
         def get_external_access(
             doc_id: str, restrictions: dict[str, Any], ancestors: list[dict[str, Any]]
         ) -> ExternalAccess | None:
+            space_level_access = space_level_access_info.get(page_space_key)
+            if space_level_access is None and include_permissions:
+                raise ValueError(
+                    f"No space level permissions found for {page_space_key}. Likely missing "
+                    "permissions to retrieve spaces/space permissions."
+                )
             return get_page_restrictions(
                 self.confluence_client, doc_id, restrictions, ancestors
             ) or space_level_access_info.get(page_space_key)
