@@ -46,7 +46,7 @@ export default function AppLayout({
         {(customHeaderContent || currentChatSession) && (
           <header className="w-full flex flex-row justify-center items-center py-3 px-4">
             <div className="flex-1" />
-            <div className="flex-1 flex flex-col items-center dbg-red">
+            <div className="flex-1 flex flex-col items-center">
               <Text text03>{customHeaderContent}</Text>
             </div>
             <div className="flex-1 flex flex-row items-center justify-end px-1">
