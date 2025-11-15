@@ -51,11 +51,7 @@ if extract_images_from_message is None:
     def extract_images_from_message(
         message: AllMessageValues,
     ) -> Optional[List[Any]]:
-        """
-        LiteLLM <=v1.52 shipped this helper, but newer versions removed it.
-        Provide a compatible fallback that plucks any image payloads so our
-        Ollama patches can keep working across versions.
-        """
+        """Fallback for LiteLLM versions that dropped extract_images_from_message."""
 
         images: List[Any] = []
         content = message.get("content")

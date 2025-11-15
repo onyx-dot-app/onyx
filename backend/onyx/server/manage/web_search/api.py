@@ -20,7 +20,6 @@ from onyx.db.web_search import delete_web_search_provider
 from onyx.db.web_search import fetch_web_content_provider_by_id
 from onyx.db.web_search import fetch_web_content_provider_by_name
 from onyx.db.web_search import fetch_web_content_providers
-from onyx.db.web_search import fetch_web_search_provider_by_id
 from onyx.db.web_search import fetch_web_search_provider_by_name
 from onyx.db.web_search import fetch_web_search_providers
 from onyx.db.web_search import set_active_web_content_provider
@@ -86,10 +85,6 @@ def upsert_search_provider_endpoint(
         activate=request.activate,
         db_session=db_session,
     )
-
-    if request.activate and not provider.is_active:
-        set_active_web_search_provider(provider_id=provider.id, db_session=db_session)
-        provider = fetch_web_search_provider_by_id(provider.id, db_session)
 
     db_session.commit()
     return WebSearchProviderView(

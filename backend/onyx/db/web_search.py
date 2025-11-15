@@ -155,16 +155,8 @@ def delete_web_search_provider(provider_id: int, db_session: Session) -> None:
     if provider is None:
         raise ValueError(f"No web search provider with id {provider_id} exists.")
 
-    was_active = provider.is_active
     db_session.delete(provider)
     db_session.flush()
-
-    if was_active:
-        db_session.execute(
-            update(InternetSearchProvider)
-            .where(InternetSearchProvider.is_active.is_(True))
-            .values(is_active=False)
-        )
 
     db_session.commit()
 
@@ -307,15 +299,7 @@ def delete_web_content_provider(provider_id: int, db_session: Session) -> None:
     if provider is None:
         raise ValueError(f"No web content provider with id {provider_id} exists.")
 
-    was_active = provider.is_active
     db_session.delete(provider)
     db_session.flush()
-
-    if was_active:
-        db_session.execute(
-            update(InternetContentProvider)
-            .where(InternetContentProvider.is_active.is_(True))
-            .values(is_active=False)
-        )
 
     db_session.commit()
