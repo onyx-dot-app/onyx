@@ -345,10 +345,15 @@ class CCPairManager:
                 if not fetched_cc_pair.in_progress:
                     continue
 
-                if fetched_cc_pair.docs_indexed >= num_docs:
+                progress = fetched_cc_pair.latest_index_attempt_docs_indexed
+                if progress is None:
+                    progress = fetched_cc_pair.docs_indexed
+
+                if progress >= num_docs:
                     print(
                         "Indexed at least the requested number of docs: "
                         f"cc_pair={cc_pair.id} "
+                        f"latest_attempt_docs_indexed={fetched_cc_pair.latest_index_attempt_docs_indexed} "
                         f"docs_indexed={fetched_cc_pair.docs_indexed} "
                         f"num_docs={num_docs}"
                     )
