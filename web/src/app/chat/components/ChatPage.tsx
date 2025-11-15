@@ -19,7 +19,6 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
-import { FeedbackModal } from "@/app/chat/components/modal/FeedbackModal";
 import { FiArrowDown } from "react-icons/fi";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -40,14 +39,12 @@ import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import { ChatSearchModal } from "@/app/chat/chat_search/ChatSearchModal";
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useScreenSize } from "@/hooks/useScreenSize";
 import { DocumentResults } from "@/app/chat/components/documentSidebar/DocumentResults";
 import { useChatController } from "@/app/chat/hooks/useChatController";
 import { useAssistantController } from "@/app/chat/hooks/useAssistantController";
 import { useChatSessionController } from "@/app/chat/hooks/useChatSessionController";
 import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
-import { useFeedbackController } from "@/app/chat/hooks/useFeedbackController";
 import {
   useChatSessionStore,
   useMaxTokens,
@@ -87,7 +84,7 @@ interface ChatPageProps {
   firstMessage?: string;
 }
 
-export function ChatPage({
+export default function ChatPage({
   documentSidebarInitialWidth,
   firstMessage,
 }: ChatPageProps) {
@@ -277,9 +274,6 @@ export function ChatPage({
 
   const filterManager = useFilters();
   const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
-
-  // Feedback controller with optimistic updates and error handling
-  const { handleFeedbackChange } = useFeedbackController({ setPopup });
 
   const [aboveHorizon, setAboveHorizon] = useState(false);
 
@@ -745,8 +739,6 @@ export function ChatPage({
 
       <ChatPopup />
 
-      <FeedbackModal />
-
       <ChatSearchModal
         open={isChatSearchModalOpen}
         onCloseModal={() => setIsChatSearchModalOpen(false)}
@@ -824,7 +816,6 @@ export function ChatPage({
                       deepResearchEnabled={deepResearchEnabled}
                       currentMessageFiles={currentMessageFiles}
                       setPresentingDocument={setPresentingDocument}
-                      handleFeedbackChange={handleFeedbackChange}
                       onSubmit={onSubmit}
                       onMessageSelection={onMessageSelection}
                       stopGenerating={stopGenerating}
@@ -873,7 +864,7 @@ export function ChatPage({
                       )}
                     >
                       {currentProjectId == null && showCenteredInput && (
-                        <WelcomeMessage />
+                        <WelcomeMessage liveAssistant={liveAssistant} />
                       )}
                       <div
                         className={cn(

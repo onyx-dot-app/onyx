@@ -2,8 +2,7 @@
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import Button from "@/refresh-components/buttons/Button";
-import Link from "next/link";
-import { FiLogIn } from "react-icons/fi";
+
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 const Page = () => {
@@ -36,9 +35,9 @@ const Page = () => {
           </ul>
         </div>
 
-        <Link href="/auth/login" className="w-full">
-          <Button className="w-full">Return to Login Page</Button>
-        </Link>
+        <Button href="/auth/login" className="w-full">
+          Return to Login Page
+        </Button>
         <p className="text-sm text-text-500 text-center">
           We recommend trying again. If you continue to experience problems,
           please reach out to your system administrator for assistance.

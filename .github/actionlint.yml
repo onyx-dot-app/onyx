@@ -5,6 +5,8 @@ self-hosted-runner:
     - extras=s3-cache
     - hdd=256
     - runs-on
+    - runner=1cpu-linux-arm64
+    - runner=1cpu-linux-x64
     - runner=2cpu-linux-arm64
     - runner=2cpu-linux-x64
     - runner=4cpu-linux-arm64
@@ -13,6 +15,7 @@ self-hosted-runner:
     - runner=8cpu-linux-x64
     - runner=16cpu-linux-arm64
     - runner=16cpu-linux-x64
+    - ubuntu-slim # Currently in public preview
 
 # Configuration variables in array of strings defined in your repository or
 # organization. `null` means disabling configuration variables check.

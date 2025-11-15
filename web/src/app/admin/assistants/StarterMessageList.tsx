@@ -87,7 +87,6 @@ export default function StarterMessagesList({
         side="top"
       >
         <Button
-          type="button"
           onClick={() => {
             const shouldSubmit =
               values.filter((msg) => msg.message.trim() !== "").length < 4 &&

@@ -296,10 +296,13 @@ class PromptConfig(BaseModel):
             else ""
         )
 
+        # Check if this persona is the default assistant
+        is_default_persona = default_persona and model.id == default_persona.id
+
         # If this persona IS the default assistant, custom_instruction should be None
         # Otherwise, it should be the persona's system_prompt
         custom_instruction = None
-        if not model.is_default_persona:
+        if not is_default_persona:
             custom_instruction = model.system_prompt or None
 
         # Handle prompt overrides
@@ -310,7 +313,7 @@ class PromptConfig(BaseModel):
 
         # If there's an override, apply it to the appropriate field
         if override_system_prompt:
-            if model.is_default_persona:
+            if is_default_persona:
                 default_behavior_system_prompt = override_system_prompt
             else:
                 custom_instruction = override_system_prompt

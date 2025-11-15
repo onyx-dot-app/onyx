@@ -140,9 +140,3 @@ jobs:
         with:
           name: docker-all-logs
           path: ${{ github.workspace }}/docker-compose.log
-
-      - name: Stop Docker containers
-        if: always()
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.model-server-test.yml down -v

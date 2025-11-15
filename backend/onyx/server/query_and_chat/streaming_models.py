@@ -219,8 +219,8 @@ PacketObj = Union[
 
 
 class Packet(BaseModel):
-    turn_index: int
-    depth_index: int
+    turn_index: int | None
+    depth_index: int | None
     obj: Annotated[PacketObj, Field(discriminator="type")]
 
 

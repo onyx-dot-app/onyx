@@ -1,4 +1,4 @@
-import React, { memo, useEffect } from "react";
+import { memo, useState } from "react";
 import SvgCpu from "@/icons/cpu";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
@@ -8,11 +8,12 @@ import LLMProvider from "../components/LLMProvider";
 import { OnboardingActions, OnboardingState, OnboardingStep } from "../types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { PROVIDER_ICON_MAP } from "../constants";
-import LLMConnectionModal from "@/refresh-components/onboarding/components/LLMConnectionModal";
-import KeyValueInput from "@/refresh-components/inputs/InputKeyValue";
+import LLMConnectionModal, {
+  LLMConnectionModalProps,
+} from "@/refresh-components/onboarding/components/LLMConnectionModal";
 import { cn } from "@/lib/utils";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import SvgCheckCircle from "@/icons/check-circle";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 
 type LLMStepProps = {
   state: OnboardingState;
@@ -90,6 +91,10 @@ const LLMStepInner = ({
   disabled,
 }: LLMStepProps) => {
   const isLoading = !llmDescriptors || llmDescriptors.length === 0;
+  const modal = useCreateModal();
+  const [llmConnectionModalProps, setLlmConnectionModalProps] =
+    useState<LLMConnectionModalProps | null>(null);
+
   if (
     onboardingState.currentStep === OnboardingStep.LlmSetup ||
     onboardingState.currentStep === OnboardingStep.Name
@@ -141,7 +146,11 @@ const LLMStepInner = ({
               </div>
             ))
           ) : (
-            <>
+            <modal.Provider>
+              {llmConnectionModalProps && (
+                <LLMConnectionModal {...llmConnectionModalProps} />
+              )}
+
               {llmDescriptors.map((llmDescriptor) => (
                 <div
                   key={llmDescriptor.name}
@@ -158,6 +167,7 @@ const LLMStepInner = ({
                     isConnected={onboardingState.data.llmProviders?.some(
                       (provider) => provider === llmDescriptor.name
                     )}
+                    onClick={setLlmConnectionModalProps}
                   />
                 </div>
               ))}
@@ -172,11 +182,11 @@ const LLMStepInner = ({
                   isConnected={onboardingState.data.llmProviders?.some(
                     (provider) => provider === "custom"
                   )}
+                  onClick={setLlmConnectionModalProps}
                 />
               </div>
-            </>
+            </modal.Provider>
           )}
-          <LLMConnectionModal />
         </div>
       </div>
     );

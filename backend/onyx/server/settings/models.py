@@ -67,6 +67,9 @@ class Settings(BaseModel):
     # Connector settings
     show_extra_connectors: bool | None = True
 
+    # Default Assistant settings
+    disable_default_assistant: bool | None = False
+
 
 class UserSettings(Settings):
     notifications: list[Notification]

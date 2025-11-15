@@ -44,7 +44,21 @@ export const createToolGroups = (count: number) =>
  * Create minimal mock chatState
  */
 export const createMockChatState = (overrides = {}) => ({
-  assistant: { name: "Test Assistant", id: 1 },
+  assistant: {
+    id: 1,
+    name: "Test Assistant",
+    description: "Test assistant for testing",
+    tools: [],
+    starter_messages: null,
+    document_sets: [],
+    is_public: true,
+    is_visible: true,
+    display_priority: null,
+    is_default_persona: false,
+    builtin_persona: false,
+    owner: null,
+  },
+  handleFeedbackChange: jest.fn().mockResolvedValue(undefined),
   ...overrides,
 });
 
