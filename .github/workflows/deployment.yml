@@ -80,7 +80,7 @@ jobs:
     if: needs.determine-builds.outputs.build-web == 'true'
     runs-on:
       - runs-on
-      - runner=4cpu-linux-arm64
+      - runner=4cpu-linux-x64
       - run-id=${{ github.run_id }}-web-build
       - extras=ecr-cache
     env:
@@ -119,7 +119,7 @@ jobs:
         with:
           context: ./web
           file: ./web/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/x64
           push: ${{ env.IS_DRY_RUN != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -158,7 +158,7 @@ jobs:
     if: needs.determine-builds.outputs.build-web-cloud == 'true'
     runs-on:
       - runs-on
-      - runner=4cpu-linux-arm64
+      - runner=4cpu-linux-x64
       - run-id=${{ github.run_id }}-web-cloud-build
       - extras=ecr-cache
     env:
@@ -194,7 +194,7 @@ jobs:
         with:
           context: ./web
           file: ./web/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/x64
           push: ${{ env.IS_DRY_RUN != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -241,7 +241,7 @@ jobs:
     if: needs.determine-builds.outputs.build-backend == 'true'
     runs-on:
       - runs-on
-      - runner=2cpu-linux-arm64
+      - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-backend-build
       - extras=ecr-cache
     env:
@@ -280,7 +280,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/x64
           push: ${{ env.IS_DRY_RUN != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -367,7 +367,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/x64
           push: ${{ env.IS_DRY_RUN != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
