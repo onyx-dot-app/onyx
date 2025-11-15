@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM alpine:3 AS base
 
 LABEL com.onyx.maintainer="founders@onyx.app"
 LABEL com.onyx.description="This image is the web/frontend container of Onyx which \
@@ -11,10 +11,16 @@ founders@onyx.app for more information. Please visit https://github.com/onyx-dot
 ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION}
 
-# Step 1. Install dependencies + rebuild the source code only when needed
-FROM base AS builder
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
+# Step 1. Prepare stripped Node binary
+FROM node:20-alpine AS node_stripped
+
+RUN apk add --no-cache binutils
+
+RUN strip /usr/local/bin/node
+
+# Step 1b. Install dependencies + rebuild the source code only when needed
+FROM node:20-alpine AS builder
+
 WORKDIR /app
 
 # Copy package files first for better layer caching
@@ -25,8 +31,12 @@ COPY lib/opal/package.json ./lib/opal/
 # Install dependencies
 RUN npm ci
 
-# pull in source code / package.json / package-lock.json
+# Pull in remaining source code
 COPY . .
+
+# ONYX_VERSION inherited from build args, redeclared for this stage
+ARG ONYX_VERSION=0.0.0-dev
+ENV ONYX_VERSION=${ONYX_VERSION}
 
 # needed to get the `standalone` dir we expect later
 ENV NEXT_PRIVATE_STANDALONE=true
@@ -90,13 +100,13 @@ ARG NODE_OPTIONS
 RUN NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
 # Step 2. Production image, copy all the files and run next
-FROM base AS runner
+FROM base AS final
+
 WORKDIR /app
 
-# Remove global node modules, since they are not needed by the actual app
-# (all dependencies are copied over into the `/app` dir itself). These
-# global modules may be outdated and trigger security scans.
-RUN rm -rf /usr/local/lib/node_modules
+# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
+RUN apk add --no-cache libc6-compat libstdc++ libgcc libcrypto3 libssl3 ca-certificates
+RUN update-ca-certificates
 
 # Not needed, set by compose
 # ENV NODE_ENV production
@@ -108,6 +118,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 USER nextjs
+
+COPY --from=node_stripped /usr/local/bin/node /usr/local/bin/node
 
 # Add back in if we add anything to `public`
 COPY --from=builder /app/public ./public
