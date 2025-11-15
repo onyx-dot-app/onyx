@@ -10,10 +10,9 @@ from pydantic import Field
 from pydantic import TypeAdapter
 from pydantic import ValidationError
 
-from onyx.agents.agent_sdk.message_types import AgentSDKMessage
-from onyx.agents.agent_sdk.message_types import FunctionCallOutputMessage
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.turn.models import ChatTurnContext
+from onyx.llm.message_types import ChatCompletionMessage
 from onyx.tools.tool_implementations_v2.tool_result_models import (
     LlmInternalSearchResult,
 )
@@ -31,16 +30,16 @@ _tool_result_adapter = TypeAdapter(list[ToolResult])
 
 
 class CitationAssignmentResult(BaseModel):
-    updated_messages: list[AgentSDKMessage]
+    updated_messages: list[ChatCompletionMessage]
     new_docs_cited: int
     num_tool_calls_cited: int
 
 
 def assign_citation_numbers_recent_tool_calls(
-    agent_turn_messages: Sequence[AgentSDKMessage],
+    agent_turn_messages: Sequence[ChatCompletionMessage],
     ctx: ChatTurnContext,
 ) -> CitationAssignmentResult:
-    updated_messages: list[AgentSDKMessage] = []
+    updated_messages: list[ChatCompletionMessage] = []
     docs_fetched_so_far = ctx.documents_processed_by_citation_context_handler
     tool_calls_cited_so_far = ctx.tool_calls_processed_by_citation_context_handler
     num_tool_calls_cited = 0
@@ -48,12 +47,11 @@ def assign_citation_numbers_recent_tool_calls(
     curr_tool_call_idx = 0
 
     for message in agent_turn_messages:
-        new_message: AgentSDKMessage | None = None
-        if message.get("type") == "function_call_output":
+        new_message: ChatCompletionMessage | None = None
+        if message.get("role") == "tool":
             if curr_tool_call_idx >= tool_calls_cited_so_far:
-                # Type narrow to FunctionCallOutputMessage after checking the 'type' field
-                func_call_output_msg: FunctionCallOutputMessage = message  # type: ignore[assignment]
-                content = func_call_output_msg["output"]
+                content = str(message.get("content") or "")
+                call_id = message.get("tool_call_id", "")
                 tool_call_results = _decode_tool_call_result(content)
 
                 if tool_call_results:
@@ -85,10 +83,9 @@ def assign_citation_numbers_recent_tool_calls(
                                 cached_document.document_citation_number
                             )
                     if updated_citation_number:
-                        updated_output_message: FunctionCallOutputMessage = {
-                            "type": "function_call_output",
-                            "call_id": func_call_output_msg["call_id"],
-                            "output": json.dumps(
+                        updated_output_message: ChatCompletionMessage = {
+                            "role": "tool",
+                            "content": json.dumps(
                                 [
                                     result.model_dump(
                                         mode="json",
@@ -100,6 +97,7 @@ def assign_citation_numbers_recent_tool_calls(
                                     for result in tool_call_results
                                 ]
                             ),
+                            "tool_call_id": call_id,
                         }
                         new_message = updated_output_message
                         num_tool_calls_cited += 1

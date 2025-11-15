@@ -10,11 +10,12 @@ from uuid import UUID
 
 from agents import Model
 from agents import ModelSettings
-from agents.models.openai_responses import OpenAIResponsesModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_sdk.message_format import base_messages_to_agent_sdk_msgs
+from onyx.agents.agent_sdk.message_format import (
+    base_messages_to_chat_completion_msgs,
+)
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
@@ -935,15 +936,14 @@ def _fast_message_stream(
     user_or_none: User | None,
 ) -> Generator[Packet, None, None]:
     # TODO: clean up this jank
-    is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
     prompt_builder = answer.graph_inputs.prompt_builder
     primary_llm = answer.graph_tooling.primary_llm
     if prompt_builder and primary_llm:
         _reserve_prompt_tokens_for_agent_overhead(
             prompt_builder, primary_llm, tools, prompt_config
         )
-    messages = base_messages_to_agent_sdk_msgs(
-        answer.graph_inputs.prompt_builder.build(), is_responses_api=is_responses_api
+    messages = base_messages_to_chat_completion_msgs(
+        answer.graph_inputs.prompt_builder.build()
     )
     emitter = get_default_emitter()
     return fast_chat_turn.fast_chat_turn(

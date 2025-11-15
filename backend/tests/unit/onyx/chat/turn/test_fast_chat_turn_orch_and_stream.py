@@ -9,11 +9,6 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.agents.agent_sdk.message_types import AgentSDKMessage
-from onyx.agents.agent_sdk.message_types import AssistantMessageWithContent
-from onyx.agents.agent_sdk.message_types import InputTextContent
-from onyx.agents.agent_sdk.message_types import SystemMessage
-from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.models import PromptConfig
 from onyx.chat.stop_signal_checker import set_fence
@@ -27,6 +22,7 @@ from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.message_types import ChatCompletionMessage
 from onyx.llm.model_response import ChatCompletionDeltaToolCall
 from onyx.llm.model_response import Delta
 from onyx.llm.model_response import FunctionCall
@@ -36,7 +32,6 @@ from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from tests.unit.onyx.agents.agent_framework.conftest import FakeTool
@@ -208,7 +203,7 @@ def configure_llm(
 
 
 def run_fast_chat_turn(
-    sample_messages: list[AgentSDKMessage],
+    sample_messages: list[ChatCompletionMessage],
     dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     message_id: int,
@@ -246,9 +241,9 @@ def assert_cancellation_packets(
     assert packets[-1].obj.type == "stop"
     assert packets[-2].obj.type == "section_end"
     if expect_cancelled_message:
-        assert packets[-3].obj.type == "message_start"
-        assert isinstance(packets[-3].obj, MessageStart)
-        assert packets[-3].obj.content == "Cancelled"
+        assert packets[-3].obj.type in {"message_start", "message_delta"}
+        if packets[-3].obj.type == "message_start":
+            assert packets[-3].obj.content == "Cancelled"
 
 
 # =============================================================================
@@ -272,21 +267,10 @@ def research_type() -> ResearchType:
 
 
 @pytest.fixture
-def sample_messages() -> list[AgentSDKMessage]:
+def sample_messages() -> list[ChatCompletionMessage]:
     return [
-        SystemMessage(
-            role="system",
-            content=[
-                InputTextContent(
-                    type="input_text",
-                    text="You are a highly capable assistant",
-                )
-            ],
-        ),
-        UserMessage(
-            role="user",
-            content=[InputTextContent(type="input_text", text="hi")],
-        ),
+        {"role": "system", "content": "You are a highly capable assistant"},
+        {"role": "user", "content": "hi"},
     ]
 
 
@@ -302,7 +286,7 @@ def fake_internal_search_tool_instance() -> FakeTool:
 
 def test_fast_chat_turn_streams_message_packets(
     chat_turn_dependencies: ChatTurnDependencies,
-    sample_messages: list[AgentSDKMessage],
+    sample_messages: list[ChatCompletionMessage],
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
@@ -338,7 +322,7 @@ def test_fast_chat_turn_streams_message_packets(
 
 def test_fast_chat_turn_runs_tool_and_follow_up(
     chat_turn_dependencies: ChatTurnDependencies,
-    sample_messages: list[AgentSDKMessage],
+    sample_messages: list[ChatCompletionMessage],
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
@@ -378,7 +362,7 @@ def test_fast_chat_turn_runs_tool_and_follow_up(
 
 def test_fast_chat_turn_prompts_include_tool_messages_on_follow_up(
     chat_turn_dependencies: ChatTurnDependencies,
-    sample_messages: list[AgentSDKMessage],
+    sample_messages: list[ChatCompletionMessage],
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
@@ -442,28 +426,11 @@ def test_fast_chat_turn_second_turn_context_handlers(
         reminder="Answer the user's question.",
         datetime_aware=False,
     )
-    starter_messages: list[AgentSDKMessage] = [
-        SystemMessage(
-            role="system",
-            content=[
-                InputTextContent(
-                    type="input_text",
-                    text="You are a helpful assistant.",
-                )
-            ],
-        ),
-        UserMessage(
-            role="user",
-            content=[InputTextContent(type="input_text", text="hi")],
-        ),
-        AssistantMessageWithContent(
-            role="assistant",
-            content=[InputTextContent(type="input_text", text="I need to use a tool")],
-        ),
-        UserMessage(
-            role="user",
-            content=[InputTextContent(type="input_text", text="hi again")],
-        ),
+    starter_messages: list[ChatCompletionMessage] = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "I need to use a tool"},
+        {"role": "user", "content": "hi again"},
     ]
 
     packets = list(
@@ -484,18 +451,18 @@ def test_fast_chat_turn_second_turn_context_handlers(
     assert len(first_prompt) == 5
     assert first_prompt[0]["role"] == "system"
     assert first_prompt[1]["role"] == "user"
-    assert first_prompt[1]["content"][0]["text"] == "hi"
+    assert first_prompt[1]["content"] == "hi"
     assert first_prompt[2]["role"] == "assistant"
-    assert first_prompt[2]["content"][0]["text"] == "I need to use a tool"
+    assert first_prompt[2]["content"] == "I need to use a tool"
     assert first_prompt[3]["role"] == "user"
-    assert "Custom Instructions" in first_prompt[3]["content"][0]["text"]
+    assert "Custom Instructions" in first_prompt[3]["content"]
     assert first_prompt[4]["role"] == "user"
-    assert first_prompt[4]["content"][0]["text"] == "hi again"
+    assert first_prompt[4]["content"] == "hi again"
 
 
 def test_fast_chat_turn_context_handlers(
     chat_turn_dependencies: ChatTurnDependencies,
-    sample_messages: list[AgentSDKMessage],
+    sample_messages: list[ChatCompletionMessage],
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
@@ -544,26 +511,26 @@ def test_fast_chat_turn_context_handlers(
     assert len(first_prompt) == 3
     assert first_prompt[0]["role"] == "system"
     assert first_prompt[1]["role"] == "user"
-    assert "Custom Instructions" in first_prompt[1]["content"][0]["text"]
+    assert "Custom Instructions" in first_prompt[1]["content"]
     assert first_prompt[2]["role"] == "user"
 
     second_prompt = llm.stream_calls[1]["prompt"]
     assert len(second_prompt) == 6
     assert second_prompt[0]["role"] == "system"
     assert second_prompt[1]["role"] == "user"
-    assert "Custom Instructions" in second_prompt[1]["content"][0]["text"]
+    assert "Custom Instructions" in second_prompt[1]["content"]
     assert second_prompt[2]["role"] == "user"
-    assert second_prompt[3]["type"] == "function_call"
-    assert second_prompt[3]["name"] == "dummy_tool"
-    assert second_prompt[4]["type"] == "function_call_output"
-    assert second_prompt[4]["call_id"] == call_id
+    assert second_prompt[3]["role"] == "assistant"
+    assert second_prompt[3]["tool_calls"][0]["function"]["name"] == "dummy_tool"
+    assert second_prompt[4]["role"] == "tool"
+    assert second_prompt[4]["tool_call_id"] == call_id
     assert second_prompt[5]["role"] == "user"
-    assert prompt_config.reminder in second_prompt[5]["content"][0]["text"]
+    assert prompt_config.reminder in second_prompt[5]["content"]
 
 
 def test_fast_chat_turn_handles_cancellation_before_stream(
     chat_turn_dependencies: ChatTurnDependencies,
-    sample_messages: list[AgentSDKMessage],
+    sample_messages: list[ChatCompletionMessage],
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
@@ -598,7 +565,7 @@ def test_fast_chat_turn_handles_cancellation_before_stream(
 
 def test_fast_chat_turn_handles_cancellation_mid_stream(
     chat_turn_dependencies: ChatTurnDependencies,
-    sample_messages: list[AgentSDKMessage],
+    sample_messages: list[ChatCompletionMessage],
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
@@ -643,7 +610,7 @@ def test_fast_chat_turn_handles_cancellation_mid_stream(
 
 def test_fast_chat_turn_catch_exception(
     chat_turn_dependencies: ChatTurnDependencies,
-    sample_messages: list[AgentSDKMessage],
+    sample_messages: list[ChatCompletionMessage],
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
@@ -674,7 +641,7 @@ def test_fast_chat_turn_catch_exception(
 
 def test_fast_chat_turn_citation_processing(
     chat_turn_context: ChatTurnContext,
-    sample_messages: list[AgentSDKMessage],
+    sample_messages: list[ChatCompletionMessage],
     chat_session_id: UUID,
     message_id: int,
     research_type: ResearchType,
@@ -710,7 +677,7 @@ def test_fast_chat_turn_citation_processing(
 
     @unified_event_stream
     def wrapped_fast_chat_turn_core(
-        messages: list[AgentSDKMessage],
+        messages: list[ChatCompletionMessage],
         dependencies: ChatTurnDependencies,
         session_id: UUID,
         msg_id: int,

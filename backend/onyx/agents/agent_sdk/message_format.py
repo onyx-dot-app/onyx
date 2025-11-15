@@ -1,6 +1,10 @@
+import json
 from collections.abc import Sequence
+from typing import cast
 
 from langchain.schema.messages import BaseMessage
+from langchain_core.messages import AIMessage
+from langchain_core.messages import FunctionMessage
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import AssistantMessageWithContent
@@ -8,6 +12,7 @@ from onyx.agents.agent_sdk.message_types import ImageContent
 from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
+from onyx.llm.message_types import ChatCompletionMessage
 
 
 # TODO: Currently, we only support native API input for images. For other
@@ -18,6 +23,12 @@ def base_messages_to_agent_sdk_msgs(
     is_responses_api: bool,
 ) -> list[AgentSDKMessage]:
     return [_base_message_to_agent_sdk_msg(msg, is_responses_api) for msg in msgs]
+
+
+def base_messages_to_chat_completion_msgs(
+    msgs: Sequence[BaseMessage],
+) -> list[ChatCompletionMessage]:
+    return [_base_message_to_chat_completion_msg(msg) for msg in msgs]
 
 
 def _base_message_to_agent_sdk_msg(
@@ -165,3 +176,38 @@ def _base_message_to_agent_sdk_msg(
         raise ValueError(
             f"Unexpected content type: {type(content)}. Content: {content}"
         )
+
+
+def _base_message_to_chat_completion_msg(
+    msg: BaseMessage,
+) -> ChatCompletionMessage:
+    if msg.type == "human":
+        return {"role": "user", "content": msg.content}
+    if msg.type == "system":
+        return {"role": "system", "content": msg.content}
+    if msg.type == "ai":
+        assistant_msg: ChatCompletionMessage = {
+            "role": "assistant",
+            "content": msg.content,
+        }
+        if isinstance(msg, AIMessage) and msg.tool_calls:
+            assistant_msg["tool_calls"] = [
+                {
+                    "id": tool_call.get("id"),
+                    "type": "function",
+                    "function": {
+                        "name": tool_call["name"],
+                        "arguments": json.dumps(tool_call["args"]),
+                    },
+                }
+                for tool_call in msg.tool_calls
+            ]
+        return assistant_msg
+    if msg.type == "function":
+        function_message = cast(FunctionMessage, msg)
+        return {
+            "role": "tool",
+            "content": function_message.content,
+            "tool_call_id": function_message.name or "",
+        }
+    raise ValueError(f"Unexpected message type: {msg.type}")
