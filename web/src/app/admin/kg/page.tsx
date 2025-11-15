@@ -176,10 +176,8 @@ function KGConfiguration({
               />
               <UnlabeledSwitchField
                 name="enabled"
-                className="flex flex-1"
                 onCheckedChange={(state) => {
-                  props.resetForm();
-                  props.setFieldValue("enabled", state);
+                  if (!state) props.resetForm();
                 }}
               />
             </div>
