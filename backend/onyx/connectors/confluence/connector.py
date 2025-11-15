@@ -15,7 +15,6 @@ from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.confluence.access import get_all_space_permissions
 from onyx.connectors.confluence.access import get_page_restrictions
 from onyx.connectors.confluence.onyx_confluence import extract_text_from_confluence_html
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
@@ -111,6 +110,7 @@ class ConfluenceConnector(
         labels_to_skip: list[str] = CONFLUENCE_CONNECTOR_LABELS_TO_SKIP,
         timezone_offset: float = CONFLUENCE_TIMEZONE_OFFSET,
         scoped_token: bool = False,
+        space_level_access_info: dict[str, ExternalAccess] | None = None,
     ) -> None:
         self.wiki_base = wiki_base
         self.is_cloud = is_cloud
@@ -122,6 +122,7 @@ class ConfluenceConnector(
         self.labels_to_skip = labels_to_skip
         self.timezone_offset = timezone_offset
         self.scoped_token = scoped_token
+        self.space_level_access_info = space_level_access_info or {}
         self._confluence_client: OnyxConfluence | None = None
         self._low_timeout_confluence_client: OnyxConfluence | None = None
         self._fetched_titles: set[str] = set()
@@ -650,29 +651,16 @@ class ConfluenceConnector(
         doc_metadata_list: list[SlimDocument] = []
         restrictions_expand = ",".join(_RESTRICTIONS_EXPANSION_FIELDS)
 
-        space_level_access_info: dict[str, ExternalAccess] = {}
-        if include_permissions:
-            space_level_access_info = get_all_space_permissions(
-                self.confluence_client, self.is_cloud
-            )
-            if not space_level_access_info:
-                raise ValueError(
-                    "No space level access info found. Likely missing "
-                    "permissions to retrieve spaces/space permissions."
-                )
-
         def get_external_access(
             doc_id: str, restrictions: dict[str, Any], ancestors: list[dict[str, Any]]
         ) -> ExternalAccess | None:
-            space_level_access = space_level_access_info.get(page_space_key)
-            if space_level_access is None and include_permissions:
-                raise ValueError(
-                    f"No space level permissions found for {page_space_key}. Likely missing "
-                    "permissions to retrieve spaces/space permissions."
+            space_level_access = self.space_level_access_info.get(page_space_key)
+            return (
+                get_page_restrictions(
+                    self.confluence_client, doc_id, restrictions, ancestors
                 )
-            return get_page_restrictions(
-                self.confluence_client, doc_id, restrictions, ancestors
-            ) or space_level_access_info.get(page_space_key)
+                or space_level_access
+            )
 
         # Query pages
         page_query = self.base_cql_page_query + self.cql_label_filter

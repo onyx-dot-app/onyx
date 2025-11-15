@@ -10,6 +10,7 @@ from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFun
 from ee.onyx.external_permissions.utils import generic_doc_sync
 from onyx.access.models import DocExternalAccess
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.confluence.access import get_all_space_permissions
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.db.models import ConnectorCredentialPair
@@ -34,8 +35,25 @@ def confluence_doc_sync(
     Compares fetched documents against existing documents in the DB for the connector.
     If a document exists in the DB but not in the Confluence fetch, it's marked as restricted.
     """
+
+    # get space level access info
+    confluence_client_for_space_level_access = ConfluenceConnector(
+        **cc_pair.connector.connector_specific_config,
+    )
+    space_level_access_info = get_all_space_permissions(
+        confluence_client_for_space_level_access.confluence_client,
+        confluence_client_for_space_level_access.is_cloud,
+    )
+    if not space_level_access_info:
+        raise ValueError(
+            "No space level access info found. Likely missing "
+            "permissions to retrieve spaces/space permissions."
+        )
+
+    # get doc level access info
     confluence_connector = ConfluenceConnector(
-        **cc_pair.connector.connector_specific_config
+        **cc_pair.connector.connector_specific_config,
+        space_level_access_info=space_level_access_info,
     )
 
     provider = OnyxDBCredentialsProvider(
