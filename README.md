@@ -21,6 +21,11 @@
     </a>
 </p>
 
+<p align="center">
+  <a href="https://trendshift.io/repositories/12516" target="_blank">
+    <img src="https://trendshift.io/api/badge/repositories/12516" alt="onyx-dot-app/onyx | Trendshift" style="width: 250px; height: 55px;" />
+  </a>
+</p>
 
 
 **[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is a feature-rich, self-hostable Chat UI that works with any LLM. It is easy to deploy and can run in a completely airgapped environment.
