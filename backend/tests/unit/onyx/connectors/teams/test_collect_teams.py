@@ -28,7 +28,9 @@ def test_special_characters_in_team_names() -> None:
 
     # Test with team name containing special characters (has &, parentheses)
     # This should use client-side filtering (get().top()) instead of OData filtering
-    result = _collect_all_teams(mock_graph_client, ["Research & Development (R&D) Team"])
+    result = _collect_all_teams(
+        mock_graph_client, ["Research & Development (R&D) Team"]
+    )
 
     # Verify that get().top() was called for client-side filtering
     mock_graph_client.teams.get.assert_called()
@@ -83,14 +85,14 @@ def test_helper_functions() -> None:
     assert _escape_odata_string("Normal Team") == "Normal Team"
 
     # Test special character detection
-    assert _has_odata_incompatible_chars(["R&D Team"]) == True
-    assert _has_odata_incompatible_chars(["Team (Alpha)"]) == True
-    assert _has_odata_incompatible_chars(["Normal Team"]) == False
-    assert _has_odata_incompatible_chars([]) == False
-    assert _has_odata_incompatible_chars(None) == False
+    assert _has_odata_incompatible_chars(["R&D Team"])
+    assert _has_odata_incompatible_chars(["Team (Alpha)"])
+    assert not _has_odata_incompatible_chars(["Normal Team"])
+    assert not _has_odata_incompatible_chars([])
+    assert not _has_odata_incompatible_chars(None)
 
     # Test filtering strategy determination
     can_use, safe, problematic = _can_use_odata_filter(["Normal Team", "R&D Team"])
-    assert can_use == True
+    assert can_use
     assert "Normal Team" in safe
     assert "R&D Team" in problematic
