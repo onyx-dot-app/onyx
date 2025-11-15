@@ -323,7 +323,7 @@ jobs:
       - runs-on
       - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-model-server-build
-      - volume=80gb
+      - volume=30gb
       - extras=ecr-cache
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
