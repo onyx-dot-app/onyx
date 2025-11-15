@@ -2482,6 +2482,50 @@ class CloudEmbeddingProvider(Base):
         return f"<EmbeddingProvider(type='{self.provider_type}')>"
 
 
+class InternetSearchProvider(Base):
+    __tablename__ = "internet_search_provider"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    provider_type: Mapped[str] = mapped_column(String, nullable=False)
+    api_key: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    config: Mapped[dict[str, str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self) -> str:
+        return f"<InternetSearchProvider(name='{self.name}', provider_type='{self.provider_type}')>"
+
+
+class InternetContentProvider(Base):
+    __tablename__ = "internet_content_provider"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    provider_type: Mapped[str] = mapped_column(String, nullable=False)
+    api_key: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    config: Mapped[dict[str, str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self) -> str:
+        return f"<InternetContentProvider(name='{self.name}', provider_type='{self.provider_type}')>"
+
+
 class DocumentSet(Base):
     __tablename__ = "document_set"
 

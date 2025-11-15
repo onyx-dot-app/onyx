@@ -74,13 +74,22 @@ def web_search(
     if not provider:
         raise ValueError("No internet search provider found")
 
+    # Log which provider type is being used
+    provider_type = type(provider).__name__
+    logger.notice(
+        f"Performing web search with {provider_type} for query: '{search_query}'"
+    )
+
     @traceable(name="Search Provider API Call")
     def _search(search_query: str) -> list[WebSearchResult]:
         search_results: list[WebSearchResult] = []
         try:
             search_results = list(provider.search(search_query))
+            logger.notice(
+                f"Search returned {len(search_results)} results using {provider_type}"
+            )
         except Exception as e:
-            logger.error(f"Error performing search: {e}")
+            logger.error(f"Error performing search with {provider_type}: {e}")
         return search_results
 
     search_results: list[WebSearchResult] = _search(search_query)

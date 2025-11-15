@@ -3,27 +3,83 @@ import time
 import uuid
 from typing import Any
 from typing import cast
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
+from typing import TypedDict
 
 from litellm import AllMessageValues
 from litellm.litellm_core_utils.prompt_templates.common_utils import (
     convert_content_list_to_str,
 )
-from litellm.litellm_core_utils.prompt_templates.common_utils import (
-    extract_images_from_message,
-)
+
+try:
+    from litellm.litellm_core_utils.prompt_templates.common_utils import (
+        extract_images_from_message,
+    )
+except ImportError:
+    extract_images_from_message = None  # type: ignore[assignment]
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.llms.ollama.chat.transformation import OllamaChatConfig
 from litellm.llms.ollama.common_utils import OllamaError
-from litellm.types.llms.ollama import OllamaChatCompletionMessage
+
+try:
+    from litellm.types.llms.ollama import OllamaChatCompletionMessage
+except ImportError:
+
+    class OllamaChatCompletionMessage(TypedDict, total=False):
+        """Fallback for LiteLLM versions where this TypedDict was removed."""
+
+        role: str
+        content: Optional[str]
+        images: Optional[List[Any]]
+        thinking: Optional[str]
+        tool_calls: Optional[List["OllamaToolCall"]]
+
+
 from litellm.types.llms.ollama import OllamaToolCall
 from litellm.types.llms.ollama import OllamaToolCallFunction
 from litellm.types.llms.openai import ChatCompletionAssistantToolCall
 from litellm.types.utils import ChatCompletionUsageBlock
 from litellm.types.utils import ModelResponseStream
 from pydantic import BaseModel
+
+
+if extract_images_from_message is None:
+
+    def extract_images_from_message(
+        message: AllMessageValues,
+    ) -> Optional[List[Any]]:
+        """
+        LiteLLM <=v1.52 shipped this helper, but newer versions removed it.
+        Provide a compatible fallback that plucks any image payloads so our
+        Ollama patches can keep working across versions.
+        """
+
+        images: List[Any] = []
+        content = message.get("content")
+        if not isinstance(content, list):
+            return None
+
+        for item in content:
+            if not isinstance(item, Dict):
+                continue
+
+            item_type = item.get("type")
+            if item_type == "image_url":
+                image_url = item.get("image_url")
+                if isinstance(image_url, dict):
+                    if image_url.get("url"):
+                        images.append(image_url)
+                elif image_url:
+                    images.append(image_url)
+            elif item_type in {"input_image", "image"}:
+                image_value = item.get("image")
+                if image_value:
+                    images.append(image_value)
+
+        return images or None
 
 
 def _patch_ollama_transform_request() -> None:
