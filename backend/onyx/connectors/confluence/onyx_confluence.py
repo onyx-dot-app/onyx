@@ -959,7 +959,7 @@ def get_user_email_from_username__server(
             if not email:
                 logger.warning(
                     f"failed to get confluence email for {user_name}, "
-                    "missing email field in response. Got response: {response}."
+                    f"missing email field in response. Got response: {response}."
                 )
         except Exception:
             logger.warning(f"failed to get confluence email for {user_name}")
