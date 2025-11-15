@@ -31,7 +31,6 @@ from onyx.chat.turn.prompts.custom_instruction import build_custom_instructions
 from onyx.chat.turn.save_turn import extract_final_answer_from_packets
 from onyx.chat.turn.save_turn import save_turn
 from onyx.llm.message_types import ChatCompletionMessage
-from onyx.llm.model_response import ModelResponseStream
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
@@ -270,19 +269,13 @@ def _process_query_stream(
     message_section_open = False
     reasoning_section_open = False
 
-    stream_iter = iter(stream)
-    while True:
+    for event in stream:
         connected = is_connected(
             chat_session_id,
             dependencies.redis_client,
         )
         if not connected:
             _emit_clean_up_packets(dependencies, ctx)
-            break
-
-        try:
-            event = next(stream_iter)
-        except StopIteration:
             break
 
         if isinstance(event, RunItemStreamEvent):
@@ -302,9 +295,6 @@ def _process_query_stream(
                 event.details, ToolCallStreamItem
             ):
                 tool_call_events.append(event.details)
-            continue
-
-        if not isinstance(event, ModelResponseStream):
             continue
 
         delta = event.choice.delta

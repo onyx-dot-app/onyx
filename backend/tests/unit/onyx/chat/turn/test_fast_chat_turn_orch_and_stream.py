@@ -240,6 +240,7 @@ def assert_cancellation_packets(
     assert len(packets) >= 3
     assert packets[-1].obj.type == "stop"
     assert packets[-2].obj.type == "section_end"
+    # TODO is this legit?
     if expect_cancelled_message:
         assert packets[-3].obj.type in {"message_start", "message_delta"}
         if packets[-3].obj.type == "message_start":
