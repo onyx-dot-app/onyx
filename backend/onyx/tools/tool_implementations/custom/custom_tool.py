@@ -38,6 +38,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+CUSTOM_TOOL_RESPONSE_ID = "custom_tool_response"
+
 
 # override_kwargs is not supported for custom tools
 class CustomTool(Tool[None, CustomToolRunContext]):
@@ -131,7 +133,7 @@ class CustomTool(Tool[None, CustomToolRunContext]):
         self,
         run_context: CustomToolRunContext,
         turn_index: int,
-        depth_index: int,
+        tab_index: int,
         override_kwargs: None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -158,7 +160,7 @@ class CustomTool(Tool[None, CustomToolRunContext]):
         run_context.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                depth_index=depth_index,
+                tab_index=tab_index,
                 obj=CustomToolStart(tool_name=self._name),
             )
         )
@@ -208,7 +210,7 @@ class CustomTool(Tool[None, CustomToolRunContext]):
         run_context.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                depth_index=depth_index,
+                tab_index=tab_index,
                 obj=CustomToolDelta(
                     tool_name=self._name,
                     response_type=response_type,

@@ -2228,10 +2228,7 @@ class ToolCall(Base):
     # The tools with the same turn number (and parent) were called in parallel
     # Ones with different turn numbers (and same parent) were called sequentially
     turn_number: Mapped[int] = mapped_column(Integer)
-    # The depth of the tool call in the tree structure
-    # 0 for top level tool calls (like web search or calling the Research Agent in Deep Research)
-    # 1 for tool calls from other tool calls (like the search tool calls from the Research Agent)
-    depth: Mapped[int] = mapped_column(Integer)
+    tab_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Not a FK because we want to be able to delete the tool without deleting
     # this entry
@@ -2737,10 +2734,11 @@ class Persona(Base):
     )
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Prompt fields merged from Prompt table
+    # Custom Agent Prompt
     system_prompt: Mapped[str | None] = mapped_column(
         String(length=PROMPT_LENGTH), nullable=True
     )
+    replace_base_system_prompt: Mapped[bool] = mapped_column(Boolean, default=False)
     task_prompt: Mapped[str | None] = mapped_column(
         String(length=PROMPT_LENGTH), nullable=True
     )

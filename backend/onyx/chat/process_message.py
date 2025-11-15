@@ -17,12 +17,14 @@ from onyx.chat.chat_milestones import process_multi_assistant_milestone
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import create_temporary_persona
+from onyx.chat.chat_utils import get_custom_agent_prompt
 from onyx.chat.chat_utils import load_all_chat_files
 from onyx.chat.memories import get_memories
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import MessageSpecificCitations
@@ -172,7 +174,7 @@ def _extract_project_file_texts_and_images(
     # 60% of the LLM's max context window. The other benefit is that for projects with
     # more files, this makes it so that we don't throw away the history too quickly every time.
     max_llm_context_percentage: float = 0.6,
-) -> tuple[list[str], list[ChatLoadedFile], int | bool]:
+) -> ExtractedProjectFiles:
     """Extract text content from project files if they fit within the context window.
 
     Args:
@@ -184,14 +186,21 @@ def _extract_project_file_texts_and_images(
         max_llm_context_percentage: Maximum percentage of the LLM context window to use.
 
     Returns:
-        List of text content strings from project files (text files only)
-        List of image files from project (ChatLoadedFile objects)
-        Project id if the the project should be provided as a filter in search or None if not.
+        ExtractedProjectFiles containing:
+        - List of text content strings from project files (text files only)
+        - List of image files from project (ChatLoadedFile objects)
+        - Project id if the the project should be provided as a filter in search or None if not.
+        - Total token count of all extracted files
     """
     # TODO I believe this is not handling all file types correctly.
     project_as_filter = False
     if not project_id:
-        return [], [], False
+        return ExtractedProjectFiles(
+            project_file_texts=[],
+            project_image_files=[],
+            project_as_filter=False,
+            total_token_count=0,
+        )
 
     max_actual_tokens = (
         llm_max_context_window - reserved_token_count
@@ -209,6 +218,7 @@ def _extract_project_file_texts_and_images(
 
     project_file_texts: list[str] = []
     project_image_files: list[ChatLoadedFile] = []
+    total_token_count = 0
     if project_tokens < max_actual_tokens:
         # Load project files into memory using cached plaintext when available
         project_user_files = get_user_files_from_project(
@@ -235,6 +245,10 @@ def _extract_project_file_texts_and_images(
                         text_content = text_content.replace("\x00", "")
                         if text_content:
                             project_file_texts.append(text_content)
+                            # Add token count for text file
+                            user_file = user_file_map.get(str(file.file_id))
+                            if user_file and user_file.token_count:
+                                total_token_count += user_file.token_count
                     except Exception:
                         # Skip files that can't be decoded
                         pass
@@ -246,6 +260,7 @@ def _extract_project_file_texts_and_images(
                         if user_file and user_file.token_count
                         else 0
                     )
+                    total_token_count += token_count
                     chat_loaded_file = ChatLoadedFile(
                         file_id=file.file_id,
                         content=file.content,
@@ -258,7 +273,12 @@ def _extract_project_file_texts_and_images(
     else:
         project_as_filter = True
 
-    return project_file_texts, project_image_files, project_as_filter
+    return ExtractedProjectFiles(
+        project_file_texts=project_file_texts,
+        project_image_files=project_image_files,
+        project_as_filter=project_as_filter,
+        total_token_count=total_token_count,
+    )
 
 
 def _translate_citations(
@@ -476,13 +496,7 @@ def stream_chat_message_objects(
 
         memories = get_memories(user, db_session)
 
-        # Chat Sessions in Projects that are using a custom agent will retain the custon agent prompt
-        if persona.system_prompt:
-            custom_agent_prompt = persona.system_prompt
-        elif chat_session.project and chat_session.project.instructions:
-            custom_agent_prompt = chat_session.project.instructions
-        else:
-            custom_agent_prompt = None
+        custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
 
         reserved_token_count = calculate_reserved_tokens(
             db_session=db_session,
@@ -493,14 +507,12 @@ def stream_chat_message_objects(
         )
 
         # Process projects, if all of the files fit in the context, it doesn't need to use RAG
-        project_file_texts, project_image_files, project_as_filter = (
-            _extract_project_file_texts_and_images(
-                project_id=chat_session.project_id,
-                user_id=user_id,
-                llm_max_context_window=llm.config.max_input_tokens,
-                reserved_token_count=reserved_token_count,
-                db_session=db_session,
-            )
+        extracted_project_files = _extract_project_file_texts_and_images(
+            project_id=chat_session.project_id,
+            user_id=user_id,
+            llm_max_context_window=llm.config.max_input_tokens,
+            reserved_token_count=reserved_token_count,
+            db_session=db_session,
         )
 
         # There are cases where the internal search tool should be disabled
@@ -512,7 +524,10 @@ def stream_chat_message_objects(
         disable_internal_search = bool(
             chat_session.project_id
             and persona.id is DEFAULT_PERSONA_ID
-            and (project_file_texts or not project_as_filter)
+            and (
+                extracted_project_files.project_file_texts
+                or not extracted_project_files.project_as_filter
+            )
         )
 
         # Construct tools based on the persona configurations
@@ -524,7 +539,11 @@ def stream_chat_message_objects(
             fast_llm=fast_llm,
             search_tool_config=SearchToolConfig(
                 user_selected_filters=user_selected_filters,
-                project_id=chat_session.project_id if project_as_filter else None,
+                project_id=(
+                    chat_session.project_id
+                    if extracted_project_files.project_as_filter
+                    else None
+                ),
                 bypass_acl=bypass_acl,
                 slack_context=new_msg_req.slack_context,
             ),
@@ -567,17 +586,19 @@ def stream_chat_message_objects(
         simple_chat_history = convert_chat_history(
             chat_history=chat_history,
             files=files,
-            project_image_files=project_image_files,
+            project_image_files=extracted_project_files.project_image_files,
         )
 
         yield from run_agent_loop(
             simple_chat_history=simple_chat_history,
             tools=tools,
             custom_agent_prompt=custom_agent_prompt,
-            project_files_texts=project_file_texts,
+            project_files=extracted_project_files,
             persona=persona,
+            memories=memories,
             llm=llm,
             fast_llm=fast_llm,
+            tokenizer_func=tokenizer_encode_func,
             assistant_response=assistant_response,
             db_session=db_session,
         )
@@ -617,49 +638,48 @@ def run_agent_loop(
     simple_chat_history: list[ChatMessageSimple],
     tools: list[Tool],
     custom_agent_prompt: str | None,
-    project_files_texts: list[str],
+    project_files: ExtractedProjectFiles,
     persona: Persona | None,
+    memories: list[str] | None,
     llm: LLM,
     fast_llm: LLM,
+    tokenizer_func: Callable[[str], list[int]],
     assistant_response: ChatMessage,
     db_session: Session,
 ) -> Generator[Packet, None, None]:
+    # # The loop should happen in between here
+    # reminder_text = None
+
+    # # The section below calculates the available tokens for history a bit more accurately
+    # # now that project files are loaded in.
+    # if persona.replace_base_system_prompt:
+    #     system_prompt = SystemMessage(content=persona.system_prompt)
+    #     custom_agent_prompt = None
+    # else:
+    #     system_prompt = build_system_prompt(
+    #         base_system_prompt=get_default_base_system_prompt(db_session),
+    #         datetime_aware=persona.datetime_aware,
+    #         memories=memories,
+    #         # Tools may change over iterations but for this, it's ok
+    #         tools=tools,
+    #         # Not that many tokens, just keep it in
+    #         should_cite_documents=True,
+    #     )
+    #     custom_agent_prompt = SystemMessage(content=custom_agent_prompt)
+
+    # system_prompt_token_count = len(tokenizer_func(system_prompt.content))
+    # custom_agent_prompt_token_count = len(tokenizer_func(custom_agent_prompt.content)) if custom_agent_prompt else 0
+    # project_token_tokens = project_files.total_token_count
+
+    # reserved_tokens = system_prompt_token_count + custom_agent_prompt_token_count + project_token_tokens
+    # available_tokens = llm.config.max_input_tokens - reserved_tokens - 200 # approximate upper bound for reminder text
+
+    # chat_messages = construct_message_history(
+    #     simple_chat_history=simple_chat_history,
+    #     project_files=project_files,
+    #     available_tokens=available_tokens,
+    # )
     raise NotImplementedError("Not implemented")
-
-
-# # TODO: Refactor this to live somewhere else
-# def _reserve_prompt_tokens_for_agent_overhead(
-#     prompt_builder: AnswerPromptBuilder,
-#     primary_llm: LLM,
-#     tools: list[Tool],
-#     prompt_config: PromptConfig,
-# ) -> None:
-#     try:
-#         tokenizer = get_tokenizer(
-#             provider_type=primary_llm.config.model_provider,
-#             model_name=primary_llm.config.model_name,
-#         )
-#     except Exception:
-#         logger.exception("Failed to initialize tokenizer for agent token budgeting.")
-#         return
-
-#     reserved_tokens = 0
-
-#     if tools:
-#         try:
-#             reserved_tokens += compute_all_tool_tokens(tools, tokenizer)
-#         except Exception:
-#             logger.exception("Failed to compute tool token budget.")
-
-#     custom_instructions = prompt_config.custom_instructions
-#     if custom_instructions:
-#         custom_instruction_text = f"Custom Instructions: {custom_instructions}"
-#         reserved_tokens += len(tokenizer.encode(custom_instruction_text))
-
-#     if reserved_tokens <= 0:
-#         return
-
-#     prompt_builder.max_tokens = max(0, prompt_builder.max_tokens - reserved_tokens)
 
 
 def _fast_message_stream(

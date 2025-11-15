@@ -124,7 +124,7 @@ class CustomToolRunContext(BaseModel):
 class ToolCallInfo(BaseModel):
     parent_tool_call_id: str | None  # None if attached to the Chat Message directly
     turn_index: int
-    depth_index: int
+    tab_index: int
     tool_id: int  # DB tool type id
     tool_call_id: str
     reasoning_tokens: str | None

@@ -34,6 +34,7 @@ from onyx.db.kg_config import is_kg_config_settings_enabled_valid
 from onyx.db.llm import fetch_existing_doc_sets
 from onyx.db.llm import fetch_existing_tools
 from onyx.db.models import ChatMessage
+from onyx.db.models import ChatSession
 from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import Tool
@@ -663,15 +664,16 @@ def convert_chat_history(
                     )
                 )
 
-            # Add the user message with image files attached
-            # If this is the last USER message, also include project_image_files
-            if idx == last_user_message_idx and project_image_files:
-                image_files.extend(project_image_files)
-
-            # Sum token counts from all image files
+            # Sum token counts from image files (excluding project image files)
             image_token_count = (
                 sum(img.token_count for img in image_files) if image_files else 0
             )
+
+            # Add the user message with image files attached
+            # If this is the last USER message, also include project_image_files
+            # Note: project image file tokens are NOT counted in the token count
+            if idx == last_user_message_idx and project_image_files:
+                image_files.extend(project_image_files)
             simple_messages.append(
                 ChatMessageSimple(
                     message=chat_message.message,
@@ -726,3 +728,24 @@ def convert_chat_history(
             )
 
     return simple_messages
+
+
+def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str | None:
+    """Get the custom agent prompt from persona or project instructions.
+
+    Chat Sessions in Projects that are using a custom agent will retain the custom agent prompt.
+    Priority: persona.system_prompt > chat_session.project.instructions > None
+
+    Args:
+        persona: The Persona object
+        chat_session: The ChatSession object
+
+    Returns:
+        The custom agent prompt string, or None if neither persona nor project has one
+    """
+    if persona.system_prompt:
+        return persona.system_prompt
+    elif chat_session.project and chat_session.project.instructions:
+        return chat_session.project.instructions
+    else:
+        return None

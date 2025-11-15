@@ -65,7 +65,7 @@ class KnowledgeGraphTool(Tool[None, None]):
         self,
         run_context: None,
         turn_index: int,
-        depth_index: int,
+        tab_index: int,
         override_kwargs: None,
         **llm_kwargs: Any,
     ) -> ToolResponse:

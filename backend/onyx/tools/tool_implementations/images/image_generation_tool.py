@@ -4,13 +4,6 @@ from typing import Any
 from typing import cast
 
 import requests
-from backend.onyx.tools.tool_implementations.images.models import (
-    FinalImageGenerationResponse,
-)
-from backend.onyx.tools.tool_implementations.images.models import (
-    ImageGenerationResponse,
-)
-from backend.onyx.tools.tool_implementations.images.models import ImageShape
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
@@ -28,6 +21,13 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import ImageGenerationToolRunContext
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.images.models import (
+    FinalImageGenerationResponse,
+)
+from onyx.tools.tool_implementations.images.models import (
+    ImageGenerationResponse,
+)
+from onyx.tools.tool_implementations.images.models import ImageShape
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -205,7 +205,7 @@ class ImageGenerationTool(Tool[None, ImageGenerationToolRunContext]):
         self,
         run_context: ImageGenerationToolRunContext,
         turn_index: int,
-        depth_index: int,
+        tab_index: int,
         override_kwargs: None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -216,7 +216,7 @@ class ImageGenerationTool(Tool[None, ImageGenerationToolRunContext]):
         run_context.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                depth_index=depth_index,
+                tab_index=tab_index,
                 obj=ImageGenerationToolStart(),
             )
         )
@@ -263,7 +263,7 @@ class ImageGenerationTool(Tool[None, ImageGenerationToolRunContext]):
             run_context.emitter.emit(
                 Packet(
                     turn_index=turn_index,
-                    depth_index=depth_index,
+                    tab_index=tab_index,
                     obj=ImageGenerationToolHeartbeat(),
                 )
             )
@@ -308,7 +308,7 @@ class ImageGenerationTool(Tool[None, ImageGenerationToolRunContext]):
         run_context.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                depth_index=depth_index,
+                tab_index=tab_index,
                 obj=ImageGenerationFinal(images=generated_images),
             )
         )

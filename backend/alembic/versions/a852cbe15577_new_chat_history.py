@@ -1,7 +1,7 @@
 """New Chat History
 
 Revision ID: a852cbe15577
-Revises: a4f23d6b71c8
+Revises: 2acdef638fc2
 Create Date: 2025-11-08 15:16:37.781308
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "a852cbe15577"
-down_revision = "a4f23d6b71c8"
+down_revision = "2acdef638fc2"
 branch_labels = None
 depends_on = None
 
@@ -170,8 +170,8 @@ def upgrade() -> None:
             ["id"],
         )
 
-    # Add turn_number, depth, tool_id (if not exists)
-    for col_name in ["turn_number", "depth", "tool_id"]:
+    # Add turn_number, tool_id (if not exists)
+    for col_name in ["turn_number", "tool_id"]:
         result = conn.execute(
             sa.text(
                 f"""
@@ -185,6 +185,21 @@ def upgrade() -> None:
                 "tool_call",
                 sa.Column(col_name, sa.Integer(), nullable=False, server_default="0"),
             )
+
+    # Add tab_number (nullable, no default for existing rows)
+    result = conn.execute(
+        sa.text(
+            """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'tool_call' AND column_name = 'tab_number'
+        """
+        )
+    )
+    if not result.fetchone():
+        op.add_column(
+            "tool_call",
+            sa.Column("tab_number", sa.Integer(), nullable=True),
+        )
 
     # Add tool_call_id as String (if not exists)
     result = conn.execute(
@@ -272,8 +287,31 @@ def upgrade() -> None:
     if result.fetchone():
         op.drop_column("tool_call", "tool_name")
 
+    # Add replace_base_system_prompt to persona table (if not exists)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'persona' AND column_name = 'replace_base_system_prompt'
+    """
+        )
+    )
+    if not result.fetchone():
+        op.add_column(
+            "persona",
+            sa.Column(
+                "replace_base_system_prompt",
+                sa.Boolean(),
+                nullable=False,
+                server_default="false",
+            ),
+        )
+
 
 def downgrade() -> None:
+    # Reverse persona changes
+    op.drop_column("persona", "replace_base_system_prompt")
+
     # Reverse ToolCall changes
     op.add_column("tool_call", sa.Column("tool_name", sa.String(), nullable=False))
     op.drop_column("tool_call", "tool_id")
@@ -284,7 +322,7 @@ def downgrade() -> None:
     )
     op.drop_column("tool_call", "reasoning_tokens")
     op.drop_column("tool_call", "tool_call_id")
-    op.drop_column("tool_call", "depth")
+    op.drop_column("tool_call", "tab_number")
     op.drop_column("tool_call", "turn_number")
     op.drop_constraint(
         "fk_tool_call_parent_tool_call_id", "tool_call", type_="foreignkey"

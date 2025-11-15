@@ -219,7 +219,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
         self,
         run_context: SearchToolRunContext,
         turn_index: int,
-        depth_index: int,
+        tab_index: int,
         override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -238,7 +238,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
             run_context.emitter.emit(
                 Packet(
                     turn_index=turn_index,
-                    depth_index=depth_index,
+                    tab_index=tab_index,
                     obj=SearchToolStart(),
                 )
             )
@@ -247,7 +247,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
             run_context.emitter.emit(
                 Packet(
                     turn_index=turn_index,
-                    depth_index=depth_index,
+                    tab_index=tab_index,
                     obj=SearchToolQueriesDelta(
                         queries=[query],
                     ),
@@ -281,7 +281,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
             run_context.emitter.emit(
                 Packet(
                     turn_index=turn_index,
-                    depth_index=depth_index,
+                    tab_index=tab_index,
                     obj=SearchToolDocumentsDelta(
                         documents=saved_search_docs,
                     ),

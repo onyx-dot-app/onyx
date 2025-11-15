@@ -409,3 +409,10 @@ class ChatMessageSimple(BaseModel):
     token_count: int
     message_type: MessageType
     image_files: list[ChatLoadedFile] | None = None
+
+
+class ExtractedProjectFiles(BaseModel):
+    project_file_texts: list[str]
+    project_image_files: list[ChatLoadedFile]
+    project_as_filter: int | bool
+    total_token_count: int
