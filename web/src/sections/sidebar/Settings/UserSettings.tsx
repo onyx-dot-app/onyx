@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
 import { ThemePreference } from "@/lib/types";
-import { Switch } from "@/components/ui/switch";
+import Switch from "@/refresh-components/inputs/Switch";
 import { SubLabel } from "@/components/Field";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import {

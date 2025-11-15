@@ -22,7 +22,7 @@ const thumbClasses = {
   disabled: ["bg-background-neutral-03"],
 } as const;
 
-interface SwitchProps
+export interface SwitchProps
   extends React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root> {
   main?: boolean;
   disabled?: boolean;

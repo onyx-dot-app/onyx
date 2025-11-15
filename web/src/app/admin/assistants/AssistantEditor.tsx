@@ -73,7 +73,7 @@ import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
-import { SwitchField } from "@/components/ui/switch";
+import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
 import { generateIdenticon } from "@/refresh-components/AgentIcon";
 import { BackButton } from "@/components/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
@@ -1053,8 +1053,7 @@ export default function AssistantEditor({
                                     }`}
                                   >
                                     {({ form }: any) => (
-                                      <SwitchField
-                                        size="sm"
+                                      <UnlabeledSwitchField
                                         onCheckedChange={(checked: boolean) => {
                                           form.setFieldValue(
                                             "num_chunks",
@@ -1583,9 +1582,8 @@ export default function AssistantEditor({
                             side="top"
                           >
                             <div>
-                              <SwitchField
+                              <UnlabeledSwitchField
                                 name="is_public"
-                                size="md"
                                 onCheckedChange={(checked) => {
                                   if (values.is_default_persona && !checked) {
                                     setShowVisibilityWarning(true);
