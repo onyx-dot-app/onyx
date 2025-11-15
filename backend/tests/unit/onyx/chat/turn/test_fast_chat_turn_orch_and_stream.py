@@ -234,17 +234,10 @@ def assert_packets_contain_stop(packets: list[Packet]) -> None:
     assert isinstance(packets[-1].obj, OverallStop), "Last packet should be OverallStop"
 
 
-def assert_cancellation_packets(
-    packets: list[Packet], expect_cancelled_message: bool
-) -> None:
+def assert_cancellation_packets(packets: list[Packet]) -> None:
     assert len(packets) >= 3
     assert packets[-1].obj.type == "stop"
     assert packets[-2].obj.type == "section_end"
-    # TODO is this legit?
-    if expect_cancelled_message:
-        assert packets[-3].obj.type in {"message_start", "message_delta"}
-        if packets[-3].obj.type == "message_start":
-            assert packets[-3].obj.content == "Cancelled"
 
 
 # =============================================================================
@@ -561,7 +554,8 @@ def test_fast_chat_turn_handles_cancellation_before_stream(
     set_fence(chat_session_id, chat_turn_dependencies.redis_client, True)
     packets = list(generator)
 
-    assert_cancellation_packets(packets, expect_cancelled_message=True)
+    assert len(packets) == 3  # Start, section_end, stop with no "This will not stream"
+    assert_cancellation_packets(packets)
 
 
 def test_fast_chat_turn_handles_cancellation_mid_stream(
@@ -605,8 +599,8 @@ def test_fast_chat_turn_handles_cancellation_mid_stream(
             set_fence(chat_session_id, chat_turn_dependencies.redis_client, True)
             cancelled = True
 
-    assert cancelled, "Expected to trigger cancellation after receiving a delta packet."
-    assert_cancellation_packets(packets, expect_cancelled_message=False)
+    assert len(packets) == 4  # Start, Hello, section_end, stop with no "world"
+    assert_cancellation_packets(packets)
 
 
 def test_fast_chat_turn_catch_exception(

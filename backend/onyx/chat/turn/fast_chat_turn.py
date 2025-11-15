@@ -71,6 +71,9 @@ def _run_agent_loop(
         # TODO: The system is rather prompt-cache efficient except for rebuilding the system prompt.
         # The biggest offender is when we hit max iterations and then all the tool calls cannot
         # be cached anymore since the system message will be differ in that it will have no tools.
+        if not is_connected(chat_session_id, dependencies.redis_client):
+            _emit_clean_up_packets(dependencies, ctx)
+            break
         langchain_system_message = default_build_system_message_v2(
             dependencies.prompt_config,
             dependencies.llm.config,
