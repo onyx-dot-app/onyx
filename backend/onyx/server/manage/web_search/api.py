@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Response
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
@@ -96,13 +97,16 @@ def upsert_search_provider_endpoint(
     )
 
 
-@admin_router.delete("/search-providers/{provider_id}")
+@admin_router.delete(
+    "/search-providers/{provider_id}", status_code=204, response_class=Response
+)
 def delete_search_provider(
     provider_id: int,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> None:
+) -> Response:
     delete_web_search_provider(provider_id, db_session)
+    return Response(status_code=204)
 
 
 @admin_router.post("/search-providers/{provider_id}/activate")
@@ -234,13 +238,16 @@ def upsert_content_provider_endpoint(
     )
 
 
-@admin_router.delete("/content-providers/{provider_id}")
+@admin_router.delete(
+    "/content-providers/{provider_id}", status_code=204, response_class=Response
+)
 def delete_content_provider(
     provider_id: int,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> None:
+) -> Response:
     delete_web_content_provider(provider_id, db_session)
+    return Response(status_code=204)
 
 
 @admin_router.post("/content-providers/{provider_id}/activate")

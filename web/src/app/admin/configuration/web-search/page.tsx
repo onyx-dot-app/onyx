@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { CheckmarkIcon, GlobeIcon, InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
@@ -173,6 +173,9 @@ export default function Page() {
 
   const isLoading = isLoadingSearchProviders || isLoadingContentProviders;
 
+  const prevProviderTypeRef = useRef<WebSearchProviderType | null>(null);
+  const wasModalOpenRef = useRef(false);
+
   useEffect(() => {
     if (!isModalOpen || !selectedProviderType) {
       setApiKeyValue("");
@@ -180,15 +183,24 @@ export default function Page() {
       setSearchStatusMessage(null);
       setSearchErrorMessage(null);
       setIsProcessingSearch(false);
+      prevProviderTypeRef.current = null;
+      wasModalOpenRef.current = false;
       return;
+    }
+
+    const modalJustOpened = !wasModalOpenRef.current;
+    const providerChanged =
+      prevProviderTypeRef.current !== selectedProviderType;
+
+    if (modalJustOpened || providerChanged) {
+      setApiKeyValue("");
+      setSearchStatusMessage(null);
+      setSearchErrorMessage(null);
     }
 
     const provider = searchProviders?.find(
       (item) => item.provider_type === selectedProviderType
     );
-
-    setApiKeyValue("");
-
     if (selectedProviderType === "google_pse") {
       const config = provider?.config || {};
       const searchId =
@@ -197,6 +209,8 @@ export default function Page() {
     } else {
       setSearchEngineIdValue("");
     }
+    prevProviderTypeRef.current = selectedProviderType;
+    wasModalOpenRef.current = true;
   }, [isModalOpen, selectedProviderType, searchProviders]);
 
   useEffect(() => {
@@ -1242,29 +1256,6 @@ export default function Page() {
                           </span>
                         </span>
                       </Button>
-                      {provider.provider_type !== "onyx_web_crawler" &&
-                        !hasStoredKey &&
-                        !isCurrentCrawler && (
-                          <Button
-                            type="button"
-                            className="inline-flex shrink-0 items-center gap-2 rounded-12 px-2 py-2 bg-transparent border-0 shadow-none text-text-02"
-                            tertiary
-                            onClick={() => {
-                              setSelectedContentProviderType(
-                                provider.provider_type
-                              );
-                              setIsContentModalOpen(true);
-                              setContentActivationError(null);
-                            }}
-                          >
-                            <span className="flex items-center gap-2">
-                              <span className="whitespace-nowrap">Connect</span>
-                              <span className="flex h-4 w-4 items-center justify-center text-current">
-                                <SvgArrowExchange className="h-4 w-4 text-current" />
-                              </span>
-                            </span>
-                          </Button>
-                        )}
                     </div>
                   </div>
                 );
