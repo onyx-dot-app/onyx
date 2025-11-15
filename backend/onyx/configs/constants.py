@@ -296,6 +296,13 @@ class MessageType(str, Enum):
     ASSISTANT = "assistant"  # AIMessage
 
 
+class ChatMessageSimpleType(str, Enum):
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL_CALL = "tool_call"
+    FILE_TEXT = "file_text"
+
+
 class TokenRateLimitScope(str, Enum):
     USER = "user"
     USER_GROUP = "user_group"

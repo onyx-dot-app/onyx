@@ -135,7 +135,7 @@ def test_error_handling_with_heartbeats() -> None:
 
 
 def test_tool_message_content_filters_heartbeats() -> None:
-    """Test that build_tool_message_content correctly filters heartbeats."""
+    """Test that get_llm_tool_response correctly filters heartbeats."""
     api_key = os.getenv("OPENAI_API_KEY", "mock-key-for-testing")
 
     tool = ImageGenerationTool(
@@ -167,7 +167,7 @@ def test_tool_message_content_filters_heartbeats() -> None:
     )
 
     # Test that heartbeats are filtered out
-    result = tool.build_tool_message_content(heartbeat1, heartbeat2, image_response)
+    result = tool.get_llm_tool_response(heartbeat1, heartbeat2, image_response)
 
     # Should return JSON with image info, not heartbeats
     assert isinstance(result, str)

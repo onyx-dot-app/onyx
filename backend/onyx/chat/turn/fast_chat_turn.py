@@ -18,7 +18,6 @@ from onyx.agents.agent_sdk.monkey_patches import (
     monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search,
 )
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.chat_utils import llm_docs_from_fetched_documents_cache
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.memories import get_memories
@@ -189,13 +188,15 @@ def _run_agent_loop(
             last_call_is_final = True
         iteration_count += 1
 
+    # Store the final agent_turn_messages in context for save_turn to use
+    ctx.agent_turn_messages = agent_turn_messages
+
 
 def _fast_chat_turn_core(
     messages: list[AgentSDKMessage],
     dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     message_id: int,
-    research_type: ResearchType,
     prompt_config: PromptConfig,
     force_use_tool: ForceUseTool | None = None,
     # Dependency injectable argument for testing
@@ -208,7 +209,7 @@ def _fast_chat_turn_core(
         dependencies: Chat turn dependencies
         chat_session_id: Chat session ID
         message_id: Message ID
-        research_type: Research type
+        use_agentic_search: Whether to use agentic search
         global_iteration_responses: Optional list of iteration answers to inject for testing
         cited_documents: Optional list of cited documents to inject for testing
     """
@@ -220,7 +221,6 @@ def _fast_chat_turn_core(
         run_dependencies=dependencies,
         chat_session_id=chat_session_id,
         message_id=message_id,
-        research_type=research_type,
     )
     with trace("fast_chat_turn"):
         _run_agent_loop(
@@ -255,13 +255,11 @@ def _fast_chat_turn_core(
         db_session=dependencies.db_session,
         message_id=message_id,
         chat_session_id=chat_session_id,
-        research_type=research_type,
         model_name=dependencies.llm.config.model_name,
         model_provider=dependencies.llm.config.model_provider,
-        iteration_instructions=ctx.iteration_instructions,
-        global_iteration_responses=ctx.global_iteration_responses,
         final_answer=final_answer,
         fetched_documents_cache=ctx.fetched_documents_cache,
+        agent_turn_messages=ctx.agent_turn_messages,
     )
     dependencies.emitter.emit(
         Packet(ind=ctx.current_run_step, obj=OverallStop(type="stop"))
@@ -274,18 +272,16 @@ def fast_chat_turn(
     dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     message_id: int,
-    research_type: ResearchType,
     prompt_config: PromptConfig,
     force_use_tool: ForceUseTool | None = None,
 ) -> None:
     """Main fast chat turn function that calls the core logic with default parameters."""
     _fast_chat_turn_core(
-        messages,
-        dependencies,
-        chat_session_id,
-        message_id,
-        research_type,
-        prompt_config,
+        messages=messages,
+        dependencies=dependencies,
+        chat_session_id=chat_session_id,
+        message_id=message_id,
+        prompt_config=prompt_config,
         force_use_tool=force_use_tool,
     )
 

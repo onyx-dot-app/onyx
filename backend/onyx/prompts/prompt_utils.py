@@ -69,8 +69,9 @@ def build_date_time_string() -> str:
 
 def handle_onyx_date_awareness(
     prompt_str: str,
-    prompt_config: PromptConfig,
-    add_additional_info_if_no_tag: bool = False,
+    # We always replace the pattern [[CURRENT_DATETIME]] if it shows up
+    # but if it doesn't show up and the prompt is datetime aware, add it to the prompt at the end.
+    datetime_aware: bool = False,
 ) -> str:
     """
     If there is a [[CURRENT_DATETIME]] tag, replace it with the current date and time no matter what.
@@ -86,18 +87,10 @@ def handle_onyx_date_awareness(
     )
     if prompt_with_datetime != prompt_str:
         return prompt_with_datetime
-    any_tag_present = any(
-        _DANSWER_DATETIME_REPLACEMENT_PAT in text
-        for text in [
-            prompt_str,
-            prompt_config.default_behavior_system_prompt,
-            prompt_config.custom_instructions,
-            prompt_config.reminder,
-        ]
-        if text
-    )
-    if add_additional_info_if_no_tag and not any_tag_present:
+
+    if datetime_aware:
         return prompt_str + build_date_time_string()
+
     return prompt_str
 
 
@@ -118,7 +111,7 @@ def handle_company_awareness(prompt_str: str) -> str:
         return prompt_str
 
 
-def handle_memories(prompt_str: str, memories: list[str]) -> str:
+def handle_memories(prompt_str: str, memories: list[str] | None) -> str:
     if not memories:
         return prompt_str
     memories_str = "\n".join(memories)

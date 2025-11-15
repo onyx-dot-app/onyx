@@ -10,9 +10,10 @@ from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import ThreadMessage
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.enums import SearchType
+from onyx.context.search.models import BaseFilters
+from onyx.context.search.models import BasicChunkRequest
 from onyx.context.search.models import ChunkContext
+from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.server.manage.models import StandardAnswer
@@ -29,14 +30,12 @@ class StandardAnswerResponse(BaseModel):
     standard_answers: list[StandardAnswer] = Field(default_factory=list)
 
 
-class DocumentSearchRequest(ChunkContext):
-    message: str
-    search_type: SearchType
-    retrieval_options: RetrievalDetails
-    recency_bias_multiplier: float = 1.0
-    evaluation_type: LLMEvaluationType
-    # None to use system defaults for reranking
-    rerank_settings: RerankingDetails | None = None
+class DocumentSearchRequest(BasicChunkRequest):
+    user_selected_filters: BaseFilters | None = None
+
+
+class DocumentSearchResponse(BaseModel):
+    top_documents: list[InferenceChunk]
 
 
 class BasicCreateChatMessageRequest(ChunkContext):

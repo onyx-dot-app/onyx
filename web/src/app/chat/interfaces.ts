@@ -131,7 +131,6 @@ export interface Message {
   latestChildNodeId?: number | null;
   alternateAssistantID?: number | null;
   stackTrace?: string | null;
-  overridden_model?: string;
   stopReason?: StreamStopReason | null;
 
   // new gen
@@ -172,7 +171,6 @@ export interface BackendMessage {
   rephrased_query: string | null;
   context_docs: { top_documents: OnyxDocument[] } | null;
   time_sent: string;
-  overridden_model: string;
   alternate_assistant_id: number | null;
   chat_session_id: string;
   citations: CitationMap | null;
@@ -184,7 +182,6 @@ export interface BackendMessage {
   // Keeping existing properties
   comments: any;
   parentMessageId: number | null;
-  refined_answer_improvement: boolean | null;
   is_agentic: boolean | null;
 }
 

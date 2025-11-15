@@ -4,36 +4,27 @@ from agents import function_tool
 from agents import RunContextWrapper
 from pydantic import TypeAdapter
 
-from onyx.agents.agent_search.dr.models import IterationAnswer
-from onyx.agents.agent_search.dr.models import IterationInstructions
-from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
-    WebSearchResult,
-)
-from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    get_default_provider,
-)
-from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    WebSearchProvider,
-)
-from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
-    dummy_inference_section_from_internet_content,
-)
-from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
-    dummy_inference_section_from_internet_search_result,
-)
-from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
-    truncate_search_result_content,
-)
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import FetchedDocumentCacheEntry
-from onyx.db.tools import get_tool_by_name
+from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.server.query_and_chat.streaming_models import FetchToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SavedSearchDoc
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
-from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
+from onyx.tools.tool_implementations.web_search.models import WebSearchResult
+from onyx.tools.tool_implementations.web_search.providers import get_default_provider
+from onyx.tools.tool_implementations.web_search.utils import (
+    dummy_inference_section_from_internet_content,
+)
+from onyx.tools.tool_implementations.web_search.utils import (
+    dummy_inference_section_from_internet_search_result,
+)
+from onyx.tools.tool_implementations.web_search.utils import (
+    truncate_search_result_content,
+)
 from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
 from onyx.tools.tool_implementations_v2.tool_result_models import LlmOpenUrlResult
 from onyx.tools.tool_implementations_v2.tool_result_models import LlmWebSearchResult
@@ -70,15 +61,7 @@ def _web_search_core(
         )
     )
 
-    queries_str = ", ".join(queries)
-    run_context.context.iteration_instructions.append(
-        IterationInstructions(
-            iteration_nr=index,
-            plan="plan",
-            purpose="Searching the web for information",
-            reasoning=f"I am now using Web Search to gather information on {queries_str}",
-        )
-    )
+    ", ".join(queries)
 
     # Search all queries in parallel
     function_calls = [
@@ -96,10 +79,6 @@ def _web_search_core(
     inference_sections = [
         dummy_inference_section_from_internet_search_result(r) for r in all_hits
     ]
-
-    from onyx.agents.agent_search.dr.utils import (
-        convert_inference_sections_to_search_docs,
-    )
 
     saved_search_docs = convert_inference_sections_to_search_docs(
         inference_sections, is_internet=True
@@ -137,25 +116,6 @@ def _web_search_core(
                 )
             )
 
-    run_context.context.global_iteration_responses.append(
-        IterationAnswer(
-            tool=WebSearchTool.__name__,
-            tool_id=get_tool_by_name(
-                WebSearchTool.__name__, run_context.context.run_dependencies.db_session
-            ).id,
-            iteration_nr=index,
-            parallelization_nr=0,
-            question=queries_str,
-            reasoning=f"I am now using Web Search to gather information on {queries_str}",
-            answer="",
-            cited_documents={
-                i: inference_section
-                for i, inference_section in enumerate(inference_sections)
-            },
-            claims=[],
-            queries=queries,
-        )
-    )
     run_context.context.should_cite_documents = True
     return results
 
@@ -225,34 +185,6 @@ def _open_url_core(
             ),
         )
         entry.inference_section = dummy_inference_section_from_internet_content(doc)
-    run_context.context.iteration_instructions.append(
-        IterationInstructions(
-            iteration_nr=index,
-            plan="plan",
-            purpose="Fetching content from URLs",
-            reasoning=f"I am now using Web Fetch to gather information on {', '.join(urls)}",
-        )
-    )
-    run_context.context.global_iteration_responses.append(
-        IterationAnswer(
-            # TODO: For now, we're using the web_search_tool_name since the web_fetch_tool_name is not a built-in tool
-            tool=WebSearchTool.__name__,
-            tool_id=get_tool_by_name(
-                WebSearchTool.__name__, run_context.context.run_dependencies.db_session
-            ).id,
-            iteration_nr=index,
-            parallelization_nr=0,
-            question=f"Fetch content from URLs: {', '.join(urls)}",
-            reasoning=f"I am now using Web Fetch to gather information on {', '.join(urls)}",
-            answer="",
-            cited_documents={
-                i: dummy_inference_section_from_internet_content(d)
-                for i, d in enumerate(docs)
-            },
-            claims=[],
-            is_web_fetch=True,
-        )
-    )
 
     # Set flag to include citation requirements since we fetched documents
     run_context.context.should_cite_documents = True

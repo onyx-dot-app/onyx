@@ -21,14 +21,17 @@ import requests  # type: ignore
 from pydantic import BaseModel
 from retry import retry
 
-from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
+from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.configs.chat_configs import VESPA_SEARCHER_THREADS
 from onyx.configs.constants import KV_REINDEX_KEY
+from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.context.search.models import IndexFilters
+from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.models import QueryExpansionType
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
@@ -78,6 +81,7 @@ from onyx.key_value_store.factory import get_shared_kv_store
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
 
@@ -181,6 +185,51 @@ def add_ngrams_to_schema(schema_content: str) -> str:
         schema_content,
     )
     return schema_content
+
+
+def cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk]:
+    def _remove_title(chunk: InferenceChunkUncleaned) -> str:
+        if not chunk.title or not chunk.content:
+            return chunk.content
+
+        if chunk.content.startswith(chunk.title):
+            return chunk.content[len(chunk.title) :].lstrip()
+
+        # BLURB SIZE is by token instead of char but each token is at least 1 char
+        # If this prefix matches the content, it's assumed the title was prepended
+        if chunk.content.startswith(chunk.title[:BLURB_SIZE]):
+            return (
+                chunk.content.split(RETURN_SEPARATOR, 1)[-1]
+                if RETURN_SEPARATOR in chunk.content
+                else chunk.content
+            )
+
+        return chunk.content
+
+    def _remove_metadata_suffix(chunk: InferenceChunkUncleaned) -> str:
+        if not chunk.metadata_suffix:
+            return chunk.content
+        return chunk.content.removesuffix(chunk.metadata_suffix).rstrip(
+            RETURN_SEPARATOR
+        )
+
+    def _remove_contextual_rag(chunk: InferenceChunkUncleaned) -> str:
+        # remove document summary
+        if chunk.content.startswith(chunk.doc_summary):
+            chunk.content = chunk.content[len(chunk.doc_summary) :].lstrip()
+        # remove chunk context
+        if chunk.content.endswith(chunk.chunk_context):
+            chunk.content = chunk.content[
+                : len(chunk.content) - len(chunk.chunk_context)
+            ].rstrip()
+        return chunk.content
+
+    for chunk in chunks:
+        chunk.content = _remove_title(chunk)
+        chunk.content = _remove_metadata_suffix(chunk)
+        chunk.content = _remove_contextual_rag(chunk)
+
+    return [chunk.to_inference_chunk() for chunk in chunks]
 
 
 class VespaIndex(DocumentIndex):
@@ -906,7 +955,7 @@ class VespaIndex(DocumentIndex):
         filters: IndexFilters,
         batch_retrieval: bool = False,
         get_large_chunks: bool = False,
-    ) -> list[InferenceChunkUncleaned]:
+    ) -> list[InferenceChunk]:
         # make sure to use the vespa-afied document IDs
         chunk_requests = [
             VespaChunkRequest(
@@ -920,19 +969,24 @@ class VespaIndex(DocumentIndex):
         ]
 
         if batch_retrieval:
-            return batch_search_api_retrieval(
+            return cleanup_chunks(
+                batch_search_api_retrieval(
+                    index_name=self.index_name,
+                    chunk_requests=chunk_requests,
+                    filters=filters,
+                    get_large_chunks=get_large_chunks,
+                )
+            )
+        return cleanup_chunks(
+            parallel_visit_api_retrieval(
                 index_name=self.index_name,
                 chunk_requests=chunk_requests,
                 filters=filters,
                 get_large_chunks=get_large_chunks,
             )
-        return parallel_visit_api_retrieval(
-            index_name=self.index_name,
-            chunk_requests=chunk_requests,
-            filters=filters,
-            get_large_chunks=get_large_chunks,
         )
 
+    @log_function_time(print_only=True, debug_only=True)
     def hybrid_retrieval(
         self,
         query: str,
@@ -942,10 +996,10 @@ class VespaIndex(DocumentIndex):
         hybrid_alpha: float,
         time_decay_multiplier: float,
         num_to_retrieve: int,
-        ranking_profile_type: QueryExpansionType,
+        ranking_profile_type: QueryExpansionType = QueryExpansionType.SEMANTIC,
         offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
-    ) -> list[InferenceChunkUncleaned]:
+    ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters)
         # Needs to be at least as much as the value set in Vespa schema config
         target_hits = max(10 * num_to_retrieve, 1000)
@@ -987,7 +1041,7 @@ class VespaIndex(DocumentIndex):
             "timeout": VESPA_TIMEOUT,
         }
 
-        return query_vespa(params)
+        return cleanup_chunks(query_vespa(params))
 
     def admin_retrieval(
         self,
@@ -995,7 +1049,7 @@ class VespaIndex(DocumentIndex):
         filters: IndexFilters,
         num_to_retrieve: int = NUM_RETURNED_HITS,
         offset: int = 0,
-    ) -> list[InferenceChunkUncleaned]:
+    ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters, include_hidden=True)
         yql = (
             YQL_BASE.format(index_name=self.index_name)
@@ -1016,7 +1070,7 @@ class VespaIndex(DocumentIndex):
             "timeout": VESPA_TIMEOUT,
         }
 
-        return query_vespa(params)
+        return cleanup_chunks(query_vespa(params))
 
     # Retrieves chunk information for a document:
     # - Determines the last indexed chunk
@@ -1224,7 +1278,7 @@ class VespaIndex(DocumentIndex):
         self,
         filters: IndexFilters,
         num_to_retrieve: int = 10,
-    ) -> list[InferenceChunkUncleaned]:
+    ) -> list[InferenceChunk]:
         """Retrieve random chunks matching the filters using Vespa's random ranking
 
         This method is currently used for random chunk retrieval in the context of
@@ -1244,7 +1298,7 @@ class VespaIndex(DocumentIndex):
             "ranking.properties.random.seed": random_seed,
         }
 
-        return query_vespa(params)
+        return cleanup_chunks(query_vespa(params))
 
 
 class _VespaDeleteRequest:
