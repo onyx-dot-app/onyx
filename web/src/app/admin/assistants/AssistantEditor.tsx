@@ -1045,33 +1045,15 @@ export default function AssistantEditor({
                                       : ""
                                   }`}
                                 >
-                                  <FastField
+                                  <UnlabeledSwitchField
+                                    onCheckedChange={() =>
+                                      toggleToolInValues(searchTool?.id || -1)
+                                    }
                                     name={`enabled_tools_map.${
-                                      // -1 is a placeholder -- this section
-                                      // should be disabled anyways if no search tool
                                       searchTool?.id || -1
                                     }`}
-                                  >
-                                    {({ form }: any) => (
-                                      <UnlabeledSwitchField
-                                        onCheckedChange={(checked: boolean) => {
-                                          form.setFieldValue(
-                                            "num_chunks",
-                                            null
-                                          );
-                                          toggleToolInValues(
-                                            searchTool?.id || -1
-                                          );
-                                        }}
-                                        name={`enabled_tools_map.${
-                                          searchTool?.id || -1
-                                        }`}
-                                        disabled={
-                                          !connectorsExist || !searchTool
-                                        }
-                                      />
-                                    )}
-                                  </FastField>
+                                    disabled={!connectorsExist || !searchTool}
+                                  />
                                 </div>
                               </SimpleTooltip>
                             </div>
