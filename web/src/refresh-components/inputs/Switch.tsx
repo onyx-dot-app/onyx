@@ -1,76 +1,61 @@
 "use client";
 
-import * as React from "react";
+import React from "react";
 import * as SwitchPrimitives from "@radix-ui/react-switch";
-
 import { cn } from "@/lib/utils";
 
-interface BaseSwitchProps
+const rootClasses = {
+  main: {
+    checked: ["bg-action-link-05"],
+    unchecked: ["bg-background-neutral-03"],
+  },
+  disabled: {
+    checked: ["bg-action-link-02"],
+    unchecked: ["bg-background-neutral-02"],
+  },
+} as const;
+
+const thumbClasses = {
+  main: ["bg-background-neutral-light-00"],
+  disabled: ["bg-background-neutral-light-00", "opacity-50"],
+} as const;
+
+interface SwitchProps
   extends React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root> {
-  size?: "sm" | "md" | "lg";
+  main?: boolean;
+  disabled?: boolean;
 }
 
-function switchInner(
-  { className, size = "sm", ...props }: BaseSwitchProps,
-  ref: React.ForwardedRef<React.ComponentRef<typeof SwitchPrimitives.Root>>
+function SwitchInner(
+  { className, main, disabled, ...props }: SwitchProps,
+  ref: React.ForwardedRef<React.ElementRef<typeof SwitchPrimitives.Root>>
 ) {
-  const sizeClasses = {
-    sm: "h-4 w-8",
-    md: "h-5 w-10",
-    lg: "h-6 w-12",
-  };
-
-  const thumbSizeClasses = {
-    sm: "h-3 w-3",
-    md: "h-4 w-4",
-    lg: "h-5 w-5",
-  };
-
-  const translateClasses = {
-    sm: "data-[state=checked]:translate-x-4",
-    md: "data-[state=checked]:translate-x-5",
-    lg: "data-[state=checked]:translate-x-6",
-  };
+  const variant = main ? "main" : disabled ? "disabled" : "main";
+  const checked = props.checked ?? props.defaultChecked ?? false;
+  const state = checked ? "checked" : "unchecked";
 
   return (
     <SwitchPrimitives.Root
       ref={ref}
       className={cn(
-        "peer group inline-flex shrink-0 cursor-pointer rounded-full " +
-          "border-2 border-transparent transition-colors " +
-          // 1) default
-          "data-[state=checked]:bg-action-link-05 data-[state=unchecked]:bg-background-tint-03 " +
-          // 2) hover
-          "hover:data-[state=checked]:bg-action-link-04 hover:data-[state=unchecked]:bg-background-tint-04 " +
-          // 3) disabled
-          "disabled:cursor-not-allowed " +
-          "disabled:data-[state=checked]:bg-action-link-03 disabled:data-[state=unchecked]:bg-background-neutral-04 " +
-          // 4) focused
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background-tint-04 focus-visible:ring-offset-0 " +
-          // 5) focused + hover
-          "data-[state=unchecked]:hover:focus-visible:border-background-tint-03 " +
-          sizeClasses[size],
+        "peer inline-flex h-[1.125rem] w-[2rem] shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none disabled:cursor-not-allowed",
+        rootClasses[variant][state],
         className
       )}
+      disabled={disabled}
       {...props}
     >
       <SwitchPrimitives.Thumb
         className={cn(
-          "pointer-events-none block rounded-full shadow-lg ring-0 transition-transform " +
-            "bg-background-neutral-00 [--background-neutral-00:var(--grey-00)] " +
-            "data-[state=unchecked]:translate-x-0 " +
-            "group-data-[disabled]:bg-background-neutral-03 " +
-            thumbSizeClasses[size],
-          translateClasses[size]
+          "pointer-events-none block h-[0.875rem] w-[0.875rem] rounded-full ring-0 transition-transform data-[state=checked]:translate-x-[1rem] data-[state=unchecked]:translate-x-[0.125rem]",
+          thumbClasses[variant]
         )}
       />
     </SwitchPrimitives.Root>
   );
 }
 
-export const Switch = React.forwardRef<
-  React.ComponentRef<typeof SwitchPrimitives.Root>,
-  BaseSwitchProps
->(switchInner);
+const Switch = React.forwardRef(SwitchInner);
+Switch.displayName = "Switch";
 
-Switch.displayName = SwitchPrimitives.Root.displayName;
+export { Switch };
