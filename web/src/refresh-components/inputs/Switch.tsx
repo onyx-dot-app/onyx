@@ -24,15 +24,14 @@ const thumbClasses = {
 
 export interface SwitchProps
   extends React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root> {
-  main?: boolean;
   disabled?: boolean;
 }
 
 function SwitchInner(
-  { className, main, disabled, ...props }: SwitchProps,
+  { className, disabled, ...props }: SwitchProps,
   ref: React.ForwardedRef<React.ElementRef<typeof SwitchPrimitives.Root>>
 ) {
-  const variant = main ? "main" : disabled ? "disabled" : "main";
+  const variant = disabled ? "disabled" : "main";
 
   return (
     <SwitchPrimitives.Root
