@@ -65,6 +65,14 @@ class ScriptedFakeLLM(LLM):
     def log_model_configs(self) -> None:
         return None
 
+    def _invoke_implementation_langchain(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError
+
+    def _stream_implementation_langchain(
+        self, *args: Any, **kwargs: Any
+    ) -> Iterator[Any]:
+        raise NotImplementedError
+
     def _invoke_implementation(
         self,
         prompt: LanguageModelInput,
