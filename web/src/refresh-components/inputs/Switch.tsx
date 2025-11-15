@@ -57,5 +57,4 @@ function SwitchInner(
 
 const Switch = React.forwardRef(SwitchInner);
 Switch.displayName = "Switch";
-
-export { Switch };
+export default Switch;
