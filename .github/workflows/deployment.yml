@@ -119,7 +119,7 @@ jobs:
         with:
           context: ./web
           file: ./web/Dockerfile
-          platforms: linux/amd64,linux/x64
+          platforms: linux/amd64,linux/arm64
           push: ${{ env.IS_DRY_RUN != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -194,7 +194,7 @@ jobs:
         with:
           context: ./web
           file: ./web/Dockerfile
-          platforms: linux/amd64,linux/x64
+          platforms: linux/amd64,linux/arm64
           push: ${{ env.IS_DRY_RUN != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -280,7 +280,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          platforms: linux/amd64,linux/x64
+          platforms: linux/amd64,linux/arm64
           push: ${{ env.IS_DRY_RUN != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -367,7 +367,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
-          platforms: linux/amd64,linux/x64
+          platforms: linux/amd64,linux/arm64
           push: ${{ env.IS_DRY_RUN != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
