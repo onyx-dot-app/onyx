@@ -48,6 +48,9 @@ jobs:
 
       - name: Run MyPy
         working-directory: ./backend
+        env:
+          MYPY_FORCE_COLOR: 1
+          TERM: xterm-256color
         run: mypy .
 
       - name: Check import order with reorder-python-imports
