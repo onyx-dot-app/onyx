@@ -544,6 +544,8 @@ def yield_search_responses(
         section_relevance_list=section_relevance_list_impl(
             section_relevance, final_context_sections
         ),
+        # prompt_config should not be none so this 0 shouldn't matter
+        # we'll clean this up later
         existing_input_tokens=0,
         prompt_config=search_tool.prompt_config,
         llm_config=search_tool.llm.config,
