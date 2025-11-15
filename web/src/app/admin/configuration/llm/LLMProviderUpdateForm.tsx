@@ -223,7 +223,7 @@ export function LLMProviderUpdateForm({
             .required("Target URI is required")
             .test(
               "valid-target-uri",
-              "Target URI must be a valid URL with api-version query parameter and the deployment name in the path",
+              "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
               (value) => {
                 if (!value) return false;
                 try {
@@ -232,13 +232,17 @@ export function LLMProviderUpdateForm({
                     .get("api-version")
                     ?.trim();
 
-                  // Check if the path contains a deployment name
+                  // Check if the path contains a deployment name OR is /openai/responses
                   const pathMatch = url.pathname.match(
                     /\/openai\/deployments\/([^\/]+)/
                   );
-                  const hasDeploymentName = pathMatch && pathMatch[1];
+                  const hasDeploymentName = Boolean(pathMatch && pathMatch[1]);
+                  const isResponsesPath =
+                    url.pathname.includes("/openai/responses");
 
-                  return hasApiVersion && !!hasDeploymentName;
+                  return (
+                    hasApiVersion && (hasDeploymentName || isResponsesPath)
+                  );
                 } catch {
                   return false;
                 }
@@ -487,7 +491,7 @@ export function LLMProviderUpdateForm({
                 small={firstTimeConfiguration}
                 name="target_uri"
                 label="Target URI"
-                placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
+                placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview OR .../openai/responses?api-version=..."
                 subtext="The complete target URI for your deployment from the Azure AI portal."
               />
             ) : (
