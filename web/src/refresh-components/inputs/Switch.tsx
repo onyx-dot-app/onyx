@@ -5,19 +5,21 @@ import * as SwitchPrimitives from "@radix-ui/react-switch";
 import { cn } from "@/lib/utils";
 
 const rootClasses = {
-  main: {
-    checked: ["bg-action-link-05"],
-    unchecked: ["bg-background-neutral-03"],
-  },
-  disabled: {
-    checked: ["bg-action-link-02"],
-    unchecked: ["bg-background-neutral-02"],
-  },
+  main: [
+    "data-[state=checked]:bg-action-link-05",
+    "data-[state=checked]:hover:bg-action-link-04",
+    "data-[state=unchecked]:bg-background-tint-03",
+    "data-[state=unchecked]:hover:bg-background-tint-04",
+  ],
+  disabled: [
+    "data-[state=checked]:bg-action-link-03",
+    "data-[state=unchecked]:bg-background-neutral-04",
+  ],
 } as const;
 
 const thumbClasses = {
   main: ["bg-background-neutral-light-00"],
-  disabled: ["bg-background-neutral-light-00", "opacity-50"],
+  disabled: ["bg-background-neutral-03"],
 } as const;
 
 interface SwitchProps
@@ -31,15 +33,13 @@ function SwitchInner(
   ref: React.ForwardedRef<React.ElementRef<typeof SwitchPrimitives.Root>>
 ) {
   const variant = main ? "main" : disabled ? "disabled" : "main";
-  const checked = props.checked ?? props.defaultChecked ?? false;
-  const state = checked ? "checked" : "unchecked";
 
   return (
     <SwitchPrimitives.Root
       ref={ref}
       className={cn(
         "peer inline-flex h-[1.125rem] w-[2rem] shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none disabled:cursor-not-allowed",
-        rootClasses[variant][state],
+        rootClasses[variant],
         className
       )}
       disabled={disabled}
