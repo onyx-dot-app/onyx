@@ -1,7 +1,7 @@
 """add internet search and content provider tables
 
 Revision ID: 1f2a3b4c5d6e
-Revises: 5e1c073d48a3
+Revises: 9drpiiw74ljy
 Create Date: 2025-11-10 19:45:00.000000
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "1f2a3b4c5d6e"
-down_revision = "5e1c073d48a3"
+down_revision = "9drpiiw74ljy"
 branch_labels = None
 depends_on = None
 
