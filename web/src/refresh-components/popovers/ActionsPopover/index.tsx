@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/popover";
 import SwitchList, {
   SwitchListItem,
-} from "@/refresh-components/popovers/ActionsPopover/ToggleList";
+} from "@/refresh-components/popovers/ActionsPopover/SwitchList";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
   MCPAuthenticationType,
