@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Toggle } from "@/components/ui/toggle";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgChevronLeft from "@/icons/chevron-left";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -11,8 +10,9 @@ import { PopoverMenu } from "@/components/ui/popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgProps } from "@/icons";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import Switch from "@/refresh-components/inputs/Switch";
 
-export interface ToggleListItem {
+export interface SwitchListItem {
   id: string;
   label: string;
   description?: string;
@@ -21,8 +21,8 @@ export interface ToggleListItem {
   onToggle: () => void;
 }
 
-export interface ToggleListProps {
-  items: ToggleListItem[];
+export interface SwitchListProps {
+  items: SwitchListItem[];
   searchPlaceholder: string;
   allDisabled: boolean;
   onDisableAll: () => void;
@@ -33,7 +33,7 @@ export interface ToggleListProps {
   footer?: React.ReactNode;
 }
 
-export default function ToggleList({
+export default function SwitchList({
   items,
   searchPlaceholder,
   allDisabled,
@@ -41,7 +41,7 @@ export default function ToggleList({
   onEnableAll,
   onBack,
   footer,
-}: ToggleListProps) {
+}: SwitchListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const filteredItems = useMemo(() => {
     if (!searchTerm) return items;
@@ -100,23 +100,10 @@ export default function ToggleList({
                     : undefined
                 }
                 rightChildren={
-                  <Toggle
-                    isEnabled={item.isEnabled}
-                    onClick={item.onToggle}
-                    ariaLabel={`Toggle ${item.label}`}
-                    enabledClassName="bg-action-link-05"
-                    disabledClassName="bg-background-tint-03"
-                    thumbBaseClassName="top-[2px] left-[2px] h-[12px] w-[12px] rounded-full"
-                    enabledThumbClassName="translate-x-[12px] bg-background-neutral-light-00"
-                    disabledThumbClassName="translate-x-0 bg-background-neutral-light-00"
-                    style={{
-                      width: "28px",
-                      height: "16px",
-                      borderRadius: "var(--Radius-Round, 1000px)",
-                    }}
-                    thumbStyle={{
-                      boxShadow: "0 0 1px 1px rgba(0, 0, 0, 0.05)",
-                    }}
+                  <Switch
+                    checked={item.isEnabled}
+                    onCheckedChange={item.onToggle}
+                    aria-label={`Toggle ${item.label}`}
                   />
                 }
               >

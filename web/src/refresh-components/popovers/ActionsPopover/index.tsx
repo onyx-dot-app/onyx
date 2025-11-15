@@ -8,8 +8,8 @@ import {
   PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import ToggleList, {
-  ToggleListItem,
+import SwitchList, {
+  SwitchListItem,
 } from "@/refresh-components/popovers/ActionsPopover/ToggleList";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
@@ -413,7 +413,7 @@ export default function ActionsPopover({
     selectedMcpServer.auth_type !== MCPAuthenticationType.NONE &&
     isActiveServerAuthenticated;
 
-  const mcpToggleItems: ToggleListItem[] = selectedMcpTools.map((tool) => ({
+  const mcpToggleItems: SwitchListItem[] = selectedMcpTools.map((tool) => ({
     id: tool.id.toString(),
     label: tool.display_name || tool.name,
     description: tool.description,
@@ -463,7 +463,7 @@ export default function ActionsPopover({
 
   const configuredSources = getConfiguredSources(availableSources);
 
-  const sourceToggleItems: ToggleListItem[] = configuredSources.map(
+  const sourceToggleItems: SwitchListItem[] = configuredSources.map(
     (source) => ({
       id: source.uniqueKey,
       label: source.displayName,
@@ -556,7 +556,7 @@ export default function ActionsPopover({
   );
 
   const toolsView = (
-    <ToggleList
+    <SwitchList
       items={sourceToggleItems}
       searchPlaceholder="Search Filters"
       allDisabled={allSourcesDisabled}
@@ -569,7 +569,7 @@ export default function ActionsPopover({
   );
 
   const mcpView = (
-    <ToggleList
+    <SwitchList
       items={mcpToggleItems}
       searchPlaceholder={`Search ${selectedMcpServer?.name ?? "server"} tools`}
       allDisabled={mcpAllDisabled}
