@@ -956,6 +956,11 @@ def get_user_email_from_username__server(
         try:
             response = confluence_client.get_mobile_parameters(user_name)
             email = response.get("email")
+            if not email:
+                logger.warning(
+                    f"failed to get confluence email for {user_name}, "
+                    "missing email field in response. Got response: {response}."
+                )
         except Exception:
             logger.warning(f"failed to get confluence email for {user_name}")
             # For now, we'll just return None and log a warning. This means
