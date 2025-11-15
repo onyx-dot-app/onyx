@@ -216,6 +216,18 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml up -d
         id: start_docker
 
+      - name: Inspect MCP OAuth server container
+        run: |
+          cd deployment/docker_compose
+          echo "==> docker ps"
+          docker ps
+          echo ""
+          echo "==> docker compose ps"
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml ps
+          echo ""
+          echo "==> docker compose logs mcp_oauth_server"
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml logs mcp_oauth_server || true
+
       - name: Wait for service to be ready
         run: |
           echo "Starting wait-for-service script..."
