@@ -25,6 +25,8 @@ env:
   MCP_OAUTH_PASSWORD: ${{ secrets.MCP_OAUTH_PASSWORD }}
 
   MOCK_LLM_RESPONSE: true
+  MCP_TEST_SERVER_BIND_HOST: 0.0.0.0
+  MCP_TEST_SERVER_PUBLIC_HOST: host.docker.internal
 
 jobs:
   build-web-image:

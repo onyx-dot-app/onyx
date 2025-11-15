@@ -4,35 +4,48 @@ import net from "net";
 import fs from "fs";
 
 interface StartServerOptions {
-  host?: string;
+  bindHost?: string;
+  publicHost?: string;
   port?: number;
   pythonBinary?: string;
   scriptPath?: string;
   readyTimeoutMs?: number;
 }
 
-const DEFAULT_HOST = process.env.MCP_TEST_SERVER_HOST || "127.0.0.1";
+const DEFAULT_BIND_HOST =
+  process.env.MCP_TEST_SERVER_BIND_HOST ||
+  process.env.MCP_TEST_SERVER_HOST ||
+  "127.0.0.1";
+const DEFAULT_PUBLIC_HOST =
+  process.env.MCP_TEST_SERVER_PUBLIC_HOST || DEFAULT_BIND_HOST;
 const DEFAULT_PORT = Number(process.env.MCP_TEST_SERVER_PORT || "8004");
 const READY_TIMEOUT_MS = 25_000;
 
 export class McpServerProcess {
   private process: ChildProcessWithoutNullStreams;
-  private host: string;
+  private bindHost: string;
+  private publicHost: string;
   private port: number;
   private stopped = false;
 
   constructor(
     proc: ChildProcessWithoutNullStreams,
-    host: string,
+    bindHost: string,
+    publicHost: string,
     port: number
   ) {
     this.process = proc;
-    this.host = host;
+    this.bindHost = bindHost;
+    this.publicHost = publicHost;
     this.port = port;
   }
 
   get address(): { host: string; port: number } {
-    return { host: this.host, port: this.port };
+    return { host: this.publicHost, port: this.port };
+  }
+
+  get bindAddress(): { host: string; port: number } {
+    return { host: this.bindHost, port: this.port };
   }
 
   async stop(signal: NodeJS.Signals = "SIGTERM"): Promise<void> {
@@ -65,6 +78,9 @@ function waitForPort(
   return new Promise((resolve, reject) => {
     const start = Date.now();
 
+    const connectHost =
+      host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
+
     const check = () => {
       if (proc.exitCode !== null) {
         reject(
@@ -75,7 +91,7 @@ function waitForPort(
         return;
       }
 
-      const socket = net.createConnection({ host, port });
+      const socket = net.createConnection({ host: connectHost, port });
 
       socket.once("connect", () => {
         socket.destroy();
@@ -103,7 +119,8 @@ function waitForPort(
 export async function startMcpOauthServer(
   options: StartServerOptions = {}
 ): Promise<McpServerProcess> {
-  const host = options.host || DEFAULT_HOST;
+  const bindHost = options.bindHost || DEFAULT_BIND_HOST;
+  const publicHost = options.publicHost || DEFAULT_PUBLIC_HOST;
   const port = options.port ?? DEFAULT_PORT;
   const pythonBinary = options.pythonBinary || "python3";
   const readyTimeout = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
@@ -123,7 +140,8 @@ export async function startMcpOauthServer(
     env: {
       ...process.env,
       MCP_SERVER_PORT: port.toString(),
-      MCP_SERVER_HOST: host,
+      MCP_SERVER_HOST: bindHost,
+      MCP_SERVER_PUBLIC_HOST: publicHost,
     },
   });
 
@@ -140,7 +158,7 @@ export async function startMcpOauthServer(
     console.error("[mcp-oauth-server] failed to start", err);
   });
 
-  await waitForPort(host, port, proc, readyTimeout);
+  await waitForPort(bindHost, port, proc, readyTimeout);
 
-  return new McpServerProcess(proc, host, port);
+  return new McpServerProcess(proc, bindHost, publicHost, port);
 }

@@ -115,6 +115,11 @@ function parseSelectorList(
     .filter(Boolean);
 }
 
+function buildMcpServerUrl(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, "");
+  return trimmed.endsWith("/mcp") ? trimmed : `${trimmed}/mcp`;
+}
+
 const logOauthEvent = (page: Page | null, message: string) => {
   const location = page ? ` url=${page.url()}` : "";
   console.log(`[mcp-oauth-test] ${message}${location}`);
@@ -1056,11 +1061,20 @@ test.describe("MCP OAuth flows", () => {
     if (!process.env.MCP_TEST_SERVER_URL) {
       const basePort = Number(process.env.MCP_TEST_SERVER_PORT || "8004");
       const allocatedPort = basePort + workerInfo.workerIndex;
-      serverProcess = await startMcpOauthServer({ port: allocatedPort });
-      const { host, port } = serverProcess.address;
-      runtimeMcpServerUrl = `http://${host}:${port}/mcp`;
+      serverProcess = await startMcpOauthServer({
+        port: allocatedPort,
+        bindHost: process.env.MCP_TEST_SERVER_BIND_HOST,
+        publicHost: process.env.MCP_TEST_SERVER_PUBLIC_HOST,
+      });
+      const explicitPublicUrl = process.env.MCP_TEST_SERVER_PUBLIC_URL;
+      if (explicitPublicUrl) {
+        runtimeMcpServerUrl = buildMcpServerUrl(explicitPublicUrl);
+      } else {
+        const { host: publicHost, port } = serverProcess.address;
+        runtimeMcpServerUrl = buildMcpServerUrl(`http://${publicHost}:${port}`);
+      }
     } else {
-      runtimeMcpServerUrl = process.env.MCP_TEST_SERVER_URL;
+      runtimeMcpServerUrl = buildMcpServerUrl(process.env.MCP_TEST_SERVER_URL);
     }
 
     const adminContext = await browser.newContext({
