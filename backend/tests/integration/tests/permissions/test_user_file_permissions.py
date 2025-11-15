@@ -60,7 +60,9 @@ def user_file_setup(reset: None) -> UserFileTestSetup:
 
     # Get the file descriptor and user_file_id
     user1_file_descriptor = file_descriptors[0]
-    user_file_id = user1_file_descriptor["user_file_id"]
+    user_file_id = user1_file_descriptor.get("user_file_id")
+
+    assert user_file_id is not None, "user_file_id should not be None"
 
     # Create a public assistant with the user file attached
     public_assistant = PersonaManager.create(
