@@ -45,10 +45,11 @@ export default function AppLayout({
         {/* Header */}
         {(customHeaderContent || currentChatSession) && (
           <header className="w-full flex flex-row justify-center items-center py-3 px-4">
-            <div className="flex-1">
+            <div className="flex-1" />
+            <div className="flex-1 flex flex-col items-center dbg-red">
               <Text text03>{customHeaderContent}</Text>
             </div>
-            <div className="flex flex-row items-center justify-center px-1">
+            <div className="flex-1 flex flex-row items-center justify-end px-1">
               <IconButton
                 icon={SvgShare}
                 transient={showShareModal}
