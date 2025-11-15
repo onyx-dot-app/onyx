@@ -12,7 +12,7 @@ ENV ONYX_VERSION=${ONYX_VERSION} \
     DANSWER_RUNNING_IN_DOCKER="true" \
     HF_HOME=/app/.cache/huggingface
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 
 # Create non-root user for security best practices
 RUN mkdir -p /app && \
@@ -22,24 +22,6 @@ RUN mkdir -p /app && \
     mkdir -p /var/log/onyx && \
     chmod 755 /var/log/onyx && \
     chown onyx:onyx /var/log/onyx
-
-# --- add toolchain needed for Rust/Python builds (fastuuid) ---
-ENV RUSTUP_HOME=/usr/local/rustup \
-    CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:$PATH
-
-RUN set -eux; \
-    apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        pkg-config \
-        curl \
-        ca-certificates \
-    # Install latest stable Rust (supports Cargo.lock v4)
-    && curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable \
-    && rustc --version && cargo --version \
-    && apt-get remove -y --allow-remove-essential perl-base \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
 
 COPY ./requirements/model_server.txt /tmp/requirements.txt
 RUN uv pip install --system --no-cache-dir --upgrade \

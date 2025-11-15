@@ -5,10 +5,6 @@ FROM base
 
 WORKDIR /app
 
-# TODO: This has been added to the base image but kept here for backwards compatibility.
-# Once the latest backend image is released, this can be removed.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
 # Integration test stuff
 COPY ./requirements/dev.txt /tmp/dev-requirements.txt
 RUN uv pip install --system --no-cache-dir --upgrade -r /tmp/dev-requirements.txt && \
