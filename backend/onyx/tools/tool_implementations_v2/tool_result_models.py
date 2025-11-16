@@ -42,10 +42,8 @@ class LlmOpenUrlResult(BaseCiteableToolResult):
 class PythonExecutionFile(BaseModel):
     """File generated during Python execution"""
 
-    file_id: str
     filename: str
-    path: str
-    url: str
+    file_link: str
 
 
 class LlmPythonExecutionResult(BaseModel):
@@ -57,6 +55,5 @@ class LlmPythonExecutionResult(BaseModel):
     stderr: str
     exit_code: int | None
     timed_out: bool
-    duration_ms: int
     generated_files: list[PythonExecutionFile]
     error: str | None = None
