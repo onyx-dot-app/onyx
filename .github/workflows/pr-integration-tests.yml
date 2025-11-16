@@ -83,7 +83,6 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          platforms: linux/amd64
           push: true
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}
           cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-cache
@@ -115,7 +114,6 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
-          platforms: linux/amd64
           push: true
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}
           cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-cache
@@ -184,9 +182,9 @@ jobs:
           # Pull all images from registry in parallel
           echo "Pulling Docker images in parallel..."
           # Pull images from private registry
-          (docker pull --platform linux/amd64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}) &
-          (docker pull --platform linux/amd64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}) &
-          (docker pull --platform linux/amd64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }}) &
+          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}) &
+          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}) &
+          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }}) &
 
           # Wait for all background jobs to complete
           wait
@@ -349,9 +347,9 @@ jobs:
 
       - name: Pull Docker images
         run: |
-          (docker pull --platform linux/amd64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}) &
-          (docker pull --platform linux/amd64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}) &
-          (docker pull --platform linux/amd64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }}) &
+          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}) &
+          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}) &
+          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }}) &
           wait
           docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }} onyxdotapp/onyx-backend:test
           docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
