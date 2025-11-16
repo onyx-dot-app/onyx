@@ -28,9 +28,10 @@ class PythonTool(Tool[None]):
     Actual execution is handled by the v2 function-based implementation.
     """
 
-    _NAME = "run_python"
+    _NAME = "python"
     _DESCRIPTION = "Execute Python code in a secure, isolated environment. Never call this tool directly."
-    _DISPLAY_NAME = "Python Execution"
+    # in the UI, call it `Analysis` for easier understanding of what is should primarily be used for
+    _DISPLAY_NAME = "Analysis"
 
     def __init__(self, tool_id: int) -> None:
         self._id = tool_id
