@@ -184,9 +184,9 @@ function AppSidebarInner() {
           }
         }
 
-        // Use visibleAgents instead of prev to ensure indices match
-        const reordered = arrayMove(visibleAgents, activeIndex, overIndex);
-        return reordered;
+        // Use visibleAgents instead of prev to ensure the indices match
+        // with `visibleAgentIds`
+        return arrayMove(visibleAgents, activeIndex, overIndex);
       });
     },
     [
