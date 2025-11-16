@@ -16,7 +16,7 @@ self-hosted-runner:
     - runner=16cpu-linux-arm64
     - runner=16cpu-linux-x64
     - ubuntu-slim # Currently in public preview
-    - volume=30gb
+    - volume=40gb
 
 # Configuration variables in array of strings defined in your repository or
 # organization. `null` means disabling configuration variables check.
