@@ -184,10 +184,18 @@ function AppSidebarInner() {
           }
         }
 
-        return arrayMove(prev, activeIndex, overIndex);
+        // Use visibleAgents instead of prev to ensure indices match
+        const reordered = arrayMove(visibleAgents, activeIndex, overIndex);
+        return reordered;
       });
     },
-    [visibleAgentIds, setPinnedAgents, currentAgent, currentAgentIsPinned]
+    [
+      visibleAgentIds,
+      visibleAgents,
+      setPinnedAgents,
+      currentAgent,
+      currentAgentIsPinned,
+    ]
   );
 
   // Perform the actual move
