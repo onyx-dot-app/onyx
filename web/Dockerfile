@@ -32,7 +32,7 @@ RUN npm ci
 COPY . .
 
 # ONYX_VERSION inherited from build args, redeclared for this stage
-ARG ONYX_VERSION=0.0.0-dev
+ARG ONYX_VERSION
 ENV ONYX_VERSION=${ONYX_VERSION}
 
 # needed to get the `standalone` dir we expect later
