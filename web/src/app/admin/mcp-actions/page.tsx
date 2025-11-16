@@ -1,9 +1,177 @@
 "use client";
 
-import MCPActionCard from "@/sections/actions/MCPActionCard";
+import MCPActionCard from "@/sections/actions/ActionCard";
+import type { Tool } from "@/sections/actions/ToolsList";
 import Image from "next/image";
+import { useState } from "react";
 
 export default function MCPActionsPage() {
+  // Sample tools data for Jira
+  const [jiraTools, setJiraTools] = useState<Tool[]>([
+    {
+      id: "get_ticket",
+      name: "get_ticket",
+      description: "Get Jira tickets in your team.",
+      icon: (
+        <Image
+          src="/Jira.svg"
+          alt="Jira"
+          width={16}
+          height={16}
+          className="object-contain"
+        />
+      ),
+      isAvailable: true,
+      isEnabled: true,
+    },
+    {
+      id: "create_ticket",
+      name: "create_ticket",
+      description: "Create a new ticket in Jira.",
+      icon: (
+        <Image
+          src="/Jira.svg"
+          alt="Jira"
+          width={16}
+          height={16}
+          className="object-contain"
+        />
+      ),
+      isAvailable: true,
+      isEnabled: true,
+    },
+    {
+      id: "update_ticket",
+      name: "update_ticket",
+      description: "Update details of an existing ticket in Jira.",
+      icon: (
+        <Image
+          src="/Jira.svg"
+          alt="Jira"
+          width={16}
+          height={16}
+          className="object-contain"
+        />
+      ),
+      isAvailable: true,
+      isEnabled: true,
+    },
+    {
+      id: "delete_ticket",
+      name: "delete_ticket",
+      description: "Delete an existing ticket in Jira.",
+      icon: (
+        <Image
+          src="/Jira.svg"
+          alt="Jira"
+          width={16}
+          height={16}
+          className="object-contain"
+        />
+      ),
+      isAvailable: true,
+      isEnabled: false,
+    },
+    {
+      id: "resolve_ticket",
+      name: "resolve_ticket",
+      description: "Resolve an existing ticket in Jira.",
+      icon: (
+        <Image
+          src="/Jira.svg"
+          alt="Jira"
+          width={16}
+          height={16}
+          className="object-contain"
+        />
+      ),
+      isAvailable: false,
+      isEnabled: false,
+    },
+  ]);
+
+  // Sample tools data for Slack
+  const [slackTools, setSlackTools] = useState<Tool[]>([
+    {
+      id: "send_message",
+      name: "send_message",
+      description: "Send a message to a Slack channel.",
+      icon: (
+        <Image
+          src="/Slack.png"
+          alt="Slack"
+          width={16}
+          height={16}
+          className="object-contain"
+        />
+      ),
+      isAvailable: true,
+      isEnabled: true,
+    },
+    {
+      id: "read_channel",
+      name: "read_channel",
+      description: "Read messages from a Slack channel.",
+      icon: (
+        <Image
+          src="/Slack.png"
+          alt="Slack"
+          width={16}
+          height={16}
+          className="object-contain"
+        />
+      ),
+      isAvailable: true,
+      isEnabled: true,
+    },
+    {
+      id: "create_channel",
+      name: "create_channel",
+      description: "Create a new channel in Slack.",
+      icon: (
+        <Image
+          src="/Slack.png"
+          alt="Slack"
+          width={16}
+          height={16}
+          className="object-contain"
+        />
+      ),
+      isAvailable: false,
+      isEnabled: false,
+    },
+  ]);
+
+  const handleJiraToolToggle = (toolId: string, enabled: boolean) => {
+    setJiraTools((prev) =>
+      prev.map((tool) =>
+        tool.id === toolId ? { ...tool, isEnabled: enabled } : tool
+      )
+    );
+    console.log(`Jira tool ${toolId} toggled to ${enabled}`);
+  };
+
+  const handleSlackToolToggle = (toolId: string, enabled: boolean) => {
+    setSlackTools((prev) =>
+      prev.map((tool) =>
+        tool.id === toolId ? { ...tool, isEnabled: enabled } : tool
+      )
+    );
+    console.log(`Slack tool ${toolId} toggled to ${enabled}`);
+  };
+
+  const handleDisableAllJira = () => {
+    setJiraTools((prev) => prev.map((tool) => ({ ...tool, isEnabled: false })));
+    console.log("All Jira tools disabled");
+  };
+
+  const handleDisableAllSlack = () => {
+    setSlackTools((prev) =>
+      prev.map((tool) => ({ ...tool, isEnabled: false }))
+    );
+    console.log("All Slack tools disabled");
+  };
+
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-6">MCP Actions Demo</h1>
@@ -25,10 +193,13 @@ export default function MCPActionsPage() {
               className="object-contain"
             />
           }
-          toolCount={12}
+          toolCount={jiraTools.length}
+          tools={jiraTools}
           onDisconnect={() => console.log("Disconnect Jira")}
           onManage={() => console.log("Manage Jira")}
-          onViewTools={() => console.log("View Jira tools")}
+          onToolToggle={handleJiraToolToggle}
+          onRefreshTools={() => console.log("Refresh Jira tools")}
+          onDisableAllTools={handleDisableAllJira}
         />
 
         {/* Example with Slack - Connected */}
@@ -45,10 +216,13 @@ export default function MCPActionsPage() {
               className="object-contain"
             />
           }
-          toolCount={8}
+          toolCount={slackTools.length}
+          tools={slackTools}
           onDisconnect={() => console.log("Disconnect Slack")}
           onManage={() => console.log("Manage Slack")}
-          onViewTools={() => console.log("View Slack tools")}
+          onToolToggle={handleSlackToolToggle}
+          onRefreshTools={() => console.log("Refresh Slack tools")}
+          onDisableAllTools={handleDisableAllSlack}
         />
 
         <h2 className="text-xl font-semibold mt-8 mb-2">Pending State</h2>

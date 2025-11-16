@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import Button from "@/refresh-components/buttons/Button";
 import { AuthType } from "@/lib/constants";
 import { FcGoogle } from "react-icons/fc";

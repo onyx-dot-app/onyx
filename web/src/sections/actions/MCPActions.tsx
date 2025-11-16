@@ -9,7 +9,7 @@ import Button from "@/refresh-components/buttons/Button";
 import SvgPlug from "@/icons/plug";
 import SvgArrowExchange from "@/icons/arrow-exchange";
 
-interface MCPActionCardActionsProps {
+interface MCPActionsProps {
   status: MCPActionStatus;
   serverName: string;
   onDisconnect?: () => void;
@@ -19,7 +19,7 @@ interface MCPActionCardActionsProps {
   onDelete?: () => void;
 }
 
-const MCPActionCardActions: React.FC<MCPActionCardActionsProps> = React.memo(
+const MCPActions: React.FC<MCPActionsProps> = React.memo(
   ({
     status,
     serverName,
@@ -126,6 +126,6 @@ const MCPActionCardActions: React.FC<MCPActionCardActionsProps> = React.memo(
     );
   }
 );
-MCPActionCardActions.displayName = "MCPActionCardActions";
+MCPActions.displayName = "MCPActions";
 
-export default MCPActionCardActions;
+export default MCPActions;

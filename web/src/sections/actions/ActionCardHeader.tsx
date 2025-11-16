@@ -1,12 +1,13 @@
 "use client";
+
+import React from "react";
 import { cn } from "@/lib/utils";
 import type { MCPActionStatus } from "./types";
-import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgEdit from "@/icons/edit";
 
-interface MCPActionCardHeaderProps {
+interface ActionCardHeaderProps {
   title: string;
   description: string;
   icon: React.ReactNode;
@@ -14,7 +15,7 @@ interface MCPActionCardHeaderProps {
   onEdit?: () => void;
 }
 
-const MCPActionCardHeader: React.FC<MCPActionCardHeaderProps> = React.memo(
+const ActionCardHeader: React.FC<ActionCardHeaderProps> = React.memo(
   ({ title, description, icon, status, onEdit }) => {
     const isConnected = status === "connected";
     const isPending = status === "pending";
@@ -80,5 +81,5 @@ const MCPActionCardHeader: React.FC<MCPActionCardHeaderProps> = React.memo(
     );
   }
 );
-MCPActionCardHeader.displayName = "MCPActionCardHeader";
-export default MCPActionCardHeader;
+ActionCardHeader.displayName = "ActionCardHeader";
+export default ActionCardHeader;
