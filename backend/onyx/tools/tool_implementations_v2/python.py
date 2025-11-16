@@ -221,6 +221,11 @@ def _python_execution_core(
                 file_ids=(
                     [f.file_id for f in generated_files] if generated_files else None
                 ),
+                additional_data={
+                    "stdout": truncated_stdout,
+                    "stderr": truncated_stderr,
+                    "code": code,
+                },
             )
         )
 

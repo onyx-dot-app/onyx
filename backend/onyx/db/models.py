@@ -3662,6 +3662,11 @@ class ResearchAgentIterationSubStep(Base):
         postgresql.JSONB(), nullable=True
     )
 
+    # for file-generating tools (Python, custom tools with file outputs)
+    file_ids: Mapped[list[str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
     # Relationships
     # Note: ChatMessage is accessible via primary_question_id. It is tied to the
     # primary_question_id in research_agent_iteration, which has a foreign key constraint

@@ -32,6 +32,8 @@ from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import PythonToolDelta
+from onyx.server.query_and_chat.streaming_models import PythonToolStart
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
@@ -43,10 +45,14 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
+
+logger = setup_logger()
 
 _CANNOT_SHOW_STEP_RESULTS_STR = "[Cannot display step results]"
 
@@ -214,6 +220,37 @@ def create_custom_tool_packets(
     return packets
 
 
+def create_python_tool_packets(
+    stdout: str,
+    stderr: str,
+    file_ids: list[str],
+    code: str,
+    step_nr: int,
+) -> list[Packet]:
+    """Create packets for Python tool execution replay."""
+    packets: list[Packet] = []
+
+    packets.append(
+        Packet(ind=step_nr, obj=PythonToolStart(type="python_tool_start", code=code))
+    )
+
+    packets.append(
+        Packet(
+            ind=step_nr,
+            obj=PythonToolDelta(
+                type="python_tool_delta",
+                stdout=stdout,
+                stderr=stderr,
+                file_ids=file_ids,
+            ),
+        ),
+    )
+
+    packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+
+    return packets
+
+
 def create_fetch_packets(
     fetches: list[list[SavedSearchDoc]], step_nr: int
 ) -> list[Packet]:
@@ -302,6 +339,10 @@ def translate_db_message_to_packets_simple(
             research_iterations = sorted(
                 chat_message.research_iterations, key=lambda x: x.iteration_nr
             )
+            logger.debug(
+                f"translate_db_message_to_packets_simple: Found {len(research_iterations)} research iterations "
+                f"for message {chat_message.id} with research_type={chat_message.research_type}"
+            )
             for research_iteration in research_iterations:
                 if (
                     research_iteration.iteration_nr > 1
@@ -323,6 +364,10 @@ def translate_db_message_to_packets_simple(
                     step_nr += 1
 
                 sub_steps = research_iteration.sub_steps
+                logger.debug(
+                    f"translate_db_message_to_packets_simple: Processing iteration {research_iteration.iteration_nr} "
+                    f"with {len(sub_steps)} sub_steps"
+                )
                 tasks: list[str] = []
                 tool_call_ids: list[int | None] = []
                 cited_docs: list[SavedSearchDoc] = []
@@ -383,6 +428,9 @@ def translate_db_message_to_packets_simple(
 
                 elif len(sub_steps) == 0:
                     # no sub steps, no tool calls. But iteration can have reasoning or purpose
+                    logger.debug(
+                        "translate_db_message_to_packets_simple: Skipping iteration with no sub_steps"
+                    )
                     continue
 
                 else:
@@ -391,6 +439,9 @@ def translate_db_message_to_packets_simple(
                         raise ValueError("Tool ID is required")
                     tool = get_tool_by_id(tool_id, db_session)
                     tool_name = tool.name
+                    logger.debug(
+                        f"translate_db_message_to_packets_simple: Processing tool {tool_name} (tool_id={tool_id})"
+                    )
 
                     if tool_name in [SearchTool.__name__, KnowledgeGraphTool.__name__]:
                         cited_docs = cast(list[SavedSearchDoc], cited_docs)
@@ -419,6 +470,27 @@ def translate_db_message_to_packets_simple(
                             )
                         step_nr += 1
 
+                    elif tool_name == PythonTool.__name__:
+                        # Reconstruct Python tool packets from stored data
+                        stdout = ""
+                        stderr = ""
+                        code = ""
+                        if sub_step.additional_data:
+                            stdout = sub_step.additional_data.get("stdout", "")
+                            stderr = sub_step.additional_data.get("stderr", "")
+                            code = sub_step.additional_data.get("code", "")
+
+                        packet_list.extend(
+                            create_python_tool_packets(
+                                stdout=stdout,
+                                stderr=stderr,
+                                file_ids=sub_step.file_ids or [],
+                                code=code,
+                                step_nr=step_nr,
+                            )
+                        )
+                        step_nr += 1
+
                     else:
                         packet_list.extend(
                             create_custom_tool_packets(
@@ -426,6 +498,7 @@ def translate_db_message_to_packets_simple(
                                 response_type="text",
                                 step_nr=step_nr,
                                 data=sub_step.sub_answer,
+                                file_ids=sub_step.file_ids,
                             )
                         )
                         step_nr += 1
