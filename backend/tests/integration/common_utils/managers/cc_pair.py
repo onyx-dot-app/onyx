@@ -361,7 +361,9 @@ class CCPairManager:
                 )
 
             print(
-                f"Indexing in progress waiting: cc_pair={cc_pair.id} elapsed={elapsed:.2f} timeout={timeout}s"
+                f"Indexing in progress waiting: cc_pair={cc_pair.id}"
+                f"docs_indexed={fetched_cc_pair.docs_indexed} num_docs={num_docs}"
+                f"elapsed={elapsed:.2f} timeout={timeout}s"
             )
             time.sleep(5)
 

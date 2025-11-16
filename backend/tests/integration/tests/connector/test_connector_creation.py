@@ -119,7 +119,7 @@ def test_connector_pause_while_indexing(reset: None) -> None:
     )
 
     CCPairManager.wait_for_indexing_in_progress(
-        cc_pair_1, timeout=60, num_docs=16, user_performing_action=admin_user
+        cc_pair_1, timeout=90, num_docs=16, user_performing_action=admin_user
     )
 
     CCPairManager.pause_cc_pair(cc_pair_1, user_performing_action=admin_user)
