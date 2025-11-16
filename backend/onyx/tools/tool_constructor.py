@@ -50,6 +50,9 @@ from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import
     KnowledgeGraphTool,
 )
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+from onyx.tools.tool_implementations.python.python_tool import (
+    PythonTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
@@ -312,10 +315,6 @@ def construct_tools(
 
             # Handle Python Tool
             elif tool_cls.__name__ == "PythonTool":
-                from onyx.tools.tool_implementations.python.python_tool import (
-                    PythonTool,
-                )
-
                 tool_dict[db_tool_model.id] = [PythonTool(tool_id=db_tool_model.id)]
 
         # Handle custom tools

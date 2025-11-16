@@ -129,9 +129,9 @@ def list_available_tools(
         except KeyError:
             # If tool ID not found in registry, include it by default
             logger.warning(
-                f"Tool {in_code_id} not found in registry, assuming available"
+                f"Tool {in_code_id} not found in registry, assuming not available"
             )
-            return True
+            return False
 
     return [
         AvailableTool(

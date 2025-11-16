@@ -215,7 +215,7 @@ def create_custom_tool_packets(
         ),
     )
 
-    packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+    packets.append(Packet(ind=step_nr, obj=SectionEnd()))
 
     return packets
 
@@ -230,15 +230,12 @@ def create_python_tool_packets(
     """Create packets for Python tool execution replay."""
     packets: list[Packet] = []
 
-    packets.append(
-        Packet(ind=step_nr, obj=PythonToolStart(type="python_tool_start", code=code))
-    )
+    packets.append(Packet(ind=step_nr, obj=PythonToolStart(code=code)))
 
     packets.append(
         Packet(
             ind=step_nr,
             obj=PythonToolDelta(
-                type="python_tool_delta",
                 stdout=stdout,
                 stderr=stderr,
                 file_ids=file_ids,
@@ -246,7 +243,7 @@ def create_python_tool_packets(
         ),
     )
 
-    packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+    packets.append(Packet(ind=step_nr, obj=SectionEnd()))
 
     return packets
 
@@ -257,7 +254,7 @@ def create_fetch_packets(
     packets: list[Packet] = []
     for fetch in fetches:
         packets.append(Packet(ind=step_nr, obj=FetchToolStart(documents=fetch)))
-        packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+        packets.append(Packet(ind=step_nr, obj=SectionEnd()))
         step_nr += 1
     return packets
 
@@ -339,10 +336,6 @@ def translate_db_message_to_packets_simple(
             research_iterations = sorted(
                 chat_message.research_iterations, key=lambda x: x.iteration_nr
             )
-            logger.debug(
-                f"translate_db_message_to_packets_simple: Found {len(research_iterations)} research iterations "
-                f"for message {chat_message.id} with research_type={chat_message.research_type}"
-            )
             for research_iteration in research_iterations:
                 if (
                     research_iteration.iteration_nr > 1
@@ -364,10 +357,6 @@ def translate_db_message_to_packets_simple(
                     step_nr += 1
 
                 sub_steps = research_iteration.sub_steps
-                logger.debug(
-                    f"translate_db_message_to_packets_simple: Processing iteration {research_iteration.iteration_nr} "
-                    f"with {len(sub_steps)} sub_steps"
-                )
                 tasks: list[str] = []
                 tool_call_ids: list[int | None] = []
                 cited_docs: list[SavedSearchDoc] = []
@@ -428,7 +417,7 @@ def translate_db_message_to_packets_simple(
 
                 elif len(sub_steps) == 0:
                     # no sub steps, no tool calls. But iteration can have reasoning or purpose
-                    logger.debug(
+                    logger.warning(
                         "translate_db_message_to_packets_simple: Skipping iteration with no sub_steps"
                     )
                     continue
