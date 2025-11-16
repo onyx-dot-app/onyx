@@ -218,7 +218,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                         testModelChangeWithApiKey(value);
                       }
                     }}
-                    isError={modelsApiStatus === "error"}
+                    error={modelsApiStatus === "error"}
                     options={modelOptions}
                     disabled={
                       disabled || modelOptions.length === 0 || isFetchingModels
