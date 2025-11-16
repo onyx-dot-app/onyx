@@ -44,6 +44,17 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # We don't remove the tool on downgrade since it's totally fine to just
-    # have it around. If we upgrade again, it will be a no-op.
-    pass
+    """Remove PythonTool from built-in tools"""
+    conn = op.get_bind()
+
+    conn.execute(
+        sa.text(
+            """
+            DELETE FROM tool
+            WHERE in_code_tool_id = :in_code_tool_id
+            """
+        ),
+        {
+            "in_code_tool_id": "PythonTool",
+        },
+    )
