@@ -60,7 +60,7 @@ jobs:
 
 
   build-backend-image:
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=1cpu-linux-x64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
@@ -83,6 +83,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          platforms: linux/amd64
           push: true
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}
           cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-cache
@@ -91,7 +92,7 @@ jobs:
 
 
   build-model-server-image:
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=1cpu-linux-x64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
@@ -114,6 +115,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
+          platforms: linux/amd64
           push: true
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}
           cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-cache
@@ -121,7 +123,7 @@ jobs:
 
 
   build-integration-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-build-integration-image", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}-build-integration-image", "extras=ecr-cache"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
@@ -152,7 +154,7 @@ jobs:
       ]
     runs-on:
       - runs-on
-      - runner=8cpu-linux-arm64
+      - runner=8cpu-linux-x64
       - ${{ format('run-id={0}-integration-tests-job-{1}', github.run_id, strategy['job-index']) }}
       - extras=ecr-cache
 
@@ -182,9 +184,9 @@ jobs:
           # Pull all images from registry in parallel
           echo "Pulling Docker images in parallel..."
           # Pull images from private registry
-          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }}) &
+          (docker pull --platform linux/amd64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}) &
+          (docker pull --platform linux/amd64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}) &
+          (docker pull --platform linux/amd64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }}) &
 
           # Wait for all background jobs to complete
           wait
@@ -332,7 +334,7 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
-    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-multitenant-tests", "extras=ecr-cache"]
+    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-multitenant-tests", "extras=ecr-cache"]
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -347,9 +349,9 @@ jobs:
 
       - name: Pull Docker images
         run: |
-          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }}) &
+          (docker pull --platform linux/amd64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}) &
+          (docker pull --platform linux/amd64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}) &
+          (docker pull --platform linux/amd64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }}) &
           wait
           docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }} onyxdotapp/onyx-backend:test
           docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }} onyxdotapp/onyx-model-server:test

@@ -9,11 +9,13 @@ variable "TAG" {
 target "backend" {
   context    = "."
   dockerfile = "Dockerfile"
+  platforms  = ["linux/amd64"]
 }
 
 target "integration" {
   context    = "."
   dockerfile = "tests/integration/Dockerfile"
+  platforms  = ["linux/amd64"]
 
   // Provide the base image via build context from the backend target
   contexts = {
