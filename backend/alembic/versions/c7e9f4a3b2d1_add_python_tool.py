@@ -1,7 +1,7 @@
 """add_python_tool
 
 Revision ID: c7e9f4a3b2d1
-Revises: 2acdef638fc2
+Revises: 9drpiiw74ljy
 Create Date: 2025-11-08 00:00:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "c7e9f4a3b2d1"
-down_revision = "2acdef638fc2"
+down_revision = "9drpiiw74ljy"
 branch_labels = None
 depends_on = None
 
