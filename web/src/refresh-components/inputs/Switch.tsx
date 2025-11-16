@@ -1,20 +1,13 @@
 "use client";
 
-import React from "react";
-import * as SwitchPrimitives from "@radix-ui/react-switch";
+import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 
 const rootClasses = {
-  main: [
-    "data-[state=checked]:bg-action-link-05",
-    "data-[state=checked]:hover:bg-action-link-04",
-    "data-[state=unchecked]:bg-background-tint-03",
-    "data-[state=unchecked]:hover:bg-background-tint-04",
-  ],
-  disabled: [
-    "data-[state=checked]:bg-action-link-03",
-    "data-[state=unchecked]:bg-background-neutral-04",
-  ],
+  main: ["bg-action-link-05", "hover:bg-action-link-04"],
+  unchecked: ["bg-background-tint-03", "hover:bg-background-tint-04"],
+  disabled: ["bg-action-link-03"],
+  disabledUnchecked: ["bg-background-neutral-04"],
 } as const;
 
 const thumbClasses = {
@@ -23,34 +16,76 @@ const thumbClasses = {
 } as const;
 
 export interface SwitchProps
-  extends React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root> {
+  extends Omit<React.ComponentPropsWithoutRef<"button">, "onChange"> {
+  checked?: boolean;
+  defaultChecked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
   disabled?: boolean;
 }
 
 function SwitchInner(
-  { className, disabled, ...props }: SwitchProps,
-  ref: React.ForwardedRef<React.ElementRef<typeof SwitchPrimitives.Root>>
+  {
+    className,
+    disabled,
+    checked: controlledChecked,
+    defaultChecked,
+    onCheckedChange,
+    ...props
+  }: SwitchProps,
+  ref: React.ForwardedRef<HTMLButtonElement>
 ) {
-  const variant = disabled ? "disabled" : "main";
+  const [uncontrolledChecked, setUncontrolledChecked] = useState(
+    defaultChecked ?? false
+  );
+
+  const isControlled = controlledChecked !== undefined;
+  const checked = isControlled ? controlledChecked : uncontrolledChecked;
+
+  const handleClick = () => {
+    if (disabled) return;
+
+    const newChecked = !checked;
+
+    if (!isControlled) {
+      setUncontrolledChecked(newChecked);
+    }
+
+    onCheckedChange?.(newChecked);
+  };
+
+  const getRootClasses = () => {
+    if (disabled) {
+      return checked ? rootClasses.disabled : rootClasses.disabledUnchecked;
+    }
+    return checked ? rootClasses.main : rootClasses.unchecked;
+  };
+
+  const thumbVariant = disabled ? "disabled" : "main";
 
   return (
-    <SwitchPrimitives.Root
+    <button
       ref={ref}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      data-state={checked ? "checked" : "unchecked"}
       className={cn(
         "peer inline-flex h-[1.125rem] w-[2rem] shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none disabled:cursor-not-allowed",
-        rootClasses[variant],
+        getRootClasses(),
         className
       )}
       disabled={disabled}
+      onClick={handleClick}
       {...props}
     >
-      <SwitchPrimitives.Thumb
+      <span
+        data-state={checked ? "checked" : "unchecked"}
         className={cn(
           "pointer-events-none block h-[0.875rem] w-[0.875rem] rounded-full ring-0 transition-transform data-[state=checked]:translate-x-[1rem] data-[state=unchecked]:translate-x-[0.125rem]",
-          thumbClasses[variant]
+          thumbClasses[thumbVariant]
         )}
       />
-    </SwitchPrimitives.Root>
+    </button>
   );
 }
 
