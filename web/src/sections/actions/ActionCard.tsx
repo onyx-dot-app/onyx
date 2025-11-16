@@ -3,14 +3,15 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import SvgServer from "@/icons/server";
-import MCPActionCardHeader from "./MCPActionCardHeader";
-import MCPActionCardActions from "./MCPActionCardActions";
+import ActionCardHeader from "./ActionCardHeader";
+import MCPActions from "./MCPActions";
 import ToolsSection from "./ToolsSection";
+import type { Tool } from "./ToolsList";
 
 import type { MCPActionStatus } from "./types";
 import CardSection from "@/components/admin/CardSection";
 
-export interface MCPActionCardProps {
+export interface ActionCardProps {
   // Core content
   title: string;
   description: string;
@@ -22,35 +23,45 @@ export interface MCPActionCardProps {
   // Tool count (only for connected state)
   toolCount?: number;
 
+  // Tools (optional - for expanded view)
+  tools?: Tool[];
+
   // Actions
   onDisconnect?: () => void;
   onManage?: () => void;
-  onViewTools?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   onAuthenticate?: () => void; // For pending state
   onReconnect?: () => void; // For disconnected state
+
+  // Tool-related actions
+  onToolToggle?: (toolId: string, enabled: boolean) => void;
+  onRefreshTools?: () => void;
+  onDisableAllTools?: () => void;
 
   // Optional styling
   className?: string;
 }
 
 // Main Component
-export default function MCPActionCard({
+export default function ActionCard({
   title,
   description,
   logo,
   status = "connected",
   toolCount,
+  tools,
   onDisconnect,
   onManage,
-  onViewTools,
   onEdit,
   onDelete,
   onAuthenticate,
   onReconnect,
+  onToolToggle,
+  onRefreshTools,
+  onDisableAllTools,
   className,
-}: MCPActionCardProps) {
+}: ActionCardProps) {
   const isConnected = status === "connected";
   const isPending = status === "pending";
   const isDisconnected = status === "disconnected";
@@ -67,6 +78,8 @@ export default function MCPActionCard({
       ? "bg-background-neutral-02"
       : "";
 
+  const showToolsSection = isConnected || isDisconnected;
+
   return (
     <CardSection
       className={cn(
@@ -80,7 +93,7 @@ export default function MCPActionCard({
     >
       {/* Header Section */}
       <div className="flex items-start justify-between w-full">
-        <MCPActionCardHeader
+        <ActionCardHeader
           title={title}
           description={description}
           icon={icon}
@@ -89,7 +102,7 @@ export default function MCPActionCard({
         />
 
         {/* Action Buttons */}
-        <MCPActionCardActions
+        <MCPActions
           status={status}
           serverName={title}
           onDisconnect={onDisconnect}
@@ -100,15 +113,17 @@ export default function MCPActionCard({
         />
       </div>
 
-      {/* Tools Section (Connected state only) */}
-      {isConnected ||
-        (isDisconnected && (
-          <ToolsSection
-            serverName={title}
-            toolCount={toolCount}
-            onViewTools={onViewTools}
-          />
-        ))}
+      {/* Tools Section (Connected/Disconnected state only) */}
+      {showToolsSection && (
+        <ToolsSection
+          serverName={title}
+          toolCount={toolCount}
+          tools={tools}
+          onToolToggle={onToolToggle}
+          onRefresh={onRefreshTools}
+          onDisableAll={onDisableAllTools}
+        />
+      )}
     </CardSection>
   );
 }
