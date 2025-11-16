@@ -18,19 +18,24 @@ const thumbClasses = {
 
 export interface SwitchProps
   extends Omit<React.ComponentPropsWithoutRef<"button">, "onChange"> {
+  // Switch variants
+  disabled?: boolean;
+
   checked?: boolean;
   defaultChecked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
-  disabled?: boolean;
 }
 
 function SwitchInner(
   {
-    className,
     disabled,
+
     checked: controlledChecked,
     defaultChecked,
     onCheckedChange,
+
+    className,
+    onClick,
     ...props
   }: SwitchProps,
   ref: React.ForwardedRef<HTMLButtonElement>
@@ -42,12 +47,13 @@ function SwitchInner(
   const isControlled = controlledChecked !== undefined;
   const checked = isControlled ? controlledChecked : uncontrolledChecked;
 
-  function handleClick() {
+  function handleClick(event: React.MouseEvent<HTMLButtonElement>) {
     if (disabled) return;
 
     const newChecked = !checked;
 
     if (!isControlled) setUncontrolledChecked(newChecked);
+    onClick?.(event);
     onCheckedChange?.(newChecked);
   }
 
