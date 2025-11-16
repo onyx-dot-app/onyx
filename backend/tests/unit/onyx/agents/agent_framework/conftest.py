@@ -4,9 +4,12 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from langchain.schema.language_model import LanguageModelInput
+from langchain.schema.language_model import (
+    LanguageModelInput as LangChainLanguageModelInput,
+)
 from langchain_core.messages import BaseMessage
 
+from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
@@ -69,7 +72,7 @@ class _FakeLLM(LLM):
 
     def _invoke_implementation_langchain(
         self,
-        prompt: LanguageModelInput,
+        prompt: LangChainLanguageModelInput,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict[str, Any] | None = None,
@@ -80,7 +83,7 @@ class _FakeLLM(LLM):
 
     def _stream_implementation_langchain(
         self,
-        prompt: LanguageModelInput,
+        prompt: LangChainLanguageModelInput,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict[str, Any] | None = None,

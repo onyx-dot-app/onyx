@@ -73,7 +73,7 @@ import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
-import { SwitchField } from "@/components/ui/switch";
+import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
 import { generateIdenticon } from "@/refresh-components/AgentIcon";
 import { BackButton } from "@/components/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
@@ -1040,34 +1040,15 @@ export default function AssistantEditor({
                                       : ""
                                   }`}
                                 >
-                                  <FastField
+                                  <UnlabeledSwitchField
+                                    onCheckedChange={() =>
+                                      toggleToolInValues(searchTool?.id || -1)
+                                    }
                                     name={`enabled_tools_map.${
-                                      // -1 is a placeholder -- this section
-                                      // should be disabled anyways if no search tool
                                       searchTool?.id || -1
                                     }`}
-                                  >
-                                    {({ form }: any) => (
-                                      <SwitchField
-                                        size="sm"
-                                        onCheckedChange={(checked: boolean) => {
-                                          form.setFieldValue(
-                                            "num_chunks",
-                                            null
-                                          );
-                                          toggleToolInValues(
-                                            searchTool?.id || -1
-                                          );
-                                        }}
-                                        name={`enabled_tools_map.${
-                                          searchTool?.id || -1
-                                        }`}
-                                        disabled={
-                                          !connectorsExist || !searchTool
-                                        }
-                                      />
-                                    )}
-                                  </FastField>
+                                    disabled={!connectorsExist || !searchTool}
+                                  />
                                 </div>
                               </SimpleTooltip>
                             </div>
@@ -1165,7 +1146,7 @@ export default function AssistantEditor({
 
                                     return displayedFiles.map((fileData) => {
                                       return (
-                                        <div key={fileData.id} className="w-40">
+                                        <div key={fileData.id}>
                                           <FileCard
                                             file={fileData as ProjectFile}
                                             hideProcessingState
@@ -1578,9 +1559,8 @@ export default function AssistantEditor({
                             side="top"
                           >
                             <div>
-                              <SwitchField
+                              <UnlabeledSwitchField
                                 name="is_public"
-                                size="md"
                                 onCheckedChange={(checked) => {
                                   if (values.is_default_persona && !checked) {
                                     setShowVisibilityWarning(true);

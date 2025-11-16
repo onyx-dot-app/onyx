@@ -81,7 +81,7 @@ export const getValidationSchema = (
           .required("Target URI is required")
           .test(
             "valid-target-uri",
-            "Target URI must be a valid URL with api-version query parameter and the deployment name in the path",
+            "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path (/openai/deployments/{name}/...) or /openai/responses for realtime",
             (value) => {
               if (!value) return false;
               try {
@@ -90,15 +90,23 @@ export const getValidationSchema = (
                   .get("api-version")
                   ?.trim();
 
-                // Check if the path contains a deployment name in the format:
-                // /openai/deployments/{deployment-name}/...
+                // Check if the path contains a valid Azure OpenAI endpoint:
+                // 1. /openai/deployments/{deployment-name}/... (standard pattern)
+                // 2. /openai/responses (realtime/streaming responses)
                 const pathMatch = url.pathname.match(
-                  /\/openai\/deployments\/([^\/]+)/
+                  /\/openai\/(deployments\/[^\/]+|responses)/
                 );
-                const hasDeploymentName = pathMatch && pathMatch[1];
+                const hasDeploymentName = Boolean(
+                  pathMatch && pathMatch[1]?.startsWith("deployments/")
+                );
+                const isResponsesPath = Boolean(
+                  pathMatch && pathMatch[1] === "responses"
+                );
+                const hasValidPath = hasDeploymentName || isResponsesPath;
 
-                return hasApiVersion && !!hasDeploymentName;
-              } catch {
+                return hasApiVersion && hasValidPath;
+              } catch (error) {
+                console.error("URL parsing error:", error);
                 return false;
               }
             }

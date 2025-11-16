@@ -15,7 +15,7 @@ ENV ONYX_VERSION=${ONYX_VERSION} \
     DO_NOT_TRACK="true" \
     PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 
 # Install system dependencies
 # cmake needed for psycopg (postgres)

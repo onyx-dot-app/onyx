@@ -11,7 +11,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import OnyxLogo from "@/icons/onyx-logo";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import { Switch } from "@/components/ui/switch";
+import Switch from "@/refresh-components/inputs/Switch";
 import { Separator } from "@/components/ui/separator";
 import { SubLabel } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";

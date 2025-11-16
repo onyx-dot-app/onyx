@@ -560,6 +560,10 @@ export interface CredentialSchemaResponse {
   credentials: Record<string, CredentialFieldSpec>;
 }
 
+export interface ConfigurationSchemaResponse {
+  configuration: Record<string, CredentialFieldSpec>;
+}
+
 export interface FederatedConnectorCreateRequest {
   source: string;
   credentials: Record<string, any>;

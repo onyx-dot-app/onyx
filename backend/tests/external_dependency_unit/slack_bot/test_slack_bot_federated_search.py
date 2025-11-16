@@ -346,6 +346,8 @@ class TestSlackBotFederatedSearch:
             allowed_private_channel: str | None = None,
             bot_token: str | None = None,
             include_dm: bool = False,
+            entities: dict | None = None,
+            available_channels: list | None = None,
         ) -> list:
             self._captured_filtering_params = {
                 "allowed_private_channel": allowed_private_channel,
