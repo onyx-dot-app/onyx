@@ -476,9 +476,10 @@ def translate_db_message_to_packets_simple(
                         stderr = ""
                         code = ""
                         if sub_step.additional_data:
-                            stdout = sub_step.additional_data.get("stdout", "")
-                            stderr = sub_step.additional_data.get("stderr", "")
-                            code = sub_step.additional_data.get("code", "")
+                            additional_data = cast(dict, sub_step.additional_data)
+                            stdout = cast(str, additional_data.get("stdout", ""))
+                            stderr = cast(str, additional_data.get("stderr", ""))
+                            code = cast(str, additional_data.get("code", ""))
 
                         packet_list.extend(
                             create_python_tool_packets(

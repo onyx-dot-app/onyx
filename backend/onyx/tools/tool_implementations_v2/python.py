@@ -67,21 +67,22 @@ def _python_execution_core(
     # Access chat files directly from context (available after Step 0 changes)
     chat_files = run_context.context.chat_files
 
-    for chat_file in chat_files:
+    for ind, chat_file in enumerate(chat_files):
+        file_name = chat_file.filename or f"file_{ind}"
         try:
             # Use file content already loaded in memory
             file_content = chat_file.content
 
             # Upload to Code Interpreter
-            ci_file_id = client.upload_file(file_content, chat_file.filename)
+            ci_file_id = client.upload_file(file_content, file_name)
 
             # Stage for execution
-            files_to_stage.append({"path": chat_file.filename, "file_id": ci_file_id})
+            files_to_stage.append({"path": file_name, "file_id": ci_file_id})
 
-            logger.info(f"Staged file for Python execution: {chat_file.filename}")
+            logger.info(f"Staged file for Python execution: {file_name}")
 
         except Exception as e:
-            logger.warning(f"Failed to stage file {chat_file.filename}: {e}")
+            logger.warning(f"Failed to stage file {file_name}: {e}")
 
     try:
         logger.debug(f"Executing code: {code}")
