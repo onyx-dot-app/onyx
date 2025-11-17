@@ -30,10 +30,10 @@ def upgrade() -> None:
         ),
         {
             "name": "PythonTool",
-            # in the UI, call it `Analysis` for easier understanding of what is should primarily be used for
-            "display_name": "Analysis",
+            # in the UI, call it `Code Interpreter` since this is a well known term for this tool
+            "display_name": "Code Interpreter",
             "description": (
-                "The Analysis Action allows the assistant to execute "
+                "The Code Interpreter Action allows the assistant to execute "
                 "Python code in a secure, isolated environment for data analysis, "
                 "computation, visualization, and file processing."
             ),

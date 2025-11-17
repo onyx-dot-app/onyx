@@ -30,8 +30,8 @@ class PythonTool(Tool[None]):
 
     _NAME = "python"
     _DESCRIPTION = "Execute Python code in a secure, isolated environment. Never call this tool directly."
-    # in the UI, call it `Analysis` for easier understanding of what is should primarily be used for
-    _DISPLAY_NAME = "Analysis"
+    # in the UI, call it `Code Interpreter` since this is a well known term for this tool
+    _DISPLAY_NAME = "Code Interpreter"
 
     def __init__(self, tool_id: int) -> None:
         self._id = tool_id
