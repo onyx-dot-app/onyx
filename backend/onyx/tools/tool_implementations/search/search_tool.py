@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from typing import Any
 from typing import cast
 
@@ -7,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkSearchRequest
+from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
@@ -20,6 +22,8 @@ from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.interfaces import LLM
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
+from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
@@ -28,12 +32,55 @@ from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import SearchToolRunContext
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.search.search_utils import (
+    weighted_reciprocal_rank_fusion,
+)
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
-SEARCH_EVALUATION_ID = "llm_doc_eval"
 QUERY_FIELD = "query"
+
+
+# Taking an opinionated stance on the weights, no chance users can do a good job customizing this.
+# The dedicated rephrased/extracted semantic query is likely the best for hybrid search
+LLM_SEMANTIC_QUERY_WEIGHT = 1.3
+# The keyword expansions provide more breadth through a different search ranking function
+# This one is likely to produce the most different results.
+LLM_KEYWORD_QUERY_WEIGHT = 1.0
+# This is also lower because it is the LLM generated query without the custom instructions specifically for this purpose.
+LLM_NON_CUSTOM_QUERY_WEIGHT = 0.7
+# This is much lower weight because it is likely pretty similar to the LLM semantic query but just worse quality.
+ORIGINAL_QUERY_WEIGHT = 0.5
+
+# This may in the future just use an entirely keyword search. Currently it is a hybrid search with a keyword first phase.
+KEYWORD_QUERY_HYBRID_ALPHA = 0.2
+
+
+def deduplicate_queries(
+    queries_with_weights: list[tuple[str, float]],
+) -> list[tuple[str, float]]:
+    """Deduplicate queries by case-insensitive comparison and sum weights.
+
+    Args:
+        queries_with_weights: List of (query, weight) tuples
+
+    Returns:
+        Deduplicated list of (query, weight) tuples with summed weights
+    """
+    query_map: dict[str, tuple[str, float]] = {}
+    for query, weight in queries_with_weights:
+        query_lower = query.lower()
+        if query_lower in query_map:
+            # Sum weights for duplicate queries
+            existing_query, existing_weight = query_map[query_lower]
+            query_map[query_lower] = (existing_query, existing_weight + weight)
+        else:
+            # Keep the first occurrence (preserves original casing)
+            query_map[query_lower] = (query, weight)
+    return list(query_map.values())
 
 
 def _convert_search_docs_to_llm_string(
@@ -171,6 +218,42 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
         """
         return self._session_factory()
 
+    def _run_search_for_query(
+        self,
+        query: str,
+        hybrid_alpha: float | None,
+        num_hits: int,
+    ) -> list[InferenceChunk]:
+        """Run search pipeline for a single query.
+
+        Args:
+            query: The search query string
+            hybrid_alpha: Hybrid search alpha parameter (None for default)
+            num_hits: Maximum number of hits to return
+
+        Returns:
+            List of InferenceChunk results
+        """
+        # Create a thread-safe session for this search
+        search_db_session = self._get_thread_safe_session()
+        try:
+            return search_pipeline(
+                db_session=search_db_session,
+                chunk_search_request=ChunkSearchRequest(
+                    query=query,
+                    hybrid_alpha=hybrid_alpha,
+                    user_selected_filters=self.user_selected_filters,
+                    bypass_acl=self.bypass_acl,
+                    limit=num_hits,
+                ),
+                project_id=self.project_id,
+                document_index=self.document_index,
+                user=self.user,
+                persona=self.persona,
+            )
+        finally:
+            search_db_session.close()
+
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
         """Check if search tool is available by verifying connectors exist."""
@@ -215,6 +298,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
             },
         }
 
+    @log_function_time(print_only=True)
     def run(
         self,
         run_context: SearchToolRunContext,
@@ -227,12 +311,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
         # This prevents transaction conflicts when multiple search tools run in parallel
         db_session = self._get_thread_safe_session()
         try:
-            query = cast(str, llm_kwargs[QUERY_FIELD])
-
-            # TODO this should be also passed in the history up to this point.
-
-            # TODO use the original query.
-            override_kwargs.original_query
+            llm_query = cast(str, llm_kwargs[QUERY_FIELD])
 
             # Emit SearchToolStart packet at the beginning
             run_context.emitter.emit(
@@ -243,34 +322,125 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
                 )
             )
 
+            # Run semantic and keyword query expansion in parallel
+            # Use message history, memories, and user info from override_kwargs
+            message_history = override_kwargs.message_history or []
+            memories = override_kwargs.memories
+            user_info = override_kwargs.user_info
+
+            functions_with_args: list[tuple[Callable, tuple]] = [
+                (
+                    semantic_query_rephrase,
+                    (message_history, self.llm, user_info, memories),
+                ),
+                (
+                    keyword_query_expansion,
+                    (message_history, self.llm, user_info, memories),
+                ),
+            ]
+
+            expansion_results = run_functions_tuples_in_parallel(functions_with_args)
+            semantic_query = expansion_results[0]  # str
+            keyword_queries = (
+                expansion_results[1] if expansion_results[1] is not None else []
+            )  # list[str]
+
+            # Prepare queries with their weights and hybrid_alpha settings
+            # Group 1: Keyword queries (use hybrid_alpha=0.2)
+            keyword_queries_with_weights = [
+                (kw_query, LLM_KEYWORD_QUERY_WEIGHT) for kw_query in keyword_queries
+            ]
+            deduplicated_keyword_queries = deduplicate_queries(
+                keyword_queries_with_weights
+            )
+
+            # Group 2: Semantic/LLM/Original queries (use hybrid_alpha=None)
+            semantic_queries_with_weights = [
+                (semantic_query, LLM_SEMANTIC_QUERY_WEIGHT),
+                (llm_query, LLM_NON_CUSTOM_QUERY_WEIGHT),
+            ]
+            if override_kwargs.original_query:
+                semantic_queries_with_weights.append(
+                    (override_kwargs.original_query, ORIGINAL_QUERY_WEIGHT)
+                )
+            deduplicated_semantic_queries = deduplicate_queries(
+                semantic_queries_with_weights
+            )
+
+            # Build the all_queries list for UI display, sorted by weight (highest first)
+            # Combine all deduplicated queries and sort by weight
+            all_queries_with_weights = (
+                deduplicated_semantic_queries + deduplicated_keyword_queries
+            )
+            all_queries_with_weights.sort(key=lambda x: x[1], reverse=True)
+
+            # Extract queries in weight order, handling cross-duplicates
+            all_queries = []
+            seen_lower = set()
+            for query, _ in all_queries_with_weights:
+                query_lower = query.lower()
+                if query_lower not in seen_lower:
+                    all_queries.append(query)
+                    seen_lower.add(query_lower)
+
+            logger.debug(
+                f"All Queries (sorted by weight): {all_queries}, "
+                f"Keyword queries: {[q for q, _ in deduplicated_keyword_queries]}"
+            )
+
             # Emit the queries early so the UI can display them immediately
             run_context.emitter.emit(
                 Packet(
                     turn_index=turn_index,
                     tab_index=tab_index,
                     obj=SearchToolQueriesDelta(
-                        queries=[query],
+                        queries=all_queries,
                     ),
                 )
             )
 
-            # If needed, hybrid alpha, recency bias, etc. can be added here.
-            top_chunks = search_pipeline(
-                db_session=db_session,
-                # TODO optimize this with different set of keywords potentially
-                chunk_search_request=ChunkSearchRequest(
-                    query=query,
-                    user_selected_filters=self.user_selected_filters,
-                    bypass_acl=self.bypass_acl,
-                    limit=override_kwargs.num_hits,
-                ),
-                project_id=self.project_id,
-                document_index=self.document_index,
-                user=self.user,
-                persona=self.persona,
+            # Run all searches in parallel with appropriate hybrid_alpha values
+            # Keyword queries use hybrid_alpha=0.2 (favor keyword search)
+            # Other queries use default hybrid_alpha (balanced semantic/keyword)
+            search_functions: list[tuple[Callable, tuple]] = []
+            search_weights: list[float] = []
+
+            # Add deduplicated semantic queries (use hybrid_alpha=None)
+            for query, weight in deduplicated_semantic_queries:
+                search_functions.append(
+                    (
+                        self._run_search_for_query,
+                        (query, None, override_kwargs.num_hits),
+                    )
+                )
+                search_weights.append(weight)
+
+            # Add deduplicated keyword queries (use hybrid_alpha=0.2)
+            for query, weight in deduplicated_keyword_queries:
+                search_functions.append(
+                    (
+                        self._run_search_for_query,
+                        (query, KEYWORD_QUERY_HYBRID_ALPHA, override_kwargs.num_hits),
+                    )
+                )
+                search_weights.append(weight)
+
+            # Run all searches in parallel
+            all_search_results = run_functions_tuples_in_parallel(search_functions)
+
+            # Merge results using weighted Reciprocal Rank Fusion
+            # This intelligently combines rankings from different queries
+            top_chunks = weighted_reciprocal_rank_fusion(
+                ranked_results=all_search_results,
+                weights=search_weights,
+                id_extractor=lambda chunk: f"{chunk.document_id}_{chunk.chunk_id}",
             )
 
             top_sections = merge_individual_chunks(top_chunks)
+
+            # We can disregard all of the documents that exceed the num_hits parameter since it's not valid to have
+            # documents/contents from things that aren't returned to the user on the frontend
+            top_sections = top_sections[: override_kwargs.num_hits]
 
             # Convert InferenceSections to SavedSearchDocs for emission
             saved_search_docs = convert_inference_sections_to_search_docs(
@@ -290,6 +460,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
 
             # Convert InferenceSections to SearchDoc objects for the return value
             search_docs = SearchDoc.from_chunks_or_sections(top_sections)
+
+            # CLAUDE TODO: add the helper functions to select the most relevant sections and build the InferenceSection
+            # with the right chunks.
 
             docs_str = _convert_search_docs_to_llm_string(
                 top_sections=top_sections,

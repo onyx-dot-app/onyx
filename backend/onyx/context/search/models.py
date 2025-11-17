@@ -163,7 +163,7 @@ class BasicChunkRequest(BaseModel):
 
     # Sometimes we may want to extract specific keywords from a more semantic query for
     # a better keyword search.
-    query_keywords: list[str] | None = None
+    query_keywords: list[str] | None = None  # Not used currently
 
     limit: int | None = None
     offset: int | None = None  # This one is not set currently
