@@ -13,13 +13,9 @@ import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import InputSelect, {
+  InputSelectLineItem,
+} from "@/refresh-components/inputs/InputSelect";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import Text from "@/components/ui/text";
@@ -329,26 +325,23 @@ export default function NewMCPToolPage() {
                         />
                         <div>
                           <Label htmlFor="transport">Transport</Label>
-                          <Select
+                          <InputSelect
                             value={values.transport}
                             onValueChange={(value) =>
                               setFieldValue("transport", value)
                             }
+                            placeholder="Select transport"
+                            className="mt-1"
                           >
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Select transport" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem
-                                value={MCPTransportType.STREAMABLE_HTTP}
-                              >
-                                Streamable HTTP
-                              </SelectItem>
-                              <SelectItem value={MCPTransportType.SSE}>
-                                SSE
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
+                            <InputSelectLineItem
+                              value={MCPTransportType.STREAMABLE_HTTP}
+                            >
+                              Streamable HTTP
+                            </InputSelectLineItem>
+                            <InputSelectLineItem value={MCPTransportType.SSE}>
+                              SSE
+                            </InputSelectLineItem>
+                          </InputSelect>
                         </div>
                       </div>
                     </div>
@@ -362,11 +355,10 @@ export default function NewMCPToolPage() {
                       <div className="space-y-4">
                         <div>
                           <Label htmlFor="auth_type">Authentication Type</Label>
-                          <Select
+                          <InputSelect
                             value={values.auth_type}
                             onValueChange={(value) => {
                               setFieldValue("auth_type", value);
-                              // For OAuth, we only support per-user auth. Force performer accordingly.
                               if (value === MCPAuthenticationType.OAUTH) {
                                 setFieldValue(
                                   "auth_performer",
@@ -374,24 +366,25 @@ export default function NewMCPToolPage() {
                                 );
                               }
                             }}
+                            placeholder="Select authentication type"
+                            className="mt-1"
                           >
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Select authentication type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={MCPAuthenticationType.NONE}>
-                                None
-                              </SelectItem>
-                              <SelectItem
-                                value={MCPAuthenticationType.API_TOKEN}
-                              >
-                                API Token
-                              </SelectItem>
-                              <SelectItem value={MCPAuthenticationType.OAUTH}>
-                                OAuth
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
+                            <InputSelectLineItem
+                              value={MCPAuthenticationType.NONE}
+                            >
+                              None
+                            </InputSelectLineItem>
+                            <InputSelectLineItem
+                              value={MCPAuthenticationType.API_TOKEN}
+                            >
+                              API Token
+                            </InputSelectLineItem>
+                            <InputSelectLineItem
+                              value={MCPAuthenticationType.OAUTH}
+                            >
+                              OAuth
+                            </InputSelectLineItem>
+                          </InputSelect>
                           {errors.auth_type && touched.auth_type && (
                             <div className="text-red-500 text-sm mt-1">
                               {errors.auth_type}
@@ -405,28 +398,25 @@ export default function NewMCPToolPage() {
                               <Label htmlFor="auth_performer">
                                 Who performs authentication?
                               </Label>
-                              <Select
+                              <InputSelect
                                 value={values.auth_performer}
                                 onValueChange={(value) =>
                                   setFieldValue("auth_performer", value)
                                 }
+                                placeholder="Select authentication performer"
+                                className="mt-1"
                               >
-                                <SelectTrigger className="mt-1">
-                                  <SelectValue placeholder="Select authentication performer" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem
-                                    value={MCPAuthenticationPerformer.ADMIN}
-                                  >
-                                    Admin (shared credentials)
-                                  </SelectItem>
-                                  <SelectItem
-                                    value={MCPAuthenticationPerformer.PER_USER}
-                                  >
-                                    Per-user (individual credentials)
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
+                                <InputSelectLineItem
+                                  value={MCPAuthenticationPerformer.ADMIN}
+                                >
+                                  Admin (shared credentials)
+                                </InputSelectLineItem>
+                                <InputSelectLineItem
+                                  value={MCPAuthenticationPerformer.PER_USER}
+                                >
+                                  Per-user (individual credentials)
+                                </InputSelectLineItem>
+                              </InputSelect>
                               {errors.auth_performer &&
                                 touched.auth_performer && (
                                   <div className="text-red-500 text-sm mt-1">
