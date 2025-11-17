@@ -1,3 +1,5 @@
+from typing import Any
+
 from onyx.agents.agent_search.dr.sub_agents.web_search.clients.exa_client import (
     ExaClient,
 )
@@ -46,19 +48,18 @@ def build_search_provider_from_config(
         )
         return None
 
+    # All web search providers require an API key
+    if not api_key:
+        raise ValueError(
+            f"Web search provider '{provider_name}' is missing an API key."
+        )
+    assert api_key is not None
+
     config = config or {}
 
     if provider_type_enum == WebSearchProviderType.EXA:
-        if not api_key:
-            raise ValueError(
-                f"Web search provider '{provider_name}' is missing an API key."
-            )
         return ExaClient(api_key=api_key)
     if provider_type_enum == WebSearchProviderType.SERPER:
-        if not api_key:
-            raise ValueError(
-                f"Web search provider '{provider_name}' is missing an API key."
-            )
         return SerperClient(api_key=api_key)
     if provider_type_enum == WebSearchProviderType.GOOGLE_PSE:
         search_engine_id = (
@@ -66,10 +67,11 @@ def build_search_provider_from_config(
             or config.get("cx")
             or config.get("search_engine")
         )
-        if not api_key or not search_engine_id:
+        if not search_engine_id:
             raise ValueError(
-                "Google PSE provider requires both an API key and a search engine id (cx)."
+                "Google PSE provider requires a search engine id (cx) in addition to the API key."
             )
+        assert search_engine_id is not None
         try:
             num_results = int(config.get("num_results", 10))
         except (TypeError, ValueError):
@@ -96,7 +98,7 @@ def build_search_provider_from_config(
     return None
 
 
-def _build_search_provider(provider_model) -> WebSearchProvider | None:
+def _build_search_provider(provider_model: Any) -> WebSearchProvider | None:
     return build_search_provider_from_config(
         provider_type=WebSearchProviderType(provider_model.provider_type),
         api_key=provider_model.api_key,
@@ -135,9 +137,8 @@ def build_content_provider_from_config(
 
     if provider_type_enum == WebContentProviderType.FIRECRAWL:
         if not api_key:
-            raise ValueError(
-                f"Firecrawl content provider '{provider_name}' requires an API key."
-            )
+            raise ValueError("Firecrawl content provider requires an API key.")
+        assert api_key is not None
         config = config or {}
         timeout_seconds_str = config.get("timeout_seconds")
         if timeout_seconds_str is None:
@@ -162,7 +163,7 @@ def build_content_provider_from_config(
     return None
 
 
-def _build_content_provider(provider_model) -> WebContentProvider | None:
+def _build_content_provider(provider_model: Any) -> WebContentProvider | None:
     return build_content_provider_from_config(
         provider_type=WebContentProviderType(provider_model.provider_type),
         api_key=provider_model.api_key,

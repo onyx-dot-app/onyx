@@ -24,13 +24,11 @@ _DEFAULT_MAX_WORKERS = 4
 class FirecrawlClient(WebContentProvider):
     def __init__(
         self,
-        api_key: str | None,
+        api_key: str,
         *,
         base_url: str = FIRECRAWL_SCRAPE_URL,
         timeout_seconds: int = 30,
     ) -> None:
-        if not api_key:
-            raise ValueError("Firecrawl API key is required to fetch web content.")
 
         self._headers = {
             "Authorization": f"Bearer {api_key}",

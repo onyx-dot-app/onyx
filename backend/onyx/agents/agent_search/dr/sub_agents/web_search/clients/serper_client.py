@@ -13,7 +13,6 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     WebSearchResult,
 )
-from onyx.configs.chat_configs import SERPER_API_KEY
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -22,7 +21,7 @@ SERPER_CONTENTS_URL = "https://scrape.serper.dev"
 
 
 class SerperClient(WebSearchProvider):
-    def __init__(self, api_key: str | None = SERPER_API_KEY) -> None:
+    def __init__(self, api_key: str) -> None:
         self.headers = {
             "X-API-KEY": api_key,
             "Content-Type": "application/json",

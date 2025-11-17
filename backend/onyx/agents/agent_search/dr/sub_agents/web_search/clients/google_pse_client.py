@@ -22,17 +22,12 @@ GOOGLE_CUSTOM_SEARCH_URL = "https://customsearch.googleapis.com/customsearch/v1"
 class GooglePSEClient(WebSearchProvider):
     def __init__(
         self,
-        api_key: str | None,
-        search_engine_id: str | None,
+        api_key: str,
+        search_engine_id: str,
         *,
         num_results: int = 10,
         timeout_seconds: int = 10,
     ) -> None:
-        if not api_key:
-            raise ValueError("Google PSE API key is required to initialize the client.")
-        if not search_engine_id:
-            raise ValueError("Google PSE search engine id (cx) is required.")
-
         self._api_key = api_key
         self._search_engine_id = search_engine_id
         self._num_results = num_results
@@ -40,11 +35,11 @@ class GooglePSEClient(WebSearchProvider):
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def search(self, query: str) -> list[WebSearchResult]:
-        params = {
+        params: dict[str, str] = {
             "key": self._api_key,
             "cx": self._search_engine_id,
             "q": query,
-            "num": self._num_results,
+            "num": str(self._num_results),
         }
 
         response = requests.get(
