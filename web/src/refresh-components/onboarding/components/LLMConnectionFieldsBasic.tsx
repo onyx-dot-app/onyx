@@ -1,10 +1,11 @@
-import React from "react";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { Separator } from "@/components/ui/separator";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import InputSelect, {
+  InputSelectLineItem,
+} from "@/refresh-components/inputs/InputSelect";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import InputFile from "@/refresh-components/inputs/InputFile";
 import {
@@ -17,7 +18,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/texts/Text";
 
-type Props = {
+export interface LLMConnectionFieldsBasicProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   modalContent?: any;
   modelOptions: Array<{ label: string; value: string }>;
@@ -38,9 +39,9 @@ type Props = {
     customConfig: Record<string, any>
   ) => Promise<void> | void;
   disabled?: boolean;
-};
+}
 
-export const LLMConnectionFieldsBasic: React.FC<Props> = ({
+export default function LLMConnectionFieldsBasic({
   llmDescriptor,
   modalContent,
   modelOptions,
@@ -59,7 +60,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
   testModelChangeWithApiKey,
   testFileInputChange,
   disabled = false,
-}) => {
+}: LLMConnectionFieldsBasicProps) {
   const handleApiKeyInteraction = (apiKey: string) => {
     if (!apiKey) return;
     if (llmDescriptor?.name === "openrouter") {
@@ -240,15 +241,18 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                           ""
                         }
                         onValueChange={(value) => helper.setValue(value)}
-                        options={
-                          customConfigKey.options?.map((opt) => ({
-                            label: opt.label,
-                            value: opt.value,
-                            description: opt?.description ?? undefined,
-                          })) ?? []
-                        }
                         disabled={disabled}
-                      />
+                      >
+                        {customConfigKey.options?.map((opt) => (
+                          <InputSelectLineItem
+                            key={opt.value}
+                            value={opt.value}
+                            description={opt?.description ?? undefined}
+                          >
+                            {opt.label}
+                          </InputSelectLineItem>
+                        )) ?? []}
+                      </InputSelect>
                     ) : customConfigKey.key_type === "file_input" ? (
                       <InputFile
                         placeholder={customConfigKey.default_value || ""}
@@ -363,10 +367,11 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                       testModelChangeWithApiKey(value);
                     }
                   }}
-                  options={modelOptions}
+                  error={modelsApiStatus === "error"}
                   disabled={
                     disabled || modelOptions.length === 0 || isFetchingModels
                   }
+                  placeholder="Select a model"
                   rightSection={
                     canFetchModels ? (
                       <IconButton
@@ -383,8 +388,16 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                       />
                     ) : undefined
                   }
-                  onBlur={field.onBlur}
-                />
+                >
+                  {modelOptions.map((option) => (
+                    <InputSelectLineItem
+                      key={option.value}
+                      value={option.value}
+                    >
+                      {option.label}
+                    </InputSelectLineItem>
+                  ))}
+                </InputSelect>
               )}
               {modelOptions.length === 0 && (
                 <InputTypeIn
@@ -439,4 +452,4 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
       />
     </>
   );
-};
+}
