@@ -63,6 +63,7 @@ function SelectedItem({ variant, props, placeholder }: SelectedItemProps) {
 interface ItemProps extends Omit<LineItemProps, "heavyForced"> {
   value: string;
   selected?: boolean;
+  onClick?: (event: React.SyntheticEvent) => void;
 }
 
 function Item({
@@ -77,10 +78,7 @@ function Item({
     <SelectPrimitive.Item
       value={value}
       className="outline-none focus:outline-none"
-      onSelect={(event) => {
-        // allow consumers to hook into clicks without breaking radix behaviour
-        onClick?.(event as unknown as React.MouseEvent<HTMLButtonElement>);
-      }}
+      onSelect={onClick}
     >
       <LineItem
         {...props}
