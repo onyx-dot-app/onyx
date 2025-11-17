@@ -14,8 +14,7 @@ const triggerClasses = {
     "bg-background-neutral-00",
     "border",
     "hover:border-border-02",
-    "active:border-border-05",
-    "cursor-pointer",
+    "active:!border-border-05",
   ],
   error: ["border", "border-status-error-05", "bg-background-neutral-00"],
   disabled: [
@@ -66,7 +65,14 @@ function SelectedLineItem({
   props,
   placeholder,
 }: SelectedLineItemProps) {
-  if (!props) return placeholder ?? <Text text03>Select an option</Text>;
+  if (!props) {
+    if (!placeholder) return <Text text03>Select an option</Text>;
+    return typeof placeholder === "string" ? (
+      <Text text03>{placeholder}</Text>
+    ) : (
+      placeholder
+    );
+  }
 
   return (
     <div className="flex flex-row items-center gap-2 flex-1">
