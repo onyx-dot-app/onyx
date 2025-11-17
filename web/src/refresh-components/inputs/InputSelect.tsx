@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import { useClickOutside } from "@/lib/hooks";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
+import Text from "../texts/Text";
 
 // Context to share select state between parent and children
 interface InputSelectContextValue {
@@ -39,19 +40,23 @@ export function InputSelectLineItem({
   value,
   children,
   description,
+  onClick,
   ...props
 }: InputSelectLineItemProps) {
-  const { selectedValue, onSelect, isOpen } = useInputSelectContext();
+  const { selectedValue, onSelect } = useInputSelectContext();
   const isSelected = selectedValue === value;
 
-  if (!isOpen) return null;
+  const handleMouseDown = (event: React.MouseEvent<HTMLButtonElement>) => {
+    onSelect(value);
+    onClick?.(event);
+  };
 
   return (
     <LineItem
       {...props}
       heavyForced={isSelected}
       description={description}
-      onClick={() => onSelect(value)}
+      onClick={handleMouseDown}
     >
       {children}
     </LineItem>
@@ -62,6 +67,7 @@ export function InputSelectLineItem({
 export interface InputSelectProps {
   value?: string;
   onValueChange?: (value: string) => void;
+  defaultValue?: string;
   placeholder?: string;
   children: React.ReactElement<InputSelectLineItemProps>[];
   className?: string;
@@ -69,23 +75,35 @@ export interface InputSelectProps {
 }
 
 export default function InputSelect({
-  value,
+  value: controlledValue,
   onValueChange,
+  defaultValue = undefined,
   placeholder = "Select an option",
   children,
   className,
   disabled,
 }: InputSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [internalValue, setInternalValue] = useState<string | undefined>(
+    defaultValue
+  );
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
   useClickOutside(() => setIsOpen(false), [triggerRef, dropdownRef], isOpen);
 
-  const handleSelect = (newValue: string) => {
+  // Use controlled value if provided, otherwise use internal value
+  const isControlled = controlledValue !== undefined;
+  const value = isControlled ? controlledValue : internalValue;
+
+  function handleSelect(newValue: string) {
+    // Update internal state if uncontrolled
+    if (!isControlled) {
+      setInternalValue(newValue);
+    }
+    // Always call the callback if provided
     onValueChange?.(newValue);
     setIsOpen(false);
-  };
+  }
 
   // Find the selected child to display in trigger
   const selectedChild = React.Children.toArray(children).find((child) => {
@@ -128,8 +146,9 @@ export default function InputSelect({
                 </span>
               </div>
             ) : (
-              <span className="text-text-02">{placeholder}</span>
+              <Text text03>{placeholder}</Text>
             )}
+
             <SvgChevronDownSmall
               className={cn(
                 "h-4 w-4 stroke-text-03 transition-transform",
@@ -139,17 +158,20 @@ export default function InputSelect({
           </div>
         </button>
 
-        {isOpen && (
-          <div
-            ref={dropdownRef}
-            className={cn(
-              "absolute z-[2000] w-full mt-1 max-h-72 overflow-auto rounded-12 border border-border-01 bg-background-neutral-00 p-1",
-              "animate-in fade-in-0 zoom-in-95 slide-in-from-top-2"
-            )}
-          >
-            {children}
-          </div>
-        )}
+        {/*{shouldRender && (
+        )}*/}
+        <div
+          ref={dropdownRef}
+          className={cn(
+            "absolute z-[2000] w-full mt-1 max-h-72 overflow-auto rounded-12 border border-border-01 bg-background-neutral-00 p-1",
+            "transition-all duration-200",
+            isOpen
+              ? "opacity-100 scale-100 translate-y-0"
+              : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
+          )}
+        >
+          {children}
+        </div>
       </div>
     </InputSelectContext.Provider>
   );
