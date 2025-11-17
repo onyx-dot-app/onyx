@@ -1,10 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
-import SvgChevronUpSmall from "@/icons/chevron-up-small";
+import { useClickOutside } from "@/lib/hooks";
 
 const triggerClasses = {
   main: ["border", "hover:border-border-02", "active:!border-border-05"],
@@ -48,118 +48,128 @@ export interface InputSelectProps
   rightSection?: React.ReactNode;
 }
 
-function InputSelectInner(
-  {
-    internal,
-    error,
-    disabled,
+export default function InputSelect({
+  internal,
+  error,
+  disabled,
 
-    value,
-    onValueChange,
-    options,
-    placeholder = "Select an option",
-    rightSection,
-    className,
-    ...props
-  }: InputSelectProps,
-  ref: React.ForwardedRef<HTMLButtonElement>
-) {
+  value,
+  onValueChange,
+  options,
+  placeholder = "Select an option",
+  rightSection,
+  onClick,
+  className,
+  ...props
+}: InputSelectProps) {
   const variant = internal ? "internal" : disabled ? "disabled" : "main";
 
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useClickOutside(() => setIsOpen(false), [triggerRef, dropdownRef], isOpen);
+
+  function handleTriggerClick(event: React.MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    setIsOpen(!isOpen);
+    onClick?.(event);
+  }
+
   return (
-    <SelectPrimitive.Root
-      value={value}
-      onValueChange={onValueChange}
-      disabled={disabled}
-    >
-      <SelectPrimitive.Trigger
-        ref={ref}
-        className={cn(
-          "group/InputSelect flex-1 flex w-full items-center justify-between p-1.5 rounded-08 bg-background-neutral-00 hover:cursor-pointer disabled:cursor-not-allowed",
-          triggerClasses[variant],
-          className
-        )}
-        {...props}
+    <div className="relative w-full">
+      <SelectPrimitive.Root
+        value={value}
+        onValueChange={onValueChange}
+        disabled={disabled}
       >
-        <div
+        <SelectPrimitive.Trigger
+          ref={triggerRef}
           className={cn(
-            "flex flex-row items-center justify-between w-full p-0.5 gap-1",
-            valueClasses[variant]
+            "group/InputSelect flex-1 flex w-full items-center justify-between p-1.5 rounded-08 bg-background-neutral-00 hover:cursor-pointer disabled:cursor-not-allowed",
+            triggerClasses[variant],
+            className
           )}
+          onClick={handleTriggerClick}
+          {...props}
         >
-          <SelectPrimitive.Value placeholder={placeholder} />
-          <div className="flex items-center">
-            {rightSection && (
+          <div
+            className={cn(
+              "flex flex-row items-center justify-between w-full p-0.5 gap-1",
+              valueClasses[variant]
+            )}
+          >
+            <SelectPrimitive.Value placeholder={placeholder} />
+            <div className="flex items-center">
+              {rightSection}
+              <SelectPrimitive.Icon>
+                <SvgChevronDownSmall
+                  className={cn(
+                    "h-4 w-4 stroke-text-03 transition-transform",
+                    isOpen && "rotate-180"
+                  )}
+                />
+              </SelectPrimitive.Icon>
+            </div>
+          </div>
+        </SelectPrimitive.Trigger>
+
+        <div
+          ref={dropdownRef}
+          role="listbox"
+          className={cn(
+            "absolute z-[2000] w-full max-h-72 overflow-auto rounded-12 border border-border-01 bg-background-neutral-00 p-1",
+            "transition-all duration-200",
+            isOpen
+              ? "opacity-100 scale-100 translate-y-0"
+              : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
+          )}
+          style={{
+            top: "calc(100% + 4px)",
+            left: 0,
+          }}
+        >
+          {options.map((option) => {
+            const isSelected = option.value === value;
+
+            return (
               <div
-                className="flex items-center"
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
+                key={option.value}
+                role="option"
+                aria-selected={isSelected}
+                className={cn(
+                  "relative flex flex-col w-full cursor-default select-none rounded-08 p-1.5",
+                  "text-text-04 outline-none",
+                  !option.disabled && "hover:bg-background-tint-02",
+                  isSelected && "bg-action-link-01 text-action-link-05",
+                  option.disabled && "pointer-events-none opacity-50"
+                )}
+                onClick={() => {
+                  if (!option.disabled) {
+                    onValueChange?.(option.value);
+                    setIsOpen(false);
+                  }
                 }}
               >
-                {rightSection}
-              </div>
-            )}
-            <SelectPrimitive.Icon>
-              <SvgChevronDownSmall className="h-4 w-4 stroke-text-03 transition-transform group-data-[state=open]/InputSelect:-rotate-180" />
-            </SelectPrimitive.Icon>
-          </div>
-        </div>
-      </SelectPrimitive.Trigger>
-
-      <SelectPrimitive.Content
-        className={cn(
-          "max-h-72 min-w-[8rem] w-[var(--radix-select-trigger-width)] overflow-hidden rounded-12 bg-background-neutral-00 border border-red-500",
-          "data-[state=open]:animate-in data-[state=closed]:animate-out",
-          "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-          "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-          "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2",
-          "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
-        )}
-        position="popper"
-        sideOffset={4}
-      >
-        {/*<SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1">
-          <SvgChevronUpSmall className="h-4 w-4 stroke-text-03" />
-        </SelectPrimitive.ScrollUpButton>
-
-        <SelectPrimitive.Viewport className="p-1">
-          {options.map((option) => (
-            <SelectPrimitive.Item
-              key={option.value}
-              value={option.value}
-              disabled={option.disabled}
-              className={cn(
-                "relative flex flex-col w-full cursor-default select-none rounded-08 p-1.5 group",
-                "text-text-04 outline-none",
-                "hover:bg-background-tint-02 data-[highlighted]:bg-background-tint-02",
-                "data-[state=checked]:bg-action-link-01 data-[state=checked]:text-action-link-05",
-                "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-              )}
-            >
-              <SelectPrimitive.ItemText className="text-text-04 font-main-ui-action">
-                {option.label}
-              </SelectPrimitive.ItemText>
-              {option.description && (
-                <span className="text-sm text-text-03 font-secondary-body group-data-[state=checked]:text-text-00 mt-0.5">
-                  {option.description}
+                <span className="text-text-04 font-main-ui-action">
+                  {option.label}
                 </span>
-              )}
-            </SelectPrimitive.Item>
-          ))}
-        </SelectPrimitive.Viewport>
-
-        <SelectPrimitive.ScrollDownButton className="flex cursor-default items-center justify-center py-1">
-          <SvgChevronDownSmall className="h-4 w-4 stroke-text-03" />
-        </SelectPrimitive.ScrollDownButton>*/}
-      </SelectPrimitive.Content>
-    </SelectPrimitive.Root>
+                {option.description && (
+                  <span
+                    className={cn(
+                      "text-sm text-text-03 font-secondary-body mt-0.5",
+                      isSelected && "text-text-00"
+                    )}
+                  >
+                    {option.description}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </SelectPrimitive.Root>
+    </div>
   );
 }
-
-const InputSelect = React.forwardRef(InputSelectInner);
-InputSelect.displayName = "InputSelect";
-
-export default InputSelect;

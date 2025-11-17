@@ -44,6 +44,43 @@ import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useLLMProviders } from "./hooks/useLLMProviders";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 
+export function useClickOutside(
+  callback: () => void,
+  refs: React.RefObject<any>[],
+  isActive: boolean = true
+) {
+  const mouseDownOutsideRef = useRef(false);
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    function handleMouseDown(e: MouseEvent) {
+      const clickedOutside = refs.every(
+        (ref) => ref.current && !ref.current.contains(e.target as Node)
+      );
+      mouseDownOutsideRef.current = clickedOutside;
+    }
+
+    function handleMouseUp(e: MouseEvent) {
+      const clickedOutside = refs.every(
+        (ref) => ref.current && !ref.current.contains(e.target as Node)
+      );
+
+      if (mouseDownOutsideRef.current && clickedOutside) {
+        callback();
+      }
+      mouseDownOutsideRef.current = false;
+    }
+
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [refs, callback, isActive]);
+}
+
 export function useIsMounted() {
   const [mounted, setMounted] = useState(false);
 
