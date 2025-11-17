@@ -100,11 +100,11 @@ jobs:
         id: meta
         uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && format('{0}:web-{1}', env.RUNS_ON_ECR_CACHE, needs.determine-builds.outputs.sanitized-tag) || env.REGISTRY_IMAGE }}
+          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
           tags: |
-            type=raw,value=${{ github.event_name == 'workflow_dispatch' && needs.determine-builds.outputs.sanitized-tag || github.ref_name }}
+            type=raw,value=${{ github.event_name == 'workflow_dispatch' && format('web-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-stable == 'true' && 'latest' || '' }}
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
@@ -158,11 +158,11 @@ jobs:
         id: meta
         uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && format('{0}:web-cloud-{1}', env.RUNS_ON_ECR_CACHE, needs.determine-builds.outputs.sanitized-tag) || env.REGISTRY_IMAGE }}
+          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
           tags: |
-            type=raw,value=${{ github.event_name == 'workflow_dispatch' && needs.determine-builds.outputs.sanitized-tag || github.ref_name }}
+            type=raw,value=${{ github.event_name == 'workflow_dispatch' && format('web-cloud-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -221,11 +221,11 @@ jobs:
         id: meta
         uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && format('{0}:backend-{1}', env.RUNS_ON_ECR_CACHE, needs.determine-builds.outputs.sanitized-tag) || env.REGISTRY_IMAGE }}
+          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
           tags: |
-            type=raw,value=${{ github.event_name == 'workflow_dispatch' && needs.determine-builds.outputs.sanitized-tag || github.ref_name }}
+            type=raw,value=${{ github.event_name == 'workflow_dispatch' && format('backend-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
@@ -281,11 +281,11 @@ jobs:
         id: meta
         uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && format('{0}:model-server-{1}', env.RUNS_ON_ECR_CACHE, needs.determine-builds.outputs.sanitized-tag) || env.REGISTRY_IMAGE }}
+          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
           tags: |
-            type=raw,value=${{ github.event_name == 'workflow_dispatch' && needs.determine-builds.outputs.sanitized-tag || github.ref_name }}
+            type=raw,value=${{ github.event_name == 'workflow_dispatch' && format('model-server-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
