@@ -23,7 +23,6 @@ const iconClassNames = (forced?: boolean) =>
 
 export interface LineItemProps extends React.HTMLAttributes<HTMLDivElement> {
   // Button variants
-  main?: boolean;
   forced?: boolean;
   heavyForced?: boolean;
   strikethrough?: boolean;
@@ -37,7 +36,6 @@ export interface LineItemProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export default function LineItem({
-  main,
   forced,
   heavyForced,
   strikethrough,
@@ -51,13 +49,11 @@ export default function LineItem({
   href,
   ...props
 }: LineItemProps) {
-  const variant = main
-    ? "main"
-    : strikethrough
-      ? "strikeThrough"
-      : forced || heavyForced
-        ? "forced"
-        : "main";
+  const variant = strikethrough
+    ? "strikeThrough"
+    : forced || heavyForced
+      ? "forced"
+      : "main";
 
   const content = (
     <div
