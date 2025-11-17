@@ -46,6 +46,7 @@ from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
 
 MAX_ITERATIONS = 10
+CANCELLED_MESSAGE = "Cancelled"
 
 
 # TODO -- this can be refactored out and played with in evals + normal demo
@@ -347,7 +348,7 @@ def _emit_clean_up_packets(
         and dependencies.emitter.packet_history[-1].obj.type == "message_delta"
     )
     if not has_active_message:
-        _start_message_section(dependencies, ctx, content_override="Cancelled")
+        _start_message_section(dependencies, ctx, content_override=CANCELLED_MESSAGE)
     _end_section(dependencies, ctx)
 
 

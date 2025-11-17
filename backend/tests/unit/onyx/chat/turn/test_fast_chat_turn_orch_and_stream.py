@@ -8,11 +8,13 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
+from redis.client import Redis
 
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.models import PromptConfig
 from onyx.chat.stop_signal_checker import set_fence
 from onyx.chat.turn.fast_chat_turn import _fast_chat_turn_core
+from onyx.chat.turn.fast_chat_turn import CANCELLED_MESSAGE
 from onyx.chat.turn.fast_chat_turn import fast_chat_turn
 from onyx.chat.turn.infra.chat_turn_event_stream import unified_event_stream
 from onyx.chat.turn.models import ChatTurnContext
@@ -37,13 +39,21 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from tests.unit.onyx.agents.agent_framework.conftest import FakeTool
 from tests.unit.onyx.chat.turn.utils import create_test_inference_section
 from tests.unit.onyx.chat.turn.utils import create_test_iteration_answer
+from tests.unit.onyx.chat.turn.utils import FakeRedis
 
 
 class ScriptedFakeLLM(LLM):
     """LLM double that returns a different stream per invocation."""
 
-    def __init__(self, scripted_responses: list[list[ModelResponseStream]]) -> None:
+    def __init__(
+        self,
+        scripted_responses: list[list[ModelResponseStream]],
+        cancel_after_response_index: int | None = None,
+        fake_redis_client: FakeRedis | None = None,
+        chat_session_id: UUID | None = None,
+    ) -> None:
         self._scripts = scripted_responses
+        self._cancel_after_response_index = cancel_after_response_index
         self._config = LLMConfig(
             model_provider="fake-provider",
             model_name="fake-model",
@@ -52,6 +62,8 @@ class ScriptedFakeLLM(LLM):
         )
         self._call_index = 0
         self.stream_calls: list[dict[str, Any]] = []
+        self._fake_redis_client = fake_redis_client
+        self._chat_session_id = chat_session_id
 
     @property
     def config(self) -> LLMConfig:
@@ -102,7 +114,12 @@ class ScriptedFakeLLM(LLM):
                 "tool_choice": tool_choice,
             }
         )
-        for chunk in script:
+        for i, chunk in enumerate(script):
+            if (
+                self._cancel_after_response_index is not None
+                and i > self._cancel_after_response_index
+            ):
+                set_fence(self._chat_session_id, self._fake_redis_client, True)
             yield chunk
 
 
@@ -195,9 +212,15 @@ def tool_call_chunk(
 
 
 def configure_llm(
-    dependencies: ChatTurnDependencies, scripts: list[list[ModelResponseStream]]
+    dependencies: ChatTurnDependencies,
+    scripts: list[list[ModelResponseStream]],
+    cancel_after_response_index: int | None = None,
+    fake_redis_client: Redis | None = None,
+    chat_session_id: UUID | None = None,
 ) -> ScriptedFakeLLM:
-    llm = ScriptedFakeLLM(scripts)
+    llm = ScriptedFakeLLM(
+        scripts, cancel_after_response_index, fake_redis_client, chat_session_id
+    )
     dependencies.llm = llm
     return llm
 
@@ -232,12 +255,6 @@ def run_fast_chat_turn(
 def assert_packets_contain_stop(packets: list[Packet]) -> None:
     assert packets, "Expected packets to be emitted"
     assert isinstance(packets[-1].obj, OverallStop), "Last packet should be OverallStop"
-
-
-def assert_cancellation_packets(packets: list[Packet]) -> None:
-    assert len(packets) >= 3
-    assert packets[-1].obj.type == "stop"
-    assert packets[-2].obj.type == "section_end"
 
 
 # =============================================================================
@@ -522,7 +539,7 @@ def test_fast_chat_turn_context_handlers(
     assert prompt_config.reminder in second_prompt[5]["content"]
 
 
-def test_fast_chat_turn_handles_cancellation_before_stream(
+def test_fast_chat_turn_handles_cancellation_before_content(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[ChatCompletionMessage],
     chat_session_id: UUID,
@@ -533,10 +550,14 @@ def test_fast_chat_turn_handles_cancellation_before_stream(
         chat_turn_dependencies,
         [
             [
+                stream_chunk(reasoning_content="Let me think"),
                 stream_chunk(content="This will not stream"),
                 stream_chunk(finish_reason="stop"),
             ]
         ],
+        cancel_after_response_index=0,
+        fake_redis_client=chat_turn_dependencies.redis_client,
+        chat_session_id=chat_session_id,
     )
     generator = fast_chat_turn(
         sample_messages,
@@ -551,11 +572,15 @@ def test_fast_chat_turn_handles_cancellation_before_stream(
             datetime_aware=False,
         ),
     )
-    set_fence(chat_session_id, chat_turn_dependencies.redis_client, True)
     packets = list(generator)
 
-    assert len(packets) == 3  # Start, section_end, stop with no "This will not stream"
-    assert_cancellation_packets(packets)
+    assert packets[0].obj.type == "reasoning_start"
+    assert packets[1].obj.type == "reasoning_delta"
+    assert packets[1].obj.reasoning == "Let me think"
+    assert packets[2].obj.type == "message_start"
+    assert packets[2].obj.content == CANCELLED_MESSAGE
+    assert packets[3].obj.type == "section_end"
+    assert packets[4].obj.type == "stop"
 
 
 def test_fast_chat_turn_handles_cancellation_mid_stream(
@@ -574,6 +599,9 @@ def test_fast_chat_turn_handles_cancellation_mid_stream(
                 stream_chunk(finish_reason="stop"),
             ]
         ],
+        cancel_after_response_index=0,
+        fake_redis_client=chat_turn_dependencies.redis_client,
+        chat_session_id=chat_session_id,
     )
     prompt_config = PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
@@ -591,16 +619,12 @@ def test_fast_chat_turn_handles_cancellation_mid_stream(
         prompt_config,
     )
 
-    packets: list[Packet] = []
-    cancelled = False
-    for packet in generator:
-        packets.append(packet)
-        if not cancelled and isinstance(packet.obj, MessageDelta):
-            set_fence(chat_session_id, chat_turn_dependencies.redis_client, True)
-            cancelled = True
-
-    assert len(packets) == 4  # Start, Hello, section_end, stop with no "world"
-    assert_cancellation_packets(packets)
+    packets = list(generator)
+    assert packets[0].obj.type == "message_start"
+    assert packets[1].obj.type == "message_delta"
+    assert packets[1].obj.content == "Hello"
+    assert packets[2].obj.type == "section_end"
+    assert packets[3].obj.type == "stop"
 
 
 def test_fast_chat_turn_catch_exception(
