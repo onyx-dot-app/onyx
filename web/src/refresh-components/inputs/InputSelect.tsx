@@ -1,28 +1,18 @@
 "use client";
 
-import React, {
-  useState,
-  useRef,
-  createContext,
-  useContext,
-  useEffect,
-  useCallback,
-} from "react";
-import { cn } from "@/lib/utils";
+import React from "react";
+import * as SelectPrimitive from "@radix-ui/react-select";
+import { cn, noProp } from "@/lib/utils";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
-import { useClickOutside } from "@/lib/hooks";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
-import { useEscape } from "@/hooks/useKeyPress";
 import Text from "@/refresh-components/texts/Text";
-import { createPortal } from "react-dom";
 
-// Style maps for different states
 const triggerClasses = {
   main: [
     "bg-background-neutral-00",
     "border",
     "hover:border-border-02",
-    "active:!border-border-05",
+    "data-[state=open]:border-border-05",
   ],
   error: ["border", "border-status-error-05", "bg-background-neutral-00"],
   disabled: [
@@ -44,24 +34,6 @@ const iconClasses = {
   disabled: ["stroke-text-01"],
 } as const;
 
-// Context to share select state between parent and children
-interface InputSelectContextValue {
-  selectedValue: string | undefined;
-  onSelect: (value: string) => void;
-  isOpen: boolean;
-}
-
-const InputSelectContext = createContext<InputSelectContextValue | null>(null);
-
-function useInputSelectContext() {
-  const context = useContext(InputSelectContext);
-  if (!context) {
-    throw new Error("InputSelectLineItem must be used within InputSelect");
-  }
-  return context;
-}
-
-// Display component for selected child in trigger
 interface SelectedLineItemProps {
   variant: keyof typeof textClasses;
   props?: InputSelectLineItemProps;
@@ -85,19 +57,17 @@ function SelectedLineItem({
   return (
     <div className="flex flex-row items-center gap-2 flex-1">
       {props.icon && (
-        <props.icon
-          className={cn("h-4 w-4 stroke-text-03", iconClasses[variant])}
-        />
+        <props.icon className={cn("h-4 w-4", iconClasses[variant])} />
       )}
       <Text className={cn(textClasses[variant])}>{props.children}</Text>
     </div>
   );
 }
 
-// LineItem wrapper for select options
 export interface InputSelectLineItemProps
   extends Omit<LineItemProps, "heavyForced"> {
   value: string;
+  selected?: boolean;
 }
 
 export function InputSelectLineItem({
@@ -105,29 +75,31 @@ export function InputSelectLineItem({
   children,
   description,
   onClick,
+  selected,
   ...props
 }: InputSelectLineItemProps) {
-  const { selectedValue, onSelect } = useInputSelectContext();
-  const isSelected = selectedValue === value;
-
-  const handleMouseDown = (event: React.MouseEvent<HTMLButtonElement>) => {
-    onSelect(value);
-    onClick?.(event);
-  };
-
   return (
-    <LineItem
-      {...props}
-      heavyForced={isSelected}
-      description={description}
-      onClick={handleMouseDown}
+    <SelectPrimitive.Item
+      value={value}
+      className="outline-none focus:outline-none"
+      onSelect={(event) => {
+        // allow consumers to hook into clicks without breaking radix behaviour
+        onClick?.(event as unknown as React.MouseEvent<HTMLButtonElement>);
+      }}
     >
-      {children}
-    </LineItem>
+      <LineItem
+        {...props}
+        heavyForced={selected}
+        description={description}
+        onClick={noProp((event) => event.preventDefault())}
+        className={cn("w-full", props.className)}
+      >
+        {children}
+      </LineItem>
+    </SelectPrimitive.Item>
   );
 }
 
-// Main select component
 export interface InputSelectProps {
   disabled?: boolean;
   error?: boolean;
@@ -145,7 +117,7 @@ export default function InputSelect({
   disabled,
   error,
 
-  value: controlledValue,
+  value,
   onValueChange,
   defaultValue,
   placeholder,
@@ -155,141 +127,103 @@ export default function InputSelect({
 }: InputSelectProps) {
   const variant = disabled ? "disabled" : error ? "error" : "main";
 
-  const [isOpen, setIsOpen] = useState(false);
-  const [internalValue, setInternalValue] = useState<string | undefined>(
+  const isControlled = value !== undefined;
+  const [internalValue, setInternalValue] = React.useState<string | undefined>(
     defaultValue
   );
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(
-    null
-  );
-  const [dropdownPosition, setDropdownPosition] = useState<{
-    top: number;
-    left: number;
-    width: number;
-  } | null>(null);
-  useClickOutside(() => setIsOpen(false), [triggerRef, dropdownRef], isOpen);
-  useEscape(() => setIsOpen(false), isOpen);
 
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    setPortalContainer(document.body);
-  }, []);
+  const currentValue = isControlled ? value : internalValue;
 
-  // Use controlled value if provided, otherwise use internal value
-  const isControlled = controlledValue !== undefined;
-  const value = isControlled ? controlledValue : internalValue;
-
-  const updateDropdownPosition = useCallback(() => {
-    const triggerEl = triggerRef.current;
-    if (!triggerEl) return;
-    const rect = triggerEl.getBoundingClientRect();
-    const gap = 4; // spacing between trigger and dropdown
-    setDropdownPosition({
-      top: rect.bottom + gap,
-      left: rect.left,
-      width: rect.width,
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    updateDropdownPosition();
-    window.addEventListener("resize", updateDropdownPosition);
-    window.addEventListener("scroll", updateDropdownPosition, true);
-    return () => {
-      window.removeEventListener("resize", updateDropdownPosition);
-      window.removeEventListener("scroll", updateDropdownPosition, true);
-    };
-  }, [isOpen, updateDropdownPosition]);
-
-  function handleSelect(newValue: string) {
-    // Update internal state if uncontrolled
+  React.useEffect(() => {
     if (!isControlled) {
-      setInternalValue(newValue);
+      setInternalValue(defaultValue);
     }
-    // Always call the callback if provided
-    onValueChange?.(newValue);
-    setIsOpen(false);
-  }
+  }, [defaultValue, isControlled]);
 
-  // Find the selected child to display in trigger
+  const handleValueChange = React.useCallback(
+    (nextValue: string) => {
+      if (!isControlled) {
+        setInternalValue(nextValue);
+      }
+      onValueChange?.(nextValue);
+    },
+    [isControlled, onValueChange]
+  );
+
   const selectedChild = React.Children.toArray(children).find((child) => {
     if (React.isValidElement<InputSelectLineItemProps>(child)) {
-      return child.props.value === value;
+      return child.props.value === currentValue;
     }
     return false;
   }) as React.ReactElement<InputSelectLineItemProps> | undefined;
 
-  const contextValue: InputSelectContextValue = {
-    selectedValue: value,
-    onSelect: handleSelect,
-    isOpen,
-  };
+  const renderedChildren = React.useMemo(
+    () =>
+      React.Children.map(children, (child) => {
+        if (!React.isValidElement<InputSelectLineItemProps>(child)) {
+          return child;
+        }
+        return React.cloneElement(child, {
+          selected: child.props.value === currentValue,
+        });
+      }),
+    [children, currentValue]
+  );
 
   return (
-    <InputSelectContext.Provider value={contextValue}>
-      <div className="relative w-full">
-        <button
-          ref={triggerRef}
-          type="button"
-          disabled={disabled}
-          onClick={() => !disabled && setIsOpen(!isOpen)}
-          className={cn(
-            "flex w-full items-center justify-between p-1.5 rounded-08 border",
-            triggerClasses[variant],
-            className
-          )}
-        >
-          <div className="flex flex-row items-center justify-between w-full p-0.5 gap-1">
-            <SelectedLineItem
-              variant={variant}
-              props={selectedChild?.props}
-              placeholder={placeholder}
-            />
+    <SelectPrimitive.Root
+      value={currentValue}
+      defaultValue={defaultValue}
+      onValueChange={handleValueChange}
+      disabled={disabled}
+    >
+      <SelectPrimitive.Trigger
+        className={cn(
+          "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08 border outline-none",
+          triggerClasses[variant],
+          className
+        )}
+      >
+        <div className="flex flex-row items-center justify-between w-full p-0.5 gap-1">
+          <SelectedLineItem
+            variant={variant}
+            props={selectedChild?.props}
+            placeholder={placeholder}
+          />
 
-            <div className="flex flex-row items-center">
-              {rightSection}
+          <div className="flex flex-row items-center gap-1">
+            {rightSection}
 
+            <SelectPrimitive.Icon asChild>
               <SvgChevronDownSmall
                 className={cn(
                   "h-4 w-4 transition-transform",
                   iconClasses[variant],
-                  isOpen && "-rotate-180"
+                  "group-data-[state=open]/InputSelect:-rotate-180"
                 )}
               />
-            </div>
+            </SelectPrimitive.Icon>
           </div>
-        </button>
+        </div>
+      </SelectPrimitive.Trigger>
 
-        {portalContainer &&
-          dropdownPosition &&
-          createPortal(
-            <div
-              ref={dropdownRef}
-              style={{
-                position: "fixed",
-                top: dropdownPosition.top,
-                left: dropdownPosition.left,
-                width: dropdownPosition.width,
-              }}
-              className={cn(
-                "z-[4000] max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1 shadow-lg",
-                "transition-all duration-200",
-                isOpen
-                  ? "opacity-100 scale-100 translate-y-0"
-                  : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
-              )}
-              onMouseDown={(e) => e.stopPropagation()}
-              onMouseUp={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {children}
-            </div>,
-            portalContainer
+      <SelectPrimitive.Portal>
+        <SelectPrimitive.Content
+          className={cn(
+            "z-[4000] w-[var(--radix-select-trigger-width)] max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1 pointer-events-none",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
+            "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
           )}
-      </div>
-    </InputSelectContext.Provider>
+          sideOffset={4}
+          position="popper"
+          onMouseDown={noProp()}
+        >
+          <SelectPrimitive.Viewport>
+            {renderedChildren}
+          </SelectPrimitive.Viewport>
+        </SelectPrimitive.Content>
+      </SelectPrimitive.Portal>
+    </SelectPrimitive.Root>
   );
 }
