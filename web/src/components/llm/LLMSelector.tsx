@@ -7,13 +7,10 @@ import {
 } from "@/lib/llm/utils";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import InputSelect, {
+  InputSelectLineItem,
+} from "@/refresh-components/inputs/InputSelect";
+import { SvgProps } from "@/icons";
 
 interface LLMSelectorProps {
   userSettings?: boolean;
@@ -112,41 +109,44 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
     : null;
 
   const currentLlmName = currentDescriptor?.modelName;
+  const defaultLabel = userSettings ? "System Default" : "User Default";
+
+  const wrapIcon = (
+    IconComponent: ReturnType<typeof getProviderIcon>
+  ): React.FC<SvgProps> => {
+    return function SelectIcon({ className }: SvgProps) {
+      return IconComponent({ size: 16, className });
+    };
+  };
 
   return (
-    <Select
+    <InputSelect
       value={currentLlm ? currentLlm : "default"}
       onValueChange={(value) => onSelect(value === "default" ? null : value)}
+      placeholder={defaultLabel}
+      className="min-w-40"
     >
-      <SelectTrigger className="min-w-40">
-        <SelectValue>
-          {currentLlmName
-            ? getDisplayNameForModel(currentLlmName)
-            : userSettings
-              ? "System Default"
-              : "User Default"}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent className="z-[99999]">
-        {!excludePublicProviders && (
-          <SelectItem className="flex" hideCheck value="default">
-            <span>{userSettings ? "System Default" : "User Default"}</span>
-            {userSettings && (
-              <span className=" my-auto font-normal ml-1">
-                ({defaultModelDisplayName})
-              </span>
-            )}
-          </SelectItem>
-        )}
-        {llmOptions.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            <div className="my-1 flex items-center">
-              {option.icon && option.icon({ size: 16 })}
-              <span className="ml-2">{option.name}</span>
-            </div>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+      {!excludePublicProviders && (
+        <InputSelectLineItem
+          value="default"
+          description={
+            userSettings && defaultModelDisplayName
+              ? `(${defaultModelDisplayName})`
+              : undefined
+          }
+        >
+          {defaultLabel}
+        </InputSelectLineItem>
+      )}
+      {llmOptions.map((option) => (
+        <InputSelectLineItem
+          key={option.value}
+          value={option.value}
+          icon={wrapIcon(option.icon)}
+        >
+          {option.name}
+        </InputSelectLineItem>
+      ))}
+    </InputSelect>
   );
 };

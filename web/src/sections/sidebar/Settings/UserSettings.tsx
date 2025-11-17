@@ -9,13 +9,6 @@ import { ThemePreference } from "@/lib/types";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SubLabel } from "@/components/Field";
 import { LLMSelector } from "@/components/llm/LLMSelector";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Loader2, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import Button from "@/refresh-components/buttons/Button";
@@ -36,6 +29,10 @@ import { PATManagement } from "@/components/user/PATManagement";
 import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import SvgSettings from "@/icons/settings";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import InputSelect, {
+  InputSelectLineItem,
+} from "@/refresh-components/inputs/InputSelect";
+import { SvgProps } from "@/icons";
 
 type SettingsSection =
   | "general"
@@ -385,34 +382,37 @@ export default function UserSettings() {
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-medium">Theme</h3>
-                  <Select
-                    value={theme}
+                  <InputSelect
+                    defaultValue={theme}
                     onValueChange={(value) => {
                       setTheme(value);
                       updateUserThemePreference(value as ThemePreference);
                     }}
                   >
-                    <SelectTrigger className="w-full mt-2">
-                      <SelectValue placeholder="Select theme" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem
+                    {[
+                      <InputSelectLineItem
+                        key={ThemePreference.SYSTEM}
                         value={ThemePreference.SYSTEM}
-                        icon={<Monitor className="h-4 w-4" />}
+                        icon={Monitor}
                       >
                         System
-                      </SelectItem>
-                      <SelectItem
+                      </InputSelectLineItem>,
+                      <InputSelectLineItem
+                        key={ThemePreference.LIGHT}
                         value={ThemePreference.LIGHT}
-                        icon={<Sun className="h-4 w-4" />}
+                        icon={Sun}
                       >
                         Light
-                      </SelectItem>
-                      <SelectItem icon={<Moon />} value={ThemePreference.DARK}>
+                      </InputSelectLineItem>,
+                      <InputSelectLineItem
+                        key={ThemePreference.DARK}
+                        value={ThemePreference.DARK}
+                        icon={Moon}
+                      >
                         Dark
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                      </InputSelectLineItem>,
+                    ]}
+                  </InputSelect>
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
