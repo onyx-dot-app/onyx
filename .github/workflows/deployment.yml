@@ -120,8 +120,9 @@ jobs:
           context: ./web
           file: ./web/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ env.IS_DRY_RUN != 'true' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          push: true
+          tags: |
+            ${{ env.IS_DRY_RUN == 'true' && format('{0}:web-{1}', env.RUNS_ON_ECR_CACHE, github.ref_name) || steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
@@ -132,26 +133,6 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-${{ env.DEPLOYMENT }}-cache,mode=max
-
-      - name: Run Trivy vulnerability scanner
-        if: env.IS_DRY_RUN != 'true'
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
-        with:
-          timeout_minutes: 30
-          max_attempts: 3
-          retry_wait_seconds: 10
-          command: |
-            docker run --rm -v $HOME/.cache/trivy:/root/.cache/trivy \
-              -e TRIVY_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-db:2" \
-              -e TRIVY_JAVA_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-java-db:1" \
-              -e TRIVY_USERNAME="${{ secrets.DOCKER_USERNAME }}" \
-              -e TRIVY_PASSWORD="${{ secrets.DOCKER_TOKEN }}" \
-              aquasec/trivy@sha256:a22415a38938a56c379387a8163fcb0ce38b10ace73e593475d3658d578b2436 \
-              image \
-              --skip-version-check \
-              --timeout 20m \
-              --severity CRITICAL,HIGH \
-              docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
 
   build-web-cloud:
     needs: determine-builds
@@ -195,8 +176,9 @@ jobs:
           context: ./web
           file: ./web/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ env.IS_DRY_RUN != 'true' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          push: true
+          tags: |
+            ${{ env.IS_DRY_RUN == 'true' && format('{0}:web-cloud-{1}', env.RUNS_ON_ECR_CACHE, github.ref_name) || steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
@@ -215,26 +197,6 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-${{ env.DEPLOYMENT }}-cache,mode=max
-
-      - name: Run Trivy vulnerability scanner
-        if: env.IS_DRY_RUN != 'true'
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
-        with:
-          timeout_minutes: 30
-          max_attempts: 3
-          retry_wait_seconds: 10
-          command: |
-            docker run --rm -v $HOME/.cache/trivy:/root/.cache/trivy \
-              -e TRIVY_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-db:2" \
-              -e TRIVY_JAVA_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-java-db:1" \
-              -e TRIVY_USERNAME="${{ secrets.DOCKER_USERNAME }}" \
-              -e TRIVY_PASSWORD="${{ secrets.DOCKER_TOKEN }}" \
-              aquasec/trivy@sha256:a22415a38938a56c379387a8163fcb0ce38b10ace73e593475d3658d578b2436 \
-              image \
-              --skip-version-check \
-              --timeout 20m \
-              --severity CRITICAL,HIGH \
-              docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
 
   build-backend:
     needs: determine-builds
@@ -281,8 +243,9 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ env.IS_DRY_RUN != 'true' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          push: true
+          tags: |
+            ${{ env.IS_DRY_RUN == 'true' && format('{0}:backend-{1}', env.RUNS_ON_ECR_CACHE, github.ref_name) || steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
@@ -292,29 +255,6 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-${{ env.DEPLOYMENT }}-cache,mode=max
-
-      - name: Run Trivy vulnerability scanner
-        if: env.IS_DRY_RUN != 'true'
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
-        with:
-          timeout_minutes: 30
-          max_attempts: 3
-          retry_wait_seconds: 10
-          command: |
-            REGISTRY_IMAGE="${{ env.REGISTRY_IMAGE }}"
-            docker run --rm -v $HOME/.cache/trivy:/root/.cache/trivy \
-              -v ${{ github.workspace }}/backend/.trivyignore:/tmp/.trivyignore:ro \
-              -e TRIVY_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-db:2" \
-              -e TRIVY_JAVA_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-java-db:1" \
-              -e TRIVY_USERNAME="${{ secrets.DOCKER_USERNAME }}" \
-              -e TRIVY_PASSWORD="${{ secrets.DOCKER_TOKEN }}" \
-              aquasec/trivy@sha256:a22415a38938a56c379387a8163fcb0ce38b10ace73e593475d3658d578b2436 \
-              image \
-              --skip-version-check \
-              --timeout 20m \
-              --severity CRITICAL,HIGH \
-              --ignorefile /tmp/.trivyignore \
-              docker.io/${REGISTRY_IMAGE}:${{ github.ref_name }}
 
   build-model-server:
     needs: determine-builds
@@ -368,8 +308,9 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/amd64,linux/arm64
-          push: ${{ env.IS_DRY_RUN != 'true' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          push: true
+          tags: |
+            ${{ env.IS_DRY_RUN == 'true' && format('{0}:model-server-{1}', env.RUNS_ON_ECR_CACHE, github.ref_name) || steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
@@ -380,15 +321,31 @@ jobs:
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-cache,mode=max
 
+  trivy-scan-web:
+    needs: build-web
+    if: needs.build-web.result == 'success'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-trivy-scan-web
+      - extras=ecr-cache
+    env:
+      REGISTRY_IMAGE: onyxdotapp/onyx-web-server
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
       - name: Run Trivy vulnerability scanner
-        if: env.IS_DRY_RUN != 'true'
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
         with:
           timeout_minutes: 30
           max_attempts: 3
           retry_wait_seconds: 10
           command: |
-            REGISTRY_IMAGE="${{ env.REGISTRY_IMAGE }}"
+            if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+              SCAN_IMAGE="${{ env.RUNS_ON_ECR_CACHE }}:web-${{ github.ref_name }}"
+            else
+              SCAN_IMAGE="docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}"
+            fi
             docker run --rm -v $HOME/.cache/trivy:/root/.cache/trivy \
               -e TRIVY_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-db:2" \
               -e TRIVY_JAVA_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-java-db:1" \
@@ -399,7 +356,123 @@ jobs:
               --skip-version-check \
               --timeout 20m \
               --severity CRITICAL,HIGH \
-              docker.io/${REGISTRY_IMAGE}:${{ github.ref_name }}
+              ${SCAN_IMAGE}
+
+  trivy-scan-web-cloud:
+    needs: build-web-cloud
+    if: needs.build-web-cloud.result == 'success'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-trivy-scan-web-cloud
+      - extras=ecr-cache
+    env:
+      REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Run Trivy vulnerability scanner
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
+        with:
+          timeout_minutes: 30
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+              SCAN_IMAGE="${{ env.RUNS_ON_ECR_CACHE }}:web-cloud-${{ github.ref_name }}"
+            else
+              SCAN_IMAGE="docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}"
+            fi
+            docker run --rm -v $HOME/.cache/trivy:/root/.cache/trivy \
+              -e TRIVY_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-db:2" \
+              -e TRIVY_JAVA_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-java-db:1" \
+              -e TRIVY_USERNAME="${{ secrets.DOCKER_USERNAME }}" \
+              -e TRIVY_PASSWORD="${{ secrets.DOCKER_TOKEN }}" \
+              aquasec/trivy@sha256:a22415a38938a56c379387a8163fcb0ce38b10ace73e593475d3658d578b2436 \
+              image \
+              --skip-version-check \
+              --timeout 20m \
+              --severity CRITICAL,HIGH \
+              ${SCAN_IMAGE}
+
+  trivy-scan-backend:
+    needs: build-backend
+    if: needs.build-backend.result == 'success'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-trivy-scan-backend
+      - extras=ecr-cache
+    env:
+      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
+        with:
+          timeout_minutes: 30
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+              SCAN_IMAGE="${{ env.RUNS_ON_ECR_CACHE }}:backend-${{ github.ref_name }}"
+            else
+              SCAN_IMAGE="docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}"
+            fi
+            docker run --rm -v $HOME/.cache/trivy:/root/.cache/trivy \
+              -v ${{ github.workspace }}/backend/.trivyignore:/tmp/.trivyignore:ro \
+              -e TRIVY_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-db:2" \
+              -e TRIVY_JAVA_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-java-db:1" \
+              -e TRIVY_USERNAME="${{ secrets.DOCKER_USERNAME }}" \
+              -e TRIVY_PASSWORD="${{ secrets.DOCKER_TOKEN }}" \
+              aquasec/trivy@sha256:a22415a38938a56c379387a8163fcb0ce38b10ace73e593475d3658d578b2436 \
+              image \
+              --skip-version-check \
+              --timeout 20m \
+              --severity CRITICAL,HIGH \
+              --ignorefile /tmp/.trivyignore \
+              ${SCAN_IMAGE}
+
+  trivy-scan-model-server:
+    needs: build-model-server
+    if: needs.build-model-server.result == 'success'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-trivy-scan-model-server
+      - extras=ecr-cache
+    env:
+      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Run Trivy vulnerability scanner
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
+        with:
+          timeout_minutes: 30
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+              SCAN_IMAGE="${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ github.ref_name }}"
+            else
+              SCAN_IMAGE="docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}"
+            fi
+            docker run --rm -v $HOME/.cache/trivy:/root/.cache/trivy \
+              -e TRIVY_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-db:2" \
+              -e TRIVY_JAVA_DB_REPOSITORY="public.ecr.aws/aquasecurity/trivy-java-db:1" \
+              -e TRIVY_USERNAME="${{ secrets.DOCKER_USERNAME }}" \
+              -e TRIVY_PASSWORD="${{ secrets.DOCKER_TOKEN }}" \
+              aquasec/trivy@sha256:a22415a38938a56c379387a8163fcb0ce38b10ace73e593475d3658d578b2436 \
+              image \
+              --skip-version-check \
+              --timeout 20m \
+              --severity CRITICAL,HIGH \
+              ${SCAN_IMAGE}
 
   notify-slack-on-failure:
     needs: [build-web, build-web-cloud, build-backend, build-model-server]
