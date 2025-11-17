@@ -121,7 +121,7 @@ jobs:
 
 
   build-integration-image:
-    runs-on: [runs-on, runner=4cpu-linux-x64, "run-id=${{ github.run_id }}-build-integration-image", "extras=ecr-cache", "volume=40gb"]
+    runs-on: [runs-on, runner=4cpu-linux-x64, "run-id=${{ github.run_id }}-build-integration-image", "extras=ecr-cache", "volume=80gb"]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
