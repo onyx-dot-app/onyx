@@ -59,7 +59,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     if (isComplete) {
       onComplete();
     }
-  }, [isComplete]);
+  }, [isComplete, onComplete]);
 
   const status = useMemo(() => {
     if (isComplete) {
