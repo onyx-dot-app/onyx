@@ -29,9 +29,7 @@ import { PATManagement } from "@/components/user/PATManagement";
 import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import SvgSettings from "@/icons/settings";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import InputSelect, {
-  InputSelectLineItem,
-} from "@/refresh-components/inputs/InputSelect";
+import * as InputSelect from "@/refresh-components/inputs/InputSelect";
 import { SvgProps } from "@/icons";
 
 type SettingsSection =
@@ -382,7 +380,7 @@ export default function UserSettings() {
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-medium">Theme</h3>
-                  <InputSelect
+                  <InputSelect.Root
                     defaultValue={theme}
                     onValueChange={(value) => {
                       setTheme(value);
@@ -390,29 +388,29 @@ export default function UserSettings() {
                     }}
                   >
                     {[
-                      <InputSelectLineItem
+                      <InputSelect.Item
                         key={ThemePreference.SYSTEM}
                         value={ThemePreference.SYSTEM}
                         icon={Monitor}
                       >
                         System
-                      </InputSelectLineItem>,
-                      <InputSelectLineItem
+                      </InputSelect.Item>,
+                      <InputSelect.Item
                         key={ThemePreference.LIGHT}
                         value={ThemePreference.LIGHT}
                         icon={Sun}
                       >
                         Light
-                      </InputSelectLineItem>,
-                      <InputSelectLineItem
+                      </InputSelect.Item>,
+                      <InputSelect.Item
                         key={ThemePreference.DARK}
                         value={ThemePreference.DARK}
                         icon={Moon}
                       >
                         Dark
-                      </InputSelectLineItem>,
+                      </InputSelect.Item>,
                     ]}
-                  </InputSelect>
+                  </InputSelect.Root>
                 </div>
                 <div className="flex items-center justify-between">
                   <div>

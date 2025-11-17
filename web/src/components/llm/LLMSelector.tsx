@@ -7,9 +7,7 @@ import {
 } from "@/lib/llm/utils";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
-import InputSelect, {
-  InputSelectLineItem,
-} from "@/refresh-components/inputs/InputSelect";
+import * as InputSelect from "@/refresh-components/inputs/InputSelect";
 import { SvgProps } from "@/icons";
 
 interface LLMSelectorProps {
@@ -120,14 +118,14 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
   };
 
   return (
-    <InputSelect
+    <InputSelect.Root
       value={currentLlm ? currentLlm : "default"}
       onValueChange={(value) => onSelect(value === "default" ? null : value)}
       placeholder={defaultLabel}
       className="min-w-40"
     >
       {!excludePublicProviders && (
-        <InputSelectLineItem
+        <InputSelect.Item
           value="default"
           description={
             userSettings && defaultModelDisplayName
@@ -136,17 +134,17 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
           }
         >
           {defaultLabel}
-        </InputSelectLineItem>
+        </InputSelect.Item>
       )}
       {llmOptions.map((option) => (
-        <InputSelectLineItem
+        <InputSelect.Item
           key={option.value}
           value={option.value}
           icon={wrapIcon(option.icon)}
         >
           {option.name}
-        </InputSelectLineItem>
+        </InputSelect.Item>
       ))}
-    </InputSelect>
+    </InputSelect.Root>
   );
 };

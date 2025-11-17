@@ -3,9 +3,7 @@ import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import InputSelect, {
-  InputSelectLineItem,
-} from "@/refresh-components/inputs/InputSelect";
+import * as InputSelect from "@/refresh-components/inputs/InputSelect";
 import { MODAL_CONTENT_MAP } from "../constants";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import SvgRefreshCw from "@/icons/refresh-cw";
@@ -212,7 +210,7 @@ export default function DynamicProviderFields({
               <FormField.Label>Default Model</FormField.Label>
               <FormField.Control>
                 {modelOptions.length > 0 ? (
-                  <InputSelect
+                  <InputSelect.Root
                     value={field.value}
                     onValueChange={(value) => {
                       helper.setValue(value);
@@ -242,14 +240,11 @@ export default function DynamicProviderFields({
                     }
                   >
                     {modelOptions.map((option) => (
-                      <InputSelectLineItem
-                        key={option.value}
-                        value={option.value}
-                      >
+                      <InputSelect.Item key={option.value} value={option.value}>
                         {option.label}
-                      </InputSelectLineItem>
+                      </InputSelect.Item>
                     ))}
-                  </InputSelect>
+                  </InputSelect.Root>
                 ) : (
                   <InputTypeIn
                     value={field.value}

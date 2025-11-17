@@ -13,9 +13,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import InputSelect, {
-  InputSelectLineItem,
-} from "@/refresh-components/inputs/InputSelect";
+import * as InputSelect from "@/refresh-components/inputs/InputSelect";
 
 interface PAT {
   id: number;
@@ -172,20 +170,18 @@ export function PATManagement() {
             <div className="space-y-1">
               {/* NOTE: Use Select dropdown (not free text input) to guide users to common values.
                   Backend accepts any positive integer, but we provide curated options for UX. */}
-              <InputSelect
+              <InputSelect.Root
                 value={expirationDays}
                 onValueChange={setExpirationDays}
                 disabled={isCreating}
                 placeholder="Select expiration"
                 aria-label="Select token expiration"
               >
-                <InputSelectLineItem value="7">7 days</InputSelectLineItem>
-                <InputSelectLineItem value="30">30 days</InputSelectLineItem>
-                <InputSelectLineItem value="365">365 days</InputSelectLineItem>
-                <InputSelectLineItem value="null">
-                  No expiration
-                </InputSelectLineItem>
-              </InputSelect>
+                <InputSelect.Item value="7">7 days</InputSelect.Item>
+                <InputSelect.Item value="30">30 days</InputSelect.Item>
+                <InputSelect.Item value="365">365 days</InputSelect.Item>
+                <InputSelect.Item value="null">No expiration</InputSelect.Item>
+              </InputSelect.Root>
               <Text text02 secondaryBody>
                 Expires at end of day (23:59 UTC).
               </Text>

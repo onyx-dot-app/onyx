@@ -7,15 +7,11 @@ import * as Yup from "yup";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ToolIcon } from "@/components/icons/icons";
-import { FiLink, FiCheck } from "react-icons/fi";
 import CardSection from "@/components/admin/CardSection";
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-
 import { usePopup } from "@/components/admin/connectors/Popup";
-import InputSelect, {
-  InputSelectLineItem,
-} from "@/refresh-components/inputs/InputSelect";
+import * as InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import Text from "@/components/ui/text";
@@ -36,7 +32,6 @@ import {
 import { ToolList } from "@/components/admin/actions/ToolList";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SvgCheck from "@/icons/check";
-import SvgExternalLink from "@/icons/external-link";
 import SvgLink from "@/icons/link";
 
 const validationSchema = Yup.object().shape({
@@ -325,7 +320,7 @@ export default function NewMCPToolPage() {
                         />
                         <div>
                           <Label htmlFor="transport">Transport</Label>
-                          <InputSelect
+                          <InputSelect.Root
                             value={values.transport}
                             onValueChange={(value) =>
                               setFieldValue("transport", value)
@@ -333,15 +328,15 @@ export default function NewMCPToolPage() {
                             placeholder="Select transport"
                             className="mt-1"
                           >
-                            <InputSelectLineItem
+                            <InputSelect.Item
                               value={MCPTransportType.STREAMABLE_HTTP}
                             >
                               Streamable HTTP
-                            </InputSelectLineItem>
-                            <InputSelectLineItem value={MCPTransportType.SSE}>
+                            </InputSelect.Item>
+                            <InputSelect.Item value={MCPTransportType.SSE}>
                               SSE
-                            </InputSelectLineItem>
-                          </InputSelect>
+                            </InputSelect.Item>
+                          </InputSelect.Root>
                         </div>
                       </div>
                     </div>
@@ -355,7 +350,7 @@ export default function NewMCPToolPage() {
                       <div className="space-y-4">
                         <div>
                           <Label htmlFor="auth_type">Authentication Type</Label>
-                          <InputSelect
+                          <InputSelect.Root
                             value={values.auth_type}
                             onValueChange={(value) => {
                               setFieldValue("auth_type", value);
@@ -369,22 +364,22 @@ export default function NewMCPToolPage() {
                             placeholder="Select authentication type"
                             className="mt-1"
                           >
-                            <InputSelectLineItem
+                            <InputSelect.Item
                               value={MCPAuthenticationType.NONE}
                             >
                               None
-                            </InputSelectLineItem>
-                            <InputSelectLineItem
+                            </InputSelect.Item>
+                            <InputSelect.Item
                               value={MCPAuthenticationType.API_TOKEN}
                             >
                               API Token
-                            </InputSelectLineItem>
-                            <InputSelectLineItem
+                            </InputSelect.Item>
+                            <InputSelect.Item
                               value={MCPAuthenticationType.OAUTH}
                             >
                               OAuth
-                            </InputSelectLineItem>
-                          </InputSelect>
+                            </InputSelect.Item>
+                          </InputSelect.Root>
                           {errors.auth_type && touched.auth_type && (
                             <div className="text-red-500 text-sm mt-1">
                               {errors.auth_type}
@@ -398,7 +393,7 @@ export default function NewMCPToolPage() {
                               <Label htmlFor="auth_performer">
                                 Who performs authentication?
                               </Label>
-                              <InputSelect
+                              <InputSelect.Root
                                 value={values.auth_performer}
                                 onValueChange={(value) =>
                                   setFieldValue("auth_performer", value)
@@ -406,17 +401,17 @@ export default function NewMCPToolPage() {
                                 placeholder="Select authentication performer"
                                 className="mt-1"
                               >
-                                <InputSelectLineItem
+                                <InputSelect.Item
                                   value={MCPAuthenticationPerformer.ADMIN}
                                 >
                                   Admin (shared credentials)
-                                </InputSelectLineItem>
-                                <InputSelectLineItem
+                                </InputSelect.Item>
+                                <InputSelect.Item
                                   value={MCPAuthenticationPerformer.PER_USER}
                                 >
                                   Per-user (individual credentials)
-                                </InputSelectLineItem>
-                              </InputSelect>
+                                </InputSelect.Item>
+                              </InputSelect.Root>
                               {errors.auth_performer &&
                                 touched.auth_performer && (
                                   <div className="text-red-500 text-sm mt-1">

@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import InputSelect, {
-  InputSelectLineItem,
-} from "@/refresh-components/inputs/InputSelect";
+import * as InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Label } from "@/components/Field";
 
 interface ReferralSourceSelectorProps {
@@ -44,18 +42,18 @@ export default function ReferralSourceSelector({
       <Label className="text-text-950" small={false}>
         How did you hear about us?
       </Label>
-      <InputSelect
+      <InputSelect.Root
         value={referralSource}
         onValueChange={handleChange}
         placeholder="Select an option"
         className="w-full border-background-300 !rounded-08 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
       >
         {referralOptions.map((option) => (
-          <InputSelectLineItem key={option.value} value={option.value}>
+          <InputSelect.Item key={option.value} value={option.value}>
             {option.label}
-          </InputSelectLineItem>
+          </InputSelect.Item>
         ))}
-      </InputSelect>
+      </InputSelect.Root>
     </div>
   );
 }

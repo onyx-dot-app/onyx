@@ -34,17 +34,13 @@ const iconClasses = {
   disabled: ["stroke-text-01"],
 } as const;
 
-interface SelectedLineItemProps {
+interface SelectedItemProps {
   variant: keyof typeof textClasses;
-  props?: InputSelectLineItemProps;
+  props?: ItemProps;
   placeholder?: React.ReactNode;
 }
 
-function SelectedLineItem({
-  variant,
-  props,
-  placeholder,
-}: SelectedLineItemProps) {
+function SelectedItem({ variant, props, placeholder }: SelectedItemProps) {
   if (!props) {
     if (!placeholder) return <Text text03>Select an option</Text>;
     return typeof placeholder === "string" ? (
@@ -64,20 +60,19 @@ function SelectedLineItem({
   );
 }
 
-export interface InputSelectLineItemProps
-  extends Omit<LineItemProps, "heavyForced"> {
+interface ItemProps extends Omit<LineItemProps, "heavyForced"> {
   value: string;
   selected?: boolean;
 }
 
-export function InputSelectLineItem({
+function Item({
   value,
   children,
   description,
   onClick,
   selected,
   ...props
-}: InputSelectLineItemProps) {
+}: ItemProps) {
   return (
     <SelectPrimitive.Item
       value={value}
@@ -100,7 +95,7 @@ export function InputSelectLineItem({
   );
 }
 
-export interface InputSelectProps {
+interface RootProps {
   disabled?: boolean;
   error?: boolean;
 
@@ -113,7 +108,7 @@ export interface InputSelectProps {
   children?: React.ReactNode;
 }
 
-export default function InputSelect({
+function Root({
   disabled,
   error,
 
@@ -124,7 +119,7 @@ export default function InputSelect({
   className,
   rightSection,
   children,
-}: InputSelectProps) {
+}: RootProps) {
   const variant = disabled ? "disabled" : error ? "error" : "main";
   const [isOpen, setIsOpen] = React.useState(false);
 
@@ -152,16 +147,16 @@ export default function InputSelect({
   );
 
   const selectedChild = React.Children.toArray(children).find((child) => {
-    if (React.isValidElement<InputSelectLineItemProps>(child)) {
+    if (React.isValidElement<ItemProps>(child)) {
       return child.props.value === currentValue;
     }
     return false;
-  }) as React.ReactElement<InputSelectLineItemProps> | undefined;
+  }) as React.ReactElement<ItemProps> | undefined;
 
   const renderedChildren = React.useMemo(
     () =>
       React.Children.map(children, (child) => {
-        if (!React.isValidElement<InputSelectLineItemProps>(child)) {
+        if (!React.isValidElement<ItemProps>(child)) {
           return child;
         }
         return React.cloneElement(child, {
@@ -187,7 +182,7 @@ export default function InputSelect({
         )}
       >
         <div className="flex flex-row items-center justify-between w-full p-0.5 gap-1">
-          <SelectedLineItem
+          <SelectedItem
             variant={variant}
             props={selectedChild?.props}
             placeholder={placeholder}
@@ -229,3 +224,5 @@ export default function InputSelect({
     </SelectPrimitive.Root>
   );
 }
+
+export { type ItemProps, type RootProps, Item, Root };
