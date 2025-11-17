@@ -950,8 +950,6 @@ def _fast_message_stream(
         messages=messages,
         # TODO: Maybe we can use some DI framework here?
         dependencies=ChatTurnDependencies(
-            llm_model=llm_model,
-            model_settings=model_settings,
             llm=answer.graph_tooling.primary_llm,
             tools=tools,
             db_session=db_session,

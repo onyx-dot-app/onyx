@@ -346,9 +346,8 @@ def _emit_clean_up_packets(
         dependencies.emitter.packet_history
         and dependencies.emitter.packet_history[-1].obj.type == "message_delta"
     )
-    if has_active_message:
-        _end_section(dependencies, ctx)
-    _start_message_section(dependencies, ctx, content_override="Cancelled")
+    if not has_active_message:
+        _start_message_section(dependencies, ctx, content_override="Cancelled")
     _end_section(dependencies, ctx)
 
 
