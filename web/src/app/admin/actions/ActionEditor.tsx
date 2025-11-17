@@ -400,10 +400,24 @@ const ToolSchema = Yup.object().shape({
   definition: Yup.string().required("Action definition is required"),
   customHeaders: Yup.array()
     .of(
-      Yup.object().shape({
-        key: Yup.string().required("Header key is required"),
-        value: Yup.string().required("Header value is required"),
-      })
+      Yup.object()
+        .shape({
+          key: Yup.string(),
+          value: Yup.string(),
+        })
+        .test(
+          "header-complete",
+          "Both header key and value are required",
+          function (header) {
+            const { key = "", value = "" } = header;
+            // Allow completely empty headers (they'll be filtered out on submit)
+            if (key.trim() === "" && value.trim() === "") {
+              return true;
+            }
+            // If either field is filled, both are required
+            return key.trim() !== "" && value.trim() !== "";
+          }
+        )
     )
     .default([]),
   passthrough_auth: Yup.boolean().default(false),
@@ -458,9 +472,6 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
                 "headers first.",
               type: "error",
             });
-            console.log(
-              "Cannot enable passthrough auth when Authorization headers are present. Please remove any Authorization headers first."
-            );
             return;
           }
 
@@ -482,20 +493,37 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
             passthrough_auth: values.passthrough_auth,
             oauth_config_id: values.oauth_config_id,
           };
+          const handleResponseError = (response: {
+            error: string | null;
+          }): boolean => {
+            if (response.error) {
+              setPopup({
+                message: `Failed to ${tool ? "update" : "create"} action - ${
+                  response.error
+                }`,
+                type: "error",
+              });
+              return true;
+            }
+            return false;
+          };
+
           let response;
           if (tool) {
             response = await updateCustomTool(tool.id, toolData);
+            if (handleResponseError(response)) {
+              return;
+            }
+            // Redirect to the actions list page after updating
+            router.push(`/admin/actions?u=${Date.now()}`);
           } else {
             response = await createCustomTool(toolData);
+            if (handleResponseError(response)) {
+              return;
+            }
+            // Redirect to the actions list page after creating
+            router.push(`/admin/actions?u=${Date.now()}`);
           }
-          if (response.error) {
-            setPopup({
-              message: "Failed to create action - " + response.error,
-              type: "error",
-            });
-            return;
-          }
-          router.push(`/admin/actions?u=${Date.now()}`);
         }}
       >
         {({ isSubmitting, values, setFieldValue }) => {
