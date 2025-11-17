@@ -28,7 +28,7 @@ from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
 
-JIRA_API_VERSION = os.environ.get("JIRA_API_VERSION") or "2"
+JIRA_API_VERSION = os.environ.get("JIRA_API_VERSION") or "3"
 _JIRA_FULL_PAGE_SIZE = 50
 
 
