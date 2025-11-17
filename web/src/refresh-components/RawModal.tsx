@@ -3,7 +3,6 @@ import ReactDOM from "react-dom";
 import { MODAL_ROOT_ID } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useEscape } from "@/hooks/useKeyPress";
-import { useClickOutside } from "@/lib/hooks";
 
 export interface SimpleModalProps {
   className?: string;
@@ -19,7 +18,6 @@ export default function RawModal({
   const modalRef = React.useRef<HTMLDivElement>(null);
 
   useEscape(onClose ?? (() => {}));
-  useClickOutside(() => onClose?.(), [modalRef], !!onClose);
 
   // Focus this `CoreModal` component when it mounts.
   // This is important, becaues it causes open popovers or things of the sort to CLOSE automatically (this is desired behaviour).
@@ -37,7 +35,14 @@ export default function RawModal({
     );
 
   const modalContent = (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-mask-03 backdrop-blur-03">
+    <div
+      className="fixed inset-0 z-[2000] flex items-center justify-center bg-mask-03 backdrop-blur-03"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose?.();
+        }
+      }}
+    >
       <div
         ref={modalRef}
         className={cn(
