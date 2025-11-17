@@ -3,6 +3,7 @@ Unit tests for fast_chat_turn that exercise the new agent framework query loop.
 """
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 from uuid import uuid4
@@ -39,7 +40,13 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from tests.unit.onyx.agents.agent_framework.conftest import FakeTool
 from tests.unit.onyx.chat.turn.utils import create_test_inference_section
 from tests.unit.onyx.chat.turn.utils import create_test_iteration_answer
-from tests.unit.onyx.chat.turn.utils import FakeRedis
+
+
+@dataclass
+class CancellationConfig:
+    cancel_after_response_index: int
+    fake_redis_client: Redis
+    chat_session_id: UUID
 
 
 class ScriptedFakeLLM(LLM):
@@ -48,12 +55,10 @@ class ScriptedFakeLLM(LLM):
     def __init__(
         self,
         scripted_responses: list[list[ModelResponseStream]],
-        cancel_after_response_index: int | None = None,
-        fake_redis_client: FakeRedis | None = None,
-        chat_session_id: UUID | None = None,
+        cancellation_config: CancellationConfig | None = None,
     ) -> None:
         self._scripts = scripted_responses
-        self._cancel_after_response_index = cancel_after_response_index
+        self._cancellation_config = cancellation_config
         self._config = LLMConfig(
             model_provider="fake-provider",
             model_name="fake-model",
@@ -62,8 +67,6 @@ class ScriptedFakeLLM(LLM):
         )
         self._call_index = 0
         self.stream_calls: list[dict[str, Any]] = []
-        self._fake_redis_client = fake_redis_client
-        self._chat_session_id = chat_session_id
 
     @property
     def config(self) -> LLMConfig:
@@ -115,11 +118,9 @@ class ScriptedFakeLLM(LLM):
             }
         )
         for i, chunk in enumerate(script):
-            if (
-                self._cancel_after_response_index is not None
-                and i > self._cancel_after_response_index
-            ):
-                set_fence(self._chat_session_id, self._fake_redis_client, True)
+            config = self._cancellation_config
+            if config and i > config.cancel_after_response_index:
+                set_fence(config.chat_session_id, config.fake_redis_client, True)
             yield chunk
 
 
@@ -214,13 +215,9 @@ def tool_call_chunk(
 def configure_llm(
     dependencies: ChatTurnDependencies,
     scripts: list[list[ModelResponseStream]],
-    cancel_after_response_index: int | None = None,
-    fake_redis_client: Redis | None = None,
-    chat_session_id: UUID | None = None,
+    cancellation_config: CancellationConfig | None = None,
 ) -> ScriptedFakeLLM:
-    llm = ScriptedFakeLLM(
-        scripts, cancel_after_response_index, fake_redis_client, chat_session_id
-    )
+    llm = ScriptedFakeLLM(scripts, cancellation_config)
     dependencies.llm = llm
     return llm
 
@@ -555,9 +552,11 @@ def test_fast_chat_turn_handles_cancellation_before_content(
                 stream_chunk(finish_reason="stop"),
             ]
         ],
-        cancel_after_response_index=0,
-        fake_redis_client=chat_turn_dependencies.redis_client,
-        chat_session_id=chat_session_id,
+        cancellation_config=CancellationConfig(
+            cancel_after_response_index=0,
+            fake_redis_client=chat_turn_dependencies.redis_client,
+            chat_session_id=chat_session_id,
+        ),
     )
     generator = fast_chat_turn(
         sample_messages,
@@ -599,9 +598,11 @@ def test_fast_chat_turn_handles_cancellation_mid_stream(
                 stream_chunk(finish_reason="stop"),
             ]
         ],
-        cancel_after_response_index=0,
-        fake_redis_client=chat_turn_dependencies.redis_client,
-        chat_session_id=chat_session_id,
+        cancellation_config=CancellationConfig(
+            cancel_after_response_index=0,
+            fake_redis_client=chat_turn_dependencies.redis_client,
+            chat_session_id=chat_session_id,
+        ),
     )
     prompt_config = PromptConfig(
         default_behavior_system_prompt="You are a helpful assistant.",
