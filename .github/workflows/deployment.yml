@@ -400,3 +400,40 @@ jobs:
               --timeout 20m \
               --severity CRITICAL,HIGH \
               docker.io/${REGISTRY_IMAGE}:${{ github.ref_name }}
+
+  notify-slack-on-failure:
+    needs: [build-web, build-web-cloud, build-backend, build-model-server]
+    if: always() && (needs.build-web.result == 'failure' || needs.build-web-cloud.result == 'failure' || needs.build-backend.result == 'failure' || needs.build-model-server.result == 'failure') && github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-slim
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+
+      - name: Determine failed jobs
+        id: failed-jobs
+        shell: bash
+        run: |
+          FAILED_JOBS=""
+          if [ "${{ needs.build-web.result }}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• build-web\\n"
+          fi
+          if [ "${{ needs.build-web-cloud.result }}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• build-web-cloud\\n"
+          fi
+          if [ "${{ needs.build-backend.result }}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• build-backend\\n"
+          fi
+          if [ "${{ needs.build-model-server.result }}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• build-model-server\\n"
+          fi
+          # Remove trailing \n and set output
+          FAILED_JOBS=$(printf '%s' "$FAILED_JOBS" | sed 's/\\n$//')
+          echo "jobs=$FAILED_JOBS" >> "$GITHUB_OUTPUT"
+
+      - name: Send Slack notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
+          failed-jobs: ${{ steps.failed-jobs.outputs.jobs }}
+          title: "🚨 Deployment Workflow Failed"
+          ref-name: ${{ github.ref_name }}

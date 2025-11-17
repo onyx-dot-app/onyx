@@ -85,7 +85,7 @@ class SlackFederatedConnector(FederatedConnector):
             ),
             "channels": EntityField(
                 type="list[str]",
-                description="Search the only the following channels.",
+                description="Search the following channels",
                 required=False,
                 example=["general", "eng*", "product-*"],
             ),

@@ -121,13 +121,10 @@ function Root({
   children,
 }: RootProps) {
   const variant = disabled ? "disabled" : error ? "error" : "main";
-  const [isOpen, setIsOpen] = React.useState(false);
-
   const isControlled = value !== undefined;
   const [internalValue, setInternalValue] = React.useState<string | undefined>(
     defaultValue
   );
-
   const currentValue = isControlled ? value : internalValue;
 
   React.useEffect(() => {
@@ -172,7 +169,6 @@ function Root({
       defaultValue={defaultValue}
       onValueChange={handleValueChange}
       disabled={disabled}
-      onOpenChange={setIsOpen}
     >
       <SelectPrimitive.Trigger
         className={cn(

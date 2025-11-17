@@ -14,7 +14,7 @@ export function DeleteToolButton({ toolId }: { toolId: number }) {
       onClick={async () => {
         const response = await deleteCustomTool(toolId);
         if (response.data) {
-          router.push(`/admin/tools?u=${Date.now()}`);
+          router.push(`/admin/actions?u=${Date.now()}`);
         } else {
           alert(`Failed to delete tool - ${response.error}`);
         }
