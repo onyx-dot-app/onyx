@@ -10,13 +10,7 @@ import {
 import Text from "@/components/ui/text";
 
 import { FiDownload } from "react-icons/fi";
-import {
-  Select,
-  SelectItem,
-  SelectValue,
-  SelectTrigger,
-  SelectContent,
-} from "@/components/ui/select";
+import * as InputSelect from "@/refresh-components/inputs/InputSelect";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ChatSessionMinimal } from "../usage/types";
 import { timestampToReadableDate } from "@/lib/dateUtils";
@@ -50,6 +44,9 @@ import { humanReadableFormatWithTime } from "@/lib/time";
 import { Modal } from "@/components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { Badge } from "@/components/ui/badge";
+import SvgMinusCircle from "@/icons/minus-circle";
+import SvgThumbsDown from "@/icons/thumbs-down";
+import SvgThumbsUp from "@/icons/thumbs-up";
 
 function QueryHistoryTableRow({
   chatSessionMinimal,
@@ -103,40 +100,23 @@ function SelectFeedbackType({
     <div>
       <Text className="my-auto mr-2 font-medium mb-1">Feedback Type</Text>
       <div className="max-w-sm space-y-6">
-        <Select
+        <InputSelect.Root
           value={value}
           onValueChange={onValueChange as (value: string) => void}
         >
-          <SelectTrigger>
-            <SelectValue placeholder="Select feedback type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">
-              <div className="flex items-center gap-2">
-                <FiMinus className="h-4 w-4" />
-                <span>Any</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="like">
-              <div className="flex items-center gap-2">
-                <FiSmile className="h-4 w-4" />
-                <span>Like</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="dislike">
-              <div className="flex items-center gap-2">
-                <FiFrown className="h-4 w-4" />
-                <span>Dislike</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="mixed">
-              <div className="flex items-center gap-2">
-                <FiMeh className="h-4 w-4" />
-                <span>Mixed</span>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
+          <InputSelect.Item value="all" icon={SvgMinusCircle}>
+            Any
+          </InputSelect.Item>
+          <InputSelect.Item value="like" icon={SvgThumbsUp}>
+            Like
+          </InputSelect.Item>
+          <InputSelect.Item value="dislike" icon={SvgThumbsDown}>
+            Dislike
+          </InputSelect.Item>
+          <InputSelect.Item value="mixed" icon={FiMeh}>
+            Mixed
+          </InputSelect.Item>
+        </InputSelect.Root>
       </div>
     </div>
   );

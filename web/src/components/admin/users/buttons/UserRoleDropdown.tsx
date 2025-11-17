@@ -7,26 +7,22 @@ import {
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import * as InputSelect from "@/refresh-components/inputs/InputSelect";
 import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
 import { useState } from "react";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
-const UserRoleDropdown = ({
-  user,
-  onSuccess,
-  onError,
-}: {
+export interface UserRoleDropdownProps {
   user: User;
   onSuccess: () => void;
   onError: (message: string) => void;
-}) => {
+}
+
+export default function UserRoleDropdown({
+  user,
+  onSuccess,
+  onError,
+}: UserRoleDropdownProps) {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingRole, setPendingRole] = useState<string | null>(null);
 
@@ -63,50 +59,6 @@ const UserRoleDropdown = ({
 
   return (
     <>
-      <Select
-        value={user.role}
-        onValueChange={handleChange}
-        disabled={isSettingRole}
-      >
-        <SelectTrigger data-testid={`user-role-dropdown-trigger-${user.email}`}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {(Object.entries(USER_ROLE_LABELS) as [UserRole, string][]).map(
-            ([role, label]) => {
-              // Don't want to ever show external permissioned users because it's scary
-              if (role === UserRole.EXT_PERM_USER) return null;
-
-              // Only want to show limited users if paid enterprise features are enabled
-              // Also, dont want to show these other roles in general
-              const isNotVisibleRole =
-                (!isPaidEnterpriseFeaturesEnabled &&
-                  role === UserRole.GLOBAL_CURATOR) ||
-                role === UserRole.CURATOR ||
-                role === UserRole.LIMITED ||
-                role === UserRole.SLACK_USER;
-
-              // Always show the current role
-              const isCurrentRole = user.role === role;
-
-              return isNotVisibleRole && !isCurrentRole ? null : (
-                <SelectItem
-                  key={role}
-                  onClick={() => {
-                    console.log("clicked");
-                  }}
-                  value={role}
-                  data-testid={`user-role-dropdown-${role}`}
-                  title={INVALID_ROLE_HOVER_TEXT[role] ?? ""}
-                  data-tooltip-delay="0"
-                >
-                  {label}
-                </SelectItem>
-              );
-            }
-          )}
-        </SelectContent>
-      </Select>
       {showConfirmModal && (
         <GenericConfirmModal
           title="Change Curator Role"
@@ -122,8 +74,43 @@ const UserRoleDropdown = ({
           onConfirm={handleConfirm}
         />
       )}
+
+      <InputSelect.Root
+        value={user.role}
+        onValueChange={handleChange}
+        disabled={isSettingRole}
+      >
+        {(Object.entries(USER_ROLE_LABELS) as [UserRole, string][]).map(
+          ([role, label]) => {
+            // Don't want to ever show external permissioned users because it's scary
+            if (role === UserRole.EXT_PERM_USER) return null;
+
+            // Only want to show limited users if paid enterprise features are enabled
+            // Also, dont want to show these other roles in general
+            const isNotVisibleRole =
+              (!isPaidEnterpriseFeaturesEnabled &&
+                role === UserRole.GLOBAL_CURATOR) ||
+              role === UserRole.CURATOR ||
+              role === UserRole.LIMITED ||
+              role === UserRole.SLACK_USER;
+
+            // Always show the current role
+            const isCurrentRole = user.role === role;
+
+            return isNotVisibleRole && !isCurrentRole ? null : (
+              <InputSelect.Item
+                key={role}
+                value={role}
+                data-testid={`user-role-dropdown-${role}`}
+                title={INVALID_ROLE_HOVER_TEXT[role] ?? ""}
+                data-tooltip-delay="0"
+              >
+                {label}
+              </InputSelect.Item>
+            );
+          }
+        )}
+      </InputSelect.Root>
     </>
   );
-};
-
-export default UserRoleDropdown;
+}
