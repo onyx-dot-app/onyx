@@ -18,7 +18,9 @@ from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
-_GENERIC_ERROR_MESSAGE = "PythonTool should only be used by the Deep Research Agent with v2 tools, not via direct tool calling."
+_GENERIC_ERROR_MESSAGE = (
+    "PythonTool should only be used with v2 tools, not via direct calls to PythonTool."
+)
 
 
 class PythonTool(Tool[None]):
