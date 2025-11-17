@@ -463,3 +463,84 @@ def test_query_emits_reasoning_done_before_message_start(
     assert len(result.new_messages_stateful) == 1
     assert result.new_messages_stateful[0]["role"] == "assistant"
     assert result.new_messages_stateful[0]["content"] == "Based on my analysis"
+
+
+def test_query_treats_tool_like_message_as_tool_call(
+    fake_llm: Callable[[list[ModelResponseStream]], Any],
+    fake_internal_search_tool: FakeTool,
+) -> None:
+    """Test that query treats JSON message content as a tool call when structured_response_format is empty."""
+    stream_id = "chatcmpl-tool-like-message"
+
+    responses = [
+        stream_chunk(
+            id=stream_id,
+            created="1762545000",
+            content='{"name": "internal_search", ',
+        ),
+        stream_chunk(
+            id=stream_id,
+            created="1762545000",
+            content='"arguments": {"queries": ["new agent", "framework"]}',
+        ),
+        stream_chunk(id=stream_id, created="1762545000", content="}"),
+        stream_chunk(id=stream_id, created="1762545000", finish_reason="stop"),
+    ]
+
+    llm = fake_llm(responses)
+    context: dict[str, bool] = {}
+    messages: list[ChatCompletionMessage] = [
+        {"role": "user", "content": "tell me about agents"}
+    ]
+
+    result = query(
+        llm,
+        messages,
+        tools=[fake_internal_search_tool],
+        context=context,
+        tool_choice=None,
+        structured_response_format={},
+    )
+
+    events = list(result.stream)
+    run_item_events = [e for e in events if isinstance(e, RunItemStreamEvent)]
+
+    tool_call_events = [e for e in run_item_events if e.type == "tool_call"]
+    assert len(tool_call_events) == 1
+    assert tool_call_events[0].details is not None
+    assert isinstance(tool_call_events[0].details, ToolCallStreamItem)
+    assert tool_call_events[0].details.name == "internal_search"
+    assert (
+        tool_call_events[0].details.arguments
+        == '{"queries": ["new agent", "framework"]}'
+    )
+
+    assert len(fake_internal_search_tool.calls) == 1
+    assert fake_internal_search_tool.calls[0]["queries"] == ["new agent", "framework"]
+    assert context["internal_search_called"] is True
+
+    tool_output_events = [e for e in run_item_events if e.type == "tool_call_output"]
+    assert len(tool_output_events) == 1
+    assert tool_output_events[0].details is not None
+    assert isinstance(tool_output_events[0].details, ToolCallOutputStreamItem)
+    assert (
+        tool_output_events[0].details.output
+        == "Internal Search results for: new agent, framework"
+    )
+
+    assert len(result.new_messages_stateful) == 2
+    assert result.new_messages_stateful[0]["role"] == "assistant"
+    assert result.new_messages_stateful[0]["content"] is None
+    assert len(result.new_messages_stateful[0]["tool_calls"]) == 1
+    assert (
+        result.new_messages_stateful[0]["tool_calls"][0]["function"]["name"]
+        == "internal_search"
+    )
+    assert result.new_messages_stateful[1]["role"] == "tool"
+    assert (
+        result.new_messages_stateful[1]["tool_call_id"]
+        == tool_call_events[0].details.call_id
+    )
+    assert result.new_messages_stateful[1]["content"] == (
+        "Internal Search results for: new agent, framework"
+    )

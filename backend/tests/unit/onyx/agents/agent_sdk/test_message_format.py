@@ -3,6 +3,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage as LangChainSystemMessage
 
 from onyx.agents.agent_sdk.message_format import base_messages_to_agent_sdk_msgs
+from onyx.agents.agent_sdk.message_format import base_messages_to_chat_completion_msgs
 from onyx.agents.agent_sdk.message_types import AssistantMessageWithContent
 from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import OutputTextContent
@@ -212,3 +213,46 @@ def test_assistant_message_list_content_non_responses_api() -> None:
     assert second_content["type"] == "input_text"
     text_content2: InputTextContent = second_content  # type: ignore[assignment]
     assert text_content2["text"] == "It's known for the Eiffel Tower."
+
+
+def test_base_messages_to_chat_completion_msgs_basic() -> None:
+    """Ensure system and user messages convert to chat completion format."""
+    system_message = LangChainSystemMessage(
+        content="You are a helpful assistant.",
+        additional_kwargs={},
+        response_metadata={},
+    )
+    human_message = HumanMessage(
+        content="hello",
+        additional_kwargs={},
+        response_metadata={},
+    )
+
+    results = base_messages_to_chat_completion_msgs([system_message, human_message])
+
+    assert results == [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "hello"},
+    ]
+
+
+def test_base_messages_to_chat_completion_msgs_with_tool_call() -> None:
+    """Ensure assistant messages with tool calls are preserved."""
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": "call_1",
+                "name": "internal_search",
+                "args": {"query": "test"},
+            }
+        ],
+        additional_kwargs={},
+        response_metadata={},
+    )
+
+    results = base_messages_to_chat_completion_msgs([ai_message])
+
+    assert len(results) == 1
+    assert results[0]["role"] == "assistant"
+    assert results[0]["tool_calls"][0]["function"]["name"] == "internal_search"
