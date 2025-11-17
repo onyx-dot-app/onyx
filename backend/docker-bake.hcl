@@ -20,5 +20,8 @@ target "integration" {
     base = "target:backend"
   }
 
+  cache-from = ["type=registry,ref=${REPOSITORY}:integration-test-backend-cache"]
+  cache-to   = ["type=registry,ref=${REPOSITORY}:integration-test-backend-cache,mode=max"]
+
   tags      = ["${REPOSITORY}:${TAG}"]
 }
