@@ -158,8 +158,6 @@ export default function InputSelect({
           </div>
         </button>
 
-        {/*{shouldRender && (
-        )}*/}
         <div
           ref={dropdownRef}
           className={cn(
