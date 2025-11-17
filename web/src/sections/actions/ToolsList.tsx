@@ -30,7 +30,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
   return (
     <div
       className={cn(
-        "flex flex-col gap-1 items-start max-h-[480px] overflow-y-auto pl-8 pr-2 pt-2 pb-2",
+        "flex flex-col gap-1 items-start max-h-[480px] overflow-y-auto w-full",
         className
       )}
     >

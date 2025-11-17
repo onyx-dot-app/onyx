@@ -1,12 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import SvgServer from "@/icons/server";
 import ActionCardHeader from "./ActionCardHeader";
 import MCPActions from "./MCPActions";
 import ToolsSection from "./ToolsSection";
-import type { Tool } from "./ToolsList";
+import ToolsList, { Tool } from "./ToolsList";
 
 import type { MCPActionStatus } from "./types";
 import CardSection from "@/components/admin/CardSection";
@@ -62,6 +62,10 @@ export default function ActionCard({
   onDisableAllTools,
   className,
 }: ActionCardProps) {
+  const [isToolsExpanded, setIsToolsExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredTools, setFilteredTools] = useState<Tool[]>([]);
+
   const isConnected = status === "connected";
   const isPending = status === "pending";
   const isDisconnected = status === "disconnected";
@@ -80,50 +84,76 @@ export default function ActionCard({
 
   const showToolsSection = isConnected || isDisconnected;
 
+  const handleExpandedChange = (
+    isExpanded: boolean,
+    query: string,
+    filtered: Tool[]
+  ) => {
+    setIsToolsExpanded(isExpanded);
+    setSearchQuery(query);
+    setFilteredTools(filtered);
+  };
+
   return (
-    <CardSection
+    <div
       className={cn(
-        "flex flex-col p-2 w-full",
+        "w-full",
         backgroundColor,
-        "border border-border-01",
+        "border border-border-01 rounded-16",
         className
       )}
       role="article"
       aria-label={`${title} MCP server card`}
     >
-      {/* Header Section */}
-      <div className="flex items-start justify-between w-full">
-        <ActionCardHeader
-          title={title}
-          description={description}
-          icon={icon}
-          status={status}
-          onEdit={onEdit}
-        />
+      <div className="flex flex-col p-2 w-full">
+        {/* Header Section */}
+        <div className="flex items-start justify-between w-full">
+          <ActionCardHeader
+            title={title}
+            description={description}
+            icon={icon}
+            status={status}
+            onEdit={onEdit}
+          />
 
-        {/* Action Buttons */}
-        <MCPActions
-          status={status}
-          serverName={title}
-          onDisconnect={onDisconnect}
-          onManage={onManage}
-          onAuthenticate={onAuthenticate}
-          onReconnect={onReconnect}
-          onDelete={onDelete}
-        />
+          {/* Action Buttons */}
+          <MCPActions
+            status={status}
+            serverName={title}
+            onDisconnect={onDisconnect}
+            onManage={onManage}
+            onAuthenticate={onAuthenticate}
+            onReconnect={onReconnect}
+            onDelete={onDelete}
+          />
+        </div>
+
+        {/* Tools Section (Connected/Disconnected state only) */}
+        {showToolsSection && (
+          <ToolsSection
+            serverName={title}
+            toolCount={toolCount}
+            tools={tools}
+            onRefresh={onRefreshTools}
+            onDisableAll={onDisableAllTools}
+            onExpandedChange={handleExpandedChange}
+          />
+        )}
       </div>
 
-      {/* Tools Section (Connected/Disconnected state only) */}
-      {showToolsSection && (
-        <ToolsSection
-          serverName={title}
-          toolCount={toolCount}
-          tools={tools}
-          onToolToggle={onToolToggle}
-          onRefresh={onRefreshTools}
-          onDisableAll={onDisableAllTools}
-        />
+      {/* Tools List - Only render when expanded */}
+      {isToolsExpanded && (
+        <div
+          className="animate-in fade-in slide-in-from-top-2 duration-300 pt-1"
+          style={{ animationFillMode: "both" }}
+        >
+          <ToolsList
+            tools={filteredTools}
+            searchQuery={searchQuery}
+            onToolToggle={onToolToggle}
+          />
+        </div>
       )}
-    </CardSection>
+    </div>
   );
 }
