@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import { cn } from "@/lib/utils";
 import SvgServer from "@/icons/server";
 import ActionCardHeader from "./ActionCardHeader";
 import MCPActions from "./MCPActions";
 import ToolsSection from "./ToolsSection";
 import ToolsList, { Tool } from "./ToolsList";
-
+import { cn } from "@/lib/utils";
 import type { MCPActionStatus } from "./types";
 import CardSection from "@/components/admin/CardSection";
 
@@ -64,7 +63,7 @@ export default function ActionCard({
 }: ActionCardProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filteredTools, setFilteredTools] = useState<Tool[]>([]);
+  const [filteredTools, setFilteredTools] = useState<Tool[]>(tools || []);
 
   const isConnected = status === "connected";
   const isPending = status === "pending";
@@ -82,16 +81,23 @@ export default function ActionCard({
       ? "bg-background-neutral-02"
       : "";
 
-  const showToolsSection = isConnected || isDisconnected;
+  const handleToggleTools = () => {
+    setIsToolsExpanded(!isToolsExpanded);
+    if (!isToolsExpanded) {
+      setSearchQuery("");
+      setFilteredTools(tools || []);
+    }
+  };
 
-  const handleExpandedChange = (
-    isExpanded: boolean,
-    query: string,
-    filtered: Tool[]
-  ) => {
-    setIsToolsExpanded(isExpanded);
+  const handleSearchChange = (query: string, filtered: Tool[]) => {
     setSearchQuery(query);
     setFilteredTools(filtered);
+  };
+
+  const handleFold = () => {
+    setIsToolsExpanded(false);
+    setSearchQuery("");
+    setFilteredTools(tools || []);
   };
 
   return (
@@ -105,9 +111,9 @@ export default function ActionCard({
       role="article"
       aria-label={`${title} MCP server card`}
     >
-      <div className="flex flex-col p-2 w-full">
+      <div className="flex flex-col w-full">
         {/* Header Section */}
-        <div className="flex items-start justify-between w-full">
+        <div className="flex items-start justify-between pb-2 pl-3 pt-3 pr-2 w-full">
           <ActionCardHeader
             title={title}
             description={description}
@@ -125,28 +131,28 @@ export default function ActionCard({
             onAuthenticate={onAuthenticate}
             onReconnect={onReconnect}
             onDelete={onDelete}
+            toolCount={toolCount}
+            isToolsExpanded={isToolsExpanded}
+            onToggleTools={handleToggleTools}
           />
         </div>
 
-        {/* Tools Section (Connected/Disconnected state only) */}
-        {showToolsSection && (
+        {/* Tools Section (Only when expanded) */}
+        {isToolsExpanded && (
           <ToolsSection
             serverName={title}
-            toolCount={toolCount}
             tools={tools}
             onRefresh={onRefreshTools}
             onDisableAll={onDisableAllTools}
-            onExpandedChange={handleExpandedChange}
+            onFold={handleFold}
+            onSearchChange={handleSearchChange}
           />
         )}
       </div>
 
       {/* Tools List - Only render when expanded */}
       {isToolsExpanded && (
-        <div
-          className="animate-in fade-in slide-in-from-top-2 duration-300 pt-1"
-          style={{ animationFillMode: "both" }}
-        >
+        <div className="animate-in fade-in slide-in-from-top-2 duration-300 p-2 border-t border-border-01">
           <ToolsList
             tools={filteredTools}
             searchQuery={searchQuery}

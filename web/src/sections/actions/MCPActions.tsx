@@ -8,6 +8,8 @@ import SvgTrash from "@/icons/trash";
 import Button from "@/refresh-components/buttons/Button";
 import SvgPlug from "@/icons/plug";
 import SvgArrowExchange from "@/icons/arrow-exchange";
+import SvgChevronDown from "@/icons/chevron-down";
+import LineItem from "@/refresh-components/buttons/LineItem";
 
 interface MCPActionsProps {
   status: MCPActionStatus;
@@ -17,6 +19,9 @@ interface MCPActionsProps {
   onAuthenticate?: () => void;
   onReconnect?: () => void;
   onDelete?: () => void;
+  toolCount?: number;
+  isToolsExpanded?: boolean;
+  onToggleTools?: () => void;
 }
 
 const MCPActions: React.FC<MCPActionsProps> = React.memo(
@@ -28,30 +33,51 @@ const MCPActions: React.FC<MCPActionsProps> = React.memo(
     onAuthenticate,
     onReconnect,
     onDelete,
+    toolCount,
+    isToolsExpanded,
+    onToggleTools,
   }) => {
+    const showViewToolsButton =
+      (status === "connected" || status === "disconnected") &&
+      !isToolsExpanded &&
+      onToggleTools;
+
     // Connected state
     if (status === "connected") {
       return (
-        <div className="flex items-center shrink-0">
-          {onDisconnect && (
-            <IconButton
-              icon={SvgUnplug}
-              tooltip="Disconnect Server"
+        <div className="flex flex-col gap-1 items-end">
+          <div className="flex items-center">
+            {onDisconnect && (
+              <IconButton
+                icon={SvgUnplug}
+                tooltip="Disconnect Server"
+                tertiary
+                onClick={onDisconnect}
+                className="h-9 w-9"
+                aria-label={`Disconnect ${serverName} server`}
+              />
+            )}
+            {onManage && (
+              <IconButton
+                icon={SvgSettings}
+                tooltip="Manage Server"
+                tertiary
+                onClick={onManage}
+                className="h-9 w-9"
+                aria-label={`Manage ${serverName} server`}
+              />
+            )}
+          </div>
+          {showViewToolsButton && (
+            <Button
               tertiary
-              onClick={onDisconnect}
-              className="h-9 w-9"
-              aria-label={`Disconnect ${serverName} server`}
-            />
-          )}
-          {onManage && (
-            <IconButton
-              icon={SvgSettings}
-              tooltip="Manage Server"
-              tertiary
-              onClick={onManage}
-              className="h-9 w-9"
-              aria-label={`Manage ${serverName} server`}
-            />
+              onClick={onToggleTools}
+              rightIcon={SvgChevronDown}
+              aria-label={`View tools for ${serverName}`}
+              className="mr-0.5"
+            >
+              {`View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
+            </Button>
           )}
         </div>
       );
@@ -100,27 +126,41 @@ const MCPActions: React.FC<MCPActionsProps> = React.memo(
 
     // Disconnected state
     return (
-      <div className="flex gap-1 items-end p-1 shrink-0">
-        {onReconnect && (
+      <div className="flex flex-col gap-1 items-end shrink-0">
+        <div className="flex gap-1 items-end">
+          {onReconnect && (
+            <Button
+              secondary
+              onClick={onReconnect}
+              rightIcon={SvgPlug}
+              className="bg-background-tint-01 border border-border-01"
+              aria-label={`Reconnect to ${serverName}`}
+            >
+              Reconnect
+            </Button>
+          )}
+          {onManage && (
+            <IconButton
+              icon={SvgSettings}
+              tooltip="Manage Server"
+              tertiary
+              onClick={onManage}
+              className="h-9 w-9"
+              aria-label={`Manage ${serverName} server`}
+            />
+          )}
+        </div>
+        {showViewToolsButton && (
           <Button
-            secondary
-            onClick={onReconnect}
-            rightIcon={SvgPlug}
-            className="bg-background-tint-01 border border-border-01"
-            aria-label={`Reconnect to ${serverName}`}
-          >
-            Reconnect
-          </Button>
-        )}
-        {onManage && (
-          <IconButton
-            icon={SvgSettings}
-            tooltip="Manage Server"
             tertiary
-            onClick={onManage}
-            className="h-9 w-9"
-            aria-label={`Manage ${serverName} server`}
-          />
+            onClick={onToggleTools}
+            rightIcon={SvgChevronDown}
+            aria-label={`View tools for ${serverName}`}
+            className="mr-0.5"
+            disabled
+          >
+            {`View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
+          </Button>
         )}
       </div>
     );

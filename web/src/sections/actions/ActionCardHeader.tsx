@@ -24,7 +24,7 @@ const ActionCardHeader: React.FC<ActionCardHeaderProps> = React.memo(
     const showEditButton = isPending;
 
     return (
-      <div className="flex flex-1 gap-2 items-start max-w-[480px] p-2">
+      <div className="flex flex-1 gap-2 items-start max-w-[480px]">
         <div
           className={cn(
             "flex items-center px-0 py-0.5 shrink-0",
@@ -41,9 +41,14 @@ const ActionCardHeader: React.FC<ActionCardHeaderProps> = React.memo(
                 {title}
               </Text>
             ) : isPending ? (
-              <Text headingH3 text04>
-                {title}
-              </Text>
+              <>
+                <Text headingH3 text04>
+                  {title}
+                </Text>
+                <Text mainUiMuted text03>
+                  (Not Authenticated)
+                </Text>
+              </>
             ) : isDisconnected ? (
               <>
                 <Text headingH3 text03 className="line-through">
