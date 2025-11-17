@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.message import ToolCallSummary
@@ -61,8 +62,6 @@ class PythonTool(Tool[None]):
         Only checks if CODE_INTERPRETER_BASE_URL is set - does not perform health check.
         Service failures will be handled gracefully at execution time.
         """
-        from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
-
         is_available = bool(CODE_INTERPRETER_BASE_URL)
         logger.info(
             "PythonTool.is_available() called: "
