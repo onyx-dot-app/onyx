@@ -1,12 +1,20 @@
 "use client";
 
-import React, { useState, useRef, createContext, useContext } from "react";
+import React, {
+  useState,
+  useRef,
+  createContext,
+  useContext,
+  useEffect,
+  useCallback,
+} from "react";
 import { cn } from "@/lib/utils";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import { useClickOutside } from "@/lib/hooks";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
 import { useEscape } from "@/hooks/useKeyPress";
 import Text from "@/refresh-components/texts/Text";
+import { createPortal } from "react-dom";
 
 // Style maps for different states
 const triggerClasses = {
@@ -130,7 +138,7 @@ export interface InputSelectProps {
   placeholder?: React.ReactNode;
   className?: string;
   rightSection?: React.ReactNode;
-  children: React.ReactElement<InputSelectLineItemProps>[];
+  children?: React.ReactNode;
 }
 
 export default function InputSelect({
@@ -153,12 +161,48 @@ export default function InputSelect({
   );
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(
+    null
+  );
+  const [dropdownPosition, setDropdownPosition] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
   useClickOutside(() => setIsOpen(false), [triggerRef, dropdownRef], isOpen);
   useEscape(() => setIsOpen(false), isOpen);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    setPortalContainer(document.body);
+  }, []);
 
   // Use controlled value if provided, otherwise use internal value
   const isControlled = controlledValue !== undefined;
   const value = isControlled ? controlledValue : internalValue;
+
+  const updateDropdownPosition = useCallback(() => {
+    const triggerEl = triggerRef.current;
+    if (!triggerEl) return;
+    const rect = triggerEl.getBoundingClientRect();
+    const gap = 4; // spacing between trigger and dropdown
+    setDropdownPosition({
+      top: rect.bottom + gap,
+      left: rect.left,
+      width: rect.width,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updateDropdownPosition();
+    window.addEventListener("resize", updateDropdownPosition);
+    window.addEventListener("scroll", updateDropdownPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateDropdownPosition);
+      window.removeEventListener("scroll", updateDropdownPosition, true);
+    };
+  }, [isOpen, updateDropdownPosition]);
 
   function handleSelect(newValue: string) {
     // Update internal state if uncontrolled
@@ -219,18 +263,32 @@ export default function InputSelect({
           </div>
         </button>
 
-        <div
-          ref={dropdownRef}
-          className={cn(
-            "absolute z-[2000] w-full mt-1 max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
-            "transition-all duration-200",
-            isOpen
-              ? "opacity-100 scale-100 translate-y-0"
-              : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
+        {portalContainer &&
+          dropdownPosition &&
+          createPortal(
+            <div
+              ref={dropdownRef}
+              style={{
+                position: "fixed",
+                top: dropdownPosition.top,
+                left: dropdownPosition.left,
+                width: dropdownPosition.width,
+              }}
+              className={cn(
+                "z-[4000] max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1 shadow-lg",
+                "transition-all duration-200",
+                isOpen
+                  ? "opacity-100 scale-100 translate-y-0"
+                  : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
+              )}
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {children}
+            </div>,
+            portalContainer
           )}
-        >
-          {children}
-        </div>
       </div>
     </InputSelectContext.Provider>
   );
