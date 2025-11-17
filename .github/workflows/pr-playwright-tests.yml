@@ -128,23 +128,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Pull Docker images
-        run: |
-          # Pull all images from ECR in parallel
-          echo "Pulling Docker images in parallel..."
-          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}) &
-          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}) &
-          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}) &
-
-          # Wait for all background jobs to complete
-          wait
-          echo "All Docker images pulled successfully"
-
-          # Re-tag with expected names for docker-compose
-          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }} onyxdotapp/onyx-web-server:test
-          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }} onyxdotapp/onyx-model-server:test
-
       - name: Setup node
         uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # ratchet:actions/setup-node@v4
         with:
@@ -177,7 +160,9 @@ jobs:
           EXA_API_KEY=${{ env.EXA_API_KEY }}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
-          IMAGE_TAG=test
+          ONYX_BACKEND_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
+          ONYX_MODEL_SERVER_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
+          ONYX_WEB_SERVER_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
           EOF
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
