@@ -2,8 +2,9 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { Switch } from "@/components/ui/switch";
+import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
+import SvgAlertTriangle from "@/icons/alert-triangle";
 
 export interface ToolItemProps {
   // Tool information
@@ -62,15 +63,14 @@ const ToolItem: React.FC<ToolItemProps> = ({
         {/* Content Container */}
         <div className="flex flex-col items-start flex-1 min-w-0">
           {/* Tool Name */}
-          <div className="flex items-center w-full min-h-[20px] px-0.5 relative">
-            <Text mainUiAction text04 className={cn("relative", textOpacity)}>
+          <div className="flex items-center w-full min-h-[20px] px-0.5">
+            <Text
+              mainUiAction
+              text04
+              className={cn(textOpacity, !isAvailable && "line-through")}
+            >
               {name}
             </Text>
-
-            {/* Strikethrough for unavailable items */}
-            {!isAvailable && (
-              <div className="absolute left-0.5 right-0.5 top-1/2 h-[1.5px] bg-text-02 -translate-y-1/2" />
-            )}
           </div>
 
           {/* Description */}
@@ -98,28 +98,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
                 </Text>
               </div>
               <div className="flex items-center justify-center p-0.5 w-4 h-4">
-                <svg
-                  viewBox="0 0 12 12"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-3 h-3"
-                >
-                  <path
-                    d="M6 11C8.76142 11 11 8.76142 11 6C11 3.23858 8.76142 1 6 1C3.23858 1 1 3.23858 1 6C1 8.76142 3.23858 11 6 11Z"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M6 3.5V6"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx="6" cy="8.5" r="0.5" fill="currentColor" />
-                </svg>
+                <SvgAlertTriangle className="w-3 h-3 stroke-status-warning-05" />
               </div>
             </div>
           </div>
@@ -131,7 +110,6 @@ const ToolItem: React.FC<ToolItemProps> = ({
             checked={isEnabled}
             onCheckedChange={onToggle}
             disabled={!isAvailable}
-            size="sm"
           />
         </div>
       </div>

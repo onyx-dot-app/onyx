@@ -9,15 +9,19 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgRefreshCw from "@/icons/refresh-cw";
 import SvgFold from "@/icons/fold";
-import ToolsList, { Tool } from "./ToolsList";
+import type { Tool } from "./ToolsList";
 
 interface ToolsSectionProps {
   serverName: string;
   toolCount?: number;
   tools?: Tool[];
-  onToolToggle?: (toolId: string, enabled: boolean) => void;
   onRefresh?: () => void;
   onDisableAll?: () => void;
+  onExpandedChange?: (
+    isExpanded: boolean,
+    searchQuery: string,
+    filteredTools: Tool[]
+  ) => void;
   className?: string;
 }
 
@@ -25,9 +29,9 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
   serverName,
   toolCount,
   tools,
-  onToolToggle,
   onRefresh,
   onDisableAll,
+  onExpandedChange,
   className,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -46,40 +50,50 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
     );
   }, [tools, searchQuery]);
 
+  // Notify parent when expanded state or filtered tools change
+  React.useEffect(() => {
+    onExpandedChange?.(isExpanded, searchQuery, filteredTools);
+  }, [isExpanded, searchQuery, filteredTools, onExpandedChange]);
+
   const handleToggle = () => {
-    setIsExpanded(!isExpanded);
-    if (!isExpanded) {
+    const newExpanded = !isExpanded;
+    setIsExpanded(newExpanded);
+    if (newExpanded) {
       setSearchQuery(""); // Reset search when expanding
     }
   };
 
   return (
     <div className={cn("w-full", className)}>
-      {!isExpanded ? (
-        // Collapsed State: Show tool count and View Tools button
-        <div className="flex gap-2 items-center justify-end pl-8 w-full">
-          <div className="flex flex-1 min-w-0 px-0.5">
-            <Text mainUiAction text04 className="flex-1 min-w-0">
-              {toolCount !== undefined
-                ? `${toolCount} tool${toolCount !== 1 ? "s" : ""}`
-                : "0 tools"}
-            </Text>
-          </div>
-          <Button
-            tertiary
-            onClick={handleToggle}
-            rightIcon={SvgChevronDown}
-            className="shrink-0"
-            aria-label={`View tools for ${serverName}`}
-          >
-            View Tools
-          </Button>
-        </div>
-      ) : (
-        // Expanded State: Show search bar, actions, and tools list
-        <div className="flex flex-col w-full">
-          {/* Action Bar - replaces the collapsed view */}
-          <div className="flex gap-1 items-center pl-8 w-full">
+      <div
+        className={cn(
+          "flex gap-1 items-center w-full transition-all duration-300 ease-in-out",
+          !isExpanded && "pl-8 gap-2 justify-end"
+        )}
+      >
+        {!isExpanded ? (
+          // Collapsed State: Tool count and View Tools button
+          <>
+            <div className="flex flex-1 min-w-0 px-0.5">
+              <Text mainUiAction text04 className="flex-1 min-w-0">
+                {toolCount !== undefined
+                  ? `${toolCount} tool${toolCount !== 1 ? "s" : ""}`
+                  : "0 tools"}
+              </Text>
+            </div>
+            <Button
+              tertiary
+              onClick={handleToggle}
+              rightIcon={SvgChevronDown}
+              className="shrink-0"
+              aria-label={`View tools for ${serverName}`}
+            >
+              View Tools
+            </Button>
+          </>
+        ) : (
+          // Expanded State: Search bar and action buttons
+          <>
             {/* Search Bar */}
             <div className="flex-1 min-w-[160px]">
               <InputTypeIn
@@ -88,7 +102,7 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 leftSearchIcon
                 showClearButton
-                className="w-full shadow-[0px_0px_0px_2px_var(--background-tint-04)]"
+                className="w-full"
               />
             </div>
 
@@ -106,43 +120,19 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
 
               {/* Disable All Button */}
               {onDisableAll && (
-                <button
-                  onClick={onDisableAll}
-                  className="flex items-center justify-center overflow-hidden p-1 rounded-08 hover:bg-background-tint-02"
-                >
-                  <div className="flex gap-1 items-center px-1 py-0.5">
-                    <Text text03 secondaryAction className="text-center">
-                      Disable All
-                    </Text>
-                  </div>
-                </button>
+                <Button tertiary onClick={onDisableAll}>
+                  Disable All
+                </Button>
               )}
 
               {/* Fold Button */}
-              <button
-                onClick={handleToggle}
-                className="flex items-center justify-center overflow-hidden p-1 rounded-08 hover:bg-background-tint-02"
-              >
-                <div className="flex gap-1 items-center pl-1 pr-0.5 py-0.5">
-                  <Text text03 secondaryAction className="text-right">
-                    Fold
-                  </Text>
-                </div>
-                <div className="flex items-center p-0.5 w-5 h-5">
-                  <SvgFold className="w-4 h-4 stroke-text-03" />
-                </div>
-              </button>
+              <Button tertiary onClick={handleToggle} rightIcon={SvgFold}>
+                Fold
+              </Button>
             </div>
-          </div>
-
-          {/* Tools List */}
-          <ToolsList
-            tools={filteredTools}
-            searchQuery={searchQuery}
-            onToolToggle={onToolToggle}
-          />
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 };
