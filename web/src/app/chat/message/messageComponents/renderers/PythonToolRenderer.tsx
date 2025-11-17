@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from "react";
-import { FiCode } from "react-icons/fi";
+import SvgCode from "@/icons/code";
 import {
   PacketType,
   PythonToolPacket,
@@ -79,7 +79,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     // Loading state - when executing
     if (isExecuting) {
       return children({
-        icon: FiCode,
+        icon: SvgCode,
         status: "Executing Python code...",
         content: (
           <div className="flex flex-col">
@@ -105,7 +105,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     // Complete state - show output
     if (isComplete) {
       return children({
-        icon: FiCode,
+        icon: SvgCode,
         status: hasError
           ? "Python execution failed"
           : "Python execution completed",
@@ -148,7 +148,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
             )}
             {!stdout && !stderr && (
               <div className="py-4 text-center text-gray-500 dark:text-gray-400">
-                <FiCode className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                <SvgCode className="w-6 h-6 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">No output</p>
               </div>
             )}
@@ -159,7 +159,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
     // Fallback
     return children({
-      icon: FiCode,
+      icon: SvgCode,
       status: status,
       content: <div></div>,
     });
@@ -168,7 +168,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   // Highlight/Short rendering
   if (isExecuting) {
     return children({
-      icon: FiCode,
+      icon: SvgCode,
       status: "Executing Python code...",
       content: (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -191,7 +191,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
   if (hasError) {
     return children({
-      icon: FiCode,
+      icon: SvgCode,
       status: "Python execution failed",
       content: (
         <div className="text-sm text-red-600 dark:text-red-400">
@@ -203,7 +203,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
   if (isComplete) {
     return children({
-      icon: FiCode,
+      icon: SvgCode,
       status: "Python execution completed",
       content: (
         <div className="text-sm text-muted-foreground">
@@ -218,7 +218,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   }
 
   return children({
-    icon: FiCode,
+    icon: SvgCode,
     status: "Python execution",
     content: (
       <div className="text-sm text-muted-foreground">Python execution</div>

@@ -277,7 +277,7 @@ def python(
     Files written to the current directory will be returned with a `file_link`. Use this \
     to give the user a way to download the file OR to display generated images.
 
-    Use `openpyxl` to read and write Excel files. You haveaccess to libraries like \
+    Use `openpyxl` to read and write Excel files. You have access to libraries like \
     numpy, pandas, scipy, matplotlib, and PIL
 
     Args:
