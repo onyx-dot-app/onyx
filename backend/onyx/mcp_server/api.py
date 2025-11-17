@@ -4,9 +4,11 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastmcp import FastMCP
+from starlette.middleware.base import RequestResponseEndpoint
 
 from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
 from onyx.configs.app_configs import MCP_SERVER_NAME
@@ -63,9 +65,14 @@ def create_mcp_fastapi_app() -> FastAPI:
         lifespan=combined_lifespan,
     )
 
-    @app.get("/health")
-    async def health_check() -> JSONResponse:
-        return JSONResponse({"status": "healthy", "service": "mcp_server"})
+    # Public health check endpoint (bypasses MCP auth)
+    @app.middleware("http")
+    async def health_check(
+        request: Request, call_next: RequestResponseEndpoint
+    ) -> JSONResponse:
+        if request.url.path.rstrip("/") == "/health":
+            return JSONResponse({"status": "healthy", "service": "mcp_server"})
+        return await call_next(request)
 
     # Authentication is handled by FastMCP's OnyxPATVerifier (see auth.py)
 
