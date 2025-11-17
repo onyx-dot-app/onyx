@@ -188,7 +188,6 @@ export default function InputSelect({
           onClick={() => !disabled && setIsOpen(!isOpen)}
           className={cn(
             "flex w-full items-center justify-between p-1.5 rounded-08 border",
-            "focus:outline-none",
             triggerClasses[variant],
             className
           )}
