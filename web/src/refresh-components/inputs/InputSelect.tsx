@@ -8,6 +8,35 @@ import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
 import { useEscape } from "@/hooks/useKeyPress";
 import Text from "@/refresh-components/texts/Text";
 
+// Style maps for different states
+const triggerClasses = {
+  main: [
+    "bg-background-neutral-00",
+    "border",
+    "hover:border-border-02",
+    "active:border-border-05",
+    "cursor-pointer",
+  ],
+  error: ["border", "border-status-error-05", "bg-background-neutral-00"],
+  disabled: [
+    "bg-background-neutral-03",
+    "border-border-01",
+    "cursor-not-allowed",
+  ],
+} as const;
+
+const textClasses = {
+  main: ["text-text-04"],
+  error: ["text-text-04"],
+  disabled: ["text-text-01"],
+} as const;
+
+const iconClasses = {
+  main: ["stroke-text-03"],
+  error: ["stroke-text-03"],
+  disabled: ["stroke-text-01"],
+} as const;
+
 // Context to share select state between parent and children
 interface InputSelectContextValue {
   selectedValue: string | undefined;
@@ -58,26 +87,60 @@ export function InputSelectLineItem({
   );
 }
 
+// Display component for selected child in trigger
+interface SelectedLineItemProps {
+  variant: keyof typeof textClasses;
+  props?: InputSelectLineItemProps;
+  placeholder?: React.ReactNode;
+}
+
+function SelectedLineItem({
+  variant,
+  props,
+  placeholder,
+}: SelectedLineItemProps) {
+  if (!props) return placeholder ?? <Text text03>Select an option</Text>;
+
+  return (
+    <div className="flex flex-row items-center gap-2 flex-1">
+      {props.icon && (
+        <props.icon
+          className={cn("h-4 w-4 stroke-text-03", iconClasses[variant])}
+        />
+      )}
+      <Text className={cn(textClasses[variant])}>{props.children}</Text>
+    </div>
+  );
+}
+
 // Main select component
 export interface InputSelectProps {
+  disabled?: boolean;
+  error?: boolean;
+
   value?: string;
   onValueChange?: (value: string) => void;
   defaultValue?: string;
   placeholder?: React.ReactNode;
-  children: React.ReactElement<InputSelectLineItemProps>[];
   className?: string;
-  disabled?: boolean;
+  rightSection?: React.ReactNode;
+  children: React.ReactElement<InputSelectLineItemProps>[];
 }
 
 export default function InputSelect({
+  disabled,
+  error,
+
   value: controlledValue,
   onValueChange,
   defaultValue,
   placeholder,
-  children,
   className,
-  disabled,
+  rightSection,
+  children,
 }: InputSelectProps) {
+  const variant = disabled ? "disabled" : error ? "error" : "main";
+
   const [isOpen, setIsOpen] = useState(false);
   const [internalValue, setInternalValue] = useState<string | undefined>(
     defaultValue
@@ -124,40 +187,37 @@ export default function InputSelect({
           disabled={disabled}
           onClick={() => !disabled && setIsOpen(!isOpen)}
           className={cn(
-            "flex w-full items-center justify-between p-1.5 rounded-08 bg-background-neutral-00 border border-border-01",
-            "hover:border-border-02 active:border-border-05",
-            "disabled:cursor-not-allowed disabled:bg-background-neutral-03",
+            "flex w-full items-center justify-between p-1.5 rounded-08 border",
             "focus:outline-none",
+            triggerClasses[variant],
             className
           )}
         >
           <div className="flex flex-row items-center justify-between w-full p-0.5 gap-1">
-            {selectedChild ? (
-              <div className="flex flex-row items-center gap-2 flex-1">
-                {selectedChild.props.icon && (
-                  <selectedChild.props.icon className="h-4 w-4 stroke-text-03" />
-                )}
-                <span className="text-text-04 font-main-ui-action text-left">
-                  {selectedChild.props.children}
-                </span>
-              </div>
-            ) : (
-              placeholder ?? <Text text03>Select an option</Text>
-            )}
-
-            <SvgChevronDownSmall
-              className={cn(
-                "h-4 w-4 stroke-text-03 transition-transform",
-                isOpen && "rotate-180"
-              )}
+            <SelectedLineItem
+              variant={variant}
+              props={selectedChild?.props}
+              placeholder={placeholder}
             />
+
+            <div className="flex flex-row items-center">
+              {rightSection}
+
+              <SvgChevronDownSmall
+                className={cn(
+                  "h-4 w-4 transition-transform",
+                  iconClasses[variant],
+                  isOpen && "-rotate-180"
+                )}
+              />
+            </div>
           </div>
         </button>
 
         <div
           ref={dropdownRef}
           className={cn(
-            "absolute z-[2000] w-full mt-1 max-h-72 overflow-auto rounded-12 border border-border-01 bg-background-neutral-00 p-1",
+            "absolute z-[2000] w-full mt-1 max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
             "transition-all duration-200",
             isOpen
               ? "opacity-100 scale-100 translate-y-0"
