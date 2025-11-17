@@ -1,16 +1,18 @@
-import React from "react";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import InputSelect, {
+  InputSelectLineItem,
+} from "@/refresh-components/inputs/InputSelect";
 import { MODAL_CONTENT_MAP } from "../constants";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { noProp } from "@/lib/utils";
 
-interface DynamicProviderFieldsProps {
+export interface DynamicProviderFieldsProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   fields: string[];
   modelOptions: Array<{ label: string; value: string }>;
@@ -35,7 +37,7 @@ interface DynamicProviderFieldsProps {
   disabled?: boolean;
 }
 
-export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
+export default function DynamicProviderFields({
   llmDescriptor,
   fields,
   modelOptions,
@@ -52,7 +54,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
   modelsErrorMessage = "",
   showModelsApiErrorMessage = false,
   disabled = false,
-}) => {
+}: DynamicProviderFieldsProps) {
   const modalContent = MODAL_CONTENT_MAP[llmDescriptor.name];
   const handleApiKeyInteraction = (apiKey: string) => {
     if (!apiKey) return;
@@ -219,27 +221,35 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                       }
                     }}
                     error={modelsApiStatus === "error"}
-                    options={modelOptions}
                     disabled={
                       disabled || modelOptions.length === 0 || isFetchingModels
                     }
+                    placeholder="Select a model"
                     rightSection={
                       canFetchModels ? (
                         <IconButton
                           internal
                           icon={SvgRefreshCw}
-                          onClick={(e) => {
+                          onClick={noProp((e) => {
                             e.preventDefault();
-                            e.stopPropagation();
                             onFetchModels?.();
-                          }}
+                          })}
                           tooltip="Fetch available models"
                           disabled={disabled || isFetchingModels}
                           className={isFetchingModels ? "animate-spin" : ""}
                         />
                       ) : undefined
                     }
-                  />
+                  >
+                    {modelOptions.map((option) => (
+                      <InputSelectLineItem
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </InputSelectLineItem>
+                    ))}
+                  </InputSelect>
                 ) : (
                   <InputTypeIn
                     value={field.value}
@@ -300,4 +310,4 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
   };
 
   return <>{fields.map(renderField)}</>;
-};
+}
