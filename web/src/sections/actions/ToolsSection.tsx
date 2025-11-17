@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React from "react";
 import { cn } from "@/lib/utils";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -15,7 +15,8 @@ interface ToolsSectionProps {
   onRefresh?: () => void;
   onDisableAll?: () => void;
   onFold?: () => void;
-  onSearchChange?: (searchQuery: string, filteredTools: Tool[]) => void;
+  searchQuery: string;
+  onSearchQueryChange: (query: string) => void;
   className?: string;
 }
 
@@ -25,31 +26,12 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
   onRefresh,
   onDisableAll,
   onFold,
-  onSearchChange,
+  searchQuery,
+  onSearchQueryChange,
   className,
 }) => {
-  const [searchQuery, setSearchQuery] = useState("");
-
-  // Filter tools based on search query
-  const filteredTools = useMemo(() => {
-    if (!tools) return [];
-    if (!searchQuery.trim()) return tools;
-
-    const query = searchQuery.toLowerCase();
-    return tools.filter(
-      (tool) =>
-        tool.name.toLowerCase().includes(query) ||
-        tool.description.toLowerCase().includes(query)
-    );
-  }, [tools, searchQuery]);
-
-  // Notify parent when search query or filtered tools change
-  React.useEffect(() => {
-    onSearchChange?.(searchQuery, filteredTools);
-  }, [searchQuery, filteredTools, onSearchChange]);
-
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
+    onSearchQueryChange(e.target.value);
   };
 
   return (

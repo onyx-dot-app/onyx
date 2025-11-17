@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import SvgServer from "@/icons/server";
 import ActionCardHeader from "./ActionCardHeader";
 import MCPActions from "./MCPActions";
@@ -8,7 +8,6 @@ import ToolsSection from "./ToolsSection";
 import ToolsList, { Tool } from "./ToolsList";
 import { cn } from "@/lib/utils";
 import type { MCPActionStatus } from "./types";
-import CardSection from "@/components/admin/CardSection";
 
 export interface ActionCardProps {
   // Core content
@@ -63,11 +62,23 @@ export default function ActionCard({
 }: ActionCardProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filteredTools, setFilteredTools] = useState<Tool[]>(tools || []);
 
   const isConnected = status === "connected";
   const isPending = status === "pending";
   const isDisconnected = status === "disconnected";
+
+  // Filter tools based on search query
+  const filteredTools = useMemo(() => {
+    if (!tools) return [];
+    if (!searchQuery.trim()) return tools;
+
+    const query = searchQuery.toLowerCase();
+    return tools.filter(
+      (tool) =>
+        tool.name.toLowerCase().includes(query) ||
+        tool.description.toLowerCase().includes(query)
+    );
+  }, [tools, searchQuery]);
 
   const icon = isConnected ? (
     logo
@@ -85,19 +96,12 @@ export default function ActionCard({
     setIsToolsExpanded(!isToolsExpanded);
     if (!isToolsExpanded) {
       setSearchQuery("");
-      setFilteredTools(tools || []);
     }
-  };
-
-  const handleSearchChange = (query: string, filtered: Tool[]) => {
-    setSearchQuery(query);
-    setFilteredTools(filtered);
   };
 
   const handleFold = () => {
     setIsToolsExpanded(false);
     setSearchQuery("");
-    setFilteredTools(tools || []);
   };
 
   return (
@@ -145,7 +149,8 @@ export default function ActionCard({
             onRefresh={onRefreshTools}
             onDisableAll={onDisableAllTools}
             onFold={handleFold}
-            onSearchChange={handleSearchChange}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
           />
         )}
       </div>

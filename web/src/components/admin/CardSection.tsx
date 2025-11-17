@@ -13,11 +13,11 @@ export default function CardSection({
 }: CardSectionProps) {
   return (
     <div
+      {...props}
       className={cn(
         "p-6 bg-background-neutral-00 rounded-16 border",
         className
       )}
-      {...props}
     >
       {children}
     </div>
