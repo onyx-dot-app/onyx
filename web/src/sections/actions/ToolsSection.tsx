@@ -7,11 +7,8 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgRefreshCw from "@/icons/refresh-cw";
 import SvgFold from "@/icons/fold";
-import type { Tool } from "./ToolsList";
 
 interface ToolsSectionProps {
-  serverName: string;
-  tools?: Tool[];
   onRefresh?: () => void;
   onDisableAll?: () => void;
   onFold?: () => void;
@@ -21,8 +18,6 @@ interface ToolsSectionProps {
 }
 
 const ToolsSection: React.FC<ToolsSectionProps> = ({
-  serverName,
-  tools,
   onRefresh,
   onDisableAll,
   onFold,
