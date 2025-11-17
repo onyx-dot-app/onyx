@@ -2,10 +2,7 @@ import logging
 from collections.abc import Awaitable
 from collections.abc import Callable
 
-from fastapi import FastAPI
-from fastapi import HTTPException
-from fastapi import Request
-from fastapi import Response
+from fastapi import FastAPI, HTTPException, Request, Response
 
 from ee.onyx.auth.users import decode_anonymous_user_jwt_token
 from ee.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
@@ -13,114 +10,155 @@ from onyx.auth.api_key import extract_tenant_from_api_key_header
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.engine import is_valid_schema_name
 from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
 def add_api_server_tenant_id_middleware(
     app: FastAPI, logger: logging.LoggerAdapter
 ) -> None:
+    """Добавляет middleware для определения идентификатора тенанта в API сервере.
+
+    Middleware извлекает идентификатор тенанта из различных источников запроса
+    и устанавливает его в контекстную переменную для использования в обработчиках.
+
+    Args:
+        app: Экземпляр FastAPI приложения
+        logger: Логгер для записи событий
+    """
     @app.middleware("http")
     async def set_tenant_id(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        """Extracts the tenant id from multiple locations and sets the context var.
+        """Извлекает идентификатор тенанта из запроса и устанавливает контекст.
 
-        This is very specific to the api server and probably not something you'd want
-        to use elsewhere.
+        Специфичная для API сервера логика определения тенанта из различных источников.
+
+        Args:
+            request: Входящий HTTP запрос
+            call_next: Функция для вызова следующего обработчика
+
+        Returns:
+            Ответ от следующего обработчика
+
+        Raises:
+            HTTPException: При ошибках определения тенанта
         """
         try:
             if MULTI_TENANT:
-                tenant_id = await _get_tenant_id_from_request(request, logger)
+                # Определяем идентификатор тенанта для мультитенантного режима
+                tenant_identifier = await _get_tenant_id_from_request(request, logger)
             else:
-                tenant_id = POSTGRES_DEFAULT_SCHEMA
+                # Используем схему по умолчанию для однтенантного режима
+                tenant_identifier = POSTGRES_DEFAULT_SCHEMA
 
-            CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+            # Устанавливаем идентификатор тенанта в контекстную переменную
+            CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_identifier)
             return await call_next(request)
 
-        except Exception as e:
-            logger.exception(f"Error in tenant ID middleware: {str(e)}")
+        except Exception as error:
+            logger.exception(
+                "Ошибка в middleware определения тенанта: %s",
+                str(error),
+            )
             raise
 
 
 async def _get_tenant_id_from_request(
     request: Request, logger: logging.LoggerAdapter
 ) -> str:
+    """Извлекает идентификатор тенанта из HTTP запроса.
+
+    Проверяет различные источники в порядке приоритета:
+    1. Заголовок API ключа
+    2. Redis-токен аутентификации (в куках fastapiusersauth)
+    3. Кука анонимного пользователя
+    4. Явная кука идентификатора тенанта
+
+    Returns:
+        Идентификатор тенанта или схема по умолчанию
+
+    Raises:
+        HTTPException: При невалидном формате идентификатора тенанта
     """
-    Attempt to extract tenant_id from:
-    1) The API key header
-    2) The Redis-based token (stored in Cookie: fastapiusersauth)
-    3) The anonymous user cookie
-    Fallback: POSTGRES_DEFAULT_SCHEMA
-    """
-    # Check for API key
-    tenant_id = extract_tenant_from_api_key_header(request)
-    if tenant_id is not None:
-        return tenant_id
+    tenant_identifier = None
+
+    # Проверяем заголовок API ключа
+    tenant_identifier = extract_tenant_from_api_key_header(request)
+    if tenant_identifier is not None:
+        return tenant_identifier
 
     try:
-        # Look up token data in Redis
+        # Получаем данные аутентификационного токена из Redis
+        auth_token_data = await retrieve_auth_token_data_from_redis(request)
 
-        token_data = await retrieve_auth_token_data_from_redis(request)
-
-        if token_data:
-            tenant_id_from_payload = token_data.get(
+        if auth_token_data:
+            # Извлекаем идентификатор тенанта из payload токена
+            tenant_from_token = auth_token_data.get(
                 "tenant_id", POSTGRES_DEFAULT_SCHEMA
             )
 
-            tenant_id = (
-                str(tenant_id_from_payload)
-                if tenant_id_from_payload is not None
-                else None
-            )
+            if tenant_from_token is not None:
+                tenant_identifier = str(tenant_from_token)
 
-            if tenant_id and not is_valid_schema_name(tenant_id):
-                raise HTTPException(status_code=400, detail="Invalid tenant ID format")
 
-        # Check for anonymous user cookie
-        anonymous_user_cookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME)
-        if anonymous_user_cookie:
+            if tenant_identifier and not is_valid_schema_name(tenant_identifier):
+                error_message = "Невалидный формат идентификатора тенанта"
+                raise HTTPException(status_code=400, detail=error_message)
+
+        # Проверяем куку анонимного пользователя
+        anonymous_cookie_value = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME)
+        if anonymous_cookie_value:
             try:
-                anonymous_user_data = decode_anonymous_user_jwt_token(
-                    anonymous_user_cookie
+                # Декодируем JWT токен анонимного пользователя
+                anonymous_user_info = decode_anonymous_user_jwt_token(
+                    anonymous_cookie_value
                 )
-                tenant_id = anonymous_user_data.get(
+                tenant_identifier = anonymous_user_info.get(
                     "tenant_id", POSTGRES_DEFAULT_SCHEMA
                 )
 
-                if not tenant_id or not is_valid_schema_name(tenant_id):
-                    raise HTTPException(
-                        status_code=400, detail="Invalid tenant ID format"
-                    )
+                # Проверяем валидность идентификатора тенанта
+                if not tenant_identifier or not is_valid_schema_name(tenant_identifier):
+                    error_message = "Невалидный формат идентификатора тенанта"
+                    raise HTTPException(status_code=400, detail=error_message)
 
-                return tenant_id
+                return tenant_identifier
 
-            except Exception as e:
-                logger.error(f"Error decoding anonymous user cookie: {str(e)}")
-                # Continue and attempt to authenticate
+            except Exception as decode_error:
+                logger.error(
+                    "Ошибка декодирования куки анонимного пользователя: %s",
+                    str(decode_error),
+                )
+                # Продолжаем попытки аутентификации
 
         logger.debug(
-            "Token data not found or expired in Redis, defaulting to POSTGRES_DEFAULT_SCHEMA"
+            "Данные токена не найдены или истекли в Redis, "
+            "используется схема по умолчанию: POSTGRES_DEFAULT_SCHEMA",
         )
 
-        # Return POSTGRES_DEFAULT_SCHEMA, so non-authenticated requests are sent to the default schema
-        # The CURRENT_TENANT_ID_CONTEXTVAR is initialized with POSTGRES_DEFAULT_SCHEMA,
-        # so we maintain consistency by returning it here when no valid tenant is found.
+        # Возвращаем схему PostgreSQL по умолчанию для неаутентифицированных запросов
+        # Контекстная переменная CURRENT_TENANT_ID_CONTEXTVAR инициализируется значением POSTGRES_DEFAULT_SCHEMA,
+        # поэтому мы сохраняем консистентность, возвращая его здесь, когда не найден валидный тенант
         return POSTGRES_DEFAULT_SCHEMA
 
-    except Exception as e:
-        logger.error(f"Unexpected error in _get_tenant_id_from_request: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as unexpected_error:
+        logger.error(
+            "Неожиданная ошибка при определении идентификатора тенанта из запроса: %s",
+            str(unexpected_error),
+        )
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
     finally:
-        if tenant_id:
-            return tenant_id
+        # Проверяем, был ли найден идентификатор тенанта в основном блоке try
+        if tenant_identifier:
+            return tenant_identifier
 
-        # As a final step, check for explicit tenant_id cookie
-        tenant_id_cookie = request.cookies.get(TENANT_ID_COOKIE_NAME)
-        if tenant_id_cookie and is_valid_schema_name(tenant_id_cookie):
-            return tenant_id_cookie
+        # В качестве последней попытки проверяем явную куку с идентификатором тенанта
+        explicit_tenant_cookie_value = request.cookies.get(TENANT_ID_COOKIE_NAME)
+        if explicit_tenant_cookie_value and is_valid_schema_name(explicit_tenant_cookie_value):
+            return explicit_tenant_cookie_value
 
-        # If we've reached this point, return the default schema
+        # Если достигли этой точки, возвращаем схему по умолчанию
+        # Это финальный fallback, когда все другие методы определения тенанта не сработали
         return POSTGRES_DEFAULT_SCHEMA
