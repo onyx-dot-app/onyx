@@ -125,7 +125,8 @@ class CustomModelServer(LLM):
             "Content-Type": "application/json",
             "X-UiPath-LlmGateway-RequestedFeature": "ChatWithAssistant",
             "X-UiPath-LlmGateway-RequestingFeature": "ChatWithAssistant",
-            "X-UiPath-LlmGateway-RequestingProduct": "hackathon",
+            "X-UiPath-LlmGateway-RequestingProduct": "darwin",
+            "X-UiPath-LlmGateway-TimeoutSeconds": "60",
             "Authorization": "Bearer " + self.token,
         }
 
