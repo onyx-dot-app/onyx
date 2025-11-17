@@ -346,7 +346,7 @@ protobuf==6.33.1
     #   grpc-google-iam-v1
     #   grpcio-status
     #   proto-plus
-psutil==5.9.5
+psutil==5.9.8
     # via accelerate
 py==1.11.0
     # via retry
