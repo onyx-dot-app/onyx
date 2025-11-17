@@ -66,5 +66,4 @@ class OAuthResult(BaseModel):
         default=None, description="Raw response for debugging"
     )
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    # Pydantic V2 automatically serializes datetime to ISO format, so no custom encoder needed
