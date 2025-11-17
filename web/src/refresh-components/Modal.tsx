@@ -132,10 +132,9 @@ const useModalContext = () => {
 const ModalContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
-    hideCloseButton?: boolean;
     size?: "main" | "medium" | "small" | "tall" | "mini";
   }
->(({ className, children, hideCloseButton, size, ...props }, ref) => {
+>(({ className, children, size, ...props }, ref) => {
   const closeButtonRef = React.useRef<HTMLDivElement>(null);
   const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
   const hasUserTypedRef = React.useRef(false);
@@ -158,7 +157,17 @@ const ModalContent = React.forwardRef<
       return;
     }
 
-    const target = e.target as HTMLInputElement | HTMLTextAreaElement;
+    const target = e.target as HTMLElement;
+
+    // Only handle input and textarea elements
+    if (
+      !(
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement
+      )
+    ) {
+      return;
+    }
 
     // Skip non-text inputs
     if (
