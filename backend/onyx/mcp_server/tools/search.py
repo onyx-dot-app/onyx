@@ -8,6 +8,12 @@ import httpx
 from fastmcp.server.dependencies import get_access_token
 
 from ee.onyx.server.query_and_chat.models import DocumentSearchRequest
+from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
+    get_default_provider,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
+    truncate_search_result_content,
+)
 from onyx.configs.app_configs import APP_PORT
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.enums import LLMEvaluationType
@@ -16,8 +22,6 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import RetrievalDetails
 from onyx.mcp_server.api import mcp_server
 from onyx.utils.logger import setup_logger
-
-# Import mcp_server from api module (created there to avoid circular imports)
 
 logger = setup_logger()
 
@@ -29,7 +33,7 @@ def _get_http_client() -> httpx.AsyncClient:
     """Get or create shared HTTP client for API requests."""
     global _http_client
     if _http_client is None:
-        _http_client = httpx.AsyncClient(timeout=30.0)
+        _http_client = httpx.AsyncClient(timeout=60.0)
     return _http_client
 
 
@@ -52,7 +56,6 @@ async def onyx_search_documents(
     Search Onyx's indexed knowledge base with optional filters.
 
     Returns ranked search results with snippets, scores, and metadata.
-    Results are automatically filtered by user permissions and multi-tenant context.
 
     Args:
         query: Search query string
@@ -66,7 +69,7 @@ async def onyx_search_documents(
         - total_results: Number of results found
     """
     logger.info(
-        f"Onyx MCP server: document search: query='{query}', sources={source_types}, limit={limit}"
+        f"Onyx MCP Server: document search: query='{query}', sources={source_types}, limit={limit}"
     )
 
     # Get authenticated user from FastMCP's access token
@@ -84,7 +87,7 @@ async def onyx_search_documents(
                 source_type_enums.append(DocumentSource(src.lower()))
             except ValueError:
                 logger.warning(
-                    f"Invalid source type '{src}' - will be ignored by server"
+                    f"Onyx MCP Server: Invalid source type '{src}' - will be ignored by server"
                 )
 
     # Build request payload - let API server handle validation and ACL
@@ -126,7 +129,7 @@ async def onyx_search_documents(
         for doc in result.get("top_documents", [])
     ]
 
-    logger.info(f"Search successful: {len(documents)} results")
+    logger.info(f"Onyx MCP Server: Internal search returned {len(documents)} results")
     return {
         "documents": documents,
         "total_results": len(documents),
@@ -137,7 +140,7 @@ async def onyx_search_documents(
 @mcp_server.tool()
 async def onyx_web_search(
     query: str,
-    limit: int = 10,
+    limit: int = 5,
 ) -> dict[str, Any]:
     """
     Search the public web using configured search provider (Exa or Serper+Firecrawl).
@@ -174,32 +177,24 @@ async def onyx_web_search(
 
     Note: Use `onyx_open_url` to fetch full content from URLs in these results.
     """
-    logger.info(f"Web search: query='{query}', limit={limit}")
+    logger.info(f"Onyx MCP Server: Web search: query='{query}', limit={limit}")
 
     try:
-        # Import from tool_implementations_v2 (same module as open_url)
-        from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-            get_default_provider,
-        )
-
-        # Get search provider (same provider used by web_search and open_url)
         search_provider = get_default_provider()
         if search_provider is None:
-            logger.warning("Web search provider not configured")
+            logger.warning("Onyx MCP Server: No web search provider configured")
             return {
                 "error": (
                     "Web search is not configured. "
-                    "Please set EXA_API_KEY or (SERPER_API_KEY + FIRECRAWL_API_KEY) "
-                    "environment variables."
+                    "Please see Onyx documentation https://docs.onyx.app/"
+                    "for more information."
                 ),
                 "results": [],
                 "total_results": 0,
             }
 
         # Run web search using provider
-        logger.debug(
-            f"Running web search with provider: {type(search_provider).__name__}"
-        )
+        logger.debug(f"Onyx MCP Server: Web search: query='{query}', limit={limit}")
         search_results = search_provider.search(query)
 
         # Format results (limit to requested amount)
@@ -215,7 +210,7 @@ async def onyx_web_search(
         else:
             results = []
 
-        logger.info(f"Web search successful: {len(results)} results")
+        logger.debug(f"Onyx MCP Server: Web search returned {len(results)} results")
 
         return {
             "results": results,
@@ -224,17 +219,10 @@ async def onyx_web_search(
             "query": query,
         }
 
-    except ImportError as e:
-        logger.error(f"Web search provider import failed: {e}")
-        return {
-            "error": f"Web search provider not available: {str(e)}",
-            "results": [],
-            "total_results": 0,
-        }
     except Exception as e:
-        logger.error(f"Web search error: {e}", exc_info=True)
+        logger.error(f"Onyx MCP Server: Web search error: {e}", exc_info=True)
         return {
-            "error": f"Web search failed: {str(e)}",
+            "error": f"Onyx MCP Server: Web search failed: {str(e)}",
             "results": [],
             "total_results": 0,
         }
@@ -279,33 +267,25 @@ async def onyx_open_url(
 
     Note: This returns FULL page content, unlike `onyx_web_search` which only returns snippets.
     """
-    logger.info(f"Open URL: fetching {len(urls)} URLs")
+    logger.info(f"Onyx MCP Server: Open URL: fetching {len(urls)} URLs")
 
     try:
-        # Import from tool_implementations_v2
-        from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-            get_default_provider,
-        )
-        from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
-            truncate_search_result_content,
-        )
-
         # Get provider
         search_provider = get_default_provider()
         if search_provider is None:
-            logger.warning("Web search provider not configured")
+            logger.warning("Onyx MCP Server: Web search provider not configured")
             return {
                 "error": (
                     "Web search provider is not configured. "
-                    "Please set EXA_API_KEY or (SERPER_API_KEY + FIRECRAWL_API_KEY) "
-                    "environment variables."
+                    "Please see Onyx documentation https://docs.onyx.app/"
+                    "for more information."
                 ),
                 "results": [],
                 "total_results": 0,
             }
 
         # Fetch content from URLs
-        logger.debug(f"Fetching content from {len(urls)} URLs")
+        logger.debug(f"Onyx MCP Server: Fetching content from {len(urls)} URLs")
         docs = search_provider.contents(urls)
 
         # Format results
@@ -320,23 +300,17 @@ async def onyx_open_url(
                 }
             )
 
-        logger.info(f"URL fetch successful: {len(results)} URLs processed")
+        logger.info(
+            f"Onyx MCP Server: URL fetch successful: {len(results)} URLs processed"
+        )
 
         return {
             "results": results,
-            "provider": getattr(search_provider, "provider_type", "unknown"),
             "total_results": len(results),
         }
 
-    except ImportError as e:
-        logger.error(f"URL fetch import failed: {e}")
-        return {
-            "error": f"Web provider not available: {str(e)}",
-            "results": [],
-            "total_results": 0,
-        }
     except Exception as e:
-        logger.error(f"URL fetch error: {e}", exc_info=True)
+        logger.error(f"Onyx MCP Server: URL fetch error: {e}", exc_info=True)
         return {
             "error": f"URL fetch failed: {str(e)}",
             "results": [],
