@@ -134,18 +134,21 @@ export const LogoIcon = ({
 );
 
 // Helper to create simple icon components from react-icon libraries
-const createIcon = (
+export function createIcon(
   IconComponent: React.ComponentType<{ size?: number; className?: string }>
-) => {
-  const IconWrapper = ({
+) {
+  function IconWrapper({
     size = 16,
     className = defaultTailwindCSS,
-  }: IconProps) => <IconComponent size={size} className={className} />;
+  }: IconProps) {
+    return <IconComponent size={size} className={className} />;
+  }
+
   IconWrapper.displayName = `Icon(${
     IconComponent.displayName || IconComponent.name || "Component"
   })`;
   return IconWrapper;
-};
+}
 
 /**
  * Creates a logo icon component that automatically supports dark mode adaptations.

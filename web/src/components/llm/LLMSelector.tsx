@@ -8,7 +8,7 @@ import {
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import * as InputSelect from "@/refresh-components/inputs/InputSelect";
-import { SvgProps } from "@/icons";
+import { createIcon } from "@/components/icons/icons";
 
 interface LLMSelectorProps {
   userSettings?: boolean;
@@ -105,24 +105,13 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
   const defaultModelDisplayName = defaultModelName
     ? getDisplayNameForModel(defaultModelName)
     : null;
-
-  const currentLlmName = currentDescriptor?.modelName;
   const defaultLabel = userSettings ? "System Default" : "User Default";
-
-  const wrapIcon = (
-    IconComponent: ReturnType<typeof getProviderIcon>
-  ): React.FC<SvgProps> => {
-    return function SelectIcon({ className }: SvgProps) {
-      return IconComponent({ size: 16, className });
-    };
-  };
 
   return (
     <InputSelect.Root
       value={currentLlm ? currentLlm : "default"}
       onValueChange={(value) => onSelect(value === "default" ? null : value)}
       placeholder={defaultLabel}
-      className="min-w-40"
     >
       {!excludePublicProviders && (
         <InputSelect.Item
@@ -140,7 +129,7 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
         <InputSelect.Item
           key={option.value}
           value={option.value}
-          icon={wrapIcon(option.icon)}
+          icon={createIcon(option.icon)}
         >
           {option.name}
         </InputSelect.Item>
