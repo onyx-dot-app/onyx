@@ -1,18 +1,12 @@
 "use client";
 
-import React, {
-  useState,
-  useRef,
-  useEffect,
-  createContext,
-  useContext,
-} from "react";
+import React, { useState, useRef, createContext, useContext } from "react";
 import { cn } from "@/lib/utils";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import { useClickOutside } from "@/lib/hooks";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
-import Text from "../texts/Text";
 import { useEscape } from "@/hooks/useKeyPress";
+import Text from "@/refresh-components/texts/Text";
 
 // Context to share select state between parent and children
 interface InputSelectContextValue {
@@ -69,7 +63,7 @@ export interface InputSelectProps {
   value?: string;
   onValueChange?: (value: string) => void;
   defaultValue?: string;
-  placeholder?: string;
+  placeholder?: React.ReactNode;
   children: React.ReactElement<InputSelectLineItemProps>[];
   className?: string;
   disabled?: boolean;
@@ -78,8 +72,8 @@ export interface InputSelectProps {
 export default function InputSelect({
   value: controlledValue,
   onValueChange,
-  defaultValue = undefined,
-  placeholder = "Select an option",
+  defaultValue,
+  placeholder,
   children,
   className,
   disabled,
@@ -148,7 +142,7 @@ export default function InputSelect({
                 </span>
               </div>
             ) : (
-              <Text text03>{placeholder}</Text>
+              placeholder ?? <Text text03>Select an option</Text>
             )}
 
             <SvgChevronDownSmall
