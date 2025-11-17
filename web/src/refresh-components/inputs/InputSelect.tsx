@@ -54,6 +54,32 @@ function useInputSelectContext() {
   return context;
 }
 
+// Display component for selected child in trigger
+interface SelectedLineItemProps {
+  variant: keyof typeof textClasses;
+  props?: InputSelectLineItemProps;
+  placeholder?: React.ReactNode;
+}
+
+function SelectedLineItem({
+  variant,
+  props,
+  placeholder,
+}: SelectedLineItemProps) {
+  if (!props) return placeholder ?? <Text text03>Select an option</Text>;
+
+  return (
+    <div className="flex flex-row items-center gap-2 flex-1">
+      {props.icon && (
+        <props.icon
+          className={cn("h-4 w-4 stroke-text-03", iconClasses[variant])}
+        />
+      )}
+      <Text className={cn(textClasses[variant])}>{props.children}</Text>
+    </div>
+  );
+}
+
 // LineItem wrapper for select options
 export interface InputSelectLineItemProps
   extends Omit<LineItemProps, "heavyForced"> {
@@ -84,32 +110,6 @@ export function InputSelectLineItem({
     >
       {children}
     </LineItem>
-  );
-}
-
-// Display component for selected child in trigger
-interface SelectedLineItemProps {
-  variant: keyof typeof textClasses;
-  props?: InputSelectLineItemProps;
-  placeholder?: React.ReactNode;
-}
-
-function SelectedLineItem({
-  variant,
-  props,
-  placeholder,
-}: SelectedLineItemProps) {
-  if (!props) return placeholder ?? <Text text03>Select an option</Text>;
-
-  return (
-    <div className="flex flex-row items-center gap-2 flex-1">
-      {props.icon && (
-        <props.icon
-          className={cn("h-4 w-4 stroke-text-03", iconClasses[variant])}
-        />
-      )}
-      <Text className={cn(textClasses[variant])}>{props.children}</Text>
-    </div>
   );
 }
 
