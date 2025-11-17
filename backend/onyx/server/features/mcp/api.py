@@ -73,6 +73,7 @@ from onyx.server.features.mcp.models import MCPToolUpdateRequest
 from onyx.server.features.mcp.models import MCPUserCredentialsRequest
 from onyx.server.features.mcp.models import MCPUserOAuthConnectRequest
 from onyx.server.features.mcp.models import MCPUserOAuthConnectResponse
+from onyx.server.features.tool.models import ToolSnapshot
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
 from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
@@ -1474,6 +1475,24 @@ def get_mcp_server_detail(
     return _db_mcp_server_to_api_mcp_server(
         server, email, db_session, include_auth_config=True
     )
+
+
+@admin_router.get("/tools")
+def get_all_mcp_tools(
+    db: Session = Depends(get_session),
+    user: User | None = Depends(current_curator_or_admin_user),
+) -> list:
+    """Get all tools associated with MCP servers, including both enabled and disabled tools"""
+    from sqlalchemy import select
+    from onyx.db.models import Tool
+
+    # Query MCP tools ordered by ID to maintain consistent ordering
+    stmt = select(Tool).where(Tool.mcp_server_id.is_not(None)).order_by(Tool.id)
+
+    mcp_tools = db.scalars(stmt).all()
+
+    # Convert to ToolSnapshot format
+    return [ToolSnapshot.from_model(tool) for tool in mcp_tools]
 
 
 @admin_router.get("/servers", response_model=MCPServersResponse)

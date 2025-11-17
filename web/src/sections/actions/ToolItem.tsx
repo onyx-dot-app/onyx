@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import SvgAlertTriangle from "@/icons/alert-triangle";
+import Truncated from "@/refresh-components/texts/Truncated";
 
 export interface ToolItemProps {
   // Tool information
@@ -75,13 +76,13 @@ const ToolItem: React.FC<ToolItemProps> = ({
 
           {/* Description */}
           <div className="px-0.5 w-full">
-            <Text
+            <Truncated
               text03
               secondaryBody
               className={cn("whitespace-pre-wrap", textOpacity)}
             >
               {description}
-            </Text>
+            </Truncated>
           </div>
         </div>
       </div>
