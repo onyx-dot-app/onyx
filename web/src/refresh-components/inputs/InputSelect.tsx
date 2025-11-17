@@ -2,7 +2,6 @@
 
 import React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Presence } from "@radix-ui/react-presence";
 import { cn, noProp } from "@/lib/utils";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
@@ -210,25 +209,23 @@ export default function InputSelect({
         </div>
       </SelectPrimitive.Trigger>
 
-      <Presence present={isOpen}>
-        <SelectPrimitive.Portal>
-          <SelectPrimitive.Content
-            className={cn(
-              "z-[4000] w-[var(--radix-select-trigger-width)] max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1 pointer-events-none",
-              "data-[state=open]:animate-in data-[state=closed]:animate-out",
-              "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-              "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
-            )}
-            sideOffset={4}
-            position="popper"
-            onMouseDown={noProp()}
-          >
-            <SelectPrimitive.Viewport>
-              {renderedChildren}
-            </SelectPrimitive.Viewport>
-          </SelectPrimitive.Content>
-        </SelectPrimitive.Portal>
-      </Presence>
+      <SelectPrimitive.Portal>
+        <SelectPrimitive.Content
+          className={cn(
+            "z-[4000] w-[var(--radix-select-trigger-width)] max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1 pointer-events-none",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
+            "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
+          )}
+          sideOffset={4}
+          position="popper"
+          onMouseDown={noProp()}
+        >
+          <SelectPrimitive.Viewport>
+            {renderedChildren}
+          </SelectPrimitive.Viewport>
+        </SelectPrimitive.Content>
+      </SelectPrimitive.Portal>
     </SelectPrimitive.Root>
   );
 }
