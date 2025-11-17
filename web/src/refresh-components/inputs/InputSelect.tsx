@@ -1,162 +1,156 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  createContext,
+  useContext,
+} from "react";
 import { cn } from "@/lib/utils";
-import * as SelectPrimitive from "@radix-ui/react-select";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import { useClickOutside } from "@/lib/hooks";
+import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
 
-const triggerClasses = {
-  main: ["border", "hover:border-border-02", "active:!border-border-05"],
-  internal: [],
-  error: ["border", "border-status-error-05"],
-  disabled: ["bg-background-neutral-03"],
-} as const;
-
-const valueClasses = {
-  main: [
-    "text-text-04 placeholder:!font-secondary-body placeholder:text-text-02",
-  ],
-  internal: [],
-  disabled: ["text-text-02"],
-} as const;
-
-export interface InputSelectOption {
-  value: string;
-  label: string;
-  description?: string;
-  disabled?: boolean;
+// Context to share select state between parent and children
+interface InputSelectContextValue {
+  selectedValue: string | undefined;
+  onSelect: (value: string) => void;
+  isOpen: boolean;
 }
 
-export interface InputSelectProps
-  extends Omit<
-    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>,
-    "value" | "onValueChange" | "disabled"
-  > {
-  // Input states:
-  internal?: boolean;
-  error?: boolean;
-  disabled?: boolean;
+const InputSelectContext = createContext<InputSelectContextValue | null>(null);
 
-  // Select specific props
+function useInputSelectContext() {
+  const context = useContext(InputSelectContext);
+  if (!context) {
+    throw new Error("InputSelectLineItem must be used within InputSelect");
+  }
+  return context;
+}
+
+// LineItem wrapper for select options
+export interface InputSelectLineItemProps
+  extends Omit<LineItemProps, "heavyForced"> {
+  value: string;
+}
+
+export function InputSelectLineItem({
+  value,
+  children,
+  description,
+  ...props
+}: InputSelectLineItemProps) {
+  const { selectedValue, onSelect, isOpen } = useInputSelectContext();
+  const isSelected = selectedValue === value;
+
+  if (!isOpen) return null;
+
+  return (
+    <LineItem
+      {...props}
+      heavyForced={isSelected}
+      description={description}
+      onClick={() => onSelect(value)}
+    >
+      {children}
+    </LineItem>
+  );
+}
+
+// Main select component
+export interface InputSelectProps {
   value?: string;
   onValueChange?: (value: string) => void;
-  options: InputSelectOption[];
   placeholder?: string;
-
-  // Right section of the input, e.g. action button
-  rightSection?: React.ReactNode;
+  children: React.ReactElement<InputSelectLineItemProps>[];
+  className?: string;
+  disabled?: boolean;
 }
 
 export default function InputSelect({
-  internal,
-  error,
-  disabled,
-
   value,
   onValueChange,
-  options,
   placeholder = "Select an option",
-  rightSection,
-  onClick,
+  children,
   className,
-  ...props
+  disabled,
 }: InputSelectProps) {
-  const variant = internal ? "internal" : disabled ? "disabled" : "main";
-
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
   useClickOutside(() => setIsOpen(false), [triggerRef, dropdownRef], isOpen);
 
-  function handleTriggerClick(event: React.MouseEvent<HTMLButtonElement>) {
-    event.preventDefault();
-    setIsOpen(!isOpen);
-    onClick?.(event);
-  }
+  const handleSelect = (newValue: string) => {
+    onValueChange?.(newValue);
+    setIsOpen(false);
+  };
+
+  // Find the selected child to display in trigger
+  const selectedChild = React.Children.toArray(children).find((child) => {
+    if (React.isValidElement<InputSelectLineItemProps>(child)) {
+      return child.props.value === value;
+    }
+    return false;
+  }) as React.ReactElement<InputSelectLineItemProps> | undefined;
+
+  const contextValue: InputSelectContextValue = {
+    selectedValue: value,
+    onSelect: handleSelect,
+    isOpen,
+  };
 
   return (
-    <div className="relative w-full">
-      <SelectPrimitive.Root
-        value={value}
-        onValueChange={onValueChange}
-        disabled={disabled}
-      >
-        <SelectPrimitive.Trigger
+    <InputSelectContext.Provider value={contextValue}>
+      <div className="relative w-full">
+        <button
           ref={triggerRef}
+          type="button"
+          disabled={disabled}
+          onClick={() => !disabled && setIsOpen(!isOpen)}
           className={cn(
-            "group/InputSelect flex-1 flex w-full items-center justify-between p-1.5 rounded-08 bg-background-neutral-00 hover:cursor-pointer disabled:cursor-not-allowed",
-            triggerClasses[variant],
+            "flex w-full items-center justify-between p-1.5 rounded-08 bg-background-neutral-00 border border-border-01",
+            "hover:border-border-02 active:border-border-05",
+            "disabled:cursor-not-allowed disabled:bg-background-neutral-03",
+            "focus:outline-none",
             className
           )}
-          onClick={handleTriggerClick}
-          {...props}
         >
+          <div className="flex flex-row items-center justify-between w-full p-0.5 gap-1">
+            {selectedChild ? (
+              <div className="flex flex-row items-center gap-2 flex-1">
+                {selectedChild.props.icon && (
+                  <selectedChild.props.icon className="h-4 w-4 stroke-text-03" />
+                )}
+                <span className="text-text-04 font-main-ui-action text-left">
+                  {selectedChild.props.children}
+                </span>
+              </div>
+            ) : (
+              <span className="text-text-02">{placeholder}</span>
+            )}
+            <SvgChevronDownSmall
+              className={cn(
+                "h-4 w-4 stroke-text-03 transition-transform",
+                isOpen && "rotate-180"
+              )}
+            />
+          </div>
+        </button>
+
+        {isOpen && (
           <div
+            ref={dropdownRef}
             className={cn(
-              "flex flex-row items-center justify-between w-full p-0.5 gap-1",
-              valueClasses[variant]
+              "absolute z-[2000] w-full mt-1 max-h-72 overflow-auto rounded-12 border border-border-01 bg-background-neutral-00 p-1",
+              "animate-in fade-in-0 zoom-in-95 slide-in-from-top-2"
             )}
           >
-            <SelectPrimitive.Value placeholder={placeholder} />
-            <div className="flex items-center">
-              {rightSection}
-              <SelectPrimitive.Icon>
-                <SvgChevronDownSmall
-                  className={cn(
-                    "h-4 w-4 stroke-text-03 transition-transform",
-                    isOpen && "rotate-180"
-                  )}
-                />
-              </SelectPrimitive.Icon>
-            </div>
+            {children}
           </div>
-        </SelectPrimitive.Trigger>
-        <div
-          ref={dropdownRef}
-          role="listbox"
-          className={cn(
-            "w-full max-h-72 overflow-auto rounded-12 border border-border-01 bg-background-neutral-00 p-1",
-            "transition-all duration-200",
-            isOpen
-              ? "opacity-100 scale-100 translate-y-0"
-              : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
-          )}
-          style={{
-            top: "calc(100% + 4px)",
-            left: 0,
-          }}
-        >
-          <SelectPrimitive.Content>
-            {options.map((option) => (
-              <SelectPrimitive.Item
-                key={option.value}
-                value={option.value}
-                disabled={option.disabled}
-                className={cn(
-                  "relative flex flex-col w-full cursor-default select-none rounded-08 p-1.5 group",
-                  "text-text-04 outline-none",
-                  "hover:bg-background-tint-02 data-[highlighted]:bg-background-tint-02",
-                  "data-[state=checked]:bg-action-link-01 data-[state=checked]:text-action-link-05",
-                  "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                )}
-                onSelect={() => setIsOpen(false)}
-              >
-                <SelectPrimitive.ItemText className="text-text-04 font-main-ui-action">
-                  {option.label}
-                </SelectPrimitive.ItemText>
-                {option.description && (
-                  <span className="text-sm text-text-03 font-secondary-body group-data-[state=checked]:text-text-00 mt-0.5">
-                    {option.description}
-                  </span>
-                )}
-              </SelectPrimitive.Item>
-            ))}
-          </SelectPrimitive.Content>
-        </div>
-      </SelectPrimitive.Root>
-    </div>
+        )}
+      </div>
+    </InputSelectContext.Provider>
   );
 }
