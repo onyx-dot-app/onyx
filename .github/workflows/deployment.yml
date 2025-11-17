@@ -25,11 +25,14 @@ jobs:
       is-beta: ${{ steps.check.outputs.is-beta }}
       is-stable-standalone: ${{ steps.check.outputs.is-stable-standalone }}
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
+      sanitized-tag: ${{ steps.check.outputs.sanitized-tag }}
     steps:
       - name: Check which components to build and version info
         id: check
         run: |
           TAG="${{ github.ref_name }}"
+          # Sanitize tag name by replacing slashes with hyphens (for Docker tag compatibility)
+          SANITIZED_TAG=$(echo "$TAG" | tr '/' '-')
           IS_CLOUD=false
           BUILD_WEB=false
           BUILD_WEB_CLOUD=false
@@ -73,6 +76,7 @@ jobs:
             echo "is-beta=$IS_BETA"
             echo "is-stable-standalone=$IS_STABLE_STANDALONE"
             echo "is-beta-standalone=$IS_BETA_STANDALONE"
+            echo "sanitized-tag=$SANITIZED_TAG"
           } >> "$GITHUB_OUTPUT"
 
   build-web:
@@ -96,14 +100,14 @@ jobs:
         id: meta
         uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY_IMAGE }}
+          images: ${{ github.event_name == 'workflow_dispatch' && format('{0}:web-{1}', env.RUNS_ON_ECR_CACHE, needs.determine-builds.outputs.sanitized-tag) || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
           tags: |
-            type=raw,value=${{ github.ref_name }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-stable == 'true' && 'latest' || '' }}
-            type=raw,value=${{ env.EDGE_TAG == 'true' && 'edge' || '' }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
+            type=raw,value=${{ github.event_name == 'workflow_dispatch' && needs.determine-builds.outputs.sanitized-tag || github.ref_name }}
+            type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-stable == 'true' && 'latest' || '' }}
+            type=raw,value=${{ github.event_name != 'workflow_dispatch' && env.EDGE_TAG == 'true' && 'edge' || '' }}
+            type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -121,8 +125,7 @@ jobs:
           file: ./web/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ env.IS_DRY_RUN == 'true' && format('{0}:web-{1}', env.RUNS_ON_ECR_CACHE, github.ref_name) || steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
@@ -155,11 +158,11 @@ jobs:
         id: meta
         uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY_IMAGE }}
+          images: ${{ github.event_name == 'workflow_dispatch' && format('{0}:web-cloud-{1}', env.RUNS_ON_ECR_CACHE, needs.determine-builds.outputs.sanitized-tag) || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
           tags: |
-            type=raw,value=${{ github.ref_name }}
+            type=raw,value=${{ github.event_name == 'workflow_dispatch' && needs.determine-builds.outputs.sanitized-tag || github.ref_name }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -177,8 +180,7 @@ jobs:
           file: ./web/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ env.IS_DRY_RUN == 'true' && format('{0}:web-cloud-{1}', env.RUNS_ON_ECR_CACHE, github.ref_name) || steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
@@ -219,14 +221,14 @@ jobs:
         id: meta
         uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY_IMAGE }}
+          images: ${{ github.event_name == 'workflow_dispatch' && format('{0}:backend-{1}', env.RUNS_ON_ECR_CACHE, needs.determine-builds.outputs.sanitized-tag) || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
           tags: |
-            type=raw,value=${{ github.ref_name }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
-            type=raw,value=${{ env.EDGE_TAG == 'true' && 'edge' || '' }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
+            type=raw,value=${{ github.event_name == 'workflow_dispatch' && needs.determine-builds.outputs.sanitized-tag || github.ref_name }}
+            type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
+            type=raw,value=${{ github.event_name != 'workflow_dispatch' && env.EDGE_TAG == 'true' && 'edge' || '' }}
+            type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -244,8 +246,7 @@ jobs:
           file: ./backend/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ env.IS_DRY_RUN == 'true' && format('{0}:backend-{1}', env.RUNS_ON_ECR_CACHE, github.ref_name) || steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
@@ -280,14 +281,14 @@ jobs:
         id: meta
         uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY_IMAGE }}
+          images: ${{ github.event_name == 'workflow_dispatch' && format('{0}:model-server-{1}', env.RUNS_ON_ECR_CACHE, needs.determine-builds.outputs.sanitized-tag) || env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
           tags: |
-            type=raw,value=${{ github.ref_name }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
-            type=raw,value=${{ env.EDGE_TAG == 'true' && 'edge' || '' }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
+            type=raw,value=${{ github.event_name == 'workflow_dispatch' && needs.determine-builds.outputs.sanitized-tag || github.ref_name }}
+            type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
+            type=raw,value=${{ github.event_name != 'workflow_dispatch' && env.EDGE_TAG == 'true' && 'edge' || '' }}
+            type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -309,8 +310,7 @@ jobs:
           file: ./backend/Dockerfile.model_server
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ env.IS_DRY_RUN == 'true' && format('{0}:model-server-{1}', env.RUNS_ON_ECR_CACHE, github.ref_name) || steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
@@ -322,7 +322,7 @@ jobs:
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-cache,mode=max
 
   trivy-scan-web:
-    needs: build-web
+    needs: [determine-builds, build-web]
     if: needs.build-web.result == 'success'
     runs-on:
       - runs-on
@@ -342,7 +342,7 @@ jobs:
           retry_wait_seconds: 10
           command: |
             if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-              SCAN_IMAGE="${{ env.RUNS_ON_ECR_CACHE }}:web-${{ github.ref_name }}"
+              SCAN_IMAGE="${{ env.RUNS_ON_ECR_CACHE }}:web-${{ needs.determine-builds.outputs.sanitized-tag }}"
             else
               SCAN_IMAGE="docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}"
             fi
@@ -359,7 +359,7 @@ jobs:
               ${SCAN_IMAGE}
 
   trivy-scan-web-cloud:
-    needs: build-web-cloud
+    needs: [determine-builds, build-web-cloud]
     if: needs.build-web-cloud.result == 'success'
     runs-on:
       - runs-on
@@ -379,7 +379,7 @@ jobs:
           retry_wait_seconds: 10
           command: |
             if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-              SCAN_IMAGE="${{ env.RUNS_ON_ECR_CACHE }}:web-cloud-${{ github.ref_name }}"
+              SCAN_IMAGE="${{ env.RUNS_ON_ECR_CACHE }}:web-cloud-${{ needs.determine-builds.outputs.sanitized-tag }}"
             else
               SCAN_IMAGE="docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}"
             fi
@@ -396,7 +396,7 @@ jobs:
               ${SCAN_IMAGE}
 
   trivy-scan-backend:
-    needs: build-backend
+    needs: [determine-builds, build-backend]
     if: needs.build-backend.result == 'success'
     runs-on:
       - runs-on
@@ -419,7 +419,7 @@ jobs:
           retry_wait_seconds: 10
           command: |
             if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-              SCAN_IMAGE="${{ env.RUNS_ON_ECR_CACHE }}:backend-${{ github.ref_name }}"
+              SCAN_IMAGE="${{ env.RUNS_ON_ECR_CACHE }}:backend-${{ needs.determine-builds.outputs.sanitized-tag }}"
             else
               SCAN_IMAGE="docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}"
             fi
@@ -438,7 +438,7 @@ jobs:
               ${SCAN_IMAGE}
 
   trivy-scan-model-server:
-    needs: build-model-server
+    needs: [determine-builds, build-model-server]
     if: needs.build-model-server.result == 'success'
     runs-on:
       - runs-on
@@ -458,7 +458,7 @@ jobs:
           retry_wait_seconds: 10
           command: |
             if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-              SCAN_IMAGE="${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ github.ref_name }}"
+              SCAN_IMAGE="${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ needs.determine-builds.outputs.sanitized-tag }}"
             else
               SCAN_IMAGE="docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}"
             fi
