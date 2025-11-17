@@ -114,12 +114,11 @@ export default function InputSelect({
             </div>
           </div>
         </SelectPrimitive.Trigger>
-
         <div
           ref={dropdownRef}
           role="listbox"
           className={cn(
-            "absolute z-[2000] w-full max-h-72 overflow-auto rounded-12 border border-border-01 bg-background-neutral-00 p-1",
+            "w-full max-h-72 overflow-auto rounded-12 border border-border-01 bg-background-neutral-00 p-1",
             "transition-all duration-200",
             isOpen
               ? "opacity-100 scale-100 translate-y-0"
@@ -130,44 +129,32 @@ export default function InputSelect({
             left: 0,
           }}
         >
-          {options.map((option) => {
-            const isSelected = option.value === value;
-
-            return (
-              <div
+          <SelectPrimitive.Content>
+            {options.map((option) => (
+              <SelectPrimitive.Item
                 key={option.value}
-                role="option"
-                aria-selected={isSelected}
+                value={option.value}
+                disabled={option.disabled}
                 className={cn(
-                  "relative flex flex-col w-full cursor-default select-none rounded-08 p-1.5",
+                  "relative flex flex-col w-full cursor-default select-none rounded-08 p-1.5 group",
                   "text-text-04 outline-none",
-                  !option.disabled && "hover:bg-background-tint-02",
-                  isSelected && "bg-action-link-01 text-action-link-05",
-                  option.disabled && "pointer-events-none opacity-50"
+                  "hover:bg-background-tint-02 data-[highlighted]:bg-background-tint-02",
+                  "data-[state=checked]:bg-action-link-01 data-[state=checked]:text-action-link-05",
+                  "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                 )}
-                onClick={() => {
-                  if (!option.disabled) {
-                    onValueChange?.(option.value);
-                    setIsOpen(false);
-                  }
-                }}
+                onSelect={() => setIsOpen(false)}
               >
-                <span className="text-text-04 font-main-ui-action">
+                <SelectPrimitive.ItemText className="text-text-04 font-main-ui-action">
                   {option.label}
-                </span>
+                </SelectPrimitive.ItemText>
                 {option.description && (
-                  <span
-                    className={cn(
-                      "text-sm text-text-03 font-secondary-body mt-0.5",
-                      isSelected && "text-text-00"
-                    )}
-                  >
+                  <span className="text-sm text-text-03 font-secondary-body group-data-[state=checked]:text-text-00 mt-0.5">
                     {option.description}
                   </span>
                 )}
-              </div>
-            );
-          })}
+              </SelectPrimitive.Item>
+            ))}
+          </SelectPrimitive.Content>
         </div>
       </SelectPrimitive.Root>
     </div>
