@@ -18,7 +18,7 @@ export function useKeyPress(
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [callback, enabled]);
+  }, [callback, enabled, key]);
 }
 
 /**
