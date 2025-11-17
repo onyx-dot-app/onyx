@@ -24,7 +24,7 @@ dependencies:
     condition: postgresql.enabled
     alias: postgresql
   - name: vespa
-    version: 0.2.24
+    version: 0.2.25
     repository: https://onyx-dot-app.github.io/vespa-helm-charts
     condition: vespa.enabled
   - name: ingress-nginx
