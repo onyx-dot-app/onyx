@@ -82,18 +82,19 @@ Most MCP clients support HTTP transport with custom headers. Refer to your clien
 
 The server provides three tools for searching and retrieving information:
 
-#### 1. `onyx_search_documents`
+1. `onyx_search_documents`
 Search your Onyx knowledge base with semantic search. Supports filtering by source type, time range, and result limits. Returns ranked documents with content snippets, metadata, and match scores.
 
-#### 2. `onyx_web_search`
+2. `onyx_web_search`
 Search the public web using your configured provider (Exa or Serper+Firecrawl). Returns URL, title, and snippet for each result. Requires `EXA_API_KEY` or `SERPER_API_KEY` + `FIRECRAWL_API_KEY` to be configured.
 
-#### 3. `onyx_open_url`
+3. `onyx_open_url`
 Fetch and extract full page content from web URLs. Useful for retrieving complete articles after finding them with `onyx_web_search`. Uses the same provider as web search.
 
 ### Resources
 
-At this time, the MCP server does not expose any MCP Resources, Prompts, or Elicitations. Only Tools are available.
+1. `available_sources`
+Returns a JSON payload enumerating every document source that currently has indexed content in the tenant. The `sources` array is a sorted list of the source enum values (e.g., `"confluence"`, `"github"`). Clients can use it directly to drive filter pickers before calling `onyx_search_documents`.
 
 ## Local Development
 
