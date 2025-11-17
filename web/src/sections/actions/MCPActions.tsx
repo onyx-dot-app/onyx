@@ -9,7 +9,6 @@ import Button from "@/refresh-components/buttons/Button";
 import SvgPlug from "@/icons/plug";
 import SvgArrowExchange from "@/icons/arrow-exchange";
 import SvgChevronDown from "@/icons/chevron-down";
-import LineItem from "@/refresh-components/buttons/LineItem";
 
 interface MCPActionsProps {
   status: MCPActionStatus;
@@ -38,9 +37,7 @@ const MCPActions: React.FC<MCPActionsProps> = React.memo(
     onToggleTools,
   }) => {
     const showViewToolsButton =
-      (status === "connected" || status === "disconnected") &&
-      !isToolsExpanded &&
-      onToggleTools;
+      status === "connected" && !isToolsExpanded && onToggleTools;
 
     // Connected state
     if (status === "connected") {
