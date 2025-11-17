@@ -94,7 +94,7 @@ export default function ActionCard({
 
   const handleToggleTools = () => {
     setIsToolsExpanded(!isToolsExpanded);
-    if (!isToolsExpanded) {
+    if (isToolsExpanded) {
       setSearchQuery("");
     }
   };
@@ -144,8 +144,6 @@ export default function ActionCard({
         {/* Tools Section (Only when expanded) */}
         {isToolsExpanded && (
           <ToolsSection
-            serverName={title}
-            tools={tools}
             onRefresh={onRefreshTools}
             onDisableAll={onDisableAllTools}
             onFold={handleFold}
