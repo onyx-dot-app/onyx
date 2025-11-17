@@ -12,6 +12,7 @@ import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import { useClickOutside } from "@/lib/hooks";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
 import Text from "../texts/Text";
+import { useEscape } from "@/hooks/useKeyPress";
 
 // Context to share select state between parent and children
 interface InputSelectContextValue {
@@ -90,6 +91,7 @@ export default function InputSelect({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   useClickOutside(() => setIsOpen(false), [triggerRef, dropdownRef], isOpen);
+  useEscape(() => setIsOpen(false), isOpen);
 
   // Use controlled value if provided, otherwise use internal value
   const isControlled = controlledValue !== undefined;
