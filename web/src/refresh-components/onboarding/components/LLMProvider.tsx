@@ -11,7 +11,6 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgCheckCircle from "@/icons/check-circle";
 import { OnboardingActions, OnboardingState } from "../types";
 import { cn, noProp } from "@/lib/utils";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMConnectionModalProps } from "./LLMConnectionModal";
 
 export interface LLMProviderProps {
@@ -24,6 +23,7 @@ export interface LLMProviderProps {
   onClick: (props: LLMConnectionModalProps) => void;
   onboardingState: OnboardingState;
   onboardingActions: OnboardingActions;
+  onOpenModal?: () => void;
 }
 
 function LLMProviderInner({
@@ -36,8 +36,8 @@ function LLMProviderInner({
   onboardingState,
   onboardingActions,
   onClick,
+  onOpenModal,
 }: LLMProviderProps) {
-  const modal = useModal();
   const [isHovered, setIsHovered] = useState(false);
 
   const handleCardClick = useCallback(() => {
@@ -62,16 +62,18 @@ function LLMProviderInner({
       onboardingState,
       onboardingActions,
     });
-    modal.toggle(true);
+    if (onOpenModal) {
+      onOpenModal();
+    }
   }, [
     Icon,
     llmDescriptor,
     title,
-    modal.toggle,
     onboardingState,
     onboardingActions,
     isConnected,
     onClick,
+    onOpenModal,
   ]);
 
   const handleSettingsClick = useCallback(

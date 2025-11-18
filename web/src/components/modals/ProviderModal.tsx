@@ -8,10 +8,6 @@ import { Modal } from "@/refresh-components/Modal";
 import SvgLoader from "@/icons/loader";
 
 interface ProviderModalProps {
-  // Modal sizes
-  sm?: boolean;
-  xs?: boolean;
-
   // Modal configurations
   clickOutsideToClose?: boolean;
 
@@ -34,8 +30,6 @@ interface ProviderModalProps {
 }
 
 export default function ProviderModal({
-  clickOutsideToClose = true,
-
   open,
   onOpenChange,
   icon: Icon,
@@ -66,15 +60,7 @@ export default function ProviderModal({
 
   return (
     <Modal open={open} onOpenChange={handleOpenChange}>
-      <Modal.Content
-        size="small"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onPointerDownOutside={(e) => {
-          if (!clickOutsideToClose) {
-            e.preventDefault();
-          }
-        }}
-      >
+      <Modal.Content size="tall" onOpenAutoFocus={(e) => e.preventDefault()}>
         <Modal.CloseButton />
 
         <Modal.Header className="flex flex-col gap-2 p-4">
@@ -90,7 +76,7 @@ export default function ProviderModal({
         <Modal.Body className="flex-1 overflow-y-auto">{children}</Modal.Body>
 
         {onSubmit && (
-          <Modal.Footer className="flex justify-end gap-2 p-4">
+          <Modal.Footer className="flex justify-end gap-2 p-4 ">
             <Button type="button" secondary onClick={() => onOpenChange(false)}>
               {cancelLabel}
             </Button>

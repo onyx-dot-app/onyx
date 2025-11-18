@@ -234,12 +234,14 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                   <FormField.Control>
                     {customConfigKey.key_type === "select" ? (
                       <InputSelect
+                        name={field.name}
                         value={
                           (field.value as string) ??
                           (customConfigKey.default_value as string) ??
                           ""
                         }
                         onValueChange={(value) => helper.setValue(value)}
+                        onBlur={field.onBlur}
                         options={
                           customConfigKey.options?.map((opt) => ({
                             label: opt.label,
@@ -355,6 +357,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
             <FormField.Control>
               {modelOptions.length > 0 && (
                 <InputSelect
+                  name={field.name}
                   value={field.value}
                   onValueChange={(value) => {
                     helper.setValue(value);
@@ -388,6 +391,8 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
               )}
               {modelOptions.length === 0 && (
                 <InputTypeIn
+                  name={field.name}
+                  id={field.name}
                   value={field.value}
                   onChange={(e) => {
                     helper.setValue(e.target.value);

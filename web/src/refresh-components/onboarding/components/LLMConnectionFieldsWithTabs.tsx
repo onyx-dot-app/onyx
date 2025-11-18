@@ -58,7 +58,7 @@ export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
   disabled = false,
 }) => {
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab}>
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <TabsList className="w-full">
         {tabConfig.tabs.map((tab) => (
           <TabsTrigger key={tab.id} value={tab.id} className="flex-1">
@@ -67,8 +67,8 @@ export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
         ))}
       </TabsList>
       {tabConfig.tabs.map((tab) => (
-        <TabsContent key={tab.id} value={tab.id}>
-          <div className="flex flex-col gap-4">
+        <TabsContent key={tab.id} value={tab.id} className="w-full">
+          <div className="flex flex-col gap-4 w-full">
             <DynamicProviderFields
               llmDescriptor={llmDescriptor}
               fields={tab.fields}

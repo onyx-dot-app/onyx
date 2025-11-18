@@ -72,7 +72,7 @@ const sizeClassNames = {
   main: ["w-[80dvw]", "h-[80dvh]"],
   medium: ["w-[60rem]", "h-fit"],
   small: ["w-[32rem]", "h-[30rem]"],
-  tall: ["w-[32rem]"],
+  tall: ["w-[32rem]", "max-h-[calc(100dvh-4rem)]"],
   mini: ["w-[32rem]", "h-fit"],
 } as const;
 
