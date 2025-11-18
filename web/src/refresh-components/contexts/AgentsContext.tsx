@@ -19,7 +19,6 @@ import {
 } from "@/lib/types";
 import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
 import { useSession } from "@/app/chat/stores/useChatSessionStore";
-import { BackendChatSession } from "@/app/chat/interfaces";
 
 async function fetchAllAgents(): Promise<MinimalPersonaSnapshot[]> {
   try {

@@ -162,6 +162,23 @@ export interface BackendChatSession {
   packets: Packet[][];
 }
 
+export function toChatSession(
+  backendChatSession: BackendChatSession
+): ChatSession {
+  return {
+    id: backendChatSession.chat_session_id,
+    name: backendChatSession.description,
+    persona_id: backendChatSession.persona_id,
+    time_created: backendChatSession.time_created,
+    time_updated: backendChatSession.time_updated,
+    shared_status: backendChatSession.shared_status,
+    project_id: null, // or whatever source provides
+    current_alternate_model: backendChatSession.current_alternate_model ?? "",
+    current_temperature_override:
+      backendChatSession.current_temperature_override,
+  };
+}
+
 export interface BackendMessage {
   message_id: number;
   message_type: string;

@@ -4,7 +4,6 @@ import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { ChatProvider } from "@/refresh-components/contexts/ChatContext";
 import { ProjectsProvider } from "./projects/ProjectsContext";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
-import AppLayout from "@/refresh-components/layouts/AppLayout";
 
 export interface LayoutProps {
   children: React.ReactNode;
@@ -20,9 +19,7 @@ export default async function Layout({ children }: LayoutProps) {
     safeSearchParams as { [key: string]: string }
   );
 
-  if ("redirect" in data) {
-    redirect(data.redirect);
-  }
+  if ("redirect" in data) redirect(data.redirect);
 
   const {
     chatSessions,
@@ -61,7 +58,7 @@ export default async function Layout({ children }: LayoutProps) {
       <ProjectsProvider initialProjects={projects}>
         <div className="flex flex-row w-full h-full">
           <AppSidebar />
-          <AppLayout>{children}</AppLayout>
+          {children}
         </div>
       </ProjectsProvider>
     </ChatProvider>
