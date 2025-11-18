@@ -1,5 +1,5 @@
-import AgentsPage from "@/refresh-pages/AgentsPage";
+import AgentsNavigationPage from "@/refresh-pages/AgentsNavigationPage";
 
 export default function Page() {
-  return <AgentsPage />;
+  return <AgentsNavigationPage />;
 }

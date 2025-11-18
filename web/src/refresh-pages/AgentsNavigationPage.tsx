@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import AgentCard from "@/refresh-components/AgentCard";
 import { useUser } from "@/components/user/UserProvider";
 import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/assistants/checkOwnership";
@@ -61,7 +61,7 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
   );
 }
 
-export default function AgentsPage() {
+export default function AgentsNavigationPage() {
   const { agents } = useAgentsContext();
   const [creatorFilterOpen, setCreatorFilterOpen] = useState(false);
   const [actionsFilterOpen, setActionsFilterOpen] = useState(false);
@@ -411,7 +411,10 @@ export default function AgentsPage() {
   }, [selectedActionIds, selectedMcpServerIds, uniqueActions]);
 
   return (
-    <PageLayout data-testid="AgentsPage/container" aria-label="Agents Page">
+    <PageLayout
+      data-testid="AgentsNavigationPage/container"
+      aria-label="Agents Navigation Page"
+    >
       <PageHeader
         icon={SvgOnyxOctagon}
         title="Agents & Assistants"
@@ -419,7 +422,7 @@ export default function AgentsPage() {
         className="bg-background-tint-01"
         rightChildren={
           <div data-testid="AgentsPage/new-agent-button">
-            <Button href="/assistants/new" leftIcon={SvgPlus}>
+            <Button href="/chat/agents/create" leftIcon={SvgPlus}>
               New Agent
             </Button>
           </div>

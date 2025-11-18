@@ -6,7 +6,7 @@ import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrap
 import { cookies } from "next/headers";
 import { ChatProvider } from "@/refresh-components/contexts/ChatContext";
 import { AssistantStats } from "./AssistantStats";
-import { BackButton } from "@/components/BackButton";
+import { BackButton } from "@/refresh-components/buttons/BackButton";
 
 export default async function GalleryPage(props: {
   params: Promise<{ id: string }>;

@@ -1,7 +1,7 @@
 import * as React from "react";
 import type { SVGProps } from "react";
 
-const SvgFold = (props: SVGProps<SVGSVGElement>) => (
+const SvgExpand = (props: SVGProps<SVGSVGElement>) => (
   <svg
     width="16"
     height="16"
@@ -11,7 +11,7 @@ const SvgFold = (props: SVGProps<SVGSVGElement>) => (
     {...props}
   >
     <path
-      d="M4.99994 12.75L7.52858 10.2214C7.78891 9.96103 8.21105 9.96103 8.47138 10.2214L11 12.75M5.00001 3.25001L7.52858 5.77857C7.78891 6.0389 8.21105 6.0389 8.47138 5.77857L11 3.25"
+      d="M4.99994 5.49995L7.52858 2.97131C7.78891 2.71098 8.21105 2.71098 8.47138 2.97131L11 5.49995M5.00024 10.5L7.5288 13.0286C7.78914 13.2889 8.21127 13.2889 8.4716 13.0286L11.0002 10.5"
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -19,4 +19,4 @@ const SvgFold = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-export default SvgFold;
+export default SvgExpand;

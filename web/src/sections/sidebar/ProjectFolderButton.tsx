@@ -140,8 +140,8 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
             )}
             active={
               typeof activeSidebar === "object" &&
-              activeSidebar.type === "project" &&
-              activeSidebar.id === String(project.id)
+              activeSidebar?.type === "project" &&
+              activeSidebar?.id === String(project.id)
             }
             onClick={noProp(handleTextClick)}
             focused={isEditing}

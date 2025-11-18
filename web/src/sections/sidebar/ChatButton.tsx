@@ -112,8 +112,8 @@ function ChatButtonInner({
   const active = useMemo(
     () =>
       typeof activeSidebarTab === "object" &&
-      activeSidebarTab.type === "chat" &&
-      activeSidebarTab.id === chatSession.id,
+      activeSidebarTab?.type === "chat" &&
+      activeSidebarTab?.id === chatSession.id,
     [activeSidebarTab, chatSession.id]
   );
   const [mounted, setMounted] = useState(false);

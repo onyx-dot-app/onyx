@@ -198,6 +198,7 @@ export default function Text({
         fonts[font],
         inverted ? colors.inverted[color] : colors[color],
         nowrap && "whitespace-nowrap",
+        "px-[2px]",
         className
       )}
     >

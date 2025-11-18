@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { BackButton } from "@/components/BackButton";
+import { BackButton } from "@/refresh-components/buttons/BackButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   DropdownMenu,

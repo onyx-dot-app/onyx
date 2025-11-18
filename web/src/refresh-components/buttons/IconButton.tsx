@@ -318,6 +318,7 @@ export default function IconButton({
         if (!disabled) onHover?.(false);
       }}
       disabled={disabled}
+      type="button"
       {...props}
     >
       <Icon className={cn("h-[1rem] w-[1rem]", iconClass)} />

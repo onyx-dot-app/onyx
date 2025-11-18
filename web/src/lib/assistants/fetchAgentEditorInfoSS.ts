@@ -1,27 +1,24 @@
 import { FullPersona } from "@/app/admin/assistants/interfaces";
-import { CCPairBasicInfo, DocumentSetSummary, User } from "../types";
-import { getCurrentUserSS } from "../userSS";
-import { fetchSS } from "../utilsSS";
+import { CCPairBasicInfo, DocumentSetSummary, User } from "@/lib/types";
+import { getCurrentUserSS } from "@/lib/userSS";
+import { fetchSS } from "@/lib/utilsSS";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
-import { ToolSnapshot } from "../tools/interfaces";
-import { fetchToolsSS } from "../tools/fetchTools";
+import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { fetchToolsSS } from "@/lib/tools/fetchTools";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
-export async function fetchAssistantEditorInfoSS(
+
+export interface AgentEditorInfo {
+  ccPairs: CCPairBasicInfo[];
+  documentSets: DocumentSetSummary[];
+  llmProviders: LLMProviderView[];
+  user: User | null;
+  existingPersona: FullPersona | null;
+  tools: ToolSnapshot[];
+}
+
+export default async function fetchAgentEditorInfoSS(
   personaId?: number | string
-): Promise<
-  | [
-      {
-        ccPairs: CCPairBasicInfo[];
-        documentSets: DocumentSetSummary[];
-        llmProviders: LLMProviderView[];
-        user: User | null;
-        existingPersona: FullPersona | null;
-        tools: ToolSnapshot[];
-      },
-      null,
-    ]
-  | [null, string]
-> {
+): Promise<[AgentEditorInfo, null] | [null, string]> {
   // When editing an existing persona, fetch only the providers available to that persona
   // When creating a new persona, fetch all providers
   const llmProvidersUrl =

@@ -6,7 +6,7 @@ import { ActionEditor } from "@/app/admin/actions/ActionEditor";
 import { fetchToolByIdSS } from "@/lib/tools/fetchTools";
 import { DeleteToolButton } from "./DeleteToolButton";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { BackButton } from "@/components/BackButton";
+import { BackButton } from "@/refresh-components/buttons/BackButton";
 import { ToolIcon } from "@/components/icons/icons";
 
 export default async function Page(props: {

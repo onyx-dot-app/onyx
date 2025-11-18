@@ -1,11 +1,10 @@
-import React, { JSX } from "react";
+import { JSX } from "react";
 import crypto from "crypto";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { ArtAsistantIcon, OnyxIcon } from "@/components/icons/icons";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { cn } from "@/lib/utils";
-import Text from "@/refresh-components/texts/Text";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 function md5ToBits(str: string): number[] {

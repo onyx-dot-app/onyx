@@ -8,7 +8,7 @@ import {
   SlackChannelConfig,
   ValidSources,
 } from "@/lib/types";
-import { BackButton } from "@/components/BackButton";
+import { BackButton } from "@/refresh-components/buttons/BackButton";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import {
   FetchAssistantsResponse,

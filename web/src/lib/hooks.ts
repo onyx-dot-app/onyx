@@ -61,15 +61,18 @@ export function useIsMounted() {
 type AppFocus =
   | { type: "agent" | "project" | "chat"; id: string }
   | "new-session"
-  | "more-agents";
+  | "more-agents"
+  | null;
 
 export function useAppFocus(): AppFocus {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   // Check if we're on the agents page
-  if (pathname === "/chat/agents") {
+  if (pathname === "/chat/agents" || pathname === "/chat/agents/create") {
     return "more-agents";
+  } else if (pathname === "/chat") {
+    return "new-session";
   }
 
   // Check search params for chat, agent, or project
@@ -82,8 +85,8 @@ export function useAppFocus(): AppFocus {
   const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
   if (projectId) return { type: "project", id: projectId };
 
-  // No search params means we're on a new session
-  return "new-session";
+  // Nothing matched; this means that none of the sidebar-tabs are selected.
+  return null;
 }
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";

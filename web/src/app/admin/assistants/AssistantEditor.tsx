@@ -73,9 +73,9 @@ import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
-import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
+import SwitchField from "@/refresh-components/formik-fields/SwitchField";
 import { generateIdenticon } from "@/refresh-components/AgentIcon";
-import { BackButton } from "@/components/BackButton";
+import { BackButton } from "@/refresh-components/buttons/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
@@ -1040,7 +1040,7 @@ export default function AssistantEditor({
                                       : ""
                                   }`}
                                 >
-                                  <UnlabeledSwitchField
+                                  <SwitchField
                                     onCheckedChange={() =>
                                       toggleToolInValues(searchTool?.id || -1)
                                     }
@@ -1559,7 +1559,7 @@ export default function AssistantEditor({
                             side="top"
                           >
                             <div>
-                              <UnlabeledSwitchField
+                              <SwitchField
                                 name="is_public"
                                 onCheckedChange={(checked) => {
                                   if (values.is_default_persona && !checked) {

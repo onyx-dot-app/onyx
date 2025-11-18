@@ -134,3 +134,10 @@ export const ART_ASSISTANT_ID = -3;
 // Used in the File Picker to show a max number of files.
 // The rest will be hidden behind an "All Recent Files" button.
 export const MAX_FILES_TO_SHOW = 3;
+
+export const CONVERSATION_STARTERS = [
+  "Give me an overview of some documents.",
+  "Find the latest sales report.",
+  "Compile a list of our engineering goals for this quarter.",
+  "Summarize my goals for today.",
+];

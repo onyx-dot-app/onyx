@@ -28,7 +28,7 @@ export default function AppLayout({
   const [showShareModal, setShowShareModal] = useState(false);
 
   const currentChatSession =
-    typeof appFocus === "object" && appFocus.type === "chat"
+    appFocus && typeof appFocus === "object" && appFocus.type === "chat"
       ? chatSessions.find((session) => session.id === appFocus.id)
       : undefined;
 
