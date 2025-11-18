@@ -263,10 +263,14 @@ class CloudEmbedding:
         return embeddings
 
     async def _embed_vertex(
-        self, texts: list[str], model: str | None, embedding_type: str
+        self,
+        texts: list[str],
+        model: str | None,
+        embedding_type: str,
+        reduced_dimension: int | None,
     ) -> list[Embedding]:
-        import vertexai  # type: ignore[import-untyped]
-        from vertexai.language_models import TextEmbeddingModel, TextEmbeddingInput  # type: ignore[import-untyped]
+        from google import genai  # type: ignore[import-untyped]
+        from google.genai.types import EmbedContentConfig  # type: ignore[import-untyped]
 
         if not model:
             model = DEFAULT_VERTEX_MODEL
@@ -276,30 +280,43 @@ class CloudEmbedding:
             service_account_info
         )
         project_id = service_account_info["project_id"]
-        vertexai.init(project=project_id, credentials=credentials)
-        client = TextEmbeddingModel.from_pretrained(model)
 
-        inputs = [TextEmbeddingInput(text, embedding_type) for text in texts]
+        client_kwargs: dict[str, object] = {
+            "vertexai": True,
+            "project": project_id,
+            "credentials": credentials,
+        }
 
-        # Split into batches of 25 texts
-        max_texts_per_batch = VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
-        batches = [
-            inputs[i : i + max_texts_per_batch]
-            for i in range(0, len(inputs), max_texts_per_batch)
-        ]
+        config_kwargs: dict[str, object] = {"task_type": embedding_type}
+        if reduced_dimension is not None:
+            config_kwargs["output_dimensionality"] = reduced_dimension
 
-        # Dispatch all embedding calls asynchronously at once
-        tasks = [
-            client.get_embeddings_async(
-                cast(list[str | TextEmbeddingInput], batch), auto_truncate=True
-            )
-            for batch in batches
-        ]
+        semaphore = asyncio.Semaphore(VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
 
-        # Wait for all tasks to complete in parallel
-        results = await asyncio.gather(*tasks)
+        async with genai.Client(**client_kwargs).aio as client:
 
-        return [embedding.values for batch in results for embedding in batch]
+            async def embed_single(text: str) -> Embedding:
+                async with semaphore:
+                    response = await client.models.embed_content(
+                        model=model,
+                        contents=text,
+                        config=EmbedContentConfig(**config_kwargs),
+                    )
+
+                embedding = getattr(response, "embedding", None)
+                if embedding and hasattr(embedding, "values"):
+                    return embedding.values
+
+                embeddings = getattr(response, "embeddings", None)
+                if embeddings:
+                    return embeddings[0].values
+
+                raise RuntimeError(
+                    "Unexpected response shape from google-genai embed_content"
+                )
+
+            results = await asyncio.gather(*(embed_single(text) for text in texts))
+        return list(results)
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
@@ -352,7 +369,9 @@ class CloudEmbedding:
             elif self.provider == EmbeddingProvider.VOYAGE:
                 return await self._embed_voyage(texts, model_name, embedding_type)
             elif self.provider == EmbeddingProvider.GOOGLE:
-                return await self._embed_vertex(texts, model_name, embedding_type)
+                return await self._embed_vertex(
+                    texts, model_name, embedding_type, reduced_dimension
+                )
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
         except openai.AuthenticationError:
