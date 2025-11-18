@@ -89,7 +89,6 @@ jobs:
       - extras=ecr-cache
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
-      DEPLOYMENT: standalone
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -132,10 +131,10 @@ jobs:
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-${{ env.DEPLOYMENT }}-cache
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache
           cache-to: |
             type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-${{ env.DEPLOYMENT }}-cache,mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache,mode=max
 
   build-web-cloud:
     needs: determine-builds
@@ -147,7 +146,6 @@ jobs:
       - extras=ecr-cache
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
-      DEPLOYMENT: cloud
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -195,10 +193,10 @@ jobs:
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-${{ env.DEPLOYMENT }}-cache
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache
           cache-to: |
             type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-${{ env.DEPLOYMENT }}-cache,mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache,mode=max
 
   build-backend:
     needs: determine-builds
@@ -210,7 +208,6 @@ jobs:
       - extras=ecr-cache
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
-      DEPLOYMENT: ${{ contains(github.ref_name, 'cloud') && 'cloud' || 'standalone' }}
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -252,10 +249,10 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-${{ env.DEPLOYMENT }}-cache
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
           cache-to: |
             type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-${{ env.DEPLOYMENT }}-cache,mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
 
   build-model-server:
     needs: determine-builds
@@ -268,7 +265,6 @@ jobs:
       - extras=ecr-cache
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
-      DEPLOYMENT: ${{ contains(github.ref_name, 'cloud') && 'cloud' || 'standalone' }}
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -310,10 +306,10 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-cache
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
           cache-to: |
             type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-cache,mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
 
   trivy-scan-web:
     needs: [determine-builds, build-web]
