@@ -17,7 +17,12 @@ import {
 } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
-import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
+import {
+  useFederatedConnectors,
+  useFilters,
+  useLlmManager,
+  useShowCenteredInput,
+} from "@/lib/hooks";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { FiArrowDown } from "react-icons/fi";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -52,12 +57,8 @@ import {
 } from "@/app/chat/stores/useChatSessionStore";
 import {
   useCurrentChatState,
-  useSubmittedMessage,
-  useLoadingError,
   useIsReady,
-  useIsFetching,
   useCurrentMessageTree,
-  useCurrentMessageHistory,
   useHasPerformedInitialScroll,
   useDocumentSidebarVisible,
   useHasSentLocalUserMessage,
@@ -405,14 +406,10 @@ export default function ChatPage({
   // Access chat state directly from the store
   const currentChatState = useCurrentChatState();
   const chatSessionId = useChatSessionStore((state) => state.currentSessionId);
-  const submittedMessage = useSubmittedMessage();
-  const loadingError = useLoadingError();
   const uncaughtError = useUncaughtError();
   const isReady = useIsReady();
   const maxTokens = useMaxTokens();
-  const isFetchingChatMessages = useIsFetching();
   const completeMessageTree = useCurrentMessageTree();
-  const messageHistory = useCurrentMessageHistory();
   const hasPerformedInitialScroll = useHasPerformedInitialScroll();
   const currentSessionHasSentLocalUserMessage = useHasSentLocalUserMessage();
   const documentSidebarVisible = useDocumentSidebarVisible();
@@ -422,6 +419,8 @@ export default function ChatPage({
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
+  const { messageHistory, loadingError, showCenteredInput } =
+    useShowCenteredInput();
 
   const clientScrollToBottom = useCallback(
     (fast?: boolean) => {
@@ -621,13 +620,6 @@ export default function ChatPage({
   const handleDesktopDocumentSidebarClose = useCallback(() => {
     setTimeout(() => updateCurrentDocumentSidebarVisible(false), 300);
   }, [updateCurrentDocumentSidebarVisible]);
-
-  // Determine whether to show the centered input (no messages yet)
-  const showCenteredInput =
-    messageHistory.length === 0 &&
-    !isFetchingChatMessages &&
-    !loadingError &&
-    !submittedMessage;
 
   // Only show the centered hero layout when there is NO project selected
   // and there are no messages yet. If a project is selected, prefer a top layout.

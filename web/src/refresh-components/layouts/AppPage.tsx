@@ -9,6 +9,13 @@ import { useState } from "react";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { ChatSession } from "@/app/chat/interfaces";
+import {
+  useCurrentMessageHistory,
+  useIsFetching,
+  useLoadingError,
+  useSubmittedMessage,
+} from "@/app/chat/stores/useChatSessionStore";
+import { useShowCenteredInput } from "@/lib/hooks";
 
 export interface AppPageProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
   settings: CombinedSettings | null;
@@ -29,6 +36,7 @@ export default function AppPage({
     settings?.enterpriseSettings?.custom_lower_disclaimer_content;
   const customLogo = settings?.enterpriseSettings?.use_custom_logo;
   const [showShareModal, setShowShareModal] = useState(false);
+  const { showCenteredInput } = useShowCenteredInput();
 
   return (
     <>
@@ -41,7 +49,7 @@ export default function AppPage({
 
       <div className="flex flex-col h-full w-full">
         {/* Header */}
-        {(customHeaderContent || chatSession) && (
+        {(customHeaderContent || !showCenteredInput) && (
           <header className="w-full flex flex-row justify-center items-center py-3 px-4">
             <div className="flex-1" />
             <div className="flex-1 flex flex-col items-center">
@@ -55,7 +63,7 @@ export default function AppPage({
                 transient={showShareModal}
                 tertiary
                 onClick={() => setShowShareModal(true)}
-                className={cn(!chatSession && "invisible")}
+                className={cn(showCenteredInput && !chatSession && "invisible")}
               >
                 Share Chat
               </Button>

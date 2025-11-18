@@ -24,7 +24,7 @@ import {
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
 import { parseLlmDescriptor } from "./llm/utils";
-import { ChatSession } from "@/app/chat/interfaces";
+import { ChatSession, Message } from "@/app/chat/interfaces";
 import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -43,6 +43,12 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useLLMProviders } from "./hooks/useLLMProviders";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import {
+  useCurrentMessageHistory,
+  useIsFetching,
+  useLoadingError,
+  useSubmittedMessage,
+} from "@/app/chat/stores/useChatSessionStore";
 
 export function useIsMounted() {
   const [mounted, setMounted] = useState(false);
@@ -1274,5 +1280,35 @@ export function useSourcePreferences({
     disableAllSources,
     toggleSource,
     isSourceEnabled,
+  };
+}
+
+export interface ShowCenteredInput {
+  isFetchingChatMessages: boolean;
+  loadingError: string | null;
+  messageHistory: Message[];
+  submittedMessage: string;
+  showCenteredInput: boolean;
+}
+
+// Determine whether to show the centered input (no messages yet)
+export function useShowCenteredInput(): ShowCenteredInput {
+  const isFetchingChatMessages = useIsFetching();
+  const loadingError = useLoadingError();
+  const messageHistory = useCurrentMessageHistory();
+  const submittedMessage = useSubmittedMessage();
+
+  const showCenteredInput =
+    messageHistory.length === 0 &&
+    !isFetchingChatMessages &&
+    !loadingError &&
+    !submittedMessage;
+
+  return {
+    isFetchingChatMessages,
+    loadingError,
+    messageHistory,
+    submittedMessage,
+    showCenteredInput,
   };
 }
