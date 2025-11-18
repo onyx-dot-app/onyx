@@ -182,7 +182,9 @@ def fetch_and_cache_channel_metadata(
                         f"Continuing with reduced channel types: {available_channel_types}"
                     )
                     # Don't count this as a retry attempt, just try again with fewer types
-                    continue
+                    if available_channel_types:  # Only continue if we have types left
+                        continue
+                    # Otherwise fall through to retry logic
                 else:
                     logger.error(
                         f"Missing scope '{needed_scope}' but could not map to channel type or already removed. "
