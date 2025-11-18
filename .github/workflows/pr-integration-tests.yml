@@ -243,7 +243,8 @@ jobs:
             local url=$1
             local label=$2
             local timeout=${3:-300}  # default 5 minutes
-            local start_time=$(date +%s)
+            local start_time
+            start_time=$(date +%s)
 
             while true; do
               local current_time
