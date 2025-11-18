@@ -23,6 +23,7 @@ from onyx.context.search.models import RetrievalDetails
 from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.mcp_server.api import mcp_server
+from onyx.mcp_server.utils import tenant_context_from_token
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -101,76 +102,79 @@ async def onyx_search_documents(
     if not access_token or "_user" not in access_token.claims:
         raise ValueError("Authentication required")
 
-    if not _tenant_has_indexed_sources():
-        logger.info("Onyx MCP Server: No indexed sources available for tenant")
+    with tenant_context_from_token(access_token):
+        if not _tenant_has_indexed_sources():
+            logger.info("Onyx MCP Server: No indexed sources available for tenant")
+            return {
+                "documents": [],
+                "total_results": 0,
+                "query": query,
+                "message": (
+                    "No document sources are indexed yet. Add connectors or upload data "
+                    "through Onyx before calling onyx_search_documents."
+                ),
+            }
+
+        # Convert source_types strings to DocumentSource enums if provided
+        # Invalid values will be handled by the API server
+        source_type_enums = None
+        if source_types:
+            source_type_enums = []
+            for src in source_types:
+                try:
+                    source_type_enums.append(DocumentSource(src.lower()))
+                except ValueError:
+                    logger.warning(
+                        f"Onyx MCP Server: Invalid source type '{src}' - will be ignored by server"
+                    )
+
+        # Build request payload - let API server handle validation and ACL
+        search_request = DocumentSearchRequest(
+            message=query,
+            search_type=SearchType.SEMANTIC,
+            retrieval_options=RetrievalDetails(
+                filters=IndexFilters(
+                    source_type=source_type_enums,
+                    time_cutoff=time_cutoff,
+                    access_control_list=None,  # Server handles ACL
+                ),
+                enable_auto_detect_filters=False,
+                offset=0,
+                limit=limit,
+            ),
+            evaluation_type=LLMEvaluationType.SKIP,
+        )
+
+        # Call the API server
+        response = await _get_http_client().post(
+            f"{_get_api_server_url()}/query/document-search",
+            json=search_request.model_dump(),
+            headers={"Authorization": f"Bearer {access_token.token}"},
+        )
+        response.raise_for_status()
+        result = response.json()
+
+        # Return simplified format for MCP clients
+        documents = [
+            {
+                "document_id": doc.get("document_id"),
+                "semantic_identifier": doc.get("semantic_identifier"),
+                "content": doc.get("content"),
+                "source_type": doc.get("source_type"),
+                "link": doc.get("link"),
+                "match_score": doc.get("score", 0.0),
+            }
+            for doc in result.get("top_documents", [])
+        ]
+
+        logger.info(
+            f"Onyx MCP Server: Internal search returned {len(documents)} results"
+        )
         return {
-            "documents": [],
-            "total_results": 0,
+            "documents": documents,
+            "total_results": len(documents),
             "query": query,
-            "message": (
-                "No document sources are indexed yet. Add connectors or upload data "
-                "through Onyx before calling onyx_search_documents."
-            ),
         }
-
-    # Convert source_types strings to DocumentSource enums if provided
-    # Invalid values will be handled by the API server
-    source_type_enums = None
-    if source_types:
-        source_type_enums = []
-        for src in source_types:
-            try:
-                source_type_enums.append(DocumentSource(src.lower()))
-            except ValueError:
-                logger.warning(
-                    f"Onyx MCP Server: Invalid source type '{src}' - will be ignored by server"
-                )
-
-    # Build request payload - let API server handle validation and ACL
-    search_request = DocumentSearchRequest(
-        message=query,
-        search_type=SearchType.SEMANTIC,
-        retrieval_options=RetrievalDetails(
-            filters=IndexFilters(
-                source_type=source_type_enums,
-                time_cutoff=time_cutoff,
-                access_control_list=None,  # Server handles ACL
-            ),
-            enable_auto_detect_filters=False,
-            offset=0,
-            limit=limit,
-        ),
-        evaluation_type=LLMEvaluationType.SKIP,
-    )
-
-    # Call the API server
-    response = await _get_http_client().post(
-        f"{_get_api_server_url()}/query/document-search",
-        json=search_request.model_dump(),
-        headers={"Authorization": f"Bearer {access_token.token}"},
-    )
-    response.raise_for_status()
-    result = response.json()
-
-    # Return simplified format for MCP clients
-    documents = [
-        {
-            "document_id": doc.get("document_id"),
-            "semantic_identifier": doc.get("semantic_identifier"),
-            "content": doc.get("content"),
-            "source_type": doc.get("source_type"),
-            "link": doc.get("link"),
-            "match_score": doc.get("score", 0.0),
-        }
-        for doc in result.get("top_documents", [])
-    ]
-
-    logger.info(f"Onyx MCP Server: Internal search returned {len(documents)} results")
-    return {
-        "documents": documents,
-        "total_results": len(documents),
-        "query": query,
-    }
 
 
 @mcp_server.tool()
