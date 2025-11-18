@@ -200,7 +200,7 @@ export default function ChatPage({
     state: onboardingState,
     actions: onboardingActions,
     llmDescriptors,
-  } = useOnboardingState();
+  } = useOnboardingState(liveAssistant);
 
   const llmManager = useLlmManager(selectedChatSession, liveAssistant);
 

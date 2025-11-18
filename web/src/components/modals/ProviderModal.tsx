@@ -58,9 +58,19 @@ export default function ProviderModal({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && onSubmit && !submitDisabled && !isSubmitting) {
+      // Check if the target is not a textarea (allow Enter in textareas)
+      if ((e.target as HTMLElement).tagName !== "TEXTAREA") {
+        e.preventDefault();
+        onSubmit();
+      }
+    }
+  };
+
   return (
     <Modal open={open} onOpenChange={handleOpenChange}>
-      <Modal.Content size="tall" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <Modal.Content size="tall" onKeyDown={handleKeyDown}>
         <Modal.CloseButton />
 
         <Modal.Header className="flex flex-col gap-2 p-4">

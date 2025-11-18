@@ -87,12 +87,19 @@ function LLMProviderInner({
   );
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
       onClick={handleCardClick}
+      onKeyDown={(e) => {
+        if (!disabled && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          handleCardClick();
+        }
+      }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      disabled={disabled}
+      aria-disabled={disabled}
       className={cn(
         "flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01 transition-colors text-left",
         !disabled && "hover:bg-background-neutral-02 cursor-pointer",
@@ -143,7 +150,7 @@ function LLMProviderInner({
           </div>
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
