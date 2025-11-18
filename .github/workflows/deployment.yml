@@ -192,11 +192,16 @@ jobs:
       - determine-builds
       - build-web-amd64
       - build-web-arm64
-    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
-    runs-on: ubuntu-latest
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-merge-web
+      - extras=ecr-cache
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
@@ -355,8 +360,11 @@ jobs:
       - determine-builds
       - build-web-cloud-amd64
       - build-web-cloud-arm64
-    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
-    runs-on: ubuntu-latest
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-merge-web-cloud
+      - extras=ecr-cache
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
     steps:
@@ -497,8 +505,11 @@ jobs:
       - determine-builds
       - build-backend-amd64
       - build-backend-arm64
-    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
-    runs-on: ubuntu-latest
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-merge-backend
+      - extras=ecr-cache
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
     steps:
@@ -644,8 +655,11 @@ jobs:
       - determine-builds
       - build-model-server-amd64
       - build-model-server-arm64
-    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
-    runs-on: ubuntu-latest
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-merge-model-server
+      - extras=ecr-cache
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
     steps:
