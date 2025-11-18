@@ -212,7 +212,7 @@ export function useDropdownPosition({
   debounceDelay = 16,
 }: UseDropdownPositionOptions): {
   dropdownPosition: DropdownPosition | null;
-  containerRef: RefObject<HTMLDivElement>;
+  containerRef: RefObject<HTMLDivElement | null>;
 } {
   const [dropdownPosition, setDropdownPosition] =
     useState<DropdownPosition | null>(null);

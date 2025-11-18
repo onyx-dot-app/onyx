@@ -241,8 +241,11 @@ const InputComboBox = ({
   });
 
   // Click Outside Hook
-  useClickOutside(
-    [inputRef, dropdownRef],
+  useClickOutside<HTMLElement>(
+    [
+      inputRef as React.RefObject<HTMLElement>,
+      dropdownRef as React.RefObject<HTMLElement>,
+    ],
     useCallback(() => {
       setIsOpen(false);
       setIsKeyboardNav(false);

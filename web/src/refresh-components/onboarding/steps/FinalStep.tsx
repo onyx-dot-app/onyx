@@ -33,7 +33,7 @@ const FinalStepItemInner = ({
           </Text>
         </div>
       </div>
-      <Button tertiary rightIcon={SvgExternalLink} href={buttonHref}>
+      <Button tertiary rightIcon={SvgExternalLink}>
         {buttonText}
       </Button>
     </>
