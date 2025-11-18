@@ -91,41 +91,90 @@ Here are some memories about the user:
 """
 
 
+DOCUMENT_SELECTION_PROMPT = """
+Select the most relevant document sections for the search query (maximum 10).
+
+# Document Sections
+```
+{formatted_doc_sections}
+```
+
+# User Query
+```
+{user_query}
+```
+
+# Selection Criteria
+- Choose sections most relevant to answering the query.
+- Include sections from highly relevant documents (the full document will be expanded later).
+- It is ok to select multiple sections from the same document.
+
+# Output Format
+Return ONLY section IDs as a comma-separated list, ordered by relevance:
+[most_relevant_id, second_most_relevant_id, ...]
+
+Section IDs:
+""".strip()
+
+
 # Some models are trained heavily to reason in the actual output so we allow some flexibility in the prompt
 # Downstream of the model, we will attempt to parse the output to extract the number.
+# This inference will not have a system prompt as it's a single message task more like the traditional ones.
+# LLMs should do better with just this type of next word prediction.
 DOCUMENT_CONTEXT_SELECTION_PROMPT = """
-Given a main section of a document and surrounding sections, choose between the following situations:
-1. The main section and surrounding sections are not useful for answer the user query. \
-They are either not relevant or related but about something else and could cause confusion for the final answer generation.
-2. The main section is useful and contains all of the relevant information; the surrounding sections are not useful.
-3. The main section and surrounding sections are all useful for answering the user query. \
-All of the sections should be passed back for generating the final answer.
-4. The main section and surrounding sections are all useful and likely including the rest of the document will provided \
-even more valuable context. This is a very on relevant document and should be included in full.
+Analyze the relevance of document sections to a search query and classify according to the categories \
+described at the end of the prompt.
 
-Do not assume every document is relevant to the query, many documents may be loosely related but actually misleading. \
-Be sure to remove those by classifying them as type 1.
-
-Main Section:
-```
-{main_section}
-```
-
-Section Above:
+# Section Above:
 ```
 {section_above}
 ```
 
-Section Below:
+# Main Section:
+```
+{main_section}
+```
+
+# Section Below:
 ```
 {section_below}
 ```
 
-Search Query:
+# User Query:
 ```
-{search_query}
+{user_query}
 ```
 
-Try to answer with the number of the situation most applicable to the sections.
-If you need to reason about it, your final output should end with the number (1, 2, 3, or 4).
+# Classification Categories:
+**1 - NOT_RELEVANT**
+- Main section and surrounding sections do NOT help answer the query.
+- Appears on topic but refers to a different context or subject.
+- No meaningful information related to the query.
+
+**2 - MAIN_SECTION_ONLY**
+- Main section contains useful information for the query.
+- Adjacent sections do not provide additional directly relevant information.
+
+**3 - INCLUDE_ADJACENT_SECTIONS**
+- The main section AND adjacent sections are all useful for answering the user query.
+- The surrounding sections provide relevant information that does not exist in the main section.
+- Even if only 1 of the adjacent sections is useful or there is a small piece in either that is useful.
+
+**4 - INCLUDE_FULL_DOCUMENT**
+- Sections shown are highly relevant to the query.
+- Document appears to be very pertinent to the query topic.
+- Additional unseen sections likely contain valuable related information.
+
+## Additional Decision Notes
+- If only a small piece of the document is useful - use classification 2 or 3, do not use 1.
+- If the document is very on topic and provides additional context that might be useful in \
+combination with other documents - use classification 2, 3 or 4, do not use 1.
+- A section may appear on topic but could refer to a different context or subject don't assume relevance. \
+In this case, use this classification.
+- It is important to avoid conflating different contexts and subjects - if the document is related to the query but not about \
+the correct subject, use classification 1.
+
+CRITICAL: ONLY output the NUMBER of the situation most applicable to the query and sections provided (1, 2, 3, or 4).
+
+Situation Number:
 """.strip()

@@ -184,6 +184,13 @@ class ChunkIndexRequest(BasicChunkRequest):
     filters: IndexFilters
 
 
+class ContextExpansionType(str, Enum):
+    NOT_RELEVANT = "not_relevant"
+    MAIN_SECTION_ONLY = "main_section_only"
+    INCLUDE_ADJACENT_SECTIONS = "include_adjacent_sections"
+    FULL_DOCUMENT = "full_document"
+
+
 class SearchRequest(ChunkContext):
     query: str
 

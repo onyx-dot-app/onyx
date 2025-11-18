@@ -10,7 +10,6 @@ from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkSearchRequest
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.pipeline import merge_individual_chunks
 from onyx.context.search.pipeline import search_pipeline
@@ -32,6 +31,9 @@ from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import SearchToolRunContext
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.search.search_utils import (
+    expand_section_with_context,
+)
 from onyx.tools.tool_implementations.search.search_utils import (
     weighted_reciprocal_rank_fusion,
 )
@@ -83,7 +85,7 @@ def deduplicate_queries(
     return list(query_map.values())
 
 
-def _convert_search_docs_to_llm_string(
+def _convert_inference_sections_to_llm_string(
     top_sections: list[InferenceSection],
     citation_start: int = 1,
     limit: int | None = None,
@@ -436,14 +438,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
                 id_extractor=lambda chunk: f"{chunk.document_id}_{chunk.chunk_id}",
             )
 
-            top_sections = merge_individual_chunks(top_chunks)
-
-            # We can disregard all of the documents that exceed the num_hits parameter since it's not valid to have
+            # We can disregard all of the chunks that exceed the num_hits parameter since it's not valid to have
             # documents/contents from things that aren't returned to the user on the frontend
-            top_sections = top_sections[: override_kwargs.num_hits]
+            top_sections = merge_individual_chunks(top_chunks)[
+                : override_kwargs.num_hits
+            ]
 
-            # Convert InferenceSections to SavedSearchDocs for emission
-            saved_search_docs = convert_inference_sections_to_search_docs(
+            # Convert InferenceSections to SearchDocs for emission
+            search_docs = convert_inference_sections_to_search_docs(
                 top_sections, is_internet=False
             )
 
@@ -453,19 +455,38 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
                     turn_index=turn_index,
                     tab_index=tab_index,
                     obj=SearchToolDocumentsDelta(
-                        documents=saved_search_docs,
+                        documents=search_docs,
                     ),
                 )
             )
 
-            # Convert InferenceSections to SearchDoc objects for the return value
-            search_docs = SearchDoc.from_chunks_or_sections(top_sections)
+            expanded_sections: list[InferenceSection] = []
+            # TODO must be parallelized
+            for section in top_sections:
+                try:
+                    # Use LLM to classify and expand section with appropriate context
+                    # This combines classification and expansion into a single optimized operation
+                    expanded_section = expand_section_with_context(
+                        section=section,
+                        user_query=override_kwargs.original_query
+                        or semantic_query
+                        or llm_query,
+                        llm=self.llm,
+                        document_index=self.document_index,
+                    )
 
-            # CLAUDE TODO: add the helper functions to select the most relevant sections and build the InferenceSection
-            # with the right chunks.
+                    if expanded_section is not None:
+                        expanded_sections.append(expanded_section)
 
-            docs_str = _convert_search_docs_to_llm_string(
-                top_sections=top_sections,
+                except Exception as e:
+                    logger.warning(
+                        f"Error processing section context expansion: {e}. Using original section."
+                    )
+                    # On error, use the original section
+                    expanded_sections.append(section)
+
+            docs_str = _convert_inference_sections_to_llm_string(
+                top_sections=expanded_sections,
                 citation_start=override_kwargs.starting_citation_num,
                 limit=override_kwargs.max_llm_chunks,
             )
