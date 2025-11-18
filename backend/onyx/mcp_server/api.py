@@ -54,12 +54,13 @@ def create_mcp_fastapi_app() -> FastAPI:
         )
         logger.info("Database connection pool initialized")
 
-        async with mcp_asgi_app.lifespan(app):
-            yield
-
-        logger.info("MCP server shutting down")
-        await search.shutdown_http_client()
-        SqlEngine.reset_engine()
+        try:
+            async with mcp_asgi_app.lifespan(app):
+                yield
+        finally:
+            logger.info("MCP server shutting down")
+            await search.shutdown_http_client()
+            SqlEngine.reset_engine()
 
     app = FastAPI(
         title="Onyx MCP Server",

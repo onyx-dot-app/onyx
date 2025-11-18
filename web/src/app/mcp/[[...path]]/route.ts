@@ -76,12 +76,15 @@ const supportsRequestBody = (request: NextRequest): boolean => {
 
 const trimSlashes = (value: string): string => value.replace(/^\/+|\/+$/g, "");
 
+const sanitizePathSegments = (segments: string[] | undefined): string[] =>
+  segments?.filter(Boolean).map((segment) => encodeURIComponent(segment)) ?? [];
+
 const buildTargetUrl = (
   pathSegments: string[] | undefined,
   searchParams: URLSearchParams
 ): string => {
   const target = new URL(MCP_INTERNAL_URL);
-  const forwardedPath = pathSegments?.filter(Boolean).join("/") ?? "";
+  const forwardedPath = sanitizePathSegments(pathSegments).join("/");
 
   const basePath = trimSlashes(target.pathname);
   const combinedPath = [basePath, trimSlashes(forwardedPath)]
