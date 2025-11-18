@@ -1,5 +1,4 @@
-import React from "react";
-import { Switch } from "@/components/ui/switch";
+import Switch from "@/refresh-components/inputs/Switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { useNRFPreferences } from "../../../components/context/NRFPreferencesContext";
@@ -19,12 +18,7 @@ const SidebarSwitch = ({
 }) => (
   <div className="flex justify-between items-center py-2">
     <span className="text-sm text-text-300">{label}</span>
-    <Switch
-      checked={checked}
-      onCheckedChange={onCheckedChange}
-      className="data-[state=checked]:bg-white data-[state=checked]:border-background-200 data-[state=unchecked]:bg-background-600"
-      circleClassName="data-[state=checked]:bg-background-200"
-    />
+    <Switch checked={checked} onCheckedChange={onCheckedChange} />
   </div>
 );
 

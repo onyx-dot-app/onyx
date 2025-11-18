@@ -211,7 +211,7 @@ def get_user_files(
     return user_files
 
 
-def get_user_files_as_user(
+def validate_user_files_ownership(
     user_file_ids: list[UUID],
     user_id: UUID | None,
     db_session: Session,

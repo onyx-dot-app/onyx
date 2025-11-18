@@ -113,7 +113,7 @@ export default function ShareChatSessionModal({
         icon={SvgShare}
         title="Share Chat"
         onClose={onClose}
-        submit={<Button>Share</Button>}
+        submit={<Button onClick={onClose}>Share</Button>}
       >
         {shareLink ? (
           <div>

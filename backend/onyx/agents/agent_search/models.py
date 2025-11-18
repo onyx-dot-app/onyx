@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.enums import ResearchType
@@ -25,8 +26,7 @@ class GraphInputs(BaseModel):
     structured_response_format: dict | None = None
     project_instructions: str | None = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class GraphTooling(BaseModel):
@@ -41,8 +41,7 @@ class GraphTooling(BaseModel):
     force_use_tool: ForceUseTool
     using_tool_calling_llm: bool = False
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class GraphPersistence(BaseModel):
@@ -57,8 +56,7 @@ class GraphPersistence(BaseModel):
     # message were flushed to; only needed for agentic search
     db_session: Session
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class GraphSearchConfig(BaseModel):
@@ -87,5 +85,4 @@ class GraphConfig(BaseModel):
     # Only needed for agentic search
     persistence: GraphPersistence
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)

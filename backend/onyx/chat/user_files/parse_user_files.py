@@ -3,12 +3,11 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Persona
-from onyx.db.models import UserFile
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.user_file import update_last_accessed_at_for_user_files
 from onyx.file_store.models import InMemoryChatFile
-from onyx.file_store.utils import get_user_files_as_user
 from onyx.file_store.utils import load_in_memory_chat_files
+from onyx.file_store.utils import validate_user_files_ownership
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.utils.logger import setup_logger
 
@@ -17,36 +16,40 @@ logger = setup_logger()
 
 
 def parse_user_files(
-    user_file_ids: list[UUID],
+    persona_user_file_ids: list[UUID],
+    current_message_user_file_ids: list[UUID],
     db_session: Session,
     persona: Persona,
     actual_user_input: str,
     project_id: int | None,
     user_id: UUID | None,
-) -> tuple[list[InMemoryChatFile], list[UserFile], SearchToolOverrideKwargs | None]:
+) -> tuple[list[InMemoryChatFile], SearchToolOverrideKwargs | None]:
     """
     Parse user files and project into in-memory chat files and create search tool override kwargs.
     Only creates SearchToolOverrideKwargs if token overflow occurs.
 
     Args:
-        user_file_ids: List of user file IDs to load
+        persona_user_file_ids: List of user file IDs attached to the persona
+        current_message_user_file_ids: List of user file IDs from the current message
         db_session: Database session
         persona: Persona to calculate available tokens
         actual_user_input: User's input message for token calculation
-        project_id: Project ID to validate file ownership
+        project_id: Project ID to load associated files
         user_id: User ID for file ownership validation and LLM access
 
     Returns:
         Tuple of (
             loaded user files,
-            user file models,
-            search tool override kwargs if token
-                overflow
+            search tool override kwargs if token overflow occurs
         )
     """
     # Return empty results if no files or project specified
-    if not user_file_ids and not project_id:
-        return [], [], None
+    if (
+        not persona_user_file_ids
+        and not current_message_user_file_ids
+        and not project_id
+    ):
+        return [], None
 
     project_user_file_ids = []
 
@@ -59,7 +62,9 @@ def parse_user_files(
         )
 
     # Combine user-provided and project-derived user file IDs
-    combined_user_file_ids = user_file_ids + project_user_file_ids or []
+    combined_user_file_ids = (
+        persona_user_file_ids + current_message_user_file_ids + project_user_file_ids
+    )
 
     # Load user files from the database into memory
     user_files = load_in_memory_chat_files(
@@ -67,14 +72,15 @@ def parse_user_files(
         db_session,
     )
 
-    user_file_models = get_user_files_as_user(
-        combined_user_file_ids,
+    # current message files should be owned by the user
+    validate_user_files_ownership(
+        current_message_user_file_ids,
         user_id,
         db_session,
     )
 
     # Update last accessed at for the user files which are used in the chat
-    if user_file_ids or project_user_file_ids:
+    if combined_user_file_ids:
         # update_last_accessed_at_for_user_files expects list[UUID]
         update_last_accessed_at_for_user_files(
             combined_user_file_ids,
@@ -114,7 +120,7 @@ def parse_user_files(
     # we can just pass them into the prompt directly
     if have_enough_tokens:
         # No search tool override needed - files can be passed directly
-        return user_files, user_file_models, None
+        return user_files, None
 
     # Token overflow - need to use search tool
     override_kwargs = SearchToolOverrideKwargs(
@@ -122,10 +128,10 @@ def parse_user_files(
         alternate_db_session=None,
         retrieved_sections_callback=None,
         skip_query_analysis=have_enough_tokens,
-        user_file_ids=user_file_ids or [],
+        user_file_ids=current_message_user_file_ids + persona_user_file_ids or [],
         project_id=(
             project_id if persona.is_default_persona else None
         ),  # if the persona is not default, we don't want to use the project files
     )
 
-    return user_files, user_file_models, override_kwargs
+    return user_files, override_kwargs

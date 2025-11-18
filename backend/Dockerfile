@@ -7,15 +7,12 @@ have a contract or agreement with DanswerAI, you are not permitted to use the En
 Edition features outside of personal development or testing purposes. Please reach out to \
 founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
 
-# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
-ARG ONYX_VERSION=0.0.0-dev
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
-ENV ONYX_VERSION=${ONYX_VERSION} \
-    DANSWER_RUNNING_IN_DOCKER="true" \
+ENV DANSWER_RUNNING_IN_DOCKER="true" \
     DO_NOT_TRACK="true" \
     PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 
 # Install system dependencies
 # cmake needed for psycopg (postgres)
@@ -127,6 +124,10 @@ RUN chmod +x /app/scripts/supervisord_entrypoint.sh
 COPY --chown=onyx:onyx ./assets /app/assets
 
 ENV PYTHONPATH=/app
+
+# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
+ARG ONYX_VERSION=0.0.0-dev
+ENV ONYX_VERSION=${ONYX_VERSION}
 
 # Default command which does nothing
 # This container is used by api server and background which specify their own CMD

@@ -971,21 +971,54 @@ class GoogleDriveConnector(
         )
 
         for file in drive_files:
-            document_id = onyx_document_id_from_drive_file(file.drive_file)
-            logger.debug(
-                f"Updating checkpoint for file: {file.drive_file.get('name')}. "
-                f"Seen: {document_id in checkpoint.all_retrieved_file_ids}"
-            )
-            checkpoint.completion_map[file.user_email].update(
+            drive_file = file.drive_file or {}
+            completion = checkpoint.completion_map[file.user_email]
+
+            completed_until = completion.completed_until
+            modified_time = drive_file.get(GoogleFields.MODIFIED_TIME.value)
+            if isinstance(modified_time, str):
+                try:
+                    completed_until = datetime.fromisoformat(modified_time).timestamp()
+                except ValueError:
+                    logger.warning(
+                        "Invalid modifiedTime for file '%s' (stage=%s, user=%s).",
+                        drive_file.get("id"),
+                        file.completion_stage,
+                        file.user_email,
+                    )
+
+            completion.update(
                 stage=file.completion_stage,
-                completed_until=datetime.fromisoformat(
-                    file.drive_file[GoogleFields.MODIFIED_TIME.value]
-                ).timestamp(),
+                completed_until=completed_until,
                 current_folder_or_drive_id=file.parent_id,
             )
-            if document_id not in checkpoint.all_retrieved_file_ids:
-                checkpoint.all_retrieved_file_ids.add(document_id)
+
+            if file.error is not None or not drive_file:
                 yield file
+                continue
+
+            try:
+                document_id = onyx_document_id_from_drive_file(drive_file)
+            except KeyError as exc:
+                logger.warning(
+                    "Drive file missing id/webViewLink (stage=%s user=%s). Skipping.",
+                    file.completion_stage,
+                    file.user_email,
+                )
+                if file.error is None:
+                    file.error = exc  # type: ignore[assignment]
+                yield file
+                continue
+
+            logger.debug(
+                f"Updating checkpoint for file: {drive_file.get('name')}. "
+                f"Seen: {document_id in checkpoint.all_retrieved_file_ids}"
+            )
+            if document_id in checkpoint.all_retrieved_file_ids:
+                continue
+
+            checkpoint.all_retrieved_file_ids.add(document_id)
+            yield file
 
     def _manage_oauth_retrieval(
         self,

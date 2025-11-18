@@ -33,6 +33,7 @@ const nextConfig = {
     unoptimized: true, // Disable image optimization to avoid requiring Sharp
   },
   async headers() {
+    const isDev = process.env.NODE_ENV === "development";
     return [
       {
         source: "/(.*)",
@@ -62,12 +63,13 @@ const nextConfig = {
       },
       {
         // Cache static assets (images, icons, fonts, etc.) to prevent refetching and re-renders
-        // This helps eliminate icon flickering and improves performance
-        source: "/_next/static/:path*", // Matches static assets served by Next.js
+        source: "/_next/static/:path*",
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=31536000, immutable", // Cache for 1 year, mark as immutable
+            value: isDev
+              ? "no-cache, must-revalidate" // Dev: always check if fresh
+              : "public, max-age=2592000, immutable", // Prod: cache for 30 days
           },
         ],
       },

@@ -9,6 +9,7 @@ from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+from onyx.chat.prune_and_merge import prune_and_merge_sections
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -65,9 +66,9 @@ def _internal_search_core(
 
     def execute_single_query(
         query: str, parallelization_nr: int
-    ) -> list[LlmInternalSearchResult]:
+    ) -> list[InferenceSection]:
         """Execute a single query and return the retrieved documents as LlmDocs"""
-        search_results_for_query: list[LlmInternalSearchResult] = []
+        retrieved_sections: list[InferenceSection] = []
 
         with get_session_with_current_tenant() as search_db_session:
             for tool_response in search_tool.run(
@@ -86,73 +87,13 @@ def _internal_search_core(
                     break
                 # get retrieved docs to send to the rest of the graph
                 if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:
-                    response = cast(SearchResponseSummary, tool_response.response)
-                    # TODO: just a heuristic to not overload context window -- carried over from existing DR flow
-                    docs_to_feed_llm = 15
-                    retrieved_sections: list[InferenceSection] = response.top_sections[
-                        :docs_to_feed_llm
-                    ]
-
-                    # Convert InferenceSections to LlmDocs for return value
-                    search_results_for_query = [
-                        LlmInternalSearchResult(
-                            document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
-                            title=section.center_chunk.semantic_identifier,
-                            excerpt=section.combined_content,
-                            metadata=section.center_chunk.metadata,
-                            unique_identifier_to_strip_away=section.center_chunk.document_id,
-                        )
-                        for section in retrieved_sections
-                    ]
-
-                    from onyx.chat.turn.models import FetchedDocumentCacheEntry
-
-                    for section in retrieved_sections:
-                        unique_id = section.center_chunk.document_id
-                        if unique_id not in run_context.context.fetched_documents_cache:
-                            run_context.context.fetched_documents_cache[unique_id] = (
-                                FetchedDocumentCacheEntry(
-                                    inference_section=section,
-                                    document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
-                                )
-                            )
-
-                    run_context.context.run_dependencies.emitter.emit(
-                        Packet(
-                            ind=index,
-                            obj=SearchToolDelta(
-                                type="internal_search_tool_delta",
-                                queries=[],
-                                documents=convert_inference_sections_to_search_docs(
-                                    retrieved_sections, is_internet=False
-                                ),
-                            ),
-                        )
+                    search_response_summary = cast(
+                        SearchResponseSummary, tool_response.response
                     )
-                    run_context.context.global_iteration_responses.append(
-                        IterationAnswer(
-                            tool=SearchTool.__name__,
-                            tool_id=get_tool_by_name(
-                                SearchTool.__name__,
-                                run_context.context.run_dependencies.db_session,
-                            ).id,
-                            iteration_nr=index,
-                            parallelization_nr=parallelization_nr,
-                            question=query,
-                            reasoning=f"I am now using Internal Search to gather information on {query}",
-                            answer="",
-                            cited_documents={
-                                i: inference_section
-                                for i, inference_section in enumerate(
-                                    retrieved_sections
-                                )
-                            },
-                            queries=[query],
-                        )
-                    )
+                    retrieved_sections = search_response_summary.top_sections
                     break
 
-        return search_results_for_query
+        return retrieved_sections
 
     # Execute all queries in parallel using run_functions_in_parallel
     function_calls = [
@@ -162,18 +103,84 @@ def _internal_search_core(
     search_results_dict = run_functions_in_parallel(function_calls)
 
     # Aggregate all results from all queries
-    all_retrieved_docs: list[LlmInternalSearchResult] = []
+    all_retrieved_sections: list[InferenceSection] = []
     for result_id in search_results_dict:
-        retrieved_docs = search_results_dict[result_id]
-        if retrieved_docs:
-            all_retrieved_docs.extend(retrieved_docs)
+        retrieved_sections = search_results_dict[result_id]
+        if retrieved_sections:
+            all_retrieved_sections.extend(retrieved_sections)
 
-    # Set flag to include citation requirements since we retrieved documents
-    run_context.context.should_cite_documents = (
-        run_context.context.should_cite_documents or bool(all_retrieved_docs)
+    # Use the current input token count from context for pruning
+    # This includes system prompt, history, user message, and any agent turns so far
+    existing_input_tokens = run_context.context.current_input_tokens
+
+    pruned_sections: list[InferenceSection] = prune_and_merge_sections(
+        sections=all_retrieved_sections,
+        section_relevance_list=None,
+        llm_config=search_tool.llm.config,
+        existing_input_tokens=existing_input_tokens,
+        contextual_pruning_config=search_tool.contextual_pruning_config,
     )
 
-    return all_retrieved_docs
+    search_results_for_query = [
+        LlmInternalSearchResult(
+            document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            title=section.center_chunk.semantic_identifier,
+            excerpt=section.combined_content,
+            metadata=section.center_chunk.metadata,
+            unique_identifier_to_strip_away=section.center_chunk.document_id,
+        )
+        for section in pruned_sections
+    ]
+
+    from onyx.chat.turn.models import FetchedDocumentCacheEntry
+
+    for section in pruned_sections:
+        unique_id = section.center_chunk.document_id
+        if unique_id not in run_context.context.fetched_documents_cache:
+            run_context.context.fetched_documents_cache[unique_id] = (
+                FetchedDocumentCacheEntry(
+                    inference_section=section,
+                    document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                )
+            )
+
+    run_context.context.run_dependencies.emitter.emit(
+        Packet(
+            ind=index,
+            obj=SearchToolDelta(
+                type="internal_search_tool_delta",
+                queries=[],
+                documents=convert_inference_sections_to_search_docs(
+                    pruned_sections, is_internet=False
+                ),
+            ),
+        )
+    )
+    run_context.context.global_iteration_responses.append(
+        IterationAnswer(
+            tool=SearchTool.__name__,
+            tool_id=get_tool_by_name(
+                SearchTool.__name__,
+                run_context.context.run_dependencies.db_session,
+            ).id,
+            iteration_nr=index,
+            parallelization_nr=0,
+            question=queries[0] if queries else "",
+            reasoning=f"I am now using Internal Search to gather information on {queries[0] if queries else ''}",
+            answer="",
+            cited_documents={
+                i: inference_section
+                for i, inference_section in enumerate(pruned_sections)
+            },
+            queries=queries,
+        )
+    )
+    # Set flag to include citation requirements since we retrieved documents
+    run_context.context.should_cite_documents = (
+        run_context.context.should_cite_documents or bool(pruned_sections)
+    )
+
+    return search_results_for_query
 
 
 @function_tool

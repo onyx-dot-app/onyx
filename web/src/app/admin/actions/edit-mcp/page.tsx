@@ -36,6 +36,7 @@ import {
   MCPFormValues,
   MCPAuthTemplate,
   MCPServerDetail,
+  MCPTool,
 } from "@/components/admin/actions/interfaces";
 import { ToolList } from "@/components/admin/actions/ToolList";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -105,6 +106,7 @@ export default function NewMCPToolPage() {
     oauth_client_secret: "",
   });
   const fetchedServerRef = useRef<string | null>(null);
+  const [initialDbTools, setInitialDbTools] = useState<MCPTool[] | null>(null);
 
   // We no longer probe by listing tools; OAuth connection state
   // is inferred from presence of return data in sessionStorage.
@@ -187,6 +189,61 @@ export default function NewMCPToolPage() {
 
     fetchServerData();
   }, [serverId]); // Only depend on the memoized server ID
+
+  useEffect(() => {
+    if (!serverId) {
+      setInitialDbTools(null);
+      return;
+    }
+
+    setInitialDbTools(null);
+    let cancelled = false;
+
+    const loadExistingTools = async () => {
+      try {
+        const response = await fetch(
+          `/api/admin/mcp/server/${serverId}/db-tools`
+        );
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        const data = await response.json();
+        const mappedTools: MCPTool[] = (data.tools || []).map(
+          (tool: {
+            name: string;
+            description?: string;
+            display_name?: string;
+          }) => ({
+            name: tool.name,
+            description: tool.description,
+            displayName: tool.display_name,
+          })
+        );
+        if (cancelled) {
+          return;
+        }
+        setInitialDbTools(mappedTools);
+        if (mappedTools.length > 0) {
+          const currentUrl = new URL(window.location.href);
+          if (currentUrl.searchParams.get("listing_tools") !== "true") {
+            currentUrl.searchParams.set("listing_tools", "true");
+            router.replace(currentUrl.toString());
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load MCP server tools:", error);
+        if (!cancelled) {
+          setInitialDbTools([]);
+        }
+      }
+    };
+
+    loadExistingTools();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [serverId, router]);
 
   const handleOAuthConnect = async (values: MCPFormValues) => {
     setCheckingOAuthStatus(true);
@@ -375,7 +432,10 @@ export default function NewMCPToolPage() {
                               }
                             }}
                           >
-                            <SelectTrigger className="mt-1">
+                            <SelectTrigger
+                              className="mt-1"
+                              data-testid="auth-type-select"
+                            >
                               <SelectValue placeholder="Select authentication type" />
                             </SelectTrigger>
                             <SelectContent>
@@ -473,7 +533,6 @@ export default function NewMCPToolPage() {
                     {values.auth_type === MCPAuthenticationType.OAUTH && (
                       <div className="flex items-center gap-2">
                         <Button
-                          type="button"
                           onClick={() => handleOAuthConnect(values)}
                           disabled={
                             checkingOAuthStatus ||
@@ -488,6 +547,7 @@ export default function NewMCPToolPage() {
                                 ? SvgCheck
                                 : SvgLink
                           }
+                          data-testid="connect-oauth-button"
                         >
                           {checkingOAuthStatus
                             ? "Connecting..."
@@ -503,6 +563,7 @@ export default function NewMCPToolPage() {
                       verbRoot={verbRoot}
                       serverId={serverId ? parseInt(serverId) : undefined}
                       oauthConnected={oauthConnected}
+                      initialDbTools={initialDbTools}
                       setPopup={setPopup}
                     />
                   </div>
