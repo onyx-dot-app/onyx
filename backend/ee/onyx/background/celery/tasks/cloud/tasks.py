@@ -53,7 +53,7 @@ def cloud_beat_task_generator(
         tenant_ids = get_all_tenant_ids()
 
         # NOTE: for now, we are running tasks for gated tenants, since we want to allow
-        # connector deletion to run successfully. The new plan is to continously prune
+        # connector deletion to run successfully. The new plan is to continuously prune
         # the gated tenants set, so we won't have a build up of old, unused gated tenants.
         # Keeping this around in case we want to revert to the previous behavior.
         # gated_tenants = get_gated_tenants()
