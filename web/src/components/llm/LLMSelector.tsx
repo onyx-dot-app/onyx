@@ -21,6 +21,7 @@ interface LLMSelectorProps {
   currentLlm: string | null;
   onSelect: (value: string | null) => void;
   requiresImageGeneration?: boolean;
+  excludePublicProviders?: boolean;
 }
 
 export const LLMSelector: React.FC<LLMSelectorProps> = ({
@@ -29,6 +30,7 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
   currentLlm,
   onSelect,
   requiresImageGeneration,
+  excludePublicProviders = false,
 }) => {
   const currentDescriptor = useMemo(
     () => (currentLlm ? parseLlmDescriptor(currentLlm) : null),
@@ -126,14 +128,16 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
         </SelectValue>
       </SelectTrigger>
       <SelectContent className="z-[99999]">
-        <SelectItem className="flex" hideCheck value="default">
-          <span>{userSettings ? "System Default" : "User Default"}</span>
-          {userSettings && (
-            <span className=" my-auto font-normal ml-1">
-              ({defaultModelDisplayName})
-            </span>
-          )}
-        </SelectItem>
+        {!excludePublicProviders && (
+          <SelectItem className="flex" hideCheck value="default">
+            <span>{userSettings ? "System Default" : "User Default"}</span>
+            {userSettings && (
+              <span className=" my-auto font-normal ml-1">
+                ({defaultModelDisplayName})
+              </span>
+            )}
+          </SelectItem>
+        )}
         {llmOptions.map((option) => (
           <SelectItem key={option.value} value={option.value}>
             <div className="my-1 flex items-center">

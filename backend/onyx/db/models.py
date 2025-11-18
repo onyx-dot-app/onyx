@@ -67,6 +67,7 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPTransport,
     ThemePreference,
+    SwitchoverType,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -1528,6 +1529,9 @@ class FederatedConnector(Base):
         Enum(FederatedConnectorSource, native_enum=False)
     )
     credentials: Mapped[dict[str, str]] = mapped_column(EncryptedJson(), nullable=False)
+    config: Mapped[dict[str, Any]] = mapped_column(
+        postgresql.JSONB(), default=dict, nullable=False, server_default="{}"
+    )
 
     oauth_tokens: Mapped[list["FederatedConnectorOAuthToken"]] = relationship(
         "FederatedConnectorOAuthToken",
@@ -1609,9 +1613,13 @@ class SearchSettings(Base):
         ForeignKey("embedding_provider.provider_type"), nullable=True
     )
 
-    # Whether switching to this model should re-index all connectors in the background
-    # if no re-index is needed, will be ignored. Only used during the switch-over process.
-    background_reindex_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Type of switchover to perform when switching embedding models
+    # REINDEX: waits for all connectors to complete
+    # ACTIVE_ONLY: waits for only non-paused connectors to complete
+    # INSTANT: swaps immediately without waiting
+    switchover_type: Mapped[SwitchoverType] = mapped_column(
+        Enum(SwitchoverType, native_enum=False), default=SwitchoverType.REINDEX
+    )
 
     # allows for quantization -> less memory usage for a small performance hit
     embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
@@ -2406,6 +2414,12 @@ class LLMProvider(Base):
         secondary="llm_provider__user_group",
         viewonly=True,
     )
+    personas: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary="llm_provider__persona",
+        back_populates="allowed_by_llm_providers",
+        viewonly=True,
+    )
     model_configurations: Mapped[list["ModelConfiguration"]] = relationship(
         "ModelConfiguration",
         back_populates="llm_provider",
@@ -2781,6 +2795,12 @@ class Persona(Base):
         secondary="persona__user_group",
         viewonly=True,
     )
+    allowed_by_llm_providers: Mapped[list["LLMProvider"]] = relationship(
+        "LLMProvider",
+        secondary="llm_provider__persona",
+        back_populates="personas",
+        viewonly=True,
+    )
     # Relationship to UserFile
     user_files: Mapped[list["UserFile"]] = relationship(
         "UserFile",
@@ -3098,6 +3118,22 @@ class Persona__UserGroup(Base):
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id"), primary_key=True
+    )
+
+
+class LLMProvider__Persona(Base):
+    """Association table restricting LLM providers to specific personas.
+
+    If no such rows exist for a given LLM provider, then it is accessible by all personas.
+    """
+
+    __tablename__ = "llm_provider__persona"
+
+    llm_provider_id: Mapped[int] = mapped_column(
+        ForeignKey("llm_provider.id", ondelete="CASCADE"), primary_key=True
+    )
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
     )
 
 

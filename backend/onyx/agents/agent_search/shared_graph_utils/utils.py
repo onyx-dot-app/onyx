@@ -275,7 +275,7 @@ def summarize_history(
     try:
         history_response = run_with_timeout(
             AGENT_TIMEOUT_LLM_HISTORY_SUMMARY_GENERATION,
-            llm.invoke,
+            llm.invoke_langchain,
             history_context_prompt,
             timeout_override=AGENT_TIMEOUT_CONNECT_LLM_HISTORY_SUMMARY_GENERATION,
             max_tokens=AGENT_MAX_TOKENS_HISTORY_SUMMARY,

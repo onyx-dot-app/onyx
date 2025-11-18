@@ -131,7 +131,6 @@ function ChatInputBarInner({
   disabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
-
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
@@ -430,7 +429,7 @@ function ChatInputBarInner({
             "bg-transparent",
             "resize-none",
             "placeholder:text-text-03",
-            "whitespace-normal",
+            "whitespace-pre-wrap",
             "break-word",
             "overscroll-contain",
             "overflow-y-auto",
@@ -626,7 +625,6 @@ function ChatInputBarInner({
     </div>
   );
 }
-
 const ChatInputBar = React.memo(ChatInputBarInner);
 ChatInputBar.displayName = "ChatInputBar";
 

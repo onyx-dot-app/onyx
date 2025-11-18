@@ -16,7 +16,7 @@ const divClasses = (active?: boolean, hovered?: boolean, isError?: boolean) =>
       !isError && active && "border-border-05",
     ],
     internal: [],
-    disabled: ["bg-background-neutral-03"],
+    disabled: ["bg-background-neutral-03", "border", "border-border-01"],
   }) as const;
 
 const inputClasses = (active?: boolean) =>
@@ -42,7 +42,7 @@ export interface InputTypeInProps
   // Right section of the input, e.g. password toggle icon
   rightSection?: React.ReactNode;
 
-  placeholder: string;
+  placeholder?: string;
 
   // Controls whether the clear (X) button is shown when there is a value
   showClearButton?: boolean;

@@ -11,6 +11,7 @@ import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
 
+//This component is responsible to render fields dynamically for tabs based llm providers
 interface DynamicProviderFieldsProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   fields: string[];

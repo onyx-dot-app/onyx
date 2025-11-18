@@ -1,4 +1,15 @@
 repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+        files: ^.github/
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.8
+    hooks:
+      - id: actionlint
+
   - repo: https://github.com/psf/black
     rev: 25.1.0
     hooks:
@@ -54,15 +65,12 @@ repos:
         language: system
         pass_filenames: false
         files: \.tf$
+
       - id: check-lazy-imports
-        name: Check lazy imports are not directly imported
+        name: Check lazy imports
         entry: python3 backend/scripts/check_lazy_imports.py
         language: system
         files: ^backend/(?!\.venv/).*\.py$
-        pass_filenames: false
-        # Note: pass_filenames is false because tsc must check the entire
-        # project, but the files filter ensures this only runs when relevant
-        # files change. Using --incremental for faster subsequent checks.
 
   # We would like to have a mypy pre-commit hook, but due to the fact that
   # pre-commit runs in it's own isolated environment, we would need to install

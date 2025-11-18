@@ -8,9 +8,9 @@ import {
   OnboardingStep,
 } from "./types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { updateUserPersonalization } from "@/lib/users/UserSettings";
+import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/components/user/UserProvider";
-import { useChatContext } from "../contexts/ChatContext";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 
 export function useOnboardingState(): {
   state: OnboardingState;
@@ -20,6 +20,7 @@ export function useOnboardingState(): {
   const [state, dispatch] = useReducer(onboardingReducer, initialState);
   const { user, refreshUser } = useUser();
   const { llmProviders, refreshLlmProviders } = useChatContext();
+  const hasLlmProviders = llmProviders?.length > 0;
   const userName = user?.personalization?.name;
   const [llmDescriptors, setLlmDescriptors] = useState<
     WellKnownLLMProviderDescriptor[]
@@ -49,7 +50,7 @@ export function useOnboardingState(): {
 
   // If there are any configured LLM providers already present, skip to the final step
   useEffect(() => {
-    if (Array.isArray(llmProviders) && llmProviders.length > 0) {
+    if (hasLlmProviders) {
       dispatch({
         type: OnboardingActionType.UPDATE_DATA,
         payload: { llmProviders: llmProviders.map((p) => p.provider) },
@@ -65,7 +66,7 @@ export function useOnboardingState(): {
         type: OnboardingActionType.UPDATE_DATA,
         payload: { userName },
       });
-      if (llmProviders.length > 0) {
+      if (hasLlmProviders) {
         dispatch({
           type: OnboardingActionType.SET_BUTTON_ACTIVE,
           isButtonActive: true,
@@ -90,7 +91,7 @@ export function useOnboardingState(): {
     });
 
     if (state.currentStep === OnboardingStep.Name) {
-      if (llmProviders.length > 0) {
+      if (hasLlmProviders) {
         dispatch({
           type: OnboardingActionType.SET_BUTTON_ACTIVE,
           isButtonActive: true,
@@ -107,7 +108,7 @@ export function useOnboardingState(): {
       refreshLlmProviders();
     }
     dispatch({ type: OnboardingActionType.NEXT_STEP });
-  }, [state, refreshLlmProviders]);
+  }, [state, refreshLlmProviders, llmProviders]);
 
   const prevStep = useCallback(() => {
     dispatch({ type: OnboardingActionType.PREV_STEP });
@@ -115,7 +116,7 @@ export function useOnboardingState(): {
 
   const goToStep = useCallback(
     (step: OnboardingStep) => {
-      if (step === OnboardingStep.LlmSetup && llmProviders.length > 0) {
+      if (step === OnboardingStep.LlmSetup && hasLlmProviders) {
         dispatch({
           type: OnboardingActionType.SET_BUTTON_ACTIVE,
           isButtonActive: true,

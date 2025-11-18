@@ -8,9 +8,9 @@ import {
   PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import ToggleList, {
-  ToggleListItem,
-} from "@/refresh-components/popovers/ActionsPopover/ToggleList";
+import SwitchList, {
+  SwitchListItem,
+} from "@/refresh-components/popovers/ActionsPopover/SwitchList";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
   MCPAuthenticationType,
@@ -142,7 +142,7 @@ export default function ActionsPopover({
     setForcedToolIds,
   } = useAgentsContext();
 
-  const { isAdmin, isCurator } = useUser();
+  const { user, isAdmin, isCurator } = useUser();
 
   const { availableTools, ccPairs } = useChatContext();
   const availableToolIds = availableTools.map((tool) => tool.id);
@@ -207,12 +207,17 @@ export default function ActionsPopover({
 
   // Fetch MCP servers for the assistant on mount
   useEffect(() => {
-    const fetchMCPServers = async () => {
-      if (selectedAssistant == null || selectedAssistant.id == null) return;
+    if (selectedAssistant == null || selectedAssistant.id == null) return;
 
+    const abortController = new AbortController();
+
+    const fetchMCPServers = async () => {
       try {
         const response = await fetch(
-          `/api/mcp/servers/persona/${selectedAssistant.id}`
+          `/api/mcp/servers/persona/${selectedAssistant.id}`,
+          {
+            signal: abortController.signal,
+          }
         );
         if (response.ok) {
           const data = await response.json();
@@ -231,11 +236,18 @@ export default function ActionsPopover({
           });
         }
       } catch (error) {
+        if (abortController.signal.aborted) {
+          return;
+        }
         console.error("Error fetching MCP servers:", error);
       }
     };
 
     fetchMCPServers();
+
+    return () => {
+      abortController.abort();
+    };
   }, [selectedAssistant?.id]);
 
   // No separate MCP tool loading; tools already exist in selectedAssistant.tools
@@ -413,7 +425,7 @@ export default function ActionsPopover({
     selectedMcpServer.auth_type !== MCPAuthenticationType.NONE &&
     isActiveServerAuthenticated;
 
-  const mcpToggleItems: ToggleListItem[] = selectedMcpTools.map((tool) => ({
+  const mcpToggleItems: SwitchListItem[] = selectedMcpTools.map((tool) => ({
     id: tool.id.toString(),
     label: tool.display_name || tool.name,
     description: tool.description,
@@ -463,7 +475,7 @@ export default function ActionsPopover({
 
   const configuredSources = getConfiguredSources(availableSources);
 
-  const sourceToggleItems: ToggleListItem[] = configuredSources.map(
+  const sourceToggleItems: SwitchListItem[] = configuredSources.map(
     (source) => ({
       id: source.uniqueKey,
       label: source.displayName,
@@ -556,7 +568,7 @@ export default function ActionsPopover({
   );
 
   const toolsView = (
-    <ToggleList
+    <SwitchList
       items={sourceToggleItems}
       searchPlaceholder="Search Filters"
       allDisabled={allSourcesDisabled}
@@ -569,7 +581,7 @@ export default function ActionsPopover({
   );
 
   const mcpView = (
-    <ToggleList
+    <SwitchList
       items={mcpToggleItems}
       searchPlaceholder={`Search ${selectedMcpServer?.name ?? "server"} tools`}
       allDisabled={mcpAllDisabled}

@@ -25,6 +25,7 @@ import { useFilters } from "@/lib/hooks";
 import { uploadFilesForChat } from "../services/lib";
 import { ChatFileType, FileDescriptor } from "../interfaces";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import Dropzone from "react-dropzone";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
@@ -55,7 +56,8 @@ export default function NRFPage({
   const filterManager = useFilters();
   const { isNight } = useNightTime();
   const { user, authTypeMetadata } = useUser();
-  const { ccPairs, documentSets, tags, llmProviders } = useChatContext();
+  const { ccPairs, documentSets, tags } = useChatContext();
+  const { llmProviders } = useLLMProviders();
   const settings = useContext(SettingsContext);
 
   const { popup, setPopup } = usePopup();
@@ -322,7 +324,8 @@ export default function NRFPage({
                 Welcome to Onyx
               </h2>
               <Button
-                className="bg-agent w-full hover:bg-accent-hover text-white"
+                className="w-full"
+                secondary
                 onClick={() => {
                   if (window.top) {
                     window.top.location.href = "/auth/login";
@@ -337,7 +340,9 @@ export default function NRFPage({
           )}
         </Modal>
       ) : (
-        llmProviders.length == 0 && <ApiKeyModal setPopup={setPopup} />
+        (!llmProviders || llmProviders.length === 0) && (
+          <ApiKeyModal setPopup={setPopup} />
+        )
       )}
     </div>
   );

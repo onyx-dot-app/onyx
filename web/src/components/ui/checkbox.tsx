@@ -19,9 +19,9 @@ const Checkbox = React.forwardRef<
     {...props}
   >
     <CheckboxPrimitive.Indicator
-      className={cn("grid place-content-center text-current")}
+      className={cn("grid place-content-center text-white")}
     >
-      <SvgCheck className="h-[0.75rem] w-[0.75rem] stroke-text-05" />
+      <SvgCheck className="h-[0.75rem] w-[0.75rem]" stroke="currentColor" />
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>
 ));

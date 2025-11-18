@@ -1,9 +1,11 @@
 import copy
 import io
 import json
+import re
 from collections.abc import Callable
 from collections.abc import Iterator
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
@@ -51,6 +53,23 @@ logger = setup_logger()
 MAX_CONTEXT_TOKENS = 100
 ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
+_TWELVE_LABS_PEGASUS_MODEL_NAMES = [
+    "us.twelvelabs.pegasus-1-2-v1:0",
+    "us.twelvelabs.pegasus-1-2-v1",
+    "twelvelabs/us.twelvelabs.pegasus-1-2-v1:0",
+    "twelvelabs/us.twelvelabs.pegasus-1-2-v1",
+]
+_TWELVE_LABS_PEGASUS_OUTPUT_TOKENS = max(512, GEN_AI_MODEL_FALLBACK_MAX_TOKENS // 4)
+CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
+    model_name: {
+        "max_input_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+        "max_output_tokens": _TWELVE_LABS_PEGASUS_OUTPUT_TOKENS,
+        "max_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+        "supports_reasoning": False,
+        "supports_vision": False,
+    }
+    for model_name in _TWELVE_LABS_PEGASUS_MODEL_NAMES
+}
 
 
 def _unwrap_nested_exception(error: Exception) -> Exception:
@@ -189,8 +208,6 @@ def _build_content(
     files: list[InMemoryChatFile] | None = None,
 ) -> str:
     """Applies all non-image files."""
-    from onyx.file_processing.extract_file_text import read_pdf_file
-
     if not files:
         return message
 
@@ -201,24 +218,85 @@ def _build_content(
 
     final_message_with_files = "FILES:\n\n"
     for file in text_files:
-        try:
-            file_content = file.content.decode("utf-8")
-        except UnicodeDecodeError:
-            # Try to decode as binary
-            try:
-                file_content, _, _ = read_pdf_file(io.BytesIO(file.content))
-            except Exception:
-                file_content = f"[Binary file content - {file.file_type} format]"
-                logger.exception(
-                    f"Could not decode binary file content for file type: {file.file_type}"
-                )
-                # logger.warning(f"Could not decode binary file content for file type: {file.file_type}")
+        file_content = _decode_text_file_content(file)
         file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""
         final_message_with_files += (
             f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
         )
 
     return final_message_with_files + message
+
+
+def _decode_text_file_content(file: InMemoryChatFile) -> str:
+    try:
+        return file.content.decode("utf-8")
+    except UnicodeDecodeError:
+        return _extract_non_utf8_text_file(file)
+
+
+def _extract_non_utf8_text_file(file: InMemoryChatFile) -> str:
+    """
+    Attempt to extract text from binary uploads (e.g., PDFs) while avoiding
+    unnecessary parsing for unsupported binaries.
+    """
+    from onyx.file_processing.extract_file_text import (
+        ACCEPTED_DOCUMENT_FILE_EXTENSIONS,
+        ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS,
+        extract_file_text,
+    )
+
+    candidate_extension = _infer_extension(file)
+    supported_extensions = set(
+        ACCEPTED_DOCUMENT_FILE_EXTENSIONS + ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS
+    )
+
+    if candidate_extension and candidate_extension in supported_extensions:
+        try:
+            extracted_text = extract_file_text(
+                io.BytesIO(file.content),
+                file.filename or str(file.file_id),
+                break_on_unprocessable=False,
+                extension=candidate_extension,
+            )
+            if extracted_text:
+                return extracted_text
+        except Exception:
+            logger.exception(
+                "Could not extract text content for file %s",
+                file.filename or file.file_id,
+            )
+
+    return _binary_file_placeholder(file)
+
+
+def _infer_extension(file: InMemoryChatFile) -> str | None:
+    """
+    Infer the most likely extension to drive downstream parsers.
+    Falls back to known file types and PDF magic bytes when necessary.
+    """
+    raw_bytes = file.content
+    if raw_bytes.startswith(b"%PDF") or raw_bytes.startswith(b"\xef\xbb\xbf%PDF"):
+        return ".pdf"
+
+    if file.filename:
+        extension = Path(file.filename).suffix.lower()
+        if extension:
+            return extension
+
+    if file.file_type == ChatFileType.CSV:
+        return ".csv"
+
+    if file.file_type == ChatFileType.PLAIN_TEXT:
+        return ".txt"
+
+    return None
+
+
+def _binary_file_placeholder(file: InMemoryChatFile) -> str:
+    image_type = get_image_type_from_bytes(file.content)
+    if image_type:
+        return f"[Binary image content ({image_type}) omitted]"
+    return f"[Binary file content - {file.file_type} format]"
 
 
 def build_content_with_imgs(
@@ -426,7 +504,7 @@ def test_llm(llm: LLM) -> str | None:
     error_msg = None
     for _ in range(2):
         try:
-            llm.invoke("Do not respond")
+            llm.invoke_langchain("Do not respond")
             return None
         except Exception as e:
             error_msg = str(e)
@@ -460,12 +538,17 @@ def get_model_map() -> dict:
             ):
                 starting_map[truncated_key] = potential_truncated_value
 
-    # NOTE: we could add additional models here in the future,
-    # but for now there is no point. Ollama allows the user to
-    # to specify their desired max context window, and it's
+    for model_name, model_metadata in CUSTOM_LITELLM_MODEL_OVERRIDES.items():
+        if model_name in starting_map:
+            continue
+        starting_map[model_name] = copy.deepcopy(model_metadata)
+
+    # NOTE: outside of the explicit CUSTOM_LITELLM_MODEL_OVERRIDES,
+    # we avoid hard-coding additional models here. Ollama, for example,
+    # allows the user to specify their desired max context window, and it's
     # unlikely to be standard across users even for the same model
-    # (it heavily depends on their hardware). For now, we'll just
-    # rely on GEN_AI_MODEL_FALLBACK_MAX_TOKENS to cover this.
+    # (it heavily depends on their hardware). For those cases, we rely on
+    # GEN_AI_MODEL_FALLBACK_MAX_TOKENS to cover this.
     # for model_name in [
     #     "llama3.2",
     #     "llama3.2:1b",
@@ -717,7 +800,6 @@ def get_max_input_tokens_from_llm_provider(
 
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
-
     # First, try to read an explicit configuration from the model_configuration table
     try:
         with get_session_with_current_tenant() as db_session:
@@ -740,6 +822,15 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
         )
 
     # Fallback to looking up the model in the litellm model_cost dict
+    return litellm_thinks_model_supports_image_input(model_name, model_provider)
+
+
+def litellm_thinks_model_supports_image_input(
+    model_name: str, model_provider: str
+) -> bool:
+    """Generally should call `model_supports_image_input` unless you already know that
+    `model_supports_image_input` from the DB is not set OR you need to avoid the performance
+    hit of querying the DB."""
     try:
         model_obj = find_model_obj(get_model_map(), model_provider, model_name)
         if not model_obj:
@@ -824,3 +915,24 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
             f"Failed to determine if {model_provider}/{model_name} is a true OpenAI model"
         )
         return False
+
+
+def model_needs_formatting_reenabled(model_name: str) -> bool:
+    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
+    # for OpenAI reasoning models to have correct markdown generation
+
+    # Models that need formatting re-enabled
+    model_names = ["gpt-5.1", "gpt-5", "o3", "o1"]
+
+    # Pattern matches if any of these model names appear with word boundaries
+    # Word boundaries include: start/end of string, space, hyphen, or forward slash
+    pattern = (
+        r"(?:^|[\s\-/])("
+        + "|".join(re.escape(name) for name in model_names)
+        + r")(?:$|[\s\-/])"
+    )
+
+    if re.search(pattern, model_name):
+        return True
+
+    return False

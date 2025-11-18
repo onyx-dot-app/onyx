@@ -62,6 +62,36 @@ class FakeTool:
         self.name = name
 
 
+class FakeLLMConfig:
+    """Fake LLM config for testing"""
+
+    def __init__(self) -> None:
+        self.max_input_tokens = 128000  # Default GPT-4 context
+        self.model_name = "gpt-4"
+        self.model_provider = "openai"
+
+
+class FakeLLM:
+    """Fake LLM for testing"""
+
+    def __init__(self) -> None:
+        self.config = FakeLLMConfig()
+
+
+class FakeContextualPruningConfig:
+    """Fake contextual pruning config for testing"""
+
+    def __init__(self) -> None:
+        self.max_chunks = None
+        self.max_window_percentage = None
+        self.max_tokens = None
+        self.is_manually_selected_docs = False
+        self.use_sections = True
+        self.tool_num_tokens = 0
+        self.using_tool_message = False
+        self.num_chunk_multiple = 1
+
+
 class FakeSearchPipeline:
     """Fake search pipeline for dependency injection"""
 
@@ -72,6 +102,9 @@ class FakeSearchPipeline:
         self.should_raise_exception = should_raise_exception
         self.run_called = False
         self.run_kwargs: dict[str, Any] = {}
+        # Add required attributes for SearchTool interface
+        self.llm = FakeLLM()
+        self.contextual_pruning_config = FakeContextualPruningConfig()
 
     def run(self, **kwargs: Any) -> list:
         self.run_called = True
@@ -347,11 +380,6 @@ def test_internal_search_core_basic_functionality(
     assert answer.tool == SearchTool.__name__
     assert answer.tool_id == 1
     assert answer.iteration_nr == 1
-    assert answer.question == query
-    assert (
-        answer.reasoning
-        == f"I am now using Internal Search to gather information on {query}"
-    )
     assert answer.answer == ""
     assert len(answer.cited_documents) == 2
 

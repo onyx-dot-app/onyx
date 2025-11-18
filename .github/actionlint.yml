@@ -1,0 +1,42 @@
+self-hosted-runner:
+  # Labels of self-hosted runner in array of strings.
+  labels:
+    - extras=ecr-cache
+    - extras=s3-cache
+    - hdd=256
+    - runs-on
+    - runner=1cpu-linux-arm64
+    - runner=1cpu-linux-x64
+    - runner=2cpu-linux-arm64
+    - runner=2cpu-linux-x64
+    - runner=4cpu-linux-arm64
+    - runner=4cpu-linux-x64
+    - runner=8cpu-linux-arm64
+    - runner=8cpu-linux-x64
+    - runner=16cpu-linux-arm64
+    - runner=16cpu-linux-x64
+    - ubuntu-slim # Currently in public preview
+    - volume=40gb
+
+# Configuration variables in array of strings defined in your repository or
+# organization. `null` means disabling configuration variables check.
+# Empty array means no configuration variable is allowed.
+config-variables: null
+
+# Configuration for file paths. The keys are glob patterns to match to file
+# paths relative to the repository root. The values are the configurations for
+# the file paths. Note that the path separator is always '/'.
+# The following configurations are available.
+#
+# "ignore" is an array of regular expression patterns. Matched error messages
+# are ignored. This is similar to the "-ignore" command line option.
+paths:
+  # Glob pattern relative to the repository root for matching files. The path separator is always '/'.
+  # This example configures any YAML file under the '.github/workflows/' directory.
+  .github/workflows/**/*.{yml,yaml}:
+    # TODO: These are real and should be fixed eventually.
+    ignore:
+      - 'shellcheck reported issue in this script: SC2038:.+'
+      - 'shellcheck reported issue in this script: SC2046:.+'
+      - 'shellcheck reported issue in this script: SC2086:.+'
+      - 'shellcheck reported issue in this script: SC2193:.+'

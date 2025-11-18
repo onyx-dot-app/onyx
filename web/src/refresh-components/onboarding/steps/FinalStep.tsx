@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import { memo } from "react";
 import Link from "next/link";
 import Button from "@/refresh-components/buttons/Button";
 import SvgExternalLink from "@/icons/external-link";

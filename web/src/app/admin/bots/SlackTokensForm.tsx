@@ -129,6 +129,7 @@ export const SlackTokensForm = ({
           />
           <div className="flex justify-end w-full mt-4">
             <Button
+              type="submit"
               disabled={
                 isSubmitting ||
                 !values.bot_token ||

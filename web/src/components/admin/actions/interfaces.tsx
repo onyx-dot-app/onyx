@@ -43,6 +43,7 @@ export interface ToolListProps {
   serverId: number | undefined;
   setPopup: (popup: PopupSpec | null) => void;
   oauthConnected: boolean;
+  initialDbTools?: MCPTool[] | null;
 }
 
 export interface MCPServerDetail {

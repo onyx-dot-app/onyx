@@ -5,7 +5,7 @@ import { NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED } from "@/lib/constan
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 
-const FOLDED_SIZE = 24;
+export const FOLDED_SIZE = 24;
 const UNFOLDED_SIZE = 88;
 
 export interface LogoProps {

@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useRef, useState } from "react";
+import { memo } from "react";
 import OnboardingHeader from "./components/OnboardingHeader";
 import NameStep from "./steps/NameStep";
 import LLMStep from "./steps/LLMStep";

@@ -78,10 +78,11 @@ import React, {
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
 import SvgMinusCircle from "@/icons/minus-circle";
-import IconButton from "../buttons/IconButton";
-import Button from "../buttons/Button";
+import SvgXOctagon from "@/icons/x-octagon";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import Button from "@/refresh-components/buttons/Button";
 import SvgPlusCircle from "@/icons/plus-circle";
-import Text from "../texts/Text";
+import Text from "@/refresh-components/texts/Text";
 import { FieldContext } from "../form/FieldContext";
 import { FieldMessage } from "../messages/FieldMessage";
 
