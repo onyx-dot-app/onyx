@@ -51,6 +51,12 @@ export function useOnboardingState(): {
   // If there are any configured LLM providers already present, skip to the final step
   useEffect(() => {
     if (hasLlmProviders) {
+      if (userName) {
+        dispatch({
+          type: OnboardingActionType.UPDATE_DATA,
+          payload: { userName },
+        });
+      }
       dispatch({
         type: OnboardingActionType.UPDATE_DATA,
         payload: { llmProviders: llmProviders.map((p) => p.provider) },
@@ -105,6 +111,7 @@ export function useOnboardingState(): {
     }
 
     if (state.currentStep === OnboardingStep.LlmSetup) {
+      console.log("refreshing llm providers");
       refreshLlmProviders();
     }
     dispatch({ type: OnboardingActionType.NEXT_STEP });

@@ -540,6 +540,7 @@ export interface LlmManager {
   maxTemperature: number;
   llmProviders: LLMProviderDescriptor[] | undefined;
   isLoadingProviders: boolean;
+  hasAnyProvider: boolean;
 }
 
 // Things to test
@@ -796,6 +797,9 @@ export function useLlmManager(
     }
   };
 
+  // Track if any provider exists from ChatContext (for onboarding checks)
+  const hasAnyProvider = (allUserProviders?.length ?? 0) > 0;
+
   return {
     updateModelOverrideBasedOnChatSession,
     currentLlm,
@@ -808,6 +812,7 @@ export function useLlmManager(
     maxTemperature,
     llmProviders,
     isLoadingProviders: personaId !== undefined && isLoadingPersonaProviders,
+    hasAnyProvider,
   };
 }
 

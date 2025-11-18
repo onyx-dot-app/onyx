@@ -66,6 +66,7 @@ export default function LLMConnectionModal({
     any[]
   >([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formResetKey, setFormResetKey] = useState(0);
 
   const modelOptions = useMemo(
     () => getModelOptions(llmDescriptor, fetchedModelConfigurations as any[]),
@@ -148,8 +149,16 @@ export default function LLMConnectionModal({
     }
   }, [tabConfig, activeTab]);
 
+  // Reset when modal opens to ensure fresh form
+  useEffect(() => {
+    if (modal.isOpen) {
+      setFormResetKey((prev) => prev + 1);
+    }
+  }, [modal.isOpen]);
+
   return (
     <Formik
+      key={formResetKey}
       initialValues={initialValues}
       validationSchema={getValidationSchema(
         isCustomProvider ? "custom" : llmDescriptor?.name,

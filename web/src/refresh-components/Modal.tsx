@@ -55,7 +55,7 @@ const ModalOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-[2000] bg-mask-03 backdrop-blur-03",
+      "fixed inset-0 z-[2000] bg-mask-03 backdrop-blur-03 pointer-events-none",
       "data-[state=open]:animate-in data-[state=closed]:animate-out",
       "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className
@@ -217,6 +217,19 @@ const ModalContent = React.forwardRef<
   // Handle escape key and outside clicks
   const handleInteractOutside = React.useCallback(
     (e: Event) => {
+      // Check if the click target is inside a dropdown/listbox (e.g., ComboBox dropdown)
+      const target = e.target as HTMLElement;
+      if (target) {
+        // Check if click is on a dropdown element or its children
+        const isDropdownClick = target.closest('[role="listbox"]');
+        const isOptionClick = target.closest('[role="option"]');
+        if (isDropdownClick || isOptionClick) {
+          // Prevent modal from closing but allow the dropdown interaction
+          e.preventDefault();
+          return;
+        }
+      }
+
       if (hasModifiedInputs()) {
         if (!hasAttemptedClose) {
           // First attempt: prevent close and focus the close button
@@ -257,7 +270,7 @@ const ModalContent = React.forwardRef<
           className={cn(
             "fixed left-[50%] top-[50%] z-[2001] translate-x-[-50%] translate-y-[-50%]",
             "bg-background-tint-00 border rounded-16 shadow-2xl",
-            "flex flex-col overflow-hidden",
+            "flex flex-col overflow-hidden pointer-events-auto",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",

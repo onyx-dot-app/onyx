@@ -41,6 +41,13 @@ const LLMFormikEffects = ({
       setModelsApiStatus("loading");
       setShowModelsApiErrorMessage(false);
 
+      // Clear fields when switching Ollama tabs
+      if (llmDescriptor?.name === LLMProviderName.OLLAMA_CHAT) {
+        if (activeTab === "self-hosted") {
+          formikProps.setFieldValue("custom_config.OLLAMA_API_KEY", "");
+        }
+      }
+
       if (currentTab?.hiddenFields) {
         Object.entries(currentTab.hiddenFields).forEach(([key, value]) => {
           formikProps.setFieldValue(key, value);

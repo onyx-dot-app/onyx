@@ -88,7 +88,7 @@ export const ComboBoxDropdown = forwardRef<
         role="listbox"
         aria-label={placeholder}
         className={cn(
-          "fixed z-[9999] bg-background-neutral-00 border border-border-02 rounded-12 shadow-02 max-h-60 overflow-auto p-1"
+          "fixed z-[10000] bg-background-neutral-00 border border-border-02 rounded-12 shadow-02 max-h-60 overflow-y-auto overflow-x-hidden p-1 pointer-events-auto touch-auto"
         )}
         style={{
           top: `${dropdownPosition.top}px`,
@@ -96,6 +96,16 @@ export const ComboBoxDropdown = forwardRef<
           ...(dropdownPosition.width && {
             width: `${dropdownPosition.width}px`,
           }),
+          // Ensure the dropdown can scroll independently
+          overscrollBehavior: "contain",
+        }}
+        onWheel={(e) => {
+          // Prevent event from bubbling to prevent any parent scroll blocking
+          e.stopPropagation();
+        }}
+        onTouchMove={(e) => {
+          // Prevent event from bubbling for touch devices
+          e.stopPropagation();
         }}
       >
         <OptionsList
