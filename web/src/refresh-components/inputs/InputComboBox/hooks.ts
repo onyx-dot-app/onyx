@@ -117,11 +117,16 @@ export function useComboBoxKeyboard({
           }
           break;
         case "Enter":
-          e.preventDefault();
-          if (isOpen && highlightedIndex >= 0) {
-            const option = allVisibleOptions[highlightedIndex];
-            if (option) {
-              onSelect(option);
+          // Always prevent default and stop propagation when dropdown is open
+          // to avoid bubbling to parent forms
+          if (isOpen) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (highlightedIndex >= 0) {
+              const option = allVisibleOptions[highlightedIndex];
+              if (option) {
+                onSelect(option);
+              }
             }
           }
           break;
