@@ -5,6 +5,7 @@ import { ChatProvider } from "@/refresh-components/contexts/ChatContext";
 import { ProjectsProvider } from "./projects/ProjectsContext";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
 import AppLayout from "@/refresh-components/layouts/AppLayout";
+import { HeaderActionsProvider } from "@/refresh-components/contexts/HeaderActionsContext";
 
 export interface LayoutProps {
   children: React.ReactNode;
@@ -61,7 +62,9 @@ export default async function Layout({ children }: LayoutProps) {
       <ProjectsProvider initialProjects={projects}>
         <div className="flex flex-row w-full h-full">
           <AppSidebar />
-          <AppLayout>{children}</AppLayout>
+          <HeaderActionsProvider>
+            <AppLayout>{children}</AppLayout>
+          </HeaderActionsProvider>
         </div>
       </ProjectsProvider>
     </ChatProvider>
