@@ -16,7 +16,7 @@ from onyx.configs.app_configs import MCP_SERVER_NAME
 from onyx.configs.app_configs import MCP_SERVER_VERSION
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.mcp_server.auth import OnyxPATVerifier
+from onyx.mcp_server.auth import OnyxTokenVerifier
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -27,7 +27,7 @@ logger.info(f"Creating MCP server: {MCP_SERVER_NAME} v{MCP_SERVER_VERSION}")
 mcp_server = FastMCP(
     name=MCP_SERVER_NAME,
     version=MCP_SERVER_VERSION,
-    auth=OnyxPATVerifier(),
+    auth=OnyxTokenVerifier(),
 )
 
 # Import tools and resources AFTER mcp_server is created to avoid circular imports
@@ -78,7 +78,7 @@ def create_mcp_fastapi_app() -> FastAPI:
             return JSONResponse({"status": "healthy", "service": "mcp_server"})
         return await call_next(request)
 
-    # Authentication is handled by FastMCP's OnyxPATVerifier (see auth.py)
+    # Authentication is handled by FastMCP's OnyxTokenVerifier (see auth.py)
 
     if MCP_SERVER_CORS_ORIGINS:
         logger.info(f"CORS origins: {MCP_SERVER_CORS_ORIGINS}")
