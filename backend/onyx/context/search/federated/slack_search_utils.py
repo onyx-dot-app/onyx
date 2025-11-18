@@ -41,6 +41,48 @@ class ChannelTypeString(str, Enum):
     PUBLIC_CHANNEL = "public_channel"
 
 
+# All Slack channel types for fetching metadata
+ALL_CHANNEL_TYPES = [
+    ChannelTypeString.PUBLIC_CHANNEL.value,
+    ChannelTypeString.IM.value,
+    ChannelTypeString.MPIM.value,
+    ChannelTypeString.PRIVATE_CHANNEL.value,
+]
+
+# Map Slack API scopes to their corresponding channel types
+# This is used for graceful degradation when scopes are missing
+SCOPE_TO_CHANNEL_TYPE_MAP = {
+    "mpim:read": ChannelTypeString.MPIM.value,
+    "mpim:history": ChannelTypeString.MPIM.value,
+    "im:read": ChannelTypeString.IM.value,
+    "im:history": ChannelTypeString.IM.value,
+    "groups:read": ChannelTypeString.PRIVATE_CHANNEL.value,
+    "groups:history": ChannelTypeString.PRIVATE_CHANNEL.value,
+    "channels:read": ChannelTypeString.PUBLIC_CHANNEL.value,
+    "channels:history": ChannelTypeString.PUBLIC_CHANNEL.value,
+}
+
+
+def get_channel_type_for_missing_scope(scope: str) -> str | None:
+    """Get the channel type that requires a specific Slack scope.
+
+    Args:
+        scope: The Slack API scope (e.g., 'mpim:read', 'im:history')
+
+    Returns:
+        The channel type string if scope is recognized, None otherwise
+
+    Examples:
+        >>> get_channel_type_for_missing_scope('mpim:read')
+        'mpim'
+        >>> get_channel_type_for_missing_scope('im:read')
+        'im'
+        >>> get_channel_type_for_missing_scope('unknown:scope')
+        None
+    """
+    return SCOPE_TO_CHANNEL_TYPE_MAP.get(scope)
+
+
 def _parse_llm_code_block_response(response: str) -> str:
     """Remove code block markers from LLM response if present.
 
@@ -64,10 +106,73 @@ def _parse_llm_code_block_response(response: str) -> str:
 
 
 def is_recency_query(query: str) -> bool:
-    return any(
+    """Check if a query is primarily about recency (not content + recency).
+
+    Returns True only for pure recency queries like "recent messages" or "latest updates",
+    but False for queries with content + recency like "golf scores last saturday".
+    """
+    # Check if query contains recency keywords
+    has_recency_keyword = any(
         re.search(rf"\b{re.escape(keyword)}\b", query, flags=re.IGNORECASE)
         for keyword in RECENCY_KEYWORDS
     )
+
+    if not has_recency_keyword:
+        return False
+
+    # Extract content words (excluding stop words and recency keywords)
+    query_lower = query.lower()
+    words = query_lower.split()
+
+    # Minimal stop words to check for content
+    basic_stop_words = {
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "in",
+        "on",
+        "at",
+        "to",
+        "from",
+        "what",
+        "when",
+        "where",
+        "who",
+        "how",
+        "why",
+        "messages",
+        "message",
+        "updates",
+        "update",
+        "posts",
+        "post",
+        "discussions",
+        "discussion",
+        "conversations",
+        "conversation",
+    }
+
+    # Count content words (not stop words, not recency keywords, length > 2)
+    content_word_count = 0
+    for word in words:
+        clean_word = word.strip(".,!?;:\"'#")
+        if (
+            clean_word
+            and len(clean_word) > 2
+            and clean_word not in basic_stop_words
+            and clean_word not in RECENCY_KEYWORDS
+        ):
+            content_word_count += 1
+
+    # If query has significant content words (>= 2), it's not a pure recency query
+    # Examples:
+    # - "recent messages" -> content_word_count = 0 -> pure recency
+    # - "golf scores last saturday" -> content_word_count = 3 (golf, scores, saturday) -> not pure recency
+    return content_word_count < 2
 
 
 def extract_date_range_from_query(
@@ -82,6 +187,21 @@ def extract_date_range_from_query(
 
     if re.search(r"\byesterday\b", query_lower):
         return min(1, default_search_days)
+
+    # Handle "last [day of week]" - e.g., "last monday", "last saturday"
+    days_of_week = [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+    ]
+    for day in days_of_week:
+        if re.search(rf"\b(?:last|this)\s+{day}\b", query_lower):
+            # Assume last occurrence of that day was within the past week
+            return min(DAYS_PER_WEEK, default_search_days)
 
     match = re.search(r"\b(?:last|past)\s+(\d+)\s+days?\b", query_lower)
     if match:
@@ -120,22 +240,40 @@ def extract_date_range_from_query(
 
         try:
             data = json.loads(response_clean)
+            if not isinstance(data, dict):
+                logger.debug(
+                    f"LLM date extraction returned non-dict response for query: "
+                    f"'{query}', using default: {default_search_days} days"
+                )
+                return default_search_days
+
             days_back = data.get("days_back")
             if days_back is None:
                 logger.debug(
-                    f"LLM date extraction returned null for query: '{query}', using default: {default_search_days} days"
+                    f"LLM date extraction returned null for query: '{query}', "
+                    f"using default: {default_search_days} days"
                 )
                 return default_search_days
+
+            if not isinstance(days_back, (int, float)):
+                logger.debug(
+                    f"LLM date extraction returned non-numeric days_back for "
+                    f"query: '{query}', using default: {default_search_days} days"
+                )
+                return default_search_days
+
         except json.JSONDecodeError:
             logger.debug(
-                f"Failed to parse LLM date extraction response for query: '{query}', using default: {default_search_days} days"
+                f"Failed to parse LLM date extraction response for query: '{query}' "
+                f"(response: '{response_clean}'), "
+                f"using default: {default_search_days} days"
             )
             return default_search_days
 
-        return min(days_back, default_search_days)
+        return min(int(days_back), default_search_days)
 
     except Exception as e:
-        logger.warning(f"Error extracting date range with LLM: {e}")
+        logger.warning(f"Error extracting date range with LLM for query '{query}': {e}")
         return default_search_days
 
 

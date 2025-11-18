@@ -15,10 +15,14 @@ from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import TextSection
 from onyx.context.search.federated.models import SlackMessage
+from onyx.context.search.federated.slack_search_utils import ALL_CHANNEL_TYPES
 from onyx.context.search.federated.slack_search_utils import build_channel_query_filter
 from onyx.context.search.federated.slack_search_utils import build_slack_queries
 from onyx.context.search.federated.slack_search_utils import ChannelTypeString
 from onyx.context.search.federated.slack_search_utils import get_channel_type
+from onyx.context.search.federated.slack_search_utils import (
+    get_channel_type_for_missing_scope,
+)
 from onyx.context.search.federated.slack_search_utils import is_recency_query
 from onyx.context.search.federated.slack_search_utils import should_include_message
 from onyx.context.search.models import InferenceChunk
@@ -46,7 +50,6 @@ logger = setup_logger()
 HIGHLIGHT_START_CHAR = "\ue000"
 HIGHLIGHT_END_CHAR = "\ue001"
 
-CHANNEL_TYPES = ["public_channel", "im", "mpim", "private_channel"]
 CHANNEL_METADATA_CACHE_TTL = 60 * 60 * 24  # 24 hours
 SLACK_THREAD_CONTEXT_WINDOW = 3  # Number of messages before matched message to include
 CHANNEL_METADATA_MAX_RETRIES = 3  # Maximum retry attempts for channel metadata fetching
@@ -98,10 +101,12 @@ def fetch_and_cache_channel_metadata(
 
     # Retry logic with exponential backoff
     last_exception = None
+    available_channel_types = ALL_CHANNEL_TYPES.copy()
+
     for attempt in range(CHANNEL_METADATA_MAX_RETRIES):
         try:
-            # ALWAYS fetch all channel types including private
-            channel_types = ",".join(CHANNEL_TYPES)
+            # Use available channel types (may be reduced if scopes are missing)
+            channel_types = ",".join(available_channel_types)
 
             # Fetch all channels in one call
             cursor = None
@@ -157,6 +162,34 @@ def fetch_and_cache_channel_metadata(
 
         except SlackApiError as e:
             last_exception = e
+            error_response = e.response.get("error", "") if e.response else ""
+
+            # Check if this is a missing_scope error
+            if error_response == "missing_scope" and e.response:
+                needed_scope = e.response.get("needed", "")
+
+                # Get the channel type that requires this scope
+                missing_channel_type = get_channel_type_for_missing_scope(needed_scope)
+
+                if (
+                    missing_channel_type
+                    and missing_channel_type in available_channel_types
+                ):
+                    # Remove the problematic channel type and retry
+                    available_channel_types.remove(missing_channel_type)
+                    logger.warning(
+                        f"Missing scope '{needed_scope}' for channel type '{missing_channel_type}'. "
+                        f"Continuing with reduced channel types: {available_channel_types}"
+                    )
+                    # Don't count this as a retry attempt, just try again with fewer types
+                    continue
+                else:
+                    logger.error(
+                        f"Missing scope '{needed_scope}' but could not map to channel type or already removed. "
+                        f"Response: {e.response}"
+                    )
+
+            # For other errors, use retry logic
             if attempt < CHANNEL_METADATA_MAX_RETRIES - 1:
                 retry_delay = CHANNEL_METADATA_RETRY_DELAY * (2**attempt)
                 logger.warning(
@@ -169,7 +202,15 @@ def fetch_and_cache_channel_metadata(
                     f"Failed to fetch channel metadata after {CHANNEL_METADATA_MAX_RETRIES} attempts: {e}"
                 )
 
-    # If we exhausted all retries, raise the last exception
+    # If we have some channel metadata despite errors, return it with a warning
+    if channel_metadata:
+        logger.warning(
+            f"Returning partial channel metadata ({len(channel_metadata)} channels) despite errors. "
+            f"Last error: {last_exception}"
+        )
+        return channel_metadata
+
+    # If we exhausted all retries and have no data, raise the last exception
     if last_exception:
         raise SlackApiError(
             f"Channel metadata fetching failed after {CHANNEL_METADATA_MAX_RETRIES} attempts",
