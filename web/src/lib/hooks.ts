@@ -865,7 +865,7 @@ export const useUserGroups = (): {
         isLoading: false,
         error: "",
       },
-      refreshUserGroups: () => { },
+      refreshUserGroups: () => {},
     };
   }
 
