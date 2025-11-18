@@ -171,7 +171,9 @@ services:
       context: ../../backend
       dockerfile: Dockerfile
     command: >
-      /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-false}\" = \"true\" ]; then
+      /bin/sh -c "
+      MCP_ENABLED=$(printf '%s' \"${MCP_SERVER_ENABLED:-false}\" | tr '[:upper:]' '[:lower:]') &&
+      if [ \"$MCP_ENABLED\" = \"true\" ]; then
         echo 'Starting Onyx MCP Server' &&
         uvicorn onyx.mcp_server.api:mcp_app --host 0.0.0.0 --port ${MCP_SERVER_PORT:-8090};
       else
