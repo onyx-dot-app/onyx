@@ -1,0 +1,104 @@
+{{- if gt (int .Values.mcp_server.replicaCount) 0 }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx.fullname" . }}-mcp-server
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.mcp_server.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      {{- if .Values.mcp_server.deploymentLabels }}
+      {{- toYaml .Values.mcp_server.deploymentLabels | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.mcp_server.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.mcp_server.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.mcp_server.podSecurityContext | nindent 8 }}
+      {{- with .Values.mcp_server.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mcp_server.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mcp_server.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mcp-server
+          securityContext:
+            {{- toYaml .Values.mcp_server.securityContext | nindent 12 }}
+          image: "{{ .Values.mcp_server.image.repository }}:{{ .Values.mcp_server.image.tag | default .Values.global.version }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          command:
+            - "uvicorn"
+            - "onyx.mcp_server.api:mcp_app"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "{{ .Values.mcp_server.containerPorts.server }}"
+          ports:
+            - name: mcp-server
+              containerPort: {{ .Values.mcp_server.containerPorts.server }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.mcp_server.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+          env:
+            {{- include "onyx.envSecrets" . | nindent 12}}
+            - name: MCP_SERVER_ENABLED
+              value: "true"
+            - name: MCP_SERVER_PORT
+              value: "{{ .Values.mcp_server.containerPorts.server }}"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          {{- with .Values.mcp_server.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.mcp_server.containerPorts.server }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.mcp_server.containerPorts.server }}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      {{- with .Values.mcp_server.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

@@ -407,6 +407,40 @@ celery_beat:
   tolerations: []
   affinity: {}
 
+mcp_server:
+  # Set to 0 to disable MCP server deployment
+  replicaCount: 0
+  image:
+    repository: onyxdotapp/onyx-backend
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: ""
+  deploymentLabels:
+    app: mcp-server
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend
+    app: mcp-server
+  containerPorts:
+    server: 8090
+  podSecurityContext: {}
+  securityContext: {}
+  service:
+    type: ClusterIP
+    servicePort: 8090
+    targetPort: 8090
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 celery_worker_heavy:
   replicaCount: 1
   autoscaling:

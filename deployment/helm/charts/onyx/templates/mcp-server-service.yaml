@@ -1,0 +1,23 @@
+{{- if gt (int .Values.mcp_server.replicaCount) 0 }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "onyx.fullname" . }}-mcp-server
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- if .Values.mcp_server.deploymentLabels }}
+    {{- toYaml .Values.mcp_server.deploymentLabels | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.mcp_server.service.type }}
+  ports:
+    - port: {{ .Values.mcp_server.service.servicePort }}
+      targetPort: {{ .Values.mcp_server.service.targetPort }}
+      protocol: TCP
+      name: mcp-server
+  selector:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    {{- if .Values.mcp_server.deploymentLabels }}
+    {{- toYaml .Values.mcp_server.deploymentLabels | nindent 4 }}
+    {{- end }}
+{{- end }}
