@@ -3,14 +3,12 @@ import re
 from typing import Any
 
 import braintrust
-from agents import set_trace_processors
-from braintrust.wrappers.openai import BraintrustTracingProcessor
-from braintrust_langchain import set_global_handler  # type: ignore[import-untyped]
-from braintrust_langchain.callbacks import BraintrustCallbackHandler  # type: ignore[import-untyped]
 
 from onyx.configs.app_configs import BRAINTRUST_API_KEY
-from onyx.configs.app_configs import BRAINTRUST_PROJECT
 from onyx.utils.logger import setup_logger
+
+# import langfuse  # type: ignore[import-untyped]
+# from braintrust_langchain import set_global_handler  # type: ignore[import-untyped]
 
 logger = setup_logger()
 
@@ -75,12 +73,12 @@ def setup_braintrust_if_creds_available() -> None:
         logger.info("Braintrust API key not provided, skipping Braintrust setup")
         return
 
-    braintrust_logger = braintrust.init_logger(
-        project=BRAINTRUST_PROJECT,
-        api_key=BRAINTRUST_API_KEY,
-    )
+    # braintrust_logger = braintrust.init_logger(
+    #     project=BRAINTRUST_PROJECT,
+    #     api_key=BRAINTRUST_API_KEY,
+    # )
     braintrust.set_masking_function(_mask)
-    handler = BraintrustCallbackHandler()
-    set_global_handler(handler)
-    set_trace_processors([BraintrustTracingProcessor(braintrust_logger)])
+    # handler = BraintrustCallbackHandler()
+    # set_global_handler(handler)
+    # set_trace_processors([BraintrustTracingProcessor(braintrust_logger)])
     logger.notice("Braintrust tracing initialized")
