@@ -2,9 +2,6 @@ from typing import cast
 
 from openinference.instrumentation import OITracer
 from openinference.instrumentation import TraceConfig
-from openinference.instrumentation.openai_agents._processor import (
-    OpenInferenceTracingProcessor,
-)
 from openinference.instrumentation.openai_agents.version import __version__
 from opentelemetry import trace as trace_api
 
@@ -12,6 +9,7 @@ from onyx.configs.app_configs import LANGFUSE_HOST
 from onyx.configs.app_configs import LANGFUSE_PUBLIC_KEY
 from onyx.configs.app_configs import LANGFUSE_SECRET_KEY
 from onyx.tracing import set_trace_processors
+from onyx.tracing.openinference_tracing_processor import OpenInferenceTracingProcessor
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
