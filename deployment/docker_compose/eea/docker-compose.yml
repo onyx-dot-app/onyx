@@ -87,12 +87,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: >
-      /bin/sh -c "
-      if [ -f /etc/ssl/certs/custom-ca.crt ]; then
-        update-ca-certificates;
-      fi &&
-      /app/scripts/supervisord_entrypoint.sh"
+    command: /usr/bin/supervisord
 
     restart: always
     environment:
