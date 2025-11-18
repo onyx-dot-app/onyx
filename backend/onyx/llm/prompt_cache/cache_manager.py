@@ -85,8 +85,9 @@ class CacheManager:
             self._kv_store.store(cache_key, metadata_dict, encrypt=False)
 
             logger.debug(
-                f"Stored cache metadata for provider={metadata.provider}, "
-                f"model={metadata.model_name}, cache_key={metadata.cache_key[:16]}..."
+                f"Stored cache metadata: provider={metadata.provider}, "
+                f"model={metadata.model_name}, cache_key={metadata.cache_key[:16]}..., "
+                f"tenant_id={metadata.tenant_id}"
             )
         except Exception as e:
             # Best-effort: log and continue
@@ -124,8 +125,9 @@ class CacheManager:
             self.store_cache_metadata(metadata)
 
             logger.debug(
-                f"Retrieved cache metadata for provider={provider}, "
-                f"model={model_name}, cache_key={cache_key_hash[:16]}..."
+                f"Retrieved cache metadata: provider={provider}, "
+                f"model={model_name}, cache_key={cache_key_hash[:16]}..., "
+                f"tenant_id={tenant_id}"
             )
             return metadata
         except Exception as e:

@@ -2,7 +2,6 @@
 
 from collections.abc import Callable
 from collections.abc import Sequence
-from typing import cast
 
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.message_types import ChatCompletionMessage
@@ -23,8 +22,10 @@ def normalize_language_model_input(
     if isinstance(input, str):
         # Convert string to user message
         return [UserMessageWithText(role="user", content=input)]
+    elif isinstance(input, Sequence):
+        return list(input)
     else:
-        return input
+        raise TypeError(f"Unsupported LanguageModelInput type: {type(input)}")
 
 
 def combine_messages_with_continuation(
@@ -72,7 +73,7 @@ def combine_messages_with_continuation(
                 )
                 last_msg["content"] = prefix_content + suffix_content
 
-        result[-1] = cast(ChatCompletionMessage, last_msg)
+        result[-1] = last_msg
         result.extend(suffix_msgs[1:])
         return result
 
