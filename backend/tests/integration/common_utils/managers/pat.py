@@ -30,6 +30,7 @@ class PATManager:
             json={"name": name, "expiration_days": expiration_days},
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=60,
         )
         response.raise_for_status()
         return response.json()
@@ -48,6 +49,7 @@ class PATManager:
             f"{API_SERVER_URL}/user/pats",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=60,
         )
         response.raise_for_status()
         return response.json()
@@ -64,5 +66,6 @@ class PATManager:
             f"{API_SERVER_URL}/user/pats/{token_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=60,
         )
         response.raise_for_status()
