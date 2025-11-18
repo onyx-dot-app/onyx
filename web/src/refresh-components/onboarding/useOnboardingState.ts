@@ -66,17 +66,10 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
         type: OnboardingActionType.UPDATE_DATA,
         payload: { llmProviders: llmProviders.map((p) => p.provider) },
       });
-      if (userName) {
-        dispatch({
-          type: OnboardingActionType.GO_TO_STEP,
-          step: OnboardingStep.Complete,
-        });
-      } else {
-        dispatch({
-          type: OnboardingActionType.GO_TO_STEP,
-          step: OnboardingStep.Name,
-        });
-      }
+      dispatch({
+        type: OnboardingActionType.GO_TO_STEP,
+        step: OnboardingStep.Complete,
+      });
       return;
     }
     if (userName && state.currentStep === OnboardingStep.Welcome) {
