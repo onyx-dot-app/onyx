@@ -193,6 +193,7 @@ jobs:
       - determine-builds
       - build-web-amd64
       - build-web-arm64
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-latest
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
@@ -368,6 +369,7 @@ jobs:
       - determine-builds
       - build-web-cloud-amd64
       - build-web-cloud-arm64
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-latest
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
@@ -522,6 +524,7 @@ jobs:
       - determine-builds
       - build-backend-amd64
       - build-backend-arm64
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-latest
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
@@ -680,6 +683,7 @@ jobs:
       - determine-builds
       - build-model-server-amd64
       - build-model-server-arm64
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-latest
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
@@ -721,7 +725,7 @@ jobs:
     if: needs.merge-web.result == 'success'
     runs-on:
       - runs-on
-      - runner=2cpu-linux-x64
+      - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-trivy-scan-web
       - extras=ecr-cache
     env:
@@ -760,7 +764,7 @@ jobs:
     if: needs.merge-web-cloud.result == 'success'
     runs-on:
       - runs-on
-      - runner=2cpu-linux-x64
+      - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-trivy-scan-web-cloud
       - extras=ecr-cache
     env:
@@ -799,7 +803,7 @@ jobs:
     if: needs.merge-backend.result == 'success'
     runs-on:
       - runs-on
-      - runner=2cpu-linux-x64
+      - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-trivy-scan-backend
       - extras=ecr-cache
     env:
@@ -843,7 +847,7 @@ jobs:
     if: needs.merge-model-server.result == 'success'
     runs-on:
       - runs-on
-      - runner=2cpu-linux-x64
+      - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-trivy-scan-model-server
       - extras=ecr-cache
     env:
@@ -890,6 +894,7 @@ jobs:
       - build-model-server-arm64
       - merge-model-server
     if: always() && (needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure') && github.event_name != 'workflow_dispatch'
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     steps:
       - name: Checkout
