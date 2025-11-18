@@ -173,7 +173,7 @@ services:
     command: >
       /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-false}\" = \"true\" ]; then
         echo 'Starting Onyx MCP Server' &&
-        uvicorn onyx.mcp_server.api:mcp_app --host 0.0.0.0 --port 8090;
+        uvicorn onyx.mcp_server.api:mcp_app --host 0.0.0.0 --port ${MCP_SERVER_PORT:-8090};
       else
         echo 'MCP server is disabled (set MCP_SERVER_ENABLED=true to enable)' &&
         sleep infinity;
