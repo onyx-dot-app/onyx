@@ -283,23 +283,11 @@ jobs:
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-<<<<<<< HEAD
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache
-||||||| parent of 7a74f3eed (chore(deployments): separate builds by platform)
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-${{ env.DEPLOYMENT }}-cache
-=======
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-${{ env.DEPLOYMENT }}-cache-amd64
->>>>>>> 7a74f3eed (chore(deployments): separate builds by platform)
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64
           cache-to: |
             type=inline
-<<<<<<< HEAD
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache,mode=max
-||||||| parent of 7a74f3eed (chore(deployments): separate builds by platform)
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-${{ env.DEPLOYMENT }}-cache,mode=max
-=======
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-${{ env.DEPLOYMENT }}-cache-amd64,mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64,mode=max
           outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
->>>>>>> 7a74f3eed (chore(deployments): separate builds by platform)
 
   build-web-cloud-arm64:
     needs: determine-builds
@@ -447,23 +435,11 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-<<<<<<< HEAD
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
-||||||| parent of 7a74f3eed (chore(deployments): separate builds by platform)
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-${{ env.DEPLOYMENT }}-cache
-=======
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-${{ env.DEPLOYMENT }}-cache-amd64
->>>>>>> 7a74f3eed (chore(deployments): separate builds by platform)
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64
           cache-to: |
             type=inline
-<<<<<<< HEAD
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
-||||||| parent of 7a74f3eed (chore(deployments): separate builds by platform)
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-${{ env.DEPLOYMENT }}-cache,mode=max
-=======
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-${{ env.DEPLOYMENT }}-cache-amd64,mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64,mode=max
           outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
->>>>>>> 7a74f3eed (chore(deployments): separate builds by platform)
 
   build-backend-arm64:
     needs: determine-builds
@@ -606,21 +582,10 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-<<<<<<< HEAD
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
-||||||| parent of 7a74f3eed (chore(deployments): separate builds by platform)
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-cache
-=======
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-cache-amd64
->>>>>>> 7a74f3eed (chore(deployments): separate builds by platform)
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64
           cache-to: |
             type=inline
-<<<<<<< HEAD
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
-||||||| parent of 7a74f3eed (chore(deployments): separate builds by platform)
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-cache,mode=max
-=======
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ env.DEPLOYMENT }}-cache-amd64,mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64,mode=max
           outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
   build-model-server-arm64:
@@ -716,7 +681,6 @@ jobs:
           docker buildx imagetools create \
             $(printf '%s\n' "${{ steps.meta.outputs.tags }}" | xargs -I {} echo -t {}) \
             $IMAGES
->>>>>>> 7a74f3eed (chore(deployments): separate builds by platform)
 
   trivy-scan-web:
     needs:
