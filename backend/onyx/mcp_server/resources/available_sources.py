@@ -6,9 +6,12 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
+from fastmcp.server.dependencies import get_access_token
+
 from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.mcp_server.api import mcp_server
+from onyx.mcp_server.utils import tenant_context_from_token
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -26,8 +29,13 @@ logger = setup_logger()
 def available_sources_resource() -> dict[str, Any]:
     """Return the list of indexed source types for search filtering."""
 
-    with get_session_with_current_tenant() as db_session:
-        sources = fetch_unique_document_sources(db_session)
+    access_token = get_access_token()
+    if not access_token or "_user" not in access_token.claims:
+        raise ValueError("Authentication required")
+
+    with tenant_context_from_token(access_token):
+        with get_session_with_current_tenant() as db_session:
+            sources = fetch_unique_document_sources(db_session)
 
     source_values = sorted(source.value for source in sources)
 
