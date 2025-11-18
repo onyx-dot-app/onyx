@@ -1,10 +1,11 @@
 import { fetchSS } from "@/lib/utilsSS";
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth/requireAuth";
-import { BackendChatSession } from "../../interfaces";
+import { BackendChatSession, toChatSession } from "../../interfaces";
 import { SharedChatDisplay } from "./SharedChatDisplay";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { constructMiniFiedPersona } from "@/lib/assistantIconUtils";
+import ShareChatLayout from "@/refresh-components/layouts/ShareChatLayout";
 
 async function getSharedChat(chatId: string) {
   const response = await fetchSS(
@@ -37,5 +38,11 @@ export default async function Page(props: {
     chatSession?.persona_id ?? 0
   );
 
-  return <SharedChatDisplay chatSession={chatSession} persona={persona} />;
+  const chatSessionForHeader = chatSession ? toChatSession(chatSession) : null;
+
+  return (
+    <ShareChatLayout chatSession={chatSessionForHeader}>
+      <SharedChatDisplay chatSession={chatSession} persona={persona} />
+    </ShareChatLayout>
+  );
 }
