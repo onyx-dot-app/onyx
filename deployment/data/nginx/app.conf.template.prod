@@ -68,6 +68,7 @@ server {
         proxy_read_timeout 300s;
 
         proxy_redirect off;
+        rewrite ^/mcp/?(.*)$ /$1 break;
         proxy_pass http://mcp_server/;
     }
 
