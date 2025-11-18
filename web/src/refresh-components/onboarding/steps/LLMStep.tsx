@@ -173,6 +173,7 @@ const LLMStepInner = ({
                     )}
                     onClick={setLlmConnectionModalProps}
                     onOpenModal={() => modal.toggle(true)}
+                    modal={modal}
                   />
                 </div>
               ))}
@@ -189,6 +190,7 @@ const LLMStepInner = ({
                   )}
                   onClick={setLlmConnectionModalProps}
                   onOpenModal={() => modal.toggle(true)}
+                  modal={modal}
                 />
               </div>
             </>

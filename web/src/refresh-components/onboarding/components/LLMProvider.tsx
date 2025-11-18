@@ -12,6 +12,7 @@ import SvgCheckCircle from "@/icons/check-circle";
 import { OnboardingActions, OnboardingState } from "../types";
 import { cn, noProp } from "@/lib/utils";
 import { LLMConnectionModalProps } from "./LLMConnectionModal";
+import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 
 export interface LLMProviderProps {
   title: string;
@@ -24,6 +25,7 @@ export interface LLMProviderProps {
   onboardingState: OnboardingState;
   onboardingActions: OnboardingActions;
   onOpenModal?: () => void;
+  modal: ModalCreationInterface;
 }
 
 function LLMProviderInner({
@@ -37,6 +39,7 @@ function LLMProviderInner({
   onboardingActions,
   onClick,
   onOpenModal,
+  modal,
 }: LLMProviderProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -61,6 +64,7 @@ function LLMProviderInner({
       isCustomProvider: !llmDescriptor,
       onboardingState,
       onboardingActions,
+      modal,
     });
     if (onOpenModal) {
       onOpenModal();
@@ -74,6 +78,7 @@ function LLMProviderInner({
     isConnected,
     onClick,
     onOpenModal,
+    modal,
   ]);
 
   const handleSettingsClick = useCallback(
