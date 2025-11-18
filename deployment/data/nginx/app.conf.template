@@ -21,7 +21,7 @@ upstream web_server {
 }
 
 upstream mcp_server {
-    server ${ONYX_BACKEND_API_HOST}:8090 fail_timeout=0;
+    server ${ONYX_MCP_SERVER_HOST}:8090 fail_timeout=0;
 }
 
 server {
@@ -32,7 +32,6 @@ server {
     access_log /var/log/nginx/access.log custom_main;
 
     # MCP Server - must come BEFORE /api location
-    # Phase 1: HTTP POST only, no streaming/SSE
     location /mcp {
         # misc headers
         proxy_set_header X-Real-IP $remote_addr;
