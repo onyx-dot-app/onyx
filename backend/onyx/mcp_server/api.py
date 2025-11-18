@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import Response
 from fastmcp import FastMCP
 from starlette.middleware.base import RequestResponseEndpoint
 
@@ -29,9 +29,10 @@ mcp_server = FastMCP(
     auth=OnyxPATVerifier(),
 )
 
-# Import tools AFTER mcp_server is created to avoid circular import
-# Tools register themselves via @mcp_server.tool() decorator
+# Import tools and resources AFTER mcp_server is created to avoid circular imports
+# Components register themselves via decorators on the shared mcp_server instance
 from onyx.mcp_server.tools import search  # noqa: E402, F401
+from onyx.mcp_server.resources import available_sources  # noqa: E402, F401
 
 logger.info("MCP server instance created")
 
@@ -69,9 +70,9 @@ def create_mcp_fastapi_app() -> FastAPI:
     @app.middleware("http")
     async def health_check(
         request: Request, call_next: RequestResponseEndpoint
-    ) -> JSONResponse:
+    ) -> Response:
         if request.url.path.rstrip("/") == "/health":
-            return JSONResponse({"status": "healthy", "service": "mcp_server"})
+            return Response(content="healthy", media_type="text/plain")
         return await call_next(request)
 
     # Authentication is handled by FastMCP's OnyxPATVerifier (see auth.py)

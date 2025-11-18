@@ -168,7 +168,14 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
-      "args": ["onyx.mcp_server.api:mcp_app", "--reload", "--port", "8090"],
+      "args": [
+        "onyx.mcp_server.api:mcp_app",
+        "--reload",
+        "--port",
+        "8090",
+        "--timeout-graceful-shutdown",
+        "0"
+      ],
       "presentation": {
         "group": "2"
       },
