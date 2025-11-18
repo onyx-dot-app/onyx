@@ -58,6 +58,7 @@ def create_mcp_fastapi_app() -> FastAPI:
             yield
 
         logger.info("MCP server shutting down")
+        await search.shutdown_http_client()
         SqlEngine.reset_engine()
 
     app = FastAPI(
