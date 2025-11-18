@@ -193,7 +193,7 @@ jobs:
       - determine-builds
       - build-web-amd64
       - build-web-arm64
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
@@ -368,7 +368,7 @@ jobs:
       - determine-builds
       - build-web-cloud-amd64
       - build-web-cloud-arm64
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
     steps:
@@ -522,7 +522,7 @@ jobs:
       - determine-builds
       - build-backend-amd64
       - build-backend-arm64
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
     steps:
@@ -680,7 +680,7 @@ jobs:
       - determine-builds
       - build-model-server-amd64
       - build-model-server-arm64
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
     steps:
