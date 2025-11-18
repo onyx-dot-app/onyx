@@ -2,7 +2,7 @@ from collections.abc import Iterator
 from collections.abc import Sequence
 from uuid import UUID
 
-from agents.tracing import trace
+import braintrust
 
 from onyx.agents.agent_framework.models import RunItemStreamEvent
 from onyx.agents.agent_framework.models import StreamEvent
@@ -30,6 +30,8 @@ from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.chat.turn.prompts.custom_instruction import build_custom_instructions
 from onyx.chat.turn.save_turn import extract_final_answer_from_packets
 from onyx.chat.turn.save_turn import save_turn
+from onyx.configs.app_configs import BRAINTRUST_API_KEY
+from onyx.configs.app_configs import BRAINTRUST_PROJECT
 from onyx.llm.message_types import ChatCompletionMessage
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -44,9 +46,20 @@ from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
+from onyx.tracing import set_trace_processors
+from onyx.tracing.braintrust_tracing_processor import BraintrustTracingProcessor
+from onyx.tracing.traces import TraceImpl
+
 
 MAX_ITERATIONS = 10
 CANCELLED_MESSAGE = "Cancelled"
+
+braintrust_logger = braintrust.init_logger(
+    project=BRAINTRUST_PROJECT,
+    api_key=BRAINTRUST_API_KEY,
+)
+tracing_processor = BraintrustTracingProcessor(braintrust_logger)
+set_trace_processors([tracing_processor])
 
 
 # TODO -- this can be refactored out and played with in evals + normal demo
@@ -69,12 +82,12 @@ def _run_agent_loop(
             dependencies.tools if iteration_count < MAX_ITERATIONS else []
         )
         memories = get_memories(dependencies.user_or_none, dependencies.db_session)
-        # TODO: The system is rather prompt-cache efficient except for rebuilding the system prompt.
-        # The biggest offender is when we hit max iterations and then all the tool calls cannot
-        # be cached anymore since the system message will be differ in that it will have no tools.
         if not is_connected(chat_session_id, dependencies.redis_client):
             _emit_clean_up_packets(dependencies, ctx)
             break
+        # TODO: The system is rather prompt-cache efficient except for rebuilding the system prompt.
+        # The biggest offender is when we hit max iterations and then all the tool calls cannot
+        # be cached anymore since the system message will be differ in that it will have no tools.
         langchain_system_message = default_build_system_message_v2(
             dependencies.prompt_config,
             dependencies.llm.config,
@@ -185,7 +198,13 @@ def _fast_chat_turn_core(
         message_id=message_id,
         research_type=research_type,
     )
-    with trace("fast_chat_turn"):
+    with TraceImpl(
+        name="fast_chat_turn",
+        trace_id=None,
+        group_id=None,
+        metadata=None,
+        processor=tracing_processor,
+    ):
         _run_agent_loop(
             messages=messages,
             dependencies=dependencies,

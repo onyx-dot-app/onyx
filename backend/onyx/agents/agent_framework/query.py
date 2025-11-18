@@ -17,6 +17,11 @@ from onyx.llm.message_types import ToolCall
 from onyx.llm.model_response import ModelResponseStream
 from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
+from onyx.tracing import _error_tracing
+from onyx.tracing.create import agent_span
+from onyx.tracing.create import function_span
+from onyx.tracing.create import generation_span
+from onyx.tracing.spans import SpanError
 
 
 @dataclass
@@ -147,14 +152,20 @@ def query(
 
     new_messages_stateful: list[ChatCompletionMessage] = []
 
+    current_span = agent_span(
+        name="agent_framework_query",
+        output_type="dict" if structured_response_format else "str",
+    )
+    current_span.start(mark_as_current=True)
+    current_span.span_data.tools = [t.name for t in tools]
+
     def stream_generator() -> Iterator[StreamEvent]:
-        reasoning_started = False
         message_started = False
+        reasoning_started = False
 
         tool_calls_in_progress: dict[int, dict[str, Any]] = {}
 
         content_parts: list[str] = []
-        reasoning_parts: list[str] = []
 
         synthetic_tool_call_counter = 0
 
@@ -164,153 +175,189 @@ def query(
             synthetic_tool_call_counter += 1
             return call_id
 
-        for chunk in llm_with_default_settings.stream(
-            prompt=messages,
-            tools=tool_definitions,
-            tool_choice=tool_choice,
-            structured_response_format=structured_response_format,
-        ):
-            assert isinstance(chunk, ModelResponseStream)
+        with generation_span(
+            model=llm_with_default_settings.config.model_name,
+            model_config={
+                "base_url": str(llm_with_default_settings.config.api_base or ""),
+                "model_impl": "litellm",
+            },
+        ) as span_generation:
+            span_generation.span_data.input = messages
+            for chunk in llm_with_default_settings.stream(
+                prompt=messages,
+                tools=tool_definitions,
+                tool_choice=tool_choice,
+                structured_response_format=structured_response_format,
+            ):
+                assert isinstance(chunk, ModelResponseStream)
+                usage = getattr(chunk, "usage", None)
+                if usage:
+                    span_generation.span_data.usage = {
+                        "input_tokens": usage.prompt_tokens,
+                        "output_tokens": usage.completion_tokens,
+                        "cache_read_input_tokens": usage.cache_read_input_tokens,
+                        "cache_creation_input_tokens": usage.cache_creation_input_tokens,
+                    }
 
-            delta = chunk.choice.delta
-            finish_reason = chunk.choice.finish_reason
+                delta = chunk.choice.delta
+                finish_reason = chunk.choice.finish_reason
 
-            if delta.reasoning_content:
-                reasoning_parts.append(delta.reasoning_content)
-                if not reasoning_started:
-                    yield RunItemStreamEvent(type="reasoning_start")
-                    reasoning_started = True
+                if delta.reasoning_content:
+                    if not reasoning_started:
+                        yield RunItemStreamEvent(type="reasoning_start")
+                        reasoning_started = True
 
-            if delta.content:
-                content_parts.append(delta.content)
+                if delta.content:
+                    if reasoning_started:
+                        yield RunItemStreamEvent(type="reasoning_done")
+                        reasoning_started = False
+                    content_parts.append(delta.content)
+                    if not message_started:
+                        yield RunItemStreamEvent(type="message_start")
+                        message_started = True
+
+                if delta.tool_calls:
+                    if reasoning_started:
+                        yield RunItemStreamEvent(type="reasoning_done")
+                        reasoning_started = False
+                    if message_started:
+                        yield RunItemStreamEvent(type="message_done")
+                        message_started = False
+
+                    for tool_call_delta in delta.tool_calls:
+                        _update_tool_call_with_delta(
+                            tool_calls_in_progress, tool_call_delta
+                        )
+
+                yield chunk
+
+                if not finish_reason:
+                    continue
                 if reasoning_started:
-                    yield RunItemStreamEvent(type="reasoning_done")
-                    reasoning_started = False
-                if not message_started:
-                    yield RunItemStreamEvent(type="message_start")
-                    message_started = True
-
-            if delta.tool_calls:
-                if reasoning_started and not message_started:
                     yield RunItemStreamEvent(type="reasoning_done")
                     reasoning_started = False
                 if message_started:
                     yield RunItemStreamEvent(type="message_done")
                     message_started = False
 
-                for tool_call_delta in delta.tool_calls:
-                    _update_tool_call_with_delta(
-                        tool_calls_in_progress, tool_call_delta
+                if finish_reason:
+                    _try_convert_content_to_tool_calls_for_non_tool_calling_llms(
+                        tool_calls_in_progress,
+                        content_parts,
+                        structured_response_format,
+                        _next_synthetic_tool_call_id,
                     )
 
-            yield chunk
-
-            if not finish_reason:
-                continue
-            if message_started:
-                yield RunItemStreamEvent(type="message_done")
-                message_started = False
-
-            if finish_reason:
-                _try_convert_content_to_tool_calls_for_non_tool_calling_llms(
-                    tool_calls_in_progress,
-                    content_parts,
-                    structured_response_format,
-                    _next_synthetic_tool_call_id,
-                )
-
-            if finish_reason and tool_calls_in_progress:
-                sorted_tool_calls = sorted(tool_calls_in_progress.items())
-
-                # Build tool calls for the message and execute tools
-                assistant_tool_calls: list[ToolCall] = []
-                tool_outputs: dict[str, str] = {}
-
-                for _, tool_call_data in sorted_tool_calls:
-                    call_id = tool_call_data["id"]
-                    name = tool_call_data["name"]
-                    arguments_str = tool_call_data["arguments"]
-
-                    if call_id is None or name is None:
-                        continue
-
-                    assistant_tool_calls.append(
+                if finish_reason and content_parts:
+                    new_messages_stateful.append(
                         {
-                            "id": call_id,
-                            "type": "function",
-                            "function": {
-                                "name": name,
-                                "arguments": arguments_str,
-                            },
+                            "role": "assistant",
+                            "content": "".join(content_parts),
                         }
                     )
+            span_generation.span_data.output = new_messages_stateful
+
+        # Execute tool calls outside of the stream loop and generation_span
+        if tool_calls_in_progress:
+            sorted_tool_calls = sorted(tool_calls_in_progress.items())
+
+            # Build tool calls for the message and execute tools
+            assistant_tool_calls: list[ToolCall] = []
+            tool_outputs: dict[str, str] = {}
+
+            for _, tool_call_data in sorted_tool_calls:
+                call_id = tool_call_data["id"]
+                name = tool_call_data["name"]
+                arguments_str = tool_call_data["arguments"]
+
+                if call_id is None or name is None:
+                    continue
+
+                assistant_tool_calls.append(
+                    {
+                        "id": call_id,
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "arguments": arguments_str,
+                        },
+                    }
+                )
+
+                yield RunItemStreamEvent(
+                    type="tool_call",
+                    details=ToolCallStreamItem(
+                        call_id=call_id,
+                        name=name,
+                        arguments=arguments_str,
+                    ),
+                )
+
+                if name in tools_by_name:
+                    tool = tools_by_name[name]
+                    arguments = json.loads(arguments_str)
+
+                    run_context = RunContextWrapper(context=context)
+
+                    # TODO: Instead of executing sequentially, execute in parallel
+                    # In practice, it's not a must right now since we don't use parallel
+                    # tool calls, so kicking the can down the road for now.
+                    with function_span(tool.name) as span_fn:
+                        span_fn.span_data.input = arguments
+                        try:
+                            output = tool.run_v2(run_context, **arguments)
+                            tool_outputs[call_id] = _serialize_tool_output(output)
+                            span_fn.span_data.output = output
+                        except Exception as e:
+                            _error_tracing.attach_error_to_current_span(
+                                SpanError(
+                                    message="Error running tool",
+                                    data={"tool_name": tool.name, "error": str(e)},
+                                )
+                            )
+                            # Treat the error as the tool output so the framework can continue
+                            error_output = f"Error: {str(e)}"
+                            tool_outputs[call_id] = error_output
+                            output = error_output
 
                     yield RunItemStreamEvent(
-                        type="tool_call",
-                        details=ToolCallStreamItem(
+                        type="tool_call_output",
+                        details=ToolCallOutputStreamItem(
                             call_id=call_id,
-                            name=name,
-                            arguments=arguments_str,
+                            output=output,
+                        ),
+                    )
+                else:
+                    not_found_output = f"Tool {name} not found"
+                    tool_outputs[call_id] = _serialize_tool_output(not_found_output)
+                    yield RunItemStreamEvent(
+                        type="tool_call_output",
+                        details=ToolCallOutputStreamItem(
+                            call_id=call_id,
+                            output=not_found_output,
                         ),
                     )
 
-                    if name in tools_by_name:
-                        tool = tools_by_name[name]
-                        arguments = json.loads(arguments_str)
+            new_messages_stateful.append(
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": assistant_tool_calls,
+                }
+            )
 
-                        run_context = RunContextWrapper(context=context)
+            for _, tool_call_data in sorted_tool_calls:
+                call_id = tool_call_data["id"]
 
-                        # TODO: Instead of executing sequentially, execute in parallel
-                        # In practice, it's not a must right now since we don't use parallel
-                        # tool calls, so kicking the can down the road for now.
-                        output = tool.run_v2(run_context, **arguments)
-                        tool_outputs[call_id] = _serialize_tool_output(output)
-
-                        yield RunItemStreamEvent(
-                            type="tool_call_output",
-                            details=ToolCallOutputStreamItem(
-                                call_id=call_id,
-                                output=output,
-                            ),
-                        )
-                    else:
-                        not_found_output = f"Tool {name} not found"
-                        tool_outputs[call_id] = _serialize_tool_output(not_found_output)
-                        yield RunItemStreamEvent(
-                            type="tool_call_output",
-                            details=ToolCallOutputStreamItem(
-                                call_id=call_id,
-                                output=not_found_output,
-                            ),
-                        )
-
-                new_messages_stateful.append(
-                    {
-                        "role": "assistant",
-                        "content": None,
-                        "tool_calls": assistant_tool_calls,
-                    }
-                )
-
-                for _, tool_call_data in sorted_tool_calls:
-                    call_id = tool_call_data["id"]
-
-                    if call_id in tool_outputs:
-                        new_messages_stateful.append(
-                            {
-                                "role": "tool",
-                                "content": tool_outputs[call_id],
-                                "tool_call_id": call_id,
-                            }
-                        )
-
-            elif finish_reason and content_parts:
-                new_messages_stateful.append(
-                    {
-                        "role": "assistant",
-                        "content": "".join(content_parts),
-                    }
-                )
+                if call_id in tool_outputs:
+                    new_messages_stateful.append(
+                        {
+                            "role": "tool",
+                            "content": tool_outputs[call_id],
+                            "tool_call_id": call_id,
+                        }
+                    )
+        current_span.finish(reset_current=True)
 
     return QueryResult(
         stream=stream_generator(),

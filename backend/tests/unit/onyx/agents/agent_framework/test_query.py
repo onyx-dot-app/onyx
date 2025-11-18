@@ -7,6 +7,7 @@ from onyx.agents.agent_framework.models import ToolCallStreamItem
 from onyx.agents.agent_framework.query import query
 from onyx.llm.message_types import ChatCompletionMessage
 from onyx.llm.model_response import ModelResponseStream
+from tests.unit.onyx.agents.agent_framework.conftest import FakeErrorTool
 from tests.unit.onyx.agents.agent_framework.conftest import FakeTool
 from tests.unit.onyx.agents.agent_framework.conftest import stream_chunk
 from tests.unit.onyx.agents.agent_framework.conftest import tool_call_chunk
@@ -544,3 +545,84 @@ def test_query_treats_tool_like_message_as_tool_call(
     assert result.new_messages_stateful[1]["content"] == (
         "Internal Search results for: new agent, framework"
     )
+
+
+def test_query_handles_tool_error_gracefully(
+    fake_llm: Callable[[list[ModelResponseStream]], Any],
+    fake_error_tool: FakeErrorTool,
+) -> None:
+    """Test that query handles tool errors gracefully and treats the error as the tool call response."""
+    call_id = "toolu_01ErrorToolCall123"
+    stream_id = "chatcmpl-error-test-12345"
+
+    responses = [
+        stream_chunk(
+            id=stream_id,
+            created="1762545000",
+            content="",
+            tool_calls=[tool_call_chunk(id=call_id, name="error_tool", arguments="")],
+        ),
+        stream_chunk(
+            id=stream_id,
+            created="1762545000",
+            content="",
+            tool_calls=[tool_call_chunk(arguments="")],
+        ),
+        *[
+            stream_chunk(
+                id=stream_id,
+                created="1762545000",
+                content="",
+                tool_calls=[tool_call_chunk(arguments=arg)],
+            )
+            for arg in ['{"queries": ', '["test"]}']
+        ],
+        stream_chunk(id=stream_id, created="1762545000", finish_reason="tool_calls"),
+    ]
+
+    llm = fake_llm(responses)
+    context: dict[str, bool] = {}
+    messages: list[ChatCompletionMessage] = [
+        {"role": "user", "content": "call the error tool"}
+    ]
+
+    result = query(
+        llm,
+        messages,
+        tools=[fake_error_tool],
+        context=context,
+        tool_choice=None,
+    )
+    events = list(result.stream)
+
+    run_item_events = [e for e in events if isinstance(e, RunItemStreamEvent)]
+
+    # Verify tool_call event was emitted
+    tool_call_events = [e for e in run_item_events if e.type == "tool_call"]
+    assert len(tool_call_events) == 1
+    assert tool_call_events[0].details is not None
+    assert isinstance(tool_call_events[0].details, ToolCallStreamItem)
+    assert tool_call_events[0].details.call_id == call_id
+    assert tool_call_events[0].details.name == "error_tool"
+
+    # Verify tool_call_output event was emitted with the error message
+    tool_output_events = [e for e in run_item_events if e.type == "tool_call_output"]
+    assert len(tool_output_events) == 1
+    assert tool_output_events[0].details is not None
+    assert isinstance(tool_output_events[0].details, ToolCallOutputStreamItem)
+    assert tool_output_events[0].details.call_id == call_id
+    assert tool_output_events[0].details.output == "Error: Error running tool"
+
+    # Verify new_messages contains expected assistant and tool messages
+    assert len(result.new_messages_stateful) == 2
+    assert result.new_messages_stateful[0]["role"] == "assistant"
+    assert result.new_messages_stateful[0]["content"] is None
+    assert len(result.new_messages_stateful[0]["tool_calls"]) == 1
+    assert result.new_messages_stateful[0]["tool_calls"][0]["id"] == call_id
+    assert (
+        result.new_messages_stateful[0]["tool_calls"][0]["function"]["name"]
+        == "error_tool"
+    )
+    assert result.new_messages_stateful[1]["role"] == "tool"
+    assert result.new_messages_stateful[1]["tool_call_id"] == call_id
+    assert result.new_messages_stateful[1]["content"] == "Error: Error running tool"
