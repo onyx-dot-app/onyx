@@ -37,7 +37,7 @@ def test_partial_match_in_model_map() -> None:
         "supports_audio_output": False,
         "supports_function_calling": True,
         "supports_response_schema": True,
-        "supports_system_messages": True,
+        "supports_system_messages": False,
         "supports_tool_choice": True,
         "supports_vision": True,
     }
