@@ -39,6 +39,14 @@ def _get_http_client() -> httpx.AsyncClient:
     return _http_client
 
 
+async def shutdown_http_client() -> None:
+    """Close the shared HTTP client when the server shuts down."""
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
+
+
 def _get_api_server_url() -> str:
     """Construct the API server URL for internal requests."""
     protocol = os.getenv("API_SERVER_PROTOCOL", "http")
