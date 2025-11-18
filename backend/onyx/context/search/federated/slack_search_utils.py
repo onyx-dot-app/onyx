@@ -29,6 +29,9 @@ DAYS_PER_WEEK = 7
 DAYS_PER_MONTH = 30
 MAX_CONTENT_WORDS = 3
 
+# Punctuation to strip from words during analysis
+WORD_PUNCTUATION = ".,!?;:\"'#"
+
 RECENCY_KEYWORDS = ["recent", "latest", "newest", "last"]
 
 
@@ -130,7 +133,7 @@ def is_recency_query(query: str) -> bool:
     # Count content words (not stop words, length > 2)
     content_word_count = 0
     for word in words:
-        clean_word = word.strip(".,!?;:\"'#")
+        clean_word = word.strip(WORD_PUNCTUATION)
         if clean_word and len(clean_word) > 2 and clean_word not in all_stop_words:
             content_word_count += 1
 
@@ -522,10 +525,16 @@ def _get_combined_stop_words() -> set[str]:
 
     Returns a set of stop words for filtering content words.
     Falls back to just Slack-specific stop words if NLTK is unavailable.
+
+    Note: Currently only supports English stop words. Non-English queries
+    may have suboptimal content word extraction. Future enhancement could
+    detect query language and load appropriate stop words.
     """
     try:
         from nltk.corpus import stopwords  # type: ignore
 
+        # TODO: Support multiple languages - currently hardcoded to English
+        # Could detect language or allow configuration
         nltk_stop_words = set(stopwords.words("english"))
     except Exception:
         # Fallback if NLTK not available
@@ -555,12 +564,12 @@ def extract_content_words_from_recency_query(
     content_words = []
 
     for word in words:
-        clean_word = word.lower().strip(".,!?;:\"'#")
+        clean_word = word.lower().strip(WORD_PUNCTUATION)
         # Skip if it's a channel reference or a stop word
         if clean_word in channel_references:
             continue
         if clean_word and clean_word not in all_stop_words and len(clean_word) > 2:
-            clean_word_orig = word.strip(".,!?;:\"'#")
+            clean_word_orig = word.strip(WORD_PUNCTUATION)
             if clean_word_orig.lower() not in all_stop_words:
                 content_words.append(clean_word_orig)
 

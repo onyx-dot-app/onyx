@@ -162,11 +162,17 @@ def fetch_and_cache_channel_metadata(
 
         except SlackApiError as e:
             last_exception = e
-            error_response = e.response.get("error", "") if e.response else ""
+
+            # Extract all needed fields from response upfront
+            if e.response:
+                error_response = e.response.get("error", "")
+                needed_scope = e.response.get("needed", "")
+            else:
+                error_response = ""
+                needed_scope = ""
 
             # Check if this is a missing_scope error
-            if error_response == "missing_scope" and e.response:
-                needed_scope = e.response.get("needed", "")
+            if error_response == "missing_scope":
 
                 # Get the channel type that requires this scope
                 missing_channel_type = get_channel_type_for_missing_scope(needed_scope)
