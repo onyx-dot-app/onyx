@@ -9,12 +9,6 @@ import { useState } from "react";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { ChatSession } from "@/app/chat/interfaces";
-import {
-  useCurrentMessageHistory,
-  useIsFetching,
-  useLoadingError,
-  useSubmittedMessage,
-} from "@/app/chat/stores/useChatSessionStore";
 import { useShowCenteredInput } from "@/lib/hooks";
 
 export interface AppPageProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
