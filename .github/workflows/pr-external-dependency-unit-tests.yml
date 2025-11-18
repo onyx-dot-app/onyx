@@ -51,6 +51,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64
+      - image=onyx_arm64_image
       - ${{ format('run-id={0}-external-dependency-unit-tests-job-{1}', github.run_id, strategy['job-index']) }}
       - extras=s3-cache
     strategy:

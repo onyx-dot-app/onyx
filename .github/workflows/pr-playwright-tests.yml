@@ -36,7 +36,12 @@ env:
 
 jobs:
   build-web-image:
-    runs-on: [runs-on, runner=4cpu-linux-arm64, "run-id=${{ github.run_id }}-build-web-image", "extras=ecr-cache"]
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-arm64
+      - image=onyx_arm64_image
+      - run-id=${{ github.run_id }}-build-web-image
+      - extras=ecr-cache
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -67,7 +72,12 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-image:
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
+    runs-on:
+      - runs-on
+      - runner=1cpu-linux-arm64
+      - image=onyx_arm64_image
+      - run-id=${{ github.run_id }}-build-backend-image
+      - extras=ecr-cache
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -98,7 +108,12 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
+    runs-on:
+      - runs-on
+      - runner=1cpu-linux-arm64
+      - image=onyx_arm64_image
+      - run-id=${{ github.run_id }}-build-model-server-image
+      - extras=ecr-cache
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -131,7 +146,12 @@ jobs:
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
     name: Playwright Tests (${{ matrix.project }})
-    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}", "extras=ecr-cache"]
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-arm64
+      - image=onyx_arm64_image
+      - run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}
+      - extras=ecr-cache
     strategy:
       fail-fast: false
       matrix:

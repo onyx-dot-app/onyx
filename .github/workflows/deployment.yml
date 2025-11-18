@@ -85,6 +85,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=4cpu-linux-x64
+      - image=onyx_x64_image
       - run-id=${{ github.run_id }}-web-build
       - extras=ecr-cache
     env:
@@ -143,6 +144,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=4cpu-linux-x64
+      - image=onyx_x64_image
       - run-id=${{ github.run_id }}-web-cloud-build
       - extras=ecr-cache
     env:
@@ -206,6 +208,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
+      - image=onyx_x64_image
       - run-id=${{ github.run_id }}-backend-build
       - extras=ecr-cache
     env:
@@ -263,6 +266,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
+      - image=onyx_x64_image
       - run-id=${{ github.run_id }}-model-server-build
       - volume=40gb
       - extras=ecr-cache
@@ -327,6 +331,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
+      - image=onyx_x64_image
       - run-id=${{ github.run_id }}-trivy-scan-web
       - extras=ecr-cache
     env:
@@ -364,6 +369,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
+      - image=onyx_x64_image
       - run-id=${{ github.run_id }}-trivy-scan-web-cloud
       - extras=ecr-cache
     env:
@@ -401,6 +407,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
+      - image=onyx_x64_image
       - run-id=${{ github.run_id }}-trivy-scan-backend
       - extras=ecr-cache
     env:
@@ -443,6 +450,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
+      - image=onyx_x64_image
       - run-id=${{ github.run_id }}-trivy-scan-model-server
       - extras=ecr-cache
     env:

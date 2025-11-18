@@ -5,6 +5,8 @@ self-hosted-runner:
     - extras=s3-cache
     - hdd=256
     - runs-on
+    - image=onyx_arm64_image
+    - image=onyx_x64_image
     - runner=1cpu-linux-arm64
     - runner=1cpu-linux-x64
     - runner=2cpu-linux-arm64

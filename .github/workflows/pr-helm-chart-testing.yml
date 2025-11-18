@@ -12,7 +12,12 @@ on:
 jobs:
   helm-chart-check:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=8cpu-linux-x64,hdd=256,"run-id=${{ github.run_id }}-helm-chart-check"]
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - image=onyx_x64_image
+      - hdd=256
+      - run-id=${{ github.run_id }}-helm-chart-check
 
     # fetch-depth 0 is required for helm/chart-testing-action
     steps:

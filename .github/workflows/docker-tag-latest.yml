@@ -14,7 +14,11 @@ jobs:
   tag:
     # See https://runs-on.com/runners/linux/
     # use a lower powered instance since this just does i/o to docker hub
-    runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}-tag"]
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - image=onyx_x64_image
+      - run-id=${{ github.run_id }}-tag
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
