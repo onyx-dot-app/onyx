@@ -35,6 +35,7 @@ import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import SvgFolderPlus from "@/icons/folder-plus";
+import SvgFileText from "@/icons/file-text";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
@@ -309,7 +310,7 @@ function AppSidebarInner() {
     ]
   );
 
-  const { isAdmin, isCurator } = useUser();
+  const { isAdmin, isCurator, user } = useUser();
   const activeSidebarTab = useAppFocus();
   const createProjectModal = useCreateModal();
   const newSessionButton = useMemo(
@@ -338,6 +339,24 @@ function AppSidebarInner() {
     ),
     [folded, route, activeSidebarTab, combinedSettings, currentAgent]
   );
+
+  const promptShortcutsButton = useMemo(
+    () =>
+      user?.preferences?.shortcut_enabled && (
+        <div data-testid="AppSidebar/prompt-shortcuts">
+          <SidebarTab
+            leftIcon={SvgFileText}
+            href="/chat/input-prompts"
+            folded={folded}
+            active={activeSidebarTab === "input-prompts"}
+          >
+            Prompt Shortcuts
+          </SidebarTab>
+        </div>
+      ),
+    [folded, activeSidebarTab, user?.preferences?.shortcut_enabled]
+  );
+
   const moreAgentsButton = useMemo(
     () => (
       <div data-testid="AppSidebar/more-agents">
@@ -435,7 +454,15 @@ function AppSidebarInner() {
       )}
 
       <SidebarWrapper folded={folded} setFolded={setFolded}>
-        <SidebarBody footer={settingsButton} actionButton={newSessionButton}>
+        <SidebarBody
+          footer={settingsButton}
+          actionButton={
+            <>
+              {newSessionButton}
+              {promptShortcutsButton}
+            </>
+          }
+        >
           {folded ? (
             <>
               {moreAgentsButton}

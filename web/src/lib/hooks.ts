@@ -61,7 +61,8 @@ export function useIsMounted() {
 type AppFocus =
   | { type: "agent" | "project" | "chat"; id: string }
   | "new-session"
-  | "more-agents";
+  | "more-agents"
+  | "input-prompts";
 
 export function useAppFocus(): AppFocus {
   const pathname = usePathname();
@@ -70,6 +71,10 @@ export function useAppFocus(): AppFocus {
   // Check if we're on the agents page
   if (pathname === "/chat/agents") {
     return "more-agents";
+  }
+
+  if (pathname === "/chat/input-prompts") {
+    return "input-prompts";
   }
 
   // Check search params for chat, agent, or project
@@ -860,7 +865,7 @@ export const useUserGroups = (): {
         isLoading: false,
         error: "",
       },
-      refreshUserGroups: () => {},
+      refreshUserGroups: () => { },
     };
   }
 

@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
 import Button from "@/refresh-components/buttons/Button";
-import { PlusIcon } from "@/components/icons/icons";
+import SvgPlus from "@/icons/plus";
 import { Textarea } from "@/components/ui/textarea";
-import Title from "@/components/ui/title";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/texts/Text";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { BackButton } from "@/components/BackButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   DropdownMenu,
@@ -152,14 +150,13 @@ export default function InputPrompts() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="absolute top-4 left-4">
-        <BackButton />
-      </div>
       {popup}
       <div className="flex justify-between items-start mb-6">
         <div className="flex flex-col gap-2">
-          <Title>Prompt Shortcuts</Title>
-          <Text>
+          <Text headingH2 text05>
+            Prompt Shortcuts
+          </Text>
+          <Text mainUiBody text03>
             Manage and customize prompt shortcuts for your assistants. Use your
             prompt shortcuts by starting a new message with &quot;/&quot; in
             chat.
@@ -204,8 +201,11 @@ export default function InputPrompts() {
           </div>
         </div>
       ) : (
-        <Button onClick={() => setIsCreatingNew(true)} className="w-full mt-4">
-          <PlusIcon size={14} className="mr-2" />
+        <Button
+          onClick={() => setIsCreatingNew(true)}
+          className="w-full mt-4"
+          leftIcon={SvgPlus}
+        >
           Create New Prompt
         </Button>
       )}
@@ -256,7 +256,7 @@ const PromptCard: React.FC<PromptCardProps> = ({
   }, []);
 
   return (
-    <div className="border dark:border-none dark:bg-[#333333] rounded-lg p-4 mb-4 relative">
+    <div className="border border-border-02 bg-background-neutral-01 rounded-lg p-4 mb-4 relative">
       {isEditing ? (
         <>
           <div className="absolute top-2 right-2">
@@ -297,11 +297,15 @@ const PromptCard: React.FC<PromptCardProps> = ({
             disabled={!isPromptPublic(prompt)}
           >
             <div className="mb-2  flex gap-x-2 ">
-              <p className="font-semibold">{prompt.prompt}</p>
+              <Text mainUiAction text05>
+                {prompt.prompt}
+              </Text>
               {isPromptPublic(prompt) && <SourceChip title="Built-in" />}
             </div>
           </SimpleTooltip>
-          <div className="whitespace-pre-wrap">{prompt.content}</div>
+          <Text mainUiBody text04 className="whitespace-pre-wrap">
+            {prompt.content}
+          </Text>
           <div className="absolute top-2 right-2">
             <DropdownMenu>
               <DropdownMenuTrigger className="hover:bg-transparent" asChild>
