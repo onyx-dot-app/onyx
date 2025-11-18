@@ -13,6 +13,7 @@ from dateutil.parser import parse
 from dateutil.parser import ParserError
 
 from onyx.configs.app_configs import CONNECTOR_LOCALHOST_OVERRIDE
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import IGNORE_FOR_QA
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import OnyxMetadata
@@ -105,6 +106,23 @@ def get_metadata_keys_to_ignore() -> list[str]:
     return [IGNORE_FOR_QA]
 
 
+def _parse_document_source(connector_type: Any) -> DocumentSource | None:
+    if connector_type is None:
+        return None
+
+    if isinstance(connector_type, DocumentSource):
+        return connector_type
+
+    if not isinstance(connector_type, str):
+        return None
+
+    normalized = connector_type.strip().lower().replace(" ", "_").replace("-", "_")
+    try:
+        return DocumentSource(normalized)
+    except ValueError:
+        return None
+
+
 def process_onyx_metadata(
     metadata: dict[str, Any],
 ) -> tuple[OnyxMetadata, dict[str, Any]]:
@@ -125,13 +143,14 @@ def process_onyx_metadata(
         if s_owner_names
         else None
     )
+    source_type = _parse_document_source(metadata.get("connector_type"))
 
     dt_str = metadata.get("doc_updated_at")
     doc_updated_at = time_str_to_utc(dt_str) if dt_str else None
 
     return (
         OnyxMetadata(
-            source_type=metadata.get("connector_type"),
+            source_type=source_type,
             link=metadata.get("link"),
             file_display_name=metadata.get("file_display_name"),
             title=metadata.get("title"),
