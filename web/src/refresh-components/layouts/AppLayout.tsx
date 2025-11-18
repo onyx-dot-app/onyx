@@ -43,22 +43,23 @@ export default function AppLayout({
 
       <div className="flex flex-col h-full w-full">
         {/* Header */}
-        {(customHeaderContent || currentChatSession) && (
-          <header className="w-full flex flex-row justify-center items-center py-3 px-4">
-            <div className="flex-1" />
-            <div className="flex-1 flex flex-col items-center">
-              <Text text03>{customHeaderContent}</Text>
-            </div>
-            <div className="flex-1 flex flex-row items-center justify-end px-1">
-              <IconButton
-                icon={SvgShare}
-                transient={showShareModal}
-                tertiary
-                onClick={() => setShowShareModal(true)}
-              />
-            </div>
-          </header>
-        )}
+        <header className="w-full flex flex-row justify-center items-center py-3 px-4">
+          <div className="flex-1" />
+          <div className="flex-1 flex flex-col items-center">
+            <Text text03 className={cn(!customHeaderContent && "invisible")}>
+              {customHeaderContent}
+            </Text>
+          </div>
+          <div className="flex-1 flex flex-row items-center justify-end px-1">
+            <IconButton
+              icon={SvgShare}
+              transient={showShareModal}
+              tertiary
+              onClick={() => setShowShareModal(true)}
+              className={cn(!currentChatSession && "invisible")}
+            />
+          </div>
+        </header>
 
         <div className={cn("flex-1 overflow-auto", className)} {...rest}>
           {children}
