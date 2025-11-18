@@ -39,7 +39,13 @@ class SerperClient(WebSearchProvider):
             data=json.dumps(payload),
         )
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except Exception:
+            # Avoid leaking API keys/URLs
+            raise ValueError(
+                "Serper search failed. Check credentials or quota."
+            ) from None
 
         results = response.json()
         organic_results = results["organic"]
@@ -98,7 +104,13 @@ class SerperClient(WebSearchProvider):
                 scrape_successful=False,
             )
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except Exception:
+            # Avoid leaking API keys/URLs
+            raise ValueError(
+                "Serper content fetch failed. Check credentials."
+            ) from None
 
         response_json = response.json()
 

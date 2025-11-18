@@ -19,11 +19,9 @@ import SvgKey from "@/icons/key";
 import SvgCheckSquare from "@/icons/check-square";
 import SvgArrowExchange from "@/icons/arrow-exchange";
 import SvgArrowRightCircle from "@/icons/arrow-right-circle";
-
-const CoreModal = dynamic(
-  () => import("@/refresh-components/modals/CoreModal"),
-  { ssr: false }
-);
+import RawModal from "@/refresh-components/RawModal";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgX from "@/icons/x";
 
 type WebSearchProviderType = "google_pse" | "serper" | "exa";
 type WebContentProviderType = "firecrawl" | "onyx_web_crawler" | (string & {});
@@ -91,25 +89,25 @@ const SEARCH_PROVIDER_ORDER: WebSearchProviderType[] = [
 
 const SEARCH_PROVIDER_DETAILS: Record<
   WebSearchProviderType,
-  { subtitle: string; helper: string; logoSrc?: string }
+  { subtitle: string; helper: string; logoSrc?: string; apiKeyUrl: string }
 > = {
   exa: {
     subtitle: "Exa.ai",
-    helper:
-      "Enter credentials for Exa. Onyx stores credentials securely and does not display them after saving.",
+    helper: "Connect to Exa to set up web search.",
     logoSrc: "/Exa.svg",
+    apiKeyUrl: "https://dashboard.exa.ai/api-keys",
   },
   serper: {
     subtitle: "Serper.dev",
-    helper:
-      "Enter credentials for Serper. Onyx stores credentials securely and does not display them after saving.",
+    helper: "Connect to Serper to set up web search.",
     logoSrc: "/Serper.svg",
+    apiKeyUrl: "https://serper.dev/api-key",
   },
   google_pse: {
     subtitle: "Google",
-    helper:
-      "Enter credentials for PSE. Onyx stores credentials securely and does not display them after saving.",
+    helper: "Connect to Google PSE to set up web search.",
     logoSrc: "/Google.svg",
+    apiKeyUrl: "https://programmablesearchengine.google.com/controlpanel/all",
   },
 };
 
@@ -192,15 +190,20 @@ export default function Page() {
     const providerChanged =
       prevProviderTypeRef.current !== selectedProviderType;
 
-    if (modalJustOpened || providerChanged) {
-      setApiKeyValue("");
-      setSearchStatusMessage(null);
-      setSearchErrorMessage(null);
-    }
-
     const provider = searchProviders?.find(
       (item) => item.provider_type === selectedProviderType
     );
+
+    if (modalJustOpened || providerChanged) {
+      // If there's a stored key, show a masked placeholder
+      if (provider?.has_api_key) {
+        setApiKeyValue("••••••••••••••••");
+      } else {
+        setApiKeyValue("");
+      }
+      setSearchStatusMessage(null);
+      setSearchErrorMessage(null);
+    }
     if (selectedProviderType === "google_pse") {
       const config = provider?.config || {};
       const searchId =
@@ -223,12 +226,18 @@ export default function Page() {
       return;
     }
 
-    // For now Firecrawl credentials are entered fresh each time (we do not expose stored keys).
-    setContentApiKeyValue("");
+    const provider = contentProviders?.find(
+      (item) => item.provider_type === selectedContentProviderType
+    );
+
+    // If there's a stored key, show a masked placeholder
+    if (provider?.has_api_key) {
+      setContentApiKeyValue("••••••••••••••••");
+    } else {
+      setContentApiKeyValue("");
+    }
+
     if (selectedContentProviderType === "firecrawl") {
-      const provider = contentProviders?.find(
-        (item) => item.provider_type === selectedContentProviderType
-      );
       const baseUrl =
         provider?.config?.base_url ||
         provider?.config?.api_base_url ||
@@ -371,15 +380,41 @@ export default function Page() {
     return <GlobeIcon size={size} className="text-text-02" />;
   };
 
-  const renderKeyBadge = (hasKey: boolean) => (
-    <span
-      className="flex h-4 w-4 shrink-0 items-center justify-center self-center text-text-03"
-      title={hasKey ? "API key stored" : "API key missing"}
-      aria-label={hasKey ? "API key stored" : "API key missing"}
-    >
+  const renderKeyBadge = (hasKey: boolean, onClick?: () => void) => {
+    const baseClasses =
+      "flex h-4 w-4 shrink-0 items-center justify-center self-center text-text-03";
+    const clickableClasses = onClick
+      ? "cursor-pointer hover:text-text-01 transition-colors"
+      : "";
+
+    const content = (
       <SvgKey width={16} height={16} className="h-4 w-4 shrink-0" />
-    </span>
-  );
+    );
+
+    if (onClick) {
+      return (
+        <button
+          type="button"
+          onClick={onClick}
+          className={`${baseClasses} ${clickableClasses}`}
+          title="Click to update API key"
+          aria-label="Click to update API key"
+        >
+          {content}
+        </button>
+      );
+    }
+
+    return (
+      <span
+        className={baseClasses}
+        title={hasKey ? "API key stored" : "API key missing"}
+        aria-label={hasKey ? "API key stored" : "API key missing"}
+      >
+        {content}
+      </span>
+    );
+  };
 
   const orderedContentProviders = useMemo(() => {
     const existingProviders = new Map<
@@ -499,134 +534,195 @@ export default function Page() {
     );
   }
 
-  const renderCredentialFields = () => {
-    if (!selectedProviderType) {
-      return null;
-    }
+  type ProviderSetupModalProps = {
+    isOpen: boolean;
+    onClose: () => void;
+    providerLabel: string;
+    providerLogo: ReactNode;
+    description: string;
+    apiKeyValue: string;
+    onApiKeyChange: (value: string) => void;
+    optionalField?: {
+      label: string;
+      value: string;
+      onChange: (value: string) => void;
+      placeholder: string;
+      description?: string;
+      showFirst?: boolean;
+    };
+    helperMessage: ReactNode;
+    helperClass: string;
+    isProcessing: boolean;
+    canConnect: boolean;
+    onConnect: () => void;
+    apiKeyAutoFocus?: boolean;
+  };
 
-    const defaultMessage =
-      selectedProviderType === "google_pse"
-        ? "Paste your API key from PSE to access your search engine."
-        : selectedProviderType === "serper"
-          ? "Paste your API key from Serper to access your search engine."
-          : "Paste your API key from Exa to access your search engine.";
-
-    let helperMessage = defaultMessage;
-    let helperClass = "text-text-03";
-
-    if (searchErrorMessage) {
-      helperMessage = searchErrorMessage;
-      helperClass = "text-red-500";
-    } else if (searchStatusMessage) {
-      helperMessage = searchStatusMessage;
-      helperClass = searchStatusMessage.toLowerCase().includes("validated")
-        ? "text-green-500"
-        : "text-text-03";
-    } else if (isProcessingSearch) {
-      helperMessage = "Validating API key...";
-      helperClass = "text-text-03";
-    }
+  const ProviderSetupModal = ({
+    isOpen,
+    onClose,
+    providerLabel,
+    providerLogo,
+    description,
+    apiKeyValue,
+    onApiKeyChange,
+    optionalField,
+    helperMessage,
+    helperClass,
+    isProcessing,
+    canConnect,
+    onConnect,
+    apiKeyAutoFocus = true,
+  }: ProviderSetupModalProps) => {
+    if (!isOpen) return null;
 
     return (
-      <div className="flex w-full flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <Text mainUiAction text04>
-            API Key
-          </Text>
-          <PasswordInputTypeIn
-            placeholder="Enter API key"
-            value={apiKeyValue}
-            onChange={(event) => setApiKeyValue(event.target.value)}
-          />
-          <Text mainContentBody text03 className={helperClass}>
-            {helperMessage}
-          </Text>
-        </div>
-
-        {selectedProviderType === "google_pse" && (
-          <div className="flex flex-col gap-2">
-            <Text mainUiAction text04>
-              Search Engine ID
-            </Text>
-            <InputTypeIn
-              placeholder="Enter search engine ID"
-              value={searchEngineIdValue}
-              onChange={(event) => setSearchEngineIdValue(event.target.value)}
-            />
+      <RawModal onClose={onClose} className="w-[60rem] h-fit flex flex-col">
+        <div className="bg-background-tint-00 relative flex flex-col gap-1 p-4 rounded-tl-16 rounded-tr-16">
+          <div className="absolute right-2 top-2">
+            <IconButton icon={SvgX} internal onClick={onClose} />
           </div>
-        )}
-      </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1">
+              <div className="flex items-center justify-center w-7 h-7 p-0.5">
+                {providerLogo}
+              </div>
+              <div className="flex items-center justify-center w-4 h-4 p-0.5">
+                <SvgArrowExchange className="w-3 h-3 text-text-04" />
+              </div>
+              <div className="flex items-center justify-center w-7 h-7 p-0.5">
+                <OnyxLogo width={24} height={24} className="text-text-04" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Text headingH3>{`Set up ${providerLabel}`}</Text>
+              <Text secondaryBody text03>
+                {description}
+              </Text>
+            </div>
+          </div>
+        </div>
+        <div className="bg-background-tint-01 flex flex-col gap-4 p-4 overflow-y-auto max-h-[512px]">
+          <div className="flex w-full flex-col gap-4">
+            {optionalField?.showFirst && (
+              <div className="flex flex-col gap-4">
+                <Text mainUiAction text04>
+                  {optionalField.label}
+                </Text>
+                <InputTypeIn
+                  placeholder={optionalField.placeholder}
+                  value={optionalField.value}
+                  onChange={(event) =>
+                    optionalField.onChange(event.target.value)
+                  }
+                />
+                {optionalField.description && (
+                  <Text mainContentBody text03 className="text-text-03">
+                    {optionalField.description}
+                  </Text>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-4">
+              <Text mainUiAction text04>
+                API Key
+              </Text>
+              <PasswordInputTypeIn
+                placeholder="Enter API key"
+                value={apiKeyValue}
+                autoFocus={apiKeyAutoFocus}
+                onChange={(event) => onApiKeyChange(event.target.value)}
+              />
+              <Text mainContentBody text03 className={helperClass}>
+                {helperMessage}
+              </Text>
+            </div>
+
+            {optionalField && !optionalField.showFirst && (
+              <div className="flex flex-col gap-4">
+                <Text mainUiAction text04>
+                  {optionalField.label}
+                </Text>
+                <InputTypeIn
+                  placeholder={optionalField.placeholder}
+                  value={optionalField.value}
+                  onChange={(event) =>
+                    optionalField.onChange(event.target.value)
+                  }
+                />
+                {optionalField.description && (
+                  <Text mainContentBody text03 className="text-text-03">
+                    {optionalField.description}
+                  </Text>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="bg-background-tint-00 flex flex-row items-center justify-end gap-2 p-4 rounded-bl-16 rounded-br-16">
+          <Button type="button" main secondary onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            main
+            primary
+            disabled={!canConnect || isProcessing}
+            onClick={onConnect}
+          >
+            {isProcessing ? "Connecting..." : "Connect"}
+          </Button>
+        </div>
+      </RawModal>
     );
   };
 
-  const renderContentCredentialFields = () => {
-    if (!selectedContentProviderType) {
-      return null;
+  const getSearchProviderHelperMessage = () => {
+    if (searchErrorMessage) {
+      return searchErrorMessage;
+    }
+    if (searchStatusMessage) {
+      return searchStatusMessage;
+    }
+    if (isProcessingSearch) {
+      return "Validating API key...";
     }
 
-    const providerName =
-      CONTENT_PROVIDER_LABEL[selectedContentProviderType] ||
-      selectedContentProviderType;
-
-    const defaultMessage: ReactNode =
-      selectedContentProviderType === "firecrawl" ? (
-        <>
-          Paste your <span className="underline">API key</span> from Firecrawl
-          to access your search engine.
-        </>
-      ) : (
-        `Paste your API key from ${providerName} to enable crawling.`
-      );
-
-    let helperMessage: ReactNode = defaultMessage;
-    let helperClass = "text-text-03";
-
-    if (contentErrorMessage) {
-      helperMessage = contentErrorMessage;
-      helperClass = "text-red-500";
-    } else if (contentStatusMessage) {
-      helperMessage = contentStatusMessage;
-      helperClass = contentStatusMessage.toLowerCase().includes("validated")
-        ? "text-green-500"
-        : "text-text-03";
-    } else if (isProcessingContent) {
-      helperMessage = "Validating API key...";
-      helperClass = "text-text-03";
-    }
+    const providerDetails = selectedProviderType
+      ? SEARCH_PROVIDER_DETAILS[selectedProviderType]
+      : null;
+    const apiKeyUrl = providerDetails?.apiKeyUrl || "#";
 
     return (
-      <div className="flex w-full flex-col gap-4">
-        {selectedContentProviderType === "firecrawl" && (
-          <div className="flex flex-col gap-2">
-            <Text mainUiAction text04>
-              API Base URL
-            </Text>
-            <InputTypeIn
-              placeholder="https://"
-              value={contentBaseUrlValue}
-              onChange={(event) => setContentBaseUrlValue(event.target.value)}
-            />
-            <Text mainContentBody text03 className="text-text-03">
-              Your Firecrawl API base URL.
-            </Text>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2">
-          <Text mainUiAction text04>
-            API Key
-          </Text>
-          <PasswordInputTypeIn
-            placeholder="Enter API key"
-            value={contentApiKeyValue}
-            onChange={(event) => setContentApiKeyValue(event.target.value)}
-          />
-          <Text mainContentBody text03 className={helperClass}>
-            {helperMessage}
-          </Text>
-        </div>
-      </div>
+      <>
+        Paste your{" "}
+        <a
+          href={apiKeyUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline"
+        >
+          API key
+        </a>{" "}
+        {selectedProviderType === "google_pse"
+          ? "from PSE"
+          : selectedProviderType === "serper"
+            ? "from Serper"
+            : "from Exa"}{" "}
+        to access your search engine.
+      </>
     );
+  };
+
+  const getSearchProviderHelperClass = () => {
+    if (searchErrorMessage) return "text-red-500";
+    if (searchStatusMessage) {
+      return searchStatusMessage.toLowerCase().includes("validated")
+        ? "text-green-500"
+        : "text-text-03";
+    }
+    return "text-text-03";
   };
 
   const handleSearchConnect = async () => {
@@ -852,6 +948,42 @@ export default function Page() {
     }
   };
 
+  const getContentProviderHelperMessage = () => {
+    if (contentErrorMessage) {
+      return contentErrorMessage;
+    }
+    if (contentStatusMessage) {
+      return contentStatusMessage;
+    }
+    if (isProcessingContent) {
+      return "Validating API key...";
+    }
+
+    const providerName = selectedContentProviderType
+      ? CONTENT_PROVIDER_LABEL[selectedContentProviderType] ||
+        selectedContentProviderType
+      : "";
+
+    return selectedContentProviderType === "firecrawl" ? (
+      <>
+        Paste your <span className="underline">API key</span> from Firecrawl to
+        access your search engine.
+      </>
+    ) : (
+      `Paste your API key from ${providerName} to enable crawling.`
+    );
+  };
+
+  const getContentProviderHelperClass = () => {
+    if (contentErrorMessage) return "text-red-500";
+    if (contentStatusMessage) {
+      return contentStatusMessage.toLowerCase().includes("validated")
+        ? "text-green-500"
+        : "text-text-03";
+    }
+    return "text-text-03";
+  };
+
   const handleContentConnect = async () => {
     if (!selectedContentProviderType) {
       return;
@@ -985,16 +1117,24 @@ export default function Page() {
             )}
 
             {!hasActiveSearchProvider && (
-              <div className="flex items-start gap-3 rounded-16 border border-[color:var(--Status-Info-02,#9BBEFF)] bg-[color:var(--Status-Info-00,#F8FAFE)] px-4 py-3">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[color:var(--Status-Info-01,#D4E4FF)]">
-                  <InfoIcon size={16} className="text-[#1D4ED8]" />
-                </div>
-                <Text
-                  className="flex-1"
-                  mainContentBody
-                  text03
-                  style={{ color: "rgba(4, 20, 48, 0.85)" }}
+              <div
+                className="flex items-start gap-3 rounded-16 border px-4 py-3"
+                style={{
+                  borderColor: "var(--status-info-02)",
+                  backgroundColor: "var(--status-info-00)",
+                }}
+              >
+                <div
+                  className="flex h-6 w-6 items-center justify-center rounded-full"
+                  style={{
+                    backgroundColor: "var(--status-info-01)",
+                  }}
                 >
+                  <div style={{ color: "var(--status-text-info-05)" }}>
+                    <InfoIcon size={16} />
+                  </div>
+                </div>
+                <Text className="flex-1" mainContentBody text04>
                   Connect a search engine to set up web search.
                 </Text>
               </div>
@@ -1031,8 +1171,9 @@ export default function Page() {
                     if (isActive) {
                       return {
                         label: "Current Default",
-                        disabled: true,
+                        disabled: false,
                         icon: "check" as const,
+                        onClick: undefined,
                       };
                     }
 
@@ -1072,14 +1213,24 @@ export default function Page() {
                         </div>
                       </div>
                       <div className="flex items-center justify-end gap-2">
-                        {hasStoredKey && renderKeyBadge(hasStoredKey)}
+                        {hasStoredKey &&
+                          renderKeyBadge(hasStoredKey, () => {
+                            if (
+                              typeof providerType === "string" &&
+                              (providerType === "google_pse" ||
+                                providerType === "serper" ||
+                                providerType === "exa")
+                            ) {
+                              setSelectedProviderType(
+                                providerType as WebSearchProviderType
+                              );
+                              setIsModalOpen(true);
+                              setSearchStatusMessage(null);
+                              setSearchErrorMessage(null);
+                            }
+                          })}
                         <Button
-                          type="button"
-                          className={`inline-flex shrink-0 items-center gap-2 rounded-12 px-2 py-2 bg-transparent border-0 shadow-none text-text-02 ${
-                            buttonState.icon === "check"
-                              ? "text-action-text-link-05"
-                              : ""
-                          }`}
+                          action={buttonState.icon === "check"}
                           tertiary
                           disabled={
                             buttonState.disabled ||
@@ -1087,27 +1238,21 @@ export default function Page() {
                               buttonState.icon !== "check")
                           }
                           onClick={buttonState.onClick}
+                          {...(!buttonState.onClick &&
+                            buttonState.icon === "check" && {
+                              className: "hover:bg-transparent cursor-default",
+                            })}
+                          rightIcon={
+                            buttonState.icon === "check"
+                              ? SvgCheckSquare
+                              : buttonState.icon === "arrow"
+                                ? SvgArrowExchange
+                                : buttonState.icon === "arrow-circle"
+                                  ? SvgArrowRightCircle
+                                  : undefined
+                          }
                         >
-                          <span className="flex items-center gap-2">
-                            <span className="whitespace-nowrap">
-                              {buttonState.label}
-                            </span>
-                            <span className="flex h-4 w-4 items-center justify-center text-current">
-                              {buttonState.icon === "check" && (
-                                <SvgCheckSquare
-                                  width={16}
-                                  height={16}
-                                  className="h-4 w-4"
-                                />
-                              )}
-                              {buttonState.icon === "arrow" && (
-                                <SvgArrowExchange className="h-4 w-4 text-current" />
-                              )}
-                              {buttonState.icon === "arrow-circle" && (
-                                <SvgArrowRightCircle className="h-4 w-4 text-current" />
-                              )}
-                            </span>
-                          </span>
+                          {buttonState.label}
                         </Button>
                       </div>
                     </div>
@@ -1174,7 +1319,8 @@ export default function Page() {
                     return {
                       label: "Current Crawler",
                       icon: "check" as const,
-                      disabled: true,
+                      disabled: false,
+                      onClick: undefined,
                     };
                   }
 
@@ -1220,41 +1366,37 @@ export default function Page() {
                     <div className="flex items-center justify-end gap-2">
                       {provider.provider_type !== "onyx_web_crawler" &&
                         hasStoredKey &&
-                        renderKeyBadge(true)}
+                        renderKeyBadge(true, () => {
+                          setSelectedContentProviderType(
+                            provider.provider_type
+                          );
+                          setIsContentModalOpen(true);
+                          setContentStatusMessage(null);
+                          setContentErrorMessage(null);
+                        })}
                       <Button
-                        type="button"
-                        className={`inline-flex shrink-0 items-center gap-2 rounded-12 px-2 py-2 bg-transparent border-0 shadow-none ${
-                          buttonState.icon === "check"
-                            ? "text-action-text-link-05"
-                            : "text-text-02"
-                        }`}
+                        action={buttonState.icon === "check"}
                         tertiary
                         disabled={
                           buttonState.disabled ||
                           (!buttonState.onClick && buttonState.icon !== "check")
                         }
                         onClick={buttonState.onClick}
+                        {...(!buttonState.onClick &&
+                          buttonState.icon === "check" && {
+                            className: "hover:bg-transparent cursor-default",
+                          })}
+                        rightIcon={
+                          buttonState.icon === "check"
+                            ? SvgCheckSquare
+                            : buttonState.icon === "arrow"
+                              ? SvgArrowExchange
+                              : buttonState.icon === "arrow-circle"
+                                ? SvgArrowRightCircle
+                                : undefined
+                        }
                       >
-                        <span className="flex items-center gap-2">
-                          <span className="whitespace-nowrap">
-                            {buttonState.label}
-                          </span>
-                          <span className="flex h-4 w-4 items-center justify-center text-current">
-                            {buttonState.icon === "check" && (
-                              <SvgCheckSquare
-                                width={16}
-                                height={16}
-                                className="h-4 w-4"
-                              />
-                            )}
-                            {buttonState.icon === "arrow" && (
-                              <SvgArrowExchange className="h-4 w-4 text-current" />
-                            )}
-                            {buttonState.icon === "arrow-circle" && (
-                              <SvgArrowRightCircle className="h-4 w-4 text-current" />
-                            )}
-                          </span>
-                        </span>
+                        {buttonState.label}
                       </Button>
                     </div>
                   </div>
@@ -1265,150 +1407,94 @@ export default function Page() {
         </div>
       </div>
 
-      {isModalOpen && selectedProviderType && (
-        <CoreModal
-          className="w-[480px] max-w-[90vw]"
-          onClickOutside={() => {
-            setIsModalOpen(false);
-            setSelectedProviderType(null);
-          }}
-        >
-          <div className="w-full border-b border-border-01 px-4 pt-4 pb-3 dark:border-border-02">
-            <div className="mb-3 flex items-center gap-2.5">
-              {renderProviderLogo(
-                SEARCH_PROVIDER_DETAILS[selectedProviderType]?.logoSrc,
-                providerLabel,
-                24
-              )}
-              <SvgArrowExchange className="h-4 w-4 text-text-02" />
-              <OnyxLogo
-                width={20}
-                height={20}
-                className="text-[#0c0c0c] dark:text-text-05"
-              />
-            </div>
-            <Text headingH2 text05 className="tracking-[-0.01em]">
-              {`Set up ${providerLabel}`}
-            </Text>
-          </div>
+      <ProviderSetupModal
+        isOpen={isModalOpen && !!selectedProviderType}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedProviderType(null);
+        }}
+        providerLabel={providerLabel}
+        providerLogo={renderProviderLogo(
+          selectedProviderType
+            ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.logoSrc
+            : undefined,
+          providerLabel,
+          24
+        )}
+        description={
+          selectedProviderType
+            ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.helper ??
+              SEARCH_PROVIDER_DETAILS[selectedProviderType]?.subtitle ??
+              ""
+            : ""
+        }
+        apiKeyValue={apiKeyValue}
+        onApiKeyChange={(value) => setApiKeyValue(value)}
+        optionalField={
+          selectedProviderType === "google_pse"
+            ? {
+                label: "Search Engine ID",
+                value: searchEngineIdValue,
+                onChange: (value) => setSearchEngineIdValue(value),
+                placeholder: "Enter search engine ID",
+              }
+            : undefined
+        }
+        helperMessage={getSearchProviderHelperMessage()}
+        helperClass={getSearchProviderHelperClass()}
+        isProcessing={isProcessingSearch}
+        canConnect={canConnect}
+        onConnect={() => {
+          void handleSearchConnect();
+        }}
+      />
 
-          <div className="flex w-full flex-col gap-4 px-4 py-4">
-            <div className="flex flex-col gap-1.5">
-              <Text mainContentBody text03 className="text-text-03">
-                {SEARCH_PROVIDER_DETAILS[selectedProviderType]?.subtitle}
-              </Text>
-              <Text mainContentBody text03 className="text-text-03">
-                {SEARCH_PROVIDER_DETAILS[selectedProviderType]?.helper}
-              </Text>
-            </div>
-
-            <div className="flex max-h-[360px] flex-col gap-4 overflow-y-auto pr-1">
-              {renderCredentialFields()}
-            </div>
-          </div>
-
-          <div className="flex w-full items-center justify-end gap-2 border-t border-border-01 px-4 py-4 dark:border-border-02">
-            <Button
-              type="button"
-              main
-              secondary
-              className="min-w-[96px]"
-              onClick={() => {
-                setIsModalOpen(false);
-                setSelectedProviderType(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              main
-              primary
-              className="min-w-[96px]"
-              disabled={!canConnect || isProcessingSearch}
-              onClick={() => {
-                void handleSearchConnect();
-              }}
-            >
-              {isProcessingSearch ? "Connecting..." : "Connect"}
-            </Button>
-          </div>
-        </CoreModal>
-      )}
-
-      {isContentModalOpen && selectedContentProviderType && (
-        <CoreModal
-          className="w-[480px] max-w-[90vw]"
-          onClickOutside={() => {
-            setIsContentModalOpen(false);
-            setSelectedContentProviderType(null);
-          }}
-        >
-          <div className="w-full border-b border-border-01 px-4 pt-4 pb-3 dark:border-border-02">
-            <div className="mb-3 flex items-center gap-2.5">
-              {renderProviderLogo(
-                CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.logoSrc,
-                contentProviderLabel,
-                24
-              )}
-              <SvgArrowExchange className="h-4 w-4 text-text-02" />
-              <OnyxLogo
-                width={20}
-                height={20}
-                className="text-[#0c0c0c] dark:text-text-05"
-              />
-            </div>
-            <Text headingH2 text05 className="tracking-[-0.01em]">
-              {`Set up ${contentProviderLabel}`}
-            </Text>
-          </div>
-
-          <div className="flex w-full flex-col gap-4 px-4 py-4">
-            <div className="flex flex-col gap-1.5">
-              <Text mainContentBody text03 className="text-text-03">
-                {CONTENT_PROVIDER_DETAILS[selectedContentProviderType]
-                  ?.subtitle || contentProviderLabel}
-              </Text>
-              <Text mainContentBody text03 className="text-text-03">
-                {CONTENT_PROVIDER_DETAILS[selectedContentProviderType]
-                  ?.description ||
-                  `Provide credentials for ${contentProviderLabel} to enable crawling.`}
-              </Text>
-            </div>
-
-            <div className="flex max-h-[360px] flex-col gap-4 overflow-y-auto pr-1">
-              {renderContentCredentialFields()}
-            </div>
-          </div>
-
-          <div className="flex w-full items-center justify-end gap-2 border-t border-border-01 px-4 py-4 dark:border-border-02">
-            <Button
-              type="button"
-              main
-              secondary
-              className="min-w-[96px]"
-              onClick={() => {
-                setIsContentModalOpen(false);
-                setSelectedContentProviderType(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              main
-              primary
-              className="min-w-[96px]"
-              disabled={!canConnectContent || isProcessingContent}
-              onClick={() => {
-                void handleContentConnect();
-              }}
-            >
-              {isProcessingContent ? "Connecting..." : "Connect"}
-            </Button>
-          </div>
-        </CoreModal>
-      )}
+      <ProviderSetupModal
+        isOpen={isContentModalOpen && !!selectedContentProviderType}
+        onClose={() => {
+          setIsContentModalOpen(false);
+          setSelectedContentProviderType(null);
+        }}
+        providerLabel={contentProviderLabel}
+        providerLogo={renderContentProviderLogo(
+          selectedContentProviderType || "",
+          false,
+          24
+        )}
+        description={
+          selectedContentProviderType
+            ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]
+                ?.description ||
+              CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.subtitle ||
+              `Provide credentials for ${contentProviderLabel} to enable crawling.`
+            : ""
+        }
+        apiKeyValue={contentApiKeyValue}
+        onApiKeyChange={(value) => setContentApiKeyValue(value)}
+        optionalField={
+          selectedContentProviderType === "firecrawl"
+            ? {
+                label: "API Base URL",
+                value: contentBaseUrlValue,
+                onChange: (value) => setContentBaseUrlValue(value),
+                placeholder: "https://",
+                description: "Your Firecrawl API base URL.",
+                showFirst: true,
+              }
+            : undefined
+        }
+        helperMessage={getContentProviderHelperMessage()}
+        helperClass={getContentProviderHelperClass()}
+        isProcessing={isProcessingContent}
+        canConnect={canConnectContent}
+        onConnect={() => {
+          void handleContentConnect();
+        }}
+        apiKeyAutoFocus={
+          !selectedContentProviderType ||
+          selectedContentProviderType !== "firecrawl"
+        }
+      />
     </>
   );
 }

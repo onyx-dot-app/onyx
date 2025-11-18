@@ -51,7 +51,11 @@ class OnyxWebCrawlerClient(WebContentProvider):
                 url, headers=self._headers, timeout=self._timeout_seconds
             )
         except Exception as exc:  # pragma: no cover - network failures vary
-            logger.warning(f"Onyx crawler failed to fetch {url}: {exc}")
+            logger.warning(
+                "Onyx crawler failed to fetch %s (%s)",
+                url,
+                exc.__class__.__name__,
+            )
             return WebContent(
                 title="",
                 link=url,
@@ -75,7 +79,9 @@ class OnyxWebCrawlerClient(WebContentProvider):
             text_content = parsed.cleaned_text or ""
             title = parsed.title or ""
         except Exception as exc:
-            logger.warning(f"Onyx crawler failed to parse {url}: {exc}")
+            logger.warning(
+                "Onyx crawler failed to parse %s (%s)", url, exc.__class__.__name__
+            )
             text_content = ""
             title = ""
 

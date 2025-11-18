@@ -95,7 +95,9 @@ class FirecrawlClient(WebContentProvider):
                     scrape_successful=False,
                 )
 
-            response.raise_for_status()
+            raise ValueError(
+                f"Firecrawl fetch failed with status {response.status_code}."
+            )
         else:
             self._last_error = None
 

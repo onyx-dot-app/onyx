@@ -45,9 +45,36 @@ class GooglePSEClient(WebSearchProvider):
         response = requests.get(
             GOOGLE_CUSTOM_SEARCH_URL, params=params, timeout=self._timeout_seconds
         )
-        response.raise_for_status()
+
+        # Check for HTTP errors first
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            status = response.status_code
+            error_detail = "Unknown error"
+            try:
+                error_data = response.json()
+                if "error" in error_data:
+                    error_info = error_data["error"]
+                    error_detail = error_info.get("message", str(error_info))
+            except Exception:
+                error_detail = (
+                    response.text[:200] if response.text else "No error details"
+                )
+
+            raise ValueError(
+                f"Google PSE search failed (status {status}): {error_detail}"
+            ) from exc
 
         data = response.json()
+
+        # Google Custom Search API can return errors in the response body even with 200 status
+        if "error" in data:
+            error_info = data["error"]
+            error_message = error_info.get("message", "Unknown error")
+            error_code = error_info.get("code", "Unknown")
+            raise ValueError(f"Google PSE API error ({error_code}): {error_message}")
+
         items: list[dict[str, Any]] = data.get("items", [])
         results: list[WebSearchResult] = []
 

@@ -33,6 +33,8 @@ from onyx.server.manage.web_search.models import WebSearchProviderTestRequest
 from onyx.server.manage.web_search.models import WebSearchProviderUpsertRequest
 from onyx.server.manage.web_search.models import WebSearchProviderView
 from onyx.utils.logger import setup_logger
+from shared_configs.enums import WebContentProviderType
+from shared_configs.enums import WebSearchProviderType
 
 logger = setup_logger()
 
@@ -49,7 +51,7 @@ def list_search_providers(
         WebSearchProviderView(
             id=provider.id,
             name=provider.name,
-            provider_type=provider.provider_type,
+            provider_type=WebSearchProviderType(provider.provider_type),
             is_active=provider.is_active,
             config=provider.config or {},
             has_api_key=bool(provider.api_key),
@@ -90,7 +92,7 @@ def upsert_search_provider_endpoint(
     return WebSearchProviderView(
         id=provider.id,
         name=provider.name,
-        provider_type=provider.provider_type,
+        provider_type=WebSearchProviderType(provider.provider_type),
         is_active=provider.is_active,
         config=provider.config or {},
         has_api_key=bool(provider.api_key),
@@ -122,7 +124,7 @@ def activate_search_provider(
     return WebSearchProviderView(
         id=provider.id,
         name=provider.name,
-        provider_type=provider.provider_type,
+        provider_type=WebSearchProviderType(provider.provider_type),
         is_active=provider.is_active,
         config=provider.config or {},
         has_api_key=bool(provider.api_key),
@@ -190,7 +192,7 @@ def list_content_providers(
         WebContentProviderView(
             id=provider.id,
             name=provider.name,
-            provider_type=provider.provider_type,
+            provider_type=WebContentProviderType(provider.provider_type),
             is_active=provider.is_active,
             config=provider.config or {},
             has_api_key=bool(provider.api_key),
@@ -231,7 +233,7 @@ def upsert_content_provider_endpoint(
     return WebContentProviderView(
         id=provider.id,
         name=provider.name,
-        provider_type=provider.provider_type,
+        provider_type=WebContentProviderType(provider.provider_type),
         is_active=provider.is_active,
         config=provider.config or {},
         has_api_key=bool(provider.api_key),
@@ -263,7 +265,7 @@ def activate_content_provider(
     return WebContentProviderView(
         id=provider.id,
         name=provider.name,
-        provider_type=provider.provider_type,
+        provider_type=WebContentProviderType(provider.provider_type),
         is_active=provider.is_active,
         config=provider.config or {},
         has_api_key=bool(provider.api_key),
