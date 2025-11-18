@@ -20,6 +20,8 @@ from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import RetrievalDetails
+from onyx.db.connector import fetch_unique_document_sources
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.mcp_server.api import mcp_server
 from onyx.utils.logger import setup_logger
 
@@ -43,6 +45,20 @@ def _get_api_server_url() -> str:
     host = os.getenv("API_SERVER_HOST", "127.0.0.1")
     port = os.getenv("API_SERVER_PORT", str(APP_PORT))
     return f"{protocol}://{host}:{port}"
+
+
+def _tenant_has_indexed_sources() -> bool:
+    """Check if the current tenant has any indexed document sources."""
+    try:
+        with get_session_with_current_tenant() as db_session:
+            sources = fetch_unique_document_sources(db_session)
+            return len(sources) > 0
+    except Exception:
+        logger.warning(
+            "Onyx MCP Server: Failed to determine indexed sources; assuming available",
+            exc_info=True,
+        )
+        return True
 
 
 @mcp_server.tool()
@@ -76,6 +92,18 @@ async def onyx_search_documents(
     access_token = get_access_token()
     if not access_token or "_user" not in access_token.claims:
         raise ValueError("Authentication required")
+
+    if not _tenant_has_indexed_sources():
+        logger.info("Onyx MCP Server: No indexed sources available for tenant")
+        return {
+            "documents": [],
+            "total_results": 0,
+            "query": query,
+            "message": (
+                "No document sources are indexed yet. Add connectors or upload data "
+                "through Onyx before calling onyx_search_documents."
+            ),
+        }
 
     # Convert source_types strings to DocumentSource enums if provided
     # Invalid values will be handled by the API server
