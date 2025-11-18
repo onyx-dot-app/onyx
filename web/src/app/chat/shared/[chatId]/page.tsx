@@ -5,7 +5,7 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { constructMiniFiedPersona } from "@/lib/assistantIconUtils";
 import AppPage from "@/refresh-components/layouts/AppPage";
 import { fetchSettingsSS } from "@/components/settings/lib";
-import { fetchBackendChatSessionSS } from "@/lib/chat/fetchBackendChatSessionSS";
+import { fetchBackendChatSessionSS } from "@/lib/chat/fetchChatSessionSS";
 import { toChatSession } from "@/app/chat/interfaces";
 
 export interface PageProps {
