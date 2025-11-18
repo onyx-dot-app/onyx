@@ -120,52 +120,18 @@ def is_recency_query(query: str) -> bool:
     if not has_recency_keyword:
         return False
 
-    # Extract content words (excluding stop words and recency keywords)
+    # Get combined stop words (NLTK + Slack-specific)
+    all_stop_words = _get_combined_stop_words()
+
+    # Extract content words (excluding stop words)
     query_lower = query.lower()
     words = query_lower.split()
 
-    # Minimal stop words to check for content
-    basic_stop_words = {
-        "the",
-        "a",
-        "an",
-        "is",
-        "are",
-        "was",
-        "were",
-        "in",
-        "on",
-        "at",
-        "to",
-        "from",
-        "what",
-        "when",
-        "where",
-        "who",
-        "how",
-        "why",
-        "messages",
-        "message",
-        "updates",
-        "update",
-        "posts",
-        "post",
-        "discussions",
-        "discussion",
-        "conversations",
-        "conversation",
-    }
-
-    # Count content words (not stop words, not recency keywords, length > 2)
+    # Count content words (not stop words, length > 2)
     content_word_count = 0
     for word in words:
         clean_word = word.strip(".,!?;:\"'#")
-        if (
-            clean_word
-            and len(clean_word) > 2
-            and clean_word not in basic_stop_words
-            and clean_word not in RECENCY_KEYWORDS
-        ):
+        if clean_word and len(clean_word) > 2 and clean_word not in all_stop_words:
             content_word_count += 1
 
     # If query has significant content words (>= 2), it's not a pure recency query
@@ -551,6 +517,23 @@ SLACK_SPECIFIC_STOP_WORDS = frozenset(
 )
 
 
+def _get_combined_stop_words() -> set[str]:
+    """Get combined NLTK + Slack-specific stop words.
+
+    Returns a set of stop words for filtering content words.
+    Falls back to just Slack-specific stop words if NLTK is unavailable.
+    """
+    try:
+        from nltk.corpus import stopwords  # type: ignore
+
+        nltk_stop_words = set(stopwords.words("english"))
+    except Exception:
+        # Fallback if NLTK not available
+        nltk_stop_words = set()
+
+    return nltk_stop_words | SLACK_SPECIFIC_STOP_WORDS
+
+
 def extract_content_words_from_recency_query(
     query_text: str, channel_references: set[str]
 ) -> list[str]:
@@ -565,17 +548,8 @@ def extract_content_words_from_recency_query(
     Returns:
         List of content words (up to MAX_CONTENT_WORDS)
     """
-    # Get standard English stop words from NLTK (lazy import)
-    try:
-        from nltk.corpus import stopwords  # type: ignore
-
-        nltk_stop_words = set(stopwords.words("english"))
-    except Exception:
-        # Fallback if NLTK not available
-        nltk_stop_words = set()
-
-    # Combine NLTK stop words with Slack-specific stop words
-    all_stop_words = nltk_stop_words | SLACK_SPECIFIC_STOP_WORDS
+    # Get combined stop words (NLTK + Slack-specific)
+    all_stop_words = _get_combined_stop_words()
 
     words = query_text.split()
     content_words = []
