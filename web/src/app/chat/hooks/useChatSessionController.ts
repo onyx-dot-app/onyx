@@ -115,6 +115,7 @@ export function useChatSessionController({
       state.sessions.get(state.currentSessionId || "")?.chatState || "input"
   );
   const currentChatHistory = useCurrentMessageHistory();
+  const chatSessions = useChatSessionStore((state) => state.sessions);
   const { setForcedToolIds } = useAgentsContext();
 
   // Fetch chat messages for the chat session
@@ -309,11 +310,21 @@ export function useChatSessionController({
     // SKIP_RELOAD is used after completing the first message in a new session.
     // We don't need to re-fetch at that point, we have everything we need.
     // For safety, we should always re-fetch if there are no messages in the chat history.
+    const existingChatSession = existingChatSessionId
+      ? chatSessions.get(existingChatSessionId)
+      : null;
     if (
       !searchParams?.get(SEARCH_PARAM_NAMES.SKIP_RELOAD) ||
       currentChatHistory.length === 0
     ) {
-      initialSessionFetch();
+      if (
+        !existingChatSession?.chatState ||
+        existingChatSession.chatState === "input"
+      ) {
+        initialSessionFetch();
+      } else {
+        setCurrentSession(existingChatSessionId);
+      }
     } else {
       // Remove SKIP_RELOAD param without triggering a page reload
       const currentSearchParams = new URLSearchParams(searchParams?.toString());
