@@ -1,4 +1,5 @@
 import os
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import Mock
 from unittest.mock import patch
@@ -579,7 +580,7 @@ class TestSlackBotFederatedSearch:
 
 
 @patch("onyx.context.search.federated.slack_search.get_redis_client")
-@patch("slack_sdk.WebClient")
+@patch("onyx.context.search.federated.slack_search.WebClient")
 def test_missing_scope_resilience(
     mock_web_client: Mock, mock_redis_client: Mock
 ) -> None:
@@ -594,13 +595,14 @@ def test_missing_scope_resilience(
     mock_web_client.return_value = mock_client_instance
 
     # Track which channel types were attempted
-    attempted_types = []
+    attempted_types: list[str] = []
 
-    def mock_conversations_list(types: str, **kwargs):
-        attempted_types.append(types)
+    def mock_conversations_list(types: str | None = None, **kwargs: Any) -> MagicMock:
+        if types:
+            attempted_types.append(types)
 
         # First call: all types including mpim -> missing_scope error
-        if "mpim" in types:
+        if types and "mpim" in types:
             error_response = {
                 "ok": False,
                 "error": "missing_scope",
@@ -639,7 +641,7 @@ def test_missing_scope_resilience(
         }
         return mock_response
 
-    mock_client_instance.conversations_list = mock_conversations_list
+    mock_client_instance.conversations_list.side_effect = mock_conversations_list
 
     # Call the function
     result = fetch_and_cache_channel_metadata(
@@ -666,7 +668,7 @@ def test_missing_scope_resilience(
 
 
 @patch("onyx.context.search.federated.slack_search.get_redis_client")
-@patch("slack_sdk.WebClient")
+@patch("onyx.context.search.federated.slack_search.WebClient")
 def test_multiple_missing_scopes_resilience(
     mock_web_client: Mock, mock_redis_client: Mock
 ) -> None:
@@ -681,13 +683,14 @@ def test_multiple_missing_scopes_resilience(
     mock_web_client.return_value = mock_client_instance
 
     # Track attempts
-    attempted_types = []
+    attempted_types: list[str] = []
 
-    def mock_conversations_list(types: str, **kwargs):
-        attempted_types.append(types)
+    def mock_conversations_list(types: str | None = None, **kwargs: Any) -> MagicMock:
+        if types:
+            attempted_types.append(types)
 
         # First: mpim missing
-        if "mpim" in types:
+        if types and "mpim" in types:
             error_response = {
                 "ok": False,
                 "error": "missing_scope",
@@ -697,7 +700,7 @@ def test_multiple_missing_scopes_resilience(
             raise SlackApiError("missing_scope", error_response)
 
         # Second: im missing
-        if "im" in types:
+        if types and "im" in types:
             error_response = {
                 "ok": False,
                 "error": "missing_scope",
@@ -726,7 +729,7 @@ def test_multiple_missing_scopes_resilience(
         }
         return mock_response
 
-    mock_client_instance.conversations_list = mock_conversations_list
+    mock_client_instance.conversations_list.side_effect = mock_conversations_list
 
     # Call the function
     result = fetch_and_cache_channel_metadata(
