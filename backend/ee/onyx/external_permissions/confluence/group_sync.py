@@ -8,7 +8,9 @@ from onyx.connectors.confluence.onyx_confluence import (
 )
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.users import get_all_users
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -19,7 +21,7 @@ def _build_group_member_email_map(
 ) -> dict[str, set[str]]:
     group_member_emails: dict[str, set[str]] = {}
     for user in confluence_client.paginated_cql_user_retrieval():
-        logger.debug(f"Processing groups for user: {user}")
+        logger.info(f"Processing groups for user: {user}")
 
         email = user.email
         if not email:
@@ -31,6 +33,8 @@ def _build_group_member_email_map(
                     confluence_client=confluence_client,
                     user_name=user_name,
                 )
+            else:
+                logger.error(f"user result missing username field: {user}")
 
         if not email:
             # If we still don't have an email, skip this user
@@ -64,6 +68,50 @@ def _build_group_member_email_map(
     return group_member_emails
 
 
+def _build_group_member_email_map_from_onyx_users(
+    confluence_client: OnyxConfluence,
+) -> dict[str, set[str]]:
+    with get_session_with_current_tenant() as db_session:
+        # don't include external since they are handled by the "through confluence"
+        # user fetching mechanism
+        user_emails = [
+            user.email for user in get_all_users(db_session, include_external=False)
+        ]
+
+    def _infer_username_from_email(email: str) -> str:
+        return email.split("@")[0]
+
+    group_member_emails: dict[str, set[str]] = {}
+    for email in user_emails:
+        logger.info(f"Processing groups for user with email: {email}")
+        try:
+            user_name = _infer_username_from_email(email)
+            response = confluence_client.get_user_details_by_username(user_name)
+            userKey = response.get("userKey")
+            if not userKey:
+                logger.error(f"User key not found for user with email {email}")
+                continue
+
+            all_users_groups: set[str] = set()
+            for group in confluence_client.paginated_groups_by_user_retrieval(userKey):
+                # group name uniqueness is enforced by Confluence, so we can use it as a group ID
+                group_id = group["name"]
+                group_member_emails.setdefault(group_id, set()).add(email)
+                all_users_groups.add(group_id)
+
+            if not all_users_groups:
+                msg = f"No groups found for user with email: {email}"
+                logger.error(msg)
+            else:
+                logger.info(
+                    f"Found groups {all_users_groups} for user with email {email}"
+                )
+        except Exception:
+            logger.exception(f"Error getting user details for user with email {email}")
+
+    return group_member_emails
+
+
 def confluence_group_sync(
     tenant_id: str,
     cc_pair: ConnectorCredentialPair,
@@ -90,6 +138,14 @@ def confluence_group_sync(
     group_member_email_map = _build_group_member_email_map(
         confluence_client=confluence_client,
         cc_pair_id=cc_pair.id,
+    )
+    group_member_email_map_from_onyx_users = (
+        _build_group_member_email_map_from_onyx_users(
+            confluence_client=confluence_client,
+        )
+    )
+    group_member_email_map = (
+        group_member_email_map_from_onyx_users | group_member_email_map
     )
 
     all_found_emails = set()
