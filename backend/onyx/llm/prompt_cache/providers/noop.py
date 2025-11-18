@@ -3,7 +3,7 @@
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.prompt_cache.interfaces import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
-from onyx.llm.prompt_cache.utils import normalize_language_model_input
+from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
 
 
 class NoOpPromptCacheProvider(PromptCacheProvider):
@@ -32,49 +32,13 @@ class NoOpPromptCacheProvider(PromptCacheProvider):
         Returns:
             Combined messages (prefix + suffix)
         """
-        # Normalize inputs
-        if cacheable_prefix is None:
-            return suffix
-
-        prefix_msgs = normalize_language_model_input(cacheable_prefix)
-        suffix_msgs = normalize_language_model_input(suffix)
-
-        # Handle continuation flag
-        # Special case: if cacheable_prefix was originally a string, keep it in its own block
-        was_prefix_string = isinstance(cacheable_prefix, str)
-
-        if continuation and prefix_msgs and not was_prefix_string:
-            # Append suffix content to last message of prefix
-            result = list(prefix_msgs)
-            last_msg = dict(result[-1])
-            suffix_first = dict(suffix_msgs[0]) if suffix_msgs else {}
-
-            # Combine content
-            if "content" in last_msg and "content" in suffix_first:
-                if isinstance(last_msg["content"], str) and isinstance(
-                    suffix_first["content"], str
-                ):
-                    last_msg["content"] = last_msg["content"] + suffix_first["content"]
-                else:
-                    # Handle list content (multimodal)
-                    prefix_content = (
-                        last_msg["content"]
-                        if isinstance(last_msg["content"], list)
-                        else [{"type": "text", "text": last_msg["content"]}]
-                    )
-                    suffix_content = (
-                        suffix_first["content"]
-                        if isinstance(suffix_first["content"], list)
-                        else [{"type": "text", "text": suffix_first["content"]}]
-                    )
-                    last_msg["content"] = prefix_content + suffix_content
-
-            result[-1] = last_msg
-            result.extend(suffix_msgs[1:])
-            return result
-
-        # Simple concatenation (or prefix was a string, so keep separate)
-        return list(prefix_msgs) + list(suffix_msgs)
+        # No transformation needed for no-op provider
+        return prepare_messages_with_cacheable_transform(
+            cacheable_prefix=cacheable_prefix,
+            suffix=suffix,
+            continuation=continuation,
+            transform_cacheable=None,
+        )
 
     def extract_cache_metadata(
         self,
