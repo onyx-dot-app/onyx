@@ -221,6 +221,7 @@ jobs:
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           INTEGRATION_TESTS_MODE=true \
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001 \
+          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
@@ -229,6 +230,7 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
+            mcp_server \
             background \
             -d
         id: start_docker
@@ -374,6 +376,7 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           DEV_MODE=true \
+          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.multitenant-dev.yml up \
             relational_db \
             index \
@@ -382,6 +385,7 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
+            mcp_server \
             background \
             -d
         id: start_docker_multi_tenant
