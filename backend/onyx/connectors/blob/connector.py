@@ -468,6 +468,14 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     link = onyx_metadata.link or link
                     primary_owners = onyx_metadata.primary_owners
                     secondary_owners = onyx_metadata.secondary_owners
+                    try:
+                        document_source = (
+                            DocumentSource(onyx_metadata.source_type)
+                            if onyx_metadata.source_type
+                            else DocumentSource(self.bucket_type.value)
+                        )
+                    except ValueError:
+                        document_source = DocumentSource(self.bucket_type.value)
 
                     sections: list[TextSection | ImageSection] = []
                     if extraction_result.text_content.strip():
@@ -489,7 +497,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                                 if sections
                                 else [TextSection(link=link, text="")]
                             ),
-                            source=DocumentSource(self.bucket_type.value),
+                            source=document_source,
                             semantic_identifier=file_display_name,
                             doc_updated_at=time_updated,
                             metadata=custom_tags,
