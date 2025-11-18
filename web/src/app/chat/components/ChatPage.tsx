@@ -911,8 +911,6 @@ export default function ChatPage({
                           setPresentingDocument={setPresentingDocument}
                           disabled={
                             llmManager.hasAnyProvider === false ||
-                            (!llmManager.hasAnyProvider &&
-                              !user?.personalization?.name) ||
                             onboardingState.currentStep !==
                               OnboardingStep.Complete
                           }
