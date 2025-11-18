@@ -10,6 +10,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgShare from "@/icons/share";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
 import { cn } from "@/lib/utils";
+import Button from "../buttons/Button";
 
 export interface ShareChatLayoutProps {
   chatSession: ChatSession | null;
@@ -47,13 +48,14 @@ export default function ShareChatLayout({
     }
 
     setHeaderActions(
-      <IconButton
-        icon={SvgShare}
+      <Button
+        rightIcon={SvgShare}
         transient={showShareModal}
         tertiary
         onClick={() => setShowShareModal(true)}
-        className={cn(!reserveSpace && !chatSession && "invisible")}
-      />
+      >
+        Share Chat
+      </Button>
     );
 
     return () => {
