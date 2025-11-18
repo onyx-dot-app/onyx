@@ -17,11 +17,13 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import IGNORE_FOR_QA
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import OnyxMetadata
+from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import is_valid_email
 
 
 T = TypeVar("T")
 U = TypeVar("U")
+logger = setup_logger()
 
 
 def datetime_to_utc(dt: datetime) -> datetime:
@@ -114,12 +116,17 @@ def _parse_document_source(connector_type: Any) -> DocumentSource | None:
         return connector_type
 
     if not isinstance(connector_type, str):
+        logger.warning(f"Invalid connector_type type: {type(connector_type).__name__}")
         return None
 
-    normalized = connector_type.strip().lower().replace(" ", "_").replace("-", "_")
+    normalized = re.sub(r"[\s\-]+", "_", connector_type.strip().lower())
     try:
         return DocumentSource(normalized)
     except ValueError:
+        logger.warning(
+            f"Invalid connector_type value: '{connector_type}' "
+            f"(normalized: '{normalized}')"
+        )
         return None
 
 
