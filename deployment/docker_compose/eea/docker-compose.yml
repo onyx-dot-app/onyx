@@ -1,0 +1,346 @@
+services:
+  api_server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: >
+      /bin/sh -c "alembic upgrade head &&
+      echo \"Starting Danswer Api Server\" &&
+      uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
+
+    restart: always
+    environment:
+      # Auth Settings
+      - AUTH_TYPE=${AUTH_TYPE:-disabled}
+      - SESSION_EXPIRE_TIME_SECONDS=${SESSION_EXPIRE_TIME_SECONDS:-86400}
+      - VALID_EMAIL_DOMAINS=${VALID_EMAIL_DOMAINS:-}
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      - REQUIRE_EMAIL_VERIFICATION=${REQUIRE_EMAIL_VERIFICATION:-}
+      - SMTP_SERVER=${SMTP_SERVER:-}  # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
+      - SMTP_PORT=${SMTP_PORT:-587}  # For sending verification emails, if unspecified then defaults to '587'
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - EMAIL_FROM=${EMAIL_FROM:-}
+      # Gen AI Settings
+      - GEN_AI_MODEL_PROVIDER=${GEN_AI_MODEL_PROVIDER:-}
+      - GEN_AI_MODEL_VERSION=${GEN_AI_MODEL_VERSION:-}
+      - FAST_GEN_AI_MODEL_VERSION=${FAST_GEN_AI_MODEL_VERSION:-}
+      - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
+      - GEN_AI_API_ENDPOINT=${GEN_AI_API_ENDPOINT:-}
+      - GEN_AI_API_VERSION=${GEN_AI_API_VERSION:-}
+      - GEN_AI_LLM_PROVIDER_TYPE=${GEN_AI_LLM_PROVIDER_TYPE:-}
+      - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
+      - QA_TIMEOUT=${QA_TIMEOUT:-}
+      - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
+      - DISABLE_LLM_FILTER_EXTRACTION=${DISABLE_LLM_FILTER_EXTRACTION:-}
+      - DISABLE_LLM_CHUNK_FILTER=${DISABLE_LLM_CHUNK_FILTER:-}
+      - DISABLE_LLM_CHOOSE_SEARCH=${DISABLE_LLM_CHOOSE_SEARCH:-}
+      - DISABLE_LLM_QUERY_REPHRASE=${DISABLE_LLM_QUERY_REPHRASE:-}
+      - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-}
+      # Query Options
+      - DOC_TIME_DECAY=${DOC_TIME_DECAY:-}  # Recency Bias for search results, decay at 1 / (1 + DOC_TIME_DECAY * x years)
+      - HYBRID_ALPHA=${HYBRID_ALPHA:-}  # Hybrid Search Alpha (0 for entirely keyword, 1 for entirely vector)
+      - EDIT_KEYWORD_QUERY=${EDIT_KEYWORD_QUERY:-}
+      - MULTILINGUAL_QUERY_EXPANSION=${MULTILINGUAL_QUERY_EXPANSION:-}
+      - QA_PROMPT_OVERRIDE=${QA_PROMPT_OVERRIDE:-}
+      # Other services
+      - POSTGRES_HOST=relational_db
+      - VESPA_HOST=index
+      - WEB_DOMAIN=${WEB_DOMAIN:-}  # For frontend redirect auth purpose
+      # Don't change the NLP model configs unless you know what you're doing
+      - DOCUMENT_ENCODER_MODEL=${DOCUMENT_ENCODER_MODEL:-}
+      - DOC_EMBEDDING_DIM=${DOC_EMBEDDING_DIM:-}
+      - NORMALIZE_EMBEDDINGS=${NORMALIZE_EMBEDDINGS:-}
+      - ASYM_QUERY_PREFIX=${ASYM_QUERY_PREFIX:-}
+      - ENABLE_RERANKING_REAL_TIME_FLOW=${ENABLE_RERANKING_REAL_TIME_FLOW:-}
+      - ENABLE_RERANKING_ASYNC_FLOW=${ENABLE_RERANKING_ASYNC_FLOW:-}
+      # Leave this on pretty please? Nothing sensitive is collected!
+      # https://docs.danswer.dev/more/telemetry
+      - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-info}  # Set to debug to get more fine-grained logs
+      - LOG_ALL_MODEL_INTERACTIONS=${LOG_ALL_MODEL_INTERACTIONS:-}  # Log all of the prompts to the LLM
+      # If set to `true` will enable additional logs about Vespa query performance
+      # (time spent on finding the right docs + time spent fetching summaries from disk)
+      - LOG_VESPA_TIMING_INFORMATION=${LOG_VESPA_TIMING_INFORMATION:-}
+      - MODEL_SERVER_HOST=inference_model_server
+      - REDIS_HOST=cache
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - S3_FILE_STORE_BUCKET_NAME=${S3_FILE_STORE_BUCKET_NAME:-}
+
+    volumes:
+      - ../../../data/local_dynamic_storage:/home/storage
+      - ../../../data/file_connector_tmp_storage:/home/file_connector_storage
+      - ../../../data/model_cache_torch:/root/.cache/torch/
+      - ../../../data/model_cache_nltk:/root/nltk_data/
+      - ../../../data/model_cache_huggingface:/root/.cache/huggingface/
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+  background:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: >
+      /bin/sh -c "
+      if [ -f /etc/ssl/certs/custom-ca.crt ]; then
+        update-ca-certificates;
+      fi &&
+      /app/scripts/supervisord_entrypoint.sh"
+
+    restart: always
+    environment:
+      # Gen AI Settings (Needed by DanswerBot)
+      - GEN_AI_MODEL_PROVIDER=${GEN_AI_MODEL_PROVIDER:-}
+      - GEN_AI_MODEL_VERSION=${GEN_AI_MODEL_VERSION:-}
+      - FAST_GEN_AI_MODEL_VERSION=${FAST_GEN_AI_MODEL_VERSION:-}
+      - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
+      - GEN_AI_API_ENDPOINT=${GEN_AI_API_ENDPOINT:-}
+      - GEN_AI_API_VERSION=${GEN_AI_API_VERSION:-}
+      - GEN_AI_LLM_PROVIDER_TYPE=${GEN_AI_LLM_PROVIDER_TYPE:-}
+      - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
+      - QA_TIMEOUT=${QA_TIMEOUT:-}
+      - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
+      - DISABLE_LLM_FILTER_EXTRACTION=${DISABLE_LLM_FILTER_EXTRACTION:-}
+      - DISABLE_LLM_CHUNK_FILTER=${DISABLE_LLM_CHUNK_FILTER:-}
+      - DISABLE_LLM_CHOOSE_SEARCH=${DISABLE_LLM_CHOOSE_SEARCH:-}
+      - DISABLE_LLM_QUERY_REPHRASE=${DISABLE_LLM_QUERY_REPHRASE:-}
+      - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-}
+      - GENERATIVE_MODEL_ACCESS_CHECK_FREQ=${GENERATIVE_MODEL_ACCESS_CHECK_FREQ:-}
+      # Query Options
+      - DOC_TIME_DECAY=${DOC_TIME_DECAY:-}  # Recency Bias for search results, decay at 1 / (1 + DOC_TIME_DECAY * x years)
+      - HYBRID_ALPHA=${HYBRID_ALPHA:-}  # Hybrid Search Alpha (0 for entirely keyword, 1 for entirely vector)
+      - EDIT_KEYWORD_QUERY=${EDIT_KEYWORD_QUERY:-}
+      - MULTILINGUAL_QUERY_EXPANSION=${MULTILINGUAL_QUERY_EXPANSION:-}
+      - QA_PROMPT_OVERRIDE=${QA_PROMPT_OVERRIDE:-}
+      # Other Services
+      - POSTGRES_HOST=relational_db
+      - POSTGRES_USER=${POSTGRES_USER:-}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
+      - POSTGRES_DB=${POSTGRES_DB:-}
+      - VESPA_HOST=index
+      - WEB_DOMAIN=${WEB_DOMAIN:-}  # For frontend redirect auth purpose for OAuth2 connectors
+      # Don't change the NLP model configs unless you know what you're doing
+      - DOCUMENT_ENCODER_MODEL=${DOCUMENT_ENCODER_MODEL:-}
+      - DOC_EMBEDDING_DIM=${DOC_EMBEDDING_DIM:-}
+      - NORMALIZE_EMBEDDINGS=${NORMALIZE_EMBEDDINGS:-}
+      - ASYM_QUERY_PREFIX=${ASYM_QUERY_PREFIX:-}  # Needed by DanswerBot
+      - ASYM_PASSAGE_PREFIX=${ASYM_PASSAGE_PREFIX:-}
+      - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
+      # Indexing Configs
+      - NUM_INDEXING_WORKERS=${NUM_INDEXING_WORKERS:-}
+      - DISABLE_INDEX_UPDATE_ON_SWAP=${DISABLE_INDEX_UPDATE_ON_SWAP:-}
+      - DASK_JOB_CLIENT_ENABLED=${DASK_JOB_CLIENT_ENABLED:-}
+      - CONTINUE_ON_CONNECTOR_FAILURE=${CONTINUE_ON_CONNECTOR_FAILURE:-}
+      - EXPERIMENTAL_CHECKPOINTING_ENABLED=${EXPERIMENTAL_CHECKPOINTING_ENABLED:-}
+      - CONFLUENCE_CONNECTOR_LABELS_TO_SKIP=${CONFLUENCE_CONNECTOR_LABELS_TO_SKIP:-}
+      - GONG_CONNECTOR_START_TIME=${GONG_CONNECTOR_START_TIME:-}
+      - NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP=${NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP:-}
+      - GITHUB_CONNECTOR_BASE_URL=${GITHUB_CONNECTOR_BASE_URL:-}
+      - DISABLE_DOCUMENT_CLEANUP=${DISABLE_DOCUMENT_CLEANUP:-}
+      # Danswer SlackBot Configs
+      - DANSWER_BOT_SLACK_APP_TOKEN=${DANSWER_BOT_SLACK_APP_TOKEN:-}
+      - DANSWER_BOT_SLACK_BOT_TOKEN=${DANSWER_BOT_SLACK_BOT_TOKEN:-}
+      - DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER=${DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER:-}
+      - DANSWER_BOT_DISPLAY_ERROR_MSGS=${DANSWER_BOT_DISPLAY_ERROR_MSGS:-}
+      - DANSWER_BOT_RESPOND_EVERY_CHANNEL=${DANSWER_BOT_RESPOND_EVERY_CHANNEL:-}
+      - DANSWER_BOT_DISABLE_COT=${DANSWER_BOT_DISABLE_COT:-}  # Currently unused
+      - NOTIFY_SLACKBOT_NO_ANSWER=${NOTIFY_SLACKBOT_NO_ANSWER:-}
+      - DANSWER_BOT_MAX_QPM=${DANSWER_BOT_MAX_QPM:-}
+      - DANSWER_BOT_MAX_WAIT_TIME=${DANSWER_BOT_MAX_WAIT_TIME:-}
+      # Logging
+      # Leave this on pretty please? Nothing sensitive is collected!
+      # https://docs.danswer.dev/more/telemetry
+      - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-info}  # Set to debug to get more fine-grained logs
+      - LOG_ALL_MODEL_INTERACTIONS=${LOG_ALL_MODEL_INTERACTIONS:-}  # Log all of the prompts to the LLM
+      - LOG_VESPA_TIMING_INFORMATION=${LOG_VESPA_TIMING_INFORMATION:-}
+      - REDIS_HOST=cache
+      - MODEL_SERVER_HOST=inference_model_server
+      - INDEXING_MODEL_SERVER_HOST=indexing_model_server
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - S3_FILE_STORE_BUCKET_NAME=${S3_FILE_STORE_BUCKET_NAME:-}
+
+    volumes:
+      - ./data/local_dynamic_storage:/home/storage
+      - ./data/file_connector_tmp_storage:/home/file_connector_storage
+      - ./data/model_cache_torch:/root/.cache/torch/
+      - ./data/model_cache_nltk:/root/nltk_data/
+      - ./data/model_cache_huggingface:/root/.cache/huggingface/
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+  web_server:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_DISABLE_STREAMING=${NEXT_PUBLIC_DISABLE_STREAMING:-false}
+        - NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA=${NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA:-false}
+    restart: always
+    environment:
+      - INTERNAL_URL=http://api_server:8080
+      - WEB_DOMAIN=${WEB_DOMAIN:-}
+
+  relational_db:
+    image: postgres:15.2-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ../../../data/db_volume:/var/lib/postgresql/data
+  # This container name cannot have an underscore in it due to Vespa expectations of the URL
+  index:
+    image: vespaengine/vespa:8.277.17
+    restart: always
+    ports:
+      - "19071:19071"
+      - "8081:8081"
+    volumes:
+      - ../../../data/vespa_volume:/opt/vespa/var
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+  inference_model_server:
+    image: danswer/danswer-model-server:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.model_server
+
+    command: >
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+        echo 'Skipping service...';
+        exit 0;
+      else
+        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
+      fi"
+    restart: on-failure
+    environment:
+      - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
+      # Set to debug to get more fine-grained logs
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ../../../data/model_cache_torch:/root/.cache/torch/
+      - ../../../data/model_cache_huggingface:/root/.cache/huggingface/
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+
+  indexing_model_server:
+    image: danswer/danswer-model-server:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.model_server
+    command: >
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+        echo 'Skipping service...';
+        exit 0;
+      else
+        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
+      fi"
+    restart: on-failure
+    environment:
+      - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
+      - INDEXING_ONLY=True
+      # Set to debug to get more fine-grained logs
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ../../../data/model_cache_torch:/root/.cache/torch/
+      - ../../../data/model_cache_huggingface:/root/.cache/huggingface/
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+  cache:
+    image: redis:7.4-alpine
+    restart: always
+    ports:
+      - '6379:6379'
+    command: redis-server
+    volumes: 
+      - ../../../data/redis_cache_volume:/data
+
+
+  nginx:
+    image: nginx:1.23.4-alpine
+    restart: always
+    # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
+    # if api_server / web_server are not up 
+    depends_on:
+      - api_server
+      - web_server
+    environment:
+      - DOMAIN=localhost
+    ports:
+      - "80:80"
+      - "13000:80"  # allow for localhost:3000 usage, since that is the norm
+    volumes:
+      - ./deployment/data/nginx:/etc/nginx/conf.d
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    # the specified script waits for the api_server to start up. 
+    # Without this we've seen issues where nginx shows no error logs but 
+    # does not recieve any traffic
+    # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
+    # in order to make this work on both Unix-like systems and windows
+    command: > 
+      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
+      && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev"
+
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    ports:
+      - "9004:9000"
+      - "9005:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_DEFAULT_BUCKETS: ${S3_FILE_STORE_BUCKET_NAME:-onyx-file-store-bucket}
+    volumes:
+      - ../../../data/minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+
+  flower:
+    image: mher/flower
+    ports:
+      - "5555:5555"
+    environment:
+      CELERY_BROKER_URL: redis://cache:6379/15
+      FLOWER_PORT: 5555
+

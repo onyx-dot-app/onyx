@@ -1,0 +1,45 @@
+services:
+  nginx:
+    ports:
+      - "80:80"
+      - "13000:80"  # allow for localhost:3000 usage, since that is the norm
+
+  api_server:
+#    command: bash -c "tail -f /dev/null"
+    env_file:
+      - ./.env
+    depends_on:
+      - relational_db
+      - index
+      - cache
+    volumes:
+      - ./backend/onyx:/app/onyx
+      - ./backend/alembic:/app/alembic
+      - ./backend/shared_configs:/app/shared_configs
+    environment:
+      - AUTH_TYPE=basic
+      - GEN_AI_TEMPERATURE=0.1
+      - GEN_AI_MAX_TOKENS=131072
+      - AGENT_TIMEOUT_LLM_SUBQUESTION_GENERATION=300 
+      - AGENT_TIMEOUT_LLM_SUBANSWER_GENERATION=300
+      - AGENT_TIMEOUT_CONNECT_LLM_SUBQUESTION_GENERATION=300
+      - AGENT_TIMEOUT_CONNECT_LLM_SUBANSWER_GENERATION=300
+
+  background:
+#    command: bash -c "tail -f /dev/null"
+    env_file:
+      - ./.env
+    volumes:
+      - ./backend/onyx:/app/onyx
+
+
+  web_server:
+#    entrypoint: sh -c "tail -f /dev/null"
+#    image: node:20.19.2-bullseye
+    depends_on:
+      - api_server
+    environment:
+      - APP_VERSION=2.2.4-eea.0.0.84
+    volumes:
+      - ./web:/web
+
