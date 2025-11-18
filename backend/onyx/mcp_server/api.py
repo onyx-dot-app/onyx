@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.responses import Response
 from fastmcp import FastMCP
 from starlette.middleware.base import RequestResponseEndpoint
@@ -72,7 +73,7 @@ def create_mcp_fastapi_app() -> FastAPI:
         request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         if request.url.path.rstrip("/") == "/health":
-            return Response(content="healthy", media_type="text/plain")
+            return JSONResponse({"status": "healthy", "service": "mcp_server"})
         return await call_next(request)
 
     # Authentication is handled by FastMCP's OnyxPATVerifier (see auth.py)
