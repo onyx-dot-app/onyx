@@ -10,8 +10,6 @@ from agents import FunctionTool
 from agents import HostedMCPTool
 from agents import ImageGenerationTool as AgentsImageGenerationTool
 from agents import LocalShellTool
-from agents import Model
-from agents import ModelSettings
 from agents import WebSearchTool
 from pydantic import BaseModel
 from redis.client import Redis
@@ -25,6 +23,7 @@ from onyx.chat.turn.infra.emitter import Emitter
 from onyx.context.search.models import InferenceSection
 from onyx.db.models import User
 from onyx.llm.interfaces import LLM
+from onyx.llm.message_types import ChatCompletionMessage
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.tool import Tool
 
@@ -43,9 +42,6 @@ AgentToolType = (
 
 @dataclass
 class ChatTurnDependencies:
-    llm_model: Model
-    model_settings: ModelSettings
-    # TODO we can delete this field (combine them)
     llm: LLM
     db_session: Session
     tools: Sequence[Tool]
@@ -53,6 +49,7 @@ class ChatTurnDependencies:
     emitter: Emitter
     user_or_none: User | None
     prompt_config: PromptConfig
+    messages: Sequence[ChatCompletionMessage]
 
 
 class FetchedDocumentCacheEntry(BaseModel):

@@ -31,12 +31,13 @@ from openai.types.responses.response_stream_event import ResponseTextDeltaEvent
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import AssistantMessageWithContent
 from onyx.agents.agent_sdk.message_types import InputTextContent
-from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.models import PromptConfig
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
+from onyx.llm.message_types import ChatCompletionMessage
+from onyx.llm.message_types import SystemMessage
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
@@ -92,7 +93,7 @@ class CancellationMixin:
 
 
 def run_fast_chat_turn(
-    sample_messages: list[AgentSDKMessage],
+    sample_messages: list[ChatCompletionMessage],
     chat_turn_dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     message_id: int,
@@ -361,26 +362,16 @@ def fake_tool_call_model() -> Model:
 
 
 @pytest.fixture
-def sample_messages() -> list[AgentSDKMessage]:
+def sample_messages() -> list[ChatCompletionMessage]:
     return [
-        SystemMessage(
-            role="system",
-            content=[
-                InputTextContent(
-                    type="input_text",
-                    text="You are a highly capable assistant",
-                )
-            ],
-        ),
-        UserMessage(
-            role="user",
-            content=[
-                InputTextContent(
-                    type="input_text",
-                    text="hi",
-                )
-            ],
-        ),
+        {
+            "role": "system",
+            "content": "You are a highly capable assistant",
+        },
+        {
+            "role": "user",
+            "content": "hi",
+        },
     ]
 
 
