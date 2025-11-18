@@ -138,3 +138,10 @@ class BaseSearchProcessingResponse(BaseModel):
 class CheatSheetContext(BaseModel):
     history: Dict[str, str]
     user_context: Dict[str, str]
+
+
+class ExtractionResponse(BaseModel):
+    user: list[Dict[str, str]]
+    company: list[Dict[str, str]]
+    search_strategy: list[Dict[str, str]]
+    reasoning_strategy: list[Dict[str, str]]

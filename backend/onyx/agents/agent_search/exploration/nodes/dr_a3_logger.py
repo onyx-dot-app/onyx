@@ -1,22 +1,33 @@
+import json
 import re
 from datetime import datetime
+from typing import Any
 from typing import cast
 
+from langchain_core.messages import HumanMessage
+from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
-from onyx.agents.agent_search.dr.models import AggregatedDRContext
-from onyx.agents.agent_search.dr.states import LoggerUpdate
-from onyx.agents.agent_search.dr.states import MainState
-from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
+from onyx.agents.agent_search.exploration.dr_experimentation_prompts import (
+    EXTRACTION_SYSTEM_PROMPT,
+)
+from onyx.agents.agent_search.exploration.enums import DRPath
+from onyx.agents.agent_search.exploration.enums import ResearchAnswerPurpose
+from onyx.agents.agent_search.exploration.models import AggregatedDRContext
+from onyx.agents.agent_search.exploration.states import LoggerUpdate
+from onyx.agents.agent_search.exploration.states import MainState
+from onyx.agents.agent_search.exploration.sub_agents.image_generation.models import (
     GeneratedImageFullResult,
 )
-from onyx.agents.agent_search.dr.utils import aggregate_context
-from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
-from onyx.agents.agent_search.dr.utils import parse_plan_to_dict
+from onyx.agents.agent_search.exploration.utils import aggregate_context
+from onyx.agents.agent_search.exploration.utils import (
+    convert_inference_sections_to_search_docs,
+)
+from onyx.agents.agent_search.exploration.utils import parse_plan_to_dict
 from onyx.agents.agent_search.models import GraphConfig
+from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_raw
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -28,6 +39,8 @@ from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import ResearchAgentIterationSubStep
 from onyx.db.models import SearchDoc as DbSearchDoc
+from onyx.db.users import fetch_user_by_id
+from onyx.db.users import update_user_cheat_sheet_context
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.utils.logger import setup_logger
@@ -95,6 +108,7 @@ def save_iteration(
     all_cited_documents: list[InferenceSection],
     is_internet_marker_dict: dict[str, bool],
     num_tokens: int,
+    new_cheat_sheet_context: dict[str, Any] | None = None,
 ) -> None:
     db_session = graph_config.persistence.db_session
     message_id = graph_config.persistence.message_id
@@ -184,6 +198,15 @@ def save_iteration(
         )
         db_session.add(research_agent_iteration_sub_step)
 
+    if graph_config.tooling.search_tool and graph_config.tooling.search_tool.user:
+        user = fetch_user_by_id(db_session, graph_config.tooling.search_tool.user.id)
+        if new_cheat_sheet_context and user:
+            update_user_cheat_sheet_context(
+                user=user,
+                new_cheat_sheet_context=new_cheat_sheet_context,
+                db_session=db_session,
+            )
+
     db_session.commit()
 
 
@@ -200,6 +223,7 @@ def logging(
     # Also, add missing fields once usage in UI is clear.
 
     current_step_nr = state.current_step_nr
+    base_cheat_sheet_context = state.cheat_sheet_context or {}
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     base_question = state.original_question
@@ -226,6 +250,59 @@ def logging(
 
     write_custom_event(current_step_nr, OverallStop(), writer)
 
+    # build extraction context
+
+    extracted_facts: list[str] = []
+    for iteration_response in state.iteration_responses:
+        if iteration_response.tool == DRPath.INTERNAL_SEARCH.value:
+            extracted_facts.extend(iteration_response.claims)
+
+    extraction_context = (
+        "Extracted facts: \n  - "
+        + "\n  - ".join(extracted_facts)
+        + f"\n\nProvidede Answer: \n\n{final_answer}"
+    )
+
+    extraction_system_prompt = SystemMessage(content=EXTRACTION_SYSTEM_PROMPT)
+    extraction_human_prompt = HumanMessage(content=extraction_context)
+    extraction_prompt = [extraction_system_prompt, extraction_human_prompt]
+
+    extraction_response = invoke_llm_raw(
+        llm=graph_config.tooling.primary_llm,
+        prompt=extraction_prompt,
+        # schema=ExtractionResponse,
+    )
+
+    extraction_information = json.loads(extraction_response.content)
+
+    consolidated_updates: dict[str, list[tuple[str, str]]] = {}
+
+    for area in ["user", "company", "search_strategy", "reasoning_strategy"]:
+
+        update_knowledge = extraction_information.get(area, {})
+        base_area_knowledge = base_cheat_sheet_context.get(area, {})
+
+        if area not in base_cheat_sheet_context:
+            base_cheat_sheet_context[area] = {}
+
+        for update_info in update_knowledge:
+            update_type = update_info.get("type", "n/a")
+            change_type = update_info.get("change_type", "n/a")
+            information = update_info.get("information", "n/a")
+
+            if update_type in base_area_knowledge:
+                if change_type == "update":
+                    consolidated_updates[area].append(
+                        (base_area_knowledge.get(update_type, ""), information)
+                    )
+
+                elif change_type == "delete":
+                    del base_cheat_sheet_context.get(area, {})[update_type]
+                elif change_type == "add":
+                    base_cheat_sheet_context.get(area, {})[update_type] = information
+            else:
+                base_cheat_sheet_context[area][update_type] = information
+
     # Log the research agent steps
     save_iteration(
         state,
@@ -235,6 +312,7 @@ def logging(
         all_cited_documents,
         is_internet_marker_dict,
         num_tokens,
+        new_cheat_sheet_context=base_cheat_sheet_context,
     )
 
     return LoggerUpdate(

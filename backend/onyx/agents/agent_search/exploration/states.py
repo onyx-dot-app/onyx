@@ -4,6 +4,9 @@ from typing import Any
 from typing import Dict
 from typing import TypedDict
 
+from langchain_core.messages import AIMessage
+from langchain_core.messages import HumanMessage
+from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 
 from onyx.agents.agent_search.core_state import CoreState
@@ -34,6 +37,10 @@ class OrchestrationUpdate(LoggerUpdate):
         []
     )  # gaps that may be identified by the closer before being able to answer the question.
     iteration_instructions: Annotated[list[IterationInstructions], add] = []
+    message_history_for_continuation: Annotated[
+        list[SystemMessage | HumanMessage | AIMessage], add
+    ] = []
+    iteration_responses: Annotated[list[IterationAnswer], add] = []
 
 
 class OrchestrationSetup(OrchestrationUpdate):
@@ -49,7 +56,15 @@ class OrchestrationSetup(OrchestrationUpdate):
     assistant_task_prompt: str | None = None
     uploaded_test_context: str | None = None
     uploaded_image_context: list[dict[str, Any]] | None = None
+    message_history_for_continuation: Annotated[
+        list[SystemMessage | HumanMessage | AIMessage], add
+    ] = []
     cheat_sheet_context: Dict[str, Any] | None = None
+    use_clarifier: bool = False
+    use_thinking: bool = False
+    use_plan: bool = False
+    use_plan_updates: bool = False
+    use_corpus_history: bool = False
 
 
 class AnswerUpdate(LoggerUpdate):

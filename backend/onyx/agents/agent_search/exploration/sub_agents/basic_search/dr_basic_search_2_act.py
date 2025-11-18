@@ -67,7 +67,7 @@ def basic_search(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     base_question = graph_config.inputs.prompt_builder.raw_user_query
-    research_type = graph_config.behavior.research_type
+    research_type = ResearchType.DEEP
 
     if not state.available_tools:
         raise ValueError("available_tools is not set")

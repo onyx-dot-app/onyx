@@ -3,86 +3,71 @@ from datetime import datetime
 from typing import Any
 from typing import cast
 
-from braintrust import traced
+from langchain_core.messages import AIMessage
 from langchain_core.messages import HumanMessage
-from langchain_core.messages import merge_content
+from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.exploration.constants import AVERAGE_TOOL_COSTS
 from onyx.agents.agent_search.exploration.constants import MAX_CHAT_HISTORY_MESSAGES
-from onyx.agents.agent_search.exploration.dr_prompt_builder import (
-    get_dr_prompt_orchestration_templates,
+from onyx.agents.agent_search.exploration.dr_experimentation_prompts import (
+    BASE_SYSTEM_MESSAGE_TEMPLATE,
+)
+from onyx.agents.agent_search.exploration.dr_experimentation_prompts import (
+    PLAN_PROMPT_TEMPLATE,
 )
 from onyx.agents.agent_search.exploration.enums import DRPath
 from onyx.agents.agent_search.exploration.enums import ResearchAnswerPurpose
-from onyx.agents.agent_search.exploration.enums import ResearchType
-from onyx.agents.agent_search.exploration.models import ClarificationGenerationResponse
-from onyx.agents.agent_search.exploration.models import DecisionResponse
-from onyx.agents.agent_search.exploration.models import DRPromptPurpose
 from onyx.agents.agent_search.exploration.models import OrchestrationClarificationInfo
+from onyx.agents.agent_search.exploration.models import OrchestrationPlan
 from onyx.agents.agent_search.exploration.models import OrchestratorTool
-from onyx.agents.agent_search.exploration.process_llm_stream import (
-    BasicSearchProcessedStreamResults,
-)
-from onyx.agents.agent_search.exploration.process_llm_stream import process_llm_stream
 from onyx.agents.agent_search.exploration.states import MainState
 from onyx.agents.agent_search.exploration.states import OrchestrationSetup
 from onyx.agents.agent_search.exploration.utils import get_chat_history_string
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
-from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import run_with_timeout
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.chat_utils import build_citation_map_from_numbers
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.memories import get_memories
-from onyx.chat.models import PromptConfig
-from onyx.chat.prompt_builder.citations_prompt import build_citations_system_message
-from onyx.chat.prompt_builder.citations_prompt import build_citations_user_message
-from onyx.chat.stream_processing.citation_processing import (
-    normalize_square_bracket_citations_to_double_with_links,
-)
-from onyx.configs.agent_configs import TF_DR_TIMEOUT_LONG
 from onyx.configs.agent_configs import TF_DR_TIMEOUT_SHORT
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.configs.exploration_research_configs import (
+    EXPLORATION_TEST_USE_CALRIFIER_DEFAULT,
+)
+from onyx.configs.exploration_research_configs import (
+    EXPLORATION_TEST_USE_CORPUS_HISTORY_DEFAULT,
+)
+from onyx.configs.exploration_research_configs import EXPLORATION_TEST_USE_PLAN_DEFAULT
+from onyx.configs.exploration_research_configs import (
+    EXPLORATION_TEST_USE_PLAN_UPDATES_DEFAULT,
+)
+from onyx.configs.exploration_research_configs import (
+    EXPLORATION_TEST_USE_THINKING_DEFAULT,
+)
 from onyx.db.chat import create_search_doc_from_saved_search_doc
-from onyx.db.chat import update_db_session_with_messages
 from onyx.db.connector import fetch_unique_document_sources
-from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import SearchDoc
 from onyx.db.models import Tool
 from onyx.db.tools import get_tools
 from onyx.db.users import get_user_cheat_sheet_context
-from onyx.db.users import update_user_cheat_sheet_context
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
-from onyx.kg.utils.extraction_utils import get_entity_types_str
-from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.llm.utils import check_number_of_tokens
 from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.chat_prompts import PROJECT_INSTRUCTIONS_SEPARATOR
-from onyx.prompts.dr_prompts import ANSWER_PROMPT_WO_TOOL_CALLING
-from onyx.prompts.dr_prompts import DECISION_PROMPT_W_TOOL_CALLING
-from onyx.prompts.dr_prompts import DECISION_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DEFAULT_DR_SYSTEM_PROMPT
-from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
 from onyx.prompts.prompt_template import PromptTemplate
 from onyx.prompts.prompt_utils import handle_company_awareness
 from onyx.prompts.prompt_utils import handle_memories
-from onyx.server.query_and_chat.streaming_models import MessageStart
-from onyx.server.query_and_chat.streaming_models import OverallStop
-from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -100,11 +85,18 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+_PLAN_INSTRUCTION_INSERTION = """   - Early on, the user MAY ask you to create a plan for the answer process. \
+Think about the tools you have available and how you can use them, and then \
+create a HIGH-LEVEL PLAN of how you want to approach the answer process."""
+
+
 def _get_available_tools(
     db_session: Session,
     graph_config: GraphConfig,
     kg_enabled: bool,
     active_source_types: list[DocumentSource],
+    use_clarifier: bool = False,
+    use_thinking: bool = False,
 ) -> dict[str, OrchestratorTool]:
 
     available_tools: dict[str, OrchestratorTool] = {}
@@ -203,6 +195,35 @@ def _get_available_tools(
         cost=0.0,
         tool_object=None,
     )
+
+    if use_thinking:
+        available_tools[DRPath.THINKING.value] = OrchestratorTool(
+            tool_id=102,
+            name=DRPath.THINKING.value,
+            llm_path=DRPath.THINKING.value,
+            path=DRPath.THINKING,
+            description="""This tool should be used if the next step is not particularly clear, \
+or if you think you need to think through the original question and the questions and answers \
+you have received so far in order to make a decision about what to do next AMONGST THE TOOLS AVAILABLE TO YOU \
+IN THIS REQUEST! (Note: some tools described earlier may be excluded!).
+If in doubt, use this tool. No action will be taken, just some reasoning will be done.""",
+            metadata={},
+            cost=0.0,
+            tool_object=None,
+        )
+
+    if use_clarifier:
+        available_tools[DRPath.CLARIFIER.value] = OrchestratorTool(
+            tool_id=103,
+            name=DRPath.CLARIFIER.value,
+            llm_path=DRPath.CLARIFIER.value,
+            path=DRPath.CLARIFIER,
+            description="""This tool should be used ONLY if you need to have clarification on something IMPORTANT FROM \
+the user. This can pertain to the original question or something you found out during the process so far.""",
+            metadata={},
+            cost=0.0,
+            tool_object=None,
+        )
 
     return available_tools
 
@@ -399,6 +420,14 @@ def clarifier(
     questions is needed. For now this is based on the models
     """
 
+    _EXPLORATION_TEST_USE_CALRIFIER = EXPLORATION_TEST_USE_CALRIFIER_DEFAULT
+    _EXPLORATION_TEST_USE_PLAN = EXPLORATION_TEST_USE_PLAN_DEFAULT
+    _EXPLORATION_TEST_USE_PLAN_UPDATES = EXPLORATION_TEST_USE_PLAN_UPDATES_DEFAULT
+    _EXPLORATION_TEST_USE_CORPUS_HISTORY = EXPLORATION_TEST_USE_CORPUS_HISTORY_DEFAULT
+    _EXPLORATION_TEST_USE_THINKING = EXPLORATION_TEST_USE_THINKING_DEFAULT
+
+    _EXPLORATION_TEST_USE_PLAN = False
+
     node_start_time = datetime.now()
     current_step_nr = 0
 
@@ -417,15 +446,14 @@ def clarifier(
         model_provider=llm_provider,
     )
 
-    use_tool_calling_llm = graph_config.tooling.using_tool_calling_llm
+    graph_config.tooling.using_tool_calling_llm
     db_session = graph_config.persistence.db_session
 
     original_question = graph_config.inputs.prompt_builder.raw_user_query
-    research_type = graph_config.behavior.research_type
 
-    force_use_tool = graph_config.tooling.force_use_tool
+    graph_config.tooling.force_use_tool
 
-    message_id = graph_config.persistence.message_id
+    graph_config.persistence.message_id
 
     # Perform a commit to ensure the message_id is set and saved
     db_session.commit()
@@ -436,23 +464,21 @@ def clarifier(
     active_source_types = fetch_unique_document_sources(db_session)
 
     available_tools = _get_available_tools(
-        db_session, graph_config, kg_enabled, active_source_types
+        db_session,
+        graph_config,
+        kg_enabled,
+        active_source_types,
+        use_clarifier=_EXPLORATION_TEST_USE_CALRIFIER,
+        use_thinking=_EXPLORATION_TEST_USE_THINKING,
     )
 
     available_tool_descriptions_str = "\n -" + "\n -".join(
-        [tool.description for tool in available_tools.values()]
+        [
+            tool.name + ": " + tool.description
+            for tool in available_tools.values()
+            if tool.path != DRPath.CLOSER
+        ]
     )
-
-    kg_config = get_kg_config_settings()
-    if kg_config.KG_ENABLED and kg_config.KG_EXPOSED:
-        all_entity_types = get_entity_types_str(active=True)
-        all_relationship_types = get_relationship_types_str(active=True)
-    else:
-        all_entity_types = ""
-        all_relationship_types = ""
-
-    # if not active_source_types:
-    #    raise ValueError("No active source types found")
 
     active_source_types_descriptions = [
         DocumentSourceDescription[source_type] for source_type in active_source_types
@@ -493,33 +519,6 @@ def clarifier(
         else None
     )
 
-    if user is not None:
-        original_cheat_sheet_context = get_user_cheat_sheet_context(
-            user=user, db_session=db_session
-        )
-
-        new_cheat_sheet_context = {
-            "history": {
-                "1": {
-                    "question": "Who Was Washington?",
-                    "answer": "George Washington was the first president of the United States.",
-                }
-            },
-            "user_context": {"1": "I am an AI engineer"},
-        }
-
-        if not original_cheat_sheet_context:
-
-            update_user_cheat_sheet_context(
-                user=user,
-                new_cheat_sheet_context=new_cheat_sheet_context,
-                db_session=db_session,
-            )
-
-        original_cheat_sheet_context = get_user_cheat_sheet_context(
-            user=user, db_session=db_session
-        )
-
     memories = get_memories(user, db_session)
     assistant_system_prompt = handle_company_awareness(assistant_system_prompt)
     assistant_system_prompt = handle_memories(assistant_system_prompt, memories)
@@ -552,376 +551,91 @@ def clarifier(
         graph_config.inputs.files
     )
 
-    # Use project/search context docs if available to enable citation mapping
-    context_llm_docs = getattr(
-        graph_config.inputs.prompt_builder, "context_llm_docs", None
-    )
-
-    if not (force_use_tool and force_use_tool.force_use):
-
-        if not use_tool_calling_llm or len(available_tools) == 1:
-            if len(available_tools) > 1:
-                decision_prompt = DECISION_PROMPT_WO_TOOL_CALLING.build(
-                    question=original_question,
-                    chat_history_string=chat_history_string,
-                    uploaded_context=uploaded_text_context or "",
-                    active_source_type_descriptions_str=active_source_type_descriptions_str,
-                    available_tool_descriptions_str=available_tool_descriptions_str,
-                )
-
-                llm_decision = invoke_llm_json(
-                    llm=graph_config.tooling.primary_llm,
-                    prompt=create_question_prompt(
-                        assistant_system_prompt,
-                        decision_prompt,
-                        uploaded_image_context=uploaded_image_context,
-                    ),
-                    schema=DecisionResponse,
-                )
-            else:
-                # if there is only one tool (Closer), we don't need to decide. It's an LLM answer
-                llm_decision = DecisionResponse(decision="LLM", reasoning="")
-
-            if llm_decision.decision == "LLM" and research_type != ResearchType.DEEP:
-
-                write_custom_event(
-                    current_step_nr,
-                    MessageStart(
-                        content="",
-                        final_documents=[],
-                    ),
-                    writer,
-                )
-
-                answer_prompt = ANSWER_PROMPT_WO_TOOL_CALLING.build(
-                    question=original_question,
-                    chat_history_string=chat_history_string,
-                    uploaded_context=uploaded_text_context or "",
-                    active_source_type_descriptions_str=active_source_type_descriptions_str,
-                    available_tool_descriptions_str=available_tool_descriptions_str,
-                )
-
-                answer_tokens, _, _ = run_with_timeout(
-                    TF_DR_TIMEOUT_LONG,
-                    lambda: stream_llm_answer(
-                        llm=graph_config.tooling.primary_llm,
-                        prompt=create_question_prompt(
-                            assistant_system_prompt,
-                            answer_prompt + assistant_task_prompt,
-                            uploaded_image_context=uploaded_image_context,
-                        ),
-                        event_name="basic_response",
-                        writer=writer,
-                        answer_piece=StreamingType.MESSAGE_DELTA.value,
-                        agent_answer_level=0,
-                        agent_answer_question_num=0,
-                        agent_answer_type="agent_level_answer",
-                        timeout_override=TF_DR_TIMEOUT_LONG,
-                        ind=current_step_nr,
-                        context_docs=None,
-                        replace_citations=True,
-                        max_tokens=None,
-                    ),
-                )
-
-                write_custom_event(
-                    current_step_nr,
-                    SectionEnd(
-                        type="section_end",
-                    ),
-                    writer,
-                )
-                current_step_nr += 1
-
-                answer_str = cast(str, merge_content(*answer_tokens))
-
-                write_custom_event(
-                    current_step_nr,
-                    OverallStop(),
-                    writer,
-                )
-
-                update_db_session_with_messages(
-                    db_session=db_session,
-                    chat_message_id=message_id,
-                    chat_session_id=graph_config.persistence.chat_session_id,
-                    is_agentic=graph_config.behavior.use_agentic_search,
-                    message=answer_str,
-                    update_parent_message=True,
-                    research_answer_purpose=ResearchAnswerPurpose.ANSWER,
-                )
-                db_session.commit()
-
-                return OrchestrationSetup(
-                    original_question=original_question,
-                    chat_history_string="",
-                    tools_used=[DRPath.END.value],
-                    available_tools=available_tools,
-                    query_list=[],
-                    assistant_system_prompt=assistant_system_prompt,
-                    assistant_task_prompt=assistant_task_prompt,
-                )
-
-        else:
-
-            decision_prompt = DECISION_PROMPT_W_TOOL_CALLING.build(
-                question=original_question,
-                chat_history_string=chat_history_string,
-                uploaded_context=uploaded_text_context or "",
-                active_source_type_descriptions_str=active_source_type_descriptions_str,
-            )
-
-            if context_llm_docs:
-                persona = graph_config.inputs.persona
-                if persona is not None:
-                    prompt_config = PromptConfig.from_model(
-                        persona, db_session=graph_config.persistence.db_session
-                    )
-                else:
-                    prompt_config = PromptConfig(
-                        default_behavior_system_prompt=assistant_system_prompt,
-                        custom_instructions=None,
-                        reminder="",
-                        datetime_aware=True,
-                    )
-
-                system_prompt_to_use_content = build_citations_system_message(
-                    prompt_config
-                ).content
-                system_prompt_to_use: str = cast(str, system_prompt_to_use_content)
-                if graph_config.inputs.project_instructions:
-                    system_prompt_to_use = (
-                        system_prompt_to_use
-                        + PROJECT_INSTRUCTIONS_SEPARATOR
-                        + graph_config.inputs.project_instructions
-                    )
-                user_prompt_to_use = build_citations_user_message(
-                    user_query=original_question,
-                    files=[],
-                    prompt_config=prompt_config,
-                    context_docs=context_llm_docs,
-                    all_doc_useful=False,
-                    history_message=chat_history_string,
-                    context_type="user files",
-                ).content
-            else:
-                system_prompt_to_use = assistant_system_prompt
-                user_prompt_to_use = decision_prompt + assistant_task_prompt
-
-            @traced(name="clarifier stream and process", type="llm")
-            def stream_and_process() -> BasicSearchProcessedStreamResults:
-                stream = graph_config.tooling.primary_llm.stream_langchain(
-                    prompt=create_question_prompt(
-                        cast(str, system_prompt_to_use),
-                        cast(str, user_prompt_to_use),
-                        uploaded_image_context=uploaded_image_context,
-                    ),
-                    tools=([_ARTIFICIAL_ALL_ENCOMPASSING_TOOL]),
-                    tool_choice=(None),
-                    structured_response_format=graph_config.inputs.structured_response_format,
-                )
-                return process_llm_stream(
-                    messages=stream,
-                    should_stream_answer=True,
-                    writer=writer,
-                    ind=0,
-                    search_results=context_llm_docs,
-                    generate_final_answer=True,
-                    chat_message_id=str(graph_config.persistence.chat_session_id),
-                )
-
-            # Deep research always continues to clarification or search
-            if research_type != ResearchType.DEEP:
-                full_response = stream_and_process()
-                if len(full_response.ai_message_chunk.tool_calls) == 0:
-
-                    if isinstance(full_response.full_answer, str):
-                        full_answer = (
-                            normalize_square_bracket_citations_to_double_with_links(
-                                full_response.full_answer
-                            )
-                        )
-                    else:
-                        full_answer = None
-
-                    # Persist final documents and derive citations when using in-context docs
-                    final_documents_db, citations_map = (
-                        _persist_final_docs_and_citations(
-                            db_session=db_session,
-                            context_llm_docs=context_llm_docs,
-                            full_answer=full_answer,
-                        )
-                    )
-
-                    update_db_session_with_messages(
-                        db_session=db_session,
-                        chat_message_id=message_id,
-                        chat_session_id=graph_config.persistence.chat_session_id,
-                        is_agentic=graph_config.behavior.use_agentic_search,
-                        message=full_answer,
-                        token_count=len(llm_tokenizer.encode(full_answer or "")),
-                        citations=citations_map,
-                        final_documents=final_documents_db or None,
-                        update_parent_message=True,
-                        research_answer_purpose=ResearchAnswerPurpose.ANSWER,
-                    )
-
-                    db_session.commit()
-
-                    return OrchestrationSetup(
-                        original_question=original_question,
-                        chat_history_string="",
-                        tools_used=[DRPath.END.value],
-                        query_list=[],
-                        available_tools=available_tools,
-                        assistant_system_prompt=assistant_system_prompt,
-                        assistant_task_prompt=assistant_task_prompt,
-                    )
-
-        # Continue, as external knowledge is required.
-
     current_step_nr += 1
 
     clarification = None
 
-    if research_type == ResearchType.DEEP:
-        result = _get_existing_clarification_request(graph_config)
-        if result is not None:
-            clarification, original_question, chat_history_string = result
-        else:
-            # generate clarification questions if needed
-            chat_history_string = (
-                get_chat_history_string(
-                    graph_config.inputs.prompt_builder.message_history,
-                    MAX_CHAT_HISTORY_MESSAGES,
-                )
-                or "(No chat history yet available)"
-            )
+    message_history_for_continuation: list[SystemMessage | HumanMessage | AIMessage] = (
+        []
+    )
 
-            base_clarification_prompt = get_dr_prompt_orchestration_templates(
-                DRPromptPurpose.CLARIFICATION,
-                research_type,
-                entity_types_string=all_entity_types,
-                relationship_types_string=all_relationship_types,
-                available_tools=available_tools,
-            )
-            clarification_prompt = base_clarification_prompt.build(
-                question=original_question,
-                chat_history_string=chat_history_string,
-            )
-
-            try:
-                clarification_response = invoke_llm_json(
-                    llm=graph_config.tooling.primary_llm,
-                    prompt=create_question_prompt(
-                        assistant_system_prompt,
-                        clarification_prompt,
-                        uploaded_image_context=uploaded_image_context,
-                    ),
-                    schema=ClarificationGenerationResponse,
-                    timeout_override=TF_DR_TIMEOUT_SHORT,
-                    # max_tokens=1500,
-                )
-            except Exception as e:
-                logger.error(f"Error in clarification generation: {e}")
-                raise e
-
-            if (
-                clarification_response.clarification_needed
-                and clarification_response.clarification_question
-            ):
-                clarification = OrchestrationClarificationInfo(
-                    clarification_question=clarification_response.clarification_question,
-                    clarification_response=None,
-                )
-                write_custom_event(
-                    current_step_nr,
-                    MessageStart(
-                        content="",
-                        final_documents=None,
-                    ),
-                    writer,
-                )
-
-                repeat_prompt = REPEAT_PROMPT.build(
-                    original_information=clarification_response.clarification_question
-                )
-
-                _, _, _ = run_with_timeout(
-                    TF_DR_TIMEOUT_LONG,
-                    lambda: stream_llm_answer(
-                        llm=graph_config.tooling.primary_llm,
-                        prompt=repeat_prompt,
-                        event_name="basic_response",
-                        writer=writer,
-                        agent_answer_level=0,
-                        agent_answer_question_num=0,
-                        agent_answer_type="agent_level_answer",
-                        timeout_override=TF_DR_TIMEOUT_LONG,
-                        answer_piece=StreamingType.MESSAGE_DELTA.value,
-                        ind=current_step_nr,
-                        # max_tokens=None,
-                    ),
-                )
-
-                write_custom_event(
-                    current_step_nr,
-                    SectionEnd(
-                        type="section_end",
-                    ),
-                    writer,
-                )
-
-                write_custom_event(
-                    1,
-                    OverallStop(),
-                    writer,
-                )
-
-                update_db_session_with_messages(
-                    db_session=db_session,
-                    chat_message_id=message_id,
-                    chat_session_id=graph_config.persistence.chat_session_id,
-                    is_agentic=graph_config.behavior.use_agentic_search,
-                    message=clarification_response.clarification_question,
-                    update_parent_message=True,
-                    research_type=research_type,
-                    research_answer_purpose=ResearchAnswerPurpose.CLARIFICATION_REQUEST,
-                )
-
-                db_session.commit()
-
-    else:
-        chat_history_string = (
-            get_chat_history_string(
-                graph_config.inputs.prompt_builder.message_history,
-                MAX_CHAT_HISTORY_MESSAGES,
-            )
-            or "(No chat history yet available)"
+    if user is not None:
+        original_cheat_sheet_context = get_user_cheat_sheet_context(
+            user=user, db_session=db_session
         )
 
-    if (
-        clarification
-        and clarification.clarification_question
-        and clarification.clarification_response is None
-    ):
+    if original_cheat_sheet_context:
+        cheat_sheet_string = f"""\n\nHere is additional context learned that may inform the \
+process (plan generation if applicable, reasoning, tool calls, etc.):\n{str(original_cheat_sheet_context)}\n###\n\n"""
+    else:
+        cheat_sheet_string = ""
 
-        update_db_session_with_messages(
-            db_session=db_session,
-            chat_message_id=message_id,
-            chat_session_id=graph_config.persistence.chat_session_id,
-            is_agentic=graph_config.behavior.use_agentic_search,
-            message=clarification.clarification_question,
-            update_parent_message=True,
-            research_type=research_type,
-            research_answer_purpose=ResearchAnswerPurpose.CLARIFICATION_REQUEST,
+    if _EXPLORATION_TEST_USE_PLAN:
+        plan_instruction_insertion = _PLAN_INSTRUCTION_INSERTION
+    else:
+        plan_instruction_insertion = ""
+
+    system_message = (
+        BASE_SYSTEM_MESSAGE_TEMPLATE.replace(
+            "---user_prompt---", assistant_system_prompt
+        )
+        .replace("---current_date---", datetime.now().strftime("%Y-%m-%d"))
+        .replace(
+            "---available_tool_descriptions_str---", available_tool_descriptions_str
+        )
+        .replace(
+            "---active_source_types_descriptions_str---",
+            active_source_type_descriptions_str,
+        )
+        .replace(
+            "---cheat_sheet_string---",
+            cheat_sheet_string,
+        )
+        .replace("---plan_instruction_insertion---", plan_instruction_insertion)
+    )
+
+    message_history_for_continuation.append(SystemMessage(content=system_message))
+    message_history_for_continuation.append(
+        HumanMessage(
+            content=f"""Here is the questions to answer:\n{original_question}"""
+        )
+    )
+    message_history_for_continuation.append(
+        AIMessage(content="""How should I proceed to answer the question?""")
+    )
+
+    if _EXPLORATION_TEST_USE_PLAN:
+
+        user_plan_instructions_prompt = """Think carefully how you want to address the question. You may use multiple iterations \
+of tool calls, reasoning, etc.
+
+Note:
+
+    - the plan should be HIGH-LEVEL! Do not specify any specific tools, but think about what you want to learn in each iteration.
+    - if the question is simple, one iteration may be enough.
+    - DO NOT close with 'summarize...' etc as the last steps. Just focus on the information gathering steps.
+
+"""
+
+        plan_prompt = PLAN_PROMPT_TEMPLATE.replace(
+            "---user_plan_instructions_prompt---", user_plan_instructions_prompt
         )
 
-        db_session.commit()
+        message_history_for_continuation.append(HumanMessage(content=plan_prompt))
 
-        next_tool = DRPath.END.value
-    else:
-        next_tool = DRPath.ORCHESTRATOR.value
+        plan_of_record = invoke_llm_json(
+            llm=graph_config.tooling.primary_llm,
+            prompt=message_history_for_continuation,
+            schema=OrchestrationPlan,
+            timeout_override=TF_DR_TIMEOUT_SHORT,
+            # max_tokens=3000,
+        )
+
+        plan_string = f"""Here is how the answer process should be broken down: {plan_of_record.plan}"""
+
+        message_history_for_continuation.append(AIMessage(content=plan_string))
+
+    next_tool = DRPath.ORCHESTRATOR.value
 
     return OrchestrationSetup(
         original_question=original_question,
@@ -945,5 +659,11 @@ def clarifier(
         assistant_task_prompt=assistant_task_prompt,
         uploaded_test_context=uploaded_text_context,
         uploaded_image_context=uploaded_image_context,
-        cheat_sheet_context=new_cheat_sheet_context,
+        message_history_for_continuation=message_history_for_continuation,
+        cheat_sheet_context=original_cheat_sheet_context,
+        use_clarifier=_EXPLORATION_TEST_USE_CALRIFIER,
+        use_thinking=_EXPLORATION_TEST_USE_THINKING,
+        use_plan=_EXPLORATION_TEST_USE_PLAN,
+        use_plan_updates=_EXPLORATION_TEST_USE_PLAN_UPDATES,
+        use_corpus_history=_EXPLORATION_TEST_USE_CORPUS_HISTORY,
     )

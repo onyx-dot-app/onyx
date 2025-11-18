@@ -220,6 +220,12 @@ def closer(
     # (right now, answers from each step are concatenated onto each other)
     # Also, add missing fields once usage in UI is clear.
 
+    state.use_clarifier
+    state.use_plan
+    state.use_plan_updates
+    state.use_corpus_history
+    state.use_thinking
+
     current_step_nr = state.current_step_nr
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
@@ -227,9 +233,7 @@ def closer(
     if not base_question:
         raise ValueError("Question is required for closer")
 
-    research_type = graph_config.behavior.research_type
-
-    state.cheat_sheet_context
+    research_type = ResearchType.DEEP
 
     assistant_system_prompt: str = state.assistant_system_prompt or ""
     assistant_task_prompt = state.assistant_task_prompt
