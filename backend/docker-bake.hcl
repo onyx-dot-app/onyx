@@ -31,7 +31,7 @@ target "backend" {
 target "model-server" {
   context = "."
 
-  dockerfile = "Dockerfile"
+  dockerfile = "Dockerfile.model_server"
 
   cache-from = ["type=registry,ref=${MODEL_SERVER_REPOSITORY}:latest"]
   cache-to   = ["type=inline"]
