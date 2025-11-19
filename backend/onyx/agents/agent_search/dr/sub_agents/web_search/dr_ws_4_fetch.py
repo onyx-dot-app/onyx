@@ -5,7 +5,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    get_default_provider,
+    get_default_content_provider,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.states import FetchInput
 from onyx.agents.agent_search.dr.sub_agents.web_search.states import FetchUpdate
@@ -41,9 +41,9 @@ def web_fetch(
     if graph_config.inputs.persona is None:
         raise ValueError("persona is not set")
 
-    provider = get_default_provider()
+    provider = get_default_content_provider()
     if provider is None:
-        raise ValueError("No web search provider found")
+        raise ValueError("No web content provider found")
 
     retrieved_docs: list[InferenceSection] = []
     try:
@@ -52,7 +52,7 @@ def web_fetch(
             for result in provider.contents(state.urls_to_open)
         ]
     except Exception as e:
-        logger.error(f"Error fetching URLs: {e}")
+        logger.exception(e)
 
     if not retrieved_docs:
         logger.warning("No content retrieved from URLs")

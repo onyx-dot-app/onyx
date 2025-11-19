@@ -7,13 +7,19 @@ from pydantic import TypeAdapter
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
+    WebContentProvider,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
+    WebSearchProvider,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     WebSearchResult,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    get_default_provider,
+    get_default_content_provider,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    WebSearchProvider,
+    get_default_provider,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
     dummy_inference_section_from_internet_content,
@@ -190,7 +196,7 @@ changing or evolving.
 def _open_url_core(
     run_context: RunContextWrapper[ChatTurnContext],
     urls: Sequence[str],
-    search_provider: WebSearchProvider,
+    content_provider: WebContentProvider,
 ) -> list[LlmOpenUrlResult]:
     # TODO: Find better way to track index that isn't so implicit
     # based on number of tool calls
@@ -206,7 +212,7 @@ def _open_url_core(
         )
     )
 
-    docs = search_provider.contents(urls)
+    docs = content_provider.contents(urls)
     results = [
         LlmOpenUrlResult(
             document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
@@ -267,10 +273,10 @@ def open_url(
     """
     Tool for fetching and extracting full content from web pages.
     """
-    search_provider = get_default_provider()
-    if search_provider is None:
-        raise ValueError("No search provider found")
-    retrieved_docs = _open_url_core(run_context, urls, search_provider)
+    content_provider = get_default_content_provider()
+    if content_provider is None:
+        raise ValueError("No web content provider found")
+    retrieved_docs = _open_url_core(run_context, urls, content_provider)
     adapter = TypeAdapter(list[LlmOpenUrlResult])
     return adapter.dump_json(retrieved_docs).decode()
 
