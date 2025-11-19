@@ -271,7 +271,13 @@ export function CCPairIndexingStatusTable({
   sourceLoadingStates?: Record<ValidSources, boolean>;
 }) {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-
+  ccPairsIndexingStatuses.forEach(item => {
+    if (Array.isArray(item.indexing_statuses)) {
+      item.indexing_statuses.sort((a, b) =>
+      (a.name ?? "").localeCompare(b.name ?? "", "en", { sensitivity: "base" })
+      );
+    }
+  });
   return (
     <Table className="-mt-8">
       <TableHeader>
