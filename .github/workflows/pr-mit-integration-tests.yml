@@ -143,6 +143,7 @@ jobs:
         run: |
           cd backend && docker buildx bake --push \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
+            --set backend.cache-from=type=registry,ref=onyxdotapp/onyx-backend:latest \
             --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache,mode=max \
             --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache \
             --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache,mode=max \
