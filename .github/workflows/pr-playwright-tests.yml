@@ -310,7 +310,8 @@ jobs:
           path: ${{ github.workspace }}/docker-compose.log
 
   required:
-    runs-on: ubuntu-latest
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
     needs: [playwright-tests]
     if: ${{ always() }}
     steps:

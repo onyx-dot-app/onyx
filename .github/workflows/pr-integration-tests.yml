@@ -467,7 +467,8 @@ jobs:
           docker compose -f docker-compose.multitenant-dev.yml down -v
 
   required:
-    runs-on: ubuntu-latest
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
     needs: [integration-tests, multitenant-tests]
     if: ${{ always() }}
     steps:

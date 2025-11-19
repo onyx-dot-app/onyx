@@ -329,7 +329,8 @@ jobs:
 
 
   required:
-    runs-on: ubuntu-latest
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
     needs: [integration-tests-mit]
     if: ${{ always() }}
     steps:
