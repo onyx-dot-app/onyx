@@ -240,7 +240,7 @@ def query(
                     yield RunItemStreamEvent(type="message_done")
                     message_started = False
 
-                if finish_reason:
+                if finish_reason and tool_choice != "none":
                     _try_convert_content_to_tool_calls_for_non_tool_calling_llms(
                         tool_calls_in_progress,
                         content_parts,
