@@ -42,6 +42,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -62,8 +64,10 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
           push: true
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache
+            type=registry,ref=onyxdotapp/onyx-web-server:latest
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-image:
@@ -73,6 +77,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -93,8 +99,11 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
           push: true
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
+            type=registry,ref=onyxdotapp/onyx-backend:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
@@ -104,6 +113,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -124,8 +135,10 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
           push: true
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
+            type=registry,ref=onyxdotapp/onyx-model-server:latest
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   playwright-tests:
@@ -143,6 +156,7 @@ jobs:
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup node
         uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # ratchet:actions/setup-node@v4

@@ -20,6 +20,7 @@ jobs:
       uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
       with:
         fetch-depth: 0
+        persist-credentials: false
 
     - name: Set up Helm
       uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # ratchet:azure/setup-helm@v4.3.1
