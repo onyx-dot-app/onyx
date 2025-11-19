@@ -177,10 +177,11 @@ class BraintrustTracingProcessor(TracingProcessor):
             return {}
 
     def on_span_start(self, span: Span[SpanData]) -> None:
-        if span.parent_id is not None:
-            parent: Any = self._spans[span.parent_id]
-        else:
-            parent: Any = self._spans[span.trace_id]
+        parent: Any = (
+            self._spans[span.parent_id]
+            if span.parent_id is not None
+            else self._spans[span.trace_id]
+        )
         created_span: Any = parent.start_span(
             id=span.span_id,
             name=_span_name(span),
