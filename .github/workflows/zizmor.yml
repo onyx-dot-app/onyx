@@ -1,4 +1,4 @@
-name: zizmor
+name: Run zizmor
 
 on:
   push:
