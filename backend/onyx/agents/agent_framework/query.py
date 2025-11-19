@@ -193,12 +193,9 @@ def query(
                     yield RunItemStreamEvent(type="message_done")
                     message_started = False
 
-                if finish_reason and tool_choice != "none":
-                    _try_convert_content_to_tool_calls_for_non_tool_calling_llms(
-                        tool_calls_in_progress,
-                        content_parts,
-                        structured_response_format,
-                        _next_synthetic_tool_call_id,
+                for tool_call_delta in delta.tool_calls:
+                    _update_tool_call_with_delta(
+                        tool_calls_in_progress, tool_call_delta
                     )
 
             yield chunk
