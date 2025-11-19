@@ -71,7 +71,7 @@ export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
     description: "Enable Onyx to search the internet for information.",
     icon: SvgGlobe,
     buttonText: "Web Search",
-    buttonHref: "https://docs.onyx.app/overview/core_features/web_search",
+    buttonHref: "/admin/configuration/web-search",
   },
   {
     title: "Enable image generation",

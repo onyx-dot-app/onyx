@@ -105,6 +105,9 @@ class GooglePSEClient(WebSearchProvider):
                             published_str.replace("Z", "+00:00")
                         )
                     except ValueError:
+                        logger.debug(
+                            f"Failed to parse published_date '{published_str}' for link {link}"
+                        )
                         published_date = None
 
             results.append(

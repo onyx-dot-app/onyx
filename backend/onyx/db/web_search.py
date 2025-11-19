@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
-
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import Session
@@ -136,18 +134,21 @@ def set_active_web_search_provider(
     return provider
 
 
-def deactivate_search_providers(
-    provider_ids: Iterable[int], db_session: Session
-) -> None:
-    ids = list(provider_ids)
-    if not ids:
-        return
+def deactivate_web_search_provider(
+    *, provider_id: int | None, db_session: Session
+) -> InternetSearchProvider:
+    if provider_id is None:
+        raise ValueError("Cannot deactivate a provider without an id.")
 
-    db_session.execute(
-        update(InternetSearchProvider)
-        .where(InternetSearchProvider.id.in_(ids))
-        .values(is_active=False)
-    )
+    provider = fetch_web_search_provider_by_id(provider_id, db_session)
+    if provider is None:
+        raise ValueError(f"No web search provider with id {provider_id} exists.")
+
+    provider.is_active = False
+
+    db_session.flush()
+    db_session.refresh(provider)
+    return provider
 
 
 def delete_web_search_provider(provider_id: int, db_session: Session) -> None:
@@ -280,18 +281,21 @@ def set_active_web_content_provider(
     return provider
 
 
-def deactivate_content_providers(
-    provider_ids: Iterable[int], db_session: Session
-) -> None:
-    ids = list(provider_ids)
-    if not ids:
-        return
+def deactivate_web_content_provider(
+    *, provider_id: int | None, db_session: Session
+) -> InternetContentProvider:
+    if provider_id is None:
+        raise ValueError("Cannot deactivate a provider without an id.")
 
-    db_session.execute(
-        update(InternetContentProvider)
-        .where(InternetContentProvider.id.in_(ids))
-        .values(is_active=False)
-    )
+    provider = fetch_web_content_provider_by_id(provider_id, db_session)
+    if provider is None:
+        raise ValueError(f"No web content provider with id {provider_id} exists.")
+
+    provider.is_active = False
+
+    db_session.flush()
+    db_session.refresh(provider)
+    return provider
 
 
 def delete_web_content_provider(provider_id: int, db_session: Session) -> None:

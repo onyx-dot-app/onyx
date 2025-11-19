@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -19,6 +20,13 @@ logger = setup_logger()
 
 FIRECRAWL_SCRAPE_URL = "https://api.firecrawl.dev/v1/scrape"
 _DEFAULT_MAX_WORKERS = 4
+
+
+@dataclass
+class ExtractedContentFields:
+    text: str
+    title: str
+    published_date: datetime | None
 
 
 class FirecrawlClient(WebContentProvider):
@@ -102,20 +110,20 @@ class FirecrawlClient(WebContentProvider):
             self._last_error = None
 
         response_json = response.json()
-        text, title, published_date = self._extract_content_fields(response_json, url)
+        extracted = self._extract_content_fields(response_json, url)
 
         return WebContent(
-            title=title,
+            title=extracted.title,
             link=url,
-            full_content=text,
-            published_date=published_date,
-            scrape_successful=bool(text),
+            full_content=extracted.text,
+            published_date=extracted.published_date,
+            scrape_successful=bool(extracted.text),
         )
 
     @staticmethod
     def _extract_content_fields(
         response_json: dict[str, Any], url: str
-    ) -> tuple[str, str, datetime | None]:
+    ) -> ExtractedContentFields:
         data_section = response_json.get("data") or {}
         metadata = data_section.get("metadata") or response_json.get("metadata") or {}
 
@@ -148,4 +156,8 @@ class FirecrawlClient(WebContentProvider):
         if not text:
             logger.warning(f"Firecrawl returned empty content for url={url}")
 
-        return text or "", title or "", published_date
+        return ExtractedContentFields(
+            text=text or "",
+            title=title or "",
+            published_date=published_date,
+        )

@@ -76,7 +76,7 @@ def web_search(
 
     # Log which provider type is being used
     provider_type = type(provider).__name__
-    logger.notice(
+    logger.info(
         f"Performing web search with {provider_type} for query: '{search_query}'"
     )
 
@@ -85,7 +85,7 @@ def web_search(
         search_results: list[WebSearchResult] = []
         try:
             search_results = list(provider.search(search_query))
-            logger.notice(
+            logger.info(
                 f"Search returned {len(search_results)} results using {provider_type}"
             )
         except Exception as e:

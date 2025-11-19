@@ -28,7 +28,7 @@ try:
     from litellm.types.llms.ollama import OllamaChatCompletionMessage
 except ImportError:
 
-    class OllamaChatCompletionMessage(TypedDict, total=False):
+    class OllamaChatCompletionMessage(TypedDict, total=False):  # type: ignore[no-redef]
         """Fallback for LiteLLM versions where this TypedDict was removed."""
 
         role: str

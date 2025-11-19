@@ -4,6 +4,9 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.clients.exa_client import
     ExaClient,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.clients.firecrawl_client import (
+    FIRECRAWL_SCRAPE_URL,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.clients.firecrawl_client import (
     FirecrawlClient,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.clients.google_pse_client import (
@@ -152,7 +155,7 @@ def build_content_provider_from_config(
                 )
         return FirecrawlClient(
             api_key=api_key,
-            base_url=config.get("base_url") or "https://api.firecrawl.dev/v1/scrape",
+            base_url=config.get("base_url") or FIRECRAWL_SCRAPE_URL,
             timeout_seconds=timeout_seconds,
         )
 

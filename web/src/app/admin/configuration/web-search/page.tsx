@@ -2,7 +2,14 @@
 
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  memo,
+} from "react";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { CheckmarkIcon, GlobeIcon, InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
@@ -14,6 +21,7 @@ import { Callout } from "@/components/ui/callout";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
+import { FormField } from "@/refresh-components/form/FormField";
 import OnyxLogo from "@/icons/onyx-logo";
 import SvgKey from "@/icons/key";
 import SvgCheckSquare from "@/icons/check-square";
@@ -111,6 +119,241 @@ const SEARCH_PROVIDER_DETAILS: Record<
   },
 };
 
+type ProviderSetupModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  providerLabel: string;
+  providerLogo: ReactNode;
+  description: string;
+  apiKeyValue: string;
+  onApiKeyChange: (value: string) => void;
+  optionalField?: {
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+    description?: ReactNode;
+    showFirst?: boolean;
+  };
+  helperMessage: ReactNode;
+  helperClass: string;
+  isProcessing: boolean;
+  canConnect: boolean;
+  onConnect: () => void;
+  apiKeyAutoFocus?: boolean;
+};
+
+const ProviderSetupModal = memo(
+  ({
+    isOpen,
+    onClose,
+    providerLabel,
+    providerLogo,
+    description,
+    apiKeyValue,
+    onApiKeyChange,
+    optionalField,
+    helperMessage,
+    helperClass,
+    isProcessing,
+    canConnect,
+    onConnect,
+    apiKeyAutoFocus = true,
+  }: ProviderSetupModalProps) => {
+    if (!isOpen) return null;
+
+    return (
+      <RawModal
+        onClose={onClose}
+        className="w-[32rem] h-fit flex flex-col focus:outline-none"
+      >
+        <div className="bg-background-tint-00 relative flex flex-col gap-1 p-4 rounded-tl-16 rounded-tr-16">
+          <div className="absolute right-2 top-2">
+            <IconButton icon={SvgX} internal onClick={onClose} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1">
+              <div className="flex items-center justify-center w-7 h-7 p-0.5">
+                {providerLogo}
+              </div>
+              <div className="flex items-center justify-center w-4 h-4 p-0.5">
+                <SvgArrowExchange className="w-3 h-3 text-text-04" />
+              </div>
+              <div className="flex items-center justify-center w-7 h-7 p-0.5">
+                <OnyxLogo width={24} height={24} className="text-text-04" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Text headingH3>{`Set up ${providerLabel}`}</Text>
+              <Text secondaryBody text03>
+                {description}
+              </Text>
+            </div>
+          </div>
+        </div>
+        <div className="bg-background-tint-01 flex flex-col gap-4 p-4 overflow-y-auto max-h-[512px]">
+          <div className="flex w-full flex-col gap-4">
+            {optionalField?.showFirst && (
+              <FormField
+                name={optionalField.label.toLowerCase().replace(/\s+/g, "_")}
+                state="idle"
+                className="w-full"
+              >
+                <FormField.Label>
+                  <Text mainUiAction text04>
+                    {optionalField.label}
+                  </Text>
+                </FormField.Label>
+                <FormField.Control>
+                  <InputTypeIn
+                    placeholder={optionalField.placeholder}
+                    value={optionalField.value}
+                    onChange={(event) =>
+                      optionalField.onChange(event.target.value)
+                    }
+                  />
+                </FormField.Control>
+                {optionalField.description && (
+                  <div className="text-text-03 ml-0.5">
+                    {optionalField.description}
+                  </div>
+                )}
+              </FormField>
+            )}
+
+            <FormField
+              name="api_key"
+              state={
+                helperClass.includes("error")
+                  ? "error"
+                  : helperClass.includes("green")
+                    ? "success"
+                    : "idle"
+              }
+              className="w-full"
+            >
+              <FormField.Label>
+                <Text mainUiAction text04>
+                  API Key
+                </Text>
+              </FormField.Label>
+              <FormField.Control>
+                <PasswordInputTypeIn
+                  placeholder="Enter API key"
+                  value={apiKeyValue}
+                  autoFocus={apiKeyAutoFocus}
+                  onFocus={(e) => {
+                    // Select all text if it's the masked placeholder when focused
+                    if (apiKeyValue === "••••••••••••••••") {
+                      e.target.select();
+                    }
+                  }}
+                  onChange={(event) => {
+                    onApiKeyChange(event.target.value);
+                  }}
+                  showClearButton={false}
+                />
+              </FormField.Control>
+              {typeof helperMessage === "string" ? (
+                <FormField.Message
+                  messages={{
+                    idle: helperClass.includes("error")
+                      ? ""
+                      : helperClass.includes("green")
+                        ? ""
+                        : helperMessage,
+                    error: helperClass.includes("error") ? helperMessage : "",
+                    success: helperClass.includes("green") ? helperMessage : "",
+                  }}
+                />
+              ) : (
+                <div className={`${helperClass} ml-0.5`}>{helperMessage}</div>
+              )}
+            </FormField>
+
+            {optionalField && !optionalField.showFirst && (
+              <FormField
+                name={optionalField.label.toLowerCase().replace(/\s+/g, "_")}
+                state="idle"
+                className="w-full"
+              >
+                <FormField.Label>
+                  <Text mainUiAction text04>
+                    {optionalField.label}
+                  </Text>
+                </FormField.Label>
+                <FormField.Control>
+                  <InputTypeIn
+                    placeholder={optionalField.placeholder}
+                    value={optionalField.value}
+                    onChange={(event) =>
+                      optionalField.onChange(event.target.value)
+                    }
+                  />
+                </FormField.Control>
+                {optionalField.description && (
+                  <div className="text-text-03 ml-0.5">
+                    {optionalField.description}
+                  </div>
+                )}
+              </FormField>
+            )}
+          </div>
+        </div>
+        <div className="bg-background-tint-00 flex flex-row items-center justify-end gap-2 p-4 rounded-bl-16 rounded-br-16">
+          <Button type="button" main secondary onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            main
+            primary
+            disabled={!canConnect || isProcessing}
+            onClick={onConnect}
+          >
+            {isProcessing ? "Connecting..." : "Connect"}
+          </Button>
+        </div>
+      </RawModal>
+    );
+  }
+);
+
+ProviderSetupModal.displayName = "ProviderSetupModal";
+
+const HoverIconButton = ({
+  isHovered,
+  onMouseEnter,
+  onMouseLeave,
+  children,
+  ...buttonProps
+}: {
+  isHovered: boolean;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  children: React.ReactNode;
+} & React.ComponentProps<typeof Button>) => {
+  const HoverIcon = useMemo(() => {
+    const IconComponent: React.FunctionComponent<
+      React.SVGProps<SVGSVGElement>
+    > = ({ className, ...props }) => {
+      if (isHovered) {
+        return <SvgX className={className} {...props} />;
+      }
+      return <SvgCheckSquare className={className} {...props} />;
+    };
+    return IconComponent;
+  }, [isHovered]);
+
+  return (
+    <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      <Button {...buttonProps} rightIcon={HoverIcon}>
+        {children}
+      </Button>
+    </div>
+  );
+};
+
 export default function Page() {
   const [selectedProviderType, setSelectedProviderType] =
     useState<WebSearchProviderType | null>(null);
@@ -145,6 +388,7 @@ export default function Page() {
   const [contentActivationError, setContentActivationError] = useState<
     string | null
   >(null);
+  const [hoveredButtonKey, setHoveredButtonKey] = useState<string | null>(null);
 
   const {
     data: searchProvidersData,
@@ -250,6 +494,10 @@ export default function Page() {
 
   const hasActiveSearchProvider = searchProviders.some(
     (provider) => provider.is_active
+  );
+
+  const hasStoredApiKey = searchProviders.some(
+    (provider) => provider.has_api_key
   );
 
   const searchProvidersByType = useMemo(() => {
@@ -534,150 +782,6 @@ export default function Page() {
     );
   }
 
-  type ProviderSetupModalProps = {
-    isOpen: boolean;
-    onClose: () => void;
-    providerLabel: string;
-    providerLogo: ReactNode;
-    description: string;
-    apiKeyValue: string;
-    onApiKeyChange: (value: string) => void;
-    optionalField?: {
-      label: string;
-      value: string;
-      onChange: (value: string) => void;
-      placeholder: string;
-      description?: string;
-      showFirst?: boolean;
-    };
-    helperMessage: ReactNode;
-    helperClass: string;
-    isProcessing: boolean;
-    canConnect: boolean;
-    onConnect: () => void;
-    apiKeyAutoFocus?: boolean;
-  };
-
-  const ProviderSetupModal = ({
-    isOpen,
-    onClose,
-    providerLabel,
-    providerLogo,
-    description,
-    apiKeyValue,
-    onApiKeyChange,
-    optionalField,
-    helperMessage,
-    helperClass,
-    isProcessing,
-    canConnect,
-    onConnect,
-    apiKeyAutoFocus = true,
-  }: ProviderSetupModalProps) => {
-    if (!isOpen) return null;
-
-    return (
-      <RawModal onClose={onClose} className="w-[60rem] h-fit flex flex-col">
-        <div className="bg-background-tint-00 relative flex flex-col gap-1 p-4 rounded-tl-16 rounded-tr-16">
-          <div className="absolute right-2 top-2">
-            <IconButton icon={SvgX} internal onClick={onClose} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1">
-              <div className="flex items-center justify-center w-7 h-7 p-0.5">
-                {providerLogo}
-              </div>
-              <div className="flex items-center justify-center w-4 h-4 p-0.5">
-                <SvgArrowExchange className="w-3 h-3 text-text-04" />
-              </div>
-              <div className="flex items-center justify-center w-7 h-7 p-0.5">
-                <OnyxLogo width={24} height={24} className="text-text-04" />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <Text headingH3>{`Set up ${providerLabel}`}</Text>
-              <Text secondaryBody text03>
-                {description}
-              </Text>
-            </div>
-          </div>
-        </div>
-        <div className="bg-background-tint-01 flex flex-col gap-4 p-4 overflow-y-auto max-h-[512px]">
-          <div className="flex w-full flex-col gap-4">
-            {optionalField?.showFirst && (
-              <div className="flex flex-col gap-4">
-                <Text mainUiAction text04>
-                  {optionalField.label}
-                </Text>
-                <InputTypeIn
-                  placeholder={optionalField.placeholder}
-                  value={optionalField.value}
-                  onChange={(event) =>
-                    optionalField.onChange(event.target.value)
-                  }
-                />
-                {optionalField.description && (
-                  <Text mainContentBody text03 className="text-text-03">
-                    {optionalField.description}
-                  </Text>
-                )}
-              </div>
-            )}
-
-            <div className="flex flex-col gap-4">
-              <Text mainUiAction text04>
-                API Key
-              </Text>
-              <PasswordInputTypeIn
-                placeholder="Enter API key"
-                value={apiKeyValue}
-                autoFocus={apiKeyAutoFocus}
-                onChange={(event) => onApiKeyChange(event.target.value)}
-              />
-              <Text mainContentBody text03 className={helperClass}>
-                {helperMessage}
-              </Text>
-            </div>
-
-            {optionalField && !optionalField.showFirst && (
-              <div className="flex flex-col gap-4">
-                <Text mainUiAction text04>
-                  {optionalField.label}
-                </Text>
-                <InputTypeIn
-                  placeholder={optionalField.placeholder}
-                  value={optionalField.value}
-                  onChange={(event) =>
-                    optionalField.onChange(event.target.value)
-                  }
-                />
-                {optionalField.description && (
-                  <Text mainContentBody text03 className="text-text-03">
-                    {optionalField.description}
-                  </Text>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="bg-background-tint-00 flex flex-row items-center justify-end gap-2 p-4 rounded-bl-16 rounded-br-16">
-          <Button type="button" main secondary onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            main
-            primary
-            disabled={!canConnect || isProcessing}
-            onClick={onConnect}
-          >
-            {isProcessing ? "Connecting..." : "Connect"}
-          </Button>
-        </div>
-      </RawModal>
-    );
-  };
-
   const getSearchProviderHelperMessage = () => {
     if (searchErrorMessage) {
       return searchErrorMessage;
@@ -858,6 +962,40 @@ export default function Page() {
     }
   };
 
+  const handleDeactivateSearchProvider = async (providerId: number) => {
+    setActivatingProviderId(providerId);
+    setActivationError(null);
+
+    try {
+      const response = await fetch(
+        `/api/admin/web-search/search-providers/${providerId}/deactivate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof errorBody?.detail === "string"
+            ? errorBody.detail
+            : "Failed to deactivate provider."
+        );
+      }
+
+      await mutateSearchProviders();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unexpected error occurred.";
+      setActivationError(message);
+    } finally {
+      setActivatingProviderId(null);
+    }
+  };
+
   const handleActivateContentProvider = async (
     provider: WebContentProviderView
   ) => {
@@ -936,6 +1074,47 @@ export default function Page() {
               : "Failed to set crawler as default."
           );
         }
+      }
+
+      await mutateContentProviders();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unexpected error occurred.";
+      setContentActivationError(message);
+    } finally {
+      setActivatingContentProviderId(null);
+    }
+  };
+
+  const handleDeactivateContentProvider = async (
+    providerId: number,
+    providerType: string
+  ) => {
+    setActivatingContentProviderId(providerId);
+    setContentActivationError(null);
+
+    try {
+      // For onyx_web_crawler (virtual provider with id -1), use reset-default
+      // For real providers, use the deactivate endpoint
+      const endpoint =
+        providerType === "onyx_web_crawler" || providerId < 0
+          ? "/api/admin/web-search/content-providers/reset-default"
+          : `/api/admin/web-search/content-providers/${providerId}/deactivate`;
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof errorBody?.detail === "string"
+            ? errorBody.detail
+            : "Failed to deactivate provider."
+        );
       }
 
       await mutateContentProviders();
@@ -1092,9 +1271,6 @@ export default function Page() {
         />
 
         <div className="mt-1 flex w-full max-w-[960px] flex-col gap-3">
-          <Text mainContentBody text03 className="text-text-03">
-            Search settings for external search across the internet.
-          </Text>
           <Separator className="my-0 bg-border-01" />
 
           <div className="flex flex-col gap-1 self-stretch">
@@ -1118,9 +1294,8 @@ export default function Page() {
 
             {!hasActiveSearchProvider && (
               <div
-                className="flex items-start gap-3 rounded-16 border px-4 py-3"
+                className="flex items-start gap-3 rounded-16 border px-4 py-3 border-action-link-05"
                 style={{
-                  borderColor: "var(--status-info-02)",
                   backgroundColor: "var(--status-info-00)",
                 }}
               >
@@ -1135,7 +1310,9 @@ export default function Page() {
                   </div>
                 </div>
                 <Text className="flex-1" mainContentBody text04>
-                  Connect a search engine to set up web search.
+                  {hasStoredApiKey
+                    ? "Select a search engine to enable web search."
+                    : "Connect a search engine to set up web search."}
                 </Text>
               </div>
             )}
@@ -1173,7 +1350,11 @@ export default function Page() {
                         label: "Current Default",
                         disabled: false,
                         icon: "check" as const,
-                        onClick: undefined,
+                        onClick: providerId
+                          ? () => {
+                              void handleDeactivateSearchProvider(providerId);
+                            }
+                          : undefined,
                       };
                     }
 
@@ -1192,13 +1373,31 @@ export default function Page() {
                     };
                   })();
 
+                  const buttonKey = `search-${key}-${providerType}`;
+                  const isButtonHovered = hoveredButtonKey === buttonKey;
+                  const isCardClickable =
+                    buttonState.icon === "arrow" &&
+                    typeof buttonState.onClick === "function" &&
+                    !buttonState.disabled;
+
+                  const handleCardClick = () => {
+                    if (isCardClickable) {
+                      buttonState.onClick?.();
+                    }
+                  };
+
                   return (
                     <div
                       key={`${key}-${providerType}`}
+                      onClick={isCardClickable ? handleCardClick : undefined}
                       className={`flex items-start justify-between gap-3 rounded-16 border px-3.5 py-3 bg-background-neutral-00 dark:bg-background-neutral-00 ${
                         isHighlighted
                           ? "border-action-link-05"
                           : "border-border-01"
+                      } ${
+                        isCardClickable
+                          ? "cursor-pointer hover:bg-background-tint-01 transition-colors"
+                          : ""
                       }`}
                     >
                       <div className="flex items-start gap-2">
@@ -1229,31 +1428,43 @@ export default function Page() {
                               setSearchErrorMessage(null);
                             }
                           })}
-                        <Button
-                          action={buttonState.icon === "check"}
-                          tertiary
-                          disabled={
-                            buttonState.disabled ||
-                            (!buttonState.onClick &&
-                              buttonState.icon !== "check")
-                          }
-                          onClick={buttonState.onClick}
-                          {...(!buttonState.onClick &&
-                            buttonState.icon === "check" && {
-                              className: "hover:bg-transparent cursor-default",
-                            })}
-                          rightIcon={
-                            buttonState.icon === "check"
-                              ? SvgCheckSquare
-                              : buttonState.icon === "arrow"
+                        {buttonState.icon === "check" ? (
+                          <HoverIconButton
+                            isHovered={isButtonHovered}
+                            onMouseEnter={() => setHoveredButtonKey(buttonKey)}
+                            onMouseLeave={() => setHoveredButtonKey(null)}
+                            action={true}
+                            tertiary
+                            disabled={buttonState.disabled}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              buttonState.onClick?.();
+                            }}
+                          >
+                            {buttonState.label}
+                          </HoverIconButton>
+                        ) : (
+                          <Button
+                            action={false}
+                            tertiary
+                            disabled={
+                              buttonState.disabled || !buttonState.onClick
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              buttonState.onClick?.();
+                            }}
+                            rightIcon={
+                              buttonState.icon === "arrow"
                                 ? SvgArrowExchange
                                 : buttonState.icon === "arrow-circle"
                                   ? SvgArrowRightCircle
                                   : undefined
-                          }
-                        >
-                          {buttonState.label}
-                        </Button>
+                            }
+                          >
+                            {buttonState.label}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   );
@@ -1320,7 +1531,12 @@ export default function Page() {
                       label: "Current Crawler",
                       icon: "check" as const,
                       disabled: false,
-                      onClick: undefined,
+                      onClick: () => {
+                        void handleDeactivateContentProvider(
+                          providerId,
+                          provider.provider_type
+                        );
+                      },
                     };
                   }
 
@@ -1340,13 +1556,36 @@ export default function Page() {
                   };
                 })();
 
+                const contentButtonKey = `content-${provider.provider_type}-${provider.id}`;
+                const isContentButtonHovered =
+                  hoveredButtonKey === contentButtonKey;
+                const isContentCardClickable =
+                  buttonState.icon === "arrow" &&
+                  typeof buttonState.onClick === "function" &&
+                  !buttonState.disabled;
+
+                const handleContentCardClick = () => {
+                  if (isContentCardClickable) {
+                    buttonState.onClick?.();
+                  }
+                };
+
                 return (
                   <div
                     key={`${provider.provider_type}-${provider.id}`}
+                    onClick={
+                      isContentCardClickable
+                        ? handleContentCardClick
+                        : undefined
+                    }
                     className={`flex items-start justify-between gap-3 rounded-16 border px-3.5 py-3 bg-background-neutral-00 dark:bg-background-neutral-00 ${
                       isCurrentCrawler
                         ? "border-action-link-05"
                         : "border-border-01"
+                    } ${
+                      isContentCardClickable
+                        ? "cursor-pointer hover:bg-background-tint-01 transition-colors"
+                        : ""
                     }`}
                   >
                     <div className="flex items-start gap-2">
@@ -1374,30 +1613,45 @@ export default function Page() {
                           setContentStatusMessage(null);
                           setContentErrorMessage(null);
                         })}
-                      <Button
-                        action={buttonState.icon === "check"}
-                        tertiary
-                        disabled={
-                          buttonState.disabled ||
-                          (!buttonState.onClick && buttonState.icon !== "check")
-                        }
-                        onClick={buttonState.onClick}
-                        {...(!buttonState.onClick &&
-                          buttonState.icon === "check" && {
-                            className: "hover:bg-transparent cursor-default",
-                          })}
-                        rightIcon={
-                          buttonState.icon === "check"
-                            ? SvgCheckSquare
-                            : buttonState.icon === "arrow"
+                      {buttonState.icon === "check" ? (
+                        <HoverIconButton
+                          isHovered={isContentButtonHovered}
+                          onMouseEnter={() =>
+                            setHoveredButtonKey(contentButtonKey)
+                          }
+                          onMouseLeave={() => setHoveredButtonKey(null)}
+                          action={true}
+                          tertiary
+                          disabled={buttonState.disabled}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            buttonState.onClick?.();
+                          }}
+                        >
+                          {buttonState.label}
+                        </HoverIconButton>
+                      ) : (
+                        <Button
+                          action={false}
+                          tertiary
+                          disabled={
+                            buttonState.disabled || !buttonState.onClick
+                          }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            buttonState.onClick?.();
+                          }}
+                          rightIcon={
+                            buttonState.icon === "arrow"
                               ? SvgArrowExchange
                               : buttonState.icon === "arrow-circle"
                                 ? SvgArrowRightCircle
                                 : undefined
-                        }
-                      >
-                        {buttonState.label}
-                      </Button>
+                          }
+                        >
+                          {buttonState.label}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 );
@@ -1437,6 +1691,20 @@ export default function Page() {
                 value: searchEngineIdValue,
                 onChange: (value) => setSearchEngineIdValue(value),
                 placeholder: "Enter search engine ID",
+                description: (
+                  <>
+                    Paste your{" "}
+                    <a
+                      href="https://programmablesearchengine.google.com/controlpanel/all"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline"
+                    >
+                      search engine ID
+                    </a>{" "}
+                    you want to use for web search.
+                  </>
+                ),
               }
             : undefined
         }

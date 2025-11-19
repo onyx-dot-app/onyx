@@ -15,7 +15,8 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
 from onyx.auth.users import current_admin_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
-from onyx.db.web_search import deactivate_content_providers
+from onyx.db.web_search import deactivate_web_content_provider
+from onyx.db.web_search import deactivate_web_search_provider
 from onyx.db.web_search import delete_web_content_provider
 from onyx.db.web_search import delete_web_search_provider
 from onyx.db.web_search import fetch_web_content_provider_by_name
@@ -129,6 +130,17 @@ def activate_search_provider(
         config=provider.config or {},
         has_api_key=bool(provider.api_key),
     )
+
+
+@admin_router.post("/search-providers/{provider_id}/deactivate")
+def deactivate_search_provider(
+    provider_id: int,
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> dict[str, str]:
+    deactivate_web_search_provider(provider_id=provider_id, db_session=db_session)
+    db_session.commit()
+    return {"status": "ok"}
 
 
 @admin_router.post("/search-providers/test")
@@ -280,10 +292,21 @@ def reset_content_provider_default(
     providers = fetch_web_content_providers(db_session)
     active_ids = [provider.id for provider in providers if provider.is_active]
 
-    if active_ids:
-        deactivate_content_providers(active_ids, db_session)
-        db_session.commit()
+    for provider_id in active_ids:
+        deactivate_web_content_provider(provider_id=provider_id, db_session=db_session)
+    db_session.commit()
 
+    return {"status": "ok"}
+
+
+@admin_router.post("/content-providers/{provider_id}/deactivate")
+def deactivate_content_provider(
+    provider_id: int,
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> dict[str, str]:
+    deactivate_web_content_provider(provider_id=provider_id, db_session=db_session)
+    db_session.commit()
     return {"status": "ok"}
 
 

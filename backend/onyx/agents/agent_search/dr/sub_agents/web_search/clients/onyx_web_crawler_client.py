@@ -17,7 +17,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 DEFAULT_TIMEOUT_SECONDS = 15
-DEFAULT_USER_AGENT = "OnyxWebCrawler/1.0 (+https://tryonyx.ai)"
+DEFAULT_USER_AGENT = "OnyxWebCrawler/1.0 (+https://www.onyx.app)"
 
 
 class OnyxWebCrawlerClient(WebContentProvider):
