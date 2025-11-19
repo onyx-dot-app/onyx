@@ -102,7 +102,7 @@ export interface UserFilesModalProps {
   onUnpickRecent?: (file: ProjectFile) => void;
 }
 
-export default function UserFilesModalContent({
+export default function UserFilesModal({
   open,
   onOpenChange,
   title,

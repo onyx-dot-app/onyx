@@ -86,7 +86,7 @@ import {
 import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
 import { FileCard } from "@/app/chat/components/input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
-import UserFilesModalContent from "@/components/modals/UserFilesModal";
+import UserFilesModal from "@/components/modals/UserFilesModal";
 import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMSelector } from "@/components/llm/LLMSelector";
@@ -846,7 +846,7 @@ export default function AssistantEditor({
 
           return (
             <>
-              <UserFilesModalContent
+              <UserFilesModal
                 open={userFilesModal.isOpen}
                 onOpenChange={userFilesModal.toggle}
                 title="User Files"

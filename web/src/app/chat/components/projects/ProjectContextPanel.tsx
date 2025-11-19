@@ -11,7 +11,7 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Button from "@/refresh-components/buttons/Button";
 
 import AddInstructionModal from "@/components/modals/AddInstructionModal";
-import UserFilesModalContent from "@/components/modals/UserFilesModal";
+import UserFilesModal from "@/components/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Text from "@/refresh-components/texts/Text";
 import SvgFolderOpen from "@/icons/folder-open";
@@ -105,7 +105,7 @@ export default function ProjectContextPanel({
         <AddInstructionModal />
       </addInstructionModal.Provider>
 
-      <UserFilesModalContent
+      <UserFilesModal
         open={projectFilesModal.isOpen}
         onOpenChange={projectFilesModal.toggle}
         title="Project files"

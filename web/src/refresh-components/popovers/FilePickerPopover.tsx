@@ -8,7 +8,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn, noProp } from "@/lib/utils";
-import UserFilesModalContent from "@/components/modals/UserFilesModal";
+import UserFilesModal from "@/components/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import {
   ProjectFile,
@@ -272,7 +272,7 @@ export default function FilePickerPopover({
         accept={"*/*"}
       />
 
-      <UserFilesModalContent
+      <UserFilesModal
         open={recentFilesModal.isOpen}
         onOpenChange={recentFilesModal.toggle}
         title="Recent Files"
