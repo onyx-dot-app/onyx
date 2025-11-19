@@ -4,12 +4,8 @@ alembic==1.10.4
 asyncpg==0.30.0
 atlassian-python-api==3.41.16
 beautifulsoup4==4.12.3
-<<<<<<< HEAD
-boto3==1.36.23
 brotli==1.1.0
-=======
 boto3==1.39.11
->>>>>>> v2.3.0
 celery==5.5.1
 chardet==5.2.0
 chonkie==1.0.10
@@ -107,7 +103,6 @@ mistune==0.8.4
 sentry-sdk==2.14.0
 prometheus_client==0.21.0
 fastapi-limiter==0.1.6
-langfuse==2.60.2
 prometheus_fastapi_instrumentator==7.1.0
 sendgrid==6.11.0
 voyageai==0.2.3

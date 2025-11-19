@@ -1,26 +1,17 @@
 "use client";
 import { use } from "react";
 
-import { ErrorCallout } from "@/components/ErrorCallout";
 //import { useDocumentSets } from "../hooks";
-import {
-  useConnectorCredentialIndexingStatus,
-  useUserGroups,
-} from "@/lib/hooks";
-import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { BookmarkIcon } from "@/components/icons/icons";
 import { BackButton } from "@/components/BackButton";
 //import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { LoadingAnimation } from "@/components/Loading";
 import { FiCpu } from "react-icons/fi";
 // import { Text, Title, Button } from "@tremor/react";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 

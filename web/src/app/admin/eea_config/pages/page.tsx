@@ -7,7 +7,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Separator } from "@/components/ui/separator";
 import {
   Table,
