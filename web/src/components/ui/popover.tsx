@@ -31,7 +31,7 @@ const PopoverContent = React.forwardRef<
 PopoverContent.displayName = PopoverPrimitive.Content.displayName;
 
 const sizeClasses = {
-  small: ["w-[10rem]"],
+  small: ["w-[10.5rem]"],
   medium: ["w-[15.5rem]"],
 };
 

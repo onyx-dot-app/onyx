@@ -21,6 +21,7 @@ import SvgBell from "@/icons/bell";
 import SvgX from "@/icons/x";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import SvgUser from "@/icons/user";
+import SvgFileText from "@/icons/file-text";
 import { cn } from "@/lib/utils";
 import { useModalContext } from "@/components/context/ModalContext";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
@@ -106,6 +107,26 @@ function SettingsPopover({
                 : ""
             }`}
           </MenuButton>,
+          <div key="disclaimer" data-testid="pages/disclaimer">
+            <MenuButton icon={SvgFileText} href="/pages/disclaimer">
+              Disclaimer
+            </MenuButton>
+          </div>,
+          <div key="privacy" data-testid="pages/privacy">
+            <MenuButton icon={SvgFileText} href="/pages/privacy">
+              Privacy Architecture
+            </MenuButton>
+          </div>,
+          <div key="privacy-statement" data-testid="pages/privacy-statement">
+            <MenuButton icon={SvgFileText} href="/pages/privacy-statement">
+              Privacy Statement
+            </MenuButton>
+          </div>,
+          <div key="whats-new" data-testid="pages/whats-new">
+            <MenuButton icon={SvgFileText} href="/pages/whats-new">
+              What&apos;s new
+            </MenuButton>
+          </div>,
           null,
           showLogout && (
             <MenuButton
