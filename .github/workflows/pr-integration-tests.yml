@@ -150,10 +150,10 @@ jobs:
           TAG: integration-test-${{ github.run_id }}
         run: |
           cd backend && docker buildx bake --push \
-            --set backend.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache \
-            --set backend.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max \
-            --set integration.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-cache \
-            --set integration.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-cache,mode=max \
+            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
+            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache,mode=max \
+            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache \
+            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache,mode=max \
             integration
 
   integration-tests:
