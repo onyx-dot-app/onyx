@@ -7,6 +7,9 @@ import {
 } from "../utils/tools";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 
+// This test file requires admin authentication for API calls
+test.use({ storageState: "admin_auth.json" });
+
 test.describe("Default Assistant Admin Page", () => {
   test.beforeEach(async ({ page }) => {
     // Log in as admin
@@ -564,6 +567,8 @@ test.describe("Default Assistant Admin Page", () => {
       );
     }
 
+    // Reload page to pick up the newly created providers
+    await page.reload();
     await page.waitForSelector("text=Internal Search", { timeout: 10000 });
 
     // Store initial states
