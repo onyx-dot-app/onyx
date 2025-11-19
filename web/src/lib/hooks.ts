@@ -540,6 +540,7 @@ export interface LlmManager {
   maxTemperature: number;
   llmProviders: LLMProviderDescriptor[] | undefined;
   isLoadingProviders: boolean;
+  hasAnyProvider: boolean;
 }
 
 // Things to test
@@ -592,7 +593,6 @@ export function useLlmManager(
   // Get all user-accessible providers from ChatContext (loaded server-side)
   // This includes public + all restricted providers user can access via groups
   const { llmProviders: allUserProviders } = useChatContext();
-
   // Fetch persona-specific providers to enforce RBAC restrictions per assistant
   // Only fetch if we have an assistant selected
   const personaId =
@@ -796,6 +796,9 @@ export function useLlmManager(
     }
   };
 
+  // Track if any provider exists from ChatContext (for onboarding checks)
+  const hasAnyProvider = (allUserProviders?.length ?? 0) > 0;
+
   return {
     updateModelOverrideBasedOnChatSession,
     currentLlm,
@@ -808,6 +811,7 @@ export function useLlmManager(
     maxTemperature,
     llmProviders,
     isLoadingProviders: personaId !== undefined && isLoadingPersonaProviders,
+    hasAnyProvider,
   };
 }
 

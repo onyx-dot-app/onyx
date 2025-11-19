@@ -4,6 +4,7 @@ import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { Separator } from "@/components/ui/separator";
+import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import InputFile from "@/refresh-components/inputs/InputFile";
@@ -16,6 +17,7 @@ import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/texts/Text";
+import { cn, noProp } from "@/lib/utils";
 
 type Props = {
   llmDescriptor: WellKnownLLMProviderDescriptor;
@@ -25,7 +27,6 @@ type Props = {
   apiStatus: "idle" | "loading" | "success" | "error";
   errorMessage: string;
   isFetchingModels: boolean;
-  onApiKeyBlur: (apiKey: string) => void;
   formikValues: any;
   setDefaultModelName: (value: string) => void;
   onFetchModels?: () => void;
@@ -33,7 +34,6 @@ type Props = {
   modelsApiStatus: "idle" | "loading" | "success" | "error";
   modelsErrorMessage: string;
   showModelsApiErrorMessage: boolean;
-  testModelChangeWithApiKey: (modelName: string) => Promise<void>;
   testFileInputChange: (
     customConfig: Record<string, any>
   ) => Promise<void> | void;
@@ -48,7 +48,6 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
   apiStatus,
   errorMessage,
   isFetchingModels,
-  onApiKeyBlur,
   formikValues,
   setDefaultModelName,
   onFetchModels,
@@ -56,7 +55,6 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
   modelsApiStatus,
   modelsErrorMessage,
   showModelsApiErrorMessage,
-  testModelChangeWithApiKey,
   testFileInputChange,
   disabled = false,
 }) => {
@@ -64,8 +62,6 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
     if (!apiKey) return;
     if (llmDescriptor?.name === "openrouter") {
       onFetchModels?.();
-    } else {
-      onApiKeyBlur(apiKey);
     }
   };
   return (
@@ -234,12 +230,14 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                   <FormField.Control>
                     {customConfigKey.key_type === "select" ? (
                       <InputSelect
+                        name={field.name}
                         value={
                           (field.value as string) ??
                           (customConfigKey.default_value as string) ??
                           ""
                         }
                         onValueChange={(value) => helper.setValue(value)}
+                        onBlur={field.onBlur}
                         options={
                           customConfigKey.options?.map((opt) => ({
                             label: opt.label,
@@ -353,68 +351,49 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
           <FormField name="default_model_name" state={state} className="w-full">
             <FormField.Label>Default Model</FormField.Label>
             <FormField.Control>
-              {modelOptions.length > 0 && (
-                <InputSelect
-                  value={field.value}
-                  onValueChange={(value) => {
-                    helper.setValue(value);
-                    setDefaultModelName(value);
-                    if (testModelChangeWithApiKey && value) {
-                      testModelChangeWithApiKey(value);
-                    }
-                  }}
-                  options={modelOptions}
-                  disabled={
-                    disabled || modelOptions.length === 0 || isFetchingModels
+              <InputComboBox
+                value={field.value}
+                onValueChange={(value) => {
+                  helper.setValue(value);
+                  setDefaultModelName(value);
+                }}
+                onChange={(e) => {
+                  helper.setValue(e.target.value);
+                  setDefaultModelName(e.target.value);
+                }}
+                options={modelOptions}
+                disabled={
+                  disabled || modelOptions.length === 0 || isFetchingModels
+                }
+                rightSection={
+                  canFetchModels ? (
+                    <IconButton
+                      internal
+                      icon={({ className }) => (
+                        <SvgRefreshCw
+                          className={cn(
+                            className,
+                            isFetchingModels && "animate-spin"
+                          )}
+                        />
+                      )}
+                      onClick={noProp((e) => {
+                        e.preventDefault();
+                        onFetchModels?.();
+                      })}
+                      tooltip="Fetch available models"
+                      disabled={disabled || isFetchingModels}
+                    />
+                  ) : undefined
+                }
+                onBlur={field.onBlur}
+                placeholder="Select a model"
+                onValidationError={(error) => {
+                  if (error) {
+                    helper.setError(error);
                   }
-                  rightSection={
-                    canFetchModels ? (
-                      <IconButton
-                        internal
-                        icon={SvgRefreshCw}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onFetchModels?.();
-                        }}
-                        tooltip="Fetch available models"
-                        disabled={disabled || isFetchingModels}
-                        className={isFetchingModels ? "animate-spin" : ""}
-                      />
-                    ) : undefined
-                  }
-                  onBlur={field.onBlur}
-                />
-              )}
-              {modelOptions.length === 0 && (
-                <InputTypeIn
-                  value={field.value}
-                  onChange={(e) => {
-                    helper.setValue(e.target.value);
-                    setDefaultModelName(e.target.value);
-                  }}
-                  placeholder="E.g. gpt-4"
-                  showClearButton={false}
-                  disabled={disabled}
-                  rightSection={
-                    canFetchModels ? (
-                      <IconButton
-                        internal
-                        icon={SvgRefreshCw}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onFetchModels?.();
-                        }}
-                        tooltip="Fetch available models"
-                        disabled={disabled || isFetchingModels}
-                        className={isFetchingModels ? "animate-spin" : ""}
-                      />
-                    ) : undefined
-                  }
-                  onBlur={field.onBlur}
-                />
-              )}
+                }}
+              />
             </FormField.Control>
             {!showModelsApiErrorMessage && (
               <FormField.Message

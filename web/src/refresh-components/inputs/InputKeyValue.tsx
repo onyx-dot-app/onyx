@@ -84,6 +84,7 @@ import Button from "@/refresh-components/buttons/Button";
 import SvgPlusCircle from "@/icons/plus-circle";
 import Text from "@/refresh-components/texts/Text";
 import { FieldContext } from "../form/FieldContext";
+import { FieldMessage } from "../messages/FieldMessage";
 
 export type KeyValue = { key: string; value: string };
 
@@ -140,20 +141,15 @@ const KeyValueInputItem = ({
             showClearButton={false}
           />
           {error?.key && (
-            <div className="flex flex-row items-center gap-x-0.5 ml-0.5">
-              <div className="w-4 h-4 flex items-center justify-center">
-                <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />
-              </div>
-              <Text
+            <FieldMessage variant="error" className="ml-0.5">
+              <FieldMessage.Content
                 id={`${fieldId}-key-error-${index}`}
-                text03
-                secondaryBody
-                className="ml-0.5"
                 role="alert"
+                className="ml-0.5"
               >
                 {error.key}
-              </Text>
-            </div>
+              </FieldMessage.Content>
+            </FieldMessage>
           )}
         </div>
         <div className={cn(valueClassName, "flex flex-col gap-y-0.5")}>
@@ -170,20 +166,15 @@ const KeyValueInputItem = ({
             showClearButton={false}
           />
           {error?.value && (
-            <div className="flex flex-row items-center gap-x-0.5 ml-0.5">
-              <div className="w-4 h-4 flex items-center justify-center">
-                <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />
-              </div>
-              <Text
+            <FieldMessage variant="error" className="ml-0.5">
+              <FieldMessage.Content
                 id={`${fieldId}-value-error-${index}`}
-                text03
-                secondaryBody
-                className="ml-0.5"
                 role="alert"
+                className="ml-0.5"
               >
                 {error.value}
-              </Text>
-            </div>
+              </FieldMessage.Content>
+            </FieldMessage>
           )}
         </div>
       </div>
