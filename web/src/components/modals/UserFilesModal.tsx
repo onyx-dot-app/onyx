@@ -123,6 +123,7 @@ export default function UserFilesModal({
   );
   const [showOnlySelected, setShowOnlySelected] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const triggerUploadPicker = () => fileInputRef.current?.click();
 
   useEffect(() => {
@@ -182,7 +183,15 @@ export default function UserFilesModal({
       )}
 
       <Modal open={open} onOpenChange={handleOpenChange}>
-        <Modal.Content size="tall">
+        <Modal.Content
+          size="tall"
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            setSearch("");
+            searchInputRef.current?.focus();
+          }}
+          preventAccidentalClose={false}
+        >
           <Modal.CloseButton />
 
           <Modal.Header className="flex flex-col gap-3 p-4">
@@ -195,6 +204,7 @@ export default function UserFilesModal({
             {/* Search bar section */}
             <div className="flex items-center gap-2">
               <InputTypeIn
+                ref={searchInputRef}
                 placeholder="Search files..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
