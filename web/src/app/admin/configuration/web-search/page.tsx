@@ -11,8 +11,10 @@ import {
   memo,
 } from "react";
 import { AdminPageTitle } from "@/components/admin/Title";
+import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { CheckmarkIcon, GlobeIcon, InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
+import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
@@ -173,14 +175,16 @@ const ProviderSetupModal = memo(
           </div>
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-1">
-              <div className="flex items-center justify-center w-7 h-7 p-0.5">
-                {providerLogo}
+              {providerLogo}
+              <div className="flex items-center justify-center size-4 p-0.5 shrink-0">
+                <SvgArrowExchange className="size-3 text-text-04" />
               </div>
-              <div className="flex items-center justify-center w-4 h-4 p-0.5">
-                <SvgArrowExchange className="w-3 h-3 text-text-04" />
-              </div>
-              <div className="flex items-center justify-center w-7 h-7 p-0.5">
-                <OnyxLogo width={24} height={24} className="text-text-04" />
+              <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
+                <OnyxLogo
+                  width={24}
+                  height={24}
+                  className="text-text-04 shrink-0"
+                />
               </div>
             </div>
             <div className="flex flex-col gap-1">
@@ -224,6 +228,7 @@ const ProviderSetupModal = memo(
             <FormField
               name="api_key"
               state={
+                helperClass.includes("status-error") ||
                 helperClass.includes("error")
                   ? "error"
                   : helperClass.includes("green")
@@ -254,20 +259,44 @@ const ProviderSetupModal = memo(
                   showClearButton={false}
                 />
               </FormField.Control>
-              {typeof helperMessage === "string" ? (
+              {isProcessing ? (
+                <FormField.APIMessage
+                  state="loading"
+                  messages={{
+                    loading:
+                      typeof helperMessage === "string"
+                        ? helperMessage
+                        : "Validating API key...",
+                  }}
+                />
+              ) : typeof helperMessage === "string" ? (
                 <FormField.Message
                   messages={{
-                    idle: helperClass.includes("error")
-                      ? ""
-                      : helperClass.includes("green")
+                    idle:
+                      helperClass.includes("status-error") ||
+                      helperClass.includes("error")
                         ? ""
-                        : helperMessage,
-                    error: helperClass.includes("error") ? helperMessage : "",
+                        : helperClass.includes("green")
+                          ? ""
+                          : helperMessage,
+                    error:
+                      helperClass.includes("status-error") ||
+                      helperClass.includes("error")
+                        ? helperMessage
+                        : "",
                     success: helperClass.includes("green") ? helperMessage : "",
                   }}
                 />
               ) : (
-                <div className={`${helperClass} ml-0.5`}>{helperMessage}</div>
+                <div className="flex flex-row items-center gap-x-0.5">
+                  <Text
+                    text03
+                    secondaryBody
+                    className={cn(helperClass, "ml-0.5")}
+                  >
+                    {helperMessage}
+                  </Text>
+                </div>
               )}
             </FormField>
 
@@ -586,46 +615,70 @@ export default function Page() {
   const renderProviderLogo = (
     logoSrc: string | undefined,
     label: string,
-    size = 24,
-    isHighlighted = false
-  ) =>
-    logoSrc ? (
-      <Image src={logoSrc} alt={`${label} logo`} width={size} height={size} />
-    ) : (
-      <GlobeIcon
-        size={size}
-        className={isHighlighted ? "text-action-text-link-05" : "text-text-02"}
-      />
+    size = 16,
+    isHighlighted = false,
+    containerSize?: number
+  ) => {
+    const containerSizeClass =
+      size === 24 || containerSize === 28 ? "size-7" : "size-5";
+
+    return (
+      <div
+        className={`flex items-center justify-center ${containerSizeClass} p-0.5 shrink-0 overflow-clip`}
+      >
+        {logoSrc ? (
+          <Image
+            src={logoSrc}
+            alt={`${label} logo`}
+            width={size}
+            height={size}
+          />
+        ) : (
+          <GlobeIcon
+            size={size}
+            className={
+              isHighlighted ? "text-action-text-link-05" : "text-text-02"
+            }
+          />
+        )}
+      </div>
     );
+  };
 
   const renderContentProviderLogo = (
     providerType: string,
     isHighlighted = false,
-    size = 28
+    size = 16,
+    containerSize?: number
   ) => {
-    if (providerType === "onyx_web_crawler") {
-      return (
+    const logoContent =
+      providerType === "onyx_web_crawler" ? (
         <OnyxLogo
           width={size}
           height={size}
           className="text-[#111111] dark:text-[#f5f5f5]"
         />
-      );
-    }
-
-    if (providerType === "firecrawl") {
-      return (
+      ) : providerType === "firecrawl" ? (
         <Image
           src="/firecrawl.svg"
           alt="Firecrawl logo"
           width={size}
           height={size}
-          className="h-7 w-7"
         />
+      ) : (
+        <GlobeIcon size={size} className="text-text-02" />
       );
-    }
 
-    return <GlobeIcon size={size} className="text-text-02" />;
+    const containerSizeClass =
+      size === 24 || containerSize === 28 ? "size-7" : "size-5";
+
+    return (
+      <div
+        className={`flex items-center justify-center ${containerSizeClass} p-0.5 shrink-0 overflow-clip`}
+      >
+        {logoContent}
+      </div>
+    );
   };
 
   const renderKeyBadge = (hasKey: boolean, onClick?: () => void) => {
@@ -820,7 +873,7 @@ export default function Page() {
   };
 
   const getSearchProviderHelperClass = () => {
-    if (searchErrorMessage) return "text-red-500";
+    if (searchErrorMessage) return "text-status-error-05";
     if (searchStatusMessage) {
       return searchStatusMessage.toLowerCase().includes("validated")
         ? "text-green-500"
@@ -1154,7 +1207,7 @@ export default function Page() {
   };
 
   const getContentProviderHelperClass = () => {
-    if (contentErrorMessage) return "text-red-500";
+    if (contentErrorMessage) return "text-status-error-05";
     if (contentStatusMessage) {
       return contentStatusMessage.toLowerCase().includes("validated")
         ? "text-green-500"
@@ -1264,27 +1317,37 @@ export default function Page() {
   return (
     <>
       <div className="container mx-auto">
-        <AdminPageTitle
-          title="Web Search"
-          icon={<GlobeIcon size={32} className="my-auto" />}
-          includeDivider={false}
-        />
+        <div className="w-full">
+          <div className="mb-4">
+            <HealthCheckBanner />
+          </div>
+          <div className="w-full flex flex-col gap-0.5 px-4">
+            <Text headingH2 text04 className="flex gap-x-2 items-center">
+              <GlobeIcon size={32} className="my-auto" /> Web Search
+            </Text>
+            <Text secondaryBody text03 className="px-0.5">
+              Search settings for external search across the internet.
+            </Text>
+          </div>
+        </div>
 
-        <div className="mt-1 flex w-full max-w-[960px] flex-col gap-3">
+        <div className="mt-1 flex w-full max-w-[960px] flex-col gap-8 px-4 py-6">
           <Separator className="my-0 bg-border-01" />
 
-          <div className="flex flex-col gap-1 self-stretch">
-            <Text headingH3 text05>
-              Search Engine
-            </Text>
-            <Text
-              className="flex items-start gap-[2px] self-stretch text-text-03"
-              mainContentBody
-              text03
-            >
-              External search engine API used for web search result URLs,
-              snippets, and metadata.
-            </Text>
+          <div className="flex flex-col gap-3 self-stretch">
+            <div className="flex flex-col gap-0.5">
+              <Text mainContentEmphasis text05>
+                Search Engine
+              </Text>
+              <Text
+                className="flex items-start gap-[2px] self-stretch text-text-03"
+                secondaryBody
+                text03
+              >
+                External search engine API used for web search result URLs,
+                snippets, and metadata.
+              </Text>
+            </div>
 
             {activationError && (
               <Callout type="danger" title="Unable to update default provider">
@@ -1294,26 +1357,29 @@ export default function Page() {
 
             {!hasActiveSearchProvider && (
               <div
-                className="flex items-start gap-3 rounded-16 border px-4 py-3 border-action-link-05"
+                className="flex items-start rounded-16 border p-1"
                 style={{
                   backgroundColor: "var(--status-info-00)",
+                  borderColor: "var(--status-info-02)",
                 }}
               >
-                <div
-                  className="flex h-6 w-6 items-center justify-center rounded-full"
-                  style={{
-                    backgroundColor: "var(--status-info-01)",
-                  }}
-                >
-                  <div style={{ color: "var(--status-text-info-05)" }}>
-                    <InfoIcon size={16} />
+                <div className="flex items-start gap-1 p-2">
+                  <div
+                    className="flex size-5 items-center justify-center rounded-full p-0.5"
+                    style={{
+                      backgroundColor: "var(--status-info-01)",
+                    }}
+                  >
+                    <div style={{ color: "var(--status-text-info-05)" }}>
+                      <InfoIcon size={16} />
+                    </div>
                   </div>
+                  <Text className="flex-1 px-0.5" mainUiBody text04>
+                    {hasStoredApiKey
+                      ? "Select a search engine to enable web search."
+                      : "Connect a search engine to set up web search."}
+                  </Text>
                 </div>
-                <Text className="flex-1" mainContentBody text04>
-                  {hasStoredApiKey
-                    ? "Select a search engine to enable web search."
-                    : "Connect a search engine to set up web search."}
-                </Text>
               </div>
             )}
 
@@ -1390,7 +1456,7 @@ export default function Page() {
                     <div
                       key={`${key}-${providerType}`}
                       onClick={isCardClickable ? handleCardClick : undefined}
-                      className={`flex items-start justify-between gap-3 rounded-16 border px-3.5 py-3 bg-background-neutral-00 dark:bg-background-neutral-00 ${
+                      className={`flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00 dark:bg-background-neutral-00 ${
                         isHighlighted
                           ? "border-action-link-05"
                           : "border-border-01"
@@ -1400,13 +1466,13 @@ export default function Page() {
                           : ""
                       }`}
                     >
-                      <div className="flex items-start gap-2">
-                        {renderProviderLogo(logoSrc, label, 24, isHighlighted)}
+                      <div className="flex items-start gap-2 p-2 flex-1">
+                        {renderProviderLogo(logoSrc, label, 16, isHighlighted)}
                         <div className="flex flex-col gap-1">
                           <Text headingH3 text05>
                             {label}
                           </Text>
-                          <Text mainContentBody text03 className="text-text-03">
+                          <Text secondaryBody text03>
                             {subtitle}
                           </Text>
                         </div>
@@ -1473,17 +1539,19 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-1 self-stretch">
-            <Text headingH3 text05>
-              Web Crawler
-            </Text>
-            <Text
-              className="flex items-start gap-[2px] self-stretch text-text-03"
-              mainContentBody
-              text03
-            >
-              Used to read the full contents of search result pages.
-            </Text>
+          <div className="flex flex-col gap-3 self-stretch">
+            <div className="flex flex-col gap-0.5">
+              <Text mainContentEmphasis text05>
+                Web Crawler
+              </Text>
+              <Text
+                className="flex items-start gap-[2px] self-stretch text-text-03"
+                secondaryBody
+                text03
+              >
+                Used to read the full contents of search result pages.
+              </Text>
+            </div>
 
             {contentActivationError && (
               <Callout type="danger" title="Unable to update crawler">
@@ -1578,7 +1646,7 @@ export default function Page() {
                         ? handleContentCardClick
                         : undefined
                     }
-                    className={`flex items-start justify-between gap-3 rounded-16 border px-3.5 py-3 bg-background-neutral-00 dark:bg-background-neutral-00 ${
+                    className={`flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00 dark:bg-background-neutral-00 ${
                       isCurrentCrawler
                         ? "border-action-link-05"
                         : "border-border-01"
@@ -1588,7 +1656,7 @@ export default function Page() {
                         : ""
                     }`}
                   >
-                    <div className="flex items-start gap-2">
+                    <div className="flex items-start gap-2 p-2 flex-1">
                       {renderContentProviderLogo(
                         provider.provider_type,
                         isCurrentCrawler
@@ -1597,7 +1665,7 @@ export default function Page() {
                         <Text headingH3 text05>
                           {label}
                         </Text>
-                        <Text mainContentBody text03 className="text-text-03">
+                        <Text secondaryBody text03>
                           {subtitle}
                         </Text>
                       </div>
@@ -1673,7 +1741,9 @@ export default function Page() {
             ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.logoSrc
             : undefined,
           providerLabel,
-          24
+          24,
+          false,
+          28
         )}
         description={
           selectedProviderType
@@ -1727,7 +1797,8 @@ export default function Page() {
         providerLogo={renderContentProviderLogo(
           selectedContentProviderType || "",
           false,
-          24
+          24,
+          28
         )}
         description={
           selectedContentProviderType

@@ -11,6 +11,7 @@ import {
   openActionManagement,
   waitForUnifiedGreeting,
 } from "@tests/e2e/utils/tools";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 // Tool-related test selectors now imported from shared utils
 
@@ -251,11 +252,34 @@ test.describe("Default Assistant Tests", () => {
     test("should show web-search + image-generation tools options when clicked", async ({
       page,
     }) => {
+      const apiClient = new OnyxApiClient(page);
+      let webSearchProviderId: number | null = null;
+
+      try {
+        // Set up a web search provider so the tool is available
+        webSearchProviderId = await apiClient.createWebSearchProvider("exa");
+      } catch (error) {
+        console.warn(
+          `Failed to create web search provider for test: ${error}. Test may fail if web search is required.`
+        );
+      }
+
       // Will NOT show the `internal-search` option since that will be excluded when there are no connectors connected.
       // (Since we removed pre-seeded docs, we will have NO connectors connected on a fresh install; therefore, `internal-search` will not be available.)
       await openActionManagement(page);
       expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
       expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
+
+      // Clean up web search provider
+      if (webSearchProviderId !== null) {
+        try {
+          await apiClient.deleteWebSearchProvider(webSearchProviderId);
+        } catch (error) {
+          console.warn(
+            `Failed to delete web search provider ${webSearchProviderId}: ${error}`
+          );
+        }
+      }
     });
 
     test("should be able to toggle tools on and off", async ({ page }) => {

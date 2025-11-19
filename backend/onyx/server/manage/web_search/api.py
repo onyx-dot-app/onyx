@@ -294,7 +294,7 @@ def reset_content_provider_default(
 
     for provider_id in active_ids:
         deactivate_web_content_provider(provider_id=provider_id, db_session=db_session)
-    db_session.commit()
+        db_session.commit()
 
     return {"status": "ok"}
 
