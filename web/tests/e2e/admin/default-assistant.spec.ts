@@ -634,9 +634,17 @@ test.describe("Default Assistant Admin Page", () => {
     await waitForUnifiedGreeting(page);
     await expect(page.locator(TOOL_IDS.actionToggle)).toBeVisible();
     await openActionManagement(page);
-    expect(await page.$(TOOL_IDS.searchOption)).toBeTruthy();
-    expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
-    expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
+
+    // Wait for all tool options to be visible before checking
+    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.locator(TOOL_IDS.webSearchOption)).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.locator(TOOL_IDS.imageGenerationOption)).toBeVisible({
+      timeout: 10000,
+    });
 
     await page.goto(
       "http://localhost:3000/admin/configuration/default-assistant"
