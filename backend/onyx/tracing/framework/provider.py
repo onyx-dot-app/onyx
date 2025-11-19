@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import threading
 import uuid
 from abc import ABC
@@ -185,12 +184,6 @@ class TraceProvider(ABC):
 class DefaultTraceProvider(TraceProvider):
     def __init__(self) -> None:
         self._multi_processor = SynchronousMultiTracingProcessor()
-        self._disabled = os.environ.get(
-            "OPENAI_AGENTS_DISABLE_TRACING", "false"
-        ).lower() in (
-            "true",
-            "1",
-        )
 
     def register_processor(self, processor: TracingProcessor) -> None:
         """
@@ -215,12 +208,6 @@ class DefaultTraceProvider(TraceProvider):
         Returns the currently active span, if any.
         """
         return Scope.get_current_span()
-
-    def set_disabled(self, disabled: bool) -> None:
-        """
-        Set whether tracing is disabled.
-        """
-        self._disabled = disabled
 
     def time_iso(self) -> str:
         """Return the current time in ISO 8601 format."""
@@ -249,7 +236,7 @@ class DefaultTraceProvider(TraceProvider):
         """
         Create a new trace.
         """
-        if self._disabled or disabled:
+        if disabled:
             logger.debug(f"Tracing is disabled. Not creating trace {name}")
             return NoOpTrace()
 
@@ -275,7 +262,7 @@ class DefaultTraceProvider(TraceProvider):
         """
         Create a new span.
         """
-        if self._disabled or disabled:
+        if disabled:
             logger.debug(f"Tracing is disabled. Not creating span {span_data}")
             return NoOpSpan(span_data)
 
@@ -329,9 +316,6 @@ class DefaultTraceProvider(TraceProvider):
         )
 
     def shutdown(self) -> None:
-        if self._disabled:
-            return
-
         try:
             logger.debug("Shutting down trace provider")
             self._multi_processor.shutdown()
