@@ -1,10 +1,29 @@
 """Integration tests for MCP Server Phase 1 - HTTP + PAT Auth."""
 
+from typing import Any
+
 import requests
 
 from tests.integration.common_utils.constants import MCP_SERVER_URL
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.test_models import DATestUser
+
+
+STREAMABLE_HTTP_URL = f"{MCP_SERVER_URL.rstrip('/')}/?transportType=streamable-http"
+
+
+def _error_message(payload: dict[str, Any]) -> str:
+    """Extract message from either FastAPI-style or JSON-RPC error payloads."""
+    if "detail" in payload and isinstance(payload["detail"], str):
+        return payload["detail"]
+
+    error_block = payload.get("error")
+    if isinstance(error_block, dict):
+        message = error_block.get("message")
+        if isinstance(message, str):
+            return message
+
+    return ""
 
 
 def test_mcp_server_health_check(reset: None) -> None:
@@ -17,20 +36,20 @@ def test_mcp_server_health_check(reset: None) -> None:
 
 def test_mcp_server_auth_missing_pat(reset: None) -> None:
     """Test MCP server rejects requests without PAT."""
-    response = requests.post(f"{MCP_SERVER_URL}/")
+    response = requests.post(STREAMABLE_HTTP_URL)
     assert response.status_code == 401
-    assert "Missing Personal Access Token" in response.json()["detail"]
+    assert "Missing Personal Access Token" in _error_message(response.json())
 
 
 def test_mcp_server_auth_invalid_pat(reset: None) -> None:
     """Test MCP server rejects requests with invalid PAT."""
     response = requests.post(
-        f"{MCP_SERVER_URL}/",
+        STREAMABLE_HTTP_URL,
         headers={"Authorization": "Bearer onyx_pat_invalid123"},
         json={"jsonrpc": "2.0", "method": "initialize", "id": 1},
     )
     assert response.status_code == 401
-    assert "Invalid or expired token" in response.json()["detail"]
+    assert "Invalid or expired token" in _error_message(response.json())
 
 
 def test_mcp_server_auth_valid_pat(reset: None, admin_user: DATestUser) -> None:
@@ -45,7 +64,7 @@ def test_mcp_server_auth_valid_pat(reset: None, admin_user: DATestUser) -> None:
 
     # Test connection with MCP protocol request
     response = requests.post(
-        f"{MCP_SERVER_URL}/",
+        STREAMABLE_HTTP_URL,
         headers={
             "Authorization": f"Bearer {pat_token}",
             "Content-Type": "application/json",
