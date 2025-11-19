@@ -64,16 +64,11 @@ def _parse_tool_calls_from_message_content(
         if not isinstance(name, str) or arguments is None:
             continue
 
+        if not isinstance(arguments, dict):
+            continue
+
         call_id = candidate.get("id")
-
-        if isinstance(arguments, str):
-            arguments_str = arguments
-        else:
-            try:
-                arguments_str = json.dumps(arguments)
-            except TypeError:
-                continue
-
+        arguments_str = json.dumps(arguments)
         tool_calls.append(
             {
                 "id": call_id,
@@ -240,7 +235,7 @@ def query(
                     yield RunItemStreamEvent(type="message_done")
                     message_started = False
 
-                if finish_reason:
+                if finish_reason and tool_choice != "none":
                     _try_convert_content_to_tool_calls_for_non_tool_calling_llms(
                         tool_calls_in_progress,
                         content_parts,
