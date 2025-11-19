@@ -12,14 +12,10 @@ const triggerClasses = {
     "bg-background-neutral-00",
     "border",
     "hover:border-border-02",
-    "data-[state=open]:border-border-05",
+    "active:!border-border-05",
   ],
-  error: ["border", "border-status-error-05", "bg-background-neutral-00"],
-  disabled: [
-    "bg-background-neutral-03",
-    "border-border-01",
-    "cursor-not-allowed",
-  ],
+  error: ["bg-background-neutral-00", "border", "border-status-error-05"],
+  disabled: ["bg-background-neutral-03", "border", "cursor-not-allowed"],
 } as const;
 
 const textClasses = {
