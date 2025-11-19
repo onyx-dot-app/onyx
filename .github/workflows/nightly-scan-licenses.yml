@@ -59,7 +59,9 @@ jobs:
 
       - name: Print report
         if: always()
-        run: echo "${{ steps.license_check_report.outputs.report }}"
+        env:
+          REPORT: ${{ steps.license_check_report.outputs.report }}
+        run: echo "$REPORT"
 
       - name: Install npm dependencies
         working-directory: ./web

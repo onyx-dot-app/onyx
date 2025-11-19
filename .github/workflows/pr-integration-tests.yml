@@ -473,9 +473,11 @@ jobs:
     if: ${{ always() }}
     steps:
       - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # ratchet:actions/github-script@v8
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
         with:
           script: |
-            const needs = ${{ toJSON(needs) }};
+            const needs = JSON.parse(process.env.NEEDS_JSON);
             const failed = Object.values(needs).some(n => n.result !== 'success');
             if (failed) {
               core.setFailed('One or more upstream jobs failed or were cancelled.');
