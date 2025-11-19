@@ -17,7 +17,7 @@ def setup_langfuse_if_creds_available() -> None:
 
     from openinference.instrumentation.openai_agents import OpenAIAgentsInstrumentor
 
-    OpenAIAgentsInstrumentor.instrument()
+    OpenAIAgentsInstrumentor().instrument()
     # TODO: this is how the tracing processor will look once we migrate over to new framework
     # config = TraceConfig()
     # tracer_provider = trace_api.get_tracer_provider()
