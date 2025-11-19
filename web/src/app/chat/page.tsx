@@ -1,21 +1,30 @@
+import ChatSessionLayout from "@/refresh-components/layouts/ChatSessionLayout";
 import ChatPage from "./components/ChatPage";
-import ShareChatLayout from "@/refresh-components/layouts/ShareChatLayout";
-import { ChatSession, toChatSession } from "./interfaces";
-import { fetchSS } from "@/lib/utilsSS";
 import { SEARCH_PARAM_NAMES } from "./services/searchParams";
+import { fetchSS } from "@/lib/utilsSS";
+import { BackendChatSession, ChatSession, toChatSession } from "./interfaces";
 
-async function fetchChatSession(chatId: string): Promise<ChatSession | null> {
-  const response = await fetchSS(`/chat/get-chat-session/${chatId}`);
-  if (!response.ok) {
-    return null;
-  }
-  const backendSession = await response.json();
-  return toChatSession(backendSession);
+export interface PageProps {
+  searchParams: Promise<{ [key: string]: string }>;
 }
 
-export default async function Page(props: {
-  searchParams: Promise<{ [key: string]: string }>;
-}) {
+async function fetchChatSession(
+  chatSessionId: string
+): Promise<ChatSession | null> {
+  try {
+    const response = await fetchSS(`/chat/get-chat-session/${chatSessionId}`);
+    if (!response.ok) {
+      return null;
+    }
+    const backendSession: BackendChatSession = await response.json();
+    return toChatSession(backendSession);
+  } catch (error) {
+    console.error("Failed to fetch chat session:", error);
+    return null;
+  }
+}
+
+export default async function Page(props: PageProps) {
   const searchParams = await props.searchParams;
   const firstMessage = searchParams.firstMessage;
   const chatSessionId = searchParams[SEARCH_PARAM_NAMES.CHAT_ID] ?? null;
@@ -24,8 +33,8 @@ export default async function Page(props: {
     : null;
 
   return (
-    <ShareChatLayout chatSession={chatSession}>
+    <ChatSessionLayout chatSession={chatSession}>
       <ChatPage firstMessage={firstMessage} />
-    </ShareChatLayout>
+    </ChatSessionLayout>
   );
 }

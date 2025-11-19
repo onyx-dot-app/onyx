@@ -8,12 +8,17 @@ import {
 } from "@/components/ui/popover";
 
 export interface SimplePopoverProps
-  extends React.ComponentPropsWithoutRef<typeof PopoverContent> {
+  extends Omit<
+    React.ComponentPropsWithoutRef<typeof PopoverContent>,
+    "children"
+  > {
   trigger: React.ReactNode | ((open: boolean) => React.ReactNode);
+  children: React.ReactNode | ((close: () => void) => React.ReactNode);
 }
 
 export default function SimplePopover({
   trigger,
+  children,
   ...rest
 }: SimplePopoverProps) {
   const [open, setOpen] = useState(false);
@@ -23,7 +28,11 @@ export default function SimplePopover({
       <PopoverTrigger asChild>
         <div>{typeof trigger === "function" ? trigger(open) : trigger}</div>
       </PopoverTrigger>
-      <PopoverContent align="start" side="top" {...rest} />
+      <PopoverContent align="start" side="top" {...rest}>
+        {typeof children === "function"
+          ? children(() => setOpen(false))
+          : children}
+      </PopoverContent>
     </Popover>
   );
 }
