@@ -407,6 +407,10 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, mcp_router)
     include_router_with_global_prefix_prepended(application, mcp_admin_router)
 
+    #eea
+    include_router_with_global_prefix_prepended(application, eea_config_router)
+    #eea
+
     if AUTH_TYPE != AuthType.DISABLED:
         include_router_with_global_prefix_prepended(application, pat_router)
 

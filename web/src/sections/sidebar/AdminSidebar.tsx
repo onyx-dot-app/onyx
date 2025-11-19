@@ -280,6 +280,16 @@ const collections = (
               : []),
           ],
         },
+        {
+          name: "Customize Layout",
+          items: [
+            {
+              name: "Pages",
+              icon: SettingsIconSkeleton,
+              link: "/admin/eea_config/pages",
+            },
+          ],
+        },
       ]
     : []),
 ];
