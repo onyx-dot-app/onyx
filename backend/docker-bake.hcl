@@ -1,5 +1,5 @@
 group "default" {
-  targets = ["backend", "model-server", "integration"]
+  targets = ["backend", "model-server"]
 }
 
 variable "BACKEND_REPOSITORY" {
