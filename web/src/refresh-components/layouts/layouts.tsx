@@ -141,14 +141,58 @@ export function AppPage({
     }
   };
 
-  }, [showMoveOptions, filteredProjects, handleMoveClick, setDeleteConfirmationModalOpen]);
-
   const setDeleteConfirmationModalOpen = (open: boolean) => {
     setDeleteModalOpen(open);
     if (open) {
       setPopoverOpen(false);
     }
   };
+
+  useEffect(() => {
+    if (!showMoveOptions) {
+      const popoverItems = [
+        <MenuButton
+          key="move"
+          icon={SvgFolderIn}
+          onClick={noProp(() => setShowMoveOptions(true))}
+        >
+          Move to Project
+        </MenuButton>,
+        <MenuButton
+          key="delete"
+          icon={SvgTrash}
+          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+          danger
+        >
+          Delete
+        </MenuButton>,
+      ];
+      setPopoverItems(popoverItems);
+    } else {
+      const popoverItems = [
+        <PopoverSearchInput
+          key="search"
+          setShowMoveOptions={setShowMoveOptions}
+          onSearch={setSearchTerm}
+        />,
+        ...filteredProjects.map((project) => (
+          <MenuButton
+            key={project.id}
+            icon={SvgFolderIn}
+            onClick={noProp(() => handleMoveClick(project.id))}
+          >
+            {project.name}
+          </MenuButton>
+        )),
+      ];
+      setPopoverItems(popoverItems);
+    }
+  }, [
+    showMoveOptions,
+    filteredProjects,
+    handleMoveClick,
+    setDeleteConfirmationModalOpen,
+  ]);
 
   return (
     <>
