@@ -9,6 +9,9 @@ variable "TAG" {
 target "backend" {
   context    = "."
   dockerfile = "Dockerfile"
+
+  tags = ["onyxdotapp/onyx-backend:latest"]
+  cache-from = ["type=registry,ref=onyxdotapp/onyx-backend:latest"]
 }
 
 target "integration" {
