@@ -130,7 +130,7 @@
       0px 0px 12px 1px var(--shadow-03);
   }
   .focus-shadow {
-    box-shadow: 0px 0px 0px 2px var(--border-04);
+    box-shadow: 0px 0px 0px 2px var(--background-tint-04);
   }
 
   /* DEBUGGING UTILITIES
