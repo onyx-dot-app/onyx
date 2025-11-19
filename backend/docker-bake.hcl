@@ -1,3 +1,7 @@
+group "default" {
+  targets = ["backend", "integration"]
+}
+
 variable "REPOSITORY" {
   default = "onyxdotapp/onyx-backend"
 }
