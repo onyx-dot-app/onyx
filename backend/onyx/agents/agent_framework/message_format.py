@@ -6,10 +6,10 @@ from langchain_core.messages import AIMessage
 from langchain_core.messages import BaseMessage
 from langchain_core.messages import FunctionMessage
 
-from onyx.agents.agent_sdk.message_format import ChatSystemMessage
 from onyx.llm.message_types import AssistantMessage
 from onyx.llm.message_types import ChatCompletionMessage
 from onyx.llm.message_types import FunctionCall
+from onyx.llm.message_types import SystemMessage
 from onyx.llm.message_types import ToolCall
 from onyx.llm.message_types import ToolMessage
 from onyx.llm.message_types import UserMessageWithText
@@ -36,7 +36,7 @@ def _base_message_to_chat_completion_msg(
         return user_msg
     if msg.type == SYSTEM:
         content = msg.content if isinstance(msg.content, str) else str(msg.content)
-        system_msg: ChatSystemMessage = {"role": "system", "content": content}
+        system_msg: SystemMessage = {"role": "system", "content": content}
         return system_msg
     if msg.type == AI:
         content = msg.content if isinstance(msg.content, str) else str(msg.content)
