@@ -13,8 +13,8 @@ const divClasses = {
     "active:!border-border-05",
     "focus-within-nonactive:border-border-05 focus-within-nonactive:focus-shadow",
   ],
-  internal: ["border", "border-status-error-05"],
-  error: [],
+  internal: [],
+  error: ["border", "border-status-error-05"],
   disabled: [
     "bg-background-neutral-03",
     "border",
