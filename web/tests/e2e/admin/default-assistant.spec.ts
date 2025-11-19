@@ -634,6 +634,7 @@ test.describe("Default Assistant Admin Page", () => {
     await waitForUnifiedGreeting(page);
     await expect(page.locator(TOOL_IDS.actionToggle)).toBeVisible();
     await openActionManagement(page);
+    await page.pause();
     expect(await page.$(TOOL_IDS.searchOption)).toBeTruthy();
     expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
     expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
