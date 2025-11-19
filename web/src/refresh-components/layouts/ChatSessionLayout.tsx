@@ -84,9 +84,9 @@ export default function ChatSessionLayout({
     }
 
     const actions = (
-      <div className="flex flex-row items-center gap-2">
+      <div className="flex flex-row items-center">
         <Button
-          rightIcon={SvgShare}
+          leftIcon={SvgShare}
           transient={showShareModal}
           tertiary
           onClick={() => setShowShareModal(true)}
@@ -95,12 +95,7 @@ export default function ChatSessionLayout({
         </Button>
         <SimplePopover
           trigger={(open) => (
-            <IconButton
-              icon={SvgMoreHorizontal}
-              tertiary
-              internal
-              transient={open}
-            />
+            <IconButton icon={SvgMoreHorizontal} tertiary transient={open} />
           )}
         >
           {(close) => (
