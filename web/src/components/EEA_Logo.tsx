@@ -3,6 +3,8 @@
 import { useContext } from "react";
 import { SettingsContext } from "./settings/SettingsProvider";
 import Image from "next/image";
+import { defaultTailwindCSS, IconProps } from "./icons/icons";
+import { SiZeromq } from "react-icons/si";
 
 export function Logo({
   height,
@@ -82,3 +84,15 @@ export function Logo_empty({
     </div>
   );
 }
+
+export const EEAIcon = ({
+
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  const width = size*2;
+  const height = size;
+  return (
+    <Image src="/EEA_logo_compact_EN.svg" alt="Logo" width={width} height={height} />
+  );
+};

@@ -1,4 +1,4 @@
-import { Logo } from "../EEA_Logo";
+import { EEAIcon } from "../EEA_Logo";
 import Link from "next/link";
 import { OnyxIcon } from "../icons/icons";
 
@@ -17,7 +17,7 @@ export default function AuthFlowContainer({
     //     <Logo width={92} height={70} />
     <div className="p-4 flex flex-col items-center justify-center min-h-screen bg-background">
       <div className="w-full max-w-md flex items-start flex-col bg-background-tint-00 rounded-16 shadow-lg shadow-02 p-6">
-        <OnyxIcon size={44} className="text-theme-primary-05" />
+        <EEAIcon size={44} className="text-theme-primary-05" />
         <div className="w-full mt-3">{children}</div>
       </div>
       {authState === "login" && (
