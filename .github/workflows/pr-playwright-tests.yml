@@ -62,8 +62,8 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
           push: true
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache,mode=max
+          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-image:
@@ -93,8 +93,12 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
           push: true
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
+            type=registry,ref=onyxdotapp/onyx-backend:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
+            type=registry,ref=onyxdotapp/onyx-backend:latest,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
@@ -124,8 +128,8 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
           push: true
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-cache,mode=max
+          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   playwright-tests:

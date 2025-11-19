@@ -85,8 +85,12 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
+            type=registry,ref=onyxdotapp/onyx-backend:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
+            type=registry,ref=onyxdotapp/onyx-backend:latest,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
 
@@ -141,9 +145,15 @@ jobs:
 
       - name: Build and push integration test image with Docker Bake
         env:
-          REPOSITORY: ${{ env.RUNS_ON_ECR_CACHE }}
+          INTEGRATION_REPOSITORY: ${{ env.RUNS_ON_ECR_CACHE }}
           TAG: integration-test-${{ github.run_id }}
-        run: cd backend && docker buildx bake --push integration
+        run: |
+          cd backend && docker buildx bake --push \
+            --set backend.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache \
+            --set backend.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max \
+            --set integration.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-cache \
+            --set integration.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-cache,mode=max \
+            integration
 
   integration-tests:
     needs:

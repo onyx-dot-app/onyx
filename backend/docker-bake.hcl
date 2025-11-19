@@ -1,4 +1,8 @@
 variable "REPOSITORY" {
+  default = "onyxdotapp/onyx-backend"
+}
+
+variable "INTEGRATION_REPOSITORY" {
   default = "onyxdotapp/onyx-integration"
 }
 
@@ -10,8 +14,10 @@ target "backend" {
   context    = "."
   dockerfile = "Dockerfile"
 
-  tags = ["onyxdotapp/onyx-backend:latest"]
-  cache-from = ["type=registry,ref=onyxdotapp/onyx-backend:latest"]
+  cache-from = ["type=registry,ref=${REPOSITORY}:latest"]
+  cache-to   = ["type=inline"]
+
+  tags      = ["${REPOSITORY}:${TAG}"]
 }
 
 target "integration" {
@@ -23,8 +29,5 @@ target "integration" {
     base = "target:backend"
   }
 
-  cache-from = ["type=registry,ref=${REPOSITORY}:integration-test-backend-cache"]
-  cache-to   = ["type=registry,ref=${REPOSITORY}:integration-test-backend-cache,mode=max"]
-
-  tags      = ["${REPOSITORY}:${TAG}"]
+  tags      = ["${INTEGRATION_REPOSITORY}:${TAG}"]
 }
