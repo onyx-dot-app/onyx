@@ -11,3 +11,8 @@ def time_iso() -> str:
 def gen_trace_id() -> str:
     """Generate a new trace ID."""
     return f"trace_{uuid.uuid4().hex}"
+
+
+def gen_span_id() -> str:
+    """Generate a new span ID."""
+    return f"span_{uuid.uuid4().hex[:24]}"

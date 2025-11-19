@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import contextvars
+from types import TracebackType
 from typing import Any
 from typing import Generic
 from typing import TypeVar
@@ -95,7 +96,7 @@ class Span(abc.ABC, Generic[TSpanData]):
         """
 
     @abc.abstractmethod
-    def start(self, mark_as_current: bool = False):
+    def start(self, mark_as_current: bool = False) -> None:
         """
         Start the span.
 
@@ -117,7 +118,12 @@ class Span(abc.ABC, Generic[TSpanData]):
         pass
 
     @abc.abstractmethod
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         pass
 
     @property
@@ -196,7 +202,7 @@ class NoOpSpan(Span[TSpanData]):
     def parent_id(self) -> str | None:
         return None
 
-    def start(self, mark_as_current: bool = False):
+    def start(self, mark_as_current: bool = False) -> None:
         if mark_as_current:
             self._prev_span_token = Scope.set_current_span(self)
 
@@ -209,7 +215,12 @@ class NoOpSpan(Span[TSpanData]):
         self.start(mark_as_current=True)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         reset_current = True
         if exc_type is GeneratorExit:
             reset_current = False
@@ -282,7 +293,7 @@ class SpanImpl(Span[TSpanData]):
     def parent_id(self) -> str | None:
         return self._parent_id
 
-    def start(self, mark_as_current: bool = False):
+    def start(self, mark_as_current: bool = False) -> None:
         if self.started_at is not None:
             return
 
@@ -305,7 +316,12 @@ class SpanImpl(Span[TSpanData]):
         self.start(mark_as_current=True)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         reset_current = True
         if exc_type is GeneratorExit:
             reset_current = False

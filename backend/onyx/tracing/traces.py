@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import contextvars
+from types import TracebackType
 from typing import Any
 from typing import TYPE_CHECKING
 
@@ -49,11 +50,16 @@ class Trace(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         pass
 
     @abc.abstractmethod
-    def start(self, mark_as_current: bool = False):
+    def start(self, mark_as_current: bool = False) -> None:
         """Start the trace and optionally mark it as the current trace.
 
         Args:
@@ -67,7 +73,7 @@ class Trace(abc.ABC):
         """
 
     @abc.abstractmethod
-    def finish(self, reset_current: bool = False):
+    def finish(self, reset_current: bool = False) -> None:
         """Finish the trace and optionally reset the current trace.
 
         Args:
@@ -137,7 +143,7 @@ class NoOpTrace(Trace):
         ```
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._started = False
         self._prev_context_token: contextvars.Token[Trace | None] | None = None
 
@@ -150,14 +156,19 @@ class NoOpTrace(Trace):
 
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.finish(reset_current=True)
 
-    def start(self, mark_as_current: bool = False):
+    def start(self, mark_as_current: bool = False) -> None:
         if mark_as_current:
             self._prev_context_token = Scope.set_current_trace(self)
 
-    def finish(self, reset_current: bool = False):
+    def finish(self, reset_current: bool = False) -> None:
         if reset_current and self._prev_context_token is not None:
             Scope.reset_current_trace(self._prev_context_token)
             self._prev_context_token = None
@@ -231,7 +242,7 @@ class TraceImpl(Trace):
     def name(self) -> str:
         return self._name
 
-    def start(self, mark_as_current: bool = False):
+    def start(self, mark_as_current: bool = False) -> None:
         if self._started:
             return
 
@@ -241,7 +252,7 @@ class TraceImpl(Trace):
         if mark_as_current:
             self._prev_context_token = Scope.set_current_trace(self)
 
-    def finish(self, reset_current: bool = False):
+    def finish(self, reset_current: bool = False) -> None:
         if not self._started:
             return
 
@@ -258,7 +269,12 @@ class TraceImpl(Trace):
         self.start(mark_as_current=True)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.finish(reset_current=exc_type is not GeneratorExit)
 
     def export(self) -> dict[str, Any] | None:

@@ -175,14 +175,18 @@ def query(
             synthetic_tool_call_counter += 1
             return call_id
 
-        with generation_span(
+        with generation_span(  # type: ignore[misc]
             model=llm_with_default_settings.config.model_name,
             model_config={
                 "base_url": str(llm_with_default_settings.config.api_base or ""),
                 "model_impl": "litellm",
             },
         ) as span_generation:
-            span_generation.span_data.input = messages
+            # Only set input if messages is a sequence (not a string)
+            # ChatCompletionMessage TypedDicts are compatible with Mapping[str, Any] at runtime
+            if isinstance(messages, Sequence) and not isinstance(messages, str):
+                # Convert ChatCompletionMessage sequence to Sequence[Mapping[str, Any]]
+                span_generation.span_data.input = [dict(msg) for msg in messages]  # type: ignore[assignment]
             for chunk in llm_with_default_settings.stream(
                 prompt=messages,
                 tools=tool_definitions,
