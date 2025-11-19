@@ -597,6 +597,7 @@ test.describe("Default Assistant Admin Page", () => {
     // So instead, check if specific tool options are not available
     try {
       await openActionManagement(page);
+      await page.pause();
       // If we can open it, check that tools are disabled
       await expect(page.locator(TOOL_IDS.searchOption)).not.toBeVisible({
         timeout: 10000,
