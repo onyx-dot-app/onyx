@@ -94,10 +94,13 @@ function Item({
 }
 
 interface RootProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root> {
+  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> {
   disabled?: boolean;
   error?: boolean;
 
+  defaultValue?: string;
+  value?: string;
+  onValueChange?: (value: string) => void;
   placeholder?: React.ReactNode;
   className?: string;
   rightSection?: React.ReactNode;
@@ -165,7 +168,6 @@ function Root({
       defaultValue={defaultValue}
       onValueChange={handleValueChange}
       disabled={disabled}
-      {...rest}
     >
       <SelectPrimitive.Trigger
         className={cn(
@@ -173,6 +175,7 @@ function Root({
           triggerClasses[variant],
           className
         )}
+        {...rest}
       >
         <div className="flex flex-row items-center justify-between w-full p-0.5 gap-1">
           <SelectedItem

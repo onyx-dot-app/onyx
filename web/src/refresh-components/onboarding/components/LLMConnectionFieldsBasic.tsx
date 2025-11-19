@@ -236,13 +236,6 @@ export default function LLMConnectionFieldsBasic({
                         }
                         onValueChange={(value) => helper.setValue(value)}
                         onBlur={field.onBlur}
-                        options={
-                          customConfigKey.options?.map((opt) => ({
-                            label: opt.label,
-                            value: opt.value,
-                            description: opt?.description ?? undefined,
-                          })) ?? []
-                        }
                         disabled={disabled}
                       >
                         {customConfigKey.options?.map((opt) => (
