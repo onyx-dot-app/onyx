@@ -1,48 +1,44 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef } from "react";
 import { cn, noProp } from "@/lib/utils";
-import { useBoundingBox } from "@/hooks/useBoundingBox";
 import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSearch from "@/icons/search";
 
-const divClasses = (active?: boolean, hovered?: boolean, isError?: boolean) =>
-  ({
-    defaulted: [
-      "border",
-      isError && "!border-status-error-05",
-      !isError && hovered && "border-border-02",
-      !isError && active && "border-border-05",
-    ],
-    internal: [],
-    disabled: ["bg-background-neutral-03", "border", "border-border-01"],
-  }) as const;
+const divClasses = {
+  main: ["border", "hover:border-border-02", "active:border-border-05"],
+  internal: ["border", "border-status-error-05"],
+  error: [],
+  disabled: [
+    "bg-background-neutral-03",
+    "border",
+    "border-border-01",
+    "cursor-not-allowed",
+  ],
+} as const;
 
-const inputClasses = (active?: boolean) =>
-  ({
-    defaulted: [
-      "text-text-04 placeholder:!font-secondary-body placeholder:text-text-02",
-    ],
-    internal: [],
-    disabled: ["text-text-02"],
-  }) as const;
+const inputClasses = {
+  main: [
+    "text-text-04 placeholder:!font-secondary-body placeholder:text-text-02",
+  ],
+  internal: [],
+  error: [],
+  disabled: ["text-text-02"],
+} as const;
 
 export interface InputTypeInProps
   extends React.InputHTMLAttributes<HTMLInputElement> {
   // Input states:
-  active?: boolean;
   internal?: boolean;
+  error?: boolean;
   disabled?: boolean;
-  isError?: boolean;
 
   // Stylings:
   leftSearchIcon?: boolean;
 
   // Right section of the input, e.g. password toggle icon
   rightSection?: React.ReactNode;
-
-  placeholder?: string;
 
   // Controls whether the clear (X) button is shown when there is a value
   showClearButton?: boolean;
@@ -53,46 +49,28 @@ export interface InputTypeInProps
 
 function InputTypeInInner(
   {
-    active,
     internal,
+    error,
     disabled,
-    isError,
 
     leftSearchIcon,
+    rightSection,
+    showClearButton = true,
+    onClear,
 
-    placeholder,
     className,
     value,
     onChange,
-    showClearButton = true,
-    onClear,
-    rightSection,
-    type,
     ...props
   }: InputTypeInProps,
   ref: React.ForwardedRef<HTMLInputElement>
 ) {
-  const { ref: boundingBoxRef, inside: hovered } = useBoundingBox();
-  const [localActive, setLocalActive] = useState(active);
   const localRef = useRef<HTMLInputElement>(null);
-
-  const effectiveType = type || "text";
 
   // Use forwarded ref if provided, otherwise use local ref
   const inputRef = ref || localRef;
 
-  const state = internal ? "internal" : disabled ? "disabled" : "defaulted";
-
-  useEffect(() => {
-    // if disabled, set cursor to "not-allowed"
-    if (disabled && hovered) {
-      document.body.style.cursor = "not-allowed";
-    } else if (!disabled && hovered) {
-      document.body.style.cursor = "text";
-    } else {
-      document.body.style.cursor = "default";
-    }
-  }, [hovered]);
+  const variant = internal ? "internal" : disabled ? "disabled" : "main";
 
   function handleClear() {
     if (onClear) {
@@ -111,19 +89,13 @@ function InputTypeInInner(
 
   return (
     <div
-      ref={boundingBoxRef}
       className={cn(
         "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
-        divClasses(localActive, hovered, isError)[state],
+        divClasses[variant],
         className
       )}
       onClick={() => {
-        if (
-          hovered &&
-          inputRef &&
-          typeof inputRef === "object" &&
-          inputRef.current
-        ) {
+        if (inputRef && typeof inputRef === "object" && inputRef.current) {
           inputRef.current.focus();
         }
       }}
@@ -138,25 +110,15 @@ function InputTypeInInner(
 
       <input
         ref={inputRef}
-        type={effectiveType}
-        placeholder={placeholder}
+        type="text"
         disabled={disabled}
         value={value}
         onChange={onChange}
         className={cn(
           "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
-          inputClasses(localActive)[state]
+          inputClasses[variant]
         )}
         {...props}
-        // Override the onFocus and onBlur props to set the local active state
-        onFocus={(e) => {
-          setLocalActive(true);
-          props.onFocus?.(e);
-        }}
-        onBlur={(e) => {
-          setLocalActive(false);
-          props.onBlur?.(e);
-        }}
       />
       {showClearButton && value && (
         <IconButton
