@@ -12,7 +12,18 @@ from onyx.agents.agent_sdk.message_types import ImageContent
 from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
+from onyx.llm.message_types import AssistantMessage
 from onyx.llm.message_types import ChatCompletionMessage
+from onyx.llm.message_types import FunctionCall
+from onyx.llm.message_types import SystemMessage as ChatSystemMessage
+from onyx.llm.message_types import ToolCall
+from onyx.llm.message_types import ToolMessage
+from onyx.llm.message_types import UserMessageWithText
+
+HUMAN = "human"
+SYSTEM = "system"
+AI = "ai"
+FUNCTION = "function"
 
 
 # TODO: Currently, we only support native API input for images. For other
@@ -35,9 +46,9 @@ def _base_message_to_agent_sdk_msg(
     msg: BaseMessage, is_responses_api: bool
 ) -> AgentSDKMessage:
     message_type_to_agent_sdk_role = {
-        "human": "user",
-        "system": "system",
-        "ai": "assistant",
+        HUMAN: "user",
+        SYSTEM: "system",
+        AI: "assistant",
     }
     role = message_type_to_agent_sdk_role[msg.type]
 
@@ -181,33 +192,44 @@ def _base_message_to_agent_sdk_msg(
 def _base_message_to_chat_completion_msg(
     msg: BaseMessage,
 ) -> ChatCompletionMessage:
-    if msg.type == "human":
-        return {"role": "user", "content": msg.content}
-    if msg.type == "system":
-        return {"role": "system", "content": msg.content}
-    if msg.type == "ai":
-        assistant_msg: ChatCompletionMessage = {
+    if msg.type == HUMAN:
+        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+        user_msg: UserMessageWithText = {"role": "user", "content": content}
+        return user_msg
+    if msg.type == SYSTEM:
+        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+        system_msg: ChatSystemMessage = {"role": "system", "content": content}
+        return system_msg
+    if msg.type == AI:
+        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+        assistant_msg: AssistantMessage = {
             "role": "assistant",
-            "content": msg.content,
+            "content": content,
         }
         if isinstance(msg, AIMessage) and msg.tool_calls:
             assistant_msg["tool_calls"] = [
-                {
-                    "id": tool_call.get("id"),
-                    "type": "function",
-                    "function": {
-                        "name": tool_call["name"],
-                        "arguments": json.dumps(tool_call["args"]),
-                    },
-                }
+                ToolCall(
+                    id=tool_call.get("id") or "",
+                    type="function",
+                    function=FunctionCall(
+                        name=tool_call["name"],
+                        arguments=json.dumps(tool_call["args"]),
+                    ),
+                )
                 for tool_call in msg.tool_calls
             ]
         return assistant_msg
-    if msg.type == "function":
+    if msg.type == FUNCTION:
         function_message = cast(FunctionMessage, msg)
-        return {
+        content = (
+            function_message.content
+            if isinstance(function_message.content, str)
+            else str(function_message.content)
+        )
+        tool_msg: ToolMessage = {
             "role": "tool",
-            "content": function_message.content,
+            "content": content,
             "tool_call_id": function_message.name or "",
         }
+        return tool_msg
     raise ValueError(f"Unexpected message type: {msg.type}")
