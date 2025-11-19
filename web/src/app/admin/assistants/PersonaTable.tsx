@@ -3,7 +3,7 @@
 import Text from "@/refresh-components/texts/Text";
 import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
-import { CustomCheckbox } from "@/components/CustomCheckbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState, useMemo, useEffect } from "react";
 import { UniqueIdentifier } from "@dnd-kit/core";
@@ -265,7 +265,7 @@ export function PersonasTable({
                   )}
                 </div>
                 <div className="ml-1 my-auto">
-                  <CustomCheckbox checked={persona.is_default_persona} />
+                  <Checkbox checked={persona.is_default_persona} />
                 </div>
               </div>,
               <div
@@ -294,7 +294,7 @@ export function PersonasTable({
                   )}
                 </div>
                 <div className="ml-1 my-auto">
-                  <CustomCheckbox checked={persona.is_visible} />
+                  <Checkbox checked={persona.is_visible} />
                 </div>
               </div>,
               <div key="edit" className="flex">

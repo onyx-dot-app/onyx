@@ -13,7 +13,7 @@ const getAdvancedOptionsButton = (page: Page) =>
 const getReminderTextarea = (page: Page) =>
   page.locator('textarea[name="task_prompt"]');
 const getDateTimeAwareCheckbox = (page: Page) =>
-  page.getByRole("checkbox", { name: /Date and Time Aware/i });
+  page.getByLabel(/Date and Time Aware/i);
 const getKnowledgeCutoffInput = (page: Page) =>
   page.locator('input[name="search_start_date"]');
 const getKnowledgeToggle = (page: Page) =>
@@ -23,7 +23,7 @@ const getKnowledgeToggle = (page: Page) =>
 const getNumChunksInput = (page: Page) =>
   page.locator('input[name="num_chunks"]');
 const getAiRelevanceCheckbox = (page: Page) =>
-  page.getByRole("checkbox", { name: /AI Relevance Filter/i });
+  page.getByLabel(/AI Relevance Filter/i);
 const getStarterMessageInput = (page: Page, index: number = 0) =>
   page.locator(`input[name="starter_messages.${index}.message"]`);
 const getCreateSubmitButton = (page: Page) =>

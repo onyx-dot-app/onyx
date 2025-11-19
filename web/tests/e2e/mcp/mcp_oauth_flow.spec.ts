@@ -675,9 +675,7 @@ async function selectMcpTools(
       continue;
     }
 
-    const labelLocator = sectionLocator.getByRole("checkbox", {
-      name: new RegExp(toolName, "i"),
-    });
+    const labelLocator = sectionLocator.getByLabel(new RegExp(toolName, "i"));
     if ((await labelLocator.count()) > 0) {
       await labelLocator.first().check({ force: true });
       continue;
