@@ -53,8 +53,8 @@ from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
+from onyx.tools.force import filter_tools_for_force_tool_use
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
 
@@ -109,6 +109,10 @@ def _run_agent_loop(
         available_tools: Sequence[Tool] = (
             dependencies.tools if iteration_count < MAX_ITERATIONS else []
         )
+        if force_use_tool and force_use_tool.force_use:
+            available_tools = filter_tools_for_force_tool_use(
+                list(available_tools), force_use_tool
+            )
         memories = get_memories(dependencies.user_or_none, dependencies.db_session)
         # TODO: The system is rather prompt-cache efficient except for rebuilding the system prompt.
         # The biggest offender is when we hit max iterations and then all the tool calls cannot
@@ -142,10 +146,8 @@ def _run_agent_loop(
             tool_choice = None
         else:
             tool_choice = (
-                force_use_tool_to_function_tool_names(force_use_tool, available_tools)
-                if iteration_count == 0 and force_use_tool
-                else None
-            ) or "auto"
+                "required" if force_use_tool and force_use_tool.force_use else "auto"
+            )
         model_settings = replace(dependencies.model_settings, tool_choice=tool_choice)
 
         agent = Agent(

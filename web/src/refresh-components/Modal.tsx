@@ -57,7 +57,7 @@ const ModalOverlay = React.forwardRef<
     className={cn(
       "fixed inset-0 z-[2000] bg-mask-03 backdrop-blur-03 pointer-events-none",
       "data-[state=open]:animate-in data-[state=closed]:animate-out",
-      "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
       className
     )}
     {...props}
@@ -65,51 +65,6 @@ const ModalOverlay = React.forwardRef<
 ));
 ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
-/**
- * Size class names mapping for modal variants
- */
-const sizeClassNames = {
-  main: ["w-[80dvw]", "h-[80dvh]"],
-  medium: ["w-[60rem]", "h-fit"],
-  small: ["w-[32rem]", "h-[30rem]"],
-  tall: ["w-[32rem]", "max-h-[calc(100dvh-4rem)]"],
-  mini: ["w-[32rem]", "h-fit"],
-} as const;
-
-/**
- * Modal Content Component
- *
- * Main modal container with default styling. Size and other styles controlled via className or size prop.
- *
- * @example
- * ```tsx
- * // Using size variants
- * <Modal.Content size="main">
- *   {/* Main modal: w-[80dvw] h-[80dvh] *\/}
- * </Modal.Content>
- *
- * <Modal.Content size="medium">
- *   {/* Medium modal: w-[60rem] h-fit *\/}
- * </Modal.Content>
- *
- * <Modal.Content size="small">
- *   {/* Small modal: w-[32rem] h-[30rem] *\/}
- * </Modal.Content>
- *
- * <Modal.Content size="tall">
- *   {/* Tall modal: w-[32rem] *\/}
- * </Modal.Content>
- *
- * <Modal.Content size="mini">
- *   {/* Mini modal: w-[32rem] h-fit *\/}
- * </Modal.Content>
- *
- * // Custom size with className
- * <Modal.Content className="w-[48rem]">
- *   {/* Custom sized modal *\/}
- * </Modal.Content>
- * ```
- */
 /**
  * Modal Context for managing close button ref and warning state
  */
@@ -129,178 +84,230 @@ const useModalContext = () => {
   return context;
 };
 
+/**
+ * Size class names mapping for modal variants
+ */
+const sizeClassNames = {
+  large: ["w-[80dvw]", "h-[80dvh]"],
+  medium: ["w-[60rem]", "h-fit"],
+  small: ["w-[32rem]", "h-[30rem]"],
+  tall: ["w-[32rem]", "max-h-[calc(100dvh-4rem)]"],
+  mini: ["w-[32rem]", "h-fit"],
+} as const;
+
+/**
+ * Modal Content Component
+ *
+ * Main modal container with default styling. Size and other styles controlled via className or size prop.
+ *
+ * @example
+ * ```tsx
+ * // Using size variants
+ * <Modal.Content large>
+ *   {/* Main modal: w-[80dvw] h-[80dvh] *\/}
+ * </Modal.Content>
+ *
+ * <Modal.Content medium>
+ *   {/* Medium modal: w-[60rem] h-fit *\/}
+ * </Modal.Content>
+ *
+ * <Modal.Content small>
+ *   {/* Small modal: w-[32rem] h-[30rem] *\/}
+ * </Modal.Content>
+ *
+ * <Modal.Content tall>
+ *   {/* Tall modal: w-[32rem] *\/}
+ * </Modal.Content>
+ *
+ * <Modal.Content mini>
+ *   {/* Mini modal: w-[32rem] h-fit *\/}
+ * </Modal.Content>
+ *
+ * // Custom size with className
+ * // (Highly discouraged! Always try to default to predefined sizings, please.)
+ * <Modal.Content className="w-[48rem]">
+ *   {/* Custom sized modal *\/}
+ * </Modal.Content>
+ * ```
+ */
 const ModalContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
-    size?: "main" | "medium" | "small" | "tall" | "mini";
+    large?: boolean;
+    medium?: boolean;
+    small?: boolean;
+    tall?: boolean;
+    mini?: boolean;
   }
->(({ className, children, size, ...props }, ref) => {
-  const closeButtonRef = React.useRef<HTMLDivElement>(null);
-  const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
-  const hasUserTypedRef = React.useRef(false);
+>(
+  (
+    { className, children, large, medium, small, tall, mini, ...props },
+    ref
+  ) => {
+    const variant = large
+      ? "large"
+      : medium
+        ? "medium"
+        : small
+          ? "small"
+          : tall
+            ? "tall"
+            : mini
+              ? "mini"
+              : "medium";
+    const closeButtonRef = React.useRef<HTMLDivElement>(null);
+    const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
+    const hasUserTypedRef = React.useRef(false);
 
-  // Reset state when modal closes or opens
-  const resetState = React.useCallback(() => {
-    setHasAttemptedClose(false);
-    hasUserTypedRef.current = false;
-  }, []);
+    // Reset state when modal closes or opens
+    const resetState = React.useCallback(() => {
+      setHasAttemptedClose(false);
+      hasUserTypedRef.current = false;
+    }, []);
 
-  // Handle input events to detect typing
-  const handleInput = React.useCallback((e: Event) => {
-    // Early exit if already detected typing (performance optimization)
-    if (hasUserTypedRef.current) {
-      return;
-    }
-
-    // Only trust events triggered by actual user interaction
-    if (!e.isTrusted) {
-      return;
-    }
-
-    const target = e.target as HTMLElement;
-
-    // Only handle input and textarea elements
-    if (
-      !(
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement
-      )
-    ) {
-      return;
-    }
-
-    // Skip non-text inputs
-    if (
-      target.type === "hidden" ||
-      target.type === "submit" ||
-      target.type === "button" ||
-      target.type === "checkbox" ||
-      target.type === "radio"
-    ) {
-      return;
-    }
-    // Mark that user has typed something
-    hasUserTypedRef.current = true;
-  }, []);
-
-  // Keep track of the container node for cleanup
-  const containerNodeRef = React.useRef<HTMLDivElement | null>(null);
-
-  // Callback ref to attach event listener when element mounts
-  const contentRef = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      // Cleanup previous listener if exists
-      if (containerNodeRef.current) {
-        containerNodeRef.current.removeEventListener(
-          "input",
-          handleInput,
-          true
-        );
+    // Handle input events to detect typing
+    const handleInput = React.useCallback((e: Event) => {
+      // Early exit if already detected typing (performance optimization)
+      if (hasUserTypedRef.current) {
+        return;
       }
 
-      // Attach new listener if node exists
-      if (node) {
-        node.addEventListener("input", handleInput, true);
-        containerNodeRef.current = node;
-      } else {
-        containerNodeRef.current = null;
+      // Only trust events triggered by actual user interaction
+      if (!e.isTrusted) {
+        return;
       }
-    },
-    [handleInput]
-  );
 
-  // Check if user has typed anything
-  const hasModifiedInputs = React.useCallback(() => {
-    return hasUserTypedRef.current;
-  }, []);
-
-  // Handle escape key and outside clicks
-  const handleInteractOutside = React.useCallback(
-    (e: Event) => {
-      // Check if the click target is inside a dropdown/listbox (e.g., ComboBox dropdown)
       const target = e.target as HTMLElement;
-      if (target) {
-        // Check if click is on a dropdown element or its children
-        const isDropdownClick = target.closest('[role="listbox"]');
-        const isOptionClick = target.closest('[role="option"]');
-        if (isDropdownClick || isOptionClick) {
-          // Prevent modal from closing but allow the dropdown interaction
-          e.preventDefault();
-          return;
-        }
+
+      // Only handle input and textarea elements
+      if (
+        !(
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement
+        )
+      ) {
+        return;
       }
 
-      if (hasModifiedInputs()) {
-        if (!hasAttemptedClose) {
-          // First attempt: prevent close and focus the close button
-          e.preventDefault();
-          setHasAttemptedClose(true);
-          setTimeout(() => {
-            closeButtonRef.current?.focus();
-          }, 0);
+      // Skip non-text inputs
+      if (
+        target.type === "hidden" ||
+        target.type === "submit" ||
+        target.type === "button" ||
+        target.type === "checkbox" ||
+        target.type === "radio"
+      ) {
+        return;
+      }
+      // Mark that user has typed something
+      hasUserTypedRef.current = true;
+    }, []);
+
+    // Keep track of the container node for cleanup
+    const containerNodeRef = React.useRef<HTMLDivElement | null>(null);
+
+    // Callback ref to attach event listener when element mounts
+    const contentRef = React.useCallback(
+      (node: HTMLDivElement | null) => {
+        // Cleanup previous listener if exists
+        if (containerNodeRef.current) {
+          containerNodeRef.current.removeEventListener(
+            "input",
+            handleInput,
+            true
+          );
+        }
+
+        // Attach new listener if node exists
+        if (node) {
+          node.addEventListener("input", handleInput, true);
+          containerNodeRef.current = node;
         } else {
-          // Second attempt: allow close
+          containerNodeRef.current = null;
+        }
+      },
+      [handleInput]
+    );
+
+    // Check if user has typed anything
+    const hasModifiedInputs = React.useCallback(() => {
+      return hasUserTypedRef.current;
+    }, []);
+
+    // Handle escape key and outside clicks
+    const handleInteractOutside = React.useCallback(
+      (e: Event) => {
+        if (hasModifiedInputs()) {
+          if (!hasAttemptedClose) {
+            // First attempt: prevent close and focus the close button
+            e.preventDefault();
+            setHasAttemptedClose(true);
+            setTimeout(() => {
+              closeButtonRef.current?.focus();
+            }, 0);
+          } else {
+            // Second attempt: allow close
+            setHasAttemptedClose(false);
+          }
+        } else {
+          // No modified inputs: allow immediate close
           setHasAttemptedClose(false);
         }
-      } else {
-        // No modified inputs: allow immediate close
-        setHasAttemptedClose(false);
-      }
-    },
-    [hasModifiedInputs, hasAttemptedClose]
-  );
+      },
+      [hasModifiedInputs, hasAttemptedClose]
+    );
 
-  return (
-    <ModalContext.Provider
-      value={{ closeButtonRef, hasAttemptedClose, setHasAttemptedClose }}
-    >
-      <ModalPortal>
-        <ModalOverlay />
-        <DialogPrimitive.Content
-          ref={(node) => {
-            // Handle forwarded ref
-            if (typeof ref === "function") {
-              ref(node);
-            } else if (ref) {
-              ref.current = node;
-            }
-            // Handle content ref with event listener
-            contentRef(node);
-          }}
-          className={cn(
-            "fixed left-[50%] top-[50%] z-[2001] translate-x-[-50%] translate-y-[-50%]",
-            "bg-background-tint-00 border rounded-16 shadow-2xl",
-            "flex flex-col overflow-hidden pointer-events-auto",
-            "data-[state=open]:animate-in data-[state=closed]:animate-out",
-            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-            "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-            "data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]",
-            "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
-            "duration-200",
-            // Size variants
-            size && sizeClassNames[size],
-            className
-          )}
-          onOpenAutoFocus={(e) => {
-            // Reset typing detection when modal opens
-            resetState();
-            props.onOpenAutoFocus?.(e);
-          }}
-          onCloseAutoFocus={(e) => {
-            // Reset typing detection when modal closes
-            resetState();
-            props.onCloseAutoFocus?.(e);
-          }}
-          onEscapeKeyDown={handleInteractOutside}
-          onPointerDownOutside={handleInteractOutside}
-          {...props}
-        >
-          {children}
-        </DialogPrimitive.Content>
-      </ModalPortal>
-    </ModalContext.Provider>
-  );
-});
+    return (
+      <ModalContext.Provider
+        value={{ closeButtonRef, hasAttemptedClose, setHasAttemptedClose }}
+      >
+        <ModalPortal>
+          <ModalOverlay />
+          <DialogPrimitive.Content
+            ref={(node) => {
+              // Handle forwarded ref
+              if (typeof ref === "function") {
+                ref(node);
+              } else if (ref) {
+                ref.current = node;
+              }
+              // Handle content ref with event listener
+              contentRef(node);
+            }}
+            className={cn(
+              "fixed left-[50%] top-[50%] z-[2001] translate-x-[-50%] translate-y-[-50%]",
+              "bg-background-tint-00 border rounded-16 shadow-2xl",
+              "flex flex-col overflow-hidden",
+              "data-[state=open]:animate-in data-[state=closed]:animate-out",
+              "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
+              "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
+              "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
+              "duration-200",
+              // Size variants
+              sizeClassNames[variant],
+              className
+            )}
+            onOpenAutoFocus={(e) => {
+              // Reset typing detection when modal opens
+              resetState();
+              props.onOpenAutoFocus?.(e);
+            }}
+            onCloseAutoFocus={(e) => {
+              // Reset typing detection when modal closes
+              resetState();
+              props.onCloseAutoFocus?.(e);
+            }}
+            onEscapeKeyDown={handleInteractOutside}
+            onPointerDownOutside={handleInteractOutside}
+            {...props}
+          >
+            {children}
+          </DialogPrimitive.Content>
+        </ModalPortal>
+      </ModalContext.Provider>
+    );
+  }
+);
 ModalContent.displayName = DialogPrimitive.Content.displayName;
 
 /**
@@ -328,21 +335,16 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
 interface ModalHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
   withBottomShadow?: boolean;
 }
-
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
   ({ withBottomShadow = false, className, children, ...props }, ref) => {
     return (
       <div
         ref={ref}
-        className={cn("relative z-10", className)}
-        style={
-          withBottomShadow
-            ? {
-                boxShadow:
-                  "0 2px 12px 0 var(--Shadow-02, rgba(0, 0, 0, 0.10)), 0 0 4px 1px var(--Shadow-01, rgba(0, 0, 0, 0.05))",
-              }
-            : undefined
-        }
+        className={cn(
+          "relative z-10",
+          withBottomShadow && "shadow-01",
+          className
+        )}
         {...props}
       >
         {children}
@@ -366,7 +368,6 @@ ModalHeader.displayName = "ModalHeader";
 interface ModalIconProps extends React.HTMLAttributes<HTMLDivElement> {
   icon: React.FunctionComponent<SvgProps>;
 }
-
 const ModalIcon = React.forwardRef<HTMLDivElement, ModalIconProps>(
   ({ icon: Icon, className, ...props }, ref) => {
     return (
@@ -383,13 +384,15 @@ ModalIcon.displayName = "ModalIcon";
 /**
  * Modal Close Button Component
  *
- * Absolutely positioned close button. Place inside Modal.Content.
+ * Absolutely positioned close button. Place inside Modal.Header.
  *
  * @example
  * ```tsx
  * <Modal.Content>
- *   <Modal.CloseButton />
- *   <Modal.Header>...</Modal.Header>
+ *   <Modal.Header>
+ *     <Modal.CloseButton />
+ *   </Modal.Header>
+ *   ...
  * </Modal.Content>
  *
  * // Custom positioning
@@ -399,7 +402,6 @@ ModalIcon.displayName = "ModalIcon";
 interface ModalCloseButtonProps extends React.HTMLAttributes<HTMLDivElement> {
   onClose?: () => void;
 }
-
 const ModalCloseButton = React.forwardRef<
   HTMLDivElement,
   ModalCloseButtonProps
@@ -467,7 +469,7 @@ const ModalDescription = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
 >(({ className, children, ...props }, ref) => (
   <DialogPrimitive.Description ref={ref} asChild {...props}>
-    <Text secondaryBody text02 className={className}>
+    <Text secondaryBody text03 className={className}>
       {children}
     </Text>
   </DialogPrimitive.Description>
@@ -492,7 +494,6 @@ ModalDescription.displayName = DialogPrimitive.Description.displayName;
  * ```
  */
 interface ModalBodyProps extends React.HTMLAttributes<HTMLDivElement> {}
-
 const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
   ({ className, children, ...props }, ref) => {
     return (
@@ -525,11 +526,17 @@ ModalBody.displayName = "ModalBody";
  * ```
  */
 interface ModalFooterProps extends React.HTMLAttributes<HTMLDivElement> {}
-
 const ModalFooter = React.forwardRef<HTMLDivElement, ModalFooterProps>(
   ({ className, children, ...props }, ref) => {
     return (
-      <div ref={ref} className={cn(className)} {...props}>
+      <div
+        ref={ref}
+        className={cn(
+          "flex flex-row items-center justify-end gap-1",
+          className
+        )}
+        {...props}
+      >
         {children}
       </div>
     );
@@ -537,7 +544,7 @@ const ModalFooter = React.forwardRef<HTMLDivElement, ModalFooterProps>(
 );
 ModalFooter.displayName = "ModalFooter";
 
-export const Modal = Object.assign(ModalRoot, {
+export default Object.assign(ModalRoot, {
   Portal: ModalPortal,
   Close: ModalClose,
   Overlay: ModalOverlay,
