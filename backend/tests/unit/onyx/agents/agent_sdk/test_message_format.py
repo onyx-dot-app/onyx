@@ -2,8 +2,10 @@ from langchain_core.messages import AIMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage as LangChainSystemMessage
 
+from onyx.agents.agent_framework.message_format import (
+    base_messages_to_chat_completion_msgs,
+)
 from onyx.agents.agent_sdk.message_format import base_messages_to_agent_sdk_msgs
-from onyx.agents.agent_sdk.message_format import base_messages_to_chat_completion_msgs
 from onyx.agents.agent_sdk.message_types import AssistantMessageWithContent
 from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import OutputTextContent
