@@ -17,8 +17,10 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.connector import JiraConnectorCheckpoint
+from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
@@ -41,6 +43,10 @@ def jira_connector(
     )
     connector._jira_client = mock_jira_client
     connector._jira_client.client_info.return_value = jira_base_url
+    connector._jira_client._options = MagicMock()
+    connector._jira_client._options.return_value = {
+        "rest_api_version": JIRA_SERVER_API_VERSION
+    }
     with patch("onyx.connectors.jira.connector._JIRA_FULL_PAGE_SIZE", 2):
         yield connector
 
@@ -103,7 +109,9 @@ def test_load_credentials(jira_connector: JiraConnector) -> None:
         result = jira_connector.load_credentials(credentials)
 
         mock_build_client.assert_called_once_with(
-            credentials=credentials, jira_base=jira_connector.jira_base
+            credentials=credentials,
+            jira_base=jira_connector.jira_base,
+            scoped_token=False,
         )
         assert result is None
         assert jira_connector._jira_client == mock_build_client.return_value
@@ -220,7 +228,7 @@ def test_load_from_checkpoint_with_issue_processing_error(
 
     # Mock process_jira_issue to succeed for some issues and fail for others
     def mock_process_side_effect(
-        jira_client: JIRA, issue: Issue, *args: Any, **kwargs: Any
+        jira_base_url: str, issue: Issue, *args: Any, **kwargs: Any
     ) -> Document | None:
         if issue.key in ["TEST-1", "TEST-3"]:
             return Document(
@@ -307,7 +315,7 @@ def test_load_from_checkpoint_with_skipped_issue(
     assert len(checkpoint_output.items) == 0
 
 
-def test_retrieve_all_slim_documents(
+def test_retrieve_all_slim_docs_perm_sync(
     jira_connector: JiraConnector, create_mock_issue: Any
 ) -> None:
     """Test retrieving all slim documents"""
@@ -333,8 +341,8 @@ def test_retrieve_all_slim_documents(
                 "https://jira.example.com/browse/TEST-2",
             ]
 
-            # Call retrieve_all_slim_documents
-            batches = list(jira_connector.retrieve_all_slim_documents(0, 100))
+            # Call retrieve_all_slim_docs_perm_sync
+            batches = list(jira_connector.retrieve_all_slim_docs_perm_sync(0, 100))
 
             # Check that a batch with 2 documents was returned
             assert len(batches) == 1
@@ -361,7 +369,15 @@ def test_retrieve_all_slim_documents(
             InsufficientPermissionsError,
             "Your Jira token does not have sufficient permissions",
         ),
-        (404, ConnectorValidationError, "Jira project not found"),
+        (
+            # This test used to check for 404 project not found, but the jira validation logic for 404
+            # now returns an UnexpectedValidationError when no error text is provided.
+            # There's no point in passing the expected message and asserting it exists in the raised error
+            # If tested in the UI, wrong project key will still produce the expected error.
+            404,
+            UnexpectedValidationError,
+            "Unexpected Jira error during validation",
+        ),
         (
             429,
             ConnectorValidationError,

@@ -1,15 +1,11 @@
 "use client";
-import Prism from "prismjs";
 
 import { humanReadableFormat } from "@/lib/time";
 import { BackendChatSession } from "../../interfaces";
-import {
-  buildLatestMessageChain,
-  getCitedDocumentsFromMessage,
-  processRawChatHistory,
-} from "../../lib";
-import { AIMessage, HumanMessage } from "../../message/Messages";
-import { AgenticMessage } from "../../message/AgenticMessage";
+import { processRawChatHistory } from "../../services/lib";
+import { getLatestMessageChain } from "../../services/messageTree";
+import HumanMessage from "../../message/HumanMessage";
+import AIMessage from "../../message/messageComponents/AIMessage";
 import { Callout } from "@/components/ui/callout";
 import { useContext, useEffect, useState } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -17,11 +13,10 @@ import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat/TextView";
-import { DocumentResults } from "../../documentSidebar/DocumentResults";
+import { DocumentResults } from "../../components/documentSidebar/DocumentResults";
 import { Modal } from "@/components/Modal";
-import FunctionalHeader from "@/components/chat/Header";
-import FixedLogo from "@/components/logo/FixedLogo";
 import Link from "next/link";
+import { UNNAMED_CHAT } from "@/lib/constants";
 
 function BackToOnyxButton({
   documentSidebarVisible,
@@ -40,10 +35,10 @@ function BackToOnyxButton({
       <div
         style={{ transition: "width 0.30s ease-out" }}
         className={`
-            flex-none 
-            overflow-y-hidden 
-            transition-all 
-            duration-300 
+            flex-none
+            overflow-y-hidden
+            transition-all
+            duration-300
             ease-in-out
             ${documentSidebarVisible ? "w-[400px]" : "w-[0px]"}
         `}
@@ -61,18 +56,11 @@ export function SharedChatDisplay({
 }) {
   const settings = useContext(SettingsContext);
   const [documentSidebarVisible, setDocumentSidebarVisible] = useState(false);
-  const [selectedMessageForDocDisplay, setSelectedMessageForDocDisplay] =
-    useState<number | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
-  const toggleDocumentSidebar = () => {
-    setDocumentSidebarVisible(!documentSidebarVisible);
-  };
-
   useEffect(() => {
-    Prism.highlightAll();
     setIsReady(true);
   }, []);
   if (!chatSession) {
@@ -88,8 +76,8 @@ export function SharedChatDisplay({
     );
   }
 
-  const messages = buildLatestMessageChain(
-    processRawChatHistory(chatSession.messages)
+  const messages = getLatestMessageChain(
+    processRawChatHistory(chatSession.messages, chatSession.packets)
   );
 
   const firstMessage = messages[0];
@@ -119,17 +107,7 @@ export function SharedChatDisplay({
         <div className="md:hidden">
           <Modal noPadding noScroll>
             <DocumentResults
-              humanMessage={firstMessage}
-              agenticMessage={false}
               isSharedChat={true}
-              selectedMessage={
-                selectedMessageForDocDisplay
-                  ? messages.find(
-                      (message) =>
-                        message.messageId === selectedMessageForDocDisplay
-                    ) || null
-                  : null
-              }
               toggleDocumentSelection={() => {
                 setDocumentSidebarVisible(true);
               }}
@@ -137,8 +115,6 @@ export function SharedChatDisplay({
               clearSelectedDocuments={() => {}}
               selectedDocumentTokens={0}
               maxTokens={0}
-              initialWidth={400}
-              isOpen={true}
               setPresentingDocument={setPresentingDocument}
               modal={true}
               closeSidebar={() => {
@@ -156,7 +132,7 @@ export function SharedChatDisplay({
               <div
                 style={{ transition: "width 0.30s ease-out" }}
                 className={`
-                  flex-none 
+                  flex-none
                   fixed
                   right-0
                   z-[1000]
@@ -176,26 +152,14 @@ export function SharedChatDisplay({
             `}
               >
                 <DocumentResults
-                  humanMessage={firstMessage}
-                  agenticMessage={false}
                   modal={false}
                   isSharedChat={true}
-                  selectedMessage={
-                    selectedMessageForDocDisplay
-                      ? messages.find(
-                          (message) =>
-                            message.messageId === selectedMessageForDocDisplay
-                        ) || null
-                      : null
-                  }
                   toggleDocumentSelection={() => {
                     setDocumentSidebarVisible(true);
                   }}
                   clearSelectedDocuments={() => {}}
                   selectedDocumentTokens={0}
                   maxTokens={0}
-                  initialWidth={400}
-                  isOpen={true}
                   setPresentingDocument={setPresentingDocument}
                   closeSidebar={() => {
                     setDocumentSidebarVisible(false);
@@ -204,21 +168,13 @@ export function SharedChatDisplay({
                 />
               </div>
             )}
-            <div className="flex mobile:hidden max-h-full overflow-hidden ">
-              <FunctionalHeader
-                sidebarToggled={false}
-                toggleSidebar={() => {}}
-                page="chat"
-                reset={() => {}}
-              />
-            </div>
 
             <div className="flex w-full overflow-hidden overflow-y-scroll">
               <div className="w-full h-full   flex-col flex max-w-message-max mx-auto">
                 <div className="fixed z-10 w-full ">
                   <div className="bg-background relative px-5 pt-4 w-full">
                     <h1 className="text-3xl text-strong font-bold">
-                      {chatSession.description || `Unnamed Chat`}
+                      {chatSession.description || UNNAMED_CHAT}
                     </h1>
                     <p className=" text-text-darker">
                       {humanReadableFormat(chatSession.time_created)}
@@ -247,146 +203,41 @@ export function SharedChatDisplay({
                             key={message.messageId}
                             content={message.message}
                             files={message.files}
-                            setPresentingDocument={setPresentingDocument}
                           />
                         );
                       } else if (message.type === "assistant") {
-                        const secondLevelMessage =
-                          messages[messages.indexOf(message) + 1]?.type ===
-                          "assistant"
-                            ? messages[messages.indexOf(message) + 1]
-                            : undefined;
-
-                        const secondLevelAssistantMessage =
-                          messages[messages.indexOf(message) + 1]?.type ===
-                          "assistant"
-                            ? messages[messages.indexOf(message) + 1]?.message
-                            : undefined;
-
-                        const agenticDocs =
-                          messages[messages.indexOf(message) + 1]?.type ===
-                          "assistant"
-                            ? messages[messages.indexOf(message) + 1]?.documents
-                            : undefined;
-
-                        if (messages[i - 1]?.type === "assistant") {
-                          return null;
-                        }
-
-                        if (
-                          message.sub_questions &&
-                          message.sub_questions.length > 0
-                        ) {
-                          return (
-                            <AgenticMessage
-                              isStreamingQuestions={false}
-                              isGenerating={false}
-                              shared
-                              key={message.messageId}
-                              secondLevelGenerating={false}
-                              secondLevelSubquestions={message.sub_questions?.filter(
-                                (subQuestion) => subQuestion.level === 1
-                              )}
-                              secondLevelAssistantMessage={
-                                (message.second_level_message &&
-                                message.second_level_message.length > 0
-                                  ? message.second_level_message
-                                  : secondLevelAssistantMessage) || undefined
-                              }
-                              subQuestions={
-                                message.sub_questions?.filter(
-                                  (subQuestion) => subQuestion.level === 0
-                                ) || []
-                              }
-                              agenticDocs={message.agentic_docs || agenticDocs}
-                              docs={message?.documents}
-                              setPresentingDocument={setPresentingDocument}
-                              overriddenModel={message.overridden_model}
-                              currentPersona={persona}
-                              messageId={message.messageId}
-                              content={message.message}
-                              files={message.files}
-                              query={message.query || undefined}
-                              citedDocuments={getCitedDocumentsFromMessage(
-                                message
-                              )}
-                              toolCall={message.toolCall}
-                              isComplete={true}
-                              toggleDocumentSelection={() => {
-                                if (
-                                  !documentSidebarVisible ||
-                                  (documentSidebarVisible &&
-                                    selectedMessageForDocDisplay ===
-                                      message.messageId)
-                                ) {
-                                  setDocumentSidebarVisible(
-                                    !documentSidebarVisible
-                                  );
-                                }
-                                setSelectedMessageForDocDisplay(
-                                  message.messageId
-                                );
-                              }}
-                            />
-                          );
-                        } else {
-                          return (
-                            <AIMessage
-                              shared
-                              key={message.messageId}
-                              docs={message?.documents}
-                              setPresentingDocument={setPresentingDocument}
-                              overriddenModel={message.overridden_model}
-                              currentPersona={persona}
-                              messageId={message.messageId}
-                              content={message.message}
-                              files={message.files}
-                              query={message.query || undefined}
-                              citedDocuments={getCitedDocumentsFromMessage(
-                                message
-                              )}
-                              toolCall={message.toolCall}
-                              isComplete={true}
-                              hasDocs={
-                                (message.documents &&
-                                  message.documents.length > 0) === true
-                              }
-                              selectedDocuments={[]}
-                              toggleDocumentSelection={() => {
-                                if (
-                                  !documentSidebarVisible ||
-                                  (documentSidebarVisible &&
-                                    selectedMessageForDocDisplay ===
-                                      message.messageId)
-                                ) {
-                                  setDocumentSidebarVisible(
-                                    !documentSidebarVisible
-                                  );
-                                }
-                                setSelectedMessageForDocDisplay(
-                                  message.messageId
-                                );
-                              }}
-                              retrievalDisabled={false}
-                            />
-                          );
-                        }
-                      } else {
                         return (
-                          <div key={message.messageId}>
-                            <AgenticMessage
-                              shared
-                              isStreamingQuestions={false}
-                              isGenerating={false}
-                              subQuestions={message.sub_questions || []}
-                              currentPersona={persona}
-                              messageId={message.messageId}
-                              content={
-                                <p className="text-red-700 text-sm my-auto">
-                                  {message.message}
-                                </p>
-                              }
-                            />
+                          <AIMessage
+                            key={message.messageId}
+                            rawPackets={message.packets}
+                            chatState={{
+                              handleFeedbackChange: async () => {}, // No feedback in shared chat
+                              assistant: persona,
+                              docs: message.documents,
+                              userFiles: [],
+                              citations: message.citations,
+                              setPresentingDocument: setPresentingDocument,
+                              regenerate: undefined, // No regeneration in shared chat
+                              overriddenModel: message.overridden_model,
+                            }}
+                            nodeId={message.nodeId}
+                            llmManager={null}
+                            otherMessagesCanSwitchTo={undefined}
+                            onMessageSelection={undefined}
+                          />
+                        );
+                      } else {
+                        // Error message case
+                        return (
+                          <div
+                            key={message.messageId}
+                            className="py-5 ml-4 lg:px-5"
+                          >
+                            <div className="mx-auto w-[90%] max-w-message-max">
+                              <p className="text-red-700 text-sm my-auto">
+                                {message.message}
+                              </p>
+                            </div>
                           </div>
                         );
                       }
@@ -404,10 +255,10 @@ export function SharedChatDisplay({
                 <div
                   style={{ transition: "width 0.30s ease-out" }}
                   className={`
-                          flex-none 
-                          overflow-y-hidden 
-                          transition-all 
-                          duration-300 
+                          flex-none
+                          overflow-y-hidden
+                          transition-all
+                          duration-300
                           ease-in-out
                           ${documentSidebarVisible ? "w-[400px]" : "w-[0px]"}
                       `}
@@ -416,7 +267,6 @@ export function SharedChatDisplay({
             </div>
           </div>
 
-          <FixedLogo backgroundToggled={false} />
           <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
         </div>
       </div>

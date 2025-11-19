@@ -4,13 +4,16 @@ import {
   DocumentCardProps,
 } from "@/components/search/results/Citation";
 import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
-import React, { memo } from "react";
+import React, { memo, JSX } from "react";
 import isEqual from "lodash/isEqual";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SubQuestionDetail } from "../interfaces";
 import { ValidSources } from "@/lib/types";
-import { FileResponse } from "../my-documents/DocumentsContext";
+import { ProjectFile } from "../projects/projectsService";
+import { BlinkingDot } from "./BlinkingDot";
+import Text from "@/refresh-components/texts/Text";
+import { cn } from "@/lib/utils";
 
 export const MemoizedAnchor = memo(
   ({
@@ -25,7 +28,7 @@ export const MemoizedAnchor = memo(
     subQuestions?: SubQuestionDetail[];
     openQuestion?: (question: SubQuestionDetail) => void;
     docs?: OnyxDocument[] | null;
-    userFiles?: FileResponse[] | null;
+    userFiles?: ProjectFile[] | null;
     updatePresentingDocument: (doc: OnyxDocument) => void;
     href?: string;
     children: React.ReactNode;
@@ -150,16 +153,13 @@ export const MemoizedLink = memo(
       document && updatePresentingDocument
         ? {
             url: document.link,
-            icon: document.icon as unknown as React.ReactNode,
             document: document as LoadedOnyxDocument,
             updatePresentingDocument: updatePresentingDocument!,
           }
         : undefined;
 
     if (value?.toString().startsWith("*")) {
-      return (
-        <div className="flex-none bg-background-800 inline-block rounded-full h-3 w-3 ml-2" />
-      );
+      return <BlinkingDot addMargin />;
     } else if (value?.toString().startsWith("[")) {
       return (
         <>
@@ -203,15 +203,11 @@ export const MemoizedLink = memo(
 );
 
 export const MemoizedParagraph = memo(
-  function MemoizedParagraph({ children, fontSize }: any) {
+  function MemoizedParagraph({ className, children }: any) {
     return (
-      <p
-        className={`text-neutral-900 dark:text-neutral-200 my-0 ${
-          fontSize === "sm" ? "leading-tight text-sm" : ""
-        }`}
-      >
+      <Text mainContentBody className={className}>
         {children}
-      </p>
+      </Text>
     );
   },
   (prevProps, nextProps) => {

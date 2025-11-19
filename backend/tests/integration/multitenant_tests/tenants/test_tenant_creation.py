@@ -1,4 +1,5 @@
 from http import HTTPStatus
+from uuid import uuid4
 
 import requests
 
@@ -15,14 +16,20 @@ from tests.integration.common_utils.test_models import DATestUser
 
 def test_first_user_is_admin(reset_multitenant: None) -> None:
     """Test that the first user of a tenant is automatically assigned ADMIN role."""
-    test_user: DATestUser = UserManager.create(name="test", email="test@test.com")
+    unique = uuid4().hex
+    test_user: DATestUser = UserManager.create(
+        name=f"test_{unique}", email=f"test_{unique}@test.com"
+    )
     assert UserManager.is_role(test_user, UserRole.ADMIN)
 
 
 def test_admin_can_create_credential(reset_multitenant: None) -> None:
     """Test that an admin user can create a credential in their tenant."""
     # Create admin user
-    test_user: DATestUser = UserManager.create(name="test", email="test@test.com")
+    unique = uuid4().hex
+    test_user: DATestUser = UserManager.create(
+        name=f"test_{unique}", email=f"test_{unique}@test.com"
+    )
     assert UserManager.is_role(test_user, UserRole.ADMIN)
 
     # Create credential
@@ -38,7 +45,10 @@ def test_admin_can_create_credential(reset_multitenant: None) -> None:
 def test_admin_can_create_connector(reset_multitenant: None) -> None:
     """Test that an admin user can create a connector in their tenant."""
     # Create admin user
-    test_user: DATestUser = UserManager.create(name="test", email="test@test.com")
+    unique = uuid4().hex
+    test_user: DATestUser = UserManager.create(
+        name=f"test_{unique}", email=f"test_{unique}@test.com"
+    )
     assert UserManager.is_role(test_user, UserRole.ADMIN)
 
     # Create connector
@@ -54,7 +64,10 @@ def test_admin_can_create_connector(reset_multitenant: None) -> None:
 def test_admin_can_create_and_verify_cc_pair(reset_multitenant: None) -> None:
     """Test that an admin user can create and verify a connector-credential pair in their tenant."""
     # Create admin user
-    test_user: DATestUser = UserManager.create(name="test", email="test@test.com")
+    unique = uuid4().hex
+    test_user: DATestUser = UserManager.create(
+        name=f"test_{unique}", email=f"test_{unique}@test.com"
+    )
     assert UserManager.is_role(test_user, UserRole.ADMIN)
 
     # Create credential

@@ -1,4 +1,5 @@
 import { Modal } from "@/components/Modal";
+import Button from "@/refresh-components/buttons/Button";
 
 export const NoAssistantModal = ({ isAdmin }: { isAdmin: boolean }) => {
   return (
@@ -17,14 +18,14 @@ export const NoAssistantModal = ({ isAdmin }: { isAdmin: boolean }) => {
               As an administrator, you can create a new assistant by visiting
               the admin panel.
             </p>
-            <button
+            <Button
+              className="w-full"
               onClick={() => {
                 window.location.href = "/admin/assistants";
               }}
-              className="inline-flex flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-background-800 text-center focus:outline-none focus:ring-2 focus:ring-offset-2 "
             >
               Go to Admin Panel
-            </button>
+            </Button>
           </>
         ) : (
           <p className="text-text-600 mb-2">

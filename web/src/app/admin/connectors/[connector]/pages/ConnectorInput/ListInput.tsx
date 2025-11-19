@@ -18,7 +18,9 @@ const ListInput: React.FC<ListInputProps> = ({ name, label, description }) => {
       subtext={
         typeof description === "function" ? description(null) : description
       }
-      placeholder={`Enter ${typeof label === "function" ? label(null) : label.toLowerCase()}`}
+      placeholder={`Enter ${
+        typeof label === "function" ? label(null) : label.toLowerCase()
+      }`}
     />
   );
 };

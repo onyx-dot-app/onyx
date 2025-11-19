@@ -18,12 +18,14 @@ from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.federated import create_federated_connector_document_set_mapping
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import DocumentSet as DocumentSetDBModel
 from onyx.db.models import DocumentSet__ConnectorCredentialPair
 from onyx.db.models import DocumentSet__UserGroup
+from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserRole
@@ -370,10 +372,6 @@ def update_document_set(
         db_session.add_all(ds_cc_pairs)
 
         # Update federated connector mappings
-        from onyx.db.federated import create_federated_connector_document_set_mapping
-        from onyx.db.models import FederatedConnector__DocumentSet
-        from sqlalchemy import delete
-
         # Delete existing federated connector mappings for this document set
         delete_stmt = delete(FederatedConnector__DocumentSet).where(
             FederatedConnector__DocumentSet.document_set_id == document_set_row.id
@@ -454,6 +452,13 @@ def mark_document_set_as_to_be_deleted(
         _delete_document_set_cc_pairs__no_commit(
             db_session=db_session, document_set_id=document_set_id
         )
+
+        # delete all federated connector mappings so the cleanup task can fully
+        # remove the document set once the Vespa sync completes
+        delete_stmt = delete(FederatedConnector__DocumentSet).where(
+            FederatedConnector__DocumentSet.document_set_id == document_set_id
+        )
+        db_session.execute(delete_stmt)
 
         # delete all private document set information
         versioned_delete_private_fn = fetch_versioned_implementation(

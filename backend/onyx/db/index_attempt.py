@@ -11,7 +11,6 @@ from sqlalchemy import func
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
-from sqlalchemy.orm import contains_eager
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
@@ -583,16 +582,14 @@ def get_latest_index_attempt_for_cc_pair_id(
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def count_index_attempts_for_connector(
+def count_index_attempts_for_cc_pair(
     db_session: Session,
-    connector_id: int,
+    cc_pair_id: int,
     only_current: bool = True,
     disinclude_finished: bool = False,
 ) -> int:
-    stmt = (
-        select(IndexAttempt)
-        .join(ConnectorCredentialPair)
-        .where(ConnectorCredentialPair.connector_id == connector_id)
+    stmt = select(IndexAttempt).where(
+        IndexAttempt.connector_credential_pair_id == cc_pair_id
     )
     if disinclude_finished:
         stmt = stmt.where(
@@ -612,16 +609,14 @@ def count_index_attempts_for_connector(
 
 def get_paginated_index_attempts_for_cc_pair_id(
     db_session: Session,
-    connector_id: int,
+    cc_pair_id: int,
     page: int,
     page_size: int,
     only_current: bool = True,
     disinclude_finished: bool = False,
 ) -> list[IndexAttempt]:
-    stmt = (
-        select(IndexAttempt)
-        .join(ConnectorCredentialPair)
-        .where(ConnectorCredentialPair.connector_id == connector_id)
+    stmt = select(IndexAttempt).where(
+        IndexAttempt.connector_credential_pair_id == cc_pair_id
     )
     if disinclude_finished:
         stmt = stmt.where(
@@ -638,10 +633,6 @@ def get_paginated_index_attempts_for_cc_pair_id(
 
     # Apply pagination
     stmt = stmt.offset(page * page_size).limit(page_size)
-    stmt = stmt.options(
-        contains_eager(IndexAttempt.connector_credential_pair),
-        joinedload(IndexAttempt.error_rows),
-    )
 
     return list(db_session.execute(stmt).scalars().unique().all())
 

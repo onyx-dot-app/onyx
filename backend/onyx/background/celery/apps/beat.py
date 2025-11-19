@@ -231,10 +231,7 @@ class DynamicTenantScheduler(PersistentScheduler):
         True if equivalent, False if not."""
         current_tasks = set(name for name, _ in schedule1)
         new_tasks = set(schedule2.keys())
-        if current_tasks != new_tasks:
-            return False
-
-        return True
+        return current_tasks == new_tasks
 
 
 @beat_init.connect

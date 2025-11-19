@@ -50,6 +50,25 @@ def get_empty_chat_messages_entries__paginated(
             if message.message_type != MessageType.USER:
                 continue
 
+            # Get user email
+            user_email = chat_session.user.email if chat_session.user else None
+
+            # Get assistant name (from session persona, or alternate if specified)
+            assistant_name = None
+            if message.alternate_assistant_id:
+                # If there's an alternate assistant, we need to fetch it
+                from onyx.db.models import Persona
+
+                alternate_persona = (
+                    db_session.query(Persona)
+                    .filter(Persona.id == message.alternate_assistant_id)
+                    .first()
+                )
+                if alternate_persona:
+                    assistant_name = alternate_persona.name
+            elif chat_session.persona:
+                assistant_name = chat_session.persona.name
+
             message_skeletons.append(
                 ChatMessageSkeleton(
                     message_id=message.id,
@@ -57,6 +76,9 @@ def get_empty_chat_messages_entries__paginated(
                     user_id=str(chat_session.user_id) if chat_session.user_id else None,
                     flow_type=flow_type,
                     time_sent=message.time_sent,
+                    assistant_name=assistant_name,
+                    user_email=user_email,
+                    number_of_tokens=message.token_count,
                 )
             )
     if len(chat_sessions) == 0:

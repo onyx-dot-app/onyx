@@ -423,7 +423,7 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
     addrs = raw_header.split(",")
-    name_addr_pairs = [parseaddr(addr=addr, strict=True) for addr in addrs if addr]
+    name_addr_pairs = [parseaddr(addr=addr) for addr in addrs if addr]
     return [(name, addr) for name, addr in name_addr_pairs if addr]
 
 

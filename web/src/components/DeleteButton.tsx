@@ -1,32 +1,19 @@
-import { FiTrash } from "react-icons/fi";
+import SvgTrash from "@/icons/trash";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
-export function DeleteButton({
-  onClick,
-  disabled,
-}: {
+export interface DeleteButtonProps {
   onClick?: (event: React.MouseEvent<HTMLElement>) => void | Promise<void>;
   disabled?: boolean;
-}) {
+}
+
+export function DeleteButton({ onClick, disabled }: DeleteButtonProps) {
   return (
-    <div
-      className={`
-        my-auto 
-        flex 
-        mb-1 
-        ${
-          disabled
-            ? "cursor-default"
-            : "hover:bg-accent-background-hovered cursor-pointer"
-        } 
-        w-fit 
-        p-2 
-        rounded-lg
-        border-border
-        text-sm`}
+    <IconButton
       onClick={onClick}
-    >
-      <FiTrash className="mr-1 my-auto" />
-      Delete
-    </div>
+      icon={SvgTrash}
+      tooltip="Delete"
+      disabled={disabled}
+      internal
+    />
   );
 }

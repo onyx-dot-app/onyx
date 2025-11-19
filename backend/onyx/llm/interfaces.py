@@ -2,14 +2,15 @@ import abc
 from collections.abc import Iterator
 from typing import Literal
 
+from braintrust import traced
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
-from onyx.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
 from onyx.configs.app_configs import LOG_INDIVIDUAL_MODEL_TOKENS
+from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.utils.logger import setup_logger
 
 
@@ -83,9 +84,10 @@ class LLM(abc.ABC):
     def _precall(self, prompt: LanguageModelInput) -> None:
         if DISABLE_GENERATIVE_AI:
             raise Exception("Generative AI is disabled")
-        if LOG_DANSWER_MODEL_INTERACTIONS:
+        if LOG_ONYX_MODEL_INTERACTIONS:
             log_prompt(prompt)
 
+    @traced(name="invoke llm", type="llm")
     def invoke(
         self,
         prompt: LanguageModelInput,

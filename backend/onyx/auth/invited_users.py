@@ -7,6 +7,17 @@ from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.utils.special_types import JSON_ro
 
 
+def remove_user_from_invited_users(email: str) -> int:
+    try:
+        store = get_kv_store()
+        user_emails = cast(list, store.load(KV_USER_STORE_KEY))
+        remaining_users = [user for user in user_emails if user != email]
+        store.store(KV_USER_STORE_KEY, cast(JSON_ro, remaining_users))
+        return len(remaining_users)
+    except KvKeyNotFoundError:
+        return 0
+
+
 def get_invited_users() -> list[str]:
     try:
         store = get_kv_store()

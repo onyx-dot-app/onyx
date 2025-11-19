@@ -1,0 +1,37 @@
+{{- if and (.Values.celery_worker_user_files_indexing.autoscaling.enabled) (eq (include "onyx.autoscaling.engine" .) "keda") }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "onyx.fullname" . }}-celery-worker-user-files-indexing
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "onyx.fullname" . }}-celery-worker-user-files-indexing
+  minReplicaCount: {{ .Values.celery_worker_user_files_indexing.autoscaling.minReplicas | default 1 }}
+  maxReplicaCount: {{ .Values.celery_worker_user_files_indexing.autoscaling.maxReplicas | default 10 }}
+  pollingInterval: {{ .Values.celery_worker_user_files_indexing.autoscaling.pollingInterval | default 30 }}
+  cooldownPeriod: {{ .Values.celery_worker_user_files_indexing.autoscaling.cooldownPeriod | default 300 }}
+  idleReplicaCount: {{ .Values.celery_worker_user_files_indexing.autoscaling.idleReplicaCount | default 1 }}
+  fallback:
+    failureThreshold: {{ .Values.celery_worker_user_files_indexing.autoscaling.failureThreshold | default 3 }}
+    replicas: {{ .Values.celery_worker_user_files_indexing.autoscaling.fallbackReplicas | default 1 }}
+  triggers:
+    {{- if .Values.celery_worker_user_files_indexing.autoscaling.targetCPUUtilizationPercentage }}
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "{{ .Values.celery_worker_user_files_indexing.autoscaling.targetCPUUtilizationPercentage }}"
+    {{- end }}
+    {{- if .Values.celery_worker_user_files_indexing.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: "{{ .Values.celery_worker_user_files_indexing.autoscaling.targetMemoryUtilizationPercentage }}"
+    {{- end }}
+    {{- if .Values.celery_worker_user_files_indexing.autoscaling.customTriggers }}
+    {{- toYaml .Values.celery_worker_user_files_indexing.autoscaling.customTriggers | nindent 4 }}
+    {{- end }}
+{{- end }}

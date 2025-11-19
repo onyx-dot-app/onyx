@@ -3,8 +3,10 @@ import time
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
+from onyx.configs.chat_configs import INPUT_PROMPT_YAML
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import KV_SEARCH_SETTINGS
 from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
@@ -29,7 +31,6 @@ from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
-from onyx.db.persona import delete_old_default_personas
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
@@ -46,15 +47,11 @@ from onyx.llm.llm_provider_options import OPEN_AI_MODEL_NAMES
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.natural_language_processing.search_nlp_models import warm_up_cross_encoder
-from onyx.seeding.load_docs import seed_initial_documents
-from onyx.seeding.load_yamls import load_chat_yamls
+from onyx.seeding.load_yamls import load_input_prompts_from_yaml
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
-from onyx.tools.built_in_tools import auto_add_search_tool_to_personas
-from onyx.tools.built_in_tools import load_builtin_tools
-from onyx.tools.built_in_tools import refresh_built_in_tools_cache
 from onyx.utils.gpu_utils import gpu_status_request
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import ALT_INDEX_SUFFIX
@@ -124,7 +121,11 @@ def setup_onyx(
         and not search_settings.provider_type
         and not search_settings.rerank_provider_type
     ):
-        warm_up_cross_encoder(search_settings.rerank_model_name)
+        # In integration tests, do not block API startup on warm-up
+        warm_up_cross_encoder(
+            search_settings.rerank_model_name,
+            non_blocking=INTEGRATION_TESTS_MODE,
+        )
 
     logger.notice("Verifying query preprocessing (NLTK) data is downloaded")
     download_nltk_data()
@@ -161,18 +162,18 @@ def setup_onyx(
 
     logger.notice(f"Model Server: http://{MODEL_SERVER_HOST}:{MODEL_SERVER_PORT}")
     if search_settings.provider_type is None:
+        # In integration tests, do not block API startup on warm-up
         warm_up_bi_encoder(
             embedding_model=EmbeddingModel.from_db_model(
                 search_settings=search_settings,
                 server_host=MODEL_SERVER_HOST,
                 server_port=MODEL_SERVER_PORT,
             ),
+            non_blocking=INTEGRATION_TESTS_MODE,
         )
 
     # update multipass indexing setting based on GPU availability
     update_default_multipass_indexing(db_session)
-
-    seed_initial_documents(db_session, tenant_id, cohere_enabled)
 
 
 def translate_saved_search_settings(db_session: Session) -> None:
@@ -284,16 +285,10 @@ def setup_postgres(db_session: Session) -> None:
     create_initial_public_credential(db_session)
     create_initial_default_connector(db_session)
     associate_default_cc_pair(db_session)
-    delete_old_default_personas(db_session)
 
-    logger.notice("Loading built-in tools")
-    load_builtin_tools(db_session)
-
-    logger.notice("Loading default Prompts and Personas")
-    load_chat_yamls(db_session)
-
-    refresh_built_in_tools_cache(db_session)
-    auto_add_search_tool_to_personas(db_session)
+    # Load input prompts and user folders from YAML
+    logger.notice("Loading input prompts and user folders")
+    load_input_prompts_from_yaml(db_session, INPUT_PROMPT_YAML)
 
     if GEN_AI_API_KEY and fetch_default_provider(db_session) is None:
         # Only for dev flows

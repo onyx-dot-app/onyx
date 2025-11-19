@@ -5,8 +5,12 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 from typing import TypeVar
+from urllib.parse import urljoin
+from urllib.parse import urlparse
 
+import requests
 from dateutil.parser import parse
+from dateutil.parser import ParserError
 
 from onyx.configs.app_configs import CONNECTOR_LOCALHOST_OVERRIDE
 from onyx.configs.constants import IGNORE_FOR_QA
@@ -28,22 +32,40 @@ def datetime_to_utc(dt: datetime) -> datetime:
 
 def time_str_to_utc(datetime_str: str) -> datetime:
     # Remove all timezone abbreviations in parentheses
-    datetime_str = re.sub(r"\([A-Z]+\)", "", datetime_str).strip()
+    normalized = re.sub(r"\([A-Z]+\)", "", datetime_str).strip()
 
     # Remove any remaining parentheses and their contents
-    datetime_str = re.sub(r"\(.*?\)", "", datetime_str).strip()
+    normalized = re.sub(r"\(.*?\)", "", normalized).strip()
 
-    try:
-        dt = parse(datetime_str)
-    except ValueError:
-        # Fix common format issues (e.g. "0000" => "+0000")
-        if "0000" in datetime_str:
-            datetime_str = datetime_str.replace(" 0000", " +0000")
-            dt = parse(datetime_str)
-        else:
-            raise
+    candidates: list[str] = [normalized]
 
-    return datetime_to_utc(dt)
+    # Some sources (e.g. Gmail) may prefix the value with labels like "Date:"
+    label_stripped = re.sub(
+        r"^\s*[A-Za-z][A-Za-z\s_-]*:\s*", "", normalized, count=1
+    ).strip()
+    if label_stripped and label_stripped != normalized:
+        candidates.append(label_stripped)
+
+    # Fix common format issues (e.g. "0000" => "+0000")
+    for candidate in list(candidates):
+        if " 0000" in candidate:
+            fixed = candidate.replace(" 0000", " +0000")
+            if fixed not in candidates:
+                candidates.append(fixed)
+
+    last_exception: Exception | None = None
+    for candidate in candidates:
+        try:
+            dt = parse(candidate)
+            return datetime_to_utc(dt)
+        except (ValueError, ParserError) as exc:
+            last_exception = exc
+
+    if last_exception is not None:
+        raise last_exception
+
+    # Fallback in case parsing failed without raising (should not happen)
+    raise ValueError(f"Unable to parse datetime string: {datetime_str}")
 
 
 def basic_expert_info_representation(info: BasicExpertInfo) -> str | None:
@@ -87,7 +109,7 @@ def process_onyx_metadata(
     metadata: dict[str, Any],
 ) -> tuple[OnyxMetadata, dict[str, Any]]:
     """
-    Users may set Onyx metadata and custom tags in text files. https://docs.onyx.app/connectors/file
+    Users may set Onyx metadata and custom tags in text files. https://docs.onyx.app/admin/connectors/official/file
     Any unrecognized fields are treated as custom tags.
     """
     p_owner_names = metadata.get("primary_owners")
@@ -148,3 +170,17 @@ def get_oauth_callback_uri(base_domain: str, connector_id: str) -> str:
 
 def is_atlassian_date_error(e: Exception) -> bool:
     return "field 'updated' is invalid" in str(e)
+
+
+def get_cloudId(base_url: str) -> str:
+    tenant_info_url = urljoin(base_url, "/_edge/tenant_info")
+    response = requests.get(tenant_info_url, timeout=10)
+    response.raise_for_status()
+    return response.json()["cloudId"]
+
+
+def scoped_url(url: str, product: str) -> str:
+    parsed = urlparse(url)
+    base_url = parsed.scheme + "://" + parsed.netloc
+    cloud_id = get_cloudId(base_url)
+    return f"https://api.atlassian.com/ex/{product}/{cloud_id}{parsed.path}"

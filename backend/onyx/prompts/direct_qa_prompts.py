@@ -54,6 +54,12 @@ CONVERSATION HISTORY:
 {GENERAL_SEP_PAT}
 """
 
+COMPANY_NAME_BLOCK = """
+The user works at {company_name}.
+"""
+
+COMPANY_DESCRIPTION_BLOCK = """Organization description: {company_description}
+"""
 
 # This has to be doubly escaped due to json containing { } which are also used for format strings
 EMPTY_SAMPLE_JSON = {

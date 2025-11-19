@@ -15,12 +15,12 @@ from slack_sdk.models.blocks import SectionBlock
 from slack_sdk.models.blocks.basic_components import MarkdownTextObject
 from slack_sdk.models.blocks.block_elements import ImageElement
 
-from onyx.chat.models import ChatOnyxBotResponse
+from onyx.chat.models import ChatBasicResponse
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import SearchFeedbackType
-from onyx.configs.onyxbot_configs import DANSWER_BOT_NUM_DOCS_TO_DISPLAY
+from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_DOCS_TO_DISPLAY
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_chat_session_by_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -48,6 +48,19 @@ from onyx.onyxbot.slack.utils import translate_vespa_highlight_to_slack
 from onyx.utils.text_processing import decode_escapes
 
 _MAX_BLURB_LEN = 45
+
+
+def _format_doc_updated_at(updated_at: datetime | None) -> str | None:
+    """Convert document timestamps to a human friendly relative string."""
+    if updated_at is None:
+        return None
+
+    if updated_at.tzinfo is None or updated_at.tzinfo.utcoffset(updated_at) is None:
+        aware_updated_at = updated_at.replace(tzinfo=pytz.utc)
+    else:
+        aware_updated_at = updated_at.astimezone(pytz.utc)
+
+    return timeago.format(aware_updated_at, datetime.now(pytz.utc))
 
 
 def get_feedback_reminder_blocks(thread_link: str, include_followup: bool) -> Block:
@@ -151,7 +164,7 @@ def _build_ephemeral_publication_block(
             email=message_info.email,
             sender_id=message_info.sender_id,
             thread_messages=[],
-            is_bot_msg=message_info.is_bot_msg,
+            is_slash_command=message_info.is_slash_command,
             is_bot_dm=message_info.is_bot_dm,
             thread_to_respond=respond_ts,
         )
@@ -225,10 +238,10 @@ def _build_doc_feedback_block(
 
 def get_restate_blocks(
     msg: str,
-    is_bot_msg: bool,
+    is_slash_command: bool,
 ) -> list[Block]:
     # Only the slash command needs this context because the user doesn't see their own input
-    if not is_bot_msg:
+    if not is_slash_command:
         return []
 
     return [
@@ -240,7 +253,7 @@ def get_restate_blocks(
 def _build_documents_blocks(
     documents: list[SavedSearchDoc],
     message_id: int | None,
-    num_docs_to_display: int = DANSWER_BOT_NUM_DOCS_TO_DISPLAY,
+    num_docs_to_display: int = ONYX_BOT_NUM_DOCS_TO_DISPLAY,
 ) -> list[Block]:
     header_text = (
         "Retrieved Documents" if DISABLE_GENERATIVE_AI else "Reference Documents"
@@ -268,10 +281,9 @@ def _build_documents_blocks(
             header_line = f"<{d.link}|{doc_sem_id}>\n"
 
         updated_at_line = ""
-        if d.updated_at is not None:
-            updated_at_line = (
-                f"_Updated {timeago.format(d.updated_at, datetime.now(pytz.utc))}_\n"
-            )
+        updated_at_str = _format_doc_updated_at(d.updated_at)
+        if updated_at_str:
+            updated_at_line = f"_Updated {updated_at_str}_\n"
 
         body_text = f">{remove_slack_text_interactions(match_str)}"
 
@@ -299,7 +311,7 @@ def _build_documents_blocks(
 
 def _build_sources_blocks(
     cited_documents: list[tuple[int, SavedSearchDoc]],
-    num_docs_to_display: int = DANSWER_BOT_NUM_DOCS_TO_DISPLAY,
+    num_docs_to_display: int = ONYX_BOT_NUM_DOCS_TO_DISPLAY,
 ) -> list[Block]:
     if not cited_documents:
         return [
@@ -332,11 +344,7 @@ def _build_sources_blocks(
         )
 
         owner_str = f"By {d.primary_owners[0]}" if d.primary_owners else None
-        days_ago_str = (
-            timeago.format(d.updated_at, datetime.now(pytz.utc))
-            if d.updated_at
-            else None
-        )
+        days_ago_str = _format_doc_updated_at(d.updated_at)
         final_metadata_str = " | ".join(
             ([owner_str] if owner_str else [])
             + ([days_ago_str] if days_ago_str else [])
@@ -376,22 +384,15 @@ def _build_sources_blocks(
 
 
 def _priority_ordered_documents_blocks(
-    answer: ChatOnyxBotResponse,
+    answer: ChatBasicResponse,
 ) -> list[Block]:
-    docs_response = answer.docs if answer.docs else None
-    top_docs = docs_response.top_documents if docs_response else []
-    llm_doc_inds = answer.llm_selected_doc_indices or []
-    llm_docs = [top_docs[i] for i in llm_doc_inds]
-    remaining_docs = [
-        doc for idx, doc in enumerate(top_docs) if idx not in llm_doc_inds
-    ]
-    priority_ordered_docs = llm_docs + remaining_docs
-    if not priority_ordered_docs:
+    top_docs = answer.top_documents if answer.top_documents else None
+    if not top_docs:
         return []
 
     document_blocks = _build_documents_blocks(
-        documents=priority_ordered_docs,
-        message_id=answer.chat_message_id,
+        documents=top_docs,
+        message_id=answer.message_id,
     )
     if document_blocks:
         document_blocks = [DividerBlock()] + document_blocks
@@ -399,19 +400,18 @@ def _priority_ordered_documents_blocks(
 
 
 def _build_citations_blocks(
-    answer: ChatOnyxBotResponse,
+    answer: ChatBasicResponse,
 ) -> list[Block]:
-    docs_response = answer.docs if answer.docs else None
-    top_docs = docs_response.top_documents if docs_response else []
-    citations = answer.citations or []
+    top_docs = answer.top_documents
+    citations = answer.cited_documents or {}
     cited_docs = []
-    for citation in citations:
+    for citation_num, document_id in citations.items():
         matching_doc = next(
-            (d for d in top_docs if d.document_id == citation.document_id),
+            (d for d in top_docs if d.document_id == document_id),
             None,
         )
         if matching_doc:
-            cited_docs.append((citation.citation_num, matching_doc))
+            cited_docs.append((citation_num, matching_doc))
 
     cited_docs.sort()
     citations_block = _build_sources_blocks(cited_documents=cited_docs)
@@ -419,7 +419,7 @@ def _build_citations_blocks(
 
 
 def _build_answer_blocks(
-    answer: ChatOnyxBotResponse, fallback_answer: str
+    answer: ChatBasicResponse, fallback_answer: str
 ) -> list[SectionBlock]:
     if not answer.answer:
         answer_blocks = [SectionBlock(text=fallback_answer)]
@@ -436,10 +436,10 @@ def _build_answer_blocks(
 
 
 def _build_qa_response_blocks(
-    answer: ChatOnyxBotResponse,
+    answer: ChatBasicResponse,
 ) -> list[Block]:
-    retrieval_info = answer.docs
-    if not retrieval_info:
+    top_documents = answer.top_documents
+    if not top_documents:
         # This should not happen, even with no docs retrieved, there is still info returned
         raise RuntimeError("Failed to retrieve docs, cannot answer question.")
 
@@ -447,31 +447,32 @@ def _build_qa_response_blocks(
         return []
 
     filter_block: Block | None = None
-    if (
-        retrieval_info.applied_time_cutoff
-        or retrieval_info.recency_bias_multiplier > 1
-        or retrieval_info.applied_source_filters
-    ):
-        filter_text = "Filters: "
-        if retrieval_info.applied_source_filters:
-            sources_str = ", ".join(
-                [s.value for s in retrieval_info.applied_source_filters]
-            )
-            filter_text += f"`Sources in [{sources_str}]`"
-            if (
-                retrieval_info.applied_time_cutoff
-                or retrieval_info.recency_bias_multiplier > 1
-            ):
-                filter_text += " and "
-        if retrieval_info.applied_time_cutoff is not None:
-            time_str = retrieval_info.applied_time_cutoff.strftime("%b %d, %Y")
-            filter_text += f"`Docs Updated >= {time_str}` "
-        if retrieval_info.recency_bias_multiplier > 1:
-            if retrieval_info.applied_time_cutoff is not None:
-                filter_text += "+ "
-            filter_text += "`Prioritize Recently Updated Docs`"
+    # TODO: add back in
+    # if (
+    #     retrieval_info.applied_time_cutoff
+    #     or retrieval_info.recency_bias_multiplier > 1
+    #     or retrieval_info.applied_source_filters
+    # ):
+    #     filter_text = "Filters: "
+    #     if retrieval_info.applied_source_filters:
+    #         sources_str = ", ".join(
+    #             [s.value for s in retrieval_info.applied_source_filters]
+    #         )
+    #         filter_text += f"`Sources in [{sources_str}]`"
+    #         if (
+    #             retrieval_info.applied_time_cutoff
+    #             or retrieval_info.recency_bias_multiplier > 1
+    #         ):
+    #             filter_text += " and "
+    #     if retrieval_info.applied_time_cutoff is not None:
+    #         time_str = retrieval_info.applied_time_cutoff.strftime("%b %d, %Y")
+    #         filter_text += f"`Docs Updated >= {time_str}` "
+    #     if retrieval_info.recency_bias_multiplier > 1:
+    #         if retrieval_info.applied_time_cutoff is not None:
+    #             filter_text += "+ "
+    #         filter_text += "`Prioritize Recently Updated Docs`"
 
-        filter_block = SectionBlock(text=f"_{filter_text}_")
+    #     filter_block = SectionBlock(text=f"_{filter_text}_")
 
     answer_blocks = _build_answer_blocks(
         answer=answer,
@@ -559,7 +560,7 @@ def build_follow_up_resolved_blocks(
 
 
 def build_slack_response_blocks(
-    answer: ChatOnyxBotResponse,
+    answer: ChatBasicResponse,
     message_info: SlackMessageInfo,
     channel_conf: ChannelConfig | None,
     use_citations: bool,
@@ -576,7 +577,7 @@ def build_slack_response_blocks(
     # If called with the OnyxBot slash command, the question is lost so we have to reshow it
     if not skip_restated_question:
         restate_question_block = get_restate_blocks(
-            message_info.thread_messages[-1].message, message_info.is_bot_msg
+            message_info.thread_messages[-1].message, message_info.is_slash_command
         )
     else:
         restate_question_block = []
@@ -599,7 +600,7 @@ def build_slack_response_blocks(
     if channel_conf and channel_conf.get("show_continue_in_web_ui"):
         web_follow_up_block.append(
             _build_continue_in_web_ui_block(
-                message_id=answer.chat_message_id,
+                message_id=answer.message_id,
             )
         )
 
@@ -609,22 +610,20 @@ def build_slack_response_blocks(
         and channel_conf.get("follow_up_tags") is not None
         and not channel_conf.get("is_ephemeral", False)
     ):
-        follow_up_block.append(
-            _build_follow_up_block(message_id=answer.chat_message_id)
-        )
+        follow_up_block.append(_build_follow_up_block(message_id=answer.message_id))
 
     publish_ephemeral_message_block = []
 
     if (
         offer_ephemeral_publication
-        and answer.chat_message_id is not None
+        and answer.message_id is not None
         and message_info.msg_to_respond is not None
         and channel_conf is not None
     ):
         publish_ephemeral_message_block.append(
             _build_ephemeral_publication_block(
                 channel_id=message_info.channel_to_respond,
-                chat_message_id=answer.chat_message_id,
+                chat_message_id=answer.message_id,
                 original_question_ts=message_info.msg_to_respond,
                 message_info=message_info,
                 channel_conf=channel_conf,
@@ -634,17 +633,17 @@ def build_slack_response_blocks(
 
     ai_feedback_block: list[Block] = []
 
-    if answer.chat_message_id is not None and not skip_ai_feedback:
+    if answer.message_id is not None and not skip_ai_feedback:
         ai_feedback_block.append(
             _build_qa_feedback_block(
-                message_id=answer.chat_message_id,
+                message_id=answer.message_id,
                 feedback_reminder_id=feedback_reminder_id,
             )
         )
 
     citations_blocks = []
     document_blocks = []
-    if use_citations and answer.citations:
+    if use_citations and answer.cited_documents:
         citations_blocks = _build_citations_blocks(answer)
     else:
         document_blocks = _priority_ordered_documents_blocks(answer)

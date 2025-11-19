@@ -11,8 +11,11 @@ export const HEADER_HEIGHT = "h-16";
 export const SUB_HEADER = "h-12";
 
 export const INTERNAL_URL = process.env.INTERNAL_URL || "http://127.0.0.1:8080";
-export const NEXT_PUBLIC_DISABLE_STREAMING =
-  process.env.NEXT_PUBLIC_DISABLE_STREAMING?.toLowerCase() === "true";
+
+// NOTE: this should ONLY be used on the server-side (including middleware).
+// The AUTH_TYPE environment variable is set in the backend and shared with Next.js
+export const SERVER_SIDE_ONLY__AUTH_TYPE = (process.env.AUTH_TYPE ||
+  "disabled") as AuthType;
 
 export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
   process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED?.toLowerCase() ===
@@ -108,3 +111,26 @@ export const ALLOWED_URL_PROTOCOLS = [
 ];
 
 export const MAX_CHARACTERS_PERSONA_DESCRIPTION = 5000000;
+export const MAX_STARTER_MESSAGES = 4;
+
+//Credential form data key constants
+export const CREDENTIAL_NAME = "name";
+export const CREDENTIAL_SOURCE = "source";
+export const CREDENTIAL_UPLOADED_FILE = "uploaded_file";
+export const CREDENTIAL_FIELD_KEY = "field_key";
+export const CREDENTIAL_TYPE_DEFINITION_KEY = "type_definition_key";
+export const CREDENTIAL_JSON = "credential_json";
+
+export const MODAL_ROOT_ID = "modal-root";
+
+export const ANONYMOUS_USER_NAME = "Anonymous";
+export const UNNAMED_CHAT = "New Chat";
+
+export const DEFAULT_ASSISTANT_ID = 0;
+export const GENERAL_ASSISTANT_ID = -1;
+export const IMAGE_ASSISTANT_ID = -2;
+export const ART_ASSISTANT_ID = -3;
+
+// Used in the File Picker to show a max number of files.
+// The rest will be hidden behind an "All Recent Files" button.
+export const MAX_FILES_TO_SHOW = 3;

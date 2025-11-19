@@ -68,8 +68,9 @@ def mock_issue_large() -> MagicMock:
 
 @pytest.fixture
 def mock_jira_api_version() -> Generator[Any, Any, Any]:
-    with patch("onyx.connectors.jira.connector.JIRA_API_VERSION", "2"):
-        yield
+    with patch("onyx.connectors.jira.utils.JIRA_CLOUD_API_VERSION", "3"):
+        with patch("onyx.connectors.jira.utils.JIRA_SERVER_API_VERSION", "2"):
+            yield
 
 
 @pytest.fixture
@@ -91,7 +92,7 @@ def test_fetch_jira_issues_batch_small_ticket(
     assert len(issues) == 1
 
     # Then process each issue
-    docs = [process_jira_issue(mock_jira_client, issue) for issue in issues]
+    docs = [process_jira_issue("test.com", issue) for issue in issues]
     docs = [doc for doc in docs if doc is not None]  # Filter out None values
 
     assert len(docs) == 1
@@ -116,7 +117,7 @@ def test_fetch_jira_issues_batch_large_ticket(
     assert len(issues) == 1
 
     # Then process each issue
-    docs = [process_jira_issue(mock_jira_client, issue) for issue in issues]
+    docs = [process_jira_issue("test.com", issue) for issue in issues]
     docs = [doc for doc in docs if doc is not None]  # Filter out None values
 
     assert len(docs) == 0  # The large ticket should be skipped
@@ -135,7 +136,7 @@ def test_fetch_jira_issues_batch_mixed_tickets(
     assert len(issues) == 2
 
     # Then process each issue
-    docs = [process_jira_issue(mock_jira_client, issue) for issue in issues]
+    docs = [process_jira_issue("test.com", issue) for issue in issues]
     docs = [doc for doc in docs if doc is not None]  # Filter out None values
 
     assert len(docs) == 1  # Only the small ticket should be included
@@ -158,7 +159,7 @@ def test_fetch_jira_issues_batch_custom_size_limit(
     assert len(issues) == 2
 
     # Then process each issue
-    docs = [process_jira_issue(mock_jira_client, issue) for issue in issues]
+    docs = [process_jira_issue("test.com", issue) for issue in issues]
     docs = [doc for doc in docs if doc is not None]  # Filter out None values
 
     assert len(docs) == 0  # Both tickets should be skipped due to the low size limit

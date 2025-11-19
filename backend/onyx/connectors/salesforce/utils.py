@@ -2,6 +2,12 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
+NAME_FIELD = "Name"
+MODIFIED_FIELD = "LastModifiedDate"
+ID_FIELD = "Id"
+ACCOUNT_OBJECT_TYPE = "Account"
+USER_OBJECT_TYPE = "User"
+
 
 @dataclass
 class SalesforceObject:
@@ -19,7 +25,7 @@ class SalesforceObject:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SalesforceObject":
         return cls(
-            id=data["Id"],
+            id=data[ID_FIELD],
             type=data["Type"],
             data=data,
         )

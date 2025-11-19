@@ -4,7 +4,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { LLMConfiguration } from "./LLMConfiguration";
 import { CpuIcon } from "@/components/icons/icons";
 
-const Page = () => {
+export default function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
@@ -15,6 +15,4 @@ const Page = () => {
       <LLMConfiguration />
     </div>
   );
-};
-
-export default Page;
+}

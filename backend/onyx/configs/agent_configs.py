@@ -379,4 +379,11 @@ AGENT_MAX_TOKENS_HISTORY_SUMMARY = int(
     or AGENT_DEFAULT_MAX_TOKENS_HISTORY_SUMMARY
 )
 
+# Parameters for the Thoughtful/Deep Research flows
+TF_DR_TIMEOUT_LONG = int(os.environ.get("TF_DR_TIMEOUT_LONG") or 120)
+TF_DR_TIMEOUT_SHORT = int(os.environ.get("TF_DR_TIMEOUT_SHORT") or 60)
+
+
+TF_DR_DEFAULT_FAST = (os.environ.get("TF_DR_DEFAULT_FAST") or "False").lower() == "true"
+
 GRAPH_VERSION_NAME: str = "a"

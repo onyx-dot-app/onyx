@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import React, { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
@@ -298,7 +298,7 @@ export const GmailJsonUploadSection = ({
         <a
           className="text-primary hover:text-primary/80 flex items-center gap-1 text-sm"
           target="_blank"
-          href="https://docs.onyx.app/connectors/gmail#authorization"
+          href="https://docs.onyx.app/admin/connectors/official/gmail/overview"
           rel="noreferrer"
         >
           <FiLink className="h-3 w-3" />
@@ -338,7 +338,7 @@ export const GmailJsonUploadSection = ({
           {isAdmin && !existingAuthCredential && (
             <div className="mt-2">
               <Button
-                variant="destructive"
+                danger
                 type="button"
                 onClick={async () => {
                   const endpoint =
@@ -499,7 +499,7 @@ export const GmailAuthSection = ({
             </div>
           </div>
           <Button
-            variant="destructive"
+            danger
             type="button"
             onClick={async () => {
               handleRevokeAccess(

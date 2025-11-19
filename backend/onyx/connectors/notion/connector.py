@@ -196,7 +196,16 @@ class NotionConnector(LoadConnector, PollConnector):
         try:
             res.raise_for_status()
         except Exception as e:
-            if res.json().get("code") == "object_not_found":
+            json_data = res.json()
+            code = json_data.get("code")
+            # Sep 3 2025 backend changed the error message for this case
+            # TODO: it is also now possible for there to be multiple data sources per database; at present we
+            # just don't handle that. We will need to upgrade the API to the current version + query the
+            # new data sources endpoint to handle that case correctly.
+            if code == "object_not_found" or (
+                code == "validation_error"
+                and "does not contain any data sources" in json_data.get("message", "")
+            ):
                 # this happens when a database is not shared with the integration
                 # in this case, we should just ignore the database
                 logger.error(
@@ -213,42 +222,49 @@ class NotionConnector(LoadConnector, PollConnector):
     def _properties_to_str(properties: dict[str, Any]) -> str:
         """Converts Notion properties to a string"""
 
+        def _recurse_list_properties(inner_list: list[Any]) -> str | None:
+            list_properties: list[str | None] = []
+            for item in inner_list:
+                if item and isinstance(item, dict):
+                    list_properties.append(_recurse_properties(item))
+                elif item and isinstance(item, list):
+                    list_properties.append(_recurse_list_properties(item))
+                else:
+                    list_properties.append(str(item))
+            return (
+                ", ".join(
+                    [
+                        list_property
+                        for list_property in list_properties
+                        if list_property
+                    ]
+                )
+                or None
+            )
+
         def _recurse_properties(inner_dict: dict[str, Any]) -> str | None:
-            while "type" in inner_dict:
-                type_name = inner_dict["type"]
-                inner_dict = inner_dict[type_name]
+            sub_inner_dict: dict[str, Any] | list[Any] | str = inner_dict
+            while isinstance(sub_inner_dict, dict) and "type" in sub_inner_dict:
+                type_name = sub_inner_dict["type"]
+                sub_inner_dict = sub_inner_dict[type_name]
 
                 # If the innermost layer is None, the value is not set
-                if not inner_dict:
+                if not sub_inner_dict:
                     return None
 
-                if isinstance(inner_dict, list):
-                    list_properties = [
-                        _recurse_properties(item) for item in inner_dict if item
-                    ]
-                    return (
-                        ", ".join(
-                            [
-                                list_property
-                                for list_property in list_properties
-                                if list_property
-                            ]
-                        )
-                        or None
-                    )
-
             # TODO there may be more types to handle here
-            if isinstance(inner_dict, str):
+            if isinstance(sub_inner_dict, list):
+                return _recurse_list_properties(sub_inner_dict)
+            elif isinstance(sub_inner_dict, str):
                 # For some objects the innermost value could just be a string, not sure what causes this
-                return inner_dict
-
-            elif isinstance(inner_dict, dict):
-                if "name" in inner_dict:
-                    return inner_dict["name"]
-                if "content" in inner_dict:
-                    return inner_dict["content"]
-                start = inner_dict.get("start")
-                end = inner_dict.get("end")
+                return sub_inner_dict
+            elif isinstance(sub_inner_dict, dict):
+                if "name" in sub_inner_dict:
+                    return sub_inner_dict["name"]
+                if "content" in sub_inner_dict:
+                    return sub_inner_dict["content"]
+                start = sub_inner_dict.get("start")
+                end = sub_inner_dict.get("end")
                 if start is not None:
                     if end is not None:
                         return f"{start} - {end}"
@@ -256,13 +272,13 @@ class NotionConnector(LoadConnector, PollConnector):
                 elif end is not None:
                     return f"Until {end}"
 
-                if "id" in inner_dict:
+                if "id" in sub_inner_dict:
                     # This is not useful to index, it's a reference to another Notion object
                     # and this ID value in plaintext is useless outside of the Notion context
                     logger.debug("Skipping Notion object id field property")
                     return None
 
-            logger.debug(f"Unreadable property from innermost prop: {inner_dict}")
+            logger.debug(f"Unreadable property from innermost prop: {sub_inner_dict}")
             return None
 
         result = ""

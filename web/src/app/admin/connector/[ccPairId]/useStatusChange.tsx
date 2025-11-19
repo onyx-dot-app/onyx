@@ -63,7 +63,6 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
         }}
         additionalDetails="This connector was previously marked as invalid. Please verify that your configuration is correct before re-enabling. Are you sure you want to proceed?"
         actionButtonText="Re-Enable"
-        variant="action"
       />
     ) : null;
 

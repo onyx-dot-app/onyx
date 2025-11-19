@@ -1,26 +1,23 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { PlusIcon } from "@/components/icons/icons";
-import { MoreVertical, XIcon } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { BackButton } from "@/components/BackButton";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SourceChip } from "../input/ChatInputBar";
+import { SourceChip } from "../components/input/ChatInputBar";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgX from "@/icons/x";
+import SvgMoreHorizontal from "@/icons/more-horizontal";
 
 export default function InputPrompts() {
   const [inputPrompts, setInputPrompts] = useState<InputPrompt[]>([]);
@@ -201,7 +198,7 @@ export default function InputPrompts() {
           />
           <div className="flex space-x-2">
             <Button onClick={handleCreate}>Create</Button>
-            <Button variant="ghost" onClick={() => setIsCreatingNew(false)}>
+            <Button internal onClick={() => setIsCreatingNew(false)}>
               Cancel
             </Button>
           </div>
@@ -263,15 +260,13 @@ const PromptCard: React.FC<PromptCardProps> = ({
       {isEditing ? (
         <>
           <div className="absolute top-2 right-2">
-            <Button
-              variant="ghost"
-              size="sm"
+            <IconButton
+              internal
               onClick={() => {
                 onEdit(0);
               }}
-            >
-              <XIcon size={14} />
-            </Button>
+              icon={SvgX}
+            />
           </div>
           <div className="flex">
             <div className="flex-grow mr-4">
@@ -297,32 +292,20 @@ const PromptCard: React.FC<PromptCardProps> = ({
         </>
       ) : (
         <>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="mb-2  flex gap-x-2 ">
-                  <p className="font-semibold">{prompt.prompt}</p>
-                  {isPromptPublic(prompt) && <SourceChip title="Built-in" />}
-                </div>
-              </TooltipTrigger>
-              {isPromptPublic(prompt) && (
-                <TooltipContent>
-                  <p>This is a built-in prompt and cannot be edited</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+          <SimpleTooltip
+            tooltip="This is a built-in prompt and cannot be edited"
+            disabled={!isPromptPublic(prompt)}
+          >
+            <div className="mb-2  flex gap-x-2 ">
+              <p className="font-semibold">{prompt.prompt}</p>
+              {isPromptPublic(prompt) && <SourceChip title="Built-in" />}
+            </div>
+          </SimpleTooltip>
           <div className="whitespace-pre-wrap">{prompt.content}</div>
           <div className="absolute top-2 right-2">
             <DropdownMenu>
               <DropdownMenuTrigger className="hover:bg-transparent" asChild>
-                <Button
-                  className="!hover:bg-transparent"
-                  variant="ghost"
-                  size="sm"
-                >
-                  <MoreVertical size={14} />
-                </Button>
+                <IconButton internal icon={SvgMoreHorizontal} />
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 {!isPromptPublic(prompt) && (

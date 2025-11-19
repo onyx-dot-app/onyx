@@ -1,419 +1,543 @@
 /* Copy this file into '.vscode/launch.json' or merge its contents into your existing configurations. */
 
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "compounds": [
-      {
-        // Dummy entry used to label the group
-        "name": "--- Compound ---",
-        "configurations": ["--- Individual ---"],
-        "presentation": {
-          "group": "1"
-        }
-      },
-      {
-        "name": "Run All Onyx Services",
-        "configurations": [
-          "Web Server",
-          "Model Server",
-          "API Server",
-          "Slack Bot",
-          "Celery primary",
-          "Celery light",
-          "Celery heavy",
-          "Celery docfetching",
-          "Celery docprocessing",
-          "Celery beat",
-          "Celery monitoring"
-        ],
-        "presentation": {
-          "group": "1"
-        }
-      },
-      {
-        "name": "Web / Model / API",
-        "configurations": ["Web Server", "Model Server", "API Server"],
-        "presentation": {
-          "group": "1"
-        }
-      },
-      {
-        "name": "Celery (all)",
-        "configurations": [
-          "Celery primary",
-          "Celery light",
-          "Celery heavy",
-          "Celery docfetching",
-          "Celery docprocessing",
-          "Celery beat",
-          "Celery monitoring"
-        ],
-        "presentation": {
-          "group": "1"
-        }
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "compounds": [
+    {
+      // Dummy entry used to label the group
+      "name": "--- Compound ---",
+      "configurations": ["--- Individual ---"],
+      "presentation": {
+        "group": "1"
       }
-    ],
-    "configurations": [
-      {
-        // Dummy entry used to label the group
-        "name": "--- Individual ---",
-        "type": "node",
-        "request": "launch",
-        "presentation": {
-          "group": "2",
-          "order": 0
-        }
-      },
-      {
-        "name": "Web Server",
-        "type": "node",
-        "request": "launch",
-        "cwd": "${workspaceRoot}/web",
-        "runtimeExecutable": "npm",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "runtimeArgs": ["run", "dev"],
-        "presentation": {
-          "group": "2"
-        },
-        "console": "integratedTerminal",
-        "consoleTitle": "Web Server Console"
-      },
-      {
-        "name": "Model Server",
-        "consoleName": "Model Server",
-        "type": "debugpy",
-        "request": "launch",
-        "module": "uvicorn",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {
-          "LOG_LEVEL": "DEBUG",
-          "PYTHONUNBUFFERED": "1"
-        },
-        "args": ["model_server.main:app", "--reload", "--port", "9000"],
-        "presentation": {
-          "group": "2"
-        },
-        "consoleTitle": "Model Server Console"
-      },
-      {
-        "name": "API Server",
-        "consoleName": "API Server",
-        "type": "debugpy",
-        "request": "launch",
-        "module": "uvicorn",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {
-          "LOG_DANSWER_MODEL_INTERACTIONS": "True",
-          "LOG_LEVEL": "DEBUG",
-          "PYTHONUNBUFFERED": "1"
-        },
-        "args": ["onyx.main:app", "--reload", "--port", "8080"],
-        "presentation": {
-          "group": "2"
-        },
-        "consoleTitle": "API Server Console"
-      },
-      // For the listener to access the Slack API,
-      // DANSWER_BOT_SLACK_APP_TOKEN & DANSWER_BOT_SLACK_BOT_TOKEN need to be set in .env file located in the root of the project
-      {
-        "name": "Slack Bot",
-        "consoleName": "Slack Bot",
-        "type": "debugpy",
-        "request": "launch",
-        "program": "onyx/onyxbot/slack/listener.py",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {
-          "LOG_LEVEL": "DEBUG",
-          "PYTHONUNBUFFERED": "1",
-          "PYTHONPATH": "."
-        },
-        "presentation": {
-          "group": "2"
-        },
-        "consoleTitle": "Slack Bot Console"
-      },
-      {
-        "name": "Celery primary",
-        "type": "debugpy",
-        "request": "launch",
-        "module": "celery",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {
-          "LOG_LEVEL": "INFO",
-          "PYTHONUNBUFFERED": "1",
-          "PYTHONPATH": "."
-        },
-        "args": [
-          "-A",
-          "onyx.background.celery.versioned_apps.primary",
-          "worker",
-          "--pool=threads",
-          "--concurrency=4",
-          "--prefetch-multiplier=1",
-          "--loglevel=INFO",
-          "--hostname=primary@%n",
-          "-Q",
-          "celery"
-        ],
-        "presentation": {
-          "group": "2"
-        },
-        "consoleTitle": "Celery primary Console"
-      },
-      {
-        "name": "Celery light",
-        "type": "debugpy",
-        "request": "launch",
-        "module": "celery",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {
-          "LOG_LEVEL": "INFO",
-          "PYTHONUNBUFFERED": "1",
-          "PYTHONPATH": "."
-        },
-        "args": [
-          "-A",
-          "onyx.background.celery.versioned_apps.light",
-          "worker",
-          "--pool=threads",
-          "--concurrency=64",
-          "--prefetch-multiplier=8",
-          "--loglevel=INFO",
-          "--hostname=light@%n",
-          "-Q",
-          "vespa_metadata_sync,connector_deletion,doc_permissions_upsert"
-        ],
-        "presentation": {
-          "group": "2"
-        },
-        "consoleTitle": "Celery light Console"
-      },
-      {
-        "name": "Celery heavy",
-        "type": "debugpy",
-        "request": "launch",
-        "module": "celery",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {
-          "LOG_LEVEL": "INFO",
-          "PYTHONUNBUFFERED": "1",
-          "PYTHONPATH": "."
-        },
-        "args": [
-          "-A",
-          "onyx.background.celery.versioned_apps.heavy",
-          "worker",
-          "--pool=threads",
-          "--concurrency=4",
-          "--prefetch-multiplier=1",
-          "--loglevel=INFO",
-          "--hostname=heavy@%n",
-          "-Q",
-          "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync"
-        ],
-        "presentation": {
-          "group": "2"
-        },
-        "consoleTitle": "Celery heavy Console"
-      },
-      {
-        "name": "Celery docfetching",
-        "type": "debugpy",
-        "request": "launch",
-        "module": "celery",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {
-            "LOG_LEVEL": "DEBUG",
-            "PYTHONUNBUFFERED": "1",
-            "PYTHONPATH": "."
-        },
-        "args": [
-            "-A",
-            "onyx.background.celery.versioned_apps.docfetching",
-            "worker",
-            "--pool=threads",
-            "--concurrency=1",
-            "--prefetch-multiplier=1",
-            "--loglevel=INFO",
-            "--hostname=docfetching@%n",
-            "-Q",
-            "connector_doc_fetching,user_files_indexing"
-        ],
-        "presentation": {
-            "group": "2"
-        },
-        "consoleTitle": "Celery docfetching Console",
-        "justMyCode": false
     },
     {
-        "name": "Celery docprocessing",
-        "type": "debugpy",
-        "request": "launch",
-        "module": "celery",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {
-            "ENABLE_MULTIPASS_INDEXING": "false",
-            "LOG_LEVEL": "DEBUG",
-            "PYTHONUNBUFFERED": "1",
-            "PYTHONPATH": "."
-        },
-        "args": [
-            "-A",
-            "onyx.background.celery.versioned_apps.docprocessing",
-            "worker",
-            "--pool=threads",
-            "--concurrency=6",
-            "--prefetch-multiplier=1",
-            "--loglevel=INFO",
-            "--hostname=docprocessing@%n",
-            "-Q",
-            "docprocessing"
-        ],
-        "presentation": {
-            "group": "2"
-        },
-        "consoleTitle": "Celery docprocessing Console",
-        "justMyCode": false
+      "name": "Run All Onyx Services",
+      "configurations": [
+        "Web Server",
+        "Model Server",
+        "API Server",
+        "Slack Bot",
+        "Celery primary",
+        "Celery light",
+        "Celery background",
+        "Celery docfetching",
+        "Celery docprocessing",
+        "Celery beat"
+      ],
+      "presentation": {
+        "group": "1"
+      }
     },
-      {
-        "name": "Celery monitoring",
-        "type": "debugpy",
-        "request": "launch",
-        "module": "celery",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {},
-        "args": [
-          "-A",
-          "onyx.background.celery.versioned_apps.monitoring",
-          "worker",
-          "--pool=solo",
-          "--concurrency=1",
-          "--prefetch-multiplier=1",
-          "--loglevel=INFO",
-          "--hostname=monitoring@%n",
-          "-Q",
-          "monitoring"
-        ],
-        "presentation": {
-          "group": "2"
-        },
-        "consoleTitle": "Celery monitoring Console"
+    {
+      "name": "Web / Model / API",
+      "configurations": ["Web Server", "Model Server", "API Server"],
+      "presentation": {
+        "group": "1"
+      }
+    },
+    {
+      "name": "Celery (lightweight mode)",
+      "configurations": [
+        "Celery primary",
+        "Celery background",
+        "Celery beat"
+      ],
+      "presentation": {
+        "group": "1"
       },
-      {
-        "name": "Celery beat",
-        "type": "debugpy",
-        "request": "launch",
-        "module": "celery",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {
-          "LOG_LEVEL": "DEBUG",
-          "PYTHONUNBUFFERED": "1",
-          "PYTHONPATH": "."
-        },
-        "args": [
-          "-A",
-          "onyx.background.celery.versioned_apps.beat",
-          "beat",
-          "--loglevel=INFO"
-        ],
-        "presentation": {
-          "group": "2"
-        },
-        "consoleTitle": "Celery beat Console"
+      "stopAll": true
+    },
+    {
+      "name": "Celery (standard mode)",
+      "configurations": [
+        "Celery primary",
+        "Celery light",
+        "Celery heavy",
+        "Celery kg_processing",
+        "Celery monitoring",
+        "Celery user_file_processing",
+        "Celery docfetching",
+        "Celery docprocessing",
+        "Celery beat"
+      ],
+      "presentation": {
+        "group": "1"
       },
-      {
-        "name": "Pytest",
-        "consoleName": "Pytest",
-        "type": "debugpy",
-        "request": "launch",
-        "module": "pytest",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {
-          "LOG_LEVEL": "DEBUG",
-          "PYTHONUNBUFFERED": "1",
-          "PYTHONPATH": "."
-        },
-        "args": [
-          "-v"
-          // Specify a sepcific module/test to run or provide nothing to run all tests
-          //"tests/unit/onyx/llm/answering/test_prune_and_merge.py"
-        ],
-        "presentation": {
-          "group": "2"
-        },
-        "consoleTitle": "Pytest Console"
+      "stopAll": true
+    }
+  ],
+  "configurations": [
+    {
+      // Dummy entry used to label the group
+      "name": "--- Individual ---",
+      "type": "node",
+      "request": "launch",
+      "presentation": {
+        "group": "2",
+        "order": 0
+      }
+    },
+    {
+      "name": "Web Server",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceRoot}/web",
+      "runtimeExecutable": "npm",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "runtimeArgs": ["run", "dev"],
+      "presentation": {
+        "group": "2"
       },
-      {
-        // Dummy entry used to label the group
-        "name": "--- Tasks ---",
-        "type": "node",
-        "request": "launch",
-        "presentation": {
-          "group": "3",
-          "order": 0
-        }
+      "console": "integratedTerminal",
+      "consoleTitle": "Web Server Console"
+    },
+    {
+      "name": "Model Server",
+      "consoleName": "Model Server",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1"
       },
-      {
-        "name": "Clear and Restart External Volumes and Containers",
-        "type": "node",
-        "request": "launch",
-        "runtimeExecutable": "bash",
-        "runtimeArgs": [
-          "${workspaceFolder}/backend/scripts/restart_containers.sh"
-        ],
-        "cwd": "${workspaceFolder}",
-        "console": "integratedTerminal",
-        "stopOnEntry": true,
-        "presentation": {
-          "group": "3"
-        }
+      "args": ["model_server.main:app", "--reload", "--port", "9000"],
+      "presentation": {
+        "group": "2"
       },
-      {
-        // Celery jobs launched through a single background script (legacy)
-        // Recommend using the "Celery (all)" compound launch instead.
-        "name": "Background Jobs",
-        "consoleName": "Background Jobs",
-        "type": "debugpy",
-        "request": "launch",
-        "program": "scripts/dev_run_background_jobs.py",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {
-          "LOG_DANSWER_MODEL_INTERACTIONS": "True",
-          "LOG_LEVEL": "DEBUG",
-          "PYTHONUNBUFFERED": "1",
-          "PYTHONPATH": "."
-        }
+      "consoleTitle": "Model Server Console"
+    },
+    {
+      "name": "API Server",
+      "consoleName": "API Server",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_ONYX_MODEL_INTERACTIONS": "True",
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1"
       },
-      {
-        "name": "Install Python Requirements",
-        "type": "node",
-        "request": "launch",
-        "runtimeExecutable": "bash",
-        "runtimeArgs": [
-          "-c",
-          "pip install -r backend/requirements/default.txt && pip install -r backend/requirements/dev.txt && pip install -r backend/requirements/ee.txt && pip install -r backend/requirements/model_server.txt"
-        ],
-        "cwd": "${workspaceFolder}",
-        "console": "integratedTerminal",
-        "presentation": {
-          "group": "3"
-        }
+      "args": ["onyx.main:app", "--reload", "--port", "8080"],
+      "presentation": {
+        "group": "2"
       },
+      "consoleTitle": "API Server Console"
+    },
+    // For the listener to access the Slack API,
+    // ONYX_BOT_SLACK_APP_TOKEN & ONYX_BOT_SLACK_BOT_TOKEN need to be set in .env file located in the root of the project
+    {
+      "name": "Slack Bot",
+      "consoleName": "Slack Bot",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "onyx/onyxbot/slack/listener.py",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Slack Bot Console"
+    },
+    {
+      "name": "Celery primary",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.primary",
+        "worker",
+        "--pool=threads",
+        "--concurrency=4",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=primary@%n",
+        "-Q",
+        "celery"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery primary Console"
+    },
+    {
+      "name": "Celery light",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.light",
+        "worker",
+        "--pool=threads",
+        "--concurrency=64",
+        "--prefetch-multiplier=8",
+        "--loglevel=INFO",
+        "--hostname=light@%n",
+        "-Q",
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,index_attempt_cleanup"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery light Console"
+    },
+    {
+      "name": "Celery background",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.background",
+        "worker",
+        "--pool=threads",
+        "--concurrency=20",
+        "--prefetch-multiplier=4",
+        "--loglevel=INFO",
+        "--hostname=background@%n",
+        "-Q",
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,docprocessing,connector_doc_fetching,user_files_indexing,connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,kg_processing,monitoring,user_file_processing,user_file_project_sync,user_file_delete"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery background Console"
+    },
+    {
+      "name": "Celery heavy",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.heavy",
+        "worker",
+        "--pool=threads",
+        "--concurrency=4",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=heavy@%n",
+        "-Q",
+        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery heavy Console"
+    },
+    {
+      "name": "Celery kg_processing",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.kg_processing",
+        "worker",
+        "--pool=threads",
+        "--concurrency=2",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=kg_processing@%n",
+        "-Q",
+        "kg_processing"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery kg_processing Console"
+    },
+    {
+      "name": "Celery monitoring",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.monitoring",
+        "worker",
+        "--pool=threads",
+        "--concurrency=1",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=monitoring@%n",
+        "-Q",
+        "monitoring"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery monitoring Console"
+    },
+    {
+      "name": "Celery user_file_processing",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.user_file_processing",
+        "worker",
+        "--pool=threads",
+        "--concurrency=2",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=user_file_processing@%n",
+        "-Q",
+        "user_file_processing,user_file_project_sync,user_file_delete"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery user_file_processing Console"
+    },
+    {
+      "name": "Celery docfetching",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.docfetching",
+        "worker",
+        "--pool=threads",
+        "--concurrency=1",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=docfetching@%n",
+        "-Q",
+        "connector_doc_fetching,user_files_indexing"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery docfetching Console",
+      "justMyCode": false
+    },
+    {
+      "name": "Celery docprocessing",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "ENABLE_MULTIPASS_INDEXING": "false",
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.docprocessing",
+        "worker",
+        "--pool=threads",
+        "--concurrency=6",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=docprocessing@%n",
+        "-Q",
+        "docprocessing"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery docprocessing Console"
+    },
+    {
+      "name": "Celery beat",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.beat",
+        "beat",
+        "--loglevel=INFO"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery beat Console"
+    },
+    {
+      "name": "Pytest",
+      "consoleName": "Pytest",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-v"
+        // Specify a specific module/test to run or provide nothing to run all tests
+        // "tests/unit/onyx/llm/answering/test_prune_and_merge.py"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Pytest Console"
+    },
+    {
+      // Dummy entry used to label the group
+      "name": "--- Tasks ---",
+      "type": "node",
+      "request": "launch",
+      "presentation": {
+        "group": "3",
+        "order": 0
+      }
+    },
+    {
+      "name": "Clear and Restart External Volumes and Containers",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "${workspaceFolder}/backend/scripts/restart_containers.sh"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopOnEntry": true,
+      "presentation": {
+        "group": "3"
+      }
+    },
+    {
+      "name": "Eval CLI",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/onyx/evals/eval_cli.py",
+      "cwd": "${workspaceFolder}/backend",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "presentation": {
+        "group": "3"
+      },
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": ["--verbose"],
+      "consoleTitle": "Eval CLI Console"
+    },
+    {
+      // Celery jobs launched through a single background script (legacy)
+      // Recommend using the "Celery (all)" compound launch instead.
+      "name": "Background Jobs",
+      "consoleName": "Background Jobs",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "scripts/dev_run_background_jobs.py",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_ONYX_MODEL_INTERACTIONS": "True",
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      }
+    },
+    {
+      "name": "Install Python Requirements",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "pip install -r backend/requirements/default.txt && pip install -r backend/requirements/dev.txt && pip install -r backend/requirements/ee.txt && pip install -r backend/requirements/model_server.txt"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "3"
+      }
+    },
     {
       // script to generate the openapi schema
       "name": "Onyx OpenAPI Schema Generator",
@@ -426,10 +550,7 @@
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."
       },
-      "args": [
-        "--filename",
-        "generated/openapi.json"
-      ]
+      "args": ["--filename", "generated/openapi.json"]
     },
     {
       // script to debug multi tenant db issues
@@ -454,13 +575,12 @@
         "generated/tenants_by_num_docs.csv"
       ]
     },
-      {
-        "name": "Debug React Web App in Chrome",
-        "type": "chrome",
-        "request": "launch",
-        "url": "http://localhost:3000",
-        "webRoot": "${workspaceFolder}/web"
-      }
-    ]
-  }
-  
+    {
+      "name": "Debug React Web App in Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/web"
+    }
+  ]
+}

@@ -13,15 +13,18 @@ from onyx.background.celery.tasks.kg_processing.kg_indexing import (
 from onyx.background.celery.tasks.kg_processing.kg_indexing import (
     try_creating_kg_source_reset_task,
 )
-from onyx.chat.models import CitationInfo
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import ThreadMessage
+from onyx.chat.turn.models import FetchedDocumentCacheEntry
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
+from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.kg_config import get_kg_config_settings
@@ -30,18 +33,20 @@ from onyx.db.llm import fetch_existing_doc_sets
 from onyx.db.llm import fetch_existing_tools
 from onyx.db.models import ChatMessage
 from onyx.db.models import Persona
-from onyx.db.models import Prompt
+from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import Tool
 from onyx.db.models import User
-from onyx.db.prompts import get_prompts_by_ids
 from onyx.db.search_settings import get_current_search_settings
 from onyx.kg.models import KGException
 from onyx.kg.setup.kg_default_entity_definitions import (
     populate_missing_default_entity_types__commit,
 )
 from onyx.llm.models import PreviousMessage
+from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -56,13 +61,15 @@ def prepare_chat_message_request(
     persona_id: int | None,
     # Does the question need to have a persona override
     persona_override_config: PersonaOverrideConfig | None,
-    prompt: Prompt | None,
     message_ts_to_respond_to: str | None,
     retrieval_details: RetrievalDetails | None,
     rerank_settings: RerankingDetails | None,
     db_session: Session,
     use_agentic_search: bool = False,
     skip_gen_ai_answer_generation: bool = False,
+    llm_override: LLMOverride | None = None,
+    allowed_tool_ids: list[int] | None = None,
+    slack_context: SlackContext | None = None,
 ) -> CreateChatMessageRequest:
     # Typically used for one shot flows like SlackBot or non-chat API endpoint use cases
     new_chat_session = create_chat_session(
@@ -80,7 +87,6 @@ def prepare_chat_message_request(
         parent_message_id=None,  # It's a standalone chat session each time
         message=message_text,
         file_descriptors=[],  # Currently SlackBot/answer api do not support files in the context
-        prompt_id=prompt.id if prompt else None,
         # Can always override the persona for the single query, if it's a normal persona
         # then it will be treated the same
         persona_override_config=persona_override_config,
@@ -89,6 +95,9 @@ def prepare_chat_message_request(
         rerank_settings=rerank_settings,
         use_agentic_search=use_agentic_search,
         skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
+        llm_override=llm_override,
+        allowed_tool_ids=allowed_tool_ids,
+        slack_context=slack_context,  # Pass Slack context
     )
 
 
@@ -111,6 +120,64 @@ def llm_doc_from_inference_section(inference_section: InferenceSection) -> LlmDo
         source_links=inference_section.center_chunk.source_links,
         match_highlights=inference_section.center_chunk.match_highlights,
     )
+
+
+def llm_docs_from_fetched_documents_cache(
+    fetched_documents_cache: dict[str, "FetchedDocumentCacheEntry"],
+) -> list[LlmDoc]:
+    """Convert FetchedDocumentCacheEntry objects to LlmDoc objects.
+
+    This ensures that citation numbers are properly transferred from the cache
+    entries to the LlmDoc objects, which is critical for proper citation rendering.
+
+    Args:
+        fetched_documents_cache: Dictionary mapping document IDs to FetchedDocumentCacheEntry
+
+    Returns:
+        List of LlmDoc objects with properly set document_citation_number
+    """
+    llm_docs = []
+    for cache_value in fetched_documents_cache.values():
+        llm_doc = llm_doc_from_inference_section(cache_value.inference_section)
+        llm_doc.document_citation_number = cache_value.document_citation_number
+        llm_docs.append(llm_doc)
+    return llm_docs
+
+
+def saved_search_docs_from_llm_docs(
+    llm_docs: list[LlmDoc] | None,
+) -> list[SavedSearchDoc]:
+    """Convert LlmDoc objects to SavedSearchDoc format."""
+    if not llm_docs:
+        return []
+
+    search_docs = []
+    for i, llm_doc in enumerate(llm_docs):
+        # Convert LlmDoc to SearchDoc format
+        # Note: Some fields need default values as they're not in LlmDoc
+        search_doc = SearchDoc(
+            document_id=llm_doc.document_id,
+            chunk_ind=0,  # Default value as LlmDoc doesn't have chunk index
+            semantic_identifier=llm_doc.semantic_identifier,
+            link=llm_doc.link,
+            blurb=llm_doc.blurb,
+            source_type=llm_doc.source_type,
+            boost=0,  # Default value
+            hidden=False,  # Default value
+            metadata=llm_doc.metadata,
+            score=None,  # Will be set by SavedSearchDoc
+            match_highlights=llm_doc.match_highlights or [],
+            updated_at=llm_doc.updated_at,
+            primary_owners=None,  # Default value
+            secondary_owners=None,  # Default value
+            is_internet=False,  # Default value
+        )
+
+        # Convert SearchDoc to SavedSearchDoc
+        saved_search_doc = SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
+        search_docs.append(saved_search_doc)
+
+    return search_docs
 
 
 def combine_message_thread(
@@ -300,6 +367,45 @@ def reorganize_citations(
     return new_answer, list(new_citation_info.values())
 
 
+def build_citation_map_from_infos(
+    citations_list: list[CitationInfo], db_docs: list[DbSearchDoc]
+) -> dict[int, int]:
+    """Translate a list of streaming CitationInfo objects into a mapping of
+    citation number -> saved search doc DB id.
+
+    Always cites the first instance of a document_id and assumes db_docs are
+    ordered as shown to the user (display order).
+    """
+    doc_id_to_saved_doc_id_map: dict[str, int] = {}
+    for db_doc in db_docs:
+        if db_doc.document_id not in doc_id_to_saved_doc_id_map:
+            doc_id_to_saved_doc_id_map[db_doc.document_id] = db_doc.id
+
+    citation_to_saved_doc_id_map: dict[int, int] = {}
+    for citation in citations_list:
+        if citation.citation_num not in citation_to_saved_doc_id_map:
+            saved_id = doc_id_to_saved_doc_id_map.get(citation.document_id)
+            if saved_id is not None:
+                citation_to_saved_doc_id_map[citation.citation_num] = saved_id
+
+    return citation_to_saved_doc_id_map
+
+
+def build_citation_map_from_numbers(
+    cited_numbers: list[int] | set[int], db_docs: list[DbSearchDoc]
+) -> dict[int, int]:
+    """Translate parsed citation numbers (e.g., from [[n]]) into a mapping of
+    citation number -> saved search doc DB id by positional index.
+    """
+    citation_to_saved_doc_id_map: dict[int, int] = {}
+    for num in sorted(set(cited_numbers)):
+        idx = num - 1
+        if 0 <= idx < len(db_docs):
+            citation_to_saved_doc_id_map[num] = db_docs[idx].id
+
+    return citation_to_saved_doc_id_map
+
+
 def extract_headers(
     headers: dict[str, str] | Headers, pass_through_headers: list[str] | None
 ) -> dict[str, str]:
@@ -350,28 +456,21 @@ def create_temporary_persona(
     )
 
     if persona_config.prompts:
-        persona.prompts = [
-            Prompt(
-                name=p.name,
-                description=p.description,
-                system_prompt=p.system_prompt,
-                task_prompt=p.task_prompt,
-                include_citations=p.include_citations,
-                datetime_aware=p.datetime_aware,
-            )
-            for p in persona_config.prompts
-        ]
-    elif persona_config.prompt_ids:
-        persona.prompts = get_prompts_by_ids(
-            db_session=db_session, prompt_ids=persona_config.prompt_ids
-        )
+        # Use the first prompt from the override config for embedded prompt fields
+        first_prompt = persona_config.prompts[0]
+        persona.system_prompt = first_prompt.system_prompt
+        persona.task_prompt = first_prompt.task_prompt
+        persona.datetime_aware = first_prompt.datetime_aware
 
     persona.tools = []
     if persona_config.custom_tools_openapi:
         for schema in persona_config.custom_tools_openapi:
             tools = cast(
                 list[Tool],
-                build_custom_tools_from_openapi_schema_and_headers(schema),
+                build_custom_tools_from_openapi_schema_and_headers(
+                    tool_id=0,  # dummy tool id
+                    openapi_schema=schema,
+                ),
             )
             persona.tools.extend(tools)
 
@@ -401,7 +500,7 @@ def process_kg_commands(
 ) -> None:
     # Temporarily, until we have a draft UI for the KG Operations/Management
     # TODO: move to api endpoint once we get frontend
-    if not persona_name.startswith("KG Beta"):
+    if not persona_name.startswith(TMP_DRALPHA_PERSONA_NAME):
         return
 
     kg_config_settings = get_kg_config_settings()

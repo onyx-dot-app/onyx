@@ -2,10 +2,15 @@ import { WebResultIcon } from "@/components/WebResultIcon";
 import { SourceIcon } from "@/components/SourceIcon";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, JSX } from "react";
 import { SearchResultIcon } from "@/components/SearchResultIcon";
 import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
-import { FileResponse } from "@/app/chat/my-documents/DocumentsContext";
+// Minimal shape needed locally for file icon rendering
+type FileResponse = {
+  id: number;
+  name: string;
+  link_url?: string | null;
+};
 
 export const ResultIcon = ({
   doc,

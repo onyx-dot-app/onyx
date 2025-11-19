@@ -19,6 +19,14 @@ class ChatFileType(str, Enum):
     # "user knowledge" is not a file type, it's a source or intent
     USER_KNOWLEDGE = "user_knowledge"
 
+    def is_text_file(self) -> bool:
+        return self in (
+            ChatFileType.PLAIN_TEXT,
+            ChatFileType.DOC,
+            ChatFileType.CSV,
+            ChatFileType.USER_KNOWLEDGE,
+        )
+
 
 class FileDescriptor(TypedDict):
     """NOTE: is a `TypedDict` so it can be used as a type hint for a JSONB column
@@ -27,6 +35,7 @@ class FileDescriptor(TypedDict):
     id: str
     type: ChatFileType
     name: NotRequired[str | None]
+    user_file_id: NotRequired[str | None]
 
 
 class InMemoryChatFile(BaseModel):
@@ -48,4 +57,5 @@ class InMemoryChatFile(BaseModel):
             "id": str(self.file_id),
             "type": self.file_type,
             "name": self.filename,
+            "user_file_id": str(self.file_id) if self.file_id else None,
         }

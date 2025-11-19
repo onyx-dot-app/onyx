@@ -1,13 +1,15 @@
 "use client";
+
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
-import { UserProvider } from "../user/UserProvider";
-import { ProviderContextProvider } from "../chat/ProviderContext";
-import { SettingsProvider } from "../settings/SettingsProvider";
-import { AssistantsProvider } from "./AssistantsContext";
+import { UserProvider } from "@/components/user/UserProvider";
+import { ProviderContextProvider } from "@/components/chat/ProviderContext";
+import { SettingsProvider } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { User } from "@/lib/types";
-import { ModalProvider } from "./ModalContext";
+import { ModalProvider } from "@/components/context/ModalContext";
 import { AuthTypeMetadata } from "@/lib/userSS";
+import { AgentsProvider } from "@/refresh-components/contexts/AgentsContext";
+import { AppSidebarProvider } from "@/refresh-components/contexts/AppSidebarContext";
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -15,15 +17,17 @@ interface AppProviderProps {
   settings: CombinedSettings;
   assistants: MinimalPersonaSnapshot[];
   authTypeMetadata: AuthTypeMetadata;
+  folded?: boolean;
 }
 
-export const AppProvider = ({
+export default function AppProvider({
   children,
   user,
   settings,
   assistants,
   authTypeMetadata,
-}: AppProviderProps) => {
+  folded,
+}: AppProviderProps) {
   return (
     <SettingsProvider settings={settings}>
       <UserProvider
@@ -32,11 +36,18 @@ export const AppProvider = ({
         authTypeMetadata={authTypeMetadata}
       >
         <ProviderContextProvider>
-          <AssistantsProvider initialAssistants={assistants}>
-            <ModalProvider user={user}>{children}</ModalProvider>
-          </AssistantsProvider>
+          <ModalProvider user={user}>
+            <AgentsProvider
+              agents={assistants}
+              pinnedAgentIds={user?.preferences.pinned_assistants || []}
+            >
+              <AppSidebarProvider folded={!!folded}>
+                {children}
+              </AppSidebarProvider>
+            </AgentsProvider>
+          </ModalProvider>
         </ProviderContextProvider>
       </UserProvider>
     </SettingsProvider>
   );
-};
+}

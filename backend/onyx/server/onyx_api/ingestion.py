@@ -20,6 +20,9 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.document_index.factory import get_default_document_index
+from onyx.indexing.adapters.document_indexing_adapter import (
+    DocumentIndexingBatchAdapter,
+)
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import (
@@ -113,6 +116,18 @@ def upsert_ingestion_doc(
 
     information_content_classification_model = InformationContentClassificationModel()
 
+    # Build adapter for primary indexing
+    adapter = DocumentIndexingBatchAdapter(
+        db_session=db_session,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        tenant_id=tenant_id,
+        index_attempt_metadata=IndexAttemptMetadata(
+            connector_id=cc_pair.connector_id,
+            credential_id=cc_pair.credential_id,
+        ),
+    )
+
     indexing_pipeline_result = run_indexing_pipeline(
         embedder=index_embedding_model,
         information_content_classification_model=information_content_classification_model,
@@ -121,10 +136,8 @@ def upsert_ingestion_doc(
         db_session=db_session,
         tenant_id=tenant_id,
         document_batch=[document],
-        index_attempt_metadata=IndexAttemptMetadata(
-            connector_id=cc_pair.connector_id,
-            credential_id=cc_pair.credential_id,
-        ),
+        request_id=None,
+        adapter=adapter,
     )
 
     # If there's a secondary index being built, index the doc but don't use it for return here
@@ -153,10 +166,8 @@ def upsert_ingestion_doc(
             db_session=db_session,
             tenant_id=tenant_id,
             document_batch=[document],
-            index_attempt_metadata=IndexAttemptMetadata(
-                connector_id=cc_pair.connector_id,
-                credential_id=cc_pair.credential_id,
-            ),
+            request_id=None,
+            adapter=adapter,
         )
 
     return IngestionResult(

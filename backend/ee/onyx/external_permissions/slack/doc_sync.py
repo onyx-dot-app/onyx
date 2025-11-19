@@ -105,7 +105,9 @@ def _get_slack_document_access(
     channel_permissions: dict[str, ExternalAccess],
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
-    slim_doc_generator = slack_connector.retrieve_all_slim_documents(callback=callback)
+    slim_doc_generator = slack_connector.retrieve_all_slim_docs_perm_sync(
+        callback=callback
+    )
 
     for doc_metadata_batch in slim_doc_generator:
         for doc_metadata in doc_metadata_batch:

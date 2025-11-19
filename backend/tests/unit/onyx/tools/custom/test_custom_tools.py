@@ -89,7 +89,9 @@ class TestCustomTool(unittest.TestCase):
         Verifies that the tool correctly constructs the URL and makes the GET request.
         """
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            self.openapi_schema, dynamic_schema_info=self.dynamic_schema_info
+            tool_id=-1,  # dummy tool id
+            openapi_schema=self.openapi_schema,
+            dynamic_schema_info=self.dynamic_schema_info,
         )
 
         result = list(tools[0].run(assistant_id="123"))
@@ -117,7 +119,9 @@ class TestCustomTool(unittest.TestCase):
         Verifies that the tool correctly constructs the URL and makes the POST request with the given body.
         """
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            self.openapi_schema, dynamic_schema_info=self.dynamic_schema_info
+            tool_id=-1,  # dummy tool id
+            openapi_schema=self.openapi_schema,
+            dynamic_schema_info=self.dynamic_schema_info,
         )
 
         result = list(tools[1].run(assistant_id="456"))
@@ -153,7 +157,8 @@ class TestCustomTool(unittest.TestCase):
             {"key": "Custom-Header", "value": "CustomValue"},
         ]
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            self.openapi_schema,
+            tool_id=-1,  # dummy tool id
+            openapi_schema=self.openapi_schema,
             custom_headers=custom_headers,
             dynamic_schema_info=self.dynamic_schema_info,
         )
@@ -178,7 +183,8 @@ class TestCustomTool(unittest.TestCase):
         """
         custom_headers: list[HeaderItemDict] = []
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            self.openapi_schema,
+            tool_id=-1,  # dummy tool id
+            openapi_schema=self.openapi_schema,
             custom_headers=custom_headers,
             dynamic_schema_info=self.dynamic_schema_info,
         )
@@ -209,7 +215,9 @@ class TestCustomTool(unittest.TestCase):
         Verifies that the method correctly extracts and returns the tool result.
         """
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            self.openapi_schema, dynamic_schema_info=self.dynamic_schema_info
+            tool_id=-1,  # dummy tool id
+            openapi_schema=self.openapi_schema,
+            dynamic_schema_info=self.dynamic_schema_info,
         )
 
         mock_response = ToolResponse(

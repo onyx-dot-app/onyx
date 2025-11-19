@@ -7,7 +7,6 @@ from onyx.chat.models import PromptConfig
 from onyx.configs.model_configs import GEN_AI_SINGLE_USER_MESSAGE_EXPECTED_MAX_TOKENS
 from onyx.context.search.models import InferenceChunk
 from onyx.db.models import Persona
-from onyx.db.prompts import get_default_prompt
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.factory import get_llms_for_persona
@@ -38,8 +37,8 @@ logger = setup_logger()
 def get_prompt_tokens(prompt_config: PromptConfig) -> int:
     # Note: currently custom prompts do not allow datetime aware, only default prompts
     return (
-        check_number_of_tokens(prompt_config.system_prompt)
-        + check_number_of_tokens(prompt_config.task_prompt)
+        check_number_of_tokens(prompt_config.default_behavior_system_prompt)
+        + check_number_of_tokens(prompt_config.reminder)
         + CHAT_USER_PROMPT_WITH_CONTEXT_OVERHEAD_TOKEN_CNT
         + CITATION_STATEMENT_TOKEN_CNT
         + CITATION_REMINDER_TOKEN_CNT
@@ -89,13 +88,13 @@ def compute_max_document_tokens(
 
 
 def compute_max_document_tokens_for_persona(
-    db_session: Session,
     persona: Persona,
+    db_session: Session,
     actual_user_input: str | None = None,
 ) -> int:
-    prompt = persona.prompts[0] if persona.prompts else get_default_prompt(db_session)
+    # Use the persona directly since prompts are now embedded
     return compute_max_document_tokens(
-        prompt_config=PromptConfig.from_model(prompt),
+        prompt_config=PromptConfig.from_model(persona, db_session=db_session),
         llm_config=get_main_llm_from_tuple(get_llms_for_persona(persona)).config,
         actual_user_input=actual_user_input,
     )
@@ -109,9 +108,9 @@ def compute_max_llm_input_tokens(llm_config: LLMConfig) -> int:
 def build_citations_system_message(
     prompt_config: PromptConfig,
 ) -> SystemMessage:
-    system_prompt = prompt_config.system_prompt.strip()
-    if prompt_config.include_citations:
-        system_prompt += REQUIRE_CITATION_STATEMENT
+    system_prompt = prompt_config.default_behavior_system_prompt.strip()
+    # Citations are always enabled
+    system_prompt += REQUIRE_CITATION_STATEMENT
     tag_handled_prompt = handle_onyx_date_awareness(
         system_prompt, prompt_config, add_additional_info_if_no_tag=True
     )

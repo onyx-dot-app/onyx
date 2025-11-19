@@ -45,7 +45,7 @@ def default_multi_llm() -> DefaultMultiLLM:
 
 def test_multiple_tool_calls(default_multi_llm: DefaultMultiLLM) -> None:
     # Mock the litellm.completion function
-    with patch("onyx.llm.chat_llm.litellm.completion") as mock_completion:
+    with patch("litellm.completion") as mock_completion:
         # Create a mock response with multiple tool calls using litellm objects
         mock_response = litellm.ModelResponse(
             id="chatcmpl-123",
@@ -158,7 +158,7 @@ def test_multiple_tool_calls(default_multi_llm: DefaultMultiLLM) -> None:
 
 def test_multiple_tool_calls_streaming(default_multi_llm: DefaultMultiLLM) -> None:
     # Mock the litellm.completion function
-    with patch("onyx.llm.chat_llm.litellm.completion") as mock_completion:
+    with patch("litellm.completion") as mock_completion:
         # Create a mock response with multiple tool calls using litellm objects
         mock_response = [
             litellm.ModelResponse(

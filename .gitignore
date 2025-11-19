@@ -17,12 +17,33 @@ backend/tests/regression/answer_quality/test_data.json
 backend/tests/regression/search_quality/eval-*
 backend/tests/regression/search_quality/search_eval_config.yaml
 backend/tests/regression/search_quality/*.json
+backend/onyx/evals/data/
+*.log
 
 # secret files
 .env
 jira_test_env
+settings.json
 
 # others
 /deployment/data/nginx/app.conf
 *.sw?
 /backend/tests/regression/answer_quality/search_test_config.yaml
+*.egg-info
+
+# Claude
+AGENTS.md
+CLAUDE.md
+
+# Local .terraform directories
+**/.terraform/*
+
+# Local .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Local .terraform.lock.hcl file
+.terraform.lock.hcl
+
+# MCP configs
+.playwright-mcp

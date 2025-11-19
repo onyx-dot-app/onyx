@@ -21,3 +21,11 @@ def map_document_id_order(
             current += 1
 
     return DocumentIdOrderMapping(order_mapping=order_mapping)
+
+
+def map_document_id_order_v2(fetched_docs: list[LlmDoc]) -> DocumentIdOrderMapping:
+    order_mapping = {}
+    for doc in fetched_docs:
+        if doc.document_id not in order_mapping and doc.document_citation_number:
+            order_mapping[doc.document_id] = doc.document_citation_number
+    return DocumentIdOrderMapping(order_mapping=order_mapping)

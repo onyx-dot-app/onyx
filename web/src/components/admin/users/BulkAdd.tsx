@@ -1,7 +1,7 @@
 "use client";
 
 import { withFormik, FormikProps, FormikErrors, Form, Field } from "formik";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 
 const WHITESPACE_SPLIT = /\s+/;
 const EMAIL_REGEX = /[^@]+@[^.]+\.[^.]/;
@@ -47,14 +47,8 @@ const AddUserFormRenderer = ({
     {touched.emails && errors.emails && (
       <div className="text-error text-sm">{errors.emails}</div>
     )}
-    <Button
-      className="mx-auto"
-      variant="submit"
-      size="sm"
-      type="submit"
-      disabled={isSubmitting}
-    >
-      Add!
+    <Button disabled={isSubmitting} className="self-end">
+      Add
     </Button>
   </Form>
 );

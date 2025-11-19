@@ -1,8 +1,4 @@
 import { buildUrl } from "./utilsSS";
-import getConfig from "next/config";
-
-const { publicRuntimeConfig } = getConfig();
-const version = publicRuntimeConfig?.version;
 
 // Maybe improve type-safety by creating a 'VersionType' instead of generic string
 export const getBackendVersion = async (): Promise<string | null> => {
@@ -23,10 +19,5 @@ export const getBackendVersion = async (): Promise<string | null> => {
 
 // Frontend?
 export const getWebVersion = (): string | null => {
-
-  if (process.env.APP_VERSION) {
-    return process.env.APP_VERSION;
-  }
-
-  return version;
+  return process.env.ONYX_VERSION || "dev";
 };

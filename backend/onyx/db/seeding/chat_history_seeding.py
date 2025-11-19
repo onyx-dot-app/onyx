@@ -52,13 +52,13 @@ def seed_chat_history(num_sessions: int, num_messages: int, days: int) -> None:
                     msg = f"pytest_message_assistant_{x}"
 
                 chat_message = create_new_chat_message(
-                    row.id,
-                    parent_message,
-                    msg,
-                    None,
-                    0,
-                    current_message_type,
-                    db_session,
+                    chat_session_id=row.id,
+                    parent_message=parent_message,
+                    message=msg,
+                    token_count=0,
+                    message_type=current_message_type,
+                    commit=False,
+                    db_session=db_session,
                 )
 
                 chat_message.time_sent = row.time_created + timedelta(

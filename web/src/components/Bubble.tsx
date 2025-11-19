@@ -1,3 +1,4 @@
+import { JSX } from "react";
 import { CustomCheckbox } from "./CustomCheckbox";
 
 export function Bubble({

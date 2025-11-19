@@ -19,20 +19,20 @@ from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
+from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.shared_graph_utils.models import CombinedAgentMetrics
 from onyx.agents.agent_search.shared_graph_utils.models import (
     SubQuestionAnswerResults,
 )
-from onyx.auth.schemas import UserRole
+from onyx.agents.agent_search.utils import create_citation_format_list
 from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDocs
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
-from onyx.context.search.utils import chunks_or_sections_to_search_docs
 from onyx.db.models import AgentSearchMetrics
 from onyx.db.models import AgentSubQuery
 from onyx.db.models import AgentSubQuestion
@@ -40,26 +40,28 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ChatSession
 from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import Prompt
+from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import SearchDoc
 from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
-from onyx.db.models import UserFile
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
-from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import SubQueryDetail
 from onyx.server.query_and_chat.models import SubQuestionDetail
-from onyx.tools.tool_runner import ToolCallFinalResult
+from onyx.tools.models import ToolCallFinalResult
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 
+
 logger = setup_logger()
+
+
+# Note: search/streaming packet helpers moved to streaming_utils.py
 
 
 def get_chat_session_by_id(
@@ -167,6 +169,8 @@ def get_chat_sessions_by_user(
     db_session: Session,
     include_onyxbot_flows: bool = False,
     limit: int = 50,
+    project_id: int | None = None,
+    only_non_project_chats: bool = False,
 ) -> list[ChatSession]:
     stmt = select(ChatSession).where(ChatSession.user_id == user_id)
 
@@ -180,6 +184,11 @@ def get_chat_sessions_by_user(
 
     if limit:
         stmt = stmt.limit(limit)
+
+    if project_id is not None:
+        stmt = stmt.where(ChatSession.project_id == project_id)
+    elif only_non_project_chats:
+        stmt = stmt.where(ChatSession.project_id.is_(None))
 
     result = db_session.execute(stmt)
     chat_sessions = result.scalars().all()
@@ -254,6 +263,7 @@ def create_chat_session(
     prompt_override: PromptOverride | None = None,
     onyxbot_flow: bool = False,
     slack_thread_id: str | None = None,
+    project_id: int | None = None,
 ) -> ChatSession:
     chat_session = ChatSession(
         user_id=user_id,
@@ -263,6 +273,7 @@ def create_chat_session(
         prompt_override=prompt_override,
         onyxbot_flow=onyxbot_flow,
         slack_thread_id=slack_thread_id,
+        project_id=project_id,
     )
 
     db_session.add(chat_session)
@@ -508,7 +519,6 @@ def add_chats_to_session_from_slack_thread(
             citations=chat_message.citations,
             reference_docs=chat_message.search_docs,
             tool_call=chat_message.tool_call,
-            prompt_id=chat_message.prompt_id,
             token_count=chat_message.token_count,
             message_type=chat_message.message_type,
             alternate_assistant_id=chat_message.alternate_assistant_id,
@@ -550,11 +560,23 @@ def get_chat_messages_by_session(
     )
 
     if prefetch_tool_calls:
+        # stmt = stmt.options(
+        #     joinedload(ChatMessage.tool_call),
+        #     joinedload(ChatMessage.sub_questions).joinedload(
+        #         AgentSubQuestion.sub_queries
+        #     ),
+        # )
+        # result = db_session.scalars(stmt).unique().all()
+
+        stmt = (
+            select(ChatMessage)
+            .where(ChatMessage.chat_session_id == chat_session_id)
+            .order_by(nullsfirst(ChatMessage.parent_message))
+        )
         stmt = stmt.options(
-            joinedload(ChatMessage.tool_call),
-            joinedload(ChatMessage.sub_questions).joinedload(
-                AgentSubQuestion.sub_queries
-            ),
+            joinedload(ChatMessage.research_iterations).joinedload(
+                ResearchAgentIteration.sub_steps
+            )
         )
         result = db_session.scalars(stmt).unique().all()
     else:
@@ -586,7 +608,6 @@ def get_or_create_root_message(
     else:
         new_root_message = ChatMessage(
             chat_session_id=chat_session_id,
-            prompt_id=None,
             parent_message=None,
             latest_child_message=None,
             message="",
@@ -630,7 +651,6 @@ def create_new_chat_message(
     chat_session_id: UUID,
     parent_message: ChatMessage,
     message: str,
-    prompt_id: int | None,
     token_count: int,
     message_type: MessageType,
     db_session: Session,
@@ -645,8 +665,9 @@ def create_new_chat_message(
     commit: bool = True,
     reserved_message_id: int | None = None,
     overridden_model: str | None = None,
-    refined_answer_improvement: bool | None = None,
     is_agentic: bool = False,
+    research_type: ResearchType | None = None,
+    research_plan: dict[str, Any] | None = None,
 ) -> ChatMessage:
     if reserved_message_id is not None:
         # Edit existing message
@@ -658,7 +679,6 @@ def create_new_chat_message(
         existing_message.parent_message = parent_message.id
         existing_message.message = message
         existing_message.rephrased_query = rephrased_query
-        existing_message.prompt_id = prompt_id
         existing_message.token_count = token_count
         existing_message.message_type = message_type
         existing_message.citations = citations
@@ -667,8 +687,9 @@ def create_new_chat_message(
         existing_message.error = error
         existing_message.alternate_assistant_id = alternate_assistant_id
         existing_message.overridden_model = overridden_model
-        existing_message.refined_answer_improvement = refined_answer_improvement
         existing_message.is_agentic = is_agentic
+        existing_message.research_type = research_type
+        existing_message.research_plan = research_plan
         new_chat_message = existing_message
     else:
         # Create new message
@@ -678,7 +699,6 @@ def create_new_chat_message(
             latest_child_message=None,
             message=message,
             rephrased_query=rephrased_query,
-            prompt_id=prompt_id,
             token_count=token_count,
             message_type=message_type,
             citations=citations,
@@ -687,8 +707,9 @@ def create_new_chat_message(
             error=error,
             alternate_assistant_id=alternate_assistant_id,
             overridden_model=overridden_model,
-            refined_answer_improvement=refined_answer_improvement,
             is_agentic=is_agentic,
+            research_type=research_type,
+            research_plan=research_plan,
         )
         db_session.add(new_chat_message)
 
@@ -736,33 +757,6 @@ def attach_files_to_chat_message(
     chat_message.files = files
     if commit:
         db_session.commit()
-
-
-def get_prompt_by_id(
-    prompt_id: int,
-    user: User | None,
-    db_session: Session,
-    include_deleted: bool = False,
-) -> Prompt:
-    stmt = select(Prompt).where(Prompt.id == prompt_id)
-
-    # if user is not specified OR they are an admin, they should
-    # have access to all prompts, so this where clause is not needed
-    if user and user.role != UserRole.ADMIN:
-        stmt = stmt.where(or_(Prompt.user_id == user.id, Prompt.user_id.is_(None)))
-
-    if not include_deleted:
-        stmt = stmt.where(Prompt.deleted.is_(False))
-
-    result = db_session.execute(stmt)
-    prompt = result.scalar_one_or_none()
-
-    if prompt is None:
-        raise ValueError(
-            f"Prompt with ID {prompt_id} does not exist or does not belong to user"
-        )
-
-    return prompt
 
 
 def get_doc_query_identifiers_from_model(
@@ -860,88 +854,14 @@ def get_db_search_doc_by_id(doc_id: int, db_session: Session) -> DBSearchDoc | N
     return search_doc
 
 
-def create_search_doc_from_user_file(
-    db_user_file: UserFile, associated_chat_file: InMemoryChatFile, db_session: Session
-) -> SearchDoc:
-    """Create a SearchDoc in the database from a UserFile and return it.
-    This ensures proper ID generation by SQLAlchemy and prevents duplicate key errors.
-    """
-    blurb = ""
-    if associated_chat_file and associated_chat_file.content:
-        try:
-            # Try to decode as UTF-8, but handle errors gracefully
-            content_sample = associated_chat_file.content[:100]
-            # Remove null bytes which can cause SQL errors
-            content_sample = content_sample.replace(b"\x00", b"")
-
-            # NOTE(rkuo): this used to be "replace" instead of strict, but
-            # that would bypass the binary handling below
-            blurb = content_sample.decode("utf-8", errors="strict")
-        except Exception:
-            # If decoding fails completely, provide a generic description
-            blurb = f"[Binary file: {db_user_file.name}]"
-
-    db_search_doc = SearchDoc(
-        document_id=db_user_file.document_id,
-        chunk_ind=0,  # Default to 0 for user files
-        semantic_id=db_user_file.name,
-        link=db_user_file.link_url,
-        blurb=blurb,
-        source_type=DocumentSource.FILE,  # Assuming internal source for user files
-        boost=0,  # Default boost
-        hidden=False,  # Default visibility
-        doc_metadata={},  # Empty metadata
-        score=0.0,  # Default score of 0.0 instead of None
-        is_relevant=None,  # No relevance initially
-        relevance_explanation=None,  # No explanation initially
-        match_highlights=[],  # No highlights initially
-        updated_at=db_user_file.created_at,  # Use created_at as updated_at
-        primary_owners=[],  # Empty list instead of None
-        secondary_owners=[],  # Empty list instead of None
-        is_internet=False,  # Not from internet
+def get_db_search_doc_by_document_id(
+    document_id: str, db_session: Session
+) -> DBSearchDoc | None:
+    """Get SearchDoc by document_id field. There are no safety checks here like user permission etc., use with caution"""
+    search_doc = (
+        db_session.query(SearchDoc).filter(SearchDoc.document_id == document_id).first()
     )
-
-    db_session.add(db_search_doc)
-    db_session.flush()  # Get the ID but don't commit yet
-
-    return db_search_doc
-
-
-def translate_db_user_file_to_search_doc(
-    db_user_file: UserFile, associated_chat_file: InMemoryChatFile
-) -> SearchDoc:
-    blurb = ""
-    if associated_chat_file and associated_chat_file.content:
-        try:
-            # Try to decode as UTF-8, but handle errors gracefully
-            content_sample = associated_chat_file.content[:100]
-            # Remove null bytes which can cause SQL errors
-            content_sample = content_sample.replace(b"\x00", b"")
-            blurb = content_sample.decode("utf-8", errors="replace")
-        except Exception:
-            # If decoding fails completely, provide a generic description
-            blurb = f"[Binary file: {db_user_file.name}]"
-
-    return SearchDoc(
-        # Don't set ID - let SQLAlchemy auto-generate it
-        document_id=db_user_file.document_id,
-        chunk_ind=0,  # Default to 0 for user files
-        semantic_id=db_user_file.name,
-        link=db_user_file.link_url,
-        blurb=blurb,
-        source_type=DocumentSource.FILE,  # Assuming internal source for user files
-        boost=0,  # Default boost
-        hidden=False,  # Default visibility
-        doc_metadata={},  # Empty metadata
-        score=0.0,  # Default score of 0.0 instead of None
-        is_relevant=None,  # No relevance initially
-        relevance_explanation=None,  # No explanation initially
-        match_highlights=[],  # No highlights initially
-        updated_at=db_user_file.created_at,  # Use created_at as updated_at
-        primary_owners=[],  # Empty list instead of None
-        secondary_owners=[],  # Empty list instead of None
-        is_internet=False,  # Not from internet
-    )
+    return search_doc
 
 
 def translate_db_search_doc_to_server_search_doc(
@@ -1032,10 +952,20 @@ def get_retrieval_docs_from_search_docs(
     return RetrievalDocs(top_documents=top_documents)
 
 
+# Note: translate_db_message_to_packets moved to onyx.server.query_and_chat.streaming_utils
+
+
 def translate_db_message_to_chat_message_detail(
     chat_message: ChatMessage,
     remove_doc_content: bool = False,
 ) -> ChatMessageDetail:
+    # Get current feedback if any
+    current_feedback = None
+    if chat_message.chat_message_feedbacks:
+        latest_feedback = chat_message.chat_message_feedbacks[-1]
+        if latest_feedback.is_positive is not None:
+            current_feedback = "like" if latest_feedback.is_positive else "dislike"
+
     chat_msg_detail = ChatMessageDetail(
         chat_session_id=chat_message.chat_session_id,
         message_id=chat_message.id,
@@ -1047,6 +977,7 @@ def translate_db_message_to_chat_message_detail(
             chat_message.search_docs, remove_doc_content=remove_doc_content
         ),
         message_type=chat_message.message_type,
+        research_type=chat_message.research_type,
         time_sent=chat_message.time_sent,
         citations=chat_message.citations,
         files=chat_message.files or [],
@@ -1061,12 +992,8 @@ def translate_db_message_to_chat_message_detail(
         ),
         alternate_assistant_id=chat_message.alternate_assistant_id,
         overridden_model=chat_message.overridden_model,
-        sub_questions=translate_db_sub_questions_to_server_objects(
-            chat_message.sub_questions
-        ),
-        refined_answer_improvement=chat_message.refined_answer_improvement,
-        is_agentic=chat_message.is_agentic,
         error=chat_message.error,
+        current_feedback=current_feedback,
     )
 
     return chat_msg_detail
@@ -1111,27 +1038,6 @@ def log_agent_sub_question_results(
     primary_message_id: int | None,
     sub_question_answer_results: list[SubQuestionAnswerResults],
 ) -> None:
-    def _create_citation_format_list(
-        document_citations: list[InferenceSection],
-    ) -> list[dict[str, Any]]:
-        citation_list: list[dict[str, Any]] = []
-        for document_citation in document_citations:
-            document_citation_dict = {
-                "link": "",
-                "blurb": document_citation.center_chunk.blurb,
-                "content": document_citation.center_chunk.content,
-                "metadata": document_citation.center_chunk.metadata,
-                "updated_at": str(document_citation.center_chunk.updated_at),
-                "document_id": document_citation.center_chunk.document_id,
-                "source_type": "file",
-                "source_links": document_citation.center_chunk.source_links,
-                "match_highlights": document_citation.center_chunk.match_highlights,
-                "semantic_identifier": document_citation.center_chunk.semantic_identifier,
-            }
-
-            citation_list.append(document_citation_dict)
-
-        return citation_list
 
     now = datetime.now()
 
@@ -1141,7 +1047,7 @@ def log_agent_sub_question_results(
         ]
         sub_question = sub_question_answer_result.question
         sub_answer = sub_question_answer_result.answer
-        sub_document_results = _create_citation_format_list(
+        sub_document_results = create_citation_format_list(
             sub_question_answer_result.context_documents
         )
 
@@ -1171,7 +1077,7 @@ def log_agent_sub_question_results(
             db_session.add(sub_query_object)
             db_session.commit()
 
-            search_docs = chunks_or_sections_to_search_docs(
+            search_docs = ServerSearchDoc.from_chunks_or_sections(
                 sub_query.retrieved_documents
             )
             for doc in search_docs:
@@ -1198,3 +1104,156 @@ def update_chat_session_updated_at_timestamp(
         .values(time_updated=func.now())
     )
     # No commit - the caller is responsible for committing the transaction
+
+
+def create_search_doc_from_inference_section(
+    inference_section: InferenceSection,
+    is_internet: bool,
+    db_session: Session,
+    score: float = 0.0,
+    is_relevant: bool | None = None,
+    relevance_explanation: str | None = None,
+    commit: bool = False,
+) -> SearchDoc:
+    """Create a SearchDoc in the database from an InferenceSection."""
+
+    db_search_doc = SearchDoc(
+        document_id=inference_section.center_chunk.document_id,
+        chunk_ind=inference_section.center_chunk.chunk_id,
+        semantic_id=inference_section.center_chunk.semantic_identifier,
+        link=(
+            inference_section.center_chunk.source_links.get(0)
+            if inference_section.center_chunk.source_links
+            else None
+        ),
+        blurb=inference_section.center_chunk.blurb,
+        source_type=inference_section.center_chunk.source_type,
+        boost=inference_section.center_chunk.boost,
+        hidden=inference_section.center_chunk.hidden,
+        doc_metadata=inference_section.center_chunk.metadata,
+        score=score,
+        is_relevant=is_relevant,
+        relevance_explanation=relevance_explanation,
+        match_highlights=inference_section.center_chunk.match_highlights,
+        updated_at=inference_section.center_chunk.updated_at,
+        primary_owners=inference_section.center_chunk.primary_owners or [],
+        secondary_owners=inference_section.center_chunk.secondary_owners or [],
+        is_internet=is_internet,
+    )
+
+    db_session.add(db_search_doc)
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
+
+    return db_search_doc
+
+
+def create_search_doc_from_saved_search_doc(
+    saved_search_doc: SavedSearchDoc,
+) -> SearchDoc:
+    """Convert SavedSearchDoc (server model) into DB SearchDoc with correct field mapping."""
+    return SearchDoc(
+        document_id=saved_search_doc.document_id,
+        chunk_ind=saved_search_doc.chunk_ind,
+        # Map Pydantic semantic_identifier -> DB semantic_id; ensure non-null
+        semantic_id=saved_search_doc.semantic_identifier or "Unknown",
+        link=saved_search_doc.link,
+        blurb=saved_search_doc.blurb,
+        source_type=saved_search_doc.source_type,
+        boost=saved_search_doc.boost,
+        hidden=saved_search_doc.hidden,
+        # Map metadata -> doc_metadata (DB column name)
+        doc_metadata=saved_search_doc.metadata,
+        # SavedSearchDoc.score exists and defaults to 0.0
+        score=saved_search_doc.score or 0.0,
+        match_highlights=saved_search_doc.match_highlights,
+        updated_at=saved_search_doc.updated_at,
+        primary_owners=saved_search_doc.primary_owners,
+        secondary_owners=saved_search_doc.secondary_owners,
+        is_internet=saved_search_doc.is_internet,
+        is_relevant=saved_search_doc.is_relevant,
+        relevance_explanation=saved_search_doc.relevance_explanation,
+    )
+
+
+def update_db_session_with_messages(
+    db_session: Session,
+    chat_message_id: int,
+    chat_session_id: UUID,
+    is_agentic: bool | None,
+    message: str | None = None,
+    message_type: str | None = None,
+    token_count: int | None = None,
+    rephrased_query: str | None = None,
+    citations: dict[int, int] | None = None,
+    error: str | None = None,
+    alternate_assistant_id: int | None = None,
+    overridden_model: str | None = None,
+    research_type: str | None = None,
+    research_plan: dict[str, str] | None = None,
+    final_documents: list[SearchDoc] | None = None,
+    update_parent_message: bool = True,
+    research_answer_purpose: ResearchAnswerPurpose | None = None,
+    files: list[FileDescriptor] | None = None,
+    commit: bool = False,
+) -> ChatMessage:
+    chat_message = (
+        db_session.query(ChatMessage)
+        .filter(
+            ChatMessage.id == chat_message_id,
+            ChatMessage.chat_session_id == chat_session_id,
+        )
+        .first()
+    )
+    if not chat_message:
+        raise ValueError("Chat message with id not found")  # should never happen
+
+    if message:
+        chat_message.message = message
+    if message_type:
+        chat_message.message_type = MessageType(message_type)
+    if token_count:
+        chat_message.token_count = token_count
+    if rephrased_query:
+        chat_message.rephrased_query = rephrased_query
+    if citations:
+        # Convert string keys to integers to match database field type
+        chat_message.citations = {int(k): v for k, v in citations.items()}
+    if error:
+        chat_message.error = error
+    if alternate_assistant_id:
+        chat_message.alternate_assistant_id = alternate_assistant_id
+    if overridden_model:
+        chat_message.overridden_model = overridden_model
+    if research_type:
+        chat_message.research_type = ResearchType(research_type)
+    if research_plan:
+        chat_message.research_plan = research_plan
+    if final_documents:
+        chat_message.search_docs = final_documents
+    if is_agentic is not None:
+        chat_message.is_agentic = is_agentic
+
+    if research_answer_purpose:
+        chat_message.research_answer_purpose = research_answer_purpose
+
+    if files is not None:
+        chat_message.files = files
+
+    if update_parent_message:
+        parent_chat_message = (
+            db_session.query(ChatMessage)
+            .filter(ChatMessage.id == chat_message.parent_message)
+            .first()
+        )
+        if parent_chat_message:
+            parent_chat_message.latest_child_message = chat_message.id
+
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
+
+    return chat_message

@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { IndexAttemptError } from "./types";
 import { localizeAndPrettify } from "@/lib/time";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { PageSelector } from "@/components/PageSelector";
 import { useEffect, useState, useMemo } from "react";
 
@@ -231,7 +231,6 @@ export default function IndexAttemptErrorsModal({
               {hasUnresolvedErrors && !isResolvingErrors && (
                 <Button
                   onClick={onResolveAll}
-                  variant="default"
                   className="ml-4 whitespace-nowrap"
                 >
                   Resolve All

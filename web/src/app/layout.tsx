@@ -9,6 +9,7 @@ import {
   GTM_ENABLED,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   NEXT_PUBLIC_CLOUD_ENABLED,
+  MODAL_ROOT_ID,
 } from "@/lib/constants";
 import { Metadata } from "next";
 import { buildClientUrl } from "@/lib/utilsSS";
@@ -17,7 +18,7 @@ import {
   EnterpriseSettings,
   ApplicationStatus,
 } from "./admin/settings/interfaces";
-import { AppProvider } from "@/components/context/AppProvider";
+import AppProvider from "@/components/context/AppProvider";
 import { PHProvider } from "./providers";
 import { getAuthTypeMetadataSS, getCurrentUserSS } from "@/lib/userSS";
 import { Suspense } from "react";
@@ -26,12 +27,13 @@ import Script from "next/script";
 import { Hanken_Grotesk } from "next/font/google";
 import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
-import { DocumentsProvider } from "./chat/my-documents/DocumentsContext";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import Error from "@/components/errorPages/ErrorPage";
 
 import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
 import { fetchAssistantData } from "@/lib/chat/fetchAssistantdata";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { fetchAppSidebarMetadata } from "@/lib/appSidebarSS";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -79,6 +81,8 @@ export default async function RootLayout({
       getCurrentUserSS(),
       getAuthTypeMetadataSS(),
     ]);
+
+  const { folded } = await fetchAppSidebarMetadata(user);
 
   const productGating =
     combinedSettings?.settings.application_status ?? ApplicationStatus.ACTIVE;
@@ -129,7 +133,9 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <div className="text-text min-h-screen bg-background">
-            <PHProvider>{content}</PHProvider>
+            <TooltipProvider>
+              <PHProvider>{content}</PHProvider>
+            </TooltipProvider>
           </div>
         </ThemeProvider>
       </body>
@@ -152,14 +158,15 @@ export default async function RootLayout({
       user={user}
       settings={combinedSettings}
       assistants={assistants}
+      folded={folded}
     >
-      <DocumentsProvider>
-        <Suspense fallback={null}>
-          <PostHogPageView />
-        </Suspense>
+      <Suspense fallback={null}>
+        <PostHogPageView />
+      </Suspense>
+      <div id={MODAL_ROOT_ID} className="h-screen w-screen">
         {children}
-        {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
-      </DocumentsProvider>
+      </div>
+      {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
     </AppProvider>
   );
 }

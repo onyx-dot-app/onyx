@@ -22,7 +22,6 @@ from onyx.configs.app_configs import REDIS_SSL
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_pool import RedisPool
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -129,9 +128,6 @@ def onyx_redis(
         tenant_id = get_current_tenant_id()
         logger.info(f"Purging locks associated with deleting cc_pair={cc_pair_id}.")
         redis_connector = RedisConnector(tenant_id, cc_pair_id)
-
-        match_pattern = f"{tenant_id}:{RedisConnectorIndex.FENCE_PREFIX}_{cc_pair_id}/*"
-        purge_by_match_and_type(match_pattern, "string", batch, dry_run, r)
 
         redis_delete_if_exists_helper(
             f"{tenant_id}:{redis_connector.prune.fence_key}", dry_run, r

@@ -1,15 +1,23 @@
+import os
 from collections.abc import Callable
 from datetime import datetime
 from datetime import timezone
 
+import boto3
+import httpx
+from botocore.exceptions import BotoCoreError
+from botocore.exceptions import ClientError
+from botocore.exceptions import NoCredentialsError
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
+from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
@@ -23,16 +31,24 @@ from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
+from onyx.llm.llm_provider_options import get_bedrock_model_names
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
+from onyx.server.manage.llm.models import BedrockModelsRequest
 from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import OllamaFinalModelResponse
+from onyx.server.manage.llm.models import OllamaModelDetails
+from onyx.server.manage.llm.models import OllamaModelsRequest
+from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
+from onyx.server.manage.llm.models import OpenRouterModelDetails
+from onyx.server.manage.llm.models import OpenRouterModelsRequest
 from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.utils.logger import setup_logger
@@ -386,3 +402,253 @@ def get_provider_contextual_cost(
             )
 
     return costs
+
+
+@admin_router.post("/bedrock/available-models")
+def get_bedrock_available_models(
+    request: BedrockModelsRequest,
+    _: User | None = Depends(current_admin_user),
+) -> list[str]:
+    """Fetch available Bedrock models for a specific region and credentials"""
+    try:
+        # Precedence: bearer → keys → IAM
+        if request.aws_bearer_token_bedrock:
+            os.environ["AWS_BEARER_TOKEN_BEDROCK"] = request.aws_bearer_token_bedrock
+            session = boto3.Session(region_name=request.aws_region_name)
+        elif request.aws_access_key_id and request.aws_secret_access_key:
+            session = boto3.Session(
+                aws_access_key_id=request.aws_access_key_id,
+                aws_secret_access_key=request.aws_secret_access_key,
+                region_name=request.aws_region_name,
+            )
+        else:
+            session = boto3.Session(region_name=request.aws_region_name)
+
+        try:
+            bedrock = session.client("bedrock")
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to create Bedrock client: {e}. Check AWS credentials and region.",
+            )
+
+        # Available Bedrock models: text-only, streaming supported
+        model_summaries = bedrock.list_foundation_models().get("modelSummaries", [])
+        available_models = {
+            model.get("modelId", "")
+            for model in model_summaries
+            if model.get("modelId")
+            and "embed" not in model.get("modelId", "").lower()
+            and model.get("responseStreamingSupported", False)
+        }
+
+        # Available inference profiles. Invoking these allows cross-region inference (preferred over base models).
+        profile_ids: set[str] = set()
+        cross_region_models: set[str] = set()
+        try:
+            inference_profiles = bedrock.list_inference_profiles(
+                typeEquals="SYSTEM_DEFINED"
+            ).get("inferenceProfileSummaries", [])
+            for profile in inference_profiles:
+                if profile_id := profile.get("inferenceProfileId"):
+                    profile_ids.add(profile_id)
+
+                    # The model id is everything after the first period in the profile id
+                    if "." in profile_id:
+                        model_id = profile_id.split(".", 1)[1]
+                        cross_region_models.add(model_id)
+        except Exception as e:
+            # Cross-region inference isn't guaranteed; ignore failures here.
+            logger.warning(f"Couldn't fetch inference profiles for Bedrock: {e}")
+
+        # Prefer profiles: de-dupe available models, then add profile IDs
+        candidates = (available_models - cross_region_models) | profile_ids
+
+        # Keep only models we support (compatibility with litellm)
+        filtered = sorted(
+            [model for model in candidates if model in get_bedrock_model_names()],
+            reverse=True,
+        )
+
+        # Unset the environment variable, even though it is set again in DefaultMultiLLM init
+        os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
+
+        return filtered
+
+    except (ClientError, NoCredentialsError, BotoCoreError) as e:
+        raise HTTPException(
+            status_code=400, detail=f"Failed to connect to AWS Bedrock: {e}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Unexpected error fetching Bedrock models: {e}"
+        )
+
+
+def _get_ollama_available_model_names(api_base: str) -> set[str]:
+    """Fetch available model names from Ollama server."""
+    tags_url = f"{api_base}/api/tags"
+    try:
+        response = httpx.get(tags_url, timeout=5.0)
+        response.raise_for_status()
+        response_json = response.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to fetch Ollama models: {e}",
+        )
+
+    models = response_json.get("models", [])
+    return {model.get("name") for model in models if model.get("name")}
+
+
+@admin_router.post("/ollama/available-models")
+def get_ollama_available_models(
+    request: OllamaModelsRequest,
+    _: User | None = Depends(current_admin_user),
+) -> list[OllamaFinalModelResponse]:
+    """Fetch the list of available models from an Ollama server."""
+
+    cleaned_api_base = request.api_base.strip().rstrip("/")
+    if not cleaned_api_base:
+        raise HTTPException(
+            status_code=400, detail="API base URL is required to fetch Ollama models."
+        )
+
+    model_names = _get_ollama_available_model_names(cleaned_api_base)
+    if not model_names:
+        raise HTTPException(
+            status_code=400,
+            detail="No models found from your Ollama server",
+        )
+
+    all_models_with_context_size_and_vision: list[OllamaFinalModelResponse] = []
+    show_url = f"{cleaned_api_base}/api/show"
+
+    for model_name in model_names:
+        context_limit: int | None = None
+        supports_image_input: bool | None = None
+        try:
+            show_response = httpx.post(
+                show_url,
+                json={"model": model_name},
+                timeout=5.0,
+            )
+            show_response.raise_for_status()
+            show_response_json = show_response.json()
+
+            # Parse the response into the expected format
+            ollama_model_details = OllamaModelDetails.model_validate(show_response_json)
+
+            # Check if this model supports completion/chat
+            if not ollama_model_details.supports_completion():
+                continue
+
+            # Optimistically access. Context limit is stored as "model_architecture.context" = int
+            architecture = ollama_model_details.model_info.get(
+                "general.architecture", ""
+            )
+            context_limit = ollama_model_details.model_info.get(
+                architecture + ".context_length", None
+            )
+            supports_image_input = ollama_model_details.supports_image_input()
+        except ValidationError as e:
+            logger.warning(
+                "Invalid model details from Ollama server",
+                extra={"model": model_name, "validation_error": str(e)},
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to fetch Ollama model details",
+                extra={"model": model_name, "error": str(e)},
+            )
+
+        # If we fail at any point attempting to extract context limit,
+        # still allow this model to be used with a fallback max context size
+        if not context_limit:
+            context_limit = GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+
+        if not supports_image_input:
+            supports_image_input = False
+
+        all_models_with_context_size_and_vision.append(
+            OllamaFinalModelResponse(
+                name=model_name,
+                max_input_tokens=context_limit,
+                supports_image_input=supports_image_input,
+            )
+        )
+
+    return all_models_with_context_size_and_vision
+
+
+def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:
+    """Perform GET to OpenRouter /models and return parsed JSON."""
+    cleaned_api_base = api_base.strip().rstrip("/")
+    url = f"{cleaned_api_base}/models"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        # Optional headers recommended by OpenRouter for attribution
+        "HTTP-Referer": "https://onyx.app",
+        "X-Title": "Onyx",
+    }
+    try:
+        response = httpx.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to fetch OpenRouter models: {e}",
+        )
+
+
+@admin_router.post("/openrouter/available-models")
+def get_openrouter_available_models(
+    request: OpenRouterModelsRequest,
+    _: User | None = Depends(current_admin_user),
+) -> list[OpenRouterFinalModelResponse]:
+    """Fetch available models from OpenRouter `/models` endpoint.
+
+    Parses id, context_length, and architecture.input_modalities to infer vision support.
+    """
+
+    response_json = _get_openrouter_models_response(
+        api_base=request.api_base, api_key=request.api_key
+    )
+
+    data = response_json.get("data", [])
+    if not isinstance(data, list) or len(data) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No models found from your OpenRouter endpoint",
+        )
+
+    results: list[OpenRouterFinalModelResponse] = []
+    for item in data:
+        try:
+            model_details = OpenRouterModelDetails.model_validate(item)
+
+            # NOTE: This should be removed if we ever support dynamically fetching embedding models.
+            if model_details.is_embedding_model:
+                continue
+
+            results.append(
+                OpenRouterFinalModelResponse(
+                    name=model_details.id,
+                    max_input_tokens=model_details.context_length,
+                    supports_image_input=model_details.supports_image_input,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse OpenRouter model entry",
+                extra={"error": str(e), "item": str(item)[:1000]},
+            )
+
+    if not results:
+        raise HTTPException(
+            status_code=400, detail="No compatible models found from OpenRouter"
+        )
+
+    return sorted(results, key=lambda m: m.name.lower())

@@ -2,6 +2,7 @@
 
 import { ValidStatuses } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
+import { timeAgo } from "@/lib/time";
 import {
   FiAlertTriangle,
   FiCheckCircle,
@@ -9,13 +10,11 @@ import {
   FiMinus,
   FiPauseCircle,
 } from "react-icons/fi";
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  ConnectorCredentialPairStatus,
+  PermissionSyncStatusEnum,
+} from "@/app/admin/connector/[ccPairId]/types";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 export function IndexAttemptStatus({
   status,
@@ -34,14 +33,9 @@ export function IndexAttemptStatus({
     );
     if (errorMsg) {
       badge = (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="cursor-pointer">{icon}</div>
-            </TooltipTrigger>
-            <TooltipContent>{errorMsg}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <SimpleTooltip tooltip={errorMsg}>
+          <div className="cursor-pointer">{icon}</div>
+        </SimpleTooltip>
       );
     } else {
       badge = icon;
@@ -86,6 +80,65 @@ export function IndexAttemptStatus({
     badge = (
       <Badge variant="outline" icon={FiMinus}>
         None
+      </Badge>
+    );
+  }
+
+  return <div>{badge}</div>;
+}
+
+export function PermissionSyncStatus({
+  status,
+  errorMsg,
+}: {
+  status: PermissionSyncStatusEnum | null;
+  errorMsg?: string | null;
+}) {
+  let badge;
+
+  if (status === PermissionSyncStatusEnum.FAILED) {
+    const icon = (
+      <Badge variant="destructive" icon={FiAlertTriangle}>
+        Failed
+      </Badge>
+    );
+    if (errorMsg) {
+      badge = (
+        <SimpleTooltip tooltip={errorMsg} side="bottom">
+          <div className="cursor-pointer">{icon}</div>
+        </SimpleTooltip>
+      );
+    } else {
+      badge = icon;
+    }
+  } else if (status === PermissionSyncStatusEnum.COMPLETED_WITH_ERRORS) {
+    badge = (
+      <Badge variant="secondary" icon={FiAlertTriangle}>
+        Completed with errors
+      </Badge>
+    );
+  } else if (status === PermissionSyncStatusEnum.SUCCESS) {
+    badge = (
+      <Badge variant="success" icon={FiCheckCircle}>
+        Succeeded
+      </Badge>
+    );
+  } else if (status === PermissionSyncStatusEnum.IN_PROGRESS) {
+    badge = (
+      <Badge variant="in_progress" icon={FiClock}>
+        In Progress
+      </Badge>
+    );
+  } else if (status === PermissionSyncStatusEnum.NOT_STARTED) {
+    badge = (
+      <Badge variant="not_started" icon={FiClock}>
+        Scheduled
+      </Badge>
+    );
+  } else {
+    badge = (
+      <Badge variant="secondary" icon={FiClock}>
+        Not Started
       </Badge>
     );
   }
@@ -151,6 +204,15 @@ export function CCPairStatus({
       badge = (
         <Badge variant="in_progress" icon={FiClock}>
           Indexing
+        </Badge>
+      );
+    } else if (
+      lastIndexAttemptStatus &&
+      lastIndexAttemptStatus === "canceled"
+    ) {
+      badge = (
+        <Badge variant="canceled" icon={FiClock}>
+          Canceled
         </Badge>
       );
     } else {

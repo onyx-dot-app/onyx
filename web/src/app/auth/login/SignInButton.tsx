@@ -1,43 +1,31 @@
+import Button from "@/refresh-components/buttons/Button";
 import { AuthType } from "@/lib/constants";
-import { FaGoogle } from "react-icons/fa";
+import Link from "next/link";
+import { FcGoogle } from "react-icons/fc";
+import { SvgProps } from "@/icons";
 
-export function SignInButton({
-  authorizeUrl,
-  authType,
-}: {
+interface SignInButtonProps {
   authorizeUrl: string;
   authType: AuthType;
-}) {
-  let button;
+}
+
+export default function SignInButton({
+  authorizeUrl,
+  authType,
+}: SignInButtonProps) {
+  let button: React.ReactNode;
+  let icon: React.FunctionComponent<SvgProps> | undefined;
+
   if (authType === "google_oauth" || authType === "cloud") {
-    button = (
-      <div className="mx-auto flex">
-        <div className="my-auto mr-2">
-          <FaGoogle />
-        </div>
-        <p className="text-sm font-medium select-none">Continue with Google</p>
-      </div>
-    );
+    button = "Continue with Google";
+    icon = FcGoogle;
   } else if (authType === "oidc") {
-    button = (
-      <div className="mx-auto flex">
-        <p className="text-sm font-medium select-none">
-          Continue with OIDC SSO
-        </p>
-      </div>
-    );
+    button = "Continue with OIDC SSO";
   } else if (authType === "saml") {
-    button = (
-      <div className="mx-auto flex">
-        <p className="text-sm font-medium select-none">
-          Continue with SAML SSO
-        </p>
-      </div>
-    );
+    button = "Continue with SAML SSO";
   }
 
   const url = new URL(authorizeUrl);
-
   const finalAuthorizeUrl = url.toString();
 
   if (!button) {
@@ -45,11 +33,14 @@ export function SignInButton({
   }
 
   return (
-    <a
-      className="mx-auto mb-4 mt-6 py-3 w-full dark:text-neutral-300 text-neutral-600 border border-neutral-300 flex rounded cursor-pointer hover:border-neutral-400 transition-colors"
-      href={finalAuthorizeUrl}
-    >
-      {button}
-    </a>
+    <Link href={finalAuthorizeUrl}>
+      <Button
+        secondary={authType === "google_oauth" || authType === "cloud"}
+        className="!w-full"
+        leftIcon={icon}
+      >
+        {button}
+      </Button>
+    </Link>
   );
 }

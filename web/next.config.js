@@ -1,15 +1,9 @@
-// Get Onyx Web Version
-const { version: package_version } = require("./package.json"); // version from package.json
-const env_version = process.env.ONYX_VERSION; // version from env variable
-// Use env version if set & valid, otherwise default to package version
-const version = env_version || package_version;
-
 // Always require withSentryConfig
 const { withSentryConfig } = require("@sentry/nextjs");
 
 const cspHeader = `
-    style-src 'self' 'unsafe-inline';
-    font-src 'self';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
     object-src 'none';
     base-uri 'self';
     form-action 'self';
@@ -24,9 +18,8 @@ const cspHeader = `
 const nextConfig = {
   productionBrowserSourceMaps: false,
   output: "standalone",
-  publicRuntimeConfig: {
-    version,
-  },
+  transpilePackages: ["@onyx/opal"],
+  reactCompiler: true,
   images: {
     // Used to fetch favicons
     remotePatterns: [
@@ -104,8 +97,8 @@ const sentryEnabled = Boolean(
 
 // Sentry webpack plugin options
 const sentryWebpackPluginOptions = {
-  org: process.env.SENTRY_ORG || "onyx",
-  project: process.env.SENTRY_PROJECT || "data-plane-web",
+  org: process.env.SENTRY_ORG || "onyx-vl",
+  project: process.env.SENTRY_PROJECT || "onyx-web",
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: !sentryEnabled, // Silence output when Sentry is disabled
   dryRun: !sentryEnabled, // Don't upload source maps when Sentry is disabled

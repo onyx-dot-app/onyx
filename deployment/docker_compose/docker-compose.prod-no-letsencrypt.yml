@@ -1,3 +1,5 @@
+name: onyx
+
 services:
   api_server:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
@@ -15,8 +17,6 @@ services:
       - inference_model_server
       - minio
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
@@ -31,6 +31,9 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+    env_file:
+      - path: .env
+        required: false
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -43,7 +46,7 @@ services:
         max-file: "6"
     volumes:
       # optional, only for debugging purposes
-      - api_server_logs:/var/log
+      - api_server_logs:/var/log/onyx
 
 
   background:
@@ -51,7 +54,7 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-    command: /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+    command: /app/scripts/supervisord_entrypoint.sh
     depends_on:
       - relational_db
       - index
@@ -59,9 +62,8 @@ services:
       - inference_model_server
       - indexing_model_server
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
+      - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
@@ -76,13 +78,16 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+    env_file:
+      - path: .env
+        required: false
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - background_logs:/var/log
+      - background_logs:/var/log/onyx
     logging:
       driver: json-file
       options:
@@ -95,8 +100,6 @@ services:
       context: ../../web
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_DISABLE_STREAMING=${NEXT_PUBLIC_DISABLE_STREAMING:-false}
-        - NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA=${NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA:-false}
         - NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
         - NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
         - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
@@ -105,10 +108,11 @@ services:
     depends_on:
       - api_server
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       - INTERNAL_URL=http://api_server:8080
+    env_file:
+      - path: .env
+        required: false
     logging:
       driver: json-file
       options:
@@ -134,9 +138,9 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
       # Not necessary, this is just to reduce download time during startup
-      - model_cache_huggingface:/root/.cache/huggingface/
+      - model_cache_huggingface:/app/.cache/huggingface/
       # optional, only for debugging purposes
-      - inference_model_server_logs:/var/log
+      - inference_model_server_logs:/var/log/onyx
     logging:
       driver: json-file
       options:
@@ -164,9 +168,9 @@ services:
       - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-1}
     volumes:
       # Not necessary, this is just to reduce download time during startup
-      - indexing_huggingface_model_cache:/root/.cache/huggingface/
+      - indexing_huggingface_model_cache:/app/.cache/huggingface/
       # optional, only for debugging purposes
-      - indexing_model_server_logs:/var/log
+      - indexing_model_server_logs:/var/log/onyx
     logging:
       driver: json-file
       options:
@@ -180,7 +184,8 @@ services:
     restart: unless-stopped
     # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
     env_file:
-      - .env
+      - path: .env
+        required: false
     volumes:
       - db_volume:/var/lib/postgresql/data
     logging:
@@ -231,13 +236,18 @@ services:
     # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
     # in order to make this work on both Unix-like systems and windows
     command: >
-      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
-      && /etc/nginx/conf.d/run-nginx.sh app.conf.template.no-letsencrypt"
+      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh
+      && /etc/nginx/conf.d/run-nginx.sh app.conf.template.prod.no-letsencrypt"
     env_file:
       - .env.nginx
+    environment:
+      # Nginx proxy timeout settings (in seconds)
+      - NGINX_PROXY_CONNECT_TIMEOUT=${NGINX_PROXY_CONNECT_TIMEOUT:-300}
+      - NGINX_PROXY_SEND_TIMEOUT=${NGINX_PROXY_SEND_TIMEOUT:-300}
+      - NGINX_PROXY_READ_TIMEOUT=${NGINX_PROXY_READ_TIMEOUT:-300}
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
@@ -260,6 +270,9 @@ services:
     # docker silently mounts /data even without an explicit volume mount, which enables
     # persistence. explicitly setting save and appendonly forces ephemeral behavior.
     command: redis-server --save "" --appendonly no
+    # Use tmpfs to prevent creation of anonymous volumes for /data
+    tmpfs:
+      - /data
 
 volumes:
   db_volume:

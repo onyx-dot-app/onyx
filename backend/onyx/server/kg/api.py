@@ -3,6 +3,8 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
+from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.configs.kg_configs import KG_BETA_ASSISTANT_DESCRIPTION
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.entities import get_entity_stats_by_grounded_source_name
@@ -17,6 +19,7 @@ from onyx.db.persona import create_update_persona
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
+from onyx.db.tools import get_builtin_tool
 from onyx.kg.resets.reset_index import reset_full_kg_index__commit
 from onyx.kg.setup.kg_default_entity_definitions import (
     populate_missing_default_entity_types__commit,
@@ -31,11 +34,11 @@ from onyx.server.kg.models import KGConfig
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
 from onyx.server.kg.models import SourceAndEntityTypeView
 from onyx.server.kg.models import SourceStatistics
-from onyx.tools.built_in_tools import get_search_tool
+from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
+    KnowledgeGraphTool,
+)
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
-
-_KG_BETA_ASSISTANT_DESCRIPTION = "The KG Beta assistant uses the Onyx Knowledge Graph (beta) structure \
-to answer questions"
 
 admin_router = APIRouter(prefix="/admin/kg")
 
@@ -95,12 +98,9 @@ def enable_or_disable_kg(
     enable_kg(enable_req=req)
     populate_missing_default_entity_types__commit(db_session=db_session)
 
-    # Create or restore KG Beta persona
-
-    # Get the search tool
-    search_tool = get_search_tool(db_session=db_session)
-    if not search_tool:
-        raise RuntimeError("SearchTool not found in the database.")
+    # Get the search and knowledge graph tools
+    search_tool = get_builtin_tool(db_session=db_session, tool_type=SearchTool)
+    kg_tool = get_builtin_tool(db_session=db_session, tool_type=KnowledgeGraphTool)
 
     # Check if we have a previously created persona
     kg_config_settings = get_kg_config_settings()
@@ -132,20 +132,18 @@ def enable_or_disable_kg(
     is_public = len(user_ids) == 0
 
     persona_request = PersonaUpsertRequest(
-        name="KG Beta",
-        description=_KG_BETA_ASSISTANT_DESCRIPTION,
+        name=TMP_DRALPHA_PERSONA_NAME,
+        description=KG_BETA_ASSISTANT_DESCRIPTION,
         system_prompt=KG_BETA_ASSISTANT_SYSTEM_PROMPT,
         task_prompt=KG_BETA_ASSISTANT_TASK_PROMPT,
         datetime_aware=False,
-        include_citations=True,
         num_chunks=25,
         llm_relevance_filter=False,
         is_public=is_public,
         llm_filter_extraction=False,
         recency_bias=RecencyBiasSetting.NO_DECAY,
-        prompt_ids=[0],
         document_set_ids=[],
-        tool_ids=[search_tool.id],
+        tool_ids=[search_tool.id, kg_tool.id],
         llm_model_provider_override=None,
         llm_model_version_override=None,
         starter_messages=None,
@@ -155,7 +153,6 @@ def enable_or_disable_kg(
         is_default_persona=False,
         display_priority=0,
         user_file_ids=[],
-        user_folder_ids=[],
     )
 
     persona_snapshot = create_update_persona(

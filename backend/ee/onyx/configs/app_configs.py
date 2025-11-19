@@ -1,26 +1,6 @@
 import json
 import os
 
-# Applicable for OIDC Auth
-OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL", "")
-
-# Applicable for OIDC Auth, allows you to override the scopes that
-# are requested from the OIDC provider. Currently used when passing
-# over access tokens to tool calls and the tool needs more scopes
-OIDC_SCOPE_OVERRIDE: list[str] | None = None
-_OIDC_SCOPE_OVERRIDE = os.environ.get("OIDC_SCOPE_OVERRIDE")
-
-if _OIDC_SCOPE_OVERRIDE:
-    try:
-        OIDC_SCOPE_OVERRIDE = [
-            scope.strip() for scope in _OIDC_SCOPE_OVERRIDE.split(",")
-        ]
-    except Exception:
-        pass
-
-# Applicable for SAML Auth
-SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/ee/onyx/configs/saml_config"
-
 
 #####
 # Auto Permission Sync
@@ -100,6 +80,19 @@ NUM_PERMISSION_WORKERS = int(os.environ.get("NUM_PERMISSION_WORKERS") or 2)
 # In seconds, default is 5 minutes
 TEAMS_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("TEAMS_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+)
+
+#####
+# SharePoint
+#####
+# In seconds, default is 30 minutes
+SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+
+# In seconds, default is 5 minutes
+SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
 )
 
 

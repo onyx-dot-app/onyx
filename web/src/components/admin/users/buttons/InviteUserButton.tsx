@@ -5,7 +5,7 @@ import {
 
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import useSWRMutation from "swr/mutation";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
 import { useState } from "react";
 
@@ -121,12 +121,7 @@ export const InviteUserButton = ({
         />
       )}
 
-      <Button
-        className="w-min"
-        onClick={() => setShowInviteModal(true)}
-        disabled={isMutating}
-        size="sm"
-      >
+      <Button onClick={() => setShowInviteModal(true)} disabled={isMutating}>
         {invited ? "Uninvite" : "Invite"}
       </Button>
     </>

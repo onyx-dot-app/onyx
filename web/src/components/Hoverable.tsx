@@ -1,3 +1,4 @@
+import React, { JSX } from "react";
 import { IconType } from "react-icons";
 
 const ICON_SIZE = 15;

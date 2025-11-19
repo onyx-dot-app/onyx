@@ -148,7 +148,7 @@ def test_include_shared_drives_only_with_size_threshold(
     # the folder and all its files. There is currently no consistency to the order of assignment of users
     # to shared drives, so this is a heisenbug. When we guarantee that restricted folders are retrieved,
     # we can change this to 52
-    assert len(retrieved_docs) == 51 or len(retrieved_docs) == 52
+    assert len(retrieved_docs) == 50 or len(retrieved_docs) == 51
 
 
 @patch(

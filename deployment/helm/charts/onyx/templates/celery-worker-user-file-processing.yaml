@@ -1,0 +1,98 @@
+{{- if gt (int .Values.celery_worker_user_file_processing.replicaCount) 0 }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx.fullname" . }}-celery-worker-user-file-processing
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.celery_worker_user_file_processing.autoscaling.enabled }}
+  replicas: {{ .Values.celery_worker_user_file_processing.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      {{- if .Values.celery_worker_user_file_processing.deploymentLabels }}
+      {{- toYaml .Values.celery_worker_user_file_processing.deploymentLabels | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.celery_worker_user_file_processing.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.celery_worker_user_file_processing.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
+      {{- with .Values.celery_worker_user_file_processing.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: celery-worker-user-file-processing
+          securityContext:
+            {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
+          image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          command:
+            [
+              "celery",
+              "-A",
+              "onyx.background.celery.versioned_apps.user_file_processing",
+              "worker",
+              "--loglevel=INFO",
+              "--hostname=user-file-processing@%n",
+              "-Q",
+              "user_file_processing,user_file_project_sync,user_file_delete",
+            ]
+          resources:
+            {{- toYaml .Values.celery_worker_user_file_processing.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+          env:
+            {{- include "onyx.envSecrets" . | nindent 12}}
+          {{- with .Values.celery_worker_user_file_processing.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            {{ .Values.celery_shared.startupProbe | toYaml | nindent 12}}
+          readinessProbe:
+            {{ .Values.celery_shared.readinessProbe | toYaml | nindent 12}}
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - >
+                    python onyx/background/celery/celery_k8s_probe.py
+                    --probe readiness
+                    --filename /tmp/onyx_k8s_userfileprocessing_readiness.txt
+          livenessProbe:
+            {{ .Values.celery_shared.livenessProbe | toYaml | nindent 12}}
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - >
+                    python onyx/background/celery/celery_k8s_probe.py
+                    --probe liveness
+                    --filename /tmp/onyx_k8s_userfileprocessing_liveness.txt
+      {{- with .Values.celery_worker_user_file_processing.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+
+

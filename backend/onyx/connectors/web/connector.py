@@ -229,7 +229,32 @@ def is_valid_url(url: str) -> bool:
         return False
 
 
+<<<<<<< HEAD
 def get_internal_links(base_url: str, url: str, soup: BeautifulSoup, should_ignore_pound: bool = True) -> set[str]:
+=======
+def _same_site(base_url: str, candidate_url: str) -> bool:
+    base, candidate = urlparse(base_url), urlparse(candidate_url)
+    base_netloc = base.netloc.lower().removeprefix("www.")
+    candidate_netloc = candidate.netloc.lower().removeprefix("www.")
+    if base_netloc != candidate_netloc:
+        return False
+
+    base_path = (base.path or "/").rstrip("/")
+    if base_path in ("", "/"):
+        return True
+
+    candidate_path = candidate.path or "/"
+    if candidate_path == base_path:
+        return True
+
+    boundary = f"{base_path}/"
+    return candidate_path.startswith(boundary)
+
+
+def get_internal_links(
+    base_url: str, url: str, soup: BeautifulSoup, should_ignore_pound: bool = True
+) -> set[str]:
+>>>>>>> v2.3.0
     internal_links = set()
     for link in cast(list[dict[str, Any]], soup.find_all("a")):
         href = cast(str | None, link.get("href"))
@@ -247,7 +272,7 @@ def get_internal_links(base_url: str, url: str, soup: BeautifulSoup, should_igno
             # Relative path handling
             href = urljoin(url, href)
 
-        if urlparse(href).netloc == urlparse(url).netloc and base_url in href:
+        if _same_site(base_url, href):
             internal_links.add(href)
     return internal_links
 

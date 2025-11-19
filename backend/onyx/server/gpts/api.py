@@ -1,5 +1,6 @@
 import math
 from datetime import datetime
+from datetime import timezone
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -23,8 +24,8 @@ router = APIRouter(prefix="/gpts")
 
 def time_ago(dt: datetime) -> str:
     # Calculate time difference
-    now = datetime.now()
-    diff = now - dt
+    now = datetime.now(timezone.utc)
+    diff = now - dt.astimezone(timezone.utc)
 
     # Convert difference to minutes
     minutes = diff.total_seconds() / 60

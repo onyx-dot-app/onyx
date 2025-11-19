@@ -19,6 +19,8 @@ import { User, UserGroup } from "@/lib/types";
 import Link from "next/link";
 import { DeleteButton } from "@/components/DeleteButton";
 import { TableHeader } from "@/components/ui/table";
+import Button from "@/refresh-components/buttons/Button";
+import SvgEdit from "@/icons/edit";
 
 const MAX_USERS_TO_DISPLAY = 6;
 
@@ -73,15 +75,14 @@ export const UserGroupsTable = ({
               return (
                 <TableRow key={userGroup.id}>
                   <TableCell>
-                    <Link
-                      className="whitespace-nowrap overflow-hidden text-ellipsis inline-flex items-center cursor-pointer p-2 rounded hover:bg-accent-background-hovered max-w-full"
+                    <Button
+                      internal
+                      leftIcon={SvgEdit}
                       href={`/admin/groups/${userGroup.id}`}
+                      className="truncate"
                     >
-                      <FiEdit2 className="mr-2 flex-shrink-0" />
-                      <span className="font-medium truncate">
-                        {userGroup.name}
-                      </span>
-                    </Link>
+                      {userGroup.name}
+                    </Button>
                   </TableCell>
                   <TableCell>
                     {userGroup.cc_pairs.length > 0 ? (
@@ -177,120 +178,6 @@ export const UserGroupsTable = ({
             })}
         </TableBody>
       </Table>
-    </div>
-  );
-
-  return (
-    <div>
-      <BasicTable
-        columns={[
-          {
-            header: "Name",
-            key: "name",
-          },
-          {
-            header: "Connectors",
-            key: "ccPairs",
-          },
-          {
-            header: "Users",
-            key: "users",
-          },
-          {
-            header: "Status",
-            key: "status",
-          },
-          {
-            header: "Delete",
-            key: "delete",
-          },
-        ]}
-        data={userGroups
-          .filter((userGroup) => !userGroup.is_up_for_deletion)
-          .map((userGroup) => {
-            return {
-              id: userGroup.id,
-              name: userGroup.name,
-              ccPairs: (
-                <div>
-                  {userGroup.cc_pairs.map((ccPairDescriptor, ind) => {
-                    return (
-                      <div
-                        className={
-                          ind !== userGroup.cc_pairs.length - 1 ? "mb-3" : ""
-                        }
-                        key={ccPairDescriptor.id}
-                      >
-                        <ConnectorTitle
-                          connector={ccPairDescriptor.connector}
-                          ccPairId={ccPairDescriptor.id}
-                          ccPairName={ccPairDescriptor.name}
-                          showMetadata={false}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              ),
-              users: (
-                <div>
-                  {userGroup.users.length <= MAX_USERS_TO_DISPLAY ? (
-                    userGroup.users.map((user) => {
-                      return <SimpleUserDisplay key={user.id} user={user} />;
-                    })
-                  ) : (
-                    <div>
-                      {userGroup.users
-                        .slice(0, MAX_USERS_TO_DISPLAY)
-                        .map((user) => {
-                          return (
-                            <SimpleUserDisplay key={user.id} user={user} />
-                          );
-                        })}
-                      <div className="text-text-300">
-                        + {userGroup.users.length - MAX_USERS_TO_DISPLAY} more
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ),
-              status: userGroup.is_up_to_date ? (
-                <div className="text-emerald-600">Up to date!</div>
-              ) : (
-                <div className="text-text-300 w-10">
-                  <LoadingAnimation text="Syncing" />
-                </div>
-              ),
-              delete: (
-                <div
-                  className="cursor-pointer"
-                  onClick={async (event) => {
-                    event.stopPropagation();
-                    const response = await deleteUserGroup(userGroup.id);
-                    if (response.ok) {
-                      setPopup({
-                        message: `User Group "${userGroup.name}" deleted`,
-                        type: "success",
-                      });
-                    } else {
-                      const errorMsg = (await response.json()).detail;
-                      setPopup({
-                        message: `Failed to delete User Group - ${errorMsg}`,
-                        type: "error",
-                      });
-                    }
-                    refresh();
-                  }}
-                >
-                  <TrashIcon />
-                </div>
-              ),
-            };
-          })}
-        onSelect={(data) => {
-          router.push(`/admin/groups/${data.id}`);
-        }}
-      />
     </div>
   );
 };

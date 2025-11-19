@@ -50,8 +50,15 @@ logger = setup_logger()
 # represent smart chips (elements like dates and doc links).
 SMART_CHIP_CHAR = "\ue907"
 WEB_VIEW_LINK_KEY = "webViewLink"
+# Fallback templates for generating web links when Drive omits webViewLink.
+_FALLBACK_WEB_VIEW_LINK_TEMPLATES = {
+    GDriveMimeType.DOC.value: "https://docs.google.com/document/d/{}/view",
+    GDriveMimeType.SPREADSHEET.value: "https://docs.google.com/spreadsheets/d/{}/view",
+    GDriveMimeType.PPT.value: "https://docs.google.com/presentation/d/{}/view",
+}
 
 MAX_RETRIEVER_EMAILS = 20
+CHUNK_SIZE_BUFFER = 64  # extra bytes past the limit to read
 
 # Mapping of Google Drive mime types to export formats
 GOOGLE_MIME_TYPES_TO_EXPORT = {
@@ -78,7 +85,25 @@ class PermissionSyncContext(BaseModel):
 
 
 def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
-    link = file[WEB_VIEW_LINK_KEY]
+    link = file.get(WEB_VIEW_LINK_KEY)
+    if not link:
+        file_id = file.get("id")
+        if not file_id:
+            raise KeyError(
+                f"Google Drive file missing both '{WEB_VIEW_LINK_KEY}' and 'id' fields."
+            )
+        mime_type = file.get("mimeType", "")
+        template = _FALLBACK_WEB_VIEW_LINK_TEMPLATES.get(mime_type)
+        if template is None:
+            link = f"https://drive.google.com/file/d/{file_id}/view"
+        else:
+            link = template.format(file_id)
+        logger.debug(
+            "Missing webViewLink for Google Drive file with id %s. "
+            "Falling back to constructed link %s",
+            file_id,
+            link,
+        )
     parsed_url = urlparse(link)
     parsed_url = parsed_url._replace(query="")  # remove query parameters
     spl_path = parsed_url.path.split("/")
@@ -97,18 +122,31 @@ def is_gdrive_image_mime_type(mime_type: str) -> bool:
     return is_valid_image_type(mime_type)
 
 
-def download_request(service: GoogleDriveService, file_id: str) -> bytes:
+def download_request(
+    service: GoogleDriveService, file_id: str, size_threshold: int
+) -> bytes:
     """
     Download the file from Google Drive.
     """
     # For other file types, download the file
     # Use the correct API call for downloading files
     request = service.files().get_media(fileId=file_id)
+    return _download_request(request, file_id, size_threshold)
+
+
+def _download_request(request: Any, file_id: str, size_threshold: int) -> bytes:
     response_bytes = io.BytesIO()
-    downloader = MediaIoBaseDownload(response_bytes, request)
+    downloader = MediaIoBaseDownload(
+        response_bytes, request, chunksize=size_threshold + CHUNK_SIZE_BUFFER
+    )
     done = False
     while not done:
-        _, done = downloader.next_chunk()
+        download_progress, done = downloader.next_chunk()
+        if download_progress.resumable_progress > size_threshold:
+            logger.warning(
+                f"File {file_id} exceeds size threshold of {size_threshold}. Skipping2."
+            )
+            return bytes()
 
     response = response_bytes.getvalue()
     if not response:
@@ -121,6 +159,7 @@ def _download_and_extract_sections_basic(
     file: dict[str, str],
     service: GoogleDriveService,
     allow_images: bool,
+    size_threshold: int,
 ) -> list[TextSection | ImageSection]:
     """Extract text and images from a Google Drive file."""
     file_id = file["id"]
@@ -132,7 +171,7 @@ def _download_and_extract_sections_basic(
     # Use the correct API call for downloading files
     # lazy evaluation to only download the file if necessary
     def response_call() -> bytes:
-        return download_request(service, file_id)
+        return download_request(service, file_id, size_threshold)
 
     if is_gdrive_image_mime_type(mime_type):
         # Skip images if not explicitly enabled
@@ -162,13 +201,7 @@ def _download_and_extract_sections_basic(
         request = service.files().export_media(
             fileId=file_id, mimeType=export_mime_type
         )
-        response_bytes = io.BytesIO()
-        downloader = MediaIoBaseDownload(response_bytes, request)
-        done = False
-        while not done:
-            _, done = downloader.next_chunk()
-
-        response = response_bytes.getvalue()
+        response = _download_request(request, file_id, size_threshold)
         if not response:
             logger.warning(f"Failed to export {file_name} as {export_mime_type}")
             return []
@@ -467,7 +500,7 @@ def _convert_drive_item_to_document(
                             " aligning with basic sections"
                         )
                         basic_sections = _download_and_extract_sections_basic(
-                            file, _get_drive_service(), allow_images
+                            file, _get_drive_service(), allow_images, size_threshold
                         )
                         sections = align_basic_advanced(basic_sections, doc_sections)
 
@@ -478,7 +511,7 @@ def _convert_drive_item_to_document(
         # Not Google Doc, attempt basic extraction
         else:
             sections = _download_and_extract_sections_basic(
-                file, _get_drive_service(), allow_images
+                file, _get_drive_service(), allow_images, size_threshold
             )
 
         # If we still don't have any sections, skip this file

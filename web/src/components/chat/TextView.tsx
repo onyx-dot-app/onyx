@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -11,11 +19,17 @@ import {
 import { Download, XIcon, ZoomIn, ZoomOut } from "lucide-react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgX from "@/icons/x";
+import SvgDownloadCloud from "@/icons/download-cloud";
+import SvgZoomIn from "@/icons/zoom-in";
+import SvgZoomOut from "@/icons/zoom-out";
 
-interface TextViewProps {
+export interface TextViewProps {
   presentingDocument: MinimalOnyxDocument;
   onClose: () => void;
 }
+
 export default function TextView({
   presentingDocument,
   onClose,
@@ -40,6 +54,7 @@ export default function TextView({
       "text/markdown",
       "text/x-markdown",
       "text/plain",
+      "text/csv",
       "text/x-rst",
       "text/x-org",
       "txt",
@@ -71,13 +86,13 @@ export default function TextView({
   const fetchFile = useCallback(async () => {
     console.log("fetching file");
     setIsLoading(true);
-    const fileId =
+    const fileIdLocal =
       presentingDocument.document_id.split("__")[1] ||
       presentingDocument.document_id;
 
     try {
       const response = await fetch(
-        `/api/chat/file/${encodeURIComponent(fileId)}`,
+        `/api/chat/file/${encodeURIComponent(fileIdLocal)}`,
         {
           method: "GET",
         }
@@ -93,13 +108,16 @@ export default function TextView({
       let contentType =
         response.headers.get("Content-Type") || "application/octet-stream";
 
-      // If it's octet-stream but file name suggests a markdown extension, override and attempt to read as markdown
-      if (
-        contentType === "application/octet-stream" &&
-        (originalFileName.toLowerCase().endsWith(".md") ||
-          originalFileName.toLowerCase().endsWith(".markdown"))
-      ) {
-        contentType = "text/markdown";
+      // If it's octet-stream but file name suggests a text-based extension, override accordingly
+      if (contentType === "application/octet-stream") {
+        const lowerName = originalFileName.toLowerCase();
+        if (lowerName.endsWith(".md") || lowerName.endsWith(".markdown")) {
+          contentType = "text/markdown";
+        } else if (lowerName.endsWith(".txt")) {
+          contentType = "text/plain";
+        } else if (lowerName.endsWith(".csv")) {
+          contentType = "text/csv";
+        }
       }
       setFileType(contentType);
 
@@ -139,7 +157,8 @@ export default function TextView({
     <Dialog open onOpenChange={onClose}>
       <DialogContent
         hideCloseIcon
-        className="max-w-4xl w-[90vw] flex flex-col justify-between gap-y-0 h-full max-h-[80vh] p-0"
+        overlayClassName="z-[3000]"
+        className="z-[3001] max-w-4xl w-[90vw] flex flex-col justify-between gap-y-0 h-[90vh] max-h-[90vh] p-0"
       >
         <DialogHeader className="px-4 mb-0 pt-2 pb-3 flex flex-row items-center justify-between border-b">
           <DialogTitle className="text-lg font-medium truncate">
@@ -147,23 +166,31 @@ export default function TextView({
           </DialogTitle>
 
           <div className="flex items-center space-x-2">
-            <Button variant="ghost" size="icon" onClick={handleZoomOut}>
-              <ZoomOut className="h-4 w-4" />
-              <span className="sr-only">Zoom Out</span>
-            </Button>
+            <IconButton
+              internal
+              onClick={handleZoomOut}
+              icon={SvgZoomOut}
+              tooltip="Zoom Out"
+            ></IconButton>
             <span className="text-sm">{zoom}%</span>
-            <Button variant="ghost" size="icon" onClick={handleZoomIn}>
-              <ZoomIn className="h-4 w-4" />
-              <span className="sr-only">Zoom In</span>
-            </Button>
-            <Button variant="ghost" size="icon" onClick={handleDownload}>
-              <Download className="h-4 w-4" />
-              <span className="sr-only">Download</span>
-            </Button>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <XIcon className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </Button>
+            <IconButton
+              internal
+              onClick={handleZoomIn}
+              icon={SvgZoomIn}
+              tooltip="Zoom In"
+            />
+            <IconButton
+              internal
+              onClick={handleDownload}
+              icon={SvgDownloadCloud}
+              tooltip="Download"
+            />
+            <IconButton
+              internal
+              onClick={onClose}
+              icon={SvgX}
+              tooltip="Close"
+            />
           </div>
         </DialogHeader>
         <div className="mt-0 rounded-b-lg flex-1 overflow-hidden">
@@ -194,10 +221,47 @@ export default function TextView({
                   />
                 ) : isMarkdownFormat(fileType) ? (
                   <div className="w-full h-full p-6 overflow-y-scroll overflow-x-hidden">
-                    <MinimalMarkdown
-                      content={fileContent}
-                      className="w-full pb-4 h-full text-lg break-words"
-                    />
+                    {fileType.startsWith("text/csv") ? (
+                      (() => {
+                        const lines = fileContent
+                          .split(/\r?\n/)
+                          .filter((l) => l.length > 0);
+                        const headers =
+                          lines.length > 0 ? lines[0]?.split(",") : [];
+                        const rows = lines
+                          .slice(1)
+                          .map((line) => line.split(","));
+                        return (
+                          <div className="w-full h-full overflow-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  {headers?.map((h, i) => (
+                                    <TableHead key={i}>{h}</TableHead>
+                                  ))}
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {rows.map((row, rIdx) => (
+                                  <TableRow key={rIdx}>
+                                    {headers?.map((_, cIdx) => (
+                                      <TableCell key={cIdx}>
+                                        {row?.[cIdx] ?? ""}
+                                      </TableCell>
+                                    ))}
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <MinimalMarkdown
+                        content={fileContent}
+                        className="w-full pb-4 h-full text-lg break-words"
+                      />
+                    )}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full">

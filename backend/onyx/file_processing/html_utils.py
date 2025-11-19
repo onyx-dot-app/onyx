@@ -1,11 +1,10 @@
 import re
 from copy import copy
 from dataclasses import dataclass
+from io import BytesIO
 from typing import IO
 
 import bs4
-import trafilatura  # type: ignore
-from trafilatura.settings import use_config  # type: ignore
 
 from onyx.configs.app_configs import HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY
 from onyx.configs.app_configs import PARSE_WITH_TRAFILATURA
@@ -55,6 +54,9 @@ def format_element_text(element_text: str, link_href: str | None) -> str:
 
 def parse_html_with_trafilatura(html_content: str) -> str:
     """Parse HTML content using trafilatura."""
+    import trafilatura  # type: ignore
+    from trafilatura.settings import use_config  # type: ignore
+
     config = use_config()
     config.set("DEFAULT", "include_links", "True")
     config.set("DEFAULT", "include_tables", "True")
@@ -161,7 +163,7 @@ def format_document_soup(
     return strip_excessive_newlines_and_spaces(text)
 
 
-def parse_html_page_basic(text: str | IO[bytes]) -> str:
+def parse_html_page_basic(text: str | BytesIO | IO[bytes]) -> str:
     soup = bs4.BeautifulSoup(text, "html.parser")
     return format_document_soup(soup)
 

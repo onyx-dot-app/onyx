@@ -1,62 +1,93 @@
 "use client";
 
-import { TextFormField } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { basicLogin, basicSignup } from "@/lib/user";
-import Cookies from "js-cookie";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { requestEmailVerification } from "../lib";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Spinner } from "@/components/Spinner";
 import Link from "next/link";
 import { useUser } from "@/components/user/UserProvider";
-import { useRouter } from "next/navigation";
+import SvgArrowRightCircle from "@/icons/arrow-right-circle";
+import { FormikField } from "@/refresh-components/form/FormikField";
+import { FormField } from "@/refresh-components/form/FormField";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
+import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
+import { APIFormFieldState } from "@/refresh-components/form/types";
 
-export function EmailPasswordForm({
-  isSignup = false,
-  shouldVerify,
-  referralSource,
-  nextUrl,
-  defaultEmail,
-  isJoin = false,
-}: {
+interface EmailPasswordFormProps {
   isSignup?: boolean;
   shouldVerify?: boolean;
   referralSource?: string;
   nextUrl?: string | null;
   defaultEmail?: string | null;
   isJoin?: boolean;
-}) {
-  const { user } = useUser();
-  const { popup, setPopup } = usePopup();
-  const router = useRouter();
-  const [isWorking, setIsWorking] = useState(false);
+}
 
-  let email_subtext = ""
-  if (isSignup){
-    email_subtext="Signup is restricted to eea domain mail address"
-  }
+export default function EmailPasswordForm({
+  isSignup = false,
+  shouldVerify,
+  referralSource,
+  nextUrl,
+  defaultEmail,
+  isJoin = false,
+}: EmailPasswordFormProps) {
+  const { user, authTypeMetadata } = useUser();
+  const passwordMinLength = authTypeMetadata?.passwordMinLength ?? 8;
+  const { popup, setPopup } = usePopup();
+  const [isWorking, setIsWorking] = useState<boolean>(false);
+  const [apiStatus, setApiStatus] = useState<APIFormFieldState>("loading");
+  const [showApiMessage, setShowApiMessage] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+
+  const apiMessages = useMemo(
+    () => ({
+      loading: isSignup
+        ? isJoin
+          ? "Joining..."
+          : "Creating account..."
+        : "Signing in...",
+      success: isSignup
+        ? "Account created. Signing in..."
+        : "Signed in successfully.",
+      error: errorMessage,
+    }),
+    [isSignup, isJoin, errorMessage]
+  );
+
   return (
     <>
       {isWorking && <Spinner />}
       {popup}
+
       <Formik
         initialValues={{
           email: defaultEmail ? defaultEmail.toLowerCase() : "",
           password: "",
         }}
+        validateOnChange={true}
+        validateOnBlur={true}
         validationSchema={Yup.object().shape({
           email: Yup.string()
             .email()
             .required()
             .transform((value) => value.toLowerCase()),
-          password: Yup.string().required(),
+          password: Yup.string()
+            .min(
+              passwordMinLength,
+              `Password must be at least ${passwordMinLength} characters`
+            )
+            .required(),
         })}
-        onSubmit={async (values) => {
+        onSubmit={async (values: { email: string; password: string }) => {
           // Ensure email is lowercase
-          const email = values.email.toLowerCase();
+          const email: string = values.email.toLowerCase();
+          setShowApiMessage(true);
+          setApiStatus("loading");
+          setErrorMessage("");
 
           if (isSignup) {
             // login is fast, no need to show a spinner
@@ -70,8 +101,8 @@ export function EmailPasswordForm({
             if (!response.ok) {
               setIsWorking(false);
 
-              const errorDetail = (await response.json()).detail;
-              let errorMsg = "Unknown error";
+              const errorDetail: any = (await response.json()).detail;
+              let errorMsg: string = "Unknown error";
               if (typeof errorDetail === "object" && errorDetail.reason) {
                 errorMsg = errorDetail.reason;
               } else if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
@@ -81,6 +112,8 @@ export function EmailPasswordForm({
               if (response.status === 429) {
                 errorMsg = "Too many requests. Please try again later.";
               }
+              setErrorMessage(errorMsg);
+              setApiStatus("error");
               setPopup({
                 type: "error",
                 message: `Failed to sign up - ${errorMsg}`,
@@ -88,6 +121,7 @@ export function EmailPasswordForm({
               setIsWorking(false);
               return;
             } else {
+              setApiStatus("success");
               setPopup({
                 type: "success",
                 message: "Account created successfully. Please log in.",
@@ -97,8 +131,7 @@ export function EmailPasswordForm({
 
           const loginResponse = await basicLogin(email, values.password);
           if (loginResponse.ok) {
-            Cookies.set("JUST_LOGGED_IN", "true", { expires: 1 });
-//            window.justLoggedIn = true;
+            setApiStatus("success");
             if (isSignup && shouldVerify) {
               await requestEmailVerification(email);
               // Use window.location.href to force a full page reload,
@@ -110,14 +143,15 @@ export function EmailPasswordForm({
               // It replicates the behavior of the case where a user
               // has signed up with email / password as the only user to an instance
               // and has just completed verification
-              window.location.href = nextUrl
-                ? encodeURI(nextUrl)
+              const validatedNextUrl = validateInternalRedirect(nextUrl);
+              window.location.href = validatedNextUrl
+                ? validatedNextUrl
                 : `/chat${isSignup && !isJoin ? "?new_team=true" : ""}`;
             }
           } else {
             setIsWorking(false);
-            const errorDetail = (await loginResponse.json()).detail;
-            let errorMsg = "Unknown error";
+            const errorDetail: any = (await loginResponse.json()).detail;
+            let errorMsg: string = "Unknown error";
             if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
               errorMsg = "Invalid email or password";
             } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
@@ -128,6 +162,8 @@ export function EmailPasswordForm({
             if (loginResponse.status === 429) {
               errorMsg = "Too many requests. Please try again later.";
             }
+            setErrorMessage(errorMsg);
+            setApiStatus("error");
             setPopup({
               type: "error",
               message: `Failed to login - ${errorMsg}`,
@@ -135,43 +171,99 @@ export function EmailPasswordForm({
           }
         }}
       >
-        {({ isSubmitting, values }) => (
-          <Form>
-            <TextFormField
-              name="email"
-              label="Email"
-              type="email"
-              subtext={email_subtext}
-              placeholder="email@eea.europa.eu"
-            />
+        {({ isSubmitting, isValid, dirty, values }) => {
+          return (
+            <Form className="gap-y-3">
+              <FormikField<string>
+                name="email"
+                render={(field, helper, meta, state) => (
+                  <FormField name="email" state={state} className="w-full">
+                    <FormField.Label>Email Address</FormField.Label>
+                    <FormField.Control>
+                      <InputTypeIn
+                        {...field}
+                        onChange={(e) => {
+                          if (showApiMessage && apiStatus === "error") {
+                            setShowApiMessage(false);
+                            setErrorMessage("");
+                            setApiStatus("loading");
+                          }
+                          field.onChange(e);
+                        }}
+                        placeholder="email@eea.europa.eu"
+                        onClear={() => helper.setValue("")}
+                        data-testid="email"
+                        isError={apiStatus === "error"}
+                        showClearButton={false}
+                      />
+                    </FormField.Control>
+                  </FormField>
+                )}
+              />
 
-            <TextFormField
-              name="password"
-              label="Password"
-              type="password"
-              placeholder="**************"
-            />
+              <FormikField<string>
+                name="password"
+                render={(field, helper, meta, state) => (
+                  <FormField name="password" state={state} className="w-full">
+                    <FormField.Label>Password</FormField.Label>
+                    <FormField.Control>
+                      <PasswordInputTypeIn
+                        {...field}
+                        onChange={(e) => {
+                          if (showApiMessage && apiStatus === "error") {
+                            setShowApiMessage(false);
+                            setErrorMessage("");
+                            setApiStatus("loading");
+                          }
+                          field.onChange(e);
+                        }}
+                        placeholder="**************"
+                        onClear={() => helper.setValue("")}
+                        data-testid="password"
+                        isError={apiStatus === "error"}
+                        showClearButton={false}
+                      />
+                    </FormField.Control>
+                    {isSignup && !showApiMessage && (
+                      <FormField.Message
+                        messages={{
+                          idle: `Password must be at least ${passwordMinLength} characters`,
+                          error: meta.error,
+                          success: `Password must be at least ${passwordMinLength} characters`,
+                        }}
+                      />
+                    )}
+                    {showApiMessage && (
+                      <FormField.APIMessage
+                        state={apiStatus}
+                        messages={apiMessages}
+                      />
+                    )}
+                  </FormField>
+                )}
+              />
 
-            <Button
-              variant="agent"
-              type="submit"
-              disabled={isSubmitting}
-              className="mx-auto  !py-4 w-full"
-            >
-              {isJoin ? "Join" : isSignup ? "Sign Up" : "Log In"}
-            </Button>
-            {user?.is_anonymous_user && (
-              <Link
-                href="/chat"
-                className="text-xs text-blue-500  cursor-pointer text-center w-full text-link font-medium mx-auto"
+              <Button
+                type="submit"
+                className="w-full mt-1"
+                disabled={isSubmitting || !isValid || !dirty}
+                rightIcon={SvgArrowRightCircle}
               >
-                <span className="hover:border-b hover:border-dotted hover:border-blue-500">
-                  or continue as guest
-                </span>
-              </Link>
-            )}
-          </Form>
-        )}
+                {isJoin ? "Join" : isSignup ? "Create Account" : "Sign In"}
+              </Button>
+              {user?.is_anonymous_user && (
+                <Link
+                  href="/chat"
+                  className="text-xs text-action-link-05 cursor-pointer text-center w-full font-medium mx-auto"
+                >
+                  <span className="hover:border-b hover:border-dotted hover:border-action-link-05">
+                    or continue as guest
+                  </span>
+                </Link>
+              )}
+            </Form>
+          );
+        }}
       </Formik>
     </>
   );

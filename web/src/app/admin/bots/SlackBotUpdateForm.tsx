@@ -3,7 +3,6 @@
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SlackBot, ValidSources } from "@/lib/types";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { updateSlackBotField } from "@/lib/updateSlackBotField";
 import { Checkbox } from "@/app/admin/settings/SettingsForm";
@@ -12,8 +11,10 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { deleteSlackBot } from "./new/lib";
 import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
-import { FiTrash } from "react-icons/fi";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
+import SvgTrash from "@/icons/trash";
+import SvgChevronDownSmall from "@/icons/chevron-down-small";
+import { cn } from "@/lib/utils";
 
 export const ExistingSlackBotForm = ({
   existingSlackBot,
@@ -92,32 +93,28 @@ export const ExistingSlackBotForm = ({
 
         <div className="flex flex-col" ref={dropdownRef}>
           <div className="flex items-center gap-4">
-            <div className="border rounded-lg border-background-200">
-              <div
-                className="flex items-center gap-2 cursor-pointer hover:bg-background-100 p-2"
-                onClick={() => setIsExpanded(!isExpanded)}
-              >
-                {isExpanded ? (
-                  <ChevronDown size={20} />
-                ) : (
-                  <ChevronRight size={20} />
-                )}
-                <span>Update Tokens</span>
-              </div>
-            </div>
             <Button
-              variant="destructive"
+              leftIcon={({ className }) => (
+                <SvgChevronDownSmall
+                  className={cn(className, !isExpanded && "-rotate-90")}
+                />
+              )}
+              onClick={() => setIsExpanded(!isExpanded)}
+              secondary
+            >
+              Update Tokens
+            </Button>
+            <Button
+              danger
               onClick={() => setShowDeleteModal(true)}
-              icon={FiTrash}
-              tooltip="Click to delete"
-              className="border h-[42px]"
+              leftIcon={SvgTrash}
             >
               Delete
             </Button>
           </div>
 
           {isExpanded && (
-            <div className="bg-white border rounded-lg border-background-200 shadow-lg absolute mt-12 right-0 z-10 w-full md:w-3/4 lg:w-1/2">
+            <div className="bg-background border rounded-lg border-background-200 shadow-lg absolute mt-12 right-0 z-10 w-full md:w-3/4 lg:w-1/2">
               <div className="p-4">
                 <SlackTokensForm
                   isUpdate={true}

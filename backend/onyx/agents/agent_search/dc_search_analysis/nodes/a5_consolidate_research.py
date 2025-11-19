@@ -12,8 +12,6 @@ from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     trim_prompt_piece,
 )
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
 from onyx.prompts.agents.dc_prompts import DC_FORMATTING_NO_BASE_DATA_PROMPT
 from onyx.prompts.agents.dc_prompts import DC_FORMATTING_WITH_BASE_DATA_PROMPT
 from onyx.utils.logger import setup_logger
@@ -33,22 +31,11 @@ def consolidate_research(
 
     search_tool = graph_config.tooling.search_tool
 
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece=" generating the answer\n\n\n",
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
-
     if search_tool is None or graph_config.inputs.persona is None:
         raise ValueError("Search tool and persona must be provided for DivCon search")
 
     # Populate prompt
-    instructions = graph_config.inputs.persona.prompts[0].system_prompt
+    instructions = graph_config.inputs.persona.system_prompt or ""
 
     try:
         agent_5_instructions = extract_section(

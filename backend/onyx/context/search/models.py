@@ -1,5 +1,7 @@
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -119,8 +121,8 @@ class BaseFilters(BaseModel):
 
 
 class UserFileFilters(BaseModel):
-    user_file_ids: list[int] | None = None
-    user_folder_ids: list[int] | None = None
+    user_file_ids: list[UUID] | None = None
+    project_id: int | None = None
 
 
 class IndexFilters(BaseFilters, UserFileFilters):
@@ -355,6 +357,44 @@ class SearchDoc(BaseModel):
     secondary_owners: list[str] | None = None
     is_internet: bool = False
 
+    @classmethod
+    def from_chunks_or_sections(
+        cls,
+        items: "Sequence[InferenceChunk | InferenceSection] | None",
+    ) -> list["SearchDoc"]:
+        """Convert a sequence of InferenceChunk or InferenceSection objects to SearchDoc objects."""
+        if not items:
+            return []
+
+        search_docs = [
+            cls(
+                document_id=(
+                    chunk := (
+                        item.center_chunk
+                        if isinstance(item, InferenceSection)
+                        else item
+                    )
+                ).document_id,
+                chunk_ind=chunk.chunk_id,
+                semantic_identifier=chunk.semantic_identifier or "Unknown",
+                link=chunk.source_links[0] if chunk.source_links else None,
+                blurb=chunk.blurb,
+                source_type=chunk.source_type,
+                boost=chunk.boost,
+                hidden=chunk.hidden,
+                metadata=chunk.metadata,
+                score=chunk.score,
+                match_highlights=chunk.match_highlights,
+                updated_at=chunk.updated_at,
+                primary_owners=chunk.primary_owners,
+                secondary_owners=chunk.secondary_owners,
+                is_internet=False,
+            )
+            for item in items
+        ]
+
+        return search_docs
+
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(*args, **kwargs)  # type: ignore
         initial_dict["updated_at"] = (
@@ -377,6 +417,40 @@ class SavedSearchDoc(SearchDoc):
         search_doc_data = search_doc.model_dump()
         search_doc_data["score"] = search_doc_data.get("score") or 0.0
         return cls(**search_doc_data, db_doc_id=db_doc_id)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SavedSearchDoc":
+        """Create SavedSearchDoc from serialized dictionary data (e.g., from database JSON)"""
+        return cls(**data)
+
+    @classmethod
+    def from_url(cls, url: str) -> "SavedSearchDoc":
+        """Create a SavedSearchDoc from a URL for internet search documents.
+
+        Uses the INTERNET_SEARCH_DOC_ prefix for document_id to match the format
+        used by inference sections created from internet content.
+        """
+        return cls(
+            # db_doc_id can be a filler value since these docs are not saved to the database.
+            db_doc_id=0,
+            document_id="INTERNET_SEARCH_DOC_" + url,
+            chunk_ind=0,
+            semantic_identifier=url,
+            link=url,
+            blurb="",
+            source_type=DocumentSource.WEB,
+            boost=1,
+            hidden=False,
+            metadata={},
+            score=0.0,
+            is_relevant=None,
+            relevance_explanation=None,
+            match_highlights=[],
+            updated_at=None,
+            primary_owners=None,
+            secondary_owners=None,
+            is_internet=True,
+        )
 
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, SavedSearchDoc):

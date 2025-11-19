@@ -2,12 +2,7 @@
 
 import * as React from "react";
 import { DropdownMenuItem } from "./dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "./tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { cn } from "@/lib/utils";
 
 interface DropdownMenuItemWithTooltipProps
@@ -32,23 +27,16 @@ const DropdownMenuItemWithTooltip = React.forwardRef<
   }
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="cursor-not-allowed">
-            <DropdownMenuItem
-              ref={ref}
-              className={cn(className)}
-              disabled={disabled}
-              {...props}
-            />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent showTick={true}>
-          <p>{tooltip}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <SimpleTooltip tooltip={tooltip}>
+      <div className="cursor-not-allowed">
+        <DropdownMenuItem
+          ref={ref}
+          className={cn(className)}
+          disabled={disabled}
+          {...props}
+        />
+      </div>
+    </SimpleTooltip>
   );
 });
 

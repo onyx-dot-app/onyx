@@ -12,12 +12,14 @@ def insert_slack_bot(
     enabled: bool,
     bot_token: str,
     app_token: str,
+    user_token: str | None = None,
 ) -> SlackBot:
     slack_bot = SlackBot(
         name=name,
         enabled=enabled,
         bot_token=bot_token,
         app_token=app_token,
+        user_token=user_token,
     )
     db_session.add(slack_bot)
     db_session.commit()
@@ -32,6 +34,7 @@ def update_slack_bot(
     enabled: bool,
     bot_token: str,
     app_token: str,
+    user_token: str | None = None,
 ) -> SlackBot:
     slack_bot = db_session.scalar(select(SlackBot).where(SlackBot.id == slack_bot_id))
     if slack_bot is None:
@@ -42,6 +45,7 @@ def update_slack_bot(
     slack_bot.enabled = enabled
     slack_bot.bot_token = bot_token
     slack_bot.app_token = app_token
+    slack_bot.user_token = user_token
 
     db_session.commit()
 
@@ -74,15 +78,3 @@ def remove_slack_bot(
 
 def fetch_slack_bots(db_session: Session) -> Sequence[SlackBot]:
     return db_session.scalars(select(SlackBot)).all()
-
-
-def fetch_slack_bot_tokens(
-    db_session: Session, slack_bot_id: int
-) -> dict[str, str] | None:
-    slack_bot = db_session.scalar(select(SlackBot).where(SlackBot.id == slack_bot_id))
-    if not slack_bot:
-        return None
-    return {
-        "app_token": slack_bot.app_token,
-        "bot_token": slack_bot.bot_token,
-    }

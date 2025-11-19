@@ -36,10 +36,11 @@ yarn-error.log*
 next-env.d.ts
 
 # playwright testing temp files
-/admin_auth.json
+/admin*_auth.json
 /user_auth.json
 /build-archive.log
 /test-results
 
 # generated clients ... in particular, the API to the Onyx backend itself!
 /src/lib/generated
+.jest-cache

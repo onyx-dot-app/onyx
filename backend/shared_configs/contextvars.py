@@ -21,6 +21,11 @@ ONYX_REQUEST_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = contextvars.Con
     "onyx_request_id", default=None
 )
 
+# Used to store cc pair id and index attempt id in multithreaded environments
+INDEX_ATTEMPT_INFO_CONTEXTVAR: contextvars.ContextVar[tuple[int, int] | None] = (
+    contextvars.ContextVar("index_attempt_info", default=None)
+)
+
 """Utils related to contextvars"""
 
 

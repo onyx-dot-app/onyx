@@ -1,41 +1,48 @@
 import { Logo } from "../EEA_Logo";
 import Link from "next/link";
+import { OnyxIcon } from "../icons/icons";
 
 export default function AuthFlowContainer({
   children,
   authState,
+  footerContent,
 }: {
   children: React.ReactNode;
   authState?: "signup" | "login" | "join";
+  footerContent?: React.ReactNode;
 }) {
   return (
     // <div className="flex flex-col items-center justify-center min-h-screen bg-background">
     //   <div className="w-full max-w-md bg-black pt-8 pb-4 px-8 mx-4 gap-y-4 bg-white flex items-center flex-col rounded-xl shadow-lg border border-bacgkround-100">
     //     <Logo width={92} height={70} />
     <div className="p-4 flex flex-col items-center justify-center min-h-screen bg-background">
-      <div className="w-full max-w-md bg-black pt-8 pb-6 px-8 mx-4 gap-y-4 bg-white flex items-center dark:border-none flex-col rounded-xl shadow-lg border border-bacgkround-100 gap-y-2 ">
-        <Logo width={70} height={70} />
-        <div className="mt-4  w-full">{children}</div>
+      <div className="w-full max-w-md flex items-start flex-col bg-background-tint-00 rounded-16 shadow-lg shadow-02 p-6">
+        <OnyxIcon size={44} className="text-theme-primary-05" />
+        <div className="w-full mt-3">{children}</div>
       </div>
       {authState === "login" && (
-        <div className="text-sm mt-4 text-center w-full text-text-900 font-medium mx-auto">
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/auth/signup"
-            className=" underline transition-colors duration-200"
-          >
-            Create one
-          </Link>
+        <div className="text-sm mt-6 text-center w-full text-text-03 mainUiBody mx-auto">
+          {footerContent ?? (
+            <>
+              New to Onyx?{" "}
+              <Link
+                href="/auth/signup"
+                className="text-text-05 mainUiAction underline transition-colors duration-200"
+              >
+                Create an Account
+              </Link>
+            </>
+          )}
         </div>
       )}
       {authState === "signup" && (
-        <div className="text-sm mt-4 text-center w-full text-text-800 font-medium mx-auto">
+        <div className="text-sm mt-6 text-center w-full text-text-03 mainUiBody mx-auto">
           Already have an account?{" "}
           <Link
             href="/auth/login"
-            className=" underline transition-colors duration-200"
+            className="text-text-05 mainUiAction underline transition-colors duration-200"
           >
-            Log In
+            Sign In
           </Link>
         </div>
       )}

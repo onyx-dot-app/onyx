@@ -6,47 +6,174 @@ concurrency:
 on: push
 
 env:
+  # AWS ECR Configuration
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-west-2' }}
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_ECR }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_ECR }}
+  BUILDX_NO_DEFAULT_ATTESTATIONS: 1
+
+  # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   GEN_AI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+
+  # for federated slack tests
+  SLACK_CLIENT_ID: ${{ secrets.SLACK_CLIENT_ID }}
+  SLACK_CLIENT_SECRET: ${{ secrets.SLACK_CLIENT_SECRET }}
+
   MOCK_LLM_RESPONSE: true
-  PYTEST_PLAYWRIGHT_SKIP_INITIAL_RESET: true
 
 jobs:
-  playwright-tests:
-    name: Playwright Tests
-
-    # See https://runs-on.com/runners/linux/
-    runs-on:
-      [
-        runs-on,
-        runner=32cpu-linux-x64,
-        disk=large,
-        "run-id=${{ github.run_id }}",
-      ]
+  build-web-image:
+    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # ratchet:aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # ratchet:aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
+
+      - name: Build and push Web Docker image
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
+        with:
+          context: ./web
+          file: ./web/Dockerfile
+          platforms: linux/arm64
+          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }}
+          provenance: false
+          sbom: false
+          push: true
+          outputs: type=registry
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  build-backend-image:
+    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # ratchet:aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # ratchet:aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
+
+      - name: Build and push Backend Docker image
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/arm64
+          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }}
+          provenance: false
+          sbom: false
+          push: true
+          outputs: type=registry
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  build-model-server-image:
+    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # ratchet:aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # ratchet:aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: useblacksmith/setup-docker-builder@affa10db466676f3dfb3e54caeb228ee0691510f # ratchet:useblacksmith/setup-docker-builder@v1
+
+      - name: Build and push Model Server Docker image
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # ratchet:useblacksmith/build-push-action@v2
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.model_server
+          platforms: linux/arm64
+          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }}
+          provenance: false
+          sbom: false
+          push: true
+          outputs: type=registry
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  playwright-tests:
+    needs: [build-web-image, build-backend-image, build-model-server-image]
+    name: Playwright Tests
+    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # ratchet:aws-actions/configure-aws-credentials@v4
         with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: |
-            backend/requirements/default.txt
-            backend/requirements/dev.txt
-            backend/requirements/model_server.txt
-      - run: |
-          python -m pip install --upgrade pip
-          pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
-          pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
-          pip install --retries 5 --timeout 30 -r backend/requirements/model_server.txt
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # ratchet:aws-actions/amazon-ecr-login@v2
+
+      # needed for pulling Vespa, Redis, Postgres, and Minio images
+      # otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Pull Docker images
+        run: |
+          # Pull all images from ECR in parallel
+          echo "Pulling Docker images in parallel..."
+          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }}) &
+          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }}) &
+          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }}) &
+
+          # Wait for all background jobs to complete
+          wait
+          echo "All Docker images pulled successfully"
+
+          # Re-tag with expected names for docker-compose
+          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }} onyxdotapp/onyx-web-server:test
+          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }} onyxdotapp/onyx-backend:test
+          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
 
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # ratchet:actions/setup-node@v4
         with:
           node-version: 22
 
@@ -58,79 +185,29 @@ jobs:
         working-directory: ./web
         run: npx playwright install --with-deps
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      # tag every docker image with "test" so that we can spin up the correct set
-      # of images during testing
-
-      # we use the runs-on cache for docker builds
-      # in conjunction with runs-on runners, it has better speed and unlimited caching
-      # https://runs-on.com/caching/s3-cache-for-github-actions/
-      # https://runs-on.com/caching/docker/
-      # https://github.com/moby/buildkit#s3-cache-experimental
-
-      # images are built and run locally for testing purposes. Not pushed.
-
-      - name: Build Web Docker image
-        uses: ./.github/actions/custom-build-and-push
-        with:
-          context: ./web
-          file: ./web/Dockerfile
-          platforms: linux/amd64
-          tags: onyxdotapp/onyx-web-server:test
-          push: false
-          load: true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/web-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/integration-tests/web-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
-
-      - name: Build Backend Docker image
-        uses: ./.github/actions/custom-build-and-push
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          platforms: linux/amd64
-          tags: onyxdotapp/onyx-backend:test
-          push: false
-          load: true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/backend/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/integration-tests/backend/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
-
-      - name: Build Model Server Docker image
-        uses: ./.github/actions/custom-build-and-push
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile.model_server
-          platforms: linux/amd64
-          tags: onyxdotapp/onyx-model-server:test
-          push: false
-          load: true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/model-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/integration-tests/model-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+      - name: Create .env file for Docker Compose
+        run: |
+          cat <<EOF > deployment/docker_compose/.env
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          AUTH_TYPE=basic
+          GEN_AI_API_KEY=${{ env.OPENAI_API_KEY }}
+          EXA_API_KEY=${{ env.EXA_API_KEY }}
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          IMAGE_TAG=test
+          EOF
 
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
-          AUTH_TYPE=basic \
-          GEN_AI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-          REQUIRE_EMAIL_VERIFICATION=false \
-          DISABLE_TELEMETRY=true \
-          IMAGE_TAG=test \
-          docker compose -f docker-compose.dev.yml -p danswer-stack up -d
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
         id: start_docker
 
       - name: Wait for service to be ready
         run: |
           echo "Starting wait-for-service script..."
 
-          docker logs -f danswer-stack-api_server-1 &
+          docker logs -f onyx-api_server-1 &
 
           start_time=$(date +%s)
           timeout=300  # 5 minutes in seconds
@@ -138,15 +215,15 @@ jobs:
           while true; do
             current_time=$(date +%s)
             elapsed_time=$((current_time - start_time))
-            
+
             if [ $elapsed_time -ge $timeout ]; then
               echo "Timeout reached. Service did not become ready in 5 minutes."
               exit 1
             fi
-            
+
             # Use curl with error handling to ignore specific exit code 56
             response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
-            
+
             if [ "$response" = "200" ]; then
               echo "Service is ready!"
               break
@@ -155,28 +232,24 @@ jobs:
             else
               echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
             fi
-            
+
             sleep 5
           done
           echo "Finished waiting for service."
 
-      - name: Run pytest playwright test init
-        working-directory: ./backend
-        env:
-          PYTEST_IGNORE_SKIP: true
-        run: pytest -s tests/integration/tests/playwright/test_playwright.py
-
       - name: Run Playwright tests
         working-directory: ./web
-        run: npx playwright test
+        run: |
+          # Create test-results directory to ensure it exists for artifact upload
+          mkdir -p test-results
+          npx playwright test
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
         if: always()
         with:
-          # Chromatic automatically defaults to the test-results directory.
-          # Replace with the path to your custom directory and adjust the CHROMATIC_ARCHIVE_LOCATION environment variable accordingly.
-          name: test-results
-          path: ./web/test-results
+          # Includes test results and trace.zip files
+          name: playwright-test-results-${{ github.run_id }}
+          path: ./web/test-results/
           retention-days: 30
 
       # save before stopping the containers so the logs can be captured
@@ -184,12 +257,12 @@ jobs:
         if: success() || failure()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p danswer-stack logs > docker-compose.log
+          docker compose logs > docker-compose.log
           mv docker-compose.log ${{ github.workspace }}/docker-compose.log
 
       - name: Upload logs
         if: success() || failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
         with:
           name: docker-logs
           path: ${{ github.workspace }}/docker-compose.log
@@ -197,7 +270,7 @@ jobs:
       - name: Stop Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p danswer-stack down -v
+          docker compose down -v
 
 # NOTE: Chromatic UI diff testing is currently disabled.
 # We are using Playwright for local and CI testing without visual regression checks.
@@ -216,12 +289,12 @@ jobs:
 #     ]
 #   steps:
 #     - name: Checkout code
-#       uses: actions/checkout@v4
+#       uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
 #       with:
 #         fetch-depth: 0
 
 #     - name: Setup node
-#       uses: actions/setup-node@v4
+#       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # ratchet:actions/setup-node@v4
 #       with:
 #         node-version: 22
 
@@ -230,7 +303,7 @@ jobs:
 #       run: npm ci
 
 #     - name: Download Playwright test results
-#       uses: actions/download-artifact@v4
+#       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
 #       with:
 #         name: test-results
 #         path: ./web/test-results

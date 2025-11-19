@@ -1,4 +1,4 @@
-import { Button } from "@/components/Button";
+import Button from "@/refresh-components/buttons/Button";
 import { Modal } from "@/components/Modal";
 import { useState } from "react";
 import { updateUserGroup } from "./lib";
@@ -49,7 +49,7 @@ export const AddConnectorForm: React.FC<AddConnectorFormProps> = ({
         />
 
         <Button
-          className="mt-4 flex-nowrap w-48"
+          className="mt-4 flex-nowrap"
           onClick={async () => {
             const newCCPairIds = [
               ...Array.from(

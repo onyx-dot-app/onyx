@@ -67,7 +67,6 @@ def test_all_stream_chat_message_objects_outputs(reset: None) -> None:
                 }
             ],
             "persona_id": 0,
-            "prompt_id": 0,
         },
         headers=admin_user.headers,
     )
@@ -114,7 +113,6 @@ def test_all_stream_chat_message_objects_outputs(reset: None) -> None:
                 },
             ],
             "persona_id": 0,
-            "prompt_id": 0,
         },
         headers=admin_user.headers,
     )
@@ -169,7 +167,6 @@ def test_all_stream_chat_message_objects_outputs(reset: None) -> None:
                 },
             ],
             "persona_id": 0,
-            "prompt_id": 0,
         },
         headers=admin_user.headers,
     )

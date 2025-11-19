@@ -13,8 +13,7 @@ As an open source project in a rapidly changing space, we welcome all contributi
 The [GitHub Issues](https://github.com/onyx-dot-app/onyx/issues) page is a great place to start for contribution ideas.
 
 To ensure that your contribution is aligned with the project's direction, please reach out to any maintainer on the Onyx team
-via [Slack](https://join.slack.com/t/onyx-dot-app/shared_invite/zt-34lu4m7xg-TsKGO6h8PDvR5W27zTdyhA) /
-[Discord](https://discord.gg/TDJ59cGV2X) or [email](mailto:founders@onyx.app).
+via [Discord](https://discord.gg/4NA5SbzrWb) or [email](mailto:hello@onyx.app).
 
 Issues that have been explicitly approved by the maintainers (aligned with the direction of the project)
 will be marked with the `approved by maintainers` label.
@@ -28,8 +27,7 @@ Your input is vital to making sure that Onyx moves in the right direction.
 Before starting on implementation, please raise a GitHub issue.
 
 Also, always feel free to message the founders (Chris Weaver / Yuhong Sun) on
-[Slack](https://join.slack.com/t/onyx-dot-app/shared_invite/zt-34lu4m7xg-TsKGO6h8PDvR5W27zTdyhA) /
-[Discord](https://discord.gg/TDJ59cGV2X) directly about anything at all.
+[Discord](https://discord.gg/4NA5SbzrWb) directly about anything at all.
 
 ### Contributing Code
 
@@ -46,9 +44,7 @@ Our goal is to make contributing as easy as possible. If you run into any issues
 That way we can help future contributors and users can avoid the same issue.
 
 We also have support channels and generally interesting discussions on our
-[Slack](https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA)
-and
-[Discord](https://discord.gg/TDJ59cGV2X).
+[Discord](https://discord.gg/4NA5SbzrWb).
 
 We would love to see you there!
 
@@ -84,10 +80,6 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
-> **Note:**
-> This virtual environment MUST NOT be set up WITHIN the onyx directory if you plan on using mypy within certain IDEs.
-> For simplicity, we recommend setting up the virtual environment outside of the onyx directory.
-
 _For Windows, activate the virtual environment using Command Prompt:_
 
 ```bash
@@ -103,10 +95,21 @@ If using PowerShell, the command slightly differs:
 Install the required python dependencies:
 
 ```bash
-pip install -r onyx/backend/requirements/default.txt
-pip install -r onyx/backend/requirements/dev.txt
-pip install -r onyx/backend/requirements/ee.txt
-pip install -r onyx/backend/requirements/model_server.txt
+pip install -r backend/requirements/combined.txt
+```
+
+or
+
+```bash
+pip install -r backend/requirements/default.txt
+pip install -r backend/requirements/dev.txt
+pip install -r backend/requirements/ee.txt
+pip install -r backend/requirements/model_server.txt
+```
+
+Fix vscode/cursor auto-imports:
+```bash
+pip install -e .
 ```
 
 Install Playwright for Python (headless browser required by the Web Connector)
@@ -121,8 +124,15 @@ You may have to deactivate and reactivate your virtualenv for `playwright` to ap
 
 #### Frontend: Node dependencies
 
-Install [Node.js and npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) for the frontend.
-Once the above is done, navigate to `onyx/web` run:
+Onyx uses Node v22.20.0. We highly recommend you use [Node Version Manager (nvm)](https://github.com/nvm-sh/nvm)
+to manage your Node installations. Once installed, you can run
+
+```bash
+nvm install 22 && nvm use 22
+node -v # verify your active version
+``` 
+
+Navigate to `onyx/web` and run:
 
 ```bash
 npm i
@@ -133,8 +143,6 @@ npm i
 ### Backend
 
 For the backend, you'll need to setup pre-commit hooks (black / reorder-python-imports).
-First, install pre-commit (if you don't have it already) following the instructions
-[here](https://pre-commit.com/#installation).
 
 With the virtual environment active, install the pre-commit library with:
 
@@ -154,15 +162,17 @@ To run the mypy checks manually, run `python -m mypy .` from the `onyx/backend` 
 
 ### Web
 
-We use `prettier` for formatting. The desired version (2.8.8) will be installed via a `npm i` from the `onyx/web` directory.
+We use `prettier` for formatting. The desired version will be installed via a `npm i` from the `onyx/web` directory.
 To run the formatter, use `npx prettier --write .` from the `onyx/web` directory.
-Please double check that prettier passes before creating a pull request.
+
+Pre-commit will also run prettier automatically on files you've recently touched. If re-formatted, your commit will fail.
+Re-stage your changes and commit again.
 
 # Running the application for development
 
 ## Developing using VSCode Debugger (recommended)
 
-We highly recommend using VSCode debugger for development.
+**We highly recommend using VSCode debugger for development.**
 See [CONTRIBUTING_VSCODE.md](./CONTRIBUTING_VSCODE.md) for more details.
 
 Otherwise, you can follow the instructions below to run the application for development.
@@ -175,7 +185,7 @@ You will need Docker installed to run these containers.
 First navigate to `onyx/deployment/docker_compose`, then start up Postgres/Vespa/Redis/MinIO with:
 
 ```bash
-docker compose -f docker-compose.dev.yml -p onyx-stack up -d index relational_db cache minio
+docker compose up -d index relational_db cache minio
 ```
 
 (index refers to Vespa, relational_db refers to Postgres, and cache refers to Redis)
@@ -257,7 +267,7 @@ You can run the full Onyx application stack from pre-built images including all 
 Navigate to `onyx/deployment/docker_compose` and run:
 
 ```bash
-docker compose -f docker-compose.dev.yml -p onyx-stack up -d
+docker compose up -d
 ```
 
 After Docker pulls and starts these containers, navigate to `http://localhost:3000` to use Onyx.
@@ -265,7 +275,7 @@ After Docker pulls and starts these containers, navigate to `http://localhost:30
 If you want to make changes to Onyx and run those changes in Docker, you can also build a local version of the Onyx container images that incorporates your changes like so:
 
 ```bash
-docker compose -f docker-compose.dev.yml -p onyx-stack up -d --build
+docker compose up -d --build
 ```
 
 

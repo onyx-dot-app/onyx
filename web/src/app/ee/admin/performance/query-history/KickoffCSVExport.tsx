@@ -1,8 +1,7 @@
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { useRef, useState } from "react";
 import { DateRange } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
-import { FaSpinner, FaRegArrowAltCircleUp } from "react-icons/fa";
 import { withRequestId, withDateRange } from "./utils";
 import {
   CHECK_QUERY_HISTORY_EXPORT_STATUS_URL,
@@ -16,8 +15,15 @@ import {
   SpinnerStatus,
   StartQueryHistoryExportResponse,
 } from "./types";
+import SvgLoader from "@/icons/loader";
+import { cn } from "@/lib/utils";
+import SvgPlayCircle from "@/icons/play-circle";
 
-export function KickoffCSVExport({ dateRange }: { dateRange: DateRange }) {
+export default function KickoffCSVExport({
+  dateRange,
+}: {
+  dateRange: DateRange;
+}) {
   const timerIdRef = useRef<null | number>(null);
   const retryCount = useRef<number>(0);
   const [, rerender] = useState<void>();
@@ -115,21 +121,18 @@ export function KickoffCSVExport({ dateRange }: { dateRange: DateRange }) {
       {popup}
       <div className="flex flex-1 flex-col w-full justify-center">
         <Button
-          className="flex ml-auto py-2 px-4 h-fit cursor-pointer text-sm w-[140px]"
+          className="ml-auto"
           onClick={startExport}
-          variant={spinnerStatus === "spinning" ? "destructive" : "default"}
+          danger={spinnerStatus === "spinning"}
+          leftIcon={
+            spinnerStatus === "spinning"
+              ? ({ className }) => (
+                  <SvgLoader className={cn(className, "animate-spin")} />
+                )
+              : SvgPlayCircle
+          }
         >
-          {spinnerStatus === "spinning" ? (
-            <>
-              <FaSpinner className="animate-spin text-2xl" />
-              Cancel
-            </>
-          ) : (
-            <>
-              <FaRegArrowAltCircleUp />
-              Kickoff Export
-            </>
-          )}
+          {spinnerStatus === "spinning" ? "Cancel" : "Kickoff Export"}
         </Button>
       </div>
     </>

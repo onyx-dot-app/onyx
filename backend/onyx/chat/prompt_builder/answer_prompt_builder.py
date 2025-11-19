@@ -1,12 +1,13 @@
 from collections.abc import Callable
+from collections.abc import Sequence
 from typing import cast
 
 from langchain_core.messages import BaseMessage
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
-from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModel__v1
 
+from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.citations_prompt import compute_max_llm_input_tokens
 from onyx.chat.prompt_builder.utils import translate_history_to_basemessages
@@ -21,8 +22,13 @@ from onyx.llm.utils import model_supports_image_input
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
 from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
+from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
+from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_PROMPT
+from onyx.prompts.chat_prompts import TOOL_PERSISTENCE_PROMPT
 from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
 from onyx.prompts.prompt_utils import drop_messages_history_overflow
+from onyx.prompts.prompt_utils import handle_company_awareness
+from onyx.prompts.prompt_utils import handle_memories
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolCallFinalResult
@@ -31,11 +37,103 @@ from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 
 
+def default_build_system_message_v2(
+    prompt_config: PromptConfig,
+    llm_config: LLMConfig,
+    memories: list[str] | None = None,
+    tools: Sequence[Tool] | None = None,
+    should_cite_documents: bool = False,
+) -> SystemMessage:
+    system_prompt = (
+        prompt_config.default_behavior_system_prompt or DEFAULT_SYSTEM_PROMPT
+    )
+
+    # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
+    # for o-series markdown generation
+    if (
+        llm_config.model_provider == OPENAI_PROVIDER_NAME
+        and llm_config.model_name.startswith("o")
+    ):
+        system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
+
+    tag_handled_prompt = handle_onyx_date_awareness(
+        system_prompt,
+        prompt_config,
+        add_additional_info_if_no_tag=prompt_config.datetime_aware,
+    )
+
+    tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
+
+    if memories:
+        tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
+
+    if tools:
+        tag_handled_prompt += "\n\n# Tools\n"
+        tag_handled_prompt += TOOL_PERSISTENCE_PROMPT
+
+        has_web_search = any(type(tool).__name__ == "WebSearchTool" for tool in tools)
+        has_internal_search = any(type(tool).__name__ == "SearchTool" for tool in tools)
+
+        if has_web_search or has_internal_search:
+            from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
+
+            tag_handled_prompt += "\n" + TOOL_DESCRIPTION_SEARCH_GUIDANCE + "\n"
+
+        if has_internal_search:
+            from onyx.prompts.chat_prompts import INTERNAL_SEARCH_GUIDANCE
+
+            tag_handled_prompt += "\n" + INTERNAL_SEARCH_GUIDANCE + "\n"
+
+        if has_internal_search and has_web_search:
+            from onyx.prompts.chat_prompts import (
+                INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE,
+            )
+
+            tag_handled_prompt += "\n" + INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE + "\n"
+
+        for tool in tools:
+            if type(tool).__name__ == "WebSearchTool":
+                from onyx.tools.tool_implementations_v2.web import (
+                    WEB_SEARCH_LONG_DESCRIPTION,
+                    OPEN_URL_LONG_DESCRIPTION,
+                )
+
+                tag_handled_prompt += "\n## web_search\n"
+                tag_handled_prompt += WEB_SEARCH_LONG_DESCRIPTION
+                tag_handled_prompt += "\n\n## open_url\n"
+                tag_handled_prompt += OPEN_URL_LONG_DESCRIPTION
+            else:
+                # TODO: ToolV2 should make this much cleaner
+                from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
+
+                if tools_to_function_tools([tool]):
+                    tag_handled_prompt += (
+                        f"\n## {tools_to_function_tools([tool])[0].name}\n"
+                    )
+                    tag_handled_prompt += tool.description
+
+    tag_handled_prompt += "\n# Reminders"
+    if should_cite_documents:
+        from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
+
+        tag_handled_prompt += "\n\n" + REQUIRE_CITATION_STATEMENT
+
+    tag_handled_prompt += "\n\n" + LONG_CONVERSATION_REMINDER_PROMPT
+
+    return SystemMessage(content=tag_handled_prompt)
+
+
 def default_build_system_message(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
+    memories: list[str] | None = None,
 ) -> SystemMessage | None:
-    system_prompt = prompt_config.system_prompt.strip()
+    # Build system prompt from default behavior and custom instructions
+    # for backwards compatibility
+    system_prompt = (
+        prompt_config.custom_instructions
+        or prompt_config.default_behavior_system_prompt
+    )
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
     # for o-series markdown generation
     if (
@@ -51,6 +149,11 @@ def default_build_system_message(
 
     if not tag_handled_prompt:
         return None
+
+    tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
+
+    if memories:
+        tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
 
     return SystemMessage(content=tag_handled_prompt)
 
@@ -70,12 +173,13 @@ def default_build_user_message(
     user_prompt = (
         CHAT_USER_CONTEXT_FREE_PROMPT.format(
             history_block=history_block,
-            task_prompt=prompt_config.task_prompt,
+            task_prompt=prompt_config.reminder,
             user_query=user_query,
         )
-        if prompt_config.task_prompt
+        if prompt_config.reminder
         else user_query
     )
+
     user_prompt = user_prompt.strip()
     tag_handled_prompt = handle_onyx_date_awareness(user_prompt, prompt_config)
     user_msg = HumanMessage(
@@ -133,6 +237,10 @@ class AnswerPromptBuilder:
         self.raw_user_query = raw_user_query
         self.raw_user_uploaded_files = raw_user_uploaded_files
         self.single_message_history = single_message_history
+
+        # Optional: if the prompt includes explicit context documents (e.g., project files),
+        # store them here so downstream streaming can reference them for citation mapping.
+        self.context_llm_docs: list[LlmDoc] | None = None
 
     def update_system_prompt(self, system_message: SystemMessage | None) -> None:
         if not system_message:
@@ -198,10 +306,6 @@ class AnswerPromptBuilder:
 
 
 # Stores some parts of a prompt builder as needed for tool calls
-class PromptSnapshot(BaseModel):
-    raw_message_history: list[PreviousMessage]
-    raw_user_query: str
-    built_prompt: list[BaseMessage]
 
 
 # TODO: rename this? AnswerConfig maybe?

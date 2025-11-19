@@ -7,9 +7,9 @@ from pydantic import Field
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
-from onyx.db.models import Prompt
 from onyx.db.models import StarterMessage
 from onyx.server.features.document_set.models import DocumentSetSummary
+from onyx.server.features.tool.models import should_expose_tool_to_fe
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
@@ -24,25 +24,22 @@ class PromptSnapshot(BaseModel):
     description: str
     system_prompt: str
     task_prompt: str
-    include_citations: bool
     datetime_aware: bool
-    default_prompt: bool
     # Not including persona info, not needed
 
     @classmethod
-    def from_model(cls, prompt: Prompt) -> "PromptSnapshot":
-        if prompt.deleted:
-            raise ValueError("Prompt has been deleted")
+    def from_model(cls, persona: Persona) -> "PromptSnapshot":
+        """Create PromptSnapshot from persona's embedded prompt fields"""
+        if persona.deleted:
+            raise ValueError("Persona has been deleted")
 
         return PromptSnapshot(
-            id=prompt.id,
-            name=prompt.name,
-            description=prompt.description,
-            system_prompt=prompt.system_prompt,
-            task_prompt=prompt.task_prompt,
-            include_citations=prompt.include_citations,
-            datetime_aware=prompt.datetime_aware,
-            default_prompt=prompt.default_prompt,
+            id=persona.id,
+            name=persona.name,
+            description=persona.description,
+            system_prompt=persona.system_prompt or "",
+            task_prompt=persona.task_prompt or "",
+            datetime_aware=persona.datetime_aware,
         )
 
 
@@ -58,15 +55,10 @@ class GenerateStarterMessageRequest(BaseModel):
 class PersonaUpsertRequest(BaseModel):
     name: str
     description: str
-    system_prompt: str
-    task_prompt: str
-    datetime_aware: bool
     document_set_ids: list[int]
     num_chunks: float
-    include_citations: bool
     is_public: bool
     recency_bias: RecencyBiasSetting
-    prompt_ids: list[int]
     llm_filter_extraction: bool
     llm_relevance_filter: bool
     llm_model_provider_override: str | None = None
@@ -85,8 +77,13 @@ class PersonaUpsertRequest(BaseModel):
     label_ids: list[int] | None = None
     is_default_persona: bool = False
     display_priority: int | None = None
-    user_file_ids: list[int] | None = None
-    user_folder_ids: list[int] | None = None
+    # Accept string UUIDs from frontend
+    user_file_ids: list[str] | None = None
+
+    # prompt fields
+    system_prompt: str
+    task_prompt: str
+    datetime_aware: bool
 
 
 class MinimalPersonaSnapshot(BaseModel):
@@ -99,6 +96,9 @@ class MinimalPersonaSnapshot(BaseModel):
     # Used for retrieval capability checking
     tools: list[ToolSnapshot]
     starter_messages: list[StarterMessage] | None
+
+    llm_relevance_filter: bool
+    llm_filter_extraction: bool
 
     # only show document sets in the UI that the assistant has access to
     document_sets: list[DocumentSetSummary]
@@ -128,8 +128,14 @@ class MinimalPersonaSnapshot(BaseModel):
             id=persona.id,
             name=persona.name,
             description=persona.description,
-            tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
+            tools=[
+                ToolSnapshot.from_model(tool)
+                for tool in persona.tools
+                if should_expose_tool_to_fe(tool)
+            ],
             starter_messages=persona.starter_messages,
+            llm_relevance_filter=persona.llm_relevance_filter,
+            llm_filter_extraction=persona.llm_filter_extraction,
             document_sets=[
                 DocumentSetSummary.from_model(document_set)
                 for document_set in persona.document_sets
@@ -162,12 +168,14 @@ class PersonaSnapshot(BaseModel):
     icon_shape: int | None
     icon_color: str | None
     uploaded_image_id: str | None
-    user_file_ids: list[int]
-    user_folder_ids: list[int]
+    # Return string UUIDs to frontend for consistency
+    user_file_ids: list[str]
     display_priority: int | None
     is_default_persona: bool
     builtin_persona: bool
     starter_messages: list[StarterMessage] | None
+    llm_relevance_filter: bool
+    llm_filter_extraction: bool
     tools: list[ToolSnapshot]
     labels: list["PersonaLabelSnapshot"]
     owner: MinimalUserSnapshot | None
@@ -177,6 +185,11 @@ class PersonaSnapshot(BaseModel):
     llm_model_provider_override: str | None
     llm_model_version_override: str | None
     num_chunks: float | None
+
+    # Embedded prompt fields (no longer separate prompt_ids)
+    system_prompt: str | None = None
+    task_prompt: str | None = None
+    datetime_aware: bool = True
 
     @classmethod
     def from_model(cls, persona: Persona) -> "PersonaSnapshot":
@@ -189,13 +202,18 @@ class PersonaSnapshot(BaseModel):
             icon_shape=persona.icon_shape,
             icon_color=persona.icon_color,
             uploaded_image_id=persona.uploaded_image_id,
-            user_file_ids=[file.id for file in persona.user_files],
-            user_folder_ids=[folder.id for folder in persona.user_folders],
+            user_file_ids=[str(file.id) for file in persona.user_files],
             display_priority=persona.display_priority,
             is_default_persona=persona.is_default_persona,
             builtin_persona=persona.builtin_persona,
             starter_messages=persona.starter_messages,
-            tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
+            llm_relevance_filter=persona.llm_relevance_filter,
+            llm_filter_extraction=persona.llm_filter_extraction,
+            tools=[
+                ToolSnapshot.from_model(tool)
+                for tool in persona.tools
+                if should_expose_tool_to_fe(tool)
+            ],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
                 MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
@@ -214,6 +232,9 @@ class PersonaSnapshot(BaseModel):
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
             num_chunks=persona.num_chunks,
+            system_prompt=persona.system_prompt,
+            task_prompt=persona.task_prompt,
+            datetime_aware=persona.datetime_aware,
         )
 
 
@@ -221,7 +242,6 @@ class PersonaSnapshot(BaseModel):
 # This is used for flows which need to know all settings
 class FullPersonaSnapshot(PersonaSnapshot):
     search_start_date: datetime | None = None
-    prompts: list[PromptSnapshot] = Field(default_factory=list)
     llm_relevance_filter: bool = False
     llm_filter_extraction: bool = False
 
@@ -245,8 +265,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             icon_shape=persona.icon_shape,
             icon_color=persona.icon_color,
             uploaded_image_id=persona.uploaded_image_id,
-            user_file_ids=[file.id for file in persona.user_files],
-            user_folder_ids=[folder.id for folder in persona.user_folders],
+            user_file_ids=[str(file.id) for file in persona.user_files],
             display_priority=persona.display_priority,
             is_default_persona=persona.is_default_persona,
             builtin_persona=persona.builtin_persona,
@@ -256,7 +275,11 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 for user in persona.users
             ],
             groups=[user_group.id for user_group in persona.groups],
-            tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
+            tools=[
+                ToolSnapshot.from_model(tool)
+                for tool in persona.tools
+                if should_expose_tool_to_fe(tool)
+            ],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
                 MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
@@ -269,11 +292,13 @@ class FullPersonaSnapshot(PersonaSnapshot):
             ],
             num_chunks=persona.num_chunks,
             search_start_date=persona.search_start_date,
-            prompts=[PromptSnapshot.from_model(prompt) for prompt in persona.prompts],
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
+            system_prompt=persona.system_prompt,
+            task_prompt=persona.task_prompt,
+            datetime_aware=persona.datetime_aware,
         )
 
 

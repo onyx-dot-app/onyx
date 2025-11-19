@@ -9,10 +9,8 @@ interface PersonaUpsertRequest {
   datetime_aware: boolean;
   document_set_ids: number[];
   num_chunks: number | null;
-  include_citations: boolean;
   is_public: boolean;
   recency_bias: string;
-  prompt_ids: number[];
   llm_filter_extraction: boolean;
   llm_relevance_filter: boolean | null;
   llm_model_provider_override: string | null;
@@ -29,20 +27,17 @@ interface PersonaUpsertRequest {
   is_default_persona: boolean;
   display_priority: number | null;
   label_ids: number[] | null;
-  user_file_ids: number[] | null;
-  user_folder_ids: number[] | null;
+  user_file_ids: string[] | null;
 }
 
 export interface PersonaUpsertParameters {
   name: string;
   description: string;
   system_prompt: string;
-  existing_prompt_id: number | null;
   task_prompt: string;
   datetime_aware: boolean;
   document_set_ids: number[];
   num_chunks: number | null;
-  include_citations: boolean;
   is_public: boolean;
   llm_relevance_filter: boolean | null;
   llm_model_provider_override: string | null;
@@ -58,8 +53,7 @@ export interface PersonaUpsertParameters {
   uploaded_image: File | null;
   is_default_persona: boolean;
   label_ids: number[] | null;
-  user_file_ids: number[];
-  user_folder_ids: number[];
+  user_file_ids: string[];
 }
 
 export const createPersonaLabel = (name: string) => {
@@ -107,10 +101,8 @@ function buildPersonaUpsertRequest(
     task_prompt,
     document_set_ids,
     num_chunks,
-    include_citations,
     is_public,
     groups,
-    existing_prompt_id,
     datetime_aware,
     users,
     tool_ids,
@@ -119,7 +111,6 @@ function buildPersonaUpsertRequest(
     remove_image,
     search_start_date,
     user_file_ids,
-    user_folder_ids,
   } = creationRequest;
 
   return {
@@ -129,7 +120,6 @@ function buildPersonaUpsertRequest(
     task_prompt,
     document_set_ids,
     num_chunks,
-    include_citations,
     is_public,
     uploaded_image_id,
     groups,
@@ -142,7 +132,6 @@ function buildPersonaUpsertRequest(
     datetime_aware,
     is_default_persona: creationRequest.is_default_persona ?? false,
     recency_bias: "base_decay",
-    prompt_ids: existing_prompt_id ? [existing_prompt_id] : [],
     llm_filter_extraction: false,
     llm_relevance_filter: creationRequest.llm_relevance_filter ?? null,
     llm_model_provider_override:
@@ -153,7 +142,6 @@ function buildPersonaUpsertRequest(
     display_priority: null,
     label_ids: creationRequest.label_ids ?? null,
     user_file_ids: user_file_ids ?? null,
-    user_folder_ids: user_folder_ids ?? null,
   };
 }
 

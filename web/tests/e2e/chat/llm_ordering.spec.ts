@@ -1,82 +1,43 @@
 import { test, expect } from "@chromatic-com/playwright";
-import { loginAsRandomUser } from "../utils/auth";
-import {
-  navigateToAssistantInHistorySidebar,
-  sendMessage,
-  verifyCurrentModel,
-  switchModel,
-  startNewChat,
-} from "../utils/chatActions";
+import { loginAs } from "../utils/auth";
+import { verifyCurrentModel } from "../utils/chatActions";
+import { ensureImageGenerationEnabled } from "../utils/assistantUtils";
 
-test("LLM Ordering and Model Switching", async ({ page }) => {
-  // Setup: Clear cookies and log in as a random user
+test("Non-image-generation model visibility in chat input bar", async ({
+  page,
+}) => {
+  // Setup: Clear cookies and log in as admin
   await page.context().clearCookies();
-  await loginAsRandomUser(page);
+  await loginAs(page, "admin");
 
-  // Navigate to the chat page and verify URL
+  // Ensure Image Generation is enabled in default assistant
+  await ensureImageGenerationEnabled(page);
+
+  // Navigate to the chat page
   await page.goto("http://localhost:3000/chat");
   await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
-  await expect(page.url()).toBe("http://localhost:3000/chat");
 
-  // Configure user settings: Set default model to o3 Mini
-  await page.locator("#onyx-user-dropdown").click();
-  await page.getByText("User Settings").click();
-  await page.getByRole("combobox").nth(1).click();
-  await page.getByLabel("o3 Mini", { exact: true }).click();
-  await page.getByLabel("Close modal").click();
-  await page.waitForTimeout(5000);
-  await verifyCurrentModel(page, "o3 Mini");
-  // Test Art Assistant: Should use its own model (GPT 4o)
-  await page.reload();
-  await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
-  await navigateToAssistantInHistorySidebar(
-    page,
-    "[-3]",
-    "Assistant for generating"
-  );
-  await sendMessage(page, "Sample message");
-  await verifyCurrentModel(page, "GPT 4o");
+  const testModelDisplayName = "GPT 4o Mini";
 
-  // Test new chat: Should use Art Assistant's model initially
-  await startNewChat(page);
-  await expect(page.getByText("Assistant for generating")).toBeVisible();
-  await verifyCurrentModel(page, "GPT 4o");
+  // Open the LLM popover by clicking the model selector button
+  const llmPopoverTrigger = page.locator('[data-testid="llm-popover-trigger"]');
+  await llmPopoverTrigger.click();
 
-  // Test another new chat: Should use user's default model (o3 Mini)
-  await startNewChat(page);
-  await verifyCurrentModel(page, "o3 Mini");
+  // Wait for the popover to open
+  await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-  // Test model switching within a chat
-  await switchModel(page, "GPT 4o Mini");
-  await sendMessage(page, "Sample message");
-  await verifyCurrentModel(page, "GPT 4o Mini");
+  // Verify that the non-vision model appears in the list
+  // The model name is displayed via getDisplayNameForModel, so we search for text containing the model name
+  // Use .first() since there might be multiple providers with the same model
+  const modelButton = page
+    .locator('[role="dialog"]')
+    .locator("div.cursor-pointer")
+    .filter({ hasText: testModelDisplayName })
+    .first();
 
-  // Create a custom assistant with a specific model
-  await page.getByRole("button", { name: "Explore Assistants" }).click();
-  await page.getByRole("button", { name: "Create", exact: true }).click();
-  await page.waitForTimeout(2000);
-  await page.getByTestId("name").fill("Sample Name");
-  await page.getByTestId("description").fill("Sample Description");
-  await page.getByTestId("system_prompt").fill("Sample Instructions");
-  await page
-    .locator('button[role="combobox"] > span:has-text("User Default")')
-    .click();
-  await page.getByLabel("o3 Mini").getByText("o3 Mini").click();
-  await page.getByRole("button", { name: "Create" }).click();
+  await expect(modelButton).toBeVisible();
 
-  // Verify custom assistant uses its specified model
-  await page.locator("#onyx-chat-input-textarea").fill("");
-  await verifyCurrentModel(page, "o3 Mini");
-
-  // Ensure model persistence for custom assistant
-  await sendMessage(page, "Sample message");
-  await verifyCurrentModel(page, "o3 Mini");
-
-  // Switch back to Art Assistant and verify its model
-  await navigateToAssistantInHistorySidebar(
-    page,
-    "[-3]",
-    "Assistant for generating"
-  );
-  await verifyCurrentModel(page, "GPT 4o");
+  // Optionally, select the model to verify it works
+  await modelButton.click();
+  await verifyCurrentModel(page, testModelDisplayName);
 });

@@ -109,11 +109,11 @@ def test_load_from_checkpoint_access__private_channel(
 def test_slim_documents_access__public_channel(
     slack_connector: SlackConnector,
 ) -> None:
-    """Test that retrieve_all_slim_documents returns correct access information for slim documents."""
+    """Test that retrieve_all_slim_docs_perm_sync returns correct access information for slim documents."""
     if not slack_connector.client:
         raise RuntimeError("Web client must be defined")
 
-    slim_docs_generator = slack_connector.retrieve_all_slim_documents(
+    slim_docs_generator = slack_connector.retrieve_all_slim_docs_perm_sync(
         start=0.0,
         end=time.time(),
     )
@@ -143,11 +143,11 @@ def test_slim_documents_access__public_channel(
 def test_slim_documents_access__private_channel(
     slack_connector: SlackConnector,
 ) -> None:
-    """Test that retrieve_all_slim_documents returns correct access information for slim documents."""
+    """Test that retrieve_all_slim_docs_perm_sync returns correct access information for slim documents."""
     if not slack_connector.client:
         raise RuntimeError("Web client must be defined")
 
-    slim_docs_generator = slack_connector.retrieve_all_slim_documents(
+    slim_docs_generator = slack_connector.retrieve_all_slim_docs_perm_sync(
         start=0.0,
         end=time.time(),
     )

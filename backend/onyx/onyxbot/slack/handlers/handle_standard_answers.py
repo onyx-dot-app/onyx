@@ -1,7 +1,6 @@
 from slack_sdk import WebClient
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Prompt
 from onyx.db.models import SlackChannelConfig
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.utils.logger import OnyxLoggingAdapter
@@ -15,7 +14,6 @@ def handle_standard_answers(
     message_info: SlackMessageInfo,
     receiver_ids: list[str] | None,
     slack_channel_config: SlackChannelConfig,
-    prompt: Prompt | None,
     logger: OnyxLoggingAdapter,
     client: WebClient,
     db_session: Session,
@@ -30,7 +28,6 @@ def handle_standard_answers(
         message_info=message_info,
         receiver_ids=receiver_ids,
         slack_channel_config=slack_channel_config,
-        prompt=prompt,
         logger=logger,
         client=client,
         db_session=db_session,
@@ -41,7 +38,6 @@ def _handle_standard_answers(
     message_info: SlackMessageInfo,
     receiver_ids: list[str] | None,
     slack_channel_config: SlackChannelConfig,
-    prompt: Prompt | None,
     logger: OnyxLoggingAdapter,
     client: WebClient,
     db_session: Session,

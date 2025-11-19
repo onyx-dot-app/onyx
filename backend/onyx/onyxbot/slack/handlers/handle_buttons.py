@@ -8,12 +8,11 @@ from slack_sdk.models.views import View
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.webhook import WebhookClient
 
-from onyx.chat.models import ChatOnyxBotResponse
-from onyx.chat.models import CitationInfo
-from onyx.chat.models import QADocsResponse
+from onyx.chat.models import ChatBasicResponse
+from onyx.chat.process_message import remove_answer_citations
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
-from onyx.configs.onyxbot_configs import DANSWER_FOLLOWUP_EMOJI
+from onyx.configs.onyxbot_configs import ONYX_BOT_FOLLOWUP_EMOJI
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_chat_message
@@ -50,6 +49,7 @@ from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import TenantSocketModeClient
 from onyx.onyxbot.slack.utils import update_emote_react
 from onyx.server.query_and_chat.models import ChatMessageDetail
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
 
 
@@ -177,7 +177,7 @@ def handle_generate_answer_button(
                 sender_id=user_id or None,
                 email=email or None,
                 bypass_filters=True,
-                is_bot_msg=False,
+                is_slash_command=False,
                 is_bot_dm=False,
             ),
             slack_channel_config=slack_channel_config,
@@ -249,23 +249,19 @@ def handle_publish_ephemeral_message_button(
         # we need to construct the blocks.
         citation_list = _build_citation_list(chat_message_detail)
 
-        onyx_bot_answer = ChatOnyxBotResponse(
+        onyx_bot_answer = ChatBasicResponse(
             answer=chat_message_detail.message,
-            citations=citation_list,
-            chat_message_id=chat_message_id,
-            docs=QADocsResponse(
-                top_documents=(
-                    chat_message_detail.context_docs.top_documents
-                    if chat_message_detail.context_docs
-                    else []
-                ),
-                predicted_flow=None,
-                predicted_search=None,
-                applied_source_filters=None,
-                applied_time_cutoff=None,
-                recency_bias_multiplier=1.0,
+            answer_citationless=remove_answer_citations(chat_message_detail.message),
+            cited_documents={
+                citation_info.citation_num: citation_info.document_id
+                for citation_info in citation_list
+            },
+            top_documents=(
+                chat_message_detail.context_docs.top_documents
+                if chat_message_detail.context_docs
+                else []
             ),
-            llm_selected_doc_indices=None,
+            message_id=chat_message_id,
             error_msg=None,
         )
 
@@ -463,7 +459,7 @@ def handle_followup_button(
     thread_ts = req.payload["container"].get("thread_ts", None)
 
     update_emote_react(
-        emoji=DANSWER_FOLLOWUP_EMOJI,
+        emoji=ONYX_BOT_FOLLOWUP_EMOJI,
         channel=channel_id,
         message_ts=thread_ts,
         remove=False,
@@ -548,7 +544,7 @@ def handle_followup_resolved_button(
     clicker_name = get_clicker_name(req, client)
 
     update_emote_react(
-        emoji=DANSWER_FOLLOWUP_EMOJI,
+        emoji=ONYX_BOT_FOLLOWUP_EMOJI,
         channel=channel_id,
         message_ts=thread_ts,
         remove=True,

@@ -1,0 +1,37 @@
+{{- if and (.Values.celery_worker_docfetching.autoscaling.enabled) (eq (include "onyx.autoscaling.engine" .) "keda") }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "onyx.fullname" . }}-celery-worker-docfetching
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "onyx.fullname" . }}-celery-worker-docfetching
+  minReplicaCount: {{ .Values.celery_worker_docfetching.autoscaling.minReplicas | default 1 }}
+  maxReplicaCount: {{ .Values.celery_worker_docfetching.autoscaling.maxReplicas | default 20 }}
+  pollingInterval: {{ .Values.celery_worker_docfetching.autoscaling.pollingInterval | default 30 }}
+  cooldownPeriod: {{ .Values.celery_worker_docfetching.autoscaling.cooldownPeriod | default 300 }}
+  idleReplicaCount: {{ .Values.celery_worker_docfetching.autoscaling.idleReplicaCount | default 1 }}
+  fallback:
+    failureThreshold: {{ .Values.celery_worker_docfetching.autoscaling.failureThreshold | default 3 }}
+    replicas: {{ .Values.celery_worker_docfetching.autoscaling.fallbackReplicas | default 1 }}
+  triggers:
+    {{- if .Values.celery_worker_docfetching.autoscaling.targetCPUUtilizationPercentage }}
+    - type: cpu
+      metadata:
+        type: Utilization
+        value: "{{ .Values.celery_worker_docfetching.autoscaling.targetCPUUtilizationPercentage }}"
+    {{- end }}
+    {{- if .Values.celery_worker_docfetching.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: memory
+      metadata:
+        type: Utilization
+        value: "{{ .Values.celery_worker_docfetching.autoscaling.targetMemoryUtilizationPercentage }}"
+    {{- end }}
+    {{- if .Values.celery_worker_docfetching.autoscaling.customTriggers }}
+    {{- toYaml .Values.celery_worker_docfetching.autoscaling.customTriggers | nindent 4 }}
+    {{- end }}
+{{- end }}

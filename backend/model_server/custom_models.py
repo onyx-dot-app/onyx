@@ -1,14 +1,12 @@
 from typing import cast
+from typing import Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from fastapi import APIRouter
 from huggingface_hub import snapshot_download  # type: ignore
-from setfit import SetFitModel  # type: ignore[import]
-from transformers import AutoTokenizer  # type: ignore
-from transformers import BatchEncoding  # type: ignore
-from transformers import PreTrainedTokenizer  # type: ignore
 
 from model_server.constants import INFORMATION_CONTENT_MODEL_WARM_UP_STRING
 from model_server.constants import MODEL_WARM_UP_STRING
@@ -37,23 +35,30 @@ from shared_configs.model_server_models import ContentClassificationPrediction
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
 
+if TYPE_CHECKING:
+    from setfit import SetFitModel  # type: ignore
+    from transformers import PreTrainedTokenizer, BatchEncoding  # type: ignore
+
+
 logger = setup_logger()
 
 router = APIRouter(prefix="/custom")
 
-_CONNECTOR_CLASSIFIER_TOKENIZER: PreTrainedTokenizer | None = None
+_CONNECTOR_CLASSIFIER_TOKENIZER: Optional["PreTrainedTokenizer"] = None
 _CONNECTOR_CLASSIFIER_MODEL: ConnectorClassifier | None = None
 
-_INTENT_TOKENIZER: PreTrainedTokenizer | None = None
+_INTENT_TOKENIZER: Optional["PreTrainedTokenizer"] = None
 _INTENT_MODEL: HybridClassifier | None = None
 
-_INFORMATION_CONTENT_MODEL: SetFitModel | None = None
+_INFORMATION_CONTENT_MODEL: Optional["SetFitModel"] = None
 
 _INFORMATION_CONTENT_MODEL_PROMPT_PREFIX: str = ""  # spec to model version!
 
 
-def get_connector_classifier_tokenizer() -> PreTrainedTokenizer:
+def get_connector_classifier_tokenizer() -> "PreTrainedTokenizer":
     global _CONNECTOR_CLASSIFIER_TOKENIZER
+    from transformers import AutoTokenizer, PreTrainedTokenizer
+
     if _CONNECTOR_CLASSIFIER_TOKENIZER is None:
         # The tokenizer details are not uploaded to the HF hub since it's just the
         # unmodified distilbert tokenizer.
@@ -95,7 +100,9 @@ def get_local_connector_classifier(
     return _CONNECTOR_CLASSIFIER_MODEL
 
 
-def get_intent_model_tokenizer() -> PreTrainedTokenizer:
+def get_intent_model_tokenizer() -> "PreTrainedTokenizer":
+    from transformers import AutoTokenizer, PreTrainedTokenizer
+
     global _INTENT_TOKENIZER
     if _INTENT_TOKENIZER is None:
         # The tokenizer details are not uploaded to the HF hub since it's just the
@@ -141,7 +148,9 @@ def get_local_intent_model(
 def get_local_information_content_model(
     model_name_or_path: str = INFORMATION_CONTENT_MODEL_VERSION,
     tag: str | None = INFORMATION_CONTENT_MODEL_TAG,
-) -> SetFitModel:
+) -> "SetFitModel":
+    from setfit import SetFitModel
+
     global _INFORMATION_CONTENT_MODEL
     if _INFORMATION_CONTENT_MODEL is None:
         try:
@@ -179,7 +188,7 @@ def get_local_information_content_model(
 def tokenize_connector_classification_query(
     connectors: list[str],
     query: str,
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: "PreTrainedTokenizer",
     connector_token_end_id: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
@@ -267,7 +276,7 @@ def warm_up_information_content_model() -> None:
 
 
 @simple_log_function_time()
-def run_inference(tokens: BatchEncoding) -> tuple[list[float], list[float]]:
+def run_inference(tokens: "BatchEncoding") -> tuple[list[float], list[float]]:
     intent_model = get_local_intent_model()
     device = intent_model.device
 
@@ -401,7 +410,7 @@ def run_content_classification_inference(
 
 
 def map_keywords(
-    input_ids: torch.Tensor, tokenizer: PreTrainedTokenizer, is_keyword: list[bool]
+    input_ids: torch.Tensor, tokenizer: "PreTrainedTokenizer", is_keyword: list[bool]
 ) -> list[str]:
     tokens = tokenizer.convert_ids_to_tokens(input_ids)  # type: ignore
 

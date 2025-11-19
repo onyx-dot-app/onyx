@@ -1,12 +1,14 @@
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import React, { useState, useEffect } from "react";
 import { FormikProps, FieldArray, ArrayHelpers, ErrorMessage } from "formik";
-import Text from "@/components/ui/text";
-import { FiUsers } from "react-icons/fi";
+import Text from "@/refresh-components/texts/Text";
+import Button from "@/refresh-components/buttons/Button";
 import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import { BooleanFormField } from "@/components/Field";
 import { useUser } from "./user/UserProvider";
+import SvgUsers from "@/icons/users";
+import { cn } from "@/lib/utils";
 
 export type IsPublicGroupSelectorFormType = {
   is_public: boolean;
@@ -112,59 +114,48 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
         userGroups &&
         userGroups?.length > 0 && (
           <>
-            <div className="flex mt-4 gap-x-2 items-center">
-              <div className="block font-medium text-base">
+            <div className="flex flex-col gap-3 pt-4">
+              <Text mainUiAction text05>
                 Assign group access for this {objectName}
-              </div>
-            </div>
-            {userGroupsIsLoading ? (
-              <div className="animate-pulse bg-background-200 h-8 w-32 rounded"></div>
-            ) : (
-              <Text className="mb-3">
-                {isAdmin || !enforceGroupSelection ? (
-                  <>
-                    This {objectName} will be visible/accessible by the groups
-                    selected below
-                  </>
-                ) : (
-                  <>
-                    Curators must select one or more groups to give access to
-                    this {objectName}
-                  </>
-                )}
               </Text>
-            )}
+              {userGroupsIsLoading ? (
+                <div className="animate-pulse bg-background-200 h-8 w-32 rounded" />
+              ) : (
+                <Text mainUiMuted text03>
+                  {isAdmin || !enforceGroupSelection ? (
+                    <>
+                      This {objectName} will be visible/accessible by the groups
+                      selected below
+                    </>
+                  ) : (
+                    <>
+                      Curators must select one or more groups to give access to
+                      this {objectName}
+                    </>
+                  )}
+                </Text>
+              )}
+            </div>
             <FieldArray
               name="groups"
               render={(arrayHelpers: ArrayHelpers) => (
-                <div className="flex gap-2 flex-wrap mb-4">
+                <div className="flex flex-wrap gap-2 py-4">
                   {userGroupsIsLoading ? (
-                    <div className="animate-pulse bg-background-200 h-8 w-32 rounded"></div>
+                    <div className="animate-pulse bg-background-200 h-8 w-32 rounded" />
                   ) : (
                     userGroups &&
                     userGroups.map((userGroup: UserGroup) => {
                       const ind = formikProps.values.groups.indexOf(
                         userGroup.id
                       );
-                      let isSelected = ind !== -1;
+                      const isSelected = ind !== -1;
                       return (
-                        <div
+                        <Button
                           key={userGroup.id}
-                          className={`
-                        px-3 
-                        py-1
-                        rounded-lg 
-                        border
-                        border-border 
-                        w-fit 
-                        flex 
-                        cursor-pointer 
-                        ${
-                          isSelected
-                            ? "bg-background-200"
-                            : "hover:bg-accent-background-hovered"
-                        }
-                      `}
+                          primary
+                          action={isSelected}
+                          type="button"
+                          leftIcon={SvgUsers}
                           onClick={() => {
                             if (isSelected) {
                               arrayHelpers.remove(ind);
@@ -173,11 +164,8 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
                             }
                           }}
                         >
-                          <div className="my-auto flex">
-                            <FiUsers className="my-auto mr-2" />{" "}
-                            {userGroup.name}
-                          </div>
-                        </div>
+                          {userGroup.name}
+                        </Button>
                       );
                     })
                   )}

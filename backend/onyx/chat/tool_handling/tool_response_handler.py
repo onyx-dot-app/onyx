@@ -7,7 +7,7 @@ from langchain_core.messages import ToolCall
 from onyx.chat.models import ResponsePart
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import LLMCall
-from onyx.chat.prompt_builder.answer_prompt_builder import PromptSnapshot
+from onyx.chat.prompt_builder.schemas import PromptSnapshot
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.message import build_tool_message
@@ -109,7 +109,6 @@ class ToolResponseHandler:
     def handle_response_part(
         self,
         response_item: BaseMessage | str | None,
-        previous_response_items: list[BaseMessage | str],
     ) -> Generator[ResponsePart, None, None]:
         if response_item is None:
             yield from self._handle_tool_call()

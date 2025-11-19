@@ -1,3 +1,5 @@
+name: onyx
+
 services:
   api_server:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
@@ -48,7 +50,7 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-    command: /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+    command: /app/scripts/supervisord_entrypoint.sh
     depends_on:
       - relational_db
       - index
@@ -57,6 +59,7 @@ services:
     env_file:
       - .env_eval
     environment:
+      - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
       - AUTH_TYPE=disabled
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
@@ -74,7 +77,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - log_store:/var/log
+      - log_store:/var/log/onyx
     logging:
       driver: json-file
       options:
@@ -87,8 +90,6 @@ services:
       context: ../../web
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_DISABLE_STREAMING=${NEXT_PUBLIC_DISABLE_STREAMING:-false}
-        - NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA=${NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA:-false}
         - NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
         - NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
         - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
@@ -125,7 +126,8 @@ services:
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - LOG_LEVEL=${LOG_LEVEL:-debug}
-      - inference_model_cache_huggingface:/root/.cache/huggingface/
+    volumes:
+      - inference_model_cache_huggingface:/app/.cache/huggingface/
     logging:
       driver: json-file
       options:
@@ -149,8 +151,9 @@ services:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - INDEXING_ONLY=True
       - LOG_LEVEL=${LOG_LEVEL:-debug}
-      - index_model_cache_huggingface:/root/.cache/huggingface/
       - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-1}
+    volumes:
+      - inference_model_cache_huggingface:/app/.cache/huggingface/
     logging:
       driver: json-file
       options:
@@ -215,10 +218,10 @@ services:
     # in order to make this work on both Unix-like systems and windows
     command: >
       /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
-      && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev"
+      && /etc/nginx/conf.d/run-nginx.sh app.conf.template"
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
     restart: unless-stopped
     ports:
       - "9004:9000"
@@ -244,8 +247,12 @@ services:
     # docker silently mounts /data even without an explicit volume mount, which enables
     # persistence. explicitly setting save and appendonly forces ephemeral behavior.
     command: redis-server --save "" --appendonly no
+    # Use tmpfs to prevent creation of anonymous volumes for /data
+    tmpfs:
+      - /data
 
 volumes:
+  inference_model_cache_huggingface:
   db_volume:
     driver: local
     driver_opts:

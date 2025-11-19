@@ -18,6 +18,9 @@ import { DocumentSetSummary } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import Text from "@/refresh-components/texts/Text";
+import { ThreeDotsLoader } from "@/components/Loading";
 
 const DocumentDisplay = ({
   document,
@@ -118,22 +121,28 @@ export function Explorer({
   const [query, setQuery] = useState(initialSearchValue || "");
   const [timeoutId, setTimeoutId] = useState<number | null>(null);
   const [results, setResults] = useState<OnyxDocument[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const filterManager = useFilters();
 
   const onSearch = useCallback(
     async (query: string) => {
-      const filters = buildFilters(
-        filterManager.selectedSources,
-        filterManager.selectedDocumentSets,
-        filterManager.timeRange,
-        filterManager.selectedTags
-      );
-      const results = await adminSearch(query, filters);
-      if (results.ok) {
-        setResults((await results.json()).documents);
+      setIsLoading(true);
+      try {
+        const filters = buildFilters(
+          filterManager.selectedSources,
+          filterManager.selectedDocumentSets,
+          filterManager.timeRange,
+          filterManager.selectedTags
+        );
+        const results = await adminSearch(query, filters);
+        if (results.ok) {
+          setResults((await results.json()).documents);
+        }
+      } finally {
+        setTimeoutId(null);
+        setIsLoading(false);
       }
-      setTimeoutId(null);
     },
     [
       filterManager.selectedDocumentSets,
@@ -147,17 +156,12 @@ export function Explorer({
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
     }
+    router.replace(
+      `/admin/documents/explorer?query=${encodeURIComponent(query)}`
+    );
 
-    if (query && query.trim() !== "") {
-      router.replace(
-        `/admin/documents/explorer?query=${encodeURIComponent(query)}`
-      );
-
-      const newTimeoutId = window.setTimeout(() => onSearch(query), 300);
-      setTimeoutId(newTimeoutId);
-    } else {
-      setResults([]);
-    }
+    const newTimeoutId = window.setTimeout(() => onSearch(query), 300);
+    setTimeoutId(newTimeoutId);
   }, [
     query,
     filterManager.selectedDocumentSets,
@@ -166,45 +170,38 @@ export function Explorer({
   ]);
 
   return (
-    <div>
+    <div className="flex flex-col gap-6">
       {popup}
-      <div className="justify-center pt-2">
-        <div className="flex items-center w-full border-2 border-border rounded-lg px-4 py-2 focus-within:border-accent bg-background-search dark:bg-transparent">
-          <MagnifyingGlass />
-          <textarea
-            autoFocus
-            className="flex-grow ml-2 h-6 bg-transparent outline-none placeholder-subtle overflow-hidden whitespace-normal resize-none"
-            role="textarea"
-            aria-multiline
-            placeholder="Find documents based on title / content..."
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-            }}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Enter" &&
-                !event.shiftKey &&
-                !(event.nativeEvent as any).isComposing
-              ) {
-                onSearch(query);
-                event.preventDefault();
-              }
-            }}
-            suppressContentEditableWarning={true}
-          />
-        </div>
-        <div className="mt-4 border-b border-border">
-          <HorizontalFilters
-            {...filterManager}
-            availableDocumentSets={documentSets}
-            existingSources={connectors.map((connector) => connector.source)}
-            availableTags={[]}
-            toggleFilters={() => {}}
-            filtersUntoggled={false}
-            tagsOnLeft={true}
-          />
-        </div>
+      <div className="flex flex-col justify-center gap-2">
+        <InputTypeIn
+          placeholder="Find documents based on title / content..."
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !(event.nativeEvent as any).isComposing
+            ) {
+              onSearch(query);
+              event.preventDefault();
+            }
+          }}
+          role="textarea"
+        />
+
+        <HorizontalFilters
+          {...filterManager}
+          availableDocumentSets={documentSets}
+          existingSources={connectors.map((connector) => connector.source)}
+          availableTags={[]}
+          toggleFilters={() => {}}
+          filtersUntoggled={false}
+          tagsOnLeft={true}
+        />
+        <div className="border-b" />
       </div>
       {results.length > 0 && (
         <div className="mt-3">
@@ -220,12 +217,7 @@ export function Explorer({
           })}
         </div>
       )}
-      {!query && (
-        <div className="flex text-text-darker mt-3">
-          Search for a document above to modify its boost or hide it from
-          searches.
-        </div>
-      )}
+      {isLoading && <ThreeDotsLoader />}
     </div>
   );
 }

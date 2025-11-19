@@ -2,12 +2,12 @@ from datetime import datetime
 
 import pytest
 
-from onyx.chat.models import CitationInfo
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
 from onyx.chat.stream_processing.utils import DocumentIdOrderMapping
 from onyx.configs.constants import DocumentSource
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 
 
 """
@@ -69,11 +69,9 @@ def process_text(
 ) -> tuple[str, list[CitationInfo]]:
     mock_docs, mock_doc_id_to_rank_map = mock_data
     final_mapping = DocumentIdOrderMapping(order_mapping=mock_doc_id_to_rank_map)
-    display_mapping = DocumentIdOrderMapping(order_mapping=mock_doc_id_to_rank_map)
     processor = CitationProcessor(
         context_docs=mock_docs,
-        final_doc_id_to_rank_map=final_mapping,
-        display_doc_id_to_rank_map=display_mapping,
+        doc_id_to_rank_map=final_mapping,
         stop_stream=None,
     )
 
@@ -518,6 +516,36 @@ def process_text(
             ],
             "Text [[2]]()[[4]]() padding [[1]](https://0.com)[[2]]()[[4]]() padding [[2]]()[[4]]()",
             ["doc_1", "doc_3", "doc_0"],
+        ),
+        (
+            "Unicode bracket citation 【3】",
+            ["Growth! 【", "3", "】", "."],
+            "Growth! [[2]]().",
+            ["doc_1"],
+        ),
+        (
+            "Unicode bracket citation at start",
+            ["【1】", " Citation at the beginning."],
+            "[[1]](https://0.com) Citation at the beginning.",
+            ["doc_0"],
+        ),
+        (
+            "Multiple unicode bracket citations",
+            ["Test 【", "1", "】", " and 【", "3", "】", " end."],
+            "Test [[1]](https://0.com) and [[2]]() end.",
+            ["doc_0", "doc_1"],
+        ),
+        (
+            "Double unicode bracket citation 【【1】】",
+            ["Test 【【1】】", " citation."],
+            "Test 【【1】】 citation.",
+            ["doc_0"],
+        ),
+        (
+            "Mixed ASCII and unicode brackets",
+            ["ASCII [1] and unicode 【", "3", "】", " together."],
+            "ASCII [[1]](https://0.com) and unicode [[2]]() together.",
+            ["doc_0", "doc_1"],
         ),
     ],
 )

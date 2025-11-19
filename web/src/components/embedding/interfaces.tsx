@@ -1,3 +1,4 @@
+import { JSX } from "react";
 import {
   AzureIcon,
   CohereIcon,
@@ -178,7 +179,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     provider_type: EmbeddingProvider.COHERE,
     website: "https://cohere.ai",
     icon: CohereIcon,
-    docsLink: "https://docs.onyx.app/guides/embedding_providers#cohere-models",
+    docsLink: "https://docs.onyx.app/admin/advanced_configs/search_configs",
     description:
       "AI company specializing in NLP models for various text-based tasks",
     apiLink: "https://dashboard.cohere.ai/api-keys",
@@ -220,7 +221,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     icon: OpenAIISVG,
     description: "AI industry leader known for ChatGPT and DALL-E",
     apiLink: "https://platform.openai.com/api-keys",
-    docsLink: "https://docs.onyx.app/guides/embedding_providers#openai-models",
+    docsLink: "https://docs.onyx.app/admin/advanced_configs/search_configs",
     costslink: "https://openai.com/pricing",
     embedding_models: [
       {
@@ -258,8 +259,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     provider_type: EmbeddingProvider.GOOGLE,
     website: "https://ai.google",
     icon: GoogleIcon,
-    docsLink:
-      "https://docs.onyx.app/guides/embedding_providers#vertex-ai-google-model",
+    docsLink: "https://docs.onyx.app/admin/advanced_configs/search_configs",
     description:
       "Offers a wide range of AI services including language and vision models",
     apiLink: "https://console.cloud.google.com/apis/credentials",
@@ -267,10 +267,10 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     embedding_models: [
       {
         provider_type: EmbeddingProvider.GOOGLE,
-        model_name: "text-embedding-005",
-        description: "Google's most recent text embedding model.",
+        model_name: "gemini-embedding-001",
+        description: "Google's Gemini embedding model. Powerful and efficient.",
         pricePerMillion: 0.025,
-        model_dim: 768,
+        model_dim: 3072,
         normalize: false,
         query_prefix: "",
         passage_prefix: "",
@@ -280,8 +280,8 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
       },
       {
         provider_type: EmbeddingProvider.GOOGLE,
-        model_name: "textembedding-gecko@003",
-        description: "Google's Gecko embedding model. Powerful and efficient.",
+        model_name: "text-embedding-005",
+        description: "Smaller, lighter-weight embedding model from Google.",
         pricePerMillion: 0.025,
         model_dim: 768,
         normalize: false,
@@ -298,7 +298,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     website: "https://www.voyageai.com",
     icon: VoyageIconSVG,
     description: "Advanced NLP research startup born from Stanford AI Labs",
-    docsLink: "https://docs.onyx.app/guides/embedding_providers#voyage-models",
+    docsLink: "https://docs.onyx.app/admin/advanced_configs/search_configs",
     apiLink: "https://www.voyageai.com/dashboard",
     costslink: "https://www.voyageai.com/pricing",
     embedding_models: [
@@ -333,6 +333,27 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     ],
   },
 ];
+
+export const getFormattedProviderName = (providerType: string | null) => {
+  if (!providerType) return "Self-hosted";
+
+  switch (providerType) {
+    case "openai":
+      return "OpenAI";
+    case "cohere":
+      return "Cohere";
+    case "voyage":
+      return "Voyage AI";
+    case "google":
+      return "Google";
+    case "litellm":
+      return "LiteLLM";
+    case "azure":
+      return "Azure";
+    default:
+      return providerType.charAt(0).toUpperCase() + providerType.slice(1);
+  }
+};
 
 export const getTitleForRerankType = (type: string) => {
   switch (type) {

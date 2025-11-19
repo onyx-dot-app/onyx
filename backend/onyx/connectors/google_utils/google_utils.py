@@ -1,4 +1,5 @@
 import re
+import socket
 import time
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -97,14 +98,15 @@ def _execute_with_retry(request: Any) -> Any:
     raise Exception(f"Failed to execute request after {max_attempts} attempts")
 
 
-def get_file_owners(file: GoogleDriveFileType) -> list[str]:
+def get_file_owners(file: GoogleDriveFileType, primary_admin_email: str) -> list[str]:
     """
     Get the owners of a file if the attribute is present.
     """
     return [
-        owner.get("emailAddress")
+        email
         for owner in file.get("owners", [])
-        if owner.get("emailAddress")
+        if (email := owner.get("emailAddress"))
+        and email.split("@")[-1] == primary_admin_email.split("@")[-1]
     ]
 
 
@@ -151,6 +153,12 @@ def _execute_single_retrieval(
         else:
             logger.exception("Error executing request:")
             raise e
+    except (TimeoutError, socket.timeout) as error:
+        logger.warning(
+            "Timed out executing Google API request; retrying with backoff. Details: %s",
+            error,
+        )
+        results = add_retries(lambda: retrieval_function(**request_kwargs).execute())()
 
     return results
 

@@ -9,10 +9,16 @@ from onyx.chat.models import PromptConfig
 from onyx.configs.chat_configs import LANGUAGE_HINT
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
-from onyx.db.models import Prompt
+from onyx.db.models import Persona
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CITATION_REMINDER
+from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_TAG_CLOSED
+from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_TAG_OPEN
+from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.prompts.constants import CODE_BLOCK_PAT
+from onyx.prompts.direct_qa_prompts import COMPANY_DESCRIPTION_BLOCK
+from onyx.prompts.direct_qa_prompts import COMPANY_NAME_BLOCK
+from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
 
@@ -37,6 +43,24 @@ def get_current_llm_day_time(
     return f"{formatted_datetime}"
 
 
+def replace_current_datetime_tag(
+    prompt_str: str,
+    *,
+    full_sentence: bool = False,
+    include_day_of_week: bool = True,
+) -> str:
+    if _DANSWER_DATETIME_REPLACEMENT_PAT not in prompt_str:
+        return prompt_str
+
+    return prompt_str.replace(
+        _DANSWER_DATETIME_REPLACEMENT_PAT,
+        get_current_llm_day_time(
+            full_sentence=full_sentence,
+            include_day_of_week=include_day_of_week,
+        ),
+    )
+
+
 def build_date_time_string() -> str:
     return ADDITIONAL_INFO.format(
         datetime_info=_BASIC_TIME_STR.format(datetime_info=get_current_llm_day_time())
@@ -55,30 +79,117 @@ def handle_onyx_date_awareness(
     This can later be expanded to support other tags.
     """
 
-    if _DANSWER_DATETIME_REPLACEMENT_PAT in prompt_str:
-        return prompt_str.replace(
-            _DANSWER_DATETIME_REPLACEMENT_PAT,
-            get_current_llm_day_time(full_sentence=False, include_day_of_week=True),
-        )
+    prompt_with_datetime = replace_current_datetime_tag(
+        prompt_str,
+        full_sentence=False,
+        include_day_of_week=True,
+    )
+    if prompt_with_datetime != prompt_str:
+        return prompt_with_datetime
     any_tag_present = any(
         _DANSWER_DATETIME_REPLACEMENT_PAT in text
-        for text in [prompt_str, prompt_config.system_prompt, prompt_config.task_prompt]
+        for text in [
+            prompt_str,
+            prompt_config.default_behavior_system_prompt,
+            prompt_config.custom_instructions,
+            prompt_config.reminder,
+        ]
+        if text
     )
     if add_additional_info_if_no_tag and not any_tag_present:
         return prompt_str + build_date_time_string()
     return prompt_str
 
 
+def handle_company_awareness(prompt_str: str) -> str:
+    try:
+        workspace_settings = load_settings()
+        company_name = workspace_settings.company_name
+        company_description = workspace_settings.company_description
+        if company_name:
+            prompt_str += COMPANY_NAME_BLOCK.format(company_name=company_name)
+        if company_description:
+            prompt_str += COMPANY_DESCRIPTION_BLOCK.format(
+                company_description=company_description
+            )
+        return prompt_str
+    except Exception as e:
+        logger.error(f"Error handling company awareness: {e}")
+        return prompt_str
+
+
+def handle_memories(prompt_str: str, memories: list[str]) -> str:
+    if not memories:
+        return prompt_str
+    memories_str = "\n".join(memories)
+    prompt_str += f"Information about the user asking the question:\n{memories_str}\n"
+    return prompt_str
+
+
 def build_task_prompt_reminders(
-    prompt: Prompt | PromptConfig,
+    prompt: Persona | PromptConfig,
     use_language_hint: bool,
     citation_str: str = CITATION_REMINDER,
     language_hint_str: str = LANGUAGE_HINT,
 ) -> str:
-    base_task = prompt.task_prompt
-    citation_or_nothing = citation_str if prompt.include_citations else ""
+    base_task = (
+        prompt.reminder
+        if isinstance(prompt, PromptConfig)
+        else prompt.task_prompt or ""
+    )
+    citation_or_nothing = citation_str
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
     return base_task + citation_or_nothing + language_hint_or_nothing
+
+
+def build_task_prompt_reminders_v2(
+    prompt: Persona | PromptConfig,
+    use_language_hint: bool,
+    should_cite: bool,
+    last_iteration_included_web_search: bool = False,
+    language_hint_str: str = LANGUAGE_HINT,
+) -> str | None:
+    """V2 version that conditionally includes citation requirements.
+
+    Args:
+        chat_turn_user_message: The user's message for this chat turn
+        prompt: Persona or PromptConfig with task_prompt
+        use_language_hint: Whether to include language hint
+        should_cite: Whether to include citation requirement statement
+        last_iteration_included_web_search: Whether the last iteration included web_search calls
+        language_hint_str: Language hint string to use
+
+    Returns:
+        Task prompt with optional citation statement and language hint
+    """
+    base_task = (
+        prompt.reminder
+        if isinstance(prompt, PromptConfig)
+        else prompt.task_prompt or ""
+    )
+
+    open_url_or_nothing = (
+        OPEN_URL_REMINDER if last_iteration_included_web_search else ""
+    )
+    citation_or_nothing = CITATION_REMINDER if should_cite else ""
+
+    language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
+    lines = []
+    if base_task:
+        lines.append(base_task)
+    if open_url_or_nothing:
+        lines.append(open_url_or_nothing)
+    if citation_or_nothing:
+        lines.append(citation_or_nothing)
+    if language_hint_or_nothing:
+        lines.append(language_hint_or_nothing)
+    if lines:
+        return "\n".join(
+            [LONG_CONVERSATION_REMINDER_TAG_OPEN]
+            + lines
+            + [LONG_CONVERSATION_REMINDER_TAG_CLOSED]
+        )
+    return None
 
 
 # Maps connector enum string to a more natural language representation for the LLM

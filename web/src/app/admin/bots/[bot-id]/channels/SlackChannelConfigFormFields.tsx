@@ -10,7 +10,7 @@ import {
   TextArrayField,
   TextFormField,
 } from "@/components/Field";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
@@ -28,7 +28,7 @@ import {
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
-import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import AgentIcon from "@/refresh-components/AgentIcon";
 import { Badge } from "@/components/ui/badge";
 import {
   Accordion,
@@ -390,11 +390,7 @@ export function SlackChannelConfigFormFields({
                         key={persona.id}
                         className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
                       >
-                        <AssistantIcon
-                          assistant={persona}
-                          size={16}
-                          className="flex-none"
-                        />
+                        <AgentIcon agent={persona} size={16} />
                         {persona.name}
                       </button>
                     )
@@ -503,7 +499,7 @@ export function SlackChannelConfigFormFields({
                   }
                 }}
                 label={'Give a "Still need help?" button'}
-                tooltip={`OnyxBot's response will include a button at the bottom 
+                tooltip={`OnyxBot's response will include a button at the bottom
                       of the response that asks the user if they still need help.`}
               />
               {values.still_need_help_enabled && (
@@ -543,8 +539,8 @@ export function SlackChannelConfigFormFields({
               <CheckFormField
                 name="is_ephemeral"
                 label="Respond to user in a private (ephemeral) message"
-                tooltip="If set, OnyxBot will respond only to the user in a private (ephemeral) message. If you also 
-                chose 'Search' Assistant above, selecting this option will make documents that are private to the user 
+                tooltip="If set, OnyxBot will respond only to the user in a private (ephemeral) message. If you also
+                chose 'Search' Assistant above, selecting this option will make documents that are private to the user
                 available for their queries."
               />
 
@@ -580,7 +576,7 @@ export function SlackChannelConfigFormFields({
                   <AlertCircle className="h-5 w-5 text-alert" />
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="top" className="bg-white p-4 w-80">
+              <TooltipContent side="top" className="bg-background p-4 w-80">
                 <Label className="text-text mb-2 font-semibold">
                   Privacy Alert
                 </Label>
@@ -625,7 +621,7 @@ export function SlackChannelConfigFormFields({
           </TooltipProvider>
         )}
         <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+        <Button type="button" secondary onClick={() => router.back()}>
           Cancel
         </Button>
       </div>

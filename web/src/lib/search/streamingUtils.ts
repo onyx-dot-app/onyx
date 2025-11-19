@@ -1,4 +1,4 @@
-import { PacketType } from "@/app/chat/lib";
+import { PacketType } from "@/app/chat/services/lib";
 
 type NonEmptyObject = { [k: string]: any };
 

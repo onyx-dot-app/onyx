@@ -41,7 +41,7 @@ All new connectors should have tests added to the `backend/tests/daily/connector
 
 #### Implementing the new Connector
 
-The connector must subclass one or more of LoadConnector, PollConnector, SlimConnector, or EventConnector.
+The connector must subclass one or more of LoadConnector, PollConnector, CheckpointedConnector, or CheckpointedConnectorWithPermSync
 
 The `__init__` should take arguments for configuring what documents the connector will and where it finds those
 documents. For example, if you have a wiki site, it may include the configuration for the team, topic, folder, etc. of

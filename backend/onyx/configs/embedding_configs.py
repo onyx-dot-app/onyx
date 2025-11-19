@@ -62,19 +62,14 @@ _BASE_EMBEDDING_MODELS = [
         index_name="danswer_chunk_text_embedding_3_small",
     ),
     _BaseEmbeddingModel(
+        name="google/gemini-embedding-001",
+        dim=3072,
+        index_name="danswer_chunk_google_gemini_embedding_001",
+    ),
+    _BaseEmbeddingModel(
         name="google/text-embedding-005",
         dim=768,
         index_name="danswer_chunk_google_text_embedding_005",
-    ),
-    _BaseEmbeddingModel(
-        name="google/textembedding-gecko@003",
-        dim=768,
-        index_name="danswer_chunk_google_textembedding_gecko_003",
-    ),
-    _BaseEmbeddingModel(
-        name="google/textembedding-gecko@003",
-        dim=768,
-        index_name="danswer_chunk_textembedding_gecko_003",
     ),
     _BaseEmbeddingModel(
         name="voyage/voyage-large-2-instruct",

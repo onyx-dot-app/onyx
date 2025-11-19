@@ -7,17 +7,11 @@ from langgraph.types import StreamWriter
 from pydantic import ValidationError
 
 from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
-from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
-from onyx.agents.agent_search.kb_search.graph_utils import stream_write_step_activities
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_step_answer_explicit,
-)
-from onyx.agents.agent_search.kb_search.graph_utils import stream_write_step_structure
 from onyx.agents.agent_search.kb_search.models import KGQuestionEntityExtractionResult
 from onyx.agents.agent_search.kb_search.models import (
     KGQuestionRelationshipExtractionResult,
 )
-from onyx.agents.agent_search.kb_search.states import ERTExtractionUpdate
+from onyx.agents.agent_search.kb_search.states import EntityRelationshipExtractionUpdate
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
@@ -42,7 +36,7 @@ logger = setup_logger()
 
 def extract_ert(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
-) -> ERTExtractionUpdate:
+) -> EntityRelationshipExtractionUpdate:
     """
     LangGraph node to start the agentic search process.
     """
@@ -68,17 +62,11 @@ def extract_ert(
         user_name = user_email.split("@")[0] or "unknown"
 
     # first four lines duplicates from generate_initial_answer
-    question = graph_config.inputs.prompt_builder.raw_user_query
+    question = state.question
     today_date = datetime.now().strftime("%A, %Y-%m-%d")
 
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
-
-    # Stream structure of substeps out to the UI
-    stream_write_step_structure(writer)
-
-    # Now specify core activities in the step (step 1)
-    stream_write_step_activities(writer, _KG_STEP_NR)
 
     # Create temporary views. TODO: move into parallel step, if ultimately materialized
     tenant_id = get_current_tenant_id()
@@ -240,12 +228,7 @@ def extract_ert(
     step_answer = f"""Entities and relationships have been extracted from query - \n \
 Entities: {extracted_entity_string} - \n Relationships: {extracted_relationship_string}"""
 
-    stream_write_step_answer_explicit(writer, step_nr=1, answer=step_answer)
-
-    # Finish Step 1
-    stream_close_step_answer(writer, _KG_STEP_NR)
-
-    return ERTExtractionUpdate(
+    return EntityRelationshipExtractionUpdate(
         entities_types_str=all_entity_types,
         relationship_types_str=all_relationship_types,
         extracted_entities_w_attributes=entity_extraction_result.entities,

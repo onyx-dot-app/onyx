@@ -1,6 +1,6 @@
 import React from "react";
 import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import Text from "@/components/ui/text";
 
 import { CloudEmbeddingModel } from "../../../../components/embedding/interfaces";
@@ -23,9 +23,7 @@ export function AlreadyPickedModal({
           You can select a different one if you want!
         </Text>
         <div className="flex mt-8 justify-between">
-          <Button variant="submit" onClick={onClose}>
-            Close
-          </Button>
+          <Button onClick={onClose}>Close</Button>
         </div>
       </div>
     </Modal>

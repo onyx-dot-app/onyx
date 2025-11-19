@@ -8,13 +8,12 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.standard_answer import fetch_standard_answer_categories_by_names
 from ee.onyx.db.standard_answer import find_matching_standard_answers
 from onyx.configs.constants import MessageType
-from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
+from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_messages_by_sessions
 from onyx.db.chat import get_chat_sessions_by_slack_thread_id
 from onyx.db.chat import get_or_create_root_message
-from onyx.db.models import Prompt
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.onyxbot.slack.blocks import get_restate_blocks
@@ -81,7 +80,6 @@ def _handle_standard_answers(
     message_info: SlackMessageInfo,
     receiver_ids: list[str] | None,
     slack_channel_config: SlackChannelConfig,
-    prompt: Prompt | None,
     logger: OnyxLoggingAdapter,
     client: WebClient,
     db_session: Session,
@@ -161,7 +159,6 @@ def _handle_standard_answers(
         new_user_message = create_new_chat_message(
             chat_session_id=chat_session.id,
             parent_message=root_message,
-            prompt_id=prompt.id if prompt else None,
             message=query_msg.message,
             token_count=0,
             message_type=MessageType.USER,
@@ -182,7 +179,6 @@ def _handle_standard_answers(
         chat_message = create_new_chat_message(
             chat_session_id=chat_session.id,
             parent_message=new_user_message,
-            prompt_id=prompt.id if prompt else None,
             message=answer_message,
             token_count=0,
             message_type=MessageType.ASSISTANT,
@@ -197,7 +193,7 @@ def _handle_standard_answers(
         db_session.commit()
 
         update_emote_react(
-            emoji=DANSWER_REACT_EMOJI,
+            emoji=ONYX_BOT_REACT_EMOJI,
             channel=message_info.channel_to_respond,
             message_ts=message_info.msg_to_respond,
             remove=True,
@@ -206,7 +202,7 @@ def _handle_standard_answers(
 
         restate_question_blocks = get_restate_blocks(
             msg=query_msg.message,
-            is_bot_msg=message_info.is_bot_msg,
+            is_slash_command=message_info.is_slash_command,
         )
 
         answer_blocks = build_standard_answer_blocks(

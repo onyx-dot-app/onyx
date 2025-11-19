@@ -414,8 +414,14 @@ def monitor_document_set_taskset(
         get_document_set_by_id(db_session=db_session, document_set_id=document_set_id),
     )  # casting since we "know" a document set with this ID exists
     if document_set:
-        if not document_set.connector_credential_pairs:
-            # if there are no connectors, then delete the document set.
+        has_connector_pairs = bool(document_set.connector_credential_pairs)
+        # Federated connectors should keep a document set alive even without cc pairs.
+        has_federated_connectors = bool(
+            getattr(document_set, "federated_connectors", [])
+        )
+
+        if not has_connector_pairs and not has_federated_connectors:
+            # If there are no connectors of any kind, delete the document set.
             delete_document_set(document_set_row=document_set, db_session=db_session)
             task_logger.info(
                 f"Successfully deleted document set: document_set={document_set_id}"

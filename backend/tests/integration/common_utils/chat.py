@@ -33,7 +33,6 @@ def test_create_chat_session_and_send_messages() -> None:
         json={
             "chat_session_id": chat_session_id,
             "message": first_message,
-            "prompt_id": None,
             "retrieval_options": {"top_k": 3},
             "stream_response": False,
         },
@@ -48,7 +47,6 @@ def test_create_chat_session_and_send_messages() -> None:
         json={
             "chat_session_id": chat_session_id,
             "message": second_message,
-            "prompt_id": None,
             "retrieval_options": {"top_k": 3},
             "stream_response": False,
         },

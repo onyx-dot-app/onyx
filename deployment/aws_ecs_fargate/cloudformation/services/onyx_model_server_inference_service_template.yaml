@@ -137,7 +137,7 @@ Resources:
               Value: info
           MountPoints:
             - SourceVolume: efs-volume
-              ContainerPath: /root/.cache/huggingface/
+              ContainerPath: /app/.cache/huggingface/
               ReadOnly: false
           VolumesFrom: []
           LogConfiguration:

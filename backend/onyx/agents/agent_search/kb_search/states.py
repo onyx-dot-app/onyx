@@ -120,7 +120,7 @@ class ResearchObjectOutput(LoggerUpdate):
     research_object_results: Annotated[list[dict[str, Any]], add] = []
 
 
-class ERTExtractionUpdate(LoggerUpdate):
+class EntityRelationshipExtractionUpdate(LoggerUpdate):
     entities_types_str: str = ""
     relationship_types_str: str = ""
     extracted_entities_w_attributes: list[str] = []
@@ -144,7 +144,13 @@ class ResearchObjectUpdate(LoggerUpdate):
 
 ## Graph Input State
 class MainInput(CoreState):
-    pass
+    question: str
+    individual_flow: bool = True  # used for UI display purposes
+
+
+class FinalAnswerUpdate(LoggerUpdate):
+    final_answer: str | None = None
+    retrieved_documents: list[InferenceSection] | None = None
 
 
 ## Graph State
@@ -154,7 +160,7 @@ class MainState(
     ToolChoiceInput,
     ToolCallUpdate,
     ToolChoiceUpdate,
-    ERTExtractionUpdate,
+    EntityRelationshipExtractionUpdate,
     AnalysisUpdate,
     SQLSimpleGenerationUpdate,
     ResultsDataUpdate,
@@ -162,6 +168,7 @@ class MainState(
     DeepSearchFilterUpdate,
     ResearchObjectUpdate,
     ConsolidatedResearchUpdate,
+    FinalAnswerUpdate,
 ):
     pass
 
@@ -169,6 +176,8 @@ class MainState(
 ## Graph Output State - presently not used
 class MainOutput(TypedDict):
     log_messages: list[str]
+    final_answer: str | None
+    retrieved_documents: list[InferenceSection] | None
 
 
 class ResearchObjectInput(LoggerUpdate):
@@ -179,3 +188,4 @@ class ResearchObjectInput(LoggerUpdate):
     source_division: bool | None
     source_entity_filters: list[str] | None
     segment_type: str
+    individual_flow: bool = True  # used for UI display purposes

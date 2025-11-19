@@ -3,7 +3,6 @@ from collections import defaultdict
 from typing import cast
 
 import numpy as np
-from nltk import ngrams  # type: ignore
 from rapidfuzz.distance.DamerauLevenshtein import normalized_similarity
 from sqlalchemy import desc
 from sqlalchemy import Float
@@ -59,6 +58,8 @@ def _normalize_one_entity(
     attributes: dict[str, str],
     allowed_docs_temp_view_name: str | None = None,
 ) -> str | None:
+    from nltk import ngrams  # type: ignore
+
     """
     Matches a single entity to the best matching entity of the same type.
     """

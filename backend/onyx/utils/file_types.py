@@ -1,3 +1,16 @@
+PRESENTATION_MIME_TYPE = (
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+)
+
+SPREADSHEET_MIME_TYPE = (
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+WORD_PROCESSING_MIME_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+)
+PDF_MIME_TYPE = "application/pdf"
+
+
 class UploadMimeTypes:
     IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
     CSV_MIME_TYPES = {"text/csv"}
@@ -13,10 +26,10 @@ class UploadMimeTypes:
         "application/x-yaml",
     }
     DOCUMENT_MIME_TYPES = {
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        PDF_MIME_TYPE,
+        WORD_PROCESSING_MIME_TYPE,
+        PRESENTATION_MIME_TYPE,
+        SPREADSHEET_MIME_TYPE,
         "message/rfc822",
         "application/epub+zip",
     }

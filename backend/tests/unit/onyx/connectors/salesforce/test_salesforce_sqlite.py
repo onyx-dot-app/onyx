@@ -26,6 +26,9 @@ from onyx.connectors.salesforce.salesforce_calls import _make_time_filter_for_sf
 from onyx.connectors.salesforce.salesforce_calls import _make_time_filtered_query
 from onyx.connectors.salesforce.salesforce_calls import get_object_by_id_query
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
+from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
+from onyx.connectors.salesforce.utils import MODIFIED_FIELD
+from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
 from onyx.utils.logger import setup_logger
 
 # from onyx.connectors.salesforce.onyx_salesforce_type import OnyxSalesforceType
@@ -153,7 +156,7 @@ def _create_csv_file_and_update_db(
     Creates a CSV file for the given object type and records.
 
     Args:
-        object_type: The Salesforce object type (e.g. "Account", "Contact")
+        object_type: The Salesforce object type (e.g. ACCOUNT_OBJECT_TYPE, "Contact")
         records: List of dictionaries containing the record data
         filename: Name of the CSV file to create (default: test_data.csv)
     """
@@ -184,7 +187,7 @@ def _create_csv_with_example_data(sf_db: OnyxSalesforceSQLite) -> None:
     Creates CSV files with example data, organized by object type.
     """
     example_data: dict[str, list[dict]] = {
-        "Account": [
+        ACCOUNT_OBJECT_TYPE: [
             {
                 "Id": _VALID_SALESFORCE_IDS[0],
                 "Name": "Acme Inc.",
@@ -428,7 +431,7 @@ def _test_query(sf_db: OnyxSalesforceSQLite) -> None:
     }
 
     # Get all Account IDs
-    account_ids = sf_db.find_ids_by_type("Account")
+    account_ids = sf_db.find_ids_by_type(ACCOUNT_OBJECT_TYPE)
 
     # Verify we found all expected accounts
     assert len(account_ids) == len(
@@ -480,7 +483,9 @@ def _test_upsert(sf_db: OnyxSalesforceSQLite) -> None:
         },
     ]
 
-    _create_csv_file_and_update_db(sf_db, "Account", update_data, "update_data.csv")
+    _create_csv_file_and_update_db(
+        sf_db, ACCOUNT_OBJECT_TYPE, update_data, "update_data.csv"
+    )
 
     # Verify the update worked
     updated_record = sf_db.get_record(_VALID_SALESFORCE_IDS[0])
@@ -573,7 +578,7 @@ def _test_account_with_children(sf_db: OnyxSalesforceSQLite) -> None:
     3. Child object data is complete and accurate
     """
     # First get all account IDs
-    account_ids = sf_db.find_ids_by_type("Account")
+    account_ids = sf_db.find_ids_by_type(ACCOUNT_OBJECT_TYPE)
     assert len(account_ids) > 0, "No accounts found"
 
     # For each account, get its children and verify the data
@@ -690,7 +695,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
     """
     # Create test data with relationships
     test_data = {
-        "Account": [
+        ACCOUNT_OBJECT_TYPE: [
             {
                 "Id": _VALID_SALESFORCE_IDS[0],
                 "Name": "Parent Account 1",
@@ -720,40 +725,46 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 1: Account directly in updated_ids and parent_types
     updated_ids = [_VALID_SALESFORCE_IDS[1]]  # Parent Account 2
-    parent_types = set(["Account"])
+    parent_types = set([ACCOUNT_OBJECT_TYPE])
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
     ):
         affected_ids_by_type[parent_type].add(parent_id)
-    assert "Account" in affected_ids_by_type, "Account type not in affected_ids_by_type"
     assert (
-        _VALID_SALESFORCE_IDS[1] in affected_ids_by_type["Account"]
+        ACCOUNT_OBJECT_TYPE in affected_ids_by_type
+    ), "Account type not in affected_ids_by_type"
+    assert (
+        _VALID_SALESFORCE_IDS[1] in affected_ids_by_type[ACCOUNT_OBJECT_TYPE]
     ), "Direct parent ID not included"
 
     # Test Case 2: Account with child in updated_ids
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
-    parent_types = set(["Account"])
+    parent_types = set([ACCOUNT_OBJECT_TYPE])
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
     ):
         affected_ids_by_type[parent_type].add(parent_id)
-    assert "Account" in affected_ids_by_type, "Account type not in affected_ids_by_type"
     assert (
-        _VALID_SALESFORCE_IDS[0] in affected_ids_by_type["Account"]
+        ACCOUNT_OBJECT_TYPE in affected_ids_by_type
+    ), "Account type not in affected_ids_by_type"
+    assert (
+        _VALID_SALESFORCE_IDS[0] in affected_ids_by_type[ACCOUNT_OBJECT_TYPE]
     ), "Parent of updated child not included"
 
     # Test Case 3: Both direct and indirect affects
     updated_ids = [_VALID_SALESFORCE_IDS[1], _VALID_SALESFORCE_IDS[40]]  # Both cases
-    parent_types = set(["Account"])
+    parent_types = set([ACCOUNT_OBJECT_TYPE])
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
     ):
         affected_ids_by_type[parent_type].add(parent_id)
-    assert "Account" in affected_ids_by_type, "Account type not in affected_ids_by_type"
-    affected_ids = affected_ids_by_type["Account"]
+    assert (
+        ACCOUNT_OBJECT_TYPE in affected_ids_by_type
+    ), "Account type not in affected_ids_by_type"
+    affected_ids = affected_ids_by_type[ACCOUNT_OBJECT_TYPE]
     assert len(affected_ids) == 2, "Expected exactly two affected parent IDs"
     assert _VALID_SALESFORCE_IDS[0] in affected_ids, "Parent of child not included"
     assert _VALID_SALESFORCE_IDS[1] in affected_ids, "Direct parent ID not included"
@@ -929,7 +940,7 @@ def _get_child_records_by_id_query(
     object_id: str,
     sf_type: str,
     child_relationships: list[str],
-    relationships_to_fields: dict[str, list[str]],
+    relationships_to_fields: dict[str, set[str]],
 ) -> str:
     """Returns a SOQL query given the object id, type and child relationships.
 
@@ -963,7 +974,7 @@ def test_salesforce_connector_single() -> None:
 
     # this record has some opportunity child records
     parent_id = "001bm00000BXfhEAAT"
-    parent_type = "Account"
+    parent_type = ACCOUNT_OBJECT_TYPE
     parent_types = [parent_type]
 
     username = os.environ["SF_USERNAME"]
@@ -987,11 +998,11 @@ def test_salesforce_connector_single() -> None:
     child_to_parent_types: dict[str, set[str]] = (
         {}
     )  # reverse map from child to parent types
-    child_relationship_to_queryable_fields: dict[str, list[str]] = {}
+    child_relationship_to_queryable_fields: dict[str, set[str]] = {}
 
     # parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = {}
 
-    # Step 1 - make a list of all the types to download (parent + direct child + "User")
+    # Step 1 - make a list of all the types to download (parent + direct child + USER_OBJECT_TYPE)
     logger.info(f"Parent object types: num={len(parent_types)} list={parent_types}")
     for parent_type_working in parent_types:
         child_types_working = sf_client.get_children_of_sf_type(parent_type_working)
@@ -1035,8 +1046,8 @@ def test_salesforce_connector_single() -> None:
     result = sf_client.query(query)
     records = result["records"]
     record = records[0]
-    assert record["attributes"]["type"] == "Account"
-    parent_last_modified_date = record.get("LastModifiedDate", "")
+    assert record["attributes"]["type"] == ACCOUNT_OBJECT_TYPE
+    parent_last_modified_date = record.get(MODIFIED_FIELD, "")
     parent_semantic_identifier = record.get("Name", "Unknown Object")
     parent_last_modified_by_id = record.get("LastModifiedById")
 
@@ -1163,9 +1174,9 @@ def test_salesforce_connector_single() -> None:
     # get user relationship if present
     primary_owner_list = None
     if parent_last_modified_by_id:
-        queryable_user_fields = sf_client.get_queryable_fields_by_type("User")
+        queryable_user_fields = sf_client.get_queryable_fields_by_type(USER_OBJECT_TYPE)
         query = get_object_by_id_query(
-            parent_last_modified_by_id, "User", queryable_user_fields
+            parent_last_modified_by_id, USER_OBJECT_TYPE, queryable_user_fields
         )
         result = sf_client.query(query)
         user_record = result["records"][0]

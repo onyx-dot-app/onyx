@@ -1,0 +1,24 @@
+name: Check Lazy Imports
+
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - main
+      - 'release/**'
+
+jobs:
+  check-lazy-imports:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c # ratchet:actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Check lazy imports
+      run: python3 backend/scripts/check_lazy_imports.py

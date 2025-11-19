@@ -2,12 +2,12 @@ from datetime import datetime
 
 import pytest
 
-from onyx.chat.models import CitationInfo
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
 from onyx.chat.stream_processing.utils import DocumentIdOrderMapping
 from onyx.configs.constants import DocumentSource
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 
 
 """
@@ -80,13 +80,9 @@ def process_text(
 ) -> tuple[str, list[CitationInfo]]:
     mock_docs, mock_doc_id_to_rank_map, mock_doc_id_to_rank_map_rerank = mock_data
     final_mapping = DocumentIdOrderMapping(order_mapping=mock_doc_id_to_rank_map)
-    display_mapping = DocumentIdOrderMapping(
-        order_mapping=mock_doc_id_to_rank_map_rerank
-    )
     processor = CitationProcessor(
         context_docs=mock_docs,
-        final_doc_id_to_rank_map=final_mapping,
-        display_doc_id_to_rank_map=display_mapping,
+        doc_id_to_rank_map=final_mapping,
         stop_stream=None,
     )
 
@@ -112,7 +108,7 @@ def process_text(
         (
             "Single citation",
             ["Gro", "wth! [", "1", "]", "."],
-            "Growth! [[2]](https://0.com).",
+            "Growth! [[1]](https://0.com).",
             ["doc_0"],
         ),
     ],

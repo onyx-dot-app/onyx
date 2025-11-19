@@ -14,27 +14,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Configure Git
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
+      - name: Install Helm CLI
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # ratchet:azure/setup-helm@v4
         with:
           version: v3.12.1
 
-      - name: Add Required Helm Repositories
+      - name: Add required Helm repositories
         run: |
-          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
           helm repo add onyx-vespa https://onyx-dot-app.github.io/vespa-helm-charts
+          helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
+          helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
+          helm repo add minio https://charts.min.io/
           helm repo update
 
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Build chart dependencies
+        run: |
+          set -euo pipefail
+          for chart_dir in deployment/helm/charts/*; do
+            if [ -f "$chart_dir/Chart.yaml" ]; then
+              echo "Building dependencies for $chart_dir"
+              helm dependency build "$chart_dir"
+            fi
+          done
+
+      - name: Publish Helm charts to gh-pages
+        uses: stefanprodan/helm-gh-pages@0ad2bb377311d61ac04ad9eb6f252fb68e207260 # ratchet:stefanprodan/helm-gh-pages@v1.7.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          charts_dir: deployment/helm/charts
+          branch: gh-pages
+          commit_username: ${{ github.actor }}
+          commit_email: ${{ github.actor }}@users.noreply.github.com

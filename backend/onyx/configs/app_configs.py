@@ -24,8 +24,6 @@ APP_PORT = 8080
 # prefix from requests directed towards the API server. In these cases, set this to `/api`
 APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 
-SKIP_WARM_UP = os.environ.get("SKIP_WARM_UP", "").lower() == "true"
-
 #####
 # User Facing Features Configs
 #####
@@ -37,6 +35,9 @@ DISABLE_GENERATIVE_AI = os.environ.get("DISABLE_GENERATIVE_AI", "").lower() == "
 
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
+
+# If set to true, will show extra/uncommon connectors in the "Other" category
+SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"
 
 # Controls whether to allow admin query history reports with:
 # 1. associated user emails
@@ -62,19 +63,19 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 AUTH_TYPE = AuthType((os.environ.get("AUTH_TYPE") or AuthType.DISABLED.value).lower())
 DISABLE_AUTH = AUTH_TYPE == AuthType.DISABLED
 
-PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 12))
+PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
 PASSWORD_REQUIRE_UPPERCASE = (
-    os.environ.get("PASSWORD_REQUIRE_UPPERCASE", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_UPPERCASE", "false").lower() == "true"
 )
 PASSWORD_REQUIRE_LOWERCASE = (
-    os.environ.get("PASSWORD_REQUIRE_LOWERCASE", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_LOWERCASE", "false").lower() == "true"
 )
 PASSWORD_REQUIRE_DIGIT = (
-    os.environ.get("PASSWORD_REQUIRE_DIGIT", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_DIGIT", "false").lower() == "true"
 )
 PASSWORD_REQUIRE_SPECIAL_CHAR = (
-    os.environ.get("PASSWORD_REQUIRE_SPECIAL_CHAR", "true").lower() == "true"
+    os.environ.get("PASSWORD_REQUIRE_SPECIAL_CHAR", "false").lower() == "true"
 )
 
 # Encryption key secret is used to encrypt connector credentials, api keys, and other sensitive
@@ -108,7 +109,11 @@ _VALID_EMAIL_DOMAINS_STR = (
     os.environ.get("VALID_EMAIL_DOMAINS", "") or _VALID_EMAIL_DOMAIN
 )
 VALID_EMAIL_DOMAINS = (
-    [domain.strip() for domain in _VALID_EMAIL_DOMAINS_STR.split(",")]
+    [
+        domain.strip().lower()
+        for domain in _VALID_EMAIL_DOMAINS_STR.split(",")
+        if domain.strip()
+    ]
     if _VALID_EMAIL_DOMAINS_STR
     else []
 )
@@ -121,6 +126,28 @@ OAUTH_CLIENT_SECRET = (
     os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
     or ""
 )
+# OpenID Connect configuration URL for OIDC integrations
+OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
+
+# Applicable for OIDC Auth, allows you to override the scopes that
+# are requested from the OIDC provider. Currently used when passing
+# over access tokens to tool calls and the tool needs more scopes
+OIDC_SCOPE_OVERRIDE: list[str] | None = None
+_OIDC_SCOPE_OVERRIDE = os.environ.get("OIDC_SCOPE_OVERRIDE")
+
+if _OIDC_SCOPE_OVERRIDE:
+    try:
+        OIDC_SCOPE_OVERRIDE = [
+            scope.strip() for scope in _OIDC_SCOPE_OVERRIDE.split(",")
+        ]
+    except Exception:
+        pass
+
+# Applicable for SAML Auth
+SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
+
+# JWT Public Key URL for JWT token verification
+JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
@@ -225,9 +252,12 @@ try:
 except ValueError:
     POSTGRES_POOL_RECYCLE = POSTGRES_POOL_RECYCLE_DEFAULT
 
+# RDS IAM authentication - enables IAM-based authentication for PostgreSQL
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
-
+# Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
+# Note: This is separate from RDS IAM auth as they use different authentication mechanisms
+USE_REDIS_IAM_AUTH = os.getenv("USE_REDIS_IAM_AUTH", "False").lower() == "true"
 REDIS_SSL = os.getenv("REDIS_SSL", "").lower() == "true"
 REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
@@ -339,8 +369,36 @@ except ValueError:
         CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT
     )
 
+CELERY_WORKER_PRIMARY_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_PRIMARY_CONCURRENCY") or 4
+)
+
+CELERY_WORKER_PRIMARY_POOL_OVERFLOW = int(
+    os.environ.get("CELERY_WORKER_PRIMARY_POOL_OVERFLOW") or 4
+)
+
+# Consolidated background worker (light, docprocessing, docfetching, heavy, kg_processing, monitoring, user_file_processing)
+# separate workers' defaults: light=24, docprocessing=6, docfetching=1, heavy=4, kg=2, monitoring=1, user_file=2
+# Total would be 40, but we use a more conservative default of 20 for the consolidated worker
+CELERY_WORKER_BACKGROUND_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_BACKGROUND_CONCURRENCY") or 20
+)
+
+# Individual worker concurrency settings (used when USE_LIGHTWEIGHT_BACKGROUND_WORKER is False or on Kuberenetes deployments)
+CELERY_WORKER_HEAVY_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_HEAVY_CONCURRENCY") or 4
+)
+
 CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
-    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 4
+    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 2
+)
+
+CELERY_WORKER_MONITORING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_MONITORING_CONCURRENCY") or 1
+)
+
+CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY") or 2
 )
 
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
@@ -358,6 +416,12 @@ POLL_CONNECTOR_OFFSET = 30  # Minutes overlap between poll windows
 # If this is empty, all connectors are enabled, this is an option for security heavy orgs where
 # only very select connectors are enabled and admins cannot add other connector types
 ENABLED_CONNECTOR_TYPES = os.environ.get("ENABLED_CONNECTOR_TYPES") or ""
+
+# If set to true, curators can only access and edit assistants that they created
+CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS = (
+    os.environ.get("CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS", "").lower()
+    == "true"
+)
 
 # Some calls to get information on expert users are quite costly especially with rate limiting
 # Since experts are not used in the actual user experience, currently it is turned off
@@ -471,6 +535,10 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
 # Default size threshold for SharePoint files (20MB)
 SHAREPOINT_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("SHAREPOINT_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
+BLOB_STORAGE_SIZE_THRESHOLD = int(
+    os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
@@ -594,6 +662,10 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # exception without aborting the attempt.
 INDEXING_EXCEPTION_LIMIT = int(os.environ.get("INDEXING_EXCEPTION_LIMIT") or 0)
 
+# Maximum number of user file connector credential pairs to index in a single batch
+# Setting this number too high may overload the indexing process
+USER_FILE_INDEXING_LIMIT = int(os.environ.get("USER_FILE_INDEXING_LIMIT") or 100)
+
 # Maximum file size in a document to be indexed
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
 MAX_FILE_SIZE_BYTES = int(
@@ -611,6 +683,12 @@ AVERAGE_SUMMARY_EMBEDDINGS = (
 
 MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 
+
+#####
+# Tool Configs
+#####
+
+
 #####
 # Miscellaneous
 #####
@@ -625,8 +703,8 @@ LOG_ALL_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ALL_MODEL_INTERACTIONS", "").lower() == "true"
 )
 # Logs Onyx only model interactions like prompts, responses, messages etc.
-LOG_DANSWER_MODEL_INTERACTIONS = (
-    os.environ.get("LOG_DANSWER_MODEL_INTERACTIONS", "").lower() == "true"
+LOG_ONYX_MODEL_INTERACTIONS = (
+    os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
 )
 LOG_INDIVIDUAL_MODEL_TOKENS = (
     os.environ.get("LOG_INDIVIDUAL_MODEL_TOKENS", "").lower() == "true"
@@ -643,6 +721,25 @@ LOG_POSTGRES_CONN_COUNTS = (
 )
 # Anonymous usage telemetry
 DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
+
+#####
+# Braintrust Configuration
+#####
+# Braintrust project name
+BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
+# Braintrust API key - if provided, Braintrust tracing will be enabled
+BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
+# Maximum concurrency for Braintrust evaluations
+BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or 5)
+
+#####
+# Langfuse Configuration
+#####
+# Langfuse API credentials - if provided, Langfuse tracing will be enabled
+LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
+LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
+# Langfuse host URL (defaults to cloud instance)
+LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or "https://cloud.langfuse.com"
 
 TOKEN_BUDGET_GLOBALLY_ENABLED = (
     os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"
@@ -692,16 +789,24 @@ MAX_FEDERATED_CHUNKS = int(
 # NOTE: this should only be enabled if you have purchased an enterprise license.
 # if you're interested in an enterprise license, please reach out to us at
 # founders@onyx.app OR message Chris Weaver or Yuhong Sun in the Onyx
-# Slack community (https://join.slack.com/t/danswer/shared_invite/zt-1w76msxmd-HJHLe3KNFIAIzk_0dSOKaQ)
+# Discord community https://discord.gg/4NA5SbzrWb
 ENTERPRISE_EDITION_ENABLED = (
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
 )
 
-# Azure DALL-E Configurations
-AZURE_DALLE_API_VERSION = os.environ.get("AZURE_DALLE_API_VERSION")
-AZURE_DALLE_API_KEY = os.environ.get("AZURE_DALLE_API_KEY")
-AZURE_DALLE_API_BASE = os.environ.get("AZURE_DALLE_API_BASE")
-AZURE_DALLE_DEPLOYMENT_NAME = os.environ.get("AZURE_DALLE_DEPLOYMENT_NAME")
+# Azure Image Configurations
+AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION") or os.environ.get(
+    "AZURE_DALLE_API_VERSION"
+)
+AZURE_IMAGE_API_KEY = os.environ.get("AZURE_IMAGE_API_KEY") or os.environ.get(
+    "AZURE_DALLE_API_KEY"
+)
+AZURE_IMAGE_API_BASE = os.environ.get("AZURE_IMAGE_API_BASE") or os.environ.get(
+    "AZURE_DALLE_API_BASE"
+)
+AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get(
+    "AZURE_IMAGE_DEPLOYMENT_NAME"
+) or os.environ.get("AZURE_DALLE_DEPLOYMENT_NAME")
 
 # configurable image model
 IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
@@ -815,6 +920,11 @@ S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 # S3/MinIO Access Keys
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
+
+# Should we force S3 local checksumming
+S3_GENERATE_LOCAL_CHECKSUM = (
+    os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
+)
 
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html

@@ -11,6 +11,9 @@ from onyx.db.models import User
 from onyx.db.models import UserRole
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from tests.external_dependency_unit.full_setup import (
+    ensure_full_deployment_setup,
+)
 
 
 @pytest.fixture(scope="function")
@@ -23,6 +26,17 @@ def db_session() -> Generator[Session, None, None]:
     )
     with get_session_with_current_tenant() as session:
         yield session
+
+
+@pytest.fixture(scope="session")
+def full_deployment_setup() -> Generator[None, None, None]:
+    """Optional fixture to perform full deployment-like setup on demand.
+
+    Import and call tests.external_dependency_unit.startup.full_setup.ensure_full_deployment_setup
+    to initialize Postgres defaults, Vespa indices, and seed initial docs.
+    """
+    ensure_full_deployment_setup()
+    yield
 
 
 @pytest.fixture(scope="function")

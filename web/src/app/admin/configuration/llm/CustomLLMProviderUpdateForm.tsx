@@ -1,7 +1,7 @@
 import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/components/ui/text";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import {
   ArrayHelpers,
@@ -11,7 +11,7 @@ import {
   Form,
   Formik,
 } from "formik";
-import { FiPlus, FiTrash, FiX } from "react-icons/fi";
+import { FiX } from "react-icons/fi";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { Label, SubLabel, TextFormField } from "@/components/Field";
 import { useState } from "react";
@@ -23,6 +23,10 @@ import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { ModelConfigurationField } from "./ModelConfigurationField";
+import SvgTrash from "@/icons/trash";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgX from "@/icons/x";
 
 function customConfigProcessing(customConfigsList: [string, string][]) {
   const customConfig: { [key: string]: string } = {};
@@ -88,7 +92,13 @@ export function CustomLLMProviderUpdateForm({
       Yup.object({
         name: Yup.string().required("Model name is required"),
         is_visible: Yup.boolean().required("Visibility is required"),
-        max_input_tokens: Yup.number().nullable().optional(),
+        // Coerce empty string from input field into null so it's optional
+        max_input_tokens: Yup.number()
+          .transform((value, originalValue) =>
+            originalValue === "" || originalValue === undefined ? null : value
+          )
+          .nullable()
+          .optional(),
       })
     ),
     default_model_name: Yup.string().required("Model name is required"),
@@ -376,9 +386,11 @@ export function CustomLLMProviderUpdateForm({
                             </div>
                           </div>
                           <div className="my-auto">
-                            <FiX
-                              className="my-auto w-10 h-10 cursor-pointer hover:bg-accent-background-hovered rounded p-2"
+                            <IconButton
+                              icon={SvgX}
+                              className="my-auto"
                               onClick={() => arrayHelpers.remove(index)}
+                              secondary
                             />
                           </div>
                         </div>
@@ -386,17 +398,15 @@ export function CustomLLMProviderUpdateForm({
                     );
                   })}
 
-                  <Button
+                  <CreateButton
                     onClick={() => {
                       arrayHelpers.push(["", ""]);
                     }}
                     className="mt-3"
-                    variant="next"
                     type="button"
-                    icon={FiPlus}
                   >
                     Add New
-                  </Button>
+                  </CreateButton>
                 </div>
               )}
             />
@@ -423,9 +433,7 @@ export function CustomLLMProviderUpdateForm({
             {!existingLlmProvider?.deployment_name && (
               <TextFormField
                 name="fast_default_model_name"
-                subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
-                for this provider. If not set, will use
-                the Default Model configured above.`}
+                subtext="The model to use for lighter flows like `LLM Chunk Filter` for this provider. If not set, will use the Default Model configured above."
                 label="[Optional] Fast Model"
                 placeholder="E.g. gpt-4"
               />
@@ -457,7 +465,7 @@ export function CustomLLMProviderUpdateForm({
               )}
 
               <div className="flex w-full mt-4">
-                <Button type="submit" variant="submit">
+                <Button type="submit">
                   {isTesting ? (
                     <LoadingAnimation text="Testing" />
                   ) : existingLlmProvider ? (
@@ -469,9 +477,9 @@ export function CustomLLMProviderUpdateForm({
                 {existingLlmProvider && (
                   <Button
                     type="button"
-                    variant="destructive"
+                    danger
                     className="ml-3"
-                    icon={FiTrash}
+                    leftIcon={SvgTrash}
                     onClick={async () => {
                       const response = await fetch(
                         `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}`,

@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
 import { unstable_noStore as noStore } from "next/cache";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
-import { ChatProvider } from "@/components/context/ChatContext";
+import { ChatProvider } from "@/refresh-components/contexts/ChatContext";
+import { ProjectsProvider } from "./projects/ProjectsContext";
+import AppSidebar from "@/sections/sidebar/AppSidebar";
+import { ChatModalProvider } from "@/refresh-components/contexts/ChatModalContext";
+import AppLayout from "@/refresh-components/layouts/AppLayout";
 
 export default async function Layout({
   children,
@@ -29,39 +33,41 @@ export default async function Layout({
     documentSets,
     tags,
     llmProviders,
-    folders,
-    openedFolders,
+    availableTools,
     sidebarInitiallyVisible,
     defaultAssistantId,
     shouldShowWelcomeModal,
     ccPairs,
     inputPrompts,
     proSearchToggled,
+    projects,
   } = data;
 
   return (
-    <>
-      <ChatProvider
-        value={{
-          proSearchToggled,
-          inputPrompts,
-          chatSessions,
-          sidebarInitiallyVisible,
-          availableSources,
-          ccPairs,
-          documentSets,
-          tags,
-          availableDocumentSets: documentSets,
-          availableTags: tags,
-          llmProviders,
-          folders,
-          openedFolders,
-          shouldShowWelcomeModal,
-          defaultAssistantId,
-        }}
-      >
-        {children}
-      </ChatProvider>
-    </>
+    <ChatProvider
+      proSearchToggled={proSearchToggled}
+      inputPrompts={inputPrompts}
+      chatSessions={chatSessions}
+      sidebarInitiallyVisible={sidebarInitiallyVisible}
+      availableSources={availableSources}
+      ccPairs={ccPairs}
+      documentSets={documentSets}
+      tags={tags}
+      availableDocumentSets={documentSets}
+      availableTags={tags}
+      llmProviders={llmProviders}
+      availableTools={availableTools}
+      shouldShowWelcomeModal={shouldShowWelcomeModal}
+      defaultAssistantId={defaultAssistantId}
+    >
+      <ChatModalProvider>
+        <ProjectsProvider initialProjects={projects}>
+          <div className="flex flex-row w-full h-full">
+            <AppSidebar />
+            <AppLayout>{children}</AppLayout>
+          </div>
+        </ProjectsProvider>
+      </ChatModalProvider>
+    </ChatProvider>
   );
 }

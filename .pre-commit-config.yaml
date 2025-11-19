@@ -29,13 +29,40 @@ repos:
     rev: v0.11.4
     hooks:
       - id: ruff
+
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v3.1.0
     hooks:
     - id: prettier
       types_or: [html, css, javascript, ts, tsx]
-      additional_dependencies:
-      - prettier
+      language_version: system
+
+  - repo: https://github.com/sirwart/ripsecrets
+    rev: v0.1.11
+    hooks:
+      - id: ripsecrets
+        args:
+        - --additional-pattern
+        - ^sk-[A-Za-z0-9_\-]{20,}$
+
+
+  - repo: local
+    hooks:
+      - id: terraform-fmt
+        name: terraform fmt
+        entry: terraform fmt -recursive
+        language: system
+        pass_filenames: false
+        files: \.tf$
+      - id: check-lazy-imports
+        name: Check lazy imports are not directly imported
+        entry: python3 backend/scripts/check_lazy_imports.py
+        language: system
+        files: ^backend/(?!\.venv/).*\.py$
+        pass_filenames: false
+        # Note: pass_filenames is false because tsc must check the entire
+        # project, but the files filter ensures this only runs when relevant
+        # files change. Using --incremental for faster subsequent checks.
 
   # We would like to have a mypy pre-commit hook, but due to the fact that
   # pre-commit runs in it's own isolated environment, we would need to install

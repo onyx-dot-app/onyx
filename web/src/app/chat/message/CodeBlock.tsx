@@ -1,7 +1,9 @@
+import SvgCheck from "@/icons/check";
+import SvgCode from "@/icons/code";
+import SvgCopy from "@/icons/copy";
+import { cn } from "@/lib/utils";
+import Text from "@/refresh-components/texts/Text";
 import React, { useState, ReactNode, useCallback, useMemo, memo } from "react";
-import { FiCheck, FiCopy } from "react-icons/fi";
-
-const CODE_BLOCK_PADDING = { padding: "1rem" };
 
 interface CodeBlockProps {
   className?: string;
@@ -43,37 +45,35 @@ export const CodeBlock = memo(function CodeBlock({
     >
       {copied ? (
         <div className="flex items-center space-x-2">
-          <FiCheck size={16} />
-          <span>Copied!</span>
+          <SvgCheck height={14} width={14} stroke="currentColor" />
+          <Text secondaryMono>Copied!</Text>
         </div>
       ) : (
         <div className="flex items-center space-x-2">
-          <FiCopy size={16} />
-          <span>Copy code</span>
+          <SvgCopy height={14} width={14} stroke="currentColor" />
+          <Text secondaryMono>Copy code</Text>
         </div>
       )}
     </div>
   );
 
-  if (typeof children === "string") {
+  if (typeof children === "string" && !language) {
     return (
       <span
-        className={`
-          font-mono 
-          text-text-800 
-          bg-background-50 
-          border 
-          border-background-300 
-          rounded 
-          align-bottom
-          px-1
-          py-[3px]
-          text-xs 
-          inline-block
-          whitespace-pre-wrap 
-          break-words 
-          ${className}
-        `}
+        className={cn(
+          "font-mono",
+          "text-text-05",
+          "bg-background-tint-00",
+          "rounded",
+          "align-bottom",
+          "text-xs",
+          "inline-block",
+          "whitespace-pre-wrap",
+          "break-words",
+          "py-0.5",
+          "px-1",
+          className
+        )}
       >
         {children}
       </span>
@@ -83,8 +83,8 @@ export const CodeBlock = memo(function CodeBlock({
   const CodeContent = () => {
     if (!language) {
       return (
-        <pre style={CODE_BLOCK_PADDING}>
-          <code className={`text-sm ${className}`}>
+        <pre className="!p-2 hljs">
+          <code className={`text-sm hljs ${className}`}>
             {Array.isArray(children)
               ? children.map((child, index) => (
                   <MemoizedCodeLine key={index} content={child} />
@@ -96,7 +96,7 @@ export const CodeBlock = memo(function CodeBlock({
     }
 
     return (
-      <pre className="overflow-x-scroll" style={CODE_BLOCK_PADDING}>
+      <pre className="!p-2 hljs">
         <code className="text-xs overflow-x-auto">
           {Array.isArray(children)
             ? children.map((child, index) => (
@@ -109,10 +109,16 @@ export const CodeBlock = memo(function CodeBlock({
   };
 
   return (
-    <div className="overflow-x-hidden">
+    <div className="overflow-x-hidden bg-background-tint-00 px-1 pb-1 rounded-12">
       {language && (
-        <div className="flex mx-3 py-2 text-xs">
-          {language}
+        <div className="flex px-2 py-1 text-sm text-text-04 gap-x-2">
+          <SvgCode
+            height={12}
+            width={12}
+            stroke="currentColor"
+            className="my-auto"
+          />
+          <Text secondaryMono>{language}</Text>
           {codeText && <CopyButton />}
         </div>
       )}

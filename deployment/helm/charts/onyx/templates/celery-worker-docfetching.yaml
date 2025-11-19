@@ -1,27 +1,29 @@
+{{- if gt (int .Values.celery_worker_docfetching.replicaCount) 0 }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx-stack.fullname" . }}-celery-worker-docfetching
+  name: {{ include "onyx.fullname" . }}-celery-worker-docfetching
   labels:
-    {{- include "onyx-stack.labels" . | nindent 4 }}
+    {{- include "onyx.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.celery_worker_docfetching.autoscaling.enabled }}
   replicas: {{ .Values.celery_worker_docfetching.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "onyx-stack.selectorLabels" . | nindent 6 }}
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
       {{- if .Values.celery_worker_docfetching.deploymentLabels }}
       {{- toYaml .Values.celery_worker_docfetching.deploymentLabels | nindent 6 }}
       {{- end }}
   template:
     metadata:
-      {{- with .Values.celery_worker_docfetching.podAnnotations }}
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.celery_worker_docfetching.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "onyx-stack.labels" . | nindent 8 }}
+        {{- include "onyx.labels" . | nindent 8 }}
         {{- with .Values.celery_worker_docfetching.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -30,13 +32,17 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.celery_worker_docfetching.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
+      {{- with .Values.celery_worker_docfetching.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: celery-worker-docfetching
           securityContext:
-            {{- toYaml .Values.celery_worker_docfetching.securityContext | nindent 12 }}
+            {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
@@ -59,7 +65,11 @@ spec:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
           env:
-            {{- include "onyx-stack.envSecrets" . | nindent 12}}
+            {{- include "onyx.envSecrets" . | nindent 12}}
+          {{- with .Values.celery_worker_docfetching.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           startupProbe:
             {{ .Values.celery_shared.startupProbe | toYaml | nindent 12}}
           readinessProbe:
@@ -81,4 +91,9 @@ spec:
                 - >
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
-                    --filename /tmp/onyx_k8s_docfetching_liveness.txt 
+                    --filename /tmp/onyx_k8s_docfetching_liveness.txt
+      {{- with .Values.celery_worker_docfetching.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

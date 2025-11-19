@@ -262,3 +262,24 @@ def create_chat_message_feedback(
 
     db_session.add(message_feedback)
     db_session.commit()
+
+
+def remove_chat_message_feedback(
+    chat_message_id: int,
+    user_id: UUID | None,
+    db_session: Session,
+) -> None:
+    """Remove all feedback for a chat message."""
+    chat_message = get_chat_message(
+        chat_message_id=chat_message_id, user_id=user_id, db_session=db_session
+    )
+
+    if chat_message.message_type != MessageType.ASSISTANT:
+        raise ValueError("Can only remove feedback from LLM Outputs")
+
+    # Delete all feedback for this message
+    db_session.query(ChatMessageFeedback).filter(
+        ChatMessageFeedback.chat_message_id == chat_message_id
+    ).delete()
+
+    db_session.commit()

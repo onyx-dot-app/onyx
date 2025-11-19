@@ -27,7 +27,10 @@ import { Spinner } from "@/components/Spinner";
 import { deleteApiKey, regenerateApiKey } from "./lib";
 import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
 import { APIKey } from "./types";
-import CreateButton from "@/components/ui/createButton";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
+import Button from "@/refresh-components/buttons/Button";
+import SvgRefreshCw from "@/icons/refresh-cw";
+import SvgEdit from "@/icons/edit";
 
 const API_KEY_TEXT = `API Keys allow you to access Onyx APIs programmatically. Click the button below to generate a new API Key.`;
 
@@ -107,19 +110,23 @@ function Main() {
     );
   }
 
-  const newApiKeyButton = (
-    <CreateButton
-      onClick={() => setShowCreateUpdateForm(true)}
-      text="Create API Key"
-    />
+  const introSection = (
+    <div className="flex flex-col items-start gap-4">
+      <Text>{API_KEY_TEXT}</Text>
+      <CreateButton
+        className="self-start"
+        onClick={() => setShowCreateUpdateForm(true)}
+      >
+        Create API Key
+      </CreateButton>
+    </div>
   );
 
   if (apiKeys.length === 0) {
     return (
       <div>
         {popup}
-        <Text>{API_KEY_TEXT}</Text>
-        {newApiKeyButton}
+        {introSection}
 
         {showCreateUpdateForm && (
           <OnyxApiKeyForm
@@ -152,8 +159,7 @@ function Main() {
 
       {keyIsGenerating && <Spinner />}
 
-      <Text>{API_KEY_TEXT}</Text>
-      {newApiKeyButton}
+      {introSection}
 
       <Separator />
 
@@ -172,22 +178,13 @@ function Main() {
           {apiKeys.map((apiKey) => (
             <TableRow key={apiKey.api_key_id}>
               <TableCell>
-                <div
-                  className={`
-                  my-auto 
-                  flex 
-                  mb-1 
-                  w-fit 
-                  hover:bg-accent-background-hovered cursor-pointer
-                  p-2 
-                  rounded-lg
-                  border-border
-                  text-sm`}
+                <Button
+                  internal
                   onClick={() => handleEdit(apiKey)}
+                  leftIcon={SvgEdit}
                 >
-                  <FiEdit2 className="my-auto mr-2" />
                   {apiKey.api_key_name || <i>null</i>}
-                </div>
+                </Button>
               </TableCell>
               <TableCell className="max-w-64">
                 {apiKey.api_key_display}
@@ -196,17 +193,9 @@ function Main() {
                 {apiKey.api_key_role.toUpperCase()}
               </TableCell>
               <TableCell>
-                <div
-                  className={`
-                  my-auto 
-                  flex 
-                  mb-1 
-                  w-fit 
-                  hover:bg-accent-background-hovered cursor-pointer
-                  p-2 
-                  rounded-lg
-                  border-border
-                  text-sm`}
+                <Button
+                  internal
+                  leftIcon={SvgRefreshCw}
                   onClick={async () => {
                     setKeyIsGenerating(true);
                     const response = await regenerateApiKey(apiKey);
@@ -224,9 +213,8 @@ function Main() {
                     mutate("/api/admin/api-key");
                   }}
                 >
-                  <FiRefreshCw className="mr-1 my-auto" />
                   Refresh
-                </div>
+                </Button>
               </TableCell>
               <TableCell>
                 <DeleteButton

@@ -1,4 +1,8 @@
 import json
+from typing import Any
+from typing import cast
+from typing import Literal
+from typing import TypedDict
 from uuid import UUID
 
 import requests
@@ -16,7 +20,40 @@ from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestChatMessage
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import ErrorResponse
 from tests.integration.common_utils.test_models import StreamedResponse
+from tests.integration.common_utils.test_models import ToolName
+from tests.integration.common_utils.test_models import ToolResult
+
+
+class StreamPacketObj(TypedDict, total=False):
+    """Base structure for streaming packet objects."""
+
+    type: Literal[
+        "message_start",
+        "message_delta",
+        "internal_search_tool_start",
+        "internal_search_tool_delta",
+        "image_generation_tool_start",
+        "image_generation_tool_heartbeat",
+        "image_generation_tool_delta",
+    ]
+    content: str
+    final_documents: list[dict[str, Any]]
+    is_internet_search: bool
+    images: list[dict[str, Any]]
+    queries: list[str]
+    documents: list[dict[str, Any]]
+
+
+class StreamPacketData(TypedDict, total=False):
+    """Structure for streaming response packets."""
+
+    reserved_assistant_message_id: int
+    error: str
+    stack_trace: str
+    obj: StreamPacketObj
+    ind: int
 
 
 class ChatSessionManager:
@@ -50,8 +87,7 @@ class ChatSessionManager:
         message: str,
         parent_message_id: int | None = None,
         user_performing_action: DATestUser | None = None,
-        file_descriptors: list[FileDescriptor] = [],
-        prompt_id: int | None = None,
+        file_descriptors: list[FileDescriptor] | None = None,
         search_doc_ids: list[int] | None = None,
         retrieval_options: RetrievalDetails | None = None,
         query_override: str | None = None,
@@ -61,13 +97,14 @@ class ChatSessionManager:
         alternate_assistant_id: int | None = None,
         use_existing_user_message: bool = False,
         use_agentic_search: bool = False,
+        forced_tool_ids: list[int] | None = None,
+        chat_session: DATestChatSession | None = None,
     ) -> StreamedResponse:
         chat_message_req = CreateChatMessageRequest(
             chat_session_id=chat_session_id,
             parent_message_id=parent_message_id,
             message=message,
             file_descriptors=file_descriptors or [],
-            prompt_id=prompt_id,
             search_doc_ids=search_doc_ids or [],
             retrieval_options=retrieval_options,
             rerank_settings=None,  # Can be added if needed
@@ -78,6 +115,7 @@ class ChatSessionManager:
             alternate_assistant_id=alternate_assistant_id,
             use_existing_user_message=use_existing_user_message,
             use_agentic_search=use_agentic_search,
+            forced_tool_ids=forced_tool_ids,
         )
 
         headers = (
@@ -95,39 +133,106 @@ class ChatSessionManager:
             cookies=cookies,
         )
 
-        return ChatSessionManager.analyze_response(response)
+        streamed_response = ChatSessionManager.analyze_response(response)
+
+        if not chat_session:
+            return streamed_response
+
+        # TODO: ideally we would get the research answer purpose from the chat history
+        # but atm the field needed would not be used outside of testing, so we're not adding it.
+        # chat_history = ChatSessionManager.get_chat_history(
+        #     chat_session=chat_session,
+        #     user_performing_action=user_performing_action,
+        # )
+
+        # for message_obj in chat_history:
+        #     if message_obj.message_type == MessageType.ASSISTANT:
+        #         streamed_response.research_answer_purpose = (
+        #             message_obj.research_answer_purpose
+        #         )
+        #         streamed_response.assistant_message_id = message_obj.id
+        #         break
+
+        return streamed_response
 
     @staticmethod
     def analyze_response(response: Response) -> StreamedResponse:
-        response_data = [
-            json.loads(line.decode("utf-8")) for line in response.iter_lines() if line
-        ]
-
-        analyzed = StreamedResponse()
-
+        response_data = cast(
+            list[StreamPacketData],
+            [
+                json.loads(line.decode("utf-8"))
+                for line in response.iter_lines()
+                if line
+            ],
+        )
+        ind_to_tool_use: dict[int, ToolResult] = {}
+        top_documents: list[SavedSearchDoc] = []
+        heartbeat_packets: list[StreamPacketData] = []
+        full_message = ""
+        assistant_message_id: int | None = None
+        error = None
         for data in response_data:
-            if "rephrased_query" in data:
-                analyzed.rephrased_query = data["rephrased_query"]
-            if "tool_name" in data:
-                analyzed.tool_name = data["tool_name"]
-                analyzed.tool_result = (
-                    data.get("tool_result")
-                    if analyzed.tool_name == "run_search"
-                    else None
+            if reserved_id := data.get("reserved_assistant_message_id"):
+                assistant_message_id = reserved_id
+            elif data.get("error"):
+                error = ErrorResponse(
+                    error=str(data["error"]),
+                    stack_trace=str(data["stack_trace"]),
                 )
-            if "relevance_summaries" in data:
-                analyzed.relevance_summaries = data["relevance_summaries"]
-            if "answer_piece" in data and data["answer_piece"]:
-                analyzed.full_message += data["answer_piece"]
-            if "top_documents" in data:
-                assert (
-                    analyzed.top_documents is None
-                ), "top_documents should only be set once"
-                analyzed.top_documents = [
-                    SavedSearchDoc(**doc) for doc in data["top_documents"]
-                ]
+            elif (
+                (data_obj := data.get("obj"))
+                and (packet_type := data_obj.get("type"))
+                and (ind := data.get("ind")) is not None
+            ):
+                if packet_type == "message_start":
+                    final_docs = data_obj.get("final_documents")
+                    if isinstance(final_docs, list):
+                        top_documents = [SavedSearchDoc(**doc) for doc in final_docs]
+                    full_message += data_obj.get("content", "")
+                elif packet_type == "message_delta":
+                    full_message += data_obj["content"]
+                elif packet_type == "internal_search_tool_start":
+                    tool_name = (
+                        ToolName.INTERNET_SEARCH
+                        if data_obj.get("is_internet_search", False)
+                        else ToolName.INTERNAL_SEARCH
+                    )
+                    ind_to_tool_use[ind] = ToolResult(
+                        tool_name=tool_name,
+                    )
+                elif packet_type == "image_generation_tool_start":
+                    ind_to_tool_use[ind] = ToolResult(
+                        tool_name=ToolName.IMAGE_GENERATION,
+                    )
+                elif packet_type == "image_generation_tool_heartbeat":
+                    # Track heartbeat packets for debugging/testing
+                    heartbeat_packets.append(data)
+                elif packet_type == "image_generation_tool_delta":
+                    from tests.integration.common_utils.test_models import (
+                        GeneratedImage,
+                    )
 
-        return analyzed
+                    images = data_obj.get("images", [])
+                    ind_to_tool_use[ind].images.extend(
+                        [GeneratedImage(**img) for img in images]
+                    )
+                elif packet_type == "internal_search_tool_delta":
+                    ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
+
+                    documents = data_obj.get("documents", [])
+                    ind_to_tool_use[ind].documents.extend(
+                        [SavedSearchDoc(**doc) for doc in documents]
+                    )
+        if not assistant_message_id:
+            raise ValueError("Assistant message id not found")
+        return StreamedResponse(
+            full_message=full_message,
+            assistant_message_id=assistant_message_id,
+            top_documents=top_documents,
+            used_tools=list(ind_to_tool_use.values()),
+            heartbeat_packets=[dict(packet) for packet in heartbeat_packets],
+            error=error,
+        )
 
     @staticmethod
     def get_chat_history(
@@ -150,6 +255,9 @@ class ChatSessionManager:
                 chat_session_id=chat_session.id,
                 parent_message_id=msg.get("parent_message"),
                 message=msg["message"],
+                research_answer_purpose=msg.get("research_answer_purpose"),
+                message_type=msg.get("message_type"),
+                files=msg.get("files"),
             )
             for msg in response.json()["messages"]
         ]

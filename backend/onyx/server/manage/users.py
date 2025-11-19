@@ -1,10 +1,11 @@
+import csv
+import io
 import re
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import cast
 
-import jwt
 from email_validator import EmailNotValidError
 from email_validator import EmailUndeliverableError
 from email_validator import validate_email
@@ -14,17 +15,16 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import Column
-from sqlalchemy import desc
-from sqlalchemy import select
-from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.auth.email_utils import send_user_email_invite
 from onyx.auth.invited_users import get_invited_users
+from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.noauth_user import fetch_no_auth_user
+from onyx.auth.noauth_user import set_no_auth_user_personalization
 from onyx.auth.noauth_user import set_no_auth_user_preferences
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import anonymous_user_enabled
@@ -45,8 +45,23 @@ from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.models import AccessToken
+from onyx.db.enums import UserFileStatus
 from onyx.db.models import User
+from onyx.db.models import UserFile
+from onyx.db.user_preferences import activate_user
+from onyx.db.user_preferences import deactivate_user
+from onyx.db.user_preferences import get_all_user_assistant_specific_configs
+from onyx.db.user_preferences import get_latest_access_token_for_user
+from onyx.db.user_preferences import update_assistant_preferences
+from onyx.db.user_preferences import update_user_assistant_visibility
+from onyx.db.user_preferences import update_user_auto_scroll
+from onyx.db.user_preferences import update_user_default_model
+from onyx.db.user_preferences import update_user_personalization
+from onyx.db.user_preferences import update_user_pinned_assistants
+from onyx.db.user_preferences import update_user_role
+from onyx.db.user_preferences import update_user_shortcut_enabled
+from onyx.db.user_preferences import update_user_temperature_override_enabled
+from onyx.db.user_preferences import update_user_theme_preference
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users
@@ -56,15 +71,20 @@ from onyx.db.users import validate_user_role_update
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import PaginatedReturn
+from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
+from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
+from onyx.server.manage.models import ThemePreferenceRequest
 from onyx.server.manage.models import UserByEmail
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
 from onyx.server.manage.models import UserRoleResponse
 from onyx.server.manage.models import UserRoleUpdateRequest
+from onyx.server.manage.models import UserSpecificAssistantPreference
+from onyx.server.manage.models import UserSpecificAssistantPreferences
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
@@ -120,9 +140,7 @@ def set_user_role(
             "remove_curator_status__no_commit",
         )(db_session, user_to_update)
 
-    user_to_update.role = user_role_update_request.new_role
-
-    db_session.commit()
+    update_user_role(user_to_update, requested_role, db_session)
 
 
 class TestUpsertRequest(BaseModel):
@@ -286,6 +304,43 @@ def list_all_users(
     )
 
 
+@router.get("/manage/users/download")
+def download_users_csv(
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> StreamingResponse:
+    """Download all users as a CSV file."""
+    # Get all users from the database
+    users = get_all_users(db_session)
+
+    # Create CSV content in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Write CSV header
+    writer.writerow(["Email", "Role", "Status"])
+
+    # Write user data
+    for user in users:
+        writer.writerow(
+            [
+                user.email,
+                user.role.value if user.role else "",
+                "Active" if user.is_active else "Inactive",
+            ]
+        )
+
+    # Prepare the CSV content for download
+    csv_content = output.getvalue()
+    output.close()
+
+    return StreamingResponse(
+        io.BytesIO(csv_content.encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment;"},
+    )
+
+
 @router.put("/manage/admin/users")
 def bulk_invite_users(
     emails: list[str] = Body(..., embed=True),
@@ -367,15 +422,11 @@ def remove_invited_user(
     db_session: Session = Depends(get_session),
 ) -> int:
     tenant_id = get_current_tenant_id()
-    user_emails = get_invited_users()
-    remaining_users = [user for user in user_emails if user != user_email.user_email]
-
     if MULTI_TENANT:
         fetch_ee_implementation_or_noop(
             "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
         )([user_email.user_email], tenant_id)
-
-    number_of_invited_users = write_invited_users(remaining_users)
+    number_of_invited_users = remove_user_from_invited_users(user_email.user_email)
 
     try:
         if MULTI_TENANT and not DEV_MODE:
@@ -393,7 +444,7 @@ def remove_invited_user(
 
 
 @router.patch("/manage/admin/deactivate-user")
-def deactivate_user(
+def deactivate_user_api(
     user_email: UserByEmail,
     current_user: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
@@ -416,9 +467,7 @@ def deactivate_user(
     if user_to_deactivate.is_active is False:
         logger.warning("{} is already deactivated".format(user_to_deactivate.email))
 
-    user_to_deactivate.is_active = False
-    db_session.add(user_to_deactivate)
-    db_session.commit()
+    deactivate_user(user_to_deactivate, db_session)
 
 
 @router.delete("/manage/admin/delete-user")
@@ -459,7 +508,7 @@ async def delete_user(
 
 
 @router.patch("/manage/admin/activate-user")
-def activate_user(
+def activate_user_api(
     user_email: UserByEmail,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
@@ -473,9 +522,7 @@ def activate_user(
     if user_to_activate.is_active is True:
         logger.warning("{} is already activated".format(user_to_activate.email))
 
-    user_to_activate.is_active = True
-    db_session.add(user_to_activate)
-    db_session.commit()
+    activate_user(user_to_activate, db_session)
 
 
 @router.get("/manage/admin/valid-domains")
@@ -502,35 +549,6 @@ async def get_user_role(user: User = Depends(current_user)) -> UserRoleResponse:
     if user is None:
         raise ValueError("Invalid or missing user.")
     return UserRoleResponse(role=user.role)
-
-
-def get_current_auth_token_expiration_jwt(
-    user: User | None, request: Request
-) -> datetime | None:
-    if user is None:
-        return None
-
-    try:
-        # Get the JWT from the cookie
-        jwt_token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
-        if not jwt_token:
-            logger.error("No JWT token found in cookies")
-            return None
-
-        # Decode the JWT
-        decoded_token = jwt.decode(jwt_token, options={"verify_signature": False})
-
-        # Get the 'exp' (expiration) claim from the token
-        exp = decoded_token.get("exp")
-        if exp:
-            return datetime.fromtimestamp(exp)
-        else:
-            logger.error("No 'exp' claim found in JWT")
-            return None
-
-    except Exception as e:
-        logger.error(f"Error decoding JWT: {e}")
-        return None
 
 
 def get_current_auth_token_creation_redis(
@@ -580,23 +598,12 @@ def get_current_token_creation(
 ) -> datetime | None:
     if user is None:
         return None
-    try:
-        result = db_session.execute(
-            select(AccessToken)
-            .where(AccessToken.user_id == user.id)  # type: ignore
-            .order_by(desc(Column("created_at")))
-            .limit(1)
-        )
-        access_token = result.scalar_one_or_none()
 
-        if access_token:
-            return access_token.created_at
-        else:
-            logger.error("No AccessToken found for user")
-            return None
-
-    except Exception as e:
-        logger.error(f"Error fetching AccessToken: {e}")
+    access_token = get_latest_access_token_for_user(user.id, db_session)
+    if access_token:
+        return access_token.created_at
+    else:
+        logger.error("No AccessToken found for user")
         return None
 
 
@@ -678,7 +685,7 @@ def verify_user_logged_in(
 
 
 @router.patch("/temperature-override-enabled")
-def update_user_temperature_override_enabled(
+def update_user_temperature_override_enabled_api(
     temperature_override_enabled: bool,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -695,12 +702,9 @@ def update_user_temperature_override_enabled(
         else:
             raise RuntimeError("This should never happen")
 
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(temperature_override_enabled=temperature_override_enabled)
+    update_user_temperature_override_enabled(
+        user.id, temperature_override_enabled, db_session
     )
-    db_session.commit()
 
 
 class ChosenDefaultModelRequest(BaseModel):
@@ -708,7 +712,7 @@ class ChosenDefaultModelRequest(BaseModel):
 
 
 @router.patch("/shortcut-enabled")
-def update_user_shortcut_enabled(
+def update_user_shortcut_enabled_api(
     shortcut_enabled: bool,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -723,16 +727,11 @@ def update_user_shortcut_enabled(
         else:
             raise RuntimeError("This should never happen")
 
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(shortcut_enabled=shortcut_enabled)
-    )
-    db_session.commit()
+    update_user_shortcut_enabled(user.id, shortcut_enabled, db_session)
 
 
 @router.patch("/auto-scroll")
-def update_user_auto_scroll(
+def update_user_auto_scroll_api(
     request: AutoScrollRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -747,16 +746,30 @@ def update_user_auto_scroll(
         else:
             raise RuntimeError("This should never happen")
 
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(auto_scroll=request.auto_scroll)
-    )
-    db_session.commit()
+    update_user_auto_scroll(user.id, request.auto_scroll, db_session)
+
+
+@router.patch("/user/theme-preference")
+def update_user_theme_preference_api(
+    request: ThemePreferenceRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            no_auth_user.preferences.theme_preference = request.theme_preference
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    update_user_theme_preference(user.id, request.theme_preference, db_session)
 
 
 @router.patch("/user/default-model")
-def update_user_default_model(
+def update_user_default_model_api(
     request: ChosenDefaultModelRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -771,12 +784,56 @@ def update_user_default_model(
         else:
             raise RuntimeError("This should never happen")
 
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(default_model=request.default_model)
+    update_user_default_model(user.id, request.default_model, db_session)
+
+
+@router.patch("/user/personalization")
+def update_user_personalization_api(
+    request: PersonalizationUpdateRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            personalization = no_auth_user.personalization
+
+            if request.name is not None:
+                personalization.name = request.name
+            if request.role is not None:
+                personalization.role = request.role
+            if request.use_memories is not None:
+                personalization.use_memories = request.use_memories
+            if request.memories is not None:
+                personalization.memories = request.memories
+
+            set_no_auth_user_personalization(store, personalization)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    new_name = request.name if request.name is not None else user.personal_name
+    new_role = request.role if request.role is not None else user.personal_role
+    current_use_memories = user.use_memories
+    new_use_memories = (
+        request.use_memories
+        if request.use_memories is not None
+        else current_use_memories
     )
-    db_session.commit()
+    existing_memories = [memory.memory_text for memory in user.memories]
+    new_memories = (
+        request.memories if request.memories is not None else existing_memories
+    )
+
+    update_user_personalization(
+        user.id,
+        personal_name=new_name,
+        personal_role=new_role,
+        use_memories=new_use_memories,
+        memories=new_memories,
+        db_session=db_session,
+    )
 
 
 class ReorderPinnedAssistantsRequest(BaseModel):
@@ -784,7 +841,7 @@ class ReorderPinnedAssistantsRequest(BaseModel):
 
 
 @router.patch("/user/pinned-assistants")
-def update_user_pinned_assistants(
+def update_user_pinned_assistants_api(
     request: ReorderPinnedAssistantsRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -801,12 +858,7 @@ def update_user_pinned_assistants(
         else:
             raise RuntimeError("This should never happen")
 
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(pinned_assistants=ordered_assistant_ids)
-    )
-    db_session.commit()
+    update_user_pinned_assistants(user.id, ordered_assistant_ids, db_session)
 
 
 class ChosenAssistantsRequest(BaseModel):
@@ -836,7 +888,7 @@ def update_assistant_visibility(
 
 
 @router.patch("/user/assistant-list/update/{assistant_id}")
-def update_user_assistant_visibility(
+def update_user_assistant_visibility_api(
     assistant_id: int,
     show: bool,
     user: User | None = Depends(current_user),
@@ -864,13 +916,81 @@ def update_user_assistant_visibility(
     )
     if updated_preferences.chosen_assistants is not None:
         updated_preferences.chosen_assistants.append(assistant_id)
-    db_session.execute(
-        update(User)
-        .where(User.id == user.id)  # type: ignore
-        .values(
-            hidden_assistants=updated_preferences.hidden_assistants,
-            visible_assistants=updated_preferences.visible_assistants,
-            chosen_assistants=updated_preferences.chosen_assistants,
+    update_user_assistant_visibility(
+        user.id,
+        updated_preferences.hidden_assistants,
+        updated_preferences.visible_assistants,
+        updated_preferences.chosen_assistants,
+        db_session,
+    )
+
+
+@router.get("/user/assistant/preferences")
+def get_user_assistant_preferences(
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> UserSpecificAssistantPreferences | None:
+    """Fetch all assistant preferences for the user."""
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            return no_auth_user.preferences.assistant_specific_configs
+        else:
+            raise RuntimeError("This should never happen")
+
+    assistant_specific_configs = get_all_user_assistant_specific_configs(
+        user.id, db_session
+    )
+    return {
+        config.assistant_id: UserSpecificAssistantPreference(
+            disabled_tool_ids=config.disabled_tool_ids
         )
+        for config in assistant_specific_configs
+    }
+
+
+@router.patch("/user/assistant/{assistant_id}/preferences")
+def update_assistant_preferences_for_user_api(
+    assistant_id: int,
+    new_assistant_preference: UserSpecificAssistantPreference,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            if no_auth_user.preferences.assistant_specific_configs is None:
+                no_auth_user.preferences.assistant_specific_configs = {}
+
+            no_auth_user.preferences.assistant_specific_configs[assistant_id] = (
+                new_assistant_preference
+            )
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    update_assistant_preferences(
+        assistant_id, user.id, new_assistant_preference, db_session
     )
     db_session.commit()
+
+
+@router.get("/user/files/recent")
+def get_recent_files(
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> list[UserFileSnapshot]:
+    user_id = user.id if user is not None else None
+    user_files = (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == user_id)
+        .filter(UserFile.status != UserFileStatus.FAILED)
+        .filter(UserFile.status != UserFileStatus.DELETING)
+        .order_by(UserFile.last_accessed_at.desc())
+        .all()
+    )
+
+    return [UserFileSnapshot.from_model(user_file) for user_file in user_files]

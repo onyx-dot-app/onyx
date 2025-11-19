@@ -75,10 +75,10 @@ export function TagFilter({
           placeholder="Search tags..."
           value={filterValue}
           onChange={(e) => setFilterValue(e.target.value)}
-          className="border border-text-subtle w-full"
+          className="border border-neutral-200 dark:border-neutral-700 w-full"
         />
       </div>
-      <div className="space-y-1 border-t pt-2 border-t-text-subtle px-4 default-scrollbar w-full max-h-64 overflow-y-auto">
+      <div className="space-y-1 border-t pt-2 border-t-neutral-200 dark:border-t-neutral-700 px-4 default-scrollbar w-full max-h-64 overflow-y-auto">
         {filteredTags
           .sort((a, b) => a.tag_key.localeCompare(b.tag_key))
           .map((tag, index) => (

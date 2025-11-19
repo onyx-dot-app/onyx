@@ -1,5 +1,6 @@
 "use client";
 
+import { JSX } from "react";
 import "./styles.css";
 
 import * as RadixPopover from "@radix-ui/react-popover";

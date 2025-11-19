@@ -5,9 +5,11 @@ import {
   ErrorMessage,
   Field,
   FieldArray,
+  FastField,
   useField,
   useFormikContext,
 } from "formik";
+import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import * as Yup from "yup";
 import { FormBodyBuilder } from "./admin/connectors/types";
 import { StringOrNumberOption } from "@/components/Dropdown";
@@ -18,25 +20,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FiInfo, FiPlus, FiX } from "react-icons/fi";
-import {
-  TooltipProvider,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { FiInfo, FiX } from "react-icons/fi";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
-import { Button } from "@/components/ui/button";
-import { CheckboxField } from "@/components/ui/checkbox";
-import { CheckedState } from "@radix-ui/react-checkbox";
+import { Checkbox } from "@/components/ui/checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
 import { DatePicker } from "./ui/datePicker";
 import { Textarea, TextareaProps } from "./ui/textarea";
+import { RichTextSubtext } from "./RichTextSubtext";
+import {
+  TypedFile,
+  createTypedFile,
+  getFileTypeDefinitionForField,
+  FILE_TYPE_DEFINITIONS,
+} from "@/lib/connectors/fileTypes";
+import Text from "@/refresh-components/texts/Text";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
+
+import SvgEye from "@/icons/eye";
+import SvgEyeClosed from "@/icons/eye-closed";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 export function SectionHeader({
   children,
@@ -50,14 +57,17 @@ export function Label({
   children,
   small,
   className,
+  htmlFor,
 }: {
   children: string | JSX.Element;
   small?: boolean;
   className?: string;
+  htmlFor?: string;
 }) {
   return (
     <label
-      className={`block font-medium text-text-700 dark:text-neutral-100 ${className} ${
+      {...(htmlFor ? { htmlFor } : {})}
+      className={`block font-medium ${className} ${
         small ? "text-sm" : "text-base"
       }`}
     >
@@ -82,15 +92,34 @@ export function LabelWithTooltip({
 }
 
 export function SubLabel({ children }: { children: string | JSX.Element }) {
+  // Add whitespace-pre-wrap for multiline descriptions (when children is a string with newlines)
+  const hasNewlines = typeof children === "string" && children.includes("\n");
+
+  // If children is a string, use RichTextSubtext to parse and render links
+  if (typeof children === "string") {
+    return (
+      <span className="block text-sm text-text-03 mb-2">
+        <RichTextSubtext
+          text={children}
+          className={hasNewlines ? "whitespace-pre-wrap" : ""}
+        />
+      </span>
+    );
+  }
+
   return (
-    <div className="text-sm text-neutral-600 dark:text-neutral-300 mb-2">
+    <span
+      className={`block text-sm text-text-03 mb-2 ${
+        hasNewlines ? "whitespace-pre-wrap" : ""
+      }`}
+    >
       {children}
-    </div>
+    </span>
   );
 }
 
 export function ManualErrorMessage({ children }: { children: string }) {
-  return <div className="text-error text-sm">{children}</div>;
+  return <div className="text-action-danger-05 text-sm">{children}</div>;
 }
 
 export function ExplanationText({
@@ -109,26 +138,17 @@ export function ExplanationText({
       {text}
     </a>
   ) : (
-    <div className="text-sm font-semibold">{text}</div>
+    <Text text03 secondaryBody>
+      {text}
+    </Text>
   );
 }
 
-export function ToolTipDetails({
-  children,
-}: {
-  children: string | JSX.Element;
-}) {
+export function ToolTipDetails({ children }: { children: string }) {
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger type="button">
-          <FiInfo size={12} />
-        </TooltipTrigger>
-        <TooltipContent side="top" align="center">
-          {children}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <SimpleTooltip tooltip={children} side="top" align="center">
+      <FiInfo size={12} />
+    </SimpleTooltip>
   );
 }
 
@@ -171,7 +191,7 @@ export const FieldLabel = ({
           <ErrorMessage
             name={name}
             component="div"
-            className="text-error my-auto text-sm"
+            className="text-action-danger-05 my-auto text-sm"
           />
         )
       )}
@@ -207,6 +227,7 @@ export function TextFormField({
   width,
   vertical,
   className,
+  showPasswordToggle = false,
 }: {
   name: string;
   removeLabel?: boolean;
@@ -234,6 +255,7 @@ export function TextFormField({
   width?: string;
   vertical?: boolean;
   className?: string;
+  showPasswordToggle?: boolean;
 }) {
   let heightString = defaultHeight || "";
   if (isTextArea && !heightString) {
@@ -245,9 +267,10 @@ export function TextFormField({
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    setValue(e.target.value);
     if (onChange) {
       onChange(e as React.ChangeEvent<HTMLInputElement>);
+    } else {
+      setValue(e.target.value);
     }
   };
   const textSizeClasses = {
@@ -269,6 +292,9 @@ export function TextFormField({
   };
 
   const sizeClass = textSizeClasses[fontSize || "sm"];
+  const isPasswordField = type === "password";
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const effectiveType = isPasswordField && isPasswordVisible ? "text" : type;
 
   return (
     <div className={`w-full ${maxWidth} ${width}`}>
@@ -289,7 +315,7 @@ export function TextFormField({
           onChange={handleChange}
           min={min}
           as={isTextArea ? "textarea" : "input"}
-          type={type}
+          type={effectiveType}
           data-testid={name}
           name={name}
           id={name}
@@ -300,19 +326,15 @@ export function TextFormField({
             w-full
             rounded-md
             border
-            border-neutral-200
-            bg-white
             px-3
             py-2
             mt-1
-            text-base
-
             file:border-0
             file:bg-transparent
             file:text-sm
             file:font-medium
-            file:text-neutral-950
-            placeholder:text-neutral-500
+            file:text-text-05
+            placeholder:text-text-02
             placeholder:font-description
             placeholder:${sizeClass.placeholder}
             caret-accent
@@ -323,22 +345,38 @@ export function TextFormField({
             disabled:cursor-not-allowed
             disabled:opacity-50
             md:text-sm
-            dark:border-neutral-700
-            dark:bg-transparent
-            dark:ring-offset-neutral-950
-            dark:file:text-neutral-50
-            dark:placeholder:text-neutral-400
+            border-border-03
+            ring-offset-background-neutral-00
+            file:text-text-inverted-05
+            text-text-04
 
             ${heightString}
             ${sizeClass.input}
-            ${disabled ? "bg-neutral-100 dark:bg-neutral-800" : ""}
+            ${disabled ? "bg-background-neutral-02" : ""}
             ${isCode ? "font-mono" : ""}
             ${className}
+            bg-background-neutral-00
+            ${isPasswordField && showPasswordToggle ? "pr-10" : ""}
           `}
           disabled={disabled}
           placeholder={placeholder}
           autoComplete={autoCompleteDisabled ? "off" : undefined}
         />
+        {!isTextArea && isPasswordField && showPasswordToggle && (
+          <button
+            type="button"
+            aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+            className="absolute right-3 top-1/2 -translate-y-1/2 stroke-text-02 hover:stroke-text-03 mt-0.5"
+            onClick={() => setIsPasswordVisible((v) => !v)}
+            tabIndex={0}
+          >
+            {isPasswordVisible ? (
+              <SvgEye className="h-4 w-4" />
+            ) : (
+              <SvgEyeClosed className="h-4 w-4" />
+            )}
+          </button>
+        )}
       </div>
 
       {explanationText && (
@@ -377,6 +415,122 @@ export function FileUploadFormField({
     <div className="w-full">
       <FieldLabel name={name} label={label} subtext={subtext} />
       <FileInput name={fileName} multiple={false} hideError />
+    </div>
+  );
+}
+
+export function TypedFileUploadFormField({
+  name,
+  label,
+  subtext,
+}: {
+  name: string;
+  label: string;
+  subtext?: string | JSX.Element;
+}) {
+  const [field, , helpers] = useField<TypedFile | null>(name);
+  const [customError, setCustomError] = useState<string>("");
+  const [isValidating, setIsValidating] = useState(false);
+  const [description, setDescription] = useState<string>("");
+
+  useEffect(() => {
+    const typeDefinitionKey = getFileTypeDefinitionForField(name);
+    if (typeDefinitionKey) {
+      setDescription(
+        FILE_TYPE_DEFINITIONS[typeDefinitionKey].description || ""
+      );
+    }
+  }, [name]);
+
+  useEffect(() => {
+    const validateFile = async () => {
+      if (!field.value) {
+        setIsValidating(false);
+        return;
+      }
+
+      setIsValidating(true);
+
+      try {
+        const validation = await field.value.validate();
+        if (validation?.isValid) {
+          setCustomError("");
+        } else {
+          setCustomError(validation?.errors.join(", ") || "Unknown error");
+          helpers.setValue(null);
+        }
+      } catch (error) {
+        setCustomError(
+          error instanceof Error ? error.message : "Validation error"
+        );
+        helpers.setValue(null);
+      } finally {
+        setIsValidating(false);
+      }
+    };
+
+    validateFile();
+  }, [field.value, helpers]);
+
+  const handleFileSelection = async (files: File[]) => {
+    if (files.length === 0) {
+      helpers.setValue(null);
+      setCustomError("");
+      return;
+    }
+
+    const file = files[0];
+    if (!file) {
+      setCustomError("File selection error");
+      return;
+    }
+
+    const typeDefinitionKey = getFileTypeDefinitionForField(name);
+
+    if (!typeDefinitionKey) {
+      setCustomError(`No file type definition found for field: ${name}`);
+      return;
+    }
+
+    try {
+      const typedFile = createTypedFile(file, name, typeDefinitionKey);
+      helpers.setValue(typedFile);
+      setCustomError("");
+    } catch (error) {
+      setCustomError(error instanceof Error ? error.message : "Unknown error");
+      helpers.setValue(null);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  return (
+    <div className="w-full">
+      <FieldLabel name={name} label={label} subtext={subtext} />
+      {description && (
+        <div className="text-sm text-text-03 mb-2">{description}</div>
+      )}
+      <FileUpload
+        selectedFiles={field.value ? [field.value.file] : []}
+        setSelectedFiles={handleFileSelection}
+        multiple={false}
+      />
+      {/* Validation feedback */}
+      {isValidating && (
+        <div className="text-status-info-05 text-sm mt-1">
+          Validating file...
+        </div>
+      )}
+
+      {customError ? (
+        <div className="text-action-danger-05 text-sm mt-1">{customError}</div>
+      ) : (
+        <ErrorMessage
+          name={name}
+          component="div"
+          className="text-action-danger-05 text-sm mt-1"
+        />
+      )}
     </div>
   );
 }
@@ -427,7 +581,7 @@ export function MultiSelectField({
             <ErrorMessage
               name={name}
               component="div"
-              className="text-error my-auto text-sm"
+              className="text-action-danger-05 my-auto text-sm"
             />
           )
         )}
@@ -475,24 +629,22 @@ export const MarkdownFormField = ({
   return (
     <div className="flex flex-col space-y-4 mb-4">
       <Label>{label}</Label>
-      <div className="border border-background-300 rounded-md">
-        <div className="flex items-center justify-between px-4 py-2 bg-background-100 rounded-t-md">
+      <div className="border border-border-02 rounded-md">
+        <div className="flex items-center justify-between px-4 py-2 bg-background-neutral-02 rounded-t-md">
           <div className="flex items-center space-x-2">
-            <FaMarkdown className="text-text-500" />
-            <span className="text-sm font-semibold text-text-600">
-              Markdown
-            </span>
+            <FaMarkdown className="text-text-03" />
+            <span className="text-sm font-semibold text-text-04">Markdown</span>
           </div>
           <button
             type="button"
             onClick={togglePreview}
-            className="text-sm font-semibold text-text-600 hover:text-text-800 focus:outline-none"
+            className="text-sm font-semibold text-text-04 hover:text-text-05 focus:outline-none"
           >
             {isPreviewOpen ? "Write" : "Preview"}
           </button>
         </div>
         {isPreviewOpen ? (
-          <div className="p-4 border-t border-background-300">
+          <div className="p-4 border-t border-border-02">
             <ReactMarkdown
               className="prose dark:prose-invert"
               remarkPlugins={[remarkGfm]}
@@ -507,7 +659,7 @@ export const MarkdownFormField = ({
               {...field}
               rows={2}
               placeholder={placeholder}
-              className={`w-full p-2 border border-border rounded-md border-background-300`}
+              className={`w-full p-2 border border-border-02 rounded-md`}
             />
           </div>
         )}
@@ -518,7 +670,7 @@ export const MarkdownFormField = ({
         <ErrorMessage
           name={name}
           component="div"
-          className="text-red-500 text-sm mt-1"
+          className="text-action-danger-05 text-sm mt-1"
         />
       )}
     </div>
@@ -539,7 +691,7 @@ interface BooleanFormFieldProps {
   onChange?: (checked: boolean) => void;
 }
 
-export const BooleanFormField = ({
+export const BooleanFormField = memo(function BooleanFormField({
   name,
   label,
   subtext,
@@ -551,67 +703,62 @@ export const BooleanFormField = ({
   tooltip,
   disabledTooltip,
   onChange,
-}: BooleanFormFieldProps) => {
-  const { setFieldValue } = useFormikContext<any>();
-
-  const handleChange = useCallback(
-    (checked: CheckedState) => {
-      if (!disabled) {
-        setFieldValue(name, checked);
-      }
-      if (onChange) {
-        onChange(checked === true);
-      }
-    },
-    [disabled, name, setFieldValue, onChange]
-  );
+}: BooleanFormFieldProps) {
+  // Generate a stable, valid id from the field name for label association
+  const checkboxId = `checkbox-${name.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
   return (
     <div>
-      <label className="flex items-center text-sm cursor-pointer">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger>
-              <CheckboxField
-                name={name}
-                size="sm"
+      <div className="flex items-center text-sm">
+        <FastField name={name} type="checkbox">
+          {({ field, form }: any) => (
+            <SimpleTooltip
+              // This may seem confusing, but we only want to show the `disabledTooltip` if and only if the `BooleanFormField` is disabled.
+              // If it disabled, then we "enable" the showing of the tooltip. Thus, `disabled={!disabled}` is not a mistake.
+              disabled={!disabled}
+              tooltip={disabledTooltip}
+            >
+              <Checkbox
+                id={checkboxId}
                 className={`
-                  ${disabled ? "opacity-50" : ""}
-                  ${removeIndent ? "mr-2" : "mx-3"}`}
-                onCheckedChange={handleChange}
+                     ${disabled ? "opacity-50" : ""}
+                     ${removeIndent ? "mr-2" : "mx-3"}`}
+                checked={Boolean(field.value)}
+                onCheckedChange={(checked) => {
+                  if (!disabled) form.setFieldValue(name, checked === true);
+                  if (onChange) onChange(checked === true);
+                }}
               />
-            </TooltipTrigger>
-            {disabled && disabledTooltip && (
-              <TooltipContent side="top" align="center">
-                <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                  {disabledTooltip}
-                </p>
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
+            </SimpleTooltip>
+          )}
+        </FastField>
         {!noLabel && (
           <div>
             <div className="flex items-center gap-x-2">
-              <Label small={small}>{`${label}${
-                optional ? " (Optional)" : ""
-              }`}</Label>
+              <Label
+                htmlFor={checkboxId}
+                small={small}
+                className="cursor-pointer"
+              >{`${label}${optional ? " (Optional)" : ""}`}</Label>
               {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
             </div>
-
-            {subtext && <SubLabel>{subtext}</SubLabel>}
+            {subtext && (
+              <label htmlFor={checkboxId} className="cursor-pointer">
+                <SubLabel>{subtext}</SubLabel>
+              </label>
+            )}
           </div>
         )}
-      </label>
+      </div>
 
       <ErrorMessage
         name={name}
         component="div"
-        className="text-error text-sm mt-1"
+        className="text-action-danger-05 text-sm mt-1"
       />
     </div>
   );
-};
+});
 
 interface TextArrayFieldProps<T extends Yup.AnyObject> {
   name: string;
@@ -676,7 +823,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
                     <div className="my-auto">
                       {index >= minFields ? (
                         <FiX
-                          className="my-auto w-10 h-10 cursor-pointer hover:bg-accent-background-hovered rounded p-2"
+                          className="my-auto w-10 h-10 cursor-pointer hover:bg-background-neutral-02 rounded p-2"
                           onClick={() => {
                             if (!disabled) {
                               arrayHelpers.remove(index);
@@ -691,26 +838,22 @@ export function TextArrayField<T extends Yup.AnyObject>({
                   <ErrorMessage
                     name={`${name}.${index}`}
                     component="div"
-                    className="text-error text-sm mt-1"
+                    className="text-action-danger-05 text-sm mt-1"
                   />
                 </div>
               ))}
 
-            <Button
+            <CreateButton
               onClick={() => {
                 if (!disabled) {
                   arrayHelpers.push("");
                 }
               }}
-              className="mt-3 disabled:cursor-not-allowed"
-              variant="update"
-              size="sm"
               type="button"
-              icon={FiPlus}
               disabled={disabled}
             >
               Add New
-            </Button>
+            </CreateButton>
           </div>
         )}
       />
@@ -866,7 +1009,7 @@ export function SelectorFormField({
       <ErrorMessage
         name={name}
         component="div"
-        className="text-error text-sm mt-1"
+        className="text-action-danger-05 text-sm mt-1"
       />
     </div>
   );

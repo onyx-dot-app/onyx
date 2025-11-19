@@ -20,6 +20,23 @@ logger = setup_logger()
 _PUBLIC_MEMBERSHIP_TYPE = "standard"  # public teams channel
 
 
+def _sanitize_message_user_display_name(value: dict) -> dict:
+    try:
+        from_obj = value.get("from")
+        if isinstance(from_obj, dict):
+            user_obj = from_obj.get("user")
+            if isinstance(user_obj, dict) and user_obj.get("displayName") is None:
+                value = dict(value)
+                from_obj = dict(from_obj)
+                user_obj = dict(user_obj)
+                user_obj["displayName"] = "Unknown User"
+                from_obj["user"] = user_obj
+                value["from"] = from_obj
+    except (AttributeError, TypeError, KeyError):
+        pass
+    return value
+
+
 def _retry(
     graph_client: GraphClient,
     request_url: str,
@@ -117,7 +134,7 @@ def fetch_messages(
         json_response = _retry(graph_client=graph_client, request_url=request_url)
 
         for value in json_response.get("value", []):
-            yield Message(**value)
+            yield Message(**_sanitize_message_user_display_name(value))
 
         request_url = _get_next_url(
             graph_client=graph_client, json_response=json_response
@@ -140,7 +157,7 @@ def fetch_replies(
         json_response = _retry(graph_client=graph_client, request_url=request_url)
 
         for value in json_response.get("value", []):
-            yield Message(**value)
+            yield Message(**_sanitize_message_user_display_name(value))
 
         request_url = _get_next_url(
             graph_client=graph_client, json_response=json_response

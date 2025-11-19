@@ -47,15 +47,15 @@ logger = setup_logger()
 
 
 def _get_classification_extraction_instructions() -> (
-    dict[str, dict[str, KGEntityTypeInstructions]]
+    dict[str | None, dict[str, KGEntityTypeInstructions]]
 ):
     """
     Prepare the classification instructions for the given source.
     """
 
-    classification_instructions_dict: dict[str, dict[str, KGEntityTypeInstructions]] = (
-        {}
-    )
+    classification_instructions_dict: dict[
+        str | None, dict[str, KGEntityTypeInstructions]
+    ] = {}
 
     with get_session_with_current_tenant() as db_session:
         entity_types = get_entity_types(db_session, active=True)

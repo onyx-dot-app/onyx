@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import uuid
 from abc import ABC
@@ -6,6 +7,8 @@ from io import BytesIO
 from typing import Any
 from typing import cast
 from typing import IO
+from typing import NotRequired
+from typing import TypedDict
 
 import boto3
 import puremagic
@@ -20,6 +23,7 @@ from onyx.configs.app_configs import S3_AWS_SECRET_ACCESS_KEY
 from onyx.configs.app_configs import S3_ENDPOINT_URL
 from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
 from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
+from onyx.configs.app_configs import S3_GENERATE_LOCAL_CHECKSUM
 from onyx.configs.app_configs import S3_VERIFY_SSL
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -37,6 +41,10 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+class S3PutKwargs(TypedDict):
+    ChecksumSHA256: NotRequired[str]
 
 
 class FileStore(ABC):
@@ -320,20 +328,31 @@ class S3BackedFileStore(FileStore):
         bucket_name = self._get_bucket_name()
         s3_key = self._get_s3_key(file_id)
 
+        hash256 = ""
+        sha256_hash = hashlib.sha256()
+        kwargs: S3PutKwargs = {}
+
         # Read content from IO object
         if hasattr(content, "read"):
             file_content = content.read()
+            if S3_GENERATE_LOCAL_CHECKSUM:
+                data_bytes = str(file_content).encode()
+                sha256_hash.update(data_bytes)
+                hash256 = sha256_hash.hexdigest()  # get the sha256 has in hex format
+                kwargs["ChecksumSHA256"] = hash256
             if hasattr(content, "seek"):
                 content.seek(0)  # Reset position for potential re-reads
         else:
             file_content = content
 
         # Upload to S3
+
         s3_client.put_object(
             Bucket=bucket_name,
             Key=s3_key,
             Body=file_content,
             ContentType=file_type,
+            **kwargs,
         )
 
         with get_session_with_current_tenant_if_none(db_session) as db_session:
@@ -411,9 +430,20 @@ class S3BackedFileStore(FileStore):
 
                 # Delete from external storage
                 s3_client = self._get_s3_client()
-                s3_client.delete_object(
-                    Bucket=file_record.bucket_name, Key=file_record.object_key
-                )
+                try:
+                    s3_client.delete_object(
+                        Bucket=file_record.bucket_name, Key=file_record.object_key
+                    )
+                except ClientError as e:
+                    # If the object doesn't exist in file store, treat it as success
+                    # since the end goal (object not existing) is achieved
+                    if e.response.get("Error", {}).get("Code") == "NoSuchKey":
+                        logger.warning(
+                            f"delete_file: File {file_id} not found in file store (key: {file_record.object_key}), "
+                            "cleaning up database record."
+                        )
+                    else:
+                        raise
 
                 # Delete metadata from database
                 delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)

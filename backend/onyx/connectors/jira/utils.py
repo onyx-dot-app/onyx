@@ -10,6 +10,7 @@ from jira.resources import CustomFieldOption
 from jira.resources import Issue
 from jira.resources import User
 
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
 from onyx.connectors.models import BasicExpertInfo
 from onyx.utils.logger import setup_logger
 
@@ -17,7 +18,8 @@ logger = setup_logger()
 
 
 PROJECT_URL_PAT = "projects"
-JIRA_API_VERSION = os.environ.get("JIRA_API_VERSION") or "2"
+JIRA_SERVER_API_VERSION = os.environ.get("JIRA_SERVER_API_VERSION") or "2"
+JIRA_CLOUD_API_VERSION = os.environ.get("JIRA_CLOUD_API_VERSION") or "3"
 
 
 def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
@@ -63,6 +65,7 @@ def extract_text_from_adf(adf: dict | None) -> str:
 
     WARNING: This function is incomplete and will e.g. skip lists!
     """
+    # TODO: complete this function
     texts = []
     if adf is not None and "content" in adf:
         for block in adf["content"]:
@@ -73,11 +76,18 @@ def extract_text_from_adf(adf: dict | None) -> str:
     return " ".join(texts)
 
 
-def build_jira_url(jira_client: JIRA, issue_key: str) -> str:
-    return f"{jira_client.client_info()}/browse/{issue_key}"
+def build_jira_url(jira_base_url: str, issue_key: str) -> str:
+    """
+    Get the url used to access an issue in the UI.
+    """
+    return f"{jira_base_url}/browse/{issue_key}"
 
 
-def build_jira_client(credentials: dict[str, Any], jira_base: str) -> JIRA:
+def build_jira_client(
+    credentials: dict[str, Any], jira_base: str, scoped_token: bool = False
+) -> JIRA:
+
+    jira_base = scoped_url(jira_base, "jira") if scoped_token else jira_base
     api_token = credentials["jira_api_token"]
     # if user provide an email we assume it's cloud
     if "jira_user_email" in credentials:
@@ -85,13 +95,13 @@ def build_jira_client(credentials: dict[str, Any], jira_base: str) -> JIRA:
         return JIRA(
             basic_auth=(email, api_token),
             server=jira_base,
-            options={"rest_api_version": JIRA_API_VERSION},
+            options={"rest_api_version": JIRA_CLOUD_API_VERSION},
         )
     else:
         return JIRA(
             token_auth=api_token,
             server=jira_base,
-            options={"rest_api_version": JIRA_API_VERSION},
+            options={"rest_api_version": JIRA_SERVER_API_VERSION},
         )
 
 
@@ -119,11 +129,10 @@ def get_comment_strs(
     comment_strs = []
     for comment in issue.fields.comment.comments:
         try:
-            body_text = (
-                comment.body
-                if JIRA_API_VERSION == "2"
-                else extract_text_from_adf(comment.raw["body"])
-            )
+            if isinstance(comment.body, str):
+                body_text = comment.body
+            else:
+                body_text = extract_text_from_adf(comment.raw["body"])
 
             if (
                 hasattr(comment, "author")

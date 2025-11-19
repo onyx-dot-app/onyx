@@ -6,6 +6,7 @@ from langchain.schema.messages import HumanMessage
 from langchain.schema.messages import SystemMessage
 from pydantic import BaseModel
 
+from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.utils import build_content_with_imgs
@@ -25,6 +26,7 @@ class PreviousMessage(BaseModel):
     files: list[InMemoryChatFile]
     tool_call: ToolCallFinalResult | None
     refined_answer_improvement: bool | None
+    research_answer_purpose: ResearchAnswerPurpose | None
 
     @classmethod
     def from_chat_message(
@@ -52,7 +54,24 @@ class PreviousMessage(BaseModel):
                 else None
             ),
             refined_answer_improvement=chat_message.refined_answer_improvement,
+            research_answer_purpose=chat_message.research_answer_purpose,
         )
+
+    def to_agent_sdk_msg(self) -> dict:
+        message_type_to_agent_sdk_role = {
+            MessageType.USER: "user",
+            MessageType.SYSTEM: "system",
+            MessageType.ASSISTANT: "assistant",
+        }
+        # TODO: Use native format for files and images
+        content = build_content_with_imgs(self.message, self.files)
+        if self.message_type in message_type_to_agent_sdk_role:
+            role = message_type_to_agent_sdk_role[self.message_type]
+            return {
+                "role": role,
+                "content": content,
+            }
+        raise ValueError(f"Unknown message type: {self.message_type}")
 
     def to_langchain_msg(self) -> BaseMessage:
         content = build_content_with_imgs(self.message, self.files)
@@ -63,6 +82,7 @@ class PreviousMessage(BaseModel):
         else:
             return SystemMessage(content=content)
 
+    # TODO: deprecate langchain
     @classmethod
     def from_langchain_msg(
         cls, msg: BaseMessage, token_count: int
@@ -72,6 +92,7 @@ class PreviousMessage(BaseModel):
             message_type = MessageType.USER
         elif isinstance(msg, AIMessage):
             message_type = MessageType.ASSISTANT
+
         message = message_to_string(msg)
         return cls(
             message=message,
@@ -80,4 +101,5 @@ class PreviousMessage(BaseModel):
             files=[],
             tool_call=None,
             refined_answer_improvement=None,
+            research_answer_purpose=None,
         )

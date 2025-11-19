@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import FileOrigin
 from onyx.db.models import ChatMessage
 from onyx.db.models import UserFile
-from onyx.db.models import UserFolder
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
@@ -23,12 +22,12 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 logger = setup_logger()
 
 
-def user_file_id_to_plaintext_file_name(user_file_id: int) -> str:
+def user_file_id_to_plaintext_file_name(user_file_id: UUID) -> str:
     """Generate a consistent file name for storing plaintext content of a user file."""
     return f"plaintext_{user_file_id}"
 
 
-def store_user_file_plaintext(user_file_id: int, plaintext_content: str) -> bool:
+def store_user_file_plaintext(user_file_id: UUID, plaintext_content: str) -> bool:
     """
     Store plaintext content for a user file in the file store.
 
@@ -46,7 +45,6 @@ def store_user_file_plaintext(user_file_id: int, plaintext_content: str) -> bool
     # Get plaintext file name
     plaintext_file_name = user_file_id_to_plaintext_file_name(user_file_id)
 
-    # Use a separate session to avoid committing the caller's transaction
     try:
         file_store = get_default_file_store()
         file_content = BytesIO(plaintext_content.encode("utf-8"))
@@ -94,14 +92,7 @@ def load_all_chat_files(
     return files
 
 
-def load_user_folder(folder_id: int, db_session: Session) -> list[InMemoryChatFile]:
-    user_files = (
-        db_session.query(UserFile).filter(UserFile.folder_id == folder_id).all()
-    )
-    return [load_user_file(file.id, db_session) for file in user_files]
-
-
-def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
+def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
     chat_file_type = ChatFileType.USER_KNOWLEDGE
     status = "not_loaded"
 
@@ -128,6 +119,11 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
             if chat_file_type != ChatFileType.IMAGE
             else chat_file_type
         )
+
+        # if we have plaintext for image (which happens when image extraction is enabled), we use PLAIN_TEXT type
+        if file_io is not None:
+            plaintext_chat_file_type = ChatFileType.PLAIN_TEXT
+
         chat_file = InMemoryChatFile(
             file_id=str(user_file.file_id),
             content=file_io.read(),
@@ -158,17 +154,15 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
 
 
 def load_in_memory_chat_files(
-    user_file_ids: list[int],
-    user_folder_ids: list[int],
+    user_file_ids: list[UUID],
     db_session: Session,
 ) -> list[InMemoryChatFile]:
     """
     Loads the actual content of user files specified by individual IDs and those
-    within specified folder IDs into memory.
+    within specified project IDs into memory.
 
     Args:
         user_file_ids: A list of specific UserFile IDs to load.
-        user_folder_ids: A list of UserFolder IDs. All UserFiles within these folders will be loaded.
         db_session: The SQLAlchemy database session.
 
     Returns:
@@ -181,32 +175,24 @@ def load_in_memory_chat_files(
         run_functions_tuples_in_parallel(
             # 1. Load files specified by individual IDs
             [(load_user_file, (file_id, db_session)) for file_id in user_file_ids]
-        )
-        # 2. Load all files within specified folders
-        + [
-            file
-            for folder_id in user_folder_ids
-            for file in load_user_folder(folder_id, db_session)
-        ],
+        ),
     )
 
 
 def get_user_files(
-    user_file_ids: list[int],
-    user_folder_ids: list[int],
+    user_file_ids: list[UUID],
     db_session: Session,
 ) -> list[UserFile]:
     """
-    Fetches UserFile database records based on provided file and folder IDs.
+    Fetches UserFile database records based on provided file and project IDs.
 
     Args:
         user_file_ids: A list of specific UserFile IDs to fetch.
-        user_folder_ids: A list of UserFolder IDs. All UserFiles within these folders will be fetched.
         db_session: The SQLAlchemy database session.
 
     Returns:
         A list containing UserFile SQLAlchemy model objects corresponding to the
-        specified file IDs and all files within the specified folder IDs.
+        specified file IDs and all files within the specified project IDs.
         It does NOT return the actual file content.
     """
     user_files: list[UserFile] = []
@@ -221,30 +207,20 @@ def get_user_files(
         if user_file is not None:
             user_files.append(user_file)
 
-    # 2. Fetch UserFile records for all files within specified folder IDs
-    for user_folder_id in user_folder_ids:
-        # Query the database for all UserFiles belonging to the current folder ID
-        # and extend the list with the results
-        user_files.extend(
-            db_session.query(UserFile)
-            .filter(UserFile.folder_id == user_folder_id)
-            .all()
-        )
-
     # 3. Return the combined list of UserFile database objects
     return user_files
 
 
 def get_user_files_as_user(
-    user_file_ids: list[int],
-    user_folder_ids: list[int],
+    user_file_ids: list[UUID],
     user_id: UUID | None,
     db_session: Session,
 ) -> list[UserFile]:
     """
     Fetches all UserFile database records for a given user.
     """
-    user_files = get_user_files(user_file_ids, user_folder_ids, db_session)
+    user_files = get_user_files(user_file_ids, db_session)
+    current_user_files = []
     for user_file in user_files:
         # Note: if user_id is None, then all files should be None as well
         # (since auth must be disabled in this case)
@@ -252,7 +228,9 @@ def get_user_files_as_user(
             raise ValueError(
                 f"User {user_id} does not have access to file {user_file.id}"
             )
-    return user_files
+        current_user_files.append(user_file)
+
+    return current_user_files
 
 
 def save_file_from_url(url: str) -> str:
@@ -322,37 +300,5 @@ def save_files(urls: list[str], base64_files: list[str]) -> list[str]:
     return run_functions_tuples_in_parallel(funcs)
 
 
-def load_all_persona_files_for_chat(
-    persona_id: int, db_session: Session
-) -> tuple[list[InMemoryChatFile], list[int]]:
-    from onyx.db.models import Persona
-    from sqlalchemy.orm import joinedload
-
-    persona = (
-        db_session.query(Persona)
-        .filter(Persona.id == persona_id)
-        .options(
-            joinedload(Persona.user_files),
-            joinedload(Persona.user_folders).joinedload(UserFolder.files),
-        )
-        .one()
-    )
-
-    persona_file_calls = [
-        (load_user_file, (user_file.id, db_session)) for user_file in persona.user_files
-    ]
-    persona_loaded_files = run_functions_tuples_in_parallel(persona_file_calls)
-
-    persona_folder_files = []
-    persona_folder_file_ids = []
-    for user_folder in persona.user_folders:
-        folder_files = load_user_folder(user_folder.id, db_session)
-        persona_folder_files.extend(folder_files)
-        persona_folder_file_ids.extend([file.id for file in user_folder.files])
-
-    persona_files = list(persona_loaded_files) + persona_folder_files
-    persona_file_ids = [
-        file.id for file in persona.user_files
-    ] + persona_folder_file_ids
-
-    return persona_files, persona_file_ids
+def build_frontend_file_url(file_id: str) -> str:
+    return f"/api/chat/file/{file_id}"

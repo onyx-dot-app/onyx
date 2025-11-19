@@ -420,7 +420,15 @@ def reset_all() -> None:
 
 
 def reset_all_multitenant() -> None:
-    """Reset both Postgres and Vespa for all tenants."""
+    """Reset both Postgres and Vespa for all tenants.
+
+    Honors SKIP_RESET env var to allow callers (e.g., CI) to disable
+    heavy resets entirely for faster end-to-end runs.
+    """
+    if os.environ.get("SKIP_RESET", "").lower() == "true":
+        logger.info("SKIPPING multitenant reset due to SKIP_RESET=true")
+        return
+
     logger.info("Resetting Postgres for all tenants...")
     reset_postgres_multitenant()
     logger.info("Resetting Vespa for all tenants...")

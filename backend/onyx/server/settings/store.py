@@ -1,5 +1,6 @@
 from onyx.configs.app_configs import DISABLE_USER_KNOWLEDGE
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
+from onyx.configs.app_configs import SHOW_EXTRA_CONNECTORS
 from onyx.configs.constants import KV_SETTINGS_KEY
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.key_value_store.factory import get_kv_store
@@ -53,6 +54,7 @@ def load_settings() -> Settings:
     if DISABLE_USER_KNOWLEDGE:
         settings.user_knowledge_enabled = False
 
+    settings.show_extra_connectors = SHOW_EXTRA_CONNECTORS
     return settings
 
 

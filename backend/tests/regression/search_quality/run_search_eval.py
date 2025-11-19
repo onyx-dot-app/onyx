@@ -438,7 +438,6 @@ class SearchAnswerAnalyzer:
                 enable_auto_detect_filters=False,
                 limit=self.config.max_search_results,
             ),
-            return_contexts=True,
             skip_gen_ai_answer_generation=self.config.search_only,
         )
 

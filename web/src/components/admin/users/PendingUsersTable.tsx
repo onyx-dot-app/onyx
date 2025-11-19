@@ -11,11 +11,12 @@ import CenteredPageSelector from "./CenteredPageSelector";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { InvitedUserSnapshot } from "@/lib/types";
 import { TableHeader } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { FetchError } from "@/lib/fetcher";
 import { CheckIcon } from "lucide-react";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import SvgCheck from "@/icons/check";
 
 const USERS_PER_PAGE = 10;
 
@@ -96,10 +97,8 @@ const PendingUsersTable = ({
           onClose={() => setUserToApprove(null)}
           onSubmit={() => handleAcceptRequest(userToApprove)}
           actionButtonText="Approve"
-          actionText="approve the join request of"
+          action="approve the join request of"
           additionalDetails={`${userToApprove} has requested to join the team. Approving will add them as a user in this team.`}
-          variant="action"
-          accent
           removeConfirmationText
         />
       )}
@@ -120,11 +119,10 @@ const PendingUsersTable = ({
                 <TableCell>
                   <div className="flex justify-end">
                     <Button
-                      variant="outline"
-                      size="sm"
+                      secondary
                       onClick={() => setUserToApprove(user.email)}
+                      leftIcon={SvgCheck}
                     >
-                      <CheckIcon className="h-4 w-4" />
                       Accept Join Request
                     </Button>
                   </div>

@@ -8,17 +8,6 @@ export interface StarterMessage extends StarterMessageBase {
   name: string;
 }
 
-export interface Prompt {
-  id: number;
-  name: string;
-  description: string;
-  system_prompt: string;
-  task_prompt: string;
-  include_citations: boolean;
-  datetime_aware: boolean;
-  default_prompt: boolean;
-}
-
 export interface MinimalPersonaSnapshot {
   id: number;
   name: string;
@@ -44,16 +33,19 @@ export interface MinimalPersonaSnapshot {
 }
 
 export interface Persona extends MinimalPersonaSnapshot {
-  user_file_ids: number[];
-  user_folder_ids: number[];
+  user_file_ids: string[];
   users: MinimalUserSnapshot[];
   groups: number[];
   num_chunks?: number;
+
+  // Embedded prompt fields on persona
+  system_prompt: string | null;
+  task_prompt: string | null;
+  datetime_aware: boolean;
 }
 
 export interface FullPersona extends Persona {
   search_start_date: Date | null;
-  prompts: Prompt[];
   llm_relevance_filter?: boolean;
   llm_filter_extraction?: boolean;
 }

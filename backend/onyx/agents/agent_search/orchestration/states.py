@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from onyx.chat.prompt_builder.answer_prompt_builder import PromptSnapshot
+from onyx.chat.prompt_builder.schemas import PromptSnapshot
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolCallFinalResult

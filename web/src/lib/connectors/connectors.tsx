@@ -300,6 +300,70 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  bitbucket: {
+    description: "Configure Bitbucket connector",
+    subtext:
+      "Configure Bitbucket connector (Cloud only). You can index a workspace, specific projects or repositories.",
+    values: [
+      {
+        type: "text",
+        label: "Workspace",
+        name: "workspace",
+        optional: false,
+        description: `The Bitbucket workspace to index (e.g., "atlassian" from https://bitbucket.org/atlassian/workspace ).`,
+      },
+      {
+        type: "tab",
+        name: "bitbucket_mode",
+        label: "What should be indexed from Bitbucket?",
+        optional: true,
+        tabs: [
+          {
+            value: "repo",
+            label: "Specific Repositories",
+            fields: [
+              {
+                type: "text",
+                label: "Repository Slugs",
+                name: "repositories",
+                optional: false,
+                description:
+                  "For multiple repositories, enter comma-separated slugs (e.g., repo1,repo2,repo3)",
+              },
+            ],
+          },
+          {
+            value: "project",
+            label: "Project(s)",
+            fields: [
+              {
+                type: "text",
+                label: "Project Key(s)",
+                name: "projects",
+                optional: false,
+                description:
+                  "One or more Bitbucket Project Keys (comma-separated) to index all repositories in those projects (e.g., PROJ1,PROJ2)",
+              },
+            ],
+          },
+          {
+            value: "workspace",
+            label: "Workspace",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Workspace",
+                name: "workspace_tab",
+                description:
+                  "This connector will index all repositories in the workspace.",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    advanced_values: [],
+  },
   gitbook: {
     description: "Configure GitBook connector",
     values: [
@@ -421,10 +485,18 @@ export const connectorConfigs: Record<
         optional: true,
         default: "",
         isTextArea: true,
+        visibleCondition: (values, currentCredential) =>
+          !currentCredential?.credential_json?.google_tokens,
+      },
+      {
+        type: "checkbox",
+        label: "Hide domain link-only files?",
+        description:
+          "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access.",
+        name: "exclude_domain_link_only",
+        default: false,
       },
     ],
-    advancedValuesVisibleCondition: (values, currentCredential) =>
-      !currentCredential?.credential_json?.google_tokens,
   },
   gmail: {
     description: "Configure Gmail connector",
@@ -433,6 +505,11 @@ export const connectorConfigs: Record<
   },
   bookstack: {
     description: "Configure Bookstack connector",
+    values: [],
+    advanced_values: [],
+  },
+  outline: {
+    description: "Configure Outline connector",
     values: [],
     advanced_values: [],
   },
@@ -473,6 +550,14 @@ export const connectorConfigs: Record<
         },
         description:
           "The base URL of your Confluence instance (e.g., https://your-domain.atlassian.net/wiki)",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
       },
       {
         type: "tab",
@@ -542,7 +627,7 @@ export const connectorConfigs: Record<
                 name: "cql_query",
                 default: "",
                 description:
-                  "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/ for more details.",
+                  "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See Atlassian's [CQL documentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) for more details.",
               },
             ],
           },
@@ -564,6 +649,14 @@ export const connectorConfigs: Record<
         optional: false,
         description:
           "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
       },
       {
         type: "tab",
@@ -598,6 +691,22 @@ export const connectorConfigs: Record<
               },
             ],
           },
+          {
+            value: "jql",
+            label: "JQL Query",
+            fields: [
+              {
+                type: "text",
+                query: "Enter the JQL query:",
+                label: "JQL Query",
+                name: "jql_query",
+                description:
+                  "A custom JQL query to filter Jira issues." +
+                  "\n\nIMPORTANT: Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses." +
+                  "\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax.",
+              },
+            ],
+          },
         ],
         defaultTab: "everything",
       },
@@ -617,14 +726,55 @@ export const connectorConfigs: Record<
     description: "Configure Salesforce connector",
     values: [
       {
-        type: "list",
-        query: "Enter requested objects:",
-        label: "Requested Objects",
-        name: "requested_objects",
+        type: "tab",
+        name: "salesforce_config_type",
+        label: "Configuration Type",
         optional: true,
-        description: `Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Onyx will default to indexing by 'Account'.
-
-Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of 'Opportunities').`,
+        tabs: [
+          {
+            value: "simple",
+            label: "Simple",
+            fields: [
+              {
+                type: "list",
+                query: "Enter requested objects:",
+                label: "Requested Objects",
+                name: "requested_objects",
+                optional: true,
+                description:
+                  "Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Onyx will default to indexing by 'Account'." +
+                  "\n\nHint: Use the singular form of the object name (e.g., 'Opportunity' instead of 'Opportunities').",
+              },
+            ],
+          },
+          {
+            value: "advanced",
+            label: "Advanced",
+            fields: [
+              {
+                type: "text",
+                query: "Enter custom query config:",
+                label: "Custom Query Config",
+                name: "custom_query_config",
+                optional: true,
+                isTextArea: true,
+                description:
+                  "Enter a JSON configuration that precisely defines which fields and child objects to index. This gives you complete control over the data structure." +
+                  "\n\nExample:" +
+                  "\n{" +
+                  '\n  "Account": {' +
+                  '\n    "fields": ["Id", "Name", "Industry"],' +
+                  '\n    "associations": {' +
+                  '\n      "Contact": ["Id", "FirstName", "LastName", "Email"]' +
+                  "\n    }" +
+                  "\n  }" +
+                  "\n}" +
+                  "\n\n[See our docs](https://docs.onyx.app/admin/connectors/official/salesforce) for more details.",
+              },
+            ],
+          },
+        ],
+        defaultTab: "simple",
       },
     ],
     advanced_values: [],
@@ -639,14 +789,33 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
         name: "sites",
         optional: true,
         description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
-
-• Specifying 'https://onyxai.sharepoint.com/sites/support' for example will only index documents within this site.
-
-• Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example will only index documents within this folder.
+• Specifying 'https://onyxai.sharepoint.com/sites/support' for example only indexes this site.
+• Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example only indexes this folder.
 `,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Index Documents:",
+        label: "Index Documents",
+        name: "include_site_documents",
+        optional: true,
+        default: true,
+        description:
+          "Index documents of all SharePoint libraries or folders defined above.",
+      },
+      {
+        type: "checkbox",
+        query: "Index ASPX Sites:",
+        label: "Index ASPX Sites",
+        name: "include_site_pages",
+        optional: true,
+        default: true,
+        description:
+          "Index aspx-pages of all SharePoint sites defined above, even if a library or folder is specified.",
+      },
+    ],
   },
   teams: {
     description: "Configure Teams connector",
@@ -944,7 +1113,16 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         default: "articles",
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "number",
+        label: "API Calls per Minute",
+        name: "calls_per_minute",
+        optional: true,
+        description:
+          "Restricts how many Zendesk API calls this connector can make per minute (applies only to this connector). See defaults: https://developer.zendesk.com/api-reference/introduction/rate-limits/",
+      },
+    ],
   },
   linear: {
     description: "Configure Linear connector",
@@ -1001,6 +1179,15 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         label: "Prefix",
         name: "prefix",
         optional: true,
+      },
+      {
+        type: "checkbox",
+        label: "EU Data Residency",
+        name: "european_residency",
+        description:
+          "Check this box if your bucket has EU data residency enabled.",
+        optional: true,
+        default: false,
       },
       {
         type: "text",
@@ -1519,6 +1706,12 @@ export interface GitlabConfig {
   include_issues: boolean;
 }
 
+export interface BitbucketConfig {
+  workspace: string;
+  repositories?: string;
+  projects?: string;
+}
+
 export interface GoogleDriveConfig {
   include_shared_drives?: boolean;
   shared_drive_urls?: string;
@@ -1530,6 +1723,8 @@ export interface GoogleDriveConfig {
 export interface GmailConfig {}
 
 export interface BookstackConfig {}
+
+export interface OutlineConfig {}
 
 export interface ConfluenceConfig {
   wiki_base: string;
@@ -1544,6 +1739,7 @@ export interface JiraConfig {
   jira_project_url: string;
   project_key?: string;
   comment_email_blacklist?: string[];
+  jql_query?: string;
 }
 
 export interface SalesforceConfig {
@@ -1552,6 +1748,8 @@ export interface SalesforceConfig {
 
 export interface SharepointConfig {
   sites?: string[];
+  include_site_pages?: boolean;
+  include_site_documents?: boolean;
 }
 
 export interface TeamsConfig {
@@ -1632,7 +1830,10 @@ export interface XenforoConfig {
   base_url: string;
 }
 
-export interface ZendeskConfig {}
+export interface ZendeskConfig {
+  content_type?: "articles" | "tickets";
+  calls_per_minute?: number;
+}
 
 export interface DropboxConfig {}
 
@@ -1646,6 +1847,7 @@ export interface R2Config {
   bucket_type: "r2";
   bucket_name: string;
   prefix: string;
+  european_residency?: boolean;
 }
 
 export interface GCSConfig {

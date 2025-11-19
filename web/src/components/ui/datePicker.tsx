@@ -1,5 +1,4 @@
-import { FiCalendar } from "react-icons/fi";
-import { Button } from "./button";
+import Button from "@/refresh-components/buttons/Button";
 import Text from "./text";
 import { Calendar } from "./calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
@@ -11,6 +10,7 @@ import {
   SelectValue,
 } from "./select";
 import { useState } from "react";
+import SvgCalendar from "@/icons/calendar";
 
 export interface DatePickerProps {
   selectedDate: Date | null;
@@ -43,8 +43,8 @@ export function DatePicker({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          icon={FiCalendar}
-          variant="outline"
+          leftIcon={SvgCalendar}
+          secondary
           className="px-6 w-[150px] disabled:cursor-not-allowed"
           disabled={disabled}
         >
@@ -96,7 +96,7 @@ export function DatePicker({
           fromMonth={new Date(validStartYear, 0)}
         />
         <Button
-          variant="outline"
+          secondary
           onClick={() => {
             setSelectedDate(null);
             onClear?.();

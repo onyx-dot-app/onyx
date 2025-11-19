@@ -1,10 +1,14 @@
 import platform
+import re
 import socket
 from enum import auto
 from enum import Enum
 
+
 ONYX_DEFAULT_APPLICATION_NAME = "EEA GPT Lab"
-ONYX_SLACK_URL = "https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
+ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"
+SLACK_USER_TOKEN_PREFIX = "xoxp-"
+SLACK_BOT_TOKEN_PREFIX = "xoxb-"
 ONYX_EMAILABLE_LOGO_MAX_DIM = 512
 
 SOURCE_TYPE = "source_type"
@@ -17,7 +21,6 @@ GEN_AI_API_KEY_STORAGE_KEY = "genai_api_key"
 PUBLIC_DOC_PAT = "PUBLIC"
 ID_SEPARATOR = ":;:"
 DEFAULT_BOOST = 0
-SESSION_KEY = "session"
 
 # Cookies
 # Currently a constant, but logic allows for configuration
@@ -44,13 +47,17 @@ DISABLED_GEN_AI_MSG = (
     "You can still use Onyx as a search engine."
 )
 
+#####
+# Version Pattern Configs
+#####
+# Version patterns for Docker image tags
+STABLE_VERSION_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+DEV_VERSION_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)-beta\.(\d+)$")
 
 DEFAULT_PERSONA_ID = 0
 DEFAULT_CC_PAIR_ID = 1
 
-# subquestion level and question number for basic flow
-BASIC_KEY = (-1, -1)
-AGENT_SEARCH_INITIAL_KEY = (0, 0)
+
 CANCEL_CHECK_INTERVAL = 20
 DISPATCH_SEP_CHAR = "\n"
 FORMAT_DOCS_SEPARATOR = "\n\n"
@@ -62,15 +69,16 @@ POSTGRES_CELERY_APP_NAME = "celery"
 POSTGRES_CELERY_BEAT_APP_NAME = "celery_beat"
 POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME = "celery_worker_primary"
 POSTGRES_CELERY_WORKER_LIGHT_APP_NAME = "celery_worker_light"
-POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
 POSTGRES_CELERY_WORKER_DOCPROCESSING_APP_NAME = "celery_worker_docprocessing"
 POSTGRES_CELERY_WORKER_DOCFETCHING_APP_NAME = "celery_worker_docfetching"
-POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
-
-# Postgres connection constants for application_name
-
 POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME = "celery_worker_indexing_child"
+POSTGRES_CELERY_WORKER_BACKGROUND_APP_NAME = "celery_worker_background"
+POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
 POSTGRES_CELERY_WORKER_KG_PROCESSING_APP_NAME = "celery_worker_kg_processing"
+POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
+POSTGRES_CELERY_WORKER_USER_FILE_PROCESSING_APP_NAME = (
+    "celery_worker_user_file_processing"
+)
 POSTGRES_PERMISSIONS_APP_NAME = "permissions"
 POSTGRES_UNKNOWN_APP_NAME = "unknown"
 
@@ -87,6 +95,7 @@ KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
 KV_PENDING_USERS_KEY = "PENDING_USERS"
 KV_NO_AUTH_USER_PREFERENCES_KEY = "no_auth_user_preferences"
+KV_NO_AUTH_USER_PERSONALIZATION_KEY = "no_auth_user_personalization"
 KV_CRED_KEY = "credential_id_{}"
 KV_GMAIL_CRED_KEY = "gmail_app_credential"
 KV_GMAIL_SERVICE_ACCOUNT_KEY = "gmail_service_account_key"
@@ -98,7 +107,6 @@ KV_CUSTOMER_UUID_KEY = "customer_uuid"
 KV_INSTANCE_DOMAIN_KEY = "instance_domain"
 KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
-KV_DOCUMENTS_SEEDED_KEY = "documents_seeded"
 KV_KG_CONFIG_KEY = "kg_config"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
@@ -107,7 +115,6 @@ CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
 
-CELERY_USER_FILE_FOLDER_SYNC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 
@@ -138,7 +145,16 @@ CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
 CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = 300  # 5 min
 
+# Doc ID migration can be long-running; use a longer TTL and renew periodically
+CELERY_USER_FILE_DOCID_MIGRATION_LOCK_TIMEOUT = 10 * 60  # 10 minutes (in seconds)
+
+CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
+
+CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
+
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
+
+TMP_DRALPHA_PERSONA_NAME = "KG Beta"
 
 
 class DocumentSource(str, Enum):
@@ -154,6 +170,7 @@ class DocumentSource(str, Enum):
     GITLAB = "gitlab"
     GURU = "guru"
     BOOKSTACK = "bookstack"
+    OUTLINE = "outline"
     CONFLUENCE = "confluence"
     JIRA = "jira"
     SLAB = "slab"
@@ -192,9 +209,12 @@ class DocumentSource(str, Enum):
     HIGHSPOT = "highspot"
 
     IMAP = "imap"
+    BITBUCKET = "bitbucket"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
+    # Special case for user files
+    USER_FILE = "user_file"
 
 
 
@@ -221,9 +241,6 @@ class BlobType(str, Enum):
     S3 = "s3"
     GOOGLE_CLOUD_STORAGE = "google_cloud_storage"
     OCI_STORAGE = "oci_storage"
-
-    # Special case, for internet search
-    NOT_APPLICABLE = "not_applicable"
 
 
 class DocumentIndexType(str, Enum):
@@ -294,6 +311,7 @@ class FileOrigin(str, Enum):
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
+    USER_FILE = "user_file"
 
 
 class FileType(str, Enum):
@@ -329,7 +347,7 @@ class OnyxCeleryQueues:
     CONNECTOR_DELETION = "connector_deletion"
     LLM_MODEL_UPDATE = "llm_model_update"
     CHECKPOINT_CLEANUP = "checkpoint_cleanup"
-
+    INDEX_ATTEMPT_CLEANUP = "index_attempt_cleanup"
     # Heavy queue
     CONNECTOR_PRUNING = "connector_pruning"
     CONNECTOR_DOC_PERMISSIONS_SYNC = "connector_doc_permissions_sync"
@@ -339,6 +357,10 @@ class OnyxCeleryQueues:
     # Indexing queue
     USER_FILES_INDEXING = "user_files_indexing"
 
+    # User file processing queue
+    USER_FILE_PROCESSING = "user_file_processing"
+    USER_FILE_PROJECT_SYNC = "user_file_project_sync"
+    USER_FILE_DELETE = "user_file_delete"
     # Document processing pipeline queue
     DOCPROCESSING = "docprocessing"
     CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
@@ -357,9 +379,14 @@ class OnyxRedisLocks:
     CHECK_PRUNE_BEAT_LOCK = "da_lock:check_prune_beat"
     CHECK_INDEXING_BEAT_LOCK = "da_lock:check_indexing_beat"
     CHECK_CHECKPOINT_CLEANUP_BEAT_LOCK = "da_lock:check_checkpoint_cleanup_beat"
-    CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = "da_lock:check_connector_doc_permissions_sync_beat"
-    CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = "da_lock:check_connector_external_group_sync_beat"
-    CHECK_USER_FILE_FOLDER_SYNC_BEAT_LOCK = "da_lock:check_user_file_folder_sync_beat"
+    CHECK_INDEX_ATTEMPT_CLEANUP_BEAT_LOCK = "da_lock:check_index_attempt_cleanup_beat"
+    CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = (
+        "da_lock:check_connector_doc_permissions_sync_beat"
+    )
+    CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = (
+        "da_lock:check_connector_external_group_sync_beat"
+    )
+
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
@@ -378,6 +405,15 @@ class OnyxRedisLocks:
 
     # KG processing
     KG_PROCESSING_LOCK = "da_lock:kg_processing"
+
+    # User file processing
+    USER_FILE_PROCESSING_BEAT_LOCK = "da_lock:check_user_file_processing_beat"
+    USER_FILE_PROCESSING_LOCK_PREFIX = "da_lock:user_file_processing"
+    USER_FILE_PROJECT_SYNC_BEAT_LOCK = "da_lock:check_user_file_project_sync_beat"
+    USER_FILE_PROJECT_SYNC_LOCK_PREFIX = "da_lock:user_file_project_sync"
+    USER_FILE_DELETE_BEAT_LOCK = "da_lock:check_user_file_delete_beat"
+    USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
+    USER_FILE_DOCID_MIGRATION_LOCK = "da_lock:user_file_docid_migration"
 
 
 class OnyxRedisSignals:
@@ -425,8 +461,6 @@ class OnyxCeleryTask:
     CLOUD_CHECK_AVAILABLE_TENANTS = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_available_tenants"
     CLOUD_MONITOR_CELERY_PIDBOX = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_pidbox"
 
-    UPDATE_USER_FILE_FOLDER_METADATA = "update_user_file_folder_metadata"
-
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
     CHECK_FOR_INDEXING = "check_for_indexing"
@@ -434,11 +468,22 @@ class OnyxCeleryTask:
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
-    CHECK_FOR_USER_FILE_FOLDER_SYNC = "check_for_user_file_folder_sync"
+
+    # User file processing
+    CHECK_FOR_USER_FILE_PROCESSING = "check_for_user_file_processing"
+    PROCESS_SINGLE_USER_FILE = "process_single_user_file"
+    CHECK_FOR_USER_FILE_PROJECT_SYNC = "check_for_user_file_project_sync"
+    PROCESS_SINGLE_USER_FILE_PROJECT_SYNC = "process_single_user_file_project_sync"
+    CHECK_FOR_USER_FILE_DELETE = "check_for_user_file_delete"
+    DELETE_SINGLE_USER_FILE = "delete_single_user_file"
 
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
     CLEANUP_CHECKPOINT = "cleanup_checkpoint"
+
+    # Connector index attempt cleanup
+    CHECK_FOR_INDEX_ATTEMPT_CLEANUP = "check_for_index_attempt_cleanup"
+    CLEANUP_INDEX_ATTEMPT = "cleanup_index_attempt"
 
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
@@ -463,12 +508,15 @@ class OnyxCeleryTask:
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
     VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
+    USER_FILE_DOCID_MIGRATION = "user_file_docid_migration"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     PERFORM_TTL_MANAGEMENT_TASK = "perform_ttl_management_task"
 
-    AUTOGENERATE_USAGE_REPORT_TASK = "autogenerate_usage_report_task"
+    GENERATE_USAGE_REPORT_TASK = "generate_usage_report_task"
+
+    EVAL_RUN_TASK = "eval_run_task"
 
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"
@@ -497,3 +545,63 @@ else:
 class OnyxCallTypes(str, Enum):
     FIREFLIES = "FIREFLIES"
     GONG = "GONG"
+
+
+NUM_DAYS_TO_KEEP_CHECKPOINTS = 7
+# checkpoints are queried based on index attempts, so we need to keep index attempts for one more day
+NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS = NUM_DAYS_TO_KEEP_CHECKPOINTS + 1
+
+# TODO: this should be stored likely in database
+DocumentSourceDescription: dict[DocumentSource, str] = {
+    # Special case, document passed in via Onyx APIs without specifying a source type
+    DocumentSource.INGESTION_API: "ingestion_api",
+    DocumentSource.SLACK: "slack channels for discussions and collaboration",
+    DocumentSource.WEB: "indexed web pages",
+    DocumentSource.GOOGLE_DRIVE: "google drive documents (docs, sheets, etc.)",
+    DocumentSource.GMAIL: "email messages",
+    DocumentSource.REQUESTTRACKER: "requesttracker",
+    DocumentSource.GITHUB: "github data (issues, PRs)",
+    DocumentSource.GITBOOK: "gitbook data",
+    DocumentSource.GITLAB: "gitlab data",
+    DocumentSource.BITBUCKET: "bitbucket data",
+    DocumentSource.GURU: "guru data",
+    DocumentSource.BOOKSTACK: "bookstack data",
+    DocumentSource.OUTLINE: "outline data",
+    DocumentSource.CONFLUENCE: "confluence data (pages, spaces, etc.)",
+    DocumentSource.JIRA: "jira data (issues, tickets, projects, etc.)",
+    DocumentSource.SLAB: "slab data",
+    DocumentSource.PRODUCTBOARD: "productboard data (boards, etc.)",
+    DocumentSource.FILE: "files",
+    DocumentSource.NOTION: "notion data - a workspace that combines note-taking, \
+project management, and collaboration tools into a single, customizable platform",
+    DocumentSource.ZULIP: "zulip data",
+    DocumentSource.LINEAR: "linear data - project management tool, including tickets etc.",
+    DocumentSource.HUBSPOT: "hubspot data - CRM and marketing automation data",
+    DocumentSource.DOCUMENT360: "document360 data",
+    DocumentSource.GONG: "gong - call transcripts",
+    DocumentSource.GOOGLE_SITES: "google_sites - websites",
+    DocumentSource.ZENDESK: "zendesk - customer support data",
+    DocumentSource.LOOPIO: "loopio - rfp data",
+    DocumentSource.DROPBOX: "dropbox - files",
+    DocumentSource.SHAREPOINT: "sharepoint - files",
+    DocumentSource.TEAMS: "teams - chat and collaboration",
+    DocumentSource.SALESFORCE: "salesforce - CRM data",
+    DocumentSource.DISCOURSE: "discourse - discussion forums",
+    DocumentSource.AXERO: "axero - employee engagement data",
+    DocumentSource.CLICKUP: "clickup - project management tool",
+    DocumentSource.MEDIAWIKI: "mediawiki - wiki data",
+    DocumentSource.WIKIPEDIA: "wikipedia - encyclopedia data",
+    DocumentSource.ASANA: "asana",
+    DocumentSource.S3: "s3",
+    DocumentSource.R2: "r2",
+    DocumentSource.GOOGLE_CLOUD_STORAGE: "google_cloud_storage - cloud storage",
+    DocumentSource.OCI_STORAGE: "oci_storage - cloud storage",
+    DocumentSource.XENFORO: "xenforo - forum data",
+    DocumentSource.DISCORD: "discord - chat and collaboration",
+    DocumentSource.FRESHDESK: "freshdesk - customer support data",
+    DocumentSource.FIREFLIES: "fireflies - call transcripts",
+    DocumentSource.EGNYTE: "egnyte - files",
+    DocumentSource.AIRTABLE: "airtable - database",
+    DocumentSource.HIGHSPOT: "highspot - CRM data",
+    DocumentSource.IMAP: "imap - email data",
+}

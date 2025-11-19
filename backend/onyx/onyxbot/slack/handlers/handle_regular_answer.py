@@ -9,17 +9,16 @@ from slack_sdk import WebClient
 from slack_sdk.models.blocks import SectionBlock
 
 from onyx.chat.chat_utils import prepare_chat_message_request
-from onyx.chat.models import ChatOnyxBotResponse
-from onyx.chat.process_message import gather_stream_for_slack
+from onyx.chat.models import ChatBasicResponse
+from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.onyxbot_configs import DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER
-from onyx.configs.onyxbot_configs import DANSWER_BOT_DISPLAY_ERROR_MSGS
-from onyx.configs.onyxbot_configs import DANSWER_BOT_NUM_RETRIES
-from onyx.configs.onyxbot_configs import DANSWER_FOLLOWUP_EMOJI
-from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
+from onyx.configs.onyxbot_configs import ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER
+from onyx.configs.onyxbot_configs import ONYX_BOT_DISPLAY_ERROR_MSGS
+from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
+from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import RetrievalDetails
@@ -71,25 +70,25 @@ def handle_regular_answer(
     channel: str,
     logger: OnyxLoggingAdapter,
     feedback_reminder_id: str | None,
-    num_retries: int = DANSWER_BOT_NUM_RETRIES,
+    num_retries: int = ONYX_BOT_NUM_RETRIES,
     thread_context_percent: float = MAX_THREAD_CONTEXT_PERCENTAGE,
-    should_respond_with_error_msgs: bool = DANSWER_BOT_DISPLAY_ERROR_MSGS,
-    disable_docs_only_answer: bool = DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER,
+    should_respond_with_error_msgs: bool = ONYX_BOT_DISPLAY_ERROR_MSGS,
+    disable_docs_only_answer: bool = ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER,
 ) -> bool:
     channel_conf = slack_channel_config.channel_config
 
     messages = message_info.thread_messages
 
     message_ts_to_respond_to = message_info.msg_to_respond
-    is_bot_msg = message_info.is_bot_msg
+    is_slash_command = message_info.is_slash_command
 
     # Capture whether response mode for channel is ephemeral. Even if the channel is set
     # to respond with an ephemeral message, we still send as non-ephemeral if
     # the message is a dm with the Onyx bot.
     send_as_ephemeral = (
         slack_channel_config.channel_config.get("is_ephemeral", False)
-        and not message_info.is_bot_dm
-    )
+        or message_info.is_slash_command
+    ) and not message_info.is_bot_dm
 
     # If the channel mis configured to respond with an ephemeral message,
     # or the message is a dm to the Onyx bot, we should use the proper onyx user from the email.
@@ -114,7 +113,6 @@ def handle_regular_answer(
     )
 
     document_set_names: list[str] | None = None
-    prompt = None
     # If no persona is specified, use the default search based persona
     # This way slack flow always has a persona
     persona = slack_channel_config.persona
@@ -124,12 +122,10 @@ def handle_regular_answer(
             document_set_names = [
                 document_set.name for document_set in persona.document_sets
             ]
-            prompt = persona.prompts[0] if persona.prompts else None
     else:
         document_set_names = [
             document_set.name for document_set in persona.document_sets
         ]
-        prompt = persona.prompts[0] if persona.prompts else None
 
     with get_session_with_current_tenant() as db_session:
         expecting_search_result = persona_has_search_tool(persona.id, db_session)
@@ -164,7 +160,7 @@ def handle_regular_answer(
     # in an attached document set were available to all users in the channel.)
     bypass_acl = False
 
-    if not message_ts_to_respond_to and not is_bot_msg:
+    if not message_ts_to_respond_to and not is_slash_command:
         # if the message is not "/onyx" command, then it should have a message ts to respond to
         raise RuntimeError(
             "No message timestamp to respond to in `handle_message`. This should never happen."
@@ -180,7 +176,7 @@ def handle_regular_answer(
         new_message_request: CreateChatMessageRequest,
         # pass in `None` to make the answer based on public documents only
         onyx_user: User | None,
-    ) -> ChatOnyxBotResponse:
+    ) -> ChatBasicResponse:
         with get_session_with_current_tenant() as db_session:
             packets = stream_chat_message_objects(
                 new_msg_req=new_message_request,
@@ -189,8 +185,7 @@ def handle_regular_answer(
                 bypass_acl=bypass_acl,
                 single_message_history=single_message_history,
             )
-
-            answer = gather_stream_for_slack(packets)
+            answer = gather_stream(packets)
 
         if answer.error_msg:
             raise RuntimeError(answer.error_msg)
@@ -228,11 +223,11 @@ def handle_regular_answer(
                 persona_id=persona.id,
                 # This is not used in the Slack flow, only in the answer API
                 persona_override_config=None,
-                prompt=prompt,
                 message_ts_to_respond_to=message_ts_to_respond_to,
                 retrieval_details=retrieval_details,
                 rerank_settings=None,  # Rerank customization supported in Slack flow
                 db_session=db_session,
+                slack_context=message_info.slack_context,  # Pass Slack context from message_info
             )
 
         # if it's a DM or ephemeral message, answer based on private documents.
@@ -262,7 +257,7 @@ def handle_regular_answer(
 
         # In case of failures, don't keep the reaction there permanently
         update_emote_react(
-            emoji=DANSWER_REACT_EMOJI,
+            emoji=ONYX_BOT_REACT_EMOJI,
             channel=message_info.channel_to_respond,
             message_ts=message_info.msg_to_respond,
             remove=True,
@@ -316,36 +311,16 @@ def handle_regular_answer(
             return True
 
     # Got an answer at this point, can remove reaction and give results
-    update_emote_react(
-        emoji=DANSWER_REACT_EMOJI,
-        channel=message_info.channel_to_respond,
-        message_ts=message_info.msg_to_respond,
-        remove=True,
-        client=client,
-    )
-
-    if answer.answer_valid is False:
-        logger.notice(
-            "Answer was evaluated to be invalid, throwing it away without responding."
-        )
+    if not is_slash_command:  # Slash commands don't have reactions
         update_emote_react(
-            emoji=DANSWER_FOLLOWUP_EMOJI,
+            emoji=ONYX_BOT_REACT_EMOJI,
             channel=message_info.channel_to_respond,
             message_ts=message_info.msg_to_respond,
-            remove=False,
+            remove=True,
             client=client,
         )
 
-        if answer.answer:
-            logger.debug(answer.answer)
-        return True
-
-    retrieval_info = answer.docs
-    if not retrieval_info and expecting_search_result:
-        # This should not happen, even with no docs retrieved, there is still info returned
-        raise RuntimeError("Failed to retrieve docs, cannot answer question.")
-
-    top_docs = retrieval_info.top_documents if retrieval_info else []
+    top_docs = answer.top_documents
     if not top_docs and expecting_search_result:
         logger.error(
             f"Unable to answer question: '{user_message}' - no documents found"
@@ -366,7 +341,7 @@ def handle_regular_answer(
     if not answer.answer and disable_docs_only_answer:
         logger.notice(
             "Unable to find answer - not responding since the "
-            "`DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER` env variable is set"
+            "`ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER` env variable is set"
         )
         return True
 
@@ -378,7 +353,7 @@ def handle_regular_answer(
     if (
         expecting_search_result
         and only_respond_if_citations
-        and not answer.citations
+        and not answer.cited_documents
         and not message_info.bypass_filters
     ):
         logger.error(

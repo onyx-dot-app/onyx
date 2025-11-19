@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import {
   ConfigurableSources,
   CredentialSchemaResponse,
@@ -11,14 +11,13 @@ import {
 } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Loader2, Trash2Icon, Info } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
 import Title from "@/components/ui/title";
-import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,13 +26,12 @@ import {
 import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
 import { FiSettings } from "react-icons/fi";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+
 import { Badge } from "@/components/ui/badge";
+import SvgLoader from "@/icons/loader";
+import SvgSettings from "@/icons/settings";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;
@@ -473,19 +471,15 @@ export function FederatedConnectorForm({
             <Badge variant="outline" className="text-xs">
               Federated
             </Badge>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="cursor-help" size={16} />
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-sm">
-                  <p className="text-xs">
-                    {sourceMetadata.federatedTooltip ||
-                      "This is a federated connector. It will result in greater latency and lower search quality compared to regular connectors."}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <SimpleTooltip
+              tooltip={
+                sourceMetadata.federatedTooltip ||
+                "This is a federated connector. It will result in greater latency and lower search quality compared to regular connectors."
+              }
+              side="bottom"
+            >
+              <Info className="cursor-help" size={16} />
+            </SimpleTooltip>
           </div>
         </div>
 
@@ -493,14 +487,11 @@ export function FederatedConnectorForm({
           <div className="ml-auto flex gap-x-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-x-1"
-                >
-                  <FiSettings className="h-4 w-4" />
-                  <span className="text-sm ml-1">Manage</span>
-                </Button>
+                <div>
+                  <Button secondary className="flex" leftIcon={SvgSettings}>
+                    Manage
+                  </Button>
+                </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItemWithTooltip
@@ -547,35 +538,26 @@ export function FederatedConnectorForm({
 
               <Button
                 type="button"
-                variant="outline"
+                secondary
                 onClick={handleValidateCredentials}
                 disabled={isValidating || !formState.schema}
-                className="flex items-center gap-2 self-center ml-auto"
+                className="flex ml-auto"
               >
-                {isValidating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Validating...
-                  </>
-                ) : (
-                  "Validate"
-                )}
+                {isValidating ? "Validating..." : "Validate"}
               </Button>
               <Button
                 type="submit"
                 disabled={isSubmitting || !formState.schema}
-                className="flex items-center gap-2 self-center"
+                className="flex"
+                leftIcon={isSubmitting ? SimpleLoader : undefined}
               >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {isEditMode ? "Updating..." : "Creating..."}
-                  </>
-                ) : isEditMode ? (
-                  "Update"
-                ) : (
-                  "Create"
-                )}
+                {isSubmitting
+                  ? isEditMode
+                    ? "Updating..."
+                    : "Creating..."
+                  : isEditMode
+                    ? "Update"
+                    : "Create"}
               </Button>
             </div>
           </form>

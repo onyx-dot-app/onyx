@@ -1,7 +1,5 @@
-from collections import OrderedDict
 from collections.abc import Callable
 from collections.abc import Iterator
-from collections.abc import Mapping
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -12,6 +10,7 @@ from typing import Union
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -19,21 +18,32 @@ from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import RetrievalDocs
+from onyx.context.search.models import SavedSearchDoc
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import PromptOverride
+from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import SubQuestionIdentifier
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
 if TYPE_CHECKING:
-    from onyx.db.models import Prompt
+    from onyx.db.models import Persona
+
+
+# We need this value to be a constant instead of None to avoid JSON serialization issues
+DOCUMENT_CITATION_NUMBER_EMPTY_VALUE = -1
 
 
 class LlmDoc(BaseModel):
     """This contains the minimal set information for the LLM portion including citations"""
 
+    # This is kind of cooked. We're overloading this field as both a "catch all" for identifying
+    # an LLM doc as well as a way to connect the LlmDoc to the DB. For internal search, it will
+    # be an id for the db but not for web search.
     document_id: str
     content: str
     blurb: str
@@ -44,46 +54,7 @@ class LlmDoc(BaseModel):
     link: str | None
     source_links: dict[int, str] | None
     match_highlights: list[str] | None
-
-
-class SubQuestionIdentifier(BaseModel):
-    """None represents references to objects in the original flow. To our understanding,
-    these will not be None in the packets returned from agent search.
-    """
-
-    level: int | None = None
-    level_question_num: int | None = None
-
-    @staticmethod
-    def make_dict_by_level(
-        original_dict: Mapping[tuple[int, int], "SubQuestionIdentifier"],
-    ) -> dict[int, list["SubQuestionIdentifier"]]:
-        """returns a dict of level to object list (sorted by level_question_num)
-        Ordering is asc for readability.
-        """
-
-        # organize by level, then sort ascending by question_index
-        level_dict: dict[int, list[SubQuestionIdentifier]] = {}
-
-        # group by level
-        for k, obj in original_dict.items():
-            level = k[0]
-            if level not in level_dict:
-                level_dict[level] = []
-            level_dict[level].append(obj)
-
-        # for each level, sort the group
-        for k2, value2 in level_dict.items():
-            # we need to handle the none case due to SubQuestionIdentifier typing
-            # level_question_num as int | None, even though it should never be None here.
-            level_dict[k2] = sorted(
-                value2,
-                key=lambda x: (x.level_question_num is None, x.level_question_num),
-            )
-
-        # sort by level
-        sorted_dict = OrderedDict(sorted(level_dict.items()))
-        return sorted_dict
+    document_citation_number: int | None = DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 
 
 # First chunk of info for streaming QA
@@ -135,10 +106,6 @@ class LLMRelevanceFilterResponse(BaseModel):
     llm_selected_doc_indices: list[int]
 
 
-class FinalUsedContextDocsResponse(BaseModel):
-    final_context_docs: list[LlmDoc]
-
-
 class RelevanceAnalysis(BaseModel):
     relevant: bool
     content: str | None = None
@@ -164,11 +131,6 @@ class OnyxAnswerPiece(BaseModel):
 
 # An intermediate representation of citations, later translated into
 # a mapping of the citation [n] number to SearchDoc
-class CitationInfo(SubQuestionIdentifier):
-    citation_num: int
-    document_id: str
-
-
 class AllCitations(BaseModel):
     citations: list[CitationInfo]
 
@@ -184,15 +146,6 @@ class MessageResponseIDInfo(BaseModel):
     reserved_assistant_message_id: int
 
 
-class AgentMessageIDInfo(BaseModel):
-    level: int
-    message_id: int
-
-
-class AgenticMessageResponseIDInfo(BaseModel):
-    agentic_message_ids: list[AgentMessageIDInfo]
-
-
 class StreamingError(BaseModel):
     error: str
     stack_trace: str | None = None
@@ -206,16 +159,6 @@ class ThreadMessage(BaseModel):
     message: str
     sender: str | None = None
     role: MessageType = MessageType.USER
-
-
-class ChatOnyxBotResponse(BaseModel):
-    answer: str | None = None
-    citations: list[CitationInfo] | None = None
-    docs: QADocsResponse | None = None
-    llm_selected_doc_indices: list[int] | None = None
-    error_msg: str | None = None
-    chat_message_id: int | None = None
-    answer_valid: bool = True  # Reflexion result, default True if Reflexion not run
 
 
 class FileChatDisplay(BaseModel):
@@ -236,8 +179,8 @@ class PromptOverrideConfig(BaseModel):
     description: str = ""
     system_prompt: str
     task_prompt: str = ""
-    include_citations: bool = True
     datetime_aware: bool = True
+    include_citations: bool = True
 
 
 class PersonaOverrideConfig(BaseModel):
@@ -252,7 +195,7 @@ class PersonaOverrideConfig(BaseModel):
     llm_model_version_override: str | None = None
 
     prompts: list[PromptOverrideConfig] = Field(default_factory=list)
-    prompt_ids: list[int] = Field(default_factory=list)
+    # Note: prompt_ids removed - prompts are now embedded in personas
 
     document_set_ids: list[int] = Field(default_factory=list)
     tools: list[ToolConfig] = Field(default_factory=list)
@@ -331,25 +274,52 @@ class PromptConfig(BaseModel):
     """Final representation of the Prompt configuration passed
     into the `PromptBuilder` object."""
 
-    system_prompt: str
-    task_prompt: str
+    default_behavior_system_prompt: str
+    custom_instructions: str | None
+    reminder: str
     datetime_aware: bool
-    include_citations: bool
 
     @classmethod
     def from_model(
-        cls, model: "Prompt", prompt_override: PromptOverride | None = None
+        cls,
+        model: "Persona",
+        db_session: Session,
+        prompt_override: PromptOverride | None = None,
     ) -> "PromptConfig":
+        from onyx.db.persona import get_default_behavior_persona
+
+        # Get the default persona's system prompt
+        default_persona = get_default_behavior_persona(db_session)
+        default_behavior_system_prompt = (
+            default_persona.system_prompt
+            if default_persona and default_persona.system_prompt
+            else ""
+        )
+
+        # If this persona IS the default assistant, custom_instruction should be None
+        # Otherwise, it should be the persona's system_prompt
+        custom_instruction = None
+        if not model.is_default_persona:
+            custom_instruction = model.system_prompt or None
+
+        # Handle prompt overrides
         override_system_prompt = (
             prompt_override.system_prompt if prompt_override else None
         )
         override_task_prompt = prompt_override.task_prompt if prompt_override else None
 
+        # If there's an override, apply it to the appropriate field
+        if override_system_prompt:
+            if model.is_default_persona:
+                default_behavior_system_prompt = override_system_prompt
+            else:
+                custom_instruction = override_system_prompt
+
         return cls(
-            system_prompt=override_system_prompt or model.system_prompt,
-            task_prompt=override_task_prompt or model.task_prompt,
+            default_behavior_system_prompt=default_behavior_system_prompt,
+            custom_instructions=custom_instruction,
+            reminder=override_task_prompt or model.task_prompt or "",
             datetime_aware=model.datetime_aware,
-            include_citations=model.include_citations,
         )
 
     model_config = ConfigDict(frozen=True)
@@ -387,10 +357,6 @@ AgentSearchPacket = Union[
     | RefinedAnswerImprovement
 ]
 
-AnswerPacket = (
-    AnswerQuestionPossibleReturn | AgentSearchPacket | ToolCallKickoff | ToolResponse
-)
-
 
 ResponsePart = (
     OnyxAnswerPiece
@@ -402,12 +368,20 @@ ResponsePart = (
     | AgentSearchPacket
 )
 
-AnswerStream = Iterator[AnswerPacket]
+AnswerStreamPart = (
+    Packet
+    | StreamStopInfo
+    | MessageResponseIDInfo
+    | StreamingError
+    | UserKnowledgeFilePacket
+)
+
+AnswerStream = Iterator[AnswerStreamPart]
 
 
 class AnswerPostInfo(BaseModel):
     ai_message_files: list[FileDescriptor]
-    qa_docs_response: QADocsResponse | None = None
+    rephrased_query: str | None = None
     reference_db_search_docs: list[DbSearchDoc] | None = None
     dropped_indices: list[int] | None = None
     tool_result: ToolCallFinalResult | None = None
@@ -417,15 +391,14 @@ class AnswerPostInfo(BaseModel):
         arbitrary_types_allowed = True
 
 
-class SubQuestionKey(BaseModel):
-    level: int
-    question_num: int
+class ChatBasicResponse(BaseModel):
+    # This is built piece by piece, any of these can be None as the flow could break
+    answer: str
+    answer_citationless: str
 
-    def __hash__(self) -> int:
-        return hash((self.level, self.question_num))
+    top_documents: list[SavedSearchDoc]
 
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, SubQuestionKey) and (
-            self.level,
-            self.question_num,
-        ) == (other.level, other.question_num)
+    error_msg: str | None
+    message_id: int
+    # this is a map of the citation number to the document id
+    cited_documents: dict[int, str]

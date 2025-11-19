@@ -85,7 +85,7 @@ def process_run_in_background(
     db_session: Session,
 ) -> None:
     # Get the latest message in the chat session
-    chat_session = get_chat_session_by_id(
+    _ = get_chat_session_by_id(
         chat_session_id=chat_session_id,
         user_id=user.id if user else None,
         db_session=db_session,
@@ -106,7 +106,6 @@ def process_run_in_background(
         parent_message_id=int(parent_message_id) if parent_message_id else None,
         message=instructions,
         file_descriptors=[],
-        prompt_id=chat_session.persona.prompts[0].id,
         search_doc_ids=None,
         retrieval_options=search_tool_retrieval_details,  # Adjust as needed
         rerank_settings=None,
@@ -184,7 +183,6 @@ def create_run(
         chat_session_id=chat_session.id,
         parent_message=latest_message,
         message="",
-        prompt_id=chat_session.persona.prompts[0].id,
         token_count=0,
         message_type=MessageType.ASSISTANT,
         db_session=db_session,

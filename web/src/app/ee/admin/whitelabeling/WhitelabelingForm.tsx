@@ -12,7 +12,7 @@ import {
   SubLabel,
   TextFormField,
 } from "@/components/Field";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import Text from "@/components/ui/text";
 import { ImageUpload } from "./ImageUpload";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
@@ -158,8 +158,7 @@ export function WhitelabelingForm() {
                   />
 
                   <Button
-                    variant="destructive"
-                    size="sm"
+                    danger
                     type="button"
                     className="mb-8"
                     onClick={async () => {
@@ -203,7 +202,9 @@ export function WhitelabelingForm() {
                 <Text>
                   Read{" "}
                   <Link
-                    href={"https://docs.onyx.app/enterprise_edition/theming"}
+                    href={
+                      "https://docs.onyx.app/admin/advanced_configs/white_labeling"
+                    }
                     className="text-link cursor-pointer"
                   >
                     the docs
@@ -302,8 +303,7 @@ export function WhitelabelingForm() {
                       />
 
                       <Button
-                        variant="destructive"
-                        size="sm"
+                        danger
                         type="button"
                         className="mb-8"
                         onClick={async () => {

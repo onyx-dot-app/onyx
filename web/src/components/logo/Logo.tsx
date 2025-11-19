@@ -2,7 +2,7 @@
 
 import { useContext } from "react";
 import { SettingsContext } from "../settings/SettingsProvider";
-import { OnyxIcon, OnyxLogoTypeIcon } from "../icons/icons";
+import { OnyxIcon } from "../icons/icons";
 
 export function Logo({
   height,
@@ -54,18 +54,5 @@ export function Logo({
         style={{ objectFit: "contain", height, width }}
       />
     </div>
-  );
-}
-
-export function LogoType({
-  size = "default",
-}: {
-  size?: "small" | "default" | "large";
-}) {
-  return (
-    <OnyxLogoTypeIcon
-      size={115}
-      className={`items-center w-full dark:text-[#fff]`}
-    />
   );
 }

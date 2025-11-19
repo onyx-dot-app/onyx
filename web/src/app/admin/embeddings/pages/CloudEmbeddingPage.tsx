@@ -11,6 +11,7 @@ import {
   EmbeddingProvider,
   LITELLM_CLOUD_PROVIDER,
   AZURE_CLOUD_PROVIDER,
+  getFormattedProviderName,
 } from "../../../../components/embedding/interfaces";
 import { EmbeddingDetails } from "../EmbeddingModelSelectionForm";
 import { FiExternalLink, FiInfo, FiTrash } from "react-icons/fi";
@@ -109,7 +110,7 @@ export default function CloudEmbeddingPage({
             <div className="flex items-center mb-2">
               {provider.icon({ size: 40 })}
               <h2 className="ml-2  mt-2 text-xl font-bold">
-                {provider.provider_type}{" "}
+                {getFormattedProviderName(provider.provider_type)}{" "}
                 {provider.provider_type == EmbeddingProvider.COHERE &&
                   "(recommended)"}
               </h2>
@@ -141,7 +142,7 @@ export default function CloudEmbeddingPage({
             <div className="flex flex-wrap gap-4">
               {provider.embedding_models.map((model) => (
                 <CloudModelCard
-                  key={model.model_name}
+                  key={`${provider.provider_type}-${model.model_name}`}
                   model={model}
                   provider={provider}
                   currentModel={currentModel}
@@ -173,7 +174,7 @@ export default function CloudEmbeddingPage({
           <div className="flex items-center mb-2">
             {LITELLM_CLOUD_PROVIDER.icon({ size: 40 })}
             <h2 className="ml-2  mt-2 text-xl font-bold">
-              {LITELLM_CLOUD_PROVIDER.provider_type}{" "}
+              {getFormattedProviderName(LITELLM_CLOUD_PROVIDER.provider_type)}{" "}
               {LITELLM_CLOUD_PROVIDER.provider_type ==
                 EmbeddingProvider.COHERE && "(recommended)"}
             </h2>
@@ -240,9 +241,12 @@ export default function CloudEmbeddingPage({
                         model.provider_type ===
                         EmbeddingProvider.LITELLM.toLowerCase()
                     )
-                    .map((model) => (
+                    .map((model, index) => (
                       <CloudModelCard
-                        key={model.model_name}
+                        key={
+                          model.id ??
+                          `${model.provider_type}-${model.model_name}-${index}`
+                        }
                         model={model}
                         provider={LITELLM_CLOUD_PROVIDER}
                         currentModel={currentModel}
@@ -286,7 +290,7 @@ export default function CloudEmbeddingPage({
           <div className="flex items-center mb-2">
             {AZURE_CLOUD_PROVIDER.icon({ size: 40 })}
             <h2 className="ml-2  mt-2 text-xl font-bold">
-              {AZURE_CLOUD_PROVIDER.provider_type}{" "}
+              {getFormattedProviderName(AZURE_CLOUD_PROVIDER.provider_type)}{" "}
             </h2>
             <HoverPopup
               mainContent={
@@ -422,10 +426,22 @@ export function CloudModelCard({
 }) {
   const { popup, setPopup } = usePopup();
   const [showDeleteModel, setShowDeleteModel] = useState(false);
-  const enabled =
+  const modelId = typeof model.id === "number" ? model.id : null;
+  const currentModelId =
+    typeof currentModel.id === "number" ? currentModel.id : null;
+
+  const idsMatch =
+    modelId !== null && currentModelId !== null && modelId === currentModelId;
+
+  const shouldCompareNames = modelId === null || currentModelId === null;
+
+  const namesMatch =
+    shouldCompareNames &&
     model.model_name === currentModel.model_name &&
-    model.provider_type?.toLowerCase() ==
+    model.provider_type?.toLowerCase() ===
       currentModel.provider_type?.toLowerCase();
+
+  const enabled = idsMatch || namesMatch;
 
   const deleteModel = async () => {
     if (!model.id) {

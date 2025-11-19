@@ -65,12 +65,12 @@ from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import BATCH_SIZE
 from onyx.document_index.vespa_constants import BOOST
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
+from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import NUM_THREADS
-from onyx.document_index.vespa_constants import USER_FILE
-from onyx.document_index.vespa_constants import USER_FOLDER
+from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
 from onyx.document_index.vespa_constants import YQL_BASE
@@ -767,13 +767,14 @@ class VespaIndex(DocumentIndex):
             if fields.hidden is not None:
                 update_dict["fields"][HIDDEN] = {"assign": fields.hidden}
 
-        if user_fields is not None:
-            if user_fields.user_file_id is not None:
-                update_dict["fields"][USER_FILE] = {"assign": user_fields.user_file_id}
+            # document_id update is added only for migration purposes, ideally we should not be updating this field
+            if fields.document_id is not None:
+                update_dict["fields"][DOCUMENT_ID] = {"assign": fields.document_id}
 
-            if user_fields.user_folder_id is not None:
-                update_dict["fields"][USER_FOLDER] = {
-                    "assign": user_fields.user_folder_id
+        if user_fields is not None:
+            if user_fields.user_projects is not None:
+                update_dict["fields"][USER_PROJECT] = {
+                    "assign": user_fields.user_projects
                 }
 
         if not update_dict["fields"]:
@@ -1063,7 +1064,7 @@ class VespaIndex(DocumentIndex):
         *,
         tenant_id: str,
         index_name: str,
-    ) -> None:
+    ) -> int:
         """
         Deletes all entries in the specified index with the given tenant_id.
 
@@ -1073,6 +1074,9 @@ class VespaIndex(DocumentIndex):
         Parameters:
             tenant_id (str): The tenant ID whose documents are to be deleted.
             index_name (str): The name of the index from which to delete documents.
+
+        Returns:
+            int: The number of documents deleted.
         """
         logger.info(
             f"Deleting entries with tenant_id: {tenant_id} from index: {index_name}"
@@ -1085,7 +1089,7 @@ class VespaIndex(DocumentIndex):
             logger.info(
                 f"No documents found with tenant_id: {tenant_id} in index: {index_name}"
             )
-            return
+            return 0
 
         # Step 2: Delete documents in batches
         delete_requests = [
@@ -1094,6 +1098,7 @@ class VespaIndex(DocumentIndex):
         ]
 
         cls._apply_deletes_batched(delete_requests)
+        return len(document_ids)
 
     @classmethod
     def _get_all_document_ids_by_tenant_id(

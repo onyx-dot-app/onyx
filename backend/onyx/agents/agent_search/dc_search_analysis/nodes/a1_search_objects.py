@@ -14,12 +14,10 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     trim_prompt_piece,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
-from onyx.configs.constants import DocumentSource
 from onyx.prompts.agents.dc_prompts import DC_OBJECT_NO_BASE_DATA_EXTRACTION_PROMPT
 from onyx.prompts.agents.dc_prompts import DC_OBJECT_SEPARATOR
 from onyx.prompts.agents.dc_prompts import DC_OBJECT_WITH_BASE_DATA_EXTRACTION_PROMPT
+from onyx.secondary_llm_flows.source_filter import strings_to_document_sources
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -41,7 +39,7 @@ def search_objects(
         raise ValueError("Search tool and persona must be provided for DivCon search")
 
     try:
-        instructions = graph_config.inputs.persona.prompts[0].system_prompt
+        instructions = graph_config.inputs.persona.system_prompt or ""
 
         agent_1_instructions = extract_section(
             instructions, "Agent Step 1:", "Agent Step 2:"
@@ -63,10 +61,12 @@ def search_objects(
         if agent_1_independent_sources_str is None:
             raise ValueError("Agent 1 Independent Research Sources not found")
 
-        document_sources = [
-            DocumentSource(x.strip().lower())
-            for x in agent_1_independent_sources_str.split(DC_OBJECT_SEPARATOR)
-        ]
+        document_sources = strings_to_document_sources(
+            [
+                x.strip().lower()
+                for x in agent_1_independent_sources_str.split(DC_OBJECT_SEPARATOR)
+            ]
+        )
 
         agent_1_output_objective = extract_section(
             agent_1_instructions, "Output Objective:"
@@ -138,17 +138,6 @@ def search_objects(
 
     except Exception as e:
         raise ValueError(f"Error in search_objects: {e}")
-
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece=" Researching the individual objects for each source type... ",
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
 
     return SearchSourcesObjectsUpdate(
         analysis_objects=object_list,

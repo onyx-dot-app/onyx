@@ -26,6 +26,7 @@ def mock_zendesk_client() -> MagicMock:
     mock = MagicMock(spec=ZendeskClient)
     mock.base_url = "https://test.zendesk.com/api/v2"
     mock.auth = ("test@example.com/token", "test_token")
+    mock.make_request = MagicMock()
     return mock
 
 

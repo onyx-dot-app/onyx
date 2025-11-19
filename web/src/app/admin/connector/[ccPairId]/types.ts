@@ -17,6 +17,15 @@ export enum ConnectorCredentialPairStatus {
   INVALID = "INVALID",
 }
 
+export enum PermissionSyncStatusEnum {
+  CANCELED = "canceled",
+  COMPLETED_WITH_ERRORS = "completed_with_errors",
+  FAILED = "failed",
+  IN_PROGRESS = "in_progress",
+  NOT_STARTED = "not_started",
+  SUCCESS = "success",
+}
+
 /**
  * Returns true if the status is not currently active (i.e. paused or invalid), but not deleting
  */
@@ -52,6 +61,12 @@ export interface CCPairFullInfo {
   last_full_permission_sync: string | null;
   overall_indexing_speed: number | null;
   latest_checkpoint_description: string | null;
+
+  // permission sync attempt status
+  last_permission_sync_attempt_status: PermissionSyncStatusEnum | null;
+  permission_syncing: boolean;
+  last_permission_sync_attempt_finished: string | null;
+  last_permission_sync_attempt_error_message: string | null;
 }
 
 export interface PaginatedIndexAttempts {

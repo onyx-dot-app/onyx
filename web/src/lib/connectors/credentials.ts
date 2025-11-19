@@ -1,4 +1,5 @@
 import { ValidSources } from "../types";
+import { TypedFile } from "./fileTypes";
 
 export interface OAuthAdditionalKwargDescription {
   name: string;
@@ -15,6 +16,8 @@ export interface AuthMethodOption<TFields> {
   label: string;
   fields: TFields;
   description?: string;
+  // UI-only: if true, hide/disable the "Auto Sync Permissions" access type when this auth is used
+  disablePermSync?: boolean;
 }
 export interface CredentialTemplateWithAuth<TFields> {
   authentication_method?: string;
@@ -28,6 +31,10 @@ export interface CredentialBase<T> {
   name?: string;
   curator_public?: boolean;
   groups?: number[];
+}
+
+export interface CredentialWithPrivateKey<T> extends CredentialBase<T> {
+  private_key: TypedFile;
 }
 
 export interface Credential<T> extends CredentialBase<T> {
@@ -50,10 +57,20 @@ export interface GitlabCredentialJson {
   gitlab_access_token: string;
 }
 
+export interface BitbucketCredentialJson {
+  bitbucket_email: string;
+  bitbucket_api_token: string;
+}
+
 export interface BookstackCredentialJson {
   bookstack_base_url: string;
   bookstack_api_token_id: string;
   bookstack_api_token_secret: string;
+}
+
+export interface OutlineCredentialJson {
+  outline_base_url: string;
+  outline_api_token: string;
 }
 
 export interface ConfluenceCredentialJson {
@@ -188,8 +205,10 @@ export interface SalesforceCredentialJson {
 
 export interface SharepointCredentialJson {
   sp_client_id: string;
-  sp_client_secret: string;
+  sp_client_secret?: string;
   sp_directory_id: string;
+  sp_certificate_password?: string;
+  sp_private_key?: TypedFile;
 }
 
 export interface AsanaCredentialJson {
@@ -218,7 +237,6 @@ export interface DiscordCredentialJson {
 
 export interface FreshdeskCredentialJson {
   freshdesk_domain: string;
-  freshdesk_password: string;
   freshdesk_api_key: string;
 }
 
@@ -255,12 +273,20 @@ export const credentialTemplates: Record<ValidSources, any> = {
     gitlab_url: "",
     gitlab_access_token: "",
   } as GitlabCredentialJson,
+  bitbucket: {
+    bitbucket_email: "",
+    bitbucket_api_token: "",
+  } as BitbucketCredentialJson,
   slack: { slack_bot_token: "" } as SlackCredentialJson,
   bookstack: {
     bookstack_base_url: "",
     bookstack_api_token_id: "",
     bookstack_api_token_secret: "",
   } as BookstackCredentialJson,
+  outline: {
+    outline_base_url: "",
+    outline_api_token: "",
+  } as OutlineCredentialJson,
   confluence: {
     confluence_username: "",
     confluence_access_token: "",
@@ -297,10 +323,35 @@ export const credentialTemplates: Record<ValidSources, any> = {
     is_sandbox: false,
   } as SalesforceCredentialJson,
   sharepoint: {
-    sp_client_id: "",
-    sp_client_secret: "",
-    sp_directory_id: "",
-  } as SharepointCredentialJson,
+    authentication_method: "client_credentials",
+    authMethods: [
+      {
+        value: "client_secret",
+        label: "Client Secret",
+        fields: {
+          sp_client_id: "",
+          sp_client_secret: "",
+          sp_directory_id: "",
+        },
+        description:
+          "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",
+        disablePermSync: true,
+      },
+      {
+        value: "certificate",
+        label: "Certificate Authentication",
+        fields: {
+          sp_client_id: "",
+          sp_directory_id: "",
+          sp_certificate_password: "",
+          sp_private_key: null,
+        },
+        description:
+          "If you select this mode, the SharePoint connector will use a certificate to authenticate. You will need to provide the client ID, directory ID, certificate password, and PFX data.",
+        disablePermSync: false,
+      },
+    ],
+  } as CredentialTemplateWithAuth<SharepointCredentialJson>,
   asana: {
     asana_api_token_secret: "",
   } as AsanaCredentialJson,
@@ -326,6 +377,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     clickup_api_token: "",
     clickup_team_id: "",
   } as ClickupCredentialJson,
+
   s3: {
     authentication_method: "access_key",
     authMethods: [
@@ -336,6 +388,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
           aws_access_key_id: "",
           aws_secret_access_key: "",
         },
+        disablePermSync: false,
       },
       {
         value: "iam_role",
@@ -343,6 +396,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         fields: {
           aws_role_arn: "",
         },
+        disablePermSync: false,
       },
       {
         value: "assume_role",
@@ -350,6 +404,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
         fields: {},
         description:
           "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required.",
+        disablePermSync: false,
       },
     ],
   } as CredentialTemplateWithAuth<S3CredentialJson>,
@@ -370,7 +425,6 @@ export const credentialTemplates: Record<ValidSources, any> = {
   } as OCICredentialJson,
   freshdesk: {
     freshdesk_domain: "",
-    freshdesk_password: "",
     freshdesk_api_key: "",
   } as FreshdeskCredentialJson,
   fireflies: {
@@ -386,6 +440,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   xenforo: null,
   google_sites: null,
   file: null,
+  user_file: null,
   wikipedia: null,
   mediawiki: null,
   web: null,
@@ -423,6 +478,11 @@ export const credentialDisplayNames: Record<string, string> = {
   bookstack_base_url: "Bookstack Base URL",
   bookstack_api_token_id: "Bookstack API Token ID",
   bookstack_api_token_secret: "Bookstack API Token Secret",
+
+  // Outline
+  outline_base_url:
+    "Outline Base URL (e.g. https://app.getoutline.com or your self-hosted URL)",
+  outline_api_token: "Outline API Token",
 
   // Confluence
   confluence_username: "Confluence Username",
@@ -522,6 +582,8 @@ export const credentialDisplayNames: Record<string, string> = {
   sp_client_id: "SharePoint Client ID",
   sp_client_secret: "SharePoint Client Secret",
   sp_directory_id: "SharePoint Directory ID",
+  sp_certificate_password: "SharePoint Certificate Password",
+  sp_private_key: "SharePoint Private Key",
 
   // Asana
   asana_api_token_secret: "Asana API Token",
@@ -541,7 +603,6 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Freshdesk
   freshdesk_domain: "Freshdesk Domain",
-  freshdesk_password: "Freshdesk Password",
   freshdesk_api_key: "Freshdesk API Key",
 
   // Fireflies
@@ -555,6 +616,10 @@ export const credentialDisplayNames: Record<string, string> = {
   highspot_url: "Highspot URL",
   highspot_key: "Highspot Key",
   highspot_secret: "Highspot Secret",
+
+  // Bitbucket
+  bitbucket_email: "Bitbucket Account Email",
+  bitbucket_api_token: "Bitbucket API Token",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {

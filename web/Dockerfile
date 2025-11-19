@@ -10,16 +10,12 @@ founders@onyx.app for more information. Please visit https://github.com/onyx-dot
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION}
-RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
 # Step 1. Install dependencies + rebuild the source code only when needed
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
-
-# Add NODE_OPTIONS argument
-ARG NODE_OPTIONS
 
 # pull in source code / package.json / package-lock.json
 COPY . .
@@ -36,11 +32,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Environment variables must be present at build time
 # https://github.com/vercel/next.js/discussions/14030
 # NOTE: if you add something here, make sure to add it to the runner as well
-ARG NEXT_PUBLIC_DISABLE_STREAMING
-ENV NEXT_PUBLIC_DISABLE_STREAMING=${NEXT_PUBLIC_DISABLE_STREAMING}
 
-ARG NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA
-ENV NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA=${NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA}
 
 ARG NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS
 ENV NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS}
@@ -86,6 +78,9 @@ ENV NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=${NEXT_PUBLIC_INCLUDE_ERROR_POP
 ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 
+# Add NODE_OPTIONS argument
+ARG NODE_OPTIONS
+
 # Use NODE_OPTIONS in the build command
 RUN NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
@@ -119,11 +114,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Environment variables must be redefined at run time
 # NOTE: if you add something here, make sure to add it to the builder as well
-ARG NEXT_PUBLIC_DISABLE_STREAMING
-ENV NEXT_PUBLIC_DISABLE_STREAMING=${NEXT_PUBLIC_DISABLE_STREAMING}
 
-ARG NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA
-ENV NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA=${NEXT_PUBLIC_NEW_CHAT_DIRECTS_TO_SAME_PERSONA}
 
 # allow user to specify custom feedback options
 ARG NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS

@@ -7,7 +7,9 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import Field
 
+from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.models import SavedSearchDoc
@@ -129,7 +131,6 @@ class DATestPersona(BaseModel):
     is_public: bool
     llm_filter_extraction: bool
     recency_bias: RecencyBiasSetting
-    prompt_ids: list[int]
     document_set_ids: list[int]
     tool_ids: list[int]
     llm_model_provider_override: str | None
@@ -138,12 +139,20 @@ class DATestPersona(BaseModel):
     groups: list[int]
     label_ids: list[int]
 
+    # Embedded prompt fields (no longer separate prompt_ids)
+    system_prompt: str | None = None
+    task_prompt: str | None = None
+    datetime_aware: bool = True
+
 
 class DATestChatMessage(BaseModel):
     id: int
     chat_session_id: UUID
     parent_message_id: int | None
     message: str
+    research_answer_purpose: ResearchAnswerPurpose | None = None
+    message_type: MessageType | None = None
+    files: list | None = None
 
 
 class DATestChatSession(BaseModel):
@@ -156,14 +165,41 @@ class DAQueryHistoryEntry(DATestChatSession):
     feedback_type: QAFeedbackType | None
 
 
+class ToolName(str, Enum):
+    INTERNET_SEARCH = "internet_search"
+    INTERNAL_SEARCH = "run_search"
+    IMAGE_GENERATION = "generate_image"
+
+
+class GeneratedImage(BaseModel):
+    file_id: str
+    url: str
+    revised_prompt: str
+    shape: str | None = None
+
+
+class ToolResult(BaseModel):
+    tool_name: ToolName
+
+    queries: list[str] = Field(default_factory=list)
+    documents: list[SavedSearchDoc] = Field(default_factory=list)
+    images: list[GeneratedImage] = Field(default_factory=list)
+
+
+class ErrorResponse(BaseModel):
+    error: str
+    stack_trace: str
+
+
 class StreamedResponse(BaseModel):
-    full_message: str = ""
-    rephrased_query: str | None = None
-    tool_name: str | None = None
-    top_documents: list[SavedSearchDoc] | None = None
-    relevance_summaries: list[dict[str, Any]] | None = None
-    tool_result: Any | None = None
-    user: str | None = None
+    full_message: str
+    assistant_message_id: int
+    top_documents: list[SavedSearchDoc]
+    used_tools: list[ToolResult]
+    error: ErrorResponse | None = None
+
+    # Track heartbeat packets for image generation and other tools
+    heartbeat_packets: list[dict[str, Any]]
 
 
 class DATestGatingType(str, Enum):

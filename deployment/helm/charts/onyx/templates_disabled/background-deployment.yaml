@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx-stack.fullname" . }}-background
+  name: {{ include "onyx.fullname" . }}-background
   labels:
-    {{- include "onyx-stack.labels" . | nindent 4 }}
+    {{- include "onyx.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.background.autoscaling.enabled }}
   replicas: {{ .Values.background.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "onyx-stack.selectorLabels" . | nindent 6 }}
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
       {{- if .Values.background.deploymentLabels }}
       {{- toYaml .Values.background.deploymentLabels | nindent 6 }}
       {{- end }}
@@ -21,7 +21,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "onyx-stack.labels" . | nindent 8 }}
+        {{- include "onyx.labels" . | nindent 8 }}
         {{- with .Values.background.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -30,7 +30,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.background.podSecurityContext | nindent 8 }}
       containers:
@@ -48,4 +48,4 @@ spec:
           env:
             - name: ENABLE_MULTIPASS_INDEXING
               value: "{{ .Values.background.enableMiniChunk }}"
-            {{- include "onyx-stack.envSecrets" . | nindent 12}}
+            {{- include "onyx.envSecrets" . | nindent 12}}

@@ -119,7 +119,7 @@ def test_zendesk_connector_slim(zendesk_article_connector: ZendeskConnector) -> 
 
     # Get slim doc IDs
     all_slim_doc_ids = set()
-    for slim_doc_batch in zendesk_article_connector.retrieve_all_slim_documents():
+    for slim_doc_batch in zendesk_article_connector.retrieve_all_slim_docs_perm_sync():
         all_slim_doc_ids.update([doc.id for doc in slim_doc_batch])
 
     # Full docs should be subset of slim docs

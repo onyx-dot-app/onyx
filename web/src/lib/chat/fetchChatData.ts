@@ -1,9 +1,5 @@
-import {
-  AuthTypeMetadata,
-  getAuthTypeMetadataSS,
-  getCurrentUserSS,
-} from "@/lib/userSS";
 import { fetchSS } from "@/lib/utilsSS";
+import { requireAuth } from "@/lib/auth/requireAuth";
 import {
   CCPairBasicInfo,
   DocumentSetSummary,
@@ -17,7 +13,6 @@ import { FullEmbeddingModelResponse } from "@/components/embedding/interfaces";
 import { Settings } from "@/app/admin/settings/interfaces";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { Folder } from "@/app/chat/folders/interfaces";
 import { cookies, headers } from "next/headers";
 import {
   SIDEBAR_TOGGLED_COOKIE_NAME,
@@ -29,6 +24,9 @@ import {
   NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN,
   NEXT_PUBLIC_ENABLE_CHROME_EXTENSION,
 } from "../constants";
+import { ToolSnapshot } from "../tools/interfaces";
+import { fetchToolsSS } from "../tools/fetchTools";
+import { Project } from "@/app/chat/projects/projectsService";
 
 interface FetchChatDataResult {
   user: User | null;
@@ -38,79 +36,31 @@ interface FetchChatDataResult {
   documentSets: DocumentSetSummary[];
   tags: Tag[];
   llmProviders: LLMProviderDescriptor[];
-  folders: Folder[];
-  openedFolders: Record<string, boolean>;
+  availableTools: ToolSnapshot[];
   defaultAssistantId?: number;
   sidebarInitiallyVisible: boolean;
   finalDocumentSidebarInitialWidth?: number;
   shouldShowWelcomeModal: boolean;
   inputPrompts: InputPrompt[];
   proSearchToggled: boolean;
+  projects: Project[];
 }
 
 export async function fetchChatData(searchParams: {
   [key: string]: string;
 }): Promise<FetchChatDataResult | { redirect: string }> {
   const requestCookies = await cookies();
-  const tasks = [
-    getAuthTypeMetadataSS(),
-    getCurrentUserSS(),
-    fetchSS("/manage/connector-status"),
-    fetchSS("/manage/document-set"),
-    fetchSS("/chat/get-user-chat-sessions"),
-    fetchSS("/query/valid-tags"),
-    fetchLLMProvidersSS(),
-    fetchSS("/folder"),
-    fetchSS("/input_prompt?include_public=true"),
-  ];
 
-  let results: (
-    | User
-    | Response
-    | AuthTypeMetadata
-    | FullEmbeddingModelResponse
-    | Settings
-    | LLMProviderDescriptor[]
-    | [Persona[], string | null]
-    | null
-    | InputPrompt[]
-  )[] = [null, null, null, null, null, null, null, null, null];
-  try {
-    results = await Promise.all(tasks);
-  } catch (e) {
-    console.log(`Some fetch failed for the main search page - ${e}`);
-  }
-
-  const authTypeMetadata = results[0] as AuthTypeMetadata | null;
-  const user = results[1] as User | null;
-  const ccPairsResponse = results[2] as Response | null;
-  const documentSetsResponse = results[3] as Response | null;
-
-  const chatSessionsResponse = results[4] as Response | null;
-
-  const tagsResponse = results[5] as Response | null;
-  const llmProviders = (results[6] || []) as LLMProviderDescriptor[];
-  const foldersResponse = results[7] as Response | null;
-
-  let inputPrompts: InputPrompt[] = [];
-  if (results[8] instanceof Response && results[8].ok) {
-    inputPrompts = await results[8].json();
-  } else {
-    console.log("Failed to fetch input prompts");
-  }
-
+  // STEP 1: Check authentication FIRST (before any protected resources)
+  const authResult = await requireAuth();
+  const { user, authTypeMetadata } = authResult;
   const authDisabled = authTypeMetadata?.authType === "disabled";
 
-  // TODO Validate need
-  if (!authDisabled && !user) {
+  // STEP 2: Handle authentication redirects with special cases
+  if (authResult.redirect && !authDisabled) {
+    // Special handling for chrome extension mode and login loop prevention
     const headersList = await headers();
     const fullUrl = headersList.get("x-url") || "/chat";
-    const searchParamsString = new URLSearchParams(
-      searchParams as unknown as Record<string, string>
-    ).toString();
-    const redirectUrl = searchParamsString
-      ? `${fullUrl}?${searchParamsString}`
-      : fullUrl;
 
     // Check the referrer to prevent redirect loops
     const referrer = headersList.get("referer") || "";
@@ -119,25 +69,67 @@ export async function fetchChatData(searchParams: {
     // Also check for the from=login query parameter
     const isRedirectedFromLogin = searchParams["from"] === "login";
 
-    console.log(
-      `Auth check: authDisabled=${authDisabled}, user=${!!user}, referrer=${referrer}, fromLogin=${isRedirectedFromLogin}`
-    );
-
     // Only redirect if we're not already coming from the login page
+    // and chrome extension mode is not enabled
     if (
       !NEXT_PUBLIC_ENABLE_CHROME_EXTENSION &&
       !isComingFromLogin &&
       !isRedirectedFromLogin
     ) {
-      console.log("Redirecting to login from chat page");
+      // Build redirect URL with search params preserved
+      const searchParamsString = new URLSearchParams(
+        searchParams as unknown as Record<string, string>
+      ).toString();
+      const redirectUrl = searchParamsString
+        ? `${fullUrl}?${searchParamsString}`
+        : fullUrl;
       return {
         redirect: `/auth/login?next=${encodeURIComponent(redirectUrl)}`,
       };
     }
   }
 
-  if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
-    return { redirect: "/auth/waiting-on-verification" };
+  // STEP 3: ONLY NOW fetch protected resources (after auth is verified)
+  const protectedTasks = [
+    fetchSS("/manage/connector-status"),
+    fetchSS("/manage/document-set"),
+    fetchSS("/chat/get-user-chat-sessions"),
+    fetchSS("/query/valid-tags"),
+    fetchLLMProvidersSS(),
+    fetchSS("/input_prompt?include_public=true"),
+    fetchToolsSS(),
+    fetchSS("/user/projects/"),
+  ];
+
+  let results: (Response | LLMProviderDescriptor[] | ToolSnapshot[] | null)[] =
+    [];
+
+  try {
+    results = await Promise.all(protectedTasks);
+  } catch (e) {
+    console.log(`Some fetch failed for the main search page - ${e}`);
+  }
+
+  const ccPairsResponse = results[0] as Response | null;
+  const documentSetsResponse = results[1] as Response | null;
+  const chatSessionsResponse = results[2] as Response | null;
+  const tagsResponse = results[3] as Response | null;
+  const llmProviders = (results[4] || []) as LLMProviderDescriptor[];
+
+  let inputPrompts: InputPrompt[] = [];
+  if (results[5] instanceof Response && results[5].ok) {
+    inputPrompts = await results[5].json();
+  } else {
+    console.log("Failed to fetch input prompts");
+  }
+
+  const availableTools = (results[6] || []) as ToolSnapshot[];
+
+  let projects: Project[] = [];
+  if (results[7] instanceof Response && results[7].ok) {
+    projects = await results[7].json();
+  } else {
+    console.log("Failed to fetch projects");
   }
 
   let ccPairs: CCPairBasicInfo[] = [];
@@ -222,18 +214,6 @@ export async function fetchChatData(searchParams: {
   // if no connectors are setup, only show personas that are pure
   // passthrough and don't do any retrieval
 
-  let folders: Folder[] = [];
-  if (foldersResponse?.ok) {
-    folders = (await foldersResponse.json()).folders as Folder[];
-  } else {
-    console.log(`Failed to fetch folders - ${foldersResponse?.status}`);
-  }
-
-  const openedFoldersCookie = requestCookies.get("openedFolders");
-  const openedFolders = openedFoldersCookie
-    ? JSON.parse(openedFoldersCookie.value)
-    : {};
-
   return {
     user,
     chatSessions,
@@ -242,13 +222,13 @@ export async function fetchChatData(searchParams: {
     documentSets,
     tags,
     llmProviders,
-    folders,
-    openedFolders,
+    availableTools,
     defaultAssistantId,
     finalDocumentSidebarInitialWidth,
     sidebarInitiallyVisible,
     shouldShowWelcomeModal,
     inputPrompts,
     proSearchToggled,
+    projects,
   };
 }

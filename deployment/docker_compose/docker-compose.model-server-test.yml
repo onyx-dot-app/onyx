@@ -1,3 +1,5 @@
+name: onyx
+
 services:
   indexing_model_server:
     image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
@@ -24,7 +26,7 @@ services:
       - SENTRY_DSN=${SENTRY_DSN:-}
     volumes:
       # Not necessary, this is just to reduce download time during startup
-      - indexing_huggingface_model_cache:/root/.cache/huggingface/
+      - indexing_huggingface_model_cache:/app/.cache/huggingface/
     logging:
       driver: json-file
       options:

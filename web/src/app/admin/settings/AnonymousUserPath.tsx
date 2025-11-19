@@ -4,11 +4,12 @@ import useSWR from "swr";
 import { useContext, useState } from "react";
 
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { ClipboardIcon } from "@/components/icons/icons";
 import { Input } from "@/components/ui/input";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import SvgCopy from "@/icons/copy";
 
 export function AnonymousUserPath({
   setPopup,
@@ -127,18 +128,9 @@ export function AnonymousUserPath({
             />
           </div>
           <div className="flex flex-row gap-2">
+            <Button onClick={handleCustomPathUpdate}>Update Path</Button>
             <Button
-              onClick={handleCustomPathUpdate}
-              variant="default"
-              size="sm"
-              className="h-10 px-4"
-            >
-              Update Path
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-10 px-4"
+              secondary
               onClick={() => {
                 navigator.clipboard.writeText(
                   `${settings?.webDomain}/anonymous/${anonymousUserPath}`
@@ -148,8 +140,8 @@ export function AnonymousUserPath({
                   type: "success",
                 });
               }}
+              leftIcon={SvgCopy}
             >
-              <ClipboardIcon className="h-4 w-4" />
               Copy
             </Button>
           </div>

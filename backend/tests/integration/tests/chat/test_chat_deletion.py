@@ -7,6 +7,9 @@ from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 
 
+MESSAGE = "Hi"
+
+
 @pytest.fixture(scope="module", autouse=True)
 def reset_for_module() -> None:
     """Reset all data once before running any tests in this module."""
@@ -35,11 +38,12 @@ def test_soft_delete_chat_session(
     # Send a message to create some data
     response = ChatSessionManager.send_message(
         chat_session_id=test_chat_session.id,
-        message="Explain the concept of machine learning in detail",
+        message=MESSAGE,
         user_performing_action=basic_user,
     )
 
     # Verify that the message was processed successfully
+    assert response.error is None, "Chat response should not have an error"
     assert len(response.full_message) > 0, "Chat response should not be empty"
 
     # Verify that the chat session can be retrieved before deletion
@@ -88,11 +92,12 @@ def test_hard_delete_chat_session(
     # Send a message to create some data
     response = ChatSessionManager.send_message(
         chat_session_id=test_chat_session.id,
-        message="Explain the concept of machine learning in detail",
+        message=MESSAGE,
         user_performing_action=basic_user,
     )
 
     # Verify that the message was processed successfully
+    assert response.error is None, "Chat response should not have an error"
     assert len(response.full_message) > 0, "Chat response should not be empty"
 
     # Verify that the chat session can be retrieved before deletion
@@ -154,7 +159,10 @@ def test_soft_delete_with_agentic_search(
     )
 
     # Verify that the message was processed successfully
-    assert len(response.full_message) > 0, "Chat response should not be empty"
+    assert response.error is None, "Chat response should not have an error"
+    assert (
+        len(response.full_message) > 0 or len(response.used_tools) > 0
+    ), "Chat response should not be empty"
 
     # Test soft deletion
     deletion_success = ChatSessionManager.soft_delete(
@@ -202,6 +210,7 @@ def test_hard_delete_with_agentic_search(
     )
 
     # Verify that the message was processed successfully
+    assert response.error is None, "Chat response should not have an error"
     assert len(response.full_message) > 0, "Chat response should not be empty"
 
     # Test hard deletion

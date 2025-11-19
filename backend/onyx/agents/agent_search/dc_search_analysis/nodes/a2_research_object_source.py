@@ -43,7 +43,7 @@ def research_object_source(
         raise ValueError("Search tool and persona must be provided for DivCon search")
 
     try:
-        instructions = graph_config.inputs.persona.prompts[0].system_prompt
+        instructions = graph_config.inputs.persona.system_prompt or ""
 
         agent_2_instructions = extract_section(
             instructions, "Agent Step 2:", "Agent Step 3:"

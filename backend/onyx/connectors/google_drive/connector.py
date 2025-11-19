@@ -41,6 +41,7 @@ from onyx.connectors.google_drive.file_retrieval import (
 )
 from onyx.connectors.google_drive.file_retrieval import get_files_in_shared_drive
 from onyx.connectors.google_drive.file_retrieval import get_root_folder_id
+from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
 from onyx.connectors.google_drive.models import DriveRetrievalStage
 from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
 from onyx.connectors.google_drive.models import GoogleDriveFileType
@@ -64,7 +65,7 @@ from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
@@ -153,7 +154,7 @@ class DriveIdStatus(Enum):
 
 
 class GoogleDriveConnector(
-    SlimConnector, CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint]
+    SlimConnectorWithPermSync, CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint]
 ):
     def __init__(
         self,
@@ -164,6 +165,7 @@ class GoogleDriveConnector(
         my_drive_emails: str | None = None,
         shared_folder_urls: str | None = None,
         specific_user_emails: str | None = None,
+        exclude_domain_link_only: bool = False,
         batch_size: int = INDEX_BATCH_SIZE,
         # OLD PARAMETERS
         folder_paths: list[str] | None = None,
@@ -232,6 +234,7 @@ class GoogleDriveConnector(
         self._specific_user_emails = _extract_str_list_from_comma_str(
             specific_user_emails
         )
+        self.exclude_domain_link_only = exclude_domain_link_only
 
         self._primary_admin_email: str | None = None
 
@@ -344,6 +347,9 @@ class GoogleDriveConnector(
     def _get_all_drives_for_user(self, user_email: str) -> set[str]:
         drive_service = get_drive_service(self.creds, user_email)
         is_service_account = isinstance(self.creds, ServiceAccountCredentials)
+        logger.info(
+            f"Getting all drives for user {user_email} with service account: {is_service_account}"
+        )
         all_drive_ids: set[str] = set()
         for drive in execute_paginated_retrieval(
             retrieval_function=drive_service.drives().list,
@@ -1103,7 +1109,7 @@ class GoogleDriveConnector(
         """
         field_type = (
             DriveFileFieldType.WITH_PERMISSIONS
-            if include_permissions
+            if include_permissions or self.exclude_domain_link_only
             else DriveFileFieldType.STANDARD
         )
 
@@ -1137,7 +1143,9 @@ class GoogleDriveConnector(
                         convert_func,
                         (
                             [file.user_email, self.primary_admin_email]
-                            + get_file_owners(file.drive_file),
+                            + get_file_owners(
+                                file.drive_file, self.primary_admin_email
+                            ),
                             file.drive_file,
                         ),
                     )
@@ -1167,6 +1175,10 @@ class GoogleDriveConnector(
                 start=start,
                 end=end,
             ):
+                if self.exclude_domain_link_only and has_link_only_permission(
+                    retrieved_file.drive_file
+                ):
+                    continue
                 if retrieved_file.error is None:
                     files_batch.append(retrieved_file)
                     continue
@@ -1271,6 +1283,10 @@ class GoogleDriveConnector(
         ):
             if file.error is not None:
                 raise file.error
+            if self.exclude_domain_link_only and has_link_only_permission(
+                file.drive_file
+            ):
+                continue
             if doc := build_slim_document(
                 self.creds,
                 file.drive_file,
@@ -1294,7 +1310,7 @@ class GoogleDriveConnector(
                     callback.progress("_extract_slim_docs_from_google_drive", 1)
         yield slim_batch
 
-    def retrieve_all_slim_documents(
+    def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,

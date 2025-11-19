@@ -44,7 +44,9 @@ export async function updateConnectorCredentialPairName(
   newName: string
 ): Promise<Response> {
   return fetch(
-    `/api/manage/admin/cc-pair/${ccPairId}/name?new_name=${encodeURIComponent(newName)}`,
+    `/api/manage/admin/cc-pair/${ccPairId}/name?new_name=${encodeURIComponent(
+      newName
+    )}`,
     {
       method: "PUT",
       headers: {

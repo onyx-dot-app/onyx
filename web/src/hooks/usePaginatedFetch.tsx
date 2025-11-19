@@ -29,6 +29,7 @@ interface PaginatedHookReturnData<T extends PaginatedType> {
   error: Error | null;
   currentPage: number;
   totalPages: number;
+  totalItems: number;
   goToPage: (page: number) => void;
   refresh: () => Promise<void>;
 }
@@ -239,6 +240,7 @@ function usePaginatedFetch<T extends PaginatedType>({
     currentPage,
     currentPageData,
     totalPages,
+    totalItems,
     goToPage,
     refresh,
     isLoading,

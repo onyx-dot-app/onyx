@@ -1,9 +1,8 @@
 "use client";
 import { Separator } from "@/components/ui/separator";
 import { IconProps, XIcon } from "./icons/icons";
-import { useRef } from "react";
+import { useRef, useEffect, useState, JSX } from "react";
 import ReactDOM from "react-dom";
-import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface ModalProps {

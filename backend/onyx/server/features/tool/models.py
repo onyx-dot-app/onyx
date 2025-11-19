@@ -5,6 +5,17 @@ from pydantic import BaseModel
 from onyx.db.models import Tool
 
 
+HIDDEN_TOOL_IDS = {"OktaProfileTool"}
+
+
+def should_expose_tool_to_fe(tool: Tool) -> bool:
+    """Return True when the given tool should be sent to the frontend."""
+    if tool.in_code_tool_id is None:
+        return True
+
+    return tool.in_code_tool_id not in HIDDEN_TOOL_IDS
+
+
 class ToolSnapshot(BaseModel):
     id: int
     name: str
@@ -14,6 +25,10 @@ class ToolSnapshot(BaseModel):
     in_code_tool_id: str | None
     custom_headers: list[Any] | None
     passthrough_auth: bool
+    mcp_server_id: int | None = None
+    user_id: str | None = None
+    oauth_config_id: int | None = None
+    oauth_config_name: str | None = None
 
     @classmethod
     def from_model(cls, tool: Tool) -> "ToolSnapshot":
@@ -26,6 +41,10 @@ class ToolSnapshot(BaseModel):
             in_code_tool_id=tool.in_code_tool_id,
             custom_headers=tool.custom_headers,
             passthrough_auth=tool.passthrough_auth,
+            mcp_server_id=tool.mcp_server_id,
+            user_id=str(tool.user_id) if tool.user_id else None,
+            oauth_config_id=tool.oauth_config_id,
+            oauth_config_name=tool.oauth_config.name if tool.oauth_config else None,
         )
 
 
@@ -40,6 +59,7 @@ class CustomToolCreate(BaseModel):
     definition: dict[str, Any]
     custom_headers: list[Header] | None = None
     passthrough_auth: bool
+    oauth_config_id: int | None = None
 
 
 class CustomToolUpdate(BaseModel):
@@ -48,3 +68,4 @@ class CustomToolUpdate(BaseModel):
     definition: dict[str, Any] | None = None
     custom_headers: list[Header] | None = None
     passthrough_auth: bool | None = None
+    oauth_config_id: int | None = None
