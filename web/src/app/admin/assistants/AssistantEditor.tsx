@@ -86,7 +86,7 @@ import {
 import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
 import { FileCard } from "@/app/chat/components/input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
-import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
+import UserFilesModalContent from "@/components/modals/UserFilesModal";
 import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMSelector } from "@/components/llm/LLMSelector";
@@ -846,36 +846,29 @@ export default function AssistantEditor({
 
           return (
             <>
-              <userFilesModal.Provider>
-                <UserFilesModalContent
-                  title="User Files"
-                  description="All files selected for this assistant"
-                  icon={SvgFiles}
-                  recentFiles={values.user_file_ids.map(
-                    (userFileId: string) => {
-                      const rf = allRecentFiles.find(
-                        (f) => f.id === userFileId
-                      );
-                      return (
-                        rf || {
-                          id: userFileId,
-                          name: `File ${userFileId.slice(0, 8)}`,
-                          status: "completed" as const,
-                        }
-                      );
+              <UserFilesModalContent
+                open={userFilesModal.isOpen}
+                onOpenChange={userFilesModal.toggle}
+                title="User Files"
+                description="All files selected for this assistant"
+                icon={SvgFiles}
+                recentFiles={values.user_file_ids.map((userFileId: string) => {
+                  const rf = allRecentFiles.find((f) => f.id === userFileId);
+                  return (
+                    rf || {
+                      id: userFileId,
+                      name: `File ${userFileId.slice(0, 8)}`,
+                      status: "completed" as const,
                     }
-                  )}
-                  onDelete={(file) => {
-                    setFieldValue(
-                      "user_file_ids",
-                      values.user_file_ids.filter(
-                        (id: string) => id !== file.id
-                      )
-                    );
-                  }}
-                  onClose={() => userFilesModal.toggle(false)}
-                />
-              </userFilesModal.Provider>
+                  );
+                })}
+                onDelete={(file) => {
+                  setFieldValue(
+                    "user_file_ids",
+                    values.user_file_ids.filter((id: string) => id !== file.id)
+                  );
+                }}
+              />
 
               <Form className="w-full text-text-950 assistant-editor">
                 <FormErrorFocus />

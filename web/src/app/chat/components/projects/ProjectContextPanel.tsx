@@ -11,7 +11,7 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Button from "@/refresh-components/buttons/Button";
 
 import AddInstructionModal from "@/components/modals/AddInstructionModal";
-import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
+import UserFilesModalContent from "@/components/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Text from "@/refresh-components/texts/Text";
 import SvgFolderOpen from "@/icons/folder-open";
@@ -105,21 +105,20 @@ export default function ProjectContextPanel({
         <AddInstructionModal />
       </addInstructionModal.Provider>
 
-      <projectFilesModal.Provider>
-        <UserFilesModalContent
-          title="Project files"
-          description="Sessions in this project can access the files here."
-          icon={SvgFiles}
-          recentFiles={[...allCurrentProjectFiles]}
-          onView={handleOnView}
-          handleUploadChange={handleUploadChange}
-          onDelete={async (file: ProjectFile) => {
-            if (!currentProjectId) return;
-            await unlinkFileFromProject(currentProjectId, file.id);
-          }}
-          onClose={() => projectFilesModal.toggle(false)}
-        />
-      </projectFilesModal.Provider>
+      <UserFilesModalContent
+        open={projectFilesModal.isOpen}
+        onOpenChange={projectFilesModal.toggle}
+        title="Project files"
+        description="Sessions in this project can access the files here."
+        icon={SvgFiles}
+        recentFiles={[...allCurrentProjectFiles]}
+        onView={handleOnView}
+        handleUploadChange={handleUploadChange}
+        onDelete={async (file: ProjectFile) => {
+          if (!currentProjectId) return;
+          await unlinkFileFromProject(currentProjectId, file.id);
+        }}
+      />
 
       <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
         <div className="flex flex-col gap-1 text-text-04">
