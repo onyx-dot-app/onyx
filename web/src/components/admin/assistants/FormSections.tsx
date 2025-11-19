@@ -4,6 +4,7 @@ import React, { memo } from "react";
 import { FastField, useFormikContext } from "formik";
 import { TextFormField } from "@/components/Field";
 import { FiChevronRight, FiChevronDown } from "react-icons/fi";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 
 const MAX_DESCRIPTION_LENGTH = 600;
 import { useState, useEffect } from "react";
@@ -143,14 +144,10 @@ export const MCPServerSection = memo(function MCPServerSection({
             <FiChevronDown className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           )}
         </button>
-        <input
-          type="checkbox"
+        <Checkbox
           checked={checkboxState === true}
-          ref={(el) => {
-            if (el) el.indeterminate = checkboxState === "indeterminate";
-          }}
-          onChange={onToggleServerTools}
-          className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
+          indeterminate={checkboxState === "indeterminate"}
+          onCheckedChange={onToggleServerTools}
           data-testid={`mcp-server-select-${serverId}`}
         />
         <div className="flex-grow">
@@ -173,17 +170,17 @@ export const MCPServerSection = memo(function MCPServerSection({
             >
               {({ field, form }: any) => (
                 <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={field.value || false}
-                    onChange={(e) => {
-                      form.setFieldValue(field.name, e.target.checked);
-                    }}
-                    className="w-4 h-4"
-                    data-testid={`mcp-server-tool-${serverId}-${tool.id}`}
-                    data-tool-name={tool.name}
-                    data-tool-display-name={tool.display_name}
-                  />
+                  <div className="pt-0.5">
+                    <Checkbox
+                      checked={field.value || false}
+                      onCheckedChange={(checked) => {
+                        form.setFieldValue(field.name, checked);
+                      }}
+                      data-testid={`mcp-server-tool-${serverId}-${tool.id}`}
+                      data-tool-name={tool.name}
+                      data-tool-display-name={tool.display_name}
+                    />
+                  </div>
                   <div>
                     <div className="text-sm font-medium">
                       {tool.display_name}

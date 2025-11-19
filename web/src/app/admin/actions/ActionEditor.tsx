@@ -18,7 +18,7 @@ import debounce from "lodash/debounce";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Link from "next/link";
 import Separator from "@/refresh-components/Separator";
-import { Checkbox } from "@/components/ui/checkbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { useAuthType } from "@/lib/hooks";
 import { InfoIcon } from "@/components/icons/icons";
 import {

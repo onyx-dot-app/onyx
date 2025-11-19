@@ -1,7 +1,7 @@
 "use client";
 
 import { DocumentSetSummary, ValidSources } from "@/lib/types";
-import { CustomCheckbox } from "../CustomCheckbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { SourceIcon } from "../SourceIcon";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
@@ -60,9 +60,9 @@ export function DocumentSetSelectable({
             </div>
           </div>
           <div className="ml-auto my-auto pl-1">
-            <CustomCheckbox
+            <Checkbox
               checked={isSelected}
-              onChange={() => null}
+              onCheckedChange={() => null}
               disabled={disabled}
             />
           </div>

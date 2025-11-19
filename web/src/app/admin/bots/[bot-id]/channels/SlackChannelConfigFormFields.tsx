@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/accordion";
 import Separator from "@/refresh-components/Separator";
 
-import { CheckFormField } from "@/components/ui/CheckField";
+import { CheckboxField as CheckFormField } from "@/refresh-components/formik-fields/CheckboxField";
 
 export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;

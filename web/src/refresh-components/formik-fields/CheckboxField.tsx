@@ -1,13 +1,12 @@
 "use client";
 
 import React from "react";
-import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
-import { Check } from "lucide-react";
 import { useField } from "formik";
 import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 
-interface CheckFieldProps {
+interface CheckboxFieldProps {
   name: string;
   label: string;
   labelClassName?: string;
@@ -17,7 +16,7 @@ interface CheckFieldProps {
   onChange?: (checked: boolean) => void;
 }
 
-export const CheckFormField: React.FC<CheckFieldProps> = ({
+export const CheckboxField: React.FC<CheckboxFieldProps> = ({
   name,
   label,
   onChange,
@@ -42,32 +41,24 @@ export const CheckFormField: React.FC<CheckFieldProps> = ({
     onChange?.(next);
   };
 
+  const labelId = `${name}-label`;
+
   const checkboxContent = (
     <div className="flex w-fit items-start space-x-2">
-      <CheckboxPrimitive.Root
+      <Checkbox
         id={name}
+        aria-labelledby={labelId}
         checked={field.value}
         onCheckedChange={(checked) => {
           helpers.setValue(Boolean(checked));
           onChange?.(Boolean(checked));
         }}
-        className={cn(
-          "peer shrink-0 rounded-sm border border-background-200 bg-white ring-offset-white " +
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 " +
-            "focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 " +
-            "data-[state=checked]:bg-neutral-900 data-[state=checked]:text-neutral-50 " +
-            "dark:border-background-800 dark:ring-offset-neutral-950 dark:focus-visible:ring-neutral-300 " +
-            "dark:data-[state=checked]:bg-neutral-50 dark:data-[state=checked]:text-neutral-900",
-          sizeClasses[size]
-        )}
+        className={cn(sizeClasses[size])}
         {...props}
-      >
-        <CheckboxPrimitive.Indicator className="flex items-center justify-center text-current">
-          <Check className={sizeClasses[size]} />
-        </CheckboxPrimitive.Indicator>
-      </CheckboxPrimitive.Root>
+      />
       <div className="flex flex-col">
         <label
+          id={labelId}
           htmlFor={name}
           className="flex flex-col cursor-pointer"
           onClick={handleClick}
@@ -96,3 +87,5 @@ export const CheckFormField: React.FC<CheckFieldProps> = ({
     </SimpleTooltip>
   );
 };
+
+export default CheckboxField;
