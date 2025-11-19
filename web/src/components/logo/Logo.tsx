@@ -14,7 +14,7 @@ export function Logo({
   height?: number;
   width?: number;
   className?: string;
-  size?: "small" | "default" | "large";
+  size?: "small" | "default" | "large" | "eea_large";
 }) {
   const settings = useContext(SettingsContext);
 
