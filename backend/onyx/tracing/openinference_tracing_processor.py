@@ -54,6 +54,8 @@ class OpenInferenceTracingProcessor(TracingProcessor):
         # Use an OrderedDict and _MAX_HANDOFFS_IN_FLIGHT to cap the size of the dict
         # in case there are large numbers of orphaned handoffs
         self._reverse_handoffs_dict: OrderedDict[str, str] = OrderedDict()
+        self._first_input: dict[str, Any] = {}
+        self._last_output: dict[str, Any] = {}
 
     def on_trace_start(self, trace: Trace) -> None:
         """Called when a trace is started.
@@ -76,8 +78,37 @@ class OpenInferenceTracingProcessor(TracingProcessor):
             trace: The trace that started.
         """
         if root_span := self._root_spans.pop(trace.trace_id, None):
+            # Get the first input and last output for this specific trace
+            trace_first_input = self._first_input.pop(trace.trace_id, None)
+            trace_last_output = self._last_output.pop(trace.trace_id, None)
+
+            # Set input/output attributes on the root span
+            if trace_first_input is not None:
+                try:
+                    root_span.set_attribute(
+                        INPUT_VALUE, safe_json_dumps(trace_first_input)
+                    )
+                    root_span.set_attribute(INPUT_MIME_TYPE, JSON)
+                except Exception:
+                    # Fallback to string if JSON serialization fails
+                    root_span.set_attribute(INPUT_VALUE, str(trace_first_input))
+
+            if trace_last_output is not None:
+                try:
+                    root_span.set_attribute(
+                        OUTPUT_VALUE, safe_json_dumps(trace_last_output)
+                    )
+                    root_span.set_attribute(OUTPUT_MIME_TYPE, JSON)
+                except Exception:
+                    # Fallback to string if JSON serialization fails
+                    root_span.set_attribute(OUTPUT_VALUE, str(trace_last_output))
+
             root_span.set_status(Status(StatusCode.OK))
             root_span.end()
+        else:
+            # Clean up stored input/output for this trace if root span doesn't exist
+            self._first_input.pop(trace.trace_id, None)
+            self._last_output.pop(trace.trace_id, None)
 
     def on_span_start(self, span: Span[Any]) -> None:
         """Called when a span is started.
@@ -142,6 +173,24 @@ class OpenInferenceTracingProcessor(TracingProcessor):
                 pass
         otel_span.set_status(status=_get_span_status(span))
         otel_span.end(end_time)
+
+        # Store first input and last output per trace_id
+        trace_id = span.trace_id
+        input_: Optional[Any] = None
+        output: Optional[Any] = None
+
+        if isinstance(data, FunctionSpanData):
+            input_ = data.input
+            output = data.output
+        elif isinstance(data, GenerationSpanData):
+            input_ = data.input
+            output = data.output
+
+        if trace_id not in self._first_input and input_ is not None:
+            self._first_input[trace_id] = input_
+
+        if output is not None:
+            self._last_output[trace_id] = output
 
     def force_flush(self) -> None:
         """Forces an immediate flush of all queued spans/traces."""
