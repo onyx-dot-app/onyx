@@ -417,6 +417,7 @@ const ModalCloseButton = React.forwardRef<
       <div
         ref={closeButtonRef as React.RefObject<HTMLDivElement>}
         tabIndex={-1}
+        className="rounded-12 !outline-none !border-[3px] !border-transparent focus:!border-action-link-05 transition-colors duration-200"
       >
         <ModalClose asChild>
           <IconButton icon={SvgX} internal onClick={onClose} />
