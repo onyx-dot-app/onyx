@@ -3503,6 +3503,9 @@ class Project__UserFile(Base):
     user_file_id: Mapped[UUID] = mapped_column(
         ForeignKey("user_file.id"), primary_key=True
     )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class UserProject(Base):
