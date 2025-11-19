@@ -16,7 +16,7 @@ class ForceUseTool(BaseModel):
 
     def build_openai_tool_choice_dict(self) -> dict[str, Any]:
         """Build dict in the format that OpenAI expects which tells them to use this tool."""
-        return {"type": "function", "function": {"name": self.tool_name}}
+        return {"type": "function", "name": self.tool_name}
 
 
 def filter_tools_for_force_tool_use(

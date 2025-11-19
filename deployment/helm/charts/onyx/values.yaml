@@ -37,7 +37,7 @@ vespa:
   replicaCount: 1
   image:
     repository: vespa
-    tag: "8.526.15"
+    tag: "8.609.39"
   podAnnotations: {}
   podLabels:
     app: vespa

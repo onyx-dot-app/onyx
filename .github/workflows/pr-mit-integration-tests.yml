@@ -123,11 +123,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
-      - name: Prepare build
-        uses: ./.github/actions/prepare-build
+      # needed for pulling openapitools/openapi-generator-cli
+      # otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
-          docker-username: ${{ secrets.DOCKER_USERNAME }}
-          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push integration test image with Docker Bake
         env:
@@ -168,24 +171,6 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Pull Docker images
-        run: |
-          # Pull all images from registry in parallel
-          echo "Pulling Docker images in parallel..."
-          # Pull images from registry
-          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }}) &
-
-          # Wait for all background jobs to complete
-          wait
-          echo "All Docker images pulled successfully"
-
-          # Re-tag to remove registry prefix for docker-compose
-          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
-          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} onyxdotapp/onyx-integration:test
-
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
       - name: Start Docker containers
@@ -196,7 +181,8 @@ jobs:
           POSTGRES_USE_NULL_POOL=true \
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
-          IMAGE_TAG=test \
+          ONYX_BACKEND_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }} \
+          ONYX_MODEL_SERVER_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }} \
           INTEGRATION_TESTS_MODE=true \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
@@ -289,7 +275,7 @@ jobs:
               -e TEST_WEB_HOSTNAME=test-runner \
               -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
-              onyxdotapp/onyx-integration:test \
+              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/${{ matrix.test-dir.path }}
 
       # ------------------------------------------------------------

@@ -91,3 +91,7 @@ class ChatTurnContext:
 
     # Files uploaded by the user in the chat
     chat_files: list[InMemoryChatFile] = dataclasses.field(default_factory=list)
+
+    # Token count of all current input context (system, history, user message, agent turns, etc.)
+    # Updated dynamically as the conversation progresses through tool calls
+    current_input_tokens: int = 0

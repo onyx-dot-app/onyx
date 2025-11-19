@@ -121,77 +121,71 @@ function ActionForm({
 
   return (
     <Form className="max-w-4xl">
-      <div className="relative w-full">
-        <TextFormField
-          name="definition"
-          label="Definition"
-          subtext="Specify an OpenAPI schema that defines the APIs you want to make available as part of this action."
-          placeholder="Enter your OpenAPI schema here"
-          isTextArea={true}
-          defaultHeight="h-96"
-          fontSize="sm"
-          isCode
-          hideError
-        />
-        <button
-          type="button"
-          className="
-            absolute
-            bottom-4
-            right-4
-            border-border
-            border
-            bg-background
-            rounded
-            py-1
-            px-3
-            text-sm
-            hover:bg-accent-background
-          "
-          onClick={() => {
-            const definition = values.definition;
-            if (definition) {
-              try {
-                const formatted = prettifyDefinition(
-                  parseJsonWithTrailingCommas(definition)
-                );
-                setFieldValue("definition", formatted);
-              } catch {
-                alert("Invalid JSON format");
+      {/* Definition Section */}
+      <div className="space-y-2">
+        <div className="relative w-full">
+          <TextFormField
+            name="definition"
+            label="Definition"
+            subtext="Specify an OpenAPI schema that defines the APIs you want to make available as part of this action."
+            placeholder="Enter your OpenAPI schema here"
+            isTextArea={true}
+            defaultHeight="h-96"
+            fontSize="sm"
+            isCode
+            hideError
+          />
+          <button
+            type="button"
+            className="absolute bottom-4 right-4 border-border border bg-background rounded py-1 px-3 text-sm hover:bg-accent-background"
+            onClick={() => {
+              const definition = values.definition;
+              if (definition) {
+                try {
+                  const formatted = prettifyDefinition(
+                    parseJsonWithTrailingCommas(definition)
+                  );
+                  setFieldValue("definition", formatted);
+                } catch {
+                  alert("Invalid JSON format");
+                }
               }
-            }
-          }}
-        >
-          Format
-        </button>
-      </div>
-      {definitionError && (
-        <Text className="text-error text-sm">{definitionError}</Text>
-      )}
-      <ErrorMessage
-        name="definition"
-        component="div"
-        className="mb-4 text-error text-sm"
-      />
-      <div className="mt-4 rounded-md border border-border bg-background-50 p-4">
-        <Link
-          href="https://docs.onyx.app/admin/actions/overview"
-          className="flex items-center group"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <InfoIcon size={16} className="mr-2 text-link" />
-          <Text className="text-link group-hover:underline">
-            Learn more about actions in our documentation
-          </Text>
-        </Link>
+            }}
+          >
+            Format
+          </button>
+        </div>
+
+        {/* Error Messages */}
+        {definitionError && (
+          <Text className="text-error text-sm">{definitionError}</Text>
+        )}
+        <ErrorMessage
+          name="definition"
+          component="div"
+          className="text-error text-sm"
+        />
+
+        {/* Documentation Link */}
+        <div className="rounded-md border border-border bg-background-50 p-4">
+          <Link
+            href="https://docs.onyx.app/admin/actions/overview"
+            className="flex items-center gap-2 group"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <InfoIcon size={16} className="text-link" />
+            <Text className="text-link group-hover:underline">
+              Learn more about actions in our documentation
+            </Text>
+          </Link>
+        </div>
       </div>
 
+      {/* Available Methods Table */}
       {methodSpecs && methodSpecs.length > 0 && (
-        <div className="my-4">
-          <Text className="text-base font-semibold mb-2">
-            Available methods
-          </Text>
+        <div className="space-y-2">
+          <Text className="text-base font-semibold">Available methods</Text>
           <div className="rounded-lg border border-background-200 bg-background-50">
             <Table className="min-w-full">
               <TableHeader className="bg-background-neutral-00">
@@ -203,7 +197,7 @@ function ActionForm({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {methodSpecs?.map((method: MethodSpec) => (
+                {methodSpecs.map((method: MethodSpec) => (
                   <TableRow
                     key={`${method.method}-${method.path}-${method.name}`}
                   >
@@ -227,137 +221,149 @@ function ActionForm({
         </div>
       )}
 
-      <AdvancedOptionsToggle
-        showAdvancedOptions={showAdvancedOptions}
-        setShowAdvancedOptions={setShowAdvancedOptions}
-      />
+      <div>
+        <AdvancedOptionsToggle
+          showAdvancedOptions={showAdvancedOptions}
+          setShowAdvancedOptions={setShowAdvancedOptions}
+        />
+      </div>
+
+      {/* Advanced Options Content */}
       {showAdvancedOptions && (
-        <div>
-          <Text className="text-xl font-bold mb-2 text-primary-600">
-            Custom Headers
-          </Text>
-          <Text className="text-sm mb-6 text-text-600 italic">
-            Specify custom headers for each request to this action&apos;s API.
-          </Text>
-          <FieldArray
-            name="customHeaders"
-            render={(arrayHelpers) => (
-              <div>
-                <div className="space-y-2">
-                  {values.customHeaders.map(
-                    (header: { key: string; value: string }, index: number) => (
-                      <div
-                        key={index}
-                        className="flex items-center space-x-2 bg-background-50 p-3 rounded-lg shadow-sm"
-                      >
-                        <Field
-                          name={`customHeaders.${index}.key`}
-                          placeholder="Header Key"
-                          className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        />
-                        <Field
-                          name={`customHeaders.${index}.value`}
-                          placeholder="Header Value"
-                          className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        />
-                        <Button
-                          onClick={() => arrayHelpers.remove(index)}
-                          danger
+        <div className="space-y-6">
+          {/* Custom Headers Section */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Text className="text-xl font-bold text-primary-600">
+                Custom Headers
+              </Text>
+              <Text className="text-sm text-text-600 italic">
+                Specify custom headers for each request to this action&apos;s
+                API.
+              </Text>
+            </div>
+
+            <FieldArray
+              name="customHeaders"
+              render={(arrayHelpers) => (
+                <div className="space-y-4">
+                  {/* Headers List */}
+                  <div className="space-y-2">
+                    {values.customHeaders.map(
+                      (
+                        header: { key: string; value: string },
+                        index: number
+                      ) => (
+                        <div
+                          key={index}
+                          className="flex items-center gap-2 bg-background-50 p-3 rounded-lg shadow-sm"
                         >
-                          Remove
-                        </Button>
-                      </div>
-                    )
-                  )}
+                          <Field
+                            name={`customHeaders.${index}.key`}
+                            placeholder="Header Key"
+                            className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          />
+                          <Field
+                            name={`customHeaders.${index}.value`}
+                            placeholder="Header Value"
+                            className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          />
+                          <Button
+                            onClick={() => arrayHelpers.remove(index)}
+                            danger
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      )
+                    )}
+                  </div>
+
+                  {/* Add Button */}
+                  <Button
+                    onClick={() => arrayHelpers.push({ key: "", value: "" })}
+                    secondary
+                  >
+                    Add New Header
+                  </Button>
                 </div>
+              )}
+            />
+          </div>
 
-                <Button
-                  onClick={() => arrayHelpers.push({ key: "", value: "" })}
-                  secondary
-                >
-                  Add New Header
-                </Button>
-              </div>
-            )}
-          />
-
-          <div className="mt-6">
-            <Text className="text-xl font-bold mb-2 text-primary-600">
+          {/* Authentication Section */}
+          <div className="space-y-4">
+            <Text className="text-xl font-bold text-primary-600">
               Authentication
             </Text>
 
             {/* OAuth Configuration Selector */}
-            <div className="mb-6">
-              <OAuthConfigSelector
-                name="oauth_config_id"
-                oauthConfigs={oauthConfigs}
-                onSelect={(configId) => {
-                  setFieldValue("oauth_config_id", configId, true);
-                  // Disable passthrough_auth if OAuth config is selected
-                  if (configId) {
-                    setFieldValue("passthrough_auth", false, true);
-                  }
-                }}
-                setPopup={setPopup}
-                mutateOAuthConfigs={mutateOAuthConfigs}
-                onConfigCreated={(createdConfig) => {
-                  // Optimistically add the new config to the list
-                  mutateOAuthConfigs(
-                    [...(oauthConfigs || []), createdConfig],
-                    false
-                  );
-                  // Revalidate in the background
-                  mutateOAuthConfigs();
-                }}
-              />
-            </div>
+            <OAuthConfigSelector
+              name="oauth_config_id"
+              oauthConfigs={oauthConfigs}
+              onSelect={(configId) => {
+                setFieldValue("oauth_config_id", configId, true);
+                // Disable passthrough_auth if OAuth config is selected
+                if (configId) {
+                  setFieldValue("passthrough_auth", false, true);
+                }
+              }}
+              setPopup={setPopup}
+              mutateOAuthConfigs={mutateOAuthConfigs}
+              onConfigCreated={(createdConfig) => {
+                // Optimistically add the new config to the list
+                mutateOAuthConfigs(
+                  [...(oauthConfigs || []), createdConfig],
+                  false
+                );
+                // Revalidate in the background
+                mutateOAuthConfigs();
+              }}
+            />
 
-            {/* Passthrough Auth (only show if OAuth not enabled) */}
+            {/* Passthrough Auth */}
             {isOAuthEnabled ? (
-              <div className="flex flex-col gap-y-2">
-                <div className="flex items-center space-x-2">
-                  <SimpleTooltip
-                    tooltip={
-                      values.oauth_config_id !== null
-                        ? "Cannot enable passthrough auth when an OAuth configuration is selected"
-                        : "Cannot enable OAuth passthrough when an Authorization header is already set"
+              <div className="flex items-center gap-2">
+                <SimpleTooltip
+                  tooltip={
+                    values.oauth_config_id !== null
+                      ? "Cannot enable passthrough auth when an OAuth configuration is selected"
+                      : "Cannot enable OAuth passthrough when an Authorization header is already set"
+                  }
+                  side="top"
+                >
+                  <div
+                    className={
+                      values.customHeaders.some(
+                        (header) => header.key.toLowerCase() === "authorization"
+                      ) || values.oauth_config_id !== null
+                        ? "opacity-50"
+                        : ""
                     }
-                    side="top"
                   >
-                    <div
-                      className={
+                    <Checkbox
+                      id="passthrough_auth"
+                      checked={values.passthrough_auth}
+                      disabled={
+                        values.oauth_config_id !== null ||
                         values.customHeaders.some(
                           (header) =>
-                            header.key.toLowerCase() === "authorization"
-                        ) || values.oauth_config_id !== null
-                          ? "opacity-50"
-                          : ""
+                            header.key.toLowerCase() === "authorization" &&
+                            !values.passthrough_auth
+                        )
                       }
-                    >
-                      <Checkbox
-                        id="passthrough_auth"
-                        checked={values.passthrough_auth}
-                        disabled={
-                          values.oauth_config_id !== null ||
-                          values.customHeaders.some(
-                            (header) =>
-                              header.key.toLowerCase() === "authorization" &&
-                              !values.passthrough_auth
-                          )
-                        }
-                        onCheckedChange={(checked) => {
-                          setFieldValue("passthrough_auth", checked, true);
-                        }}
-                      />
-                    </div>
-                  </SimpleTooltip>
-                  <div className="flex flex-col">
-                    <Text mainUiBody>Pass through user&apos;s OAuth token</Text>
-                    <Text secondaryBody>
-                      When enabled, the user&apos;s OAuth token will be passed
-                      as the Authorization header for all API calls
-                    </Text>
+                      onCheckedChange={(checked) => {
+                        setFieldValue("passthrough_auth", checked, true);
+                      }}
+                    />
                   </div>
+                </SimpleTooltip>
+                <div className="space-y-1">
+                  <Text mainUiBody>Pass through user&apos;s OAuth token</Text>
+                  <Text secondaryBody>
+                    When enabled, the user&apos;s OAuth token will be passed as
+                    the Authorization header for all API calls
+                  </Text>
                 </div>
               </div>
             ) : (
@@ -370,14 +376,12 @@ function ActionForm({
         </div>
       )}
 
-      <Separator />
+      {/* Separator */}
+      <Separator className="my-0" />
 
-      <div className="flex">
-        <Button
-          type="submit"
-          className="mx-auto"
-          disabled={isSubmitting || !!definitionError}
-        >
+      {/* Submit Button */}
+      <div className="flex justify-center">
+        <Button type="submit" disabled={isSubmitting || !!definitionError}>
           {existingTool ? "Update Action" : "Create Action"}
         </Button>
       </div>
@@ -396,10 +400,24 @@ const ToolSchema = Yup.object().shape({
   definition: Yup.string().required("Action definition is required"),
   customHeaders: Yup.array()
     .of(
-      Yup.object().shape({
-        key: Yup.string().required("Header key is required"),
-        value: Yup.string().required("Header value is required"),
-      })
+      Yup.object()
+        .shape({
+          key: Yup.string(),
+          value: Yup.string(),
+        })
+        .test(
+          "header-complete",
+          "Both header key and value are required",
+          function (header) {
+            const { key = "", value = "" } = header;
+            // Allow completely empty headers (they'll be filtered out on submit)
+            if (key.trim() === "" && value.trim() === "") {
+              return true;
+            }
+            // If either field is filled, both are required
+            return key.trim() !== "" && value.trim() !== "";
+          }
+        )
     )
     .default([]),
   passthrough_auth: Yup.boolean().default(false),
@@ -428,16 +446,22 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
         initialValues={{
           definition: prettifiedDefinition,
           customHeaders:
-            tool?.custom_headers?.map((header) => ({
-              key: header.key,
-              value: header.value,
-            })) ?? [],
+            tool?.custom_headers && tool.custom_headers.length > 0
+              ? tool.custom_headers.map((header) => ({
+                  key: header.key,
+                  value: header.value,
+                }))
+              : [{ key: "", value: "" }],
           passthrough_auth: tool?.passthrough_auth ?? false,
           oauth_config_id: tool?.oauth_config_id ?? null,
         }}
         validationSchema={ToolSchema}
         onSubmit={async (values: ToolFormValues) => {
-          const hasAuthHeader = values.customHeaders?.some(
+          // Filter non-empty headers for validation
+          const nonEmptyHeaders = values.customHeaders.filter(
+            (header) => header.key.trim() !== "" || header.value.trim() !== ""
+          );
+          const hasAuthHeader = nonEmptyHeaders.some(
             (header) => header.key.toLowerCase() === "authorization"
           );
           if (hasAuthHeader && values.passthrough_auth) {
@@ -448,9 +472,6 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
                 "headers first.",
               type: "error",
             });
-            console.log(
-              "Cannot enable passthrough auth when Authorization headers are present. Please remove any Authorization headers first."
-            );
             return;
           }
 
@@ -468,24 +489,41 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
             name: name,
             description: description || "",
             definition: definition,
-            custom_headers: values.customHeaders,
+            custom_headers: nonEmptyHeaders,
             passthrough_auth: values.passthrough_auth,
             oauth_config_id: values.oauth_config_id,
           };
+          const handleResponseError = (response: {
+            error: string | null;
+          }): boolean => {
+            if (response.error) {
+              setPopup({
+                message: `Failed to ${tool ? "update" : "create"} action - ${
+                  response.error
+                }`,
+                type: "error",
+              });
+              return true;
+            }
+            return false;
+          };
+
           let response;
           if (tool) {
             response = await updateCustomTool(tool.id, toolData);
+            if (handleResponseError(response)) {
+              return;
+            }
+            // Redirect to the actions list page after updating
+            router.push(`/admin/actions?u=${Date.now()}`);
           } else {
             response = await createCustomTool(toolData);
+            if (handleResponseError(response)) {
+              return;
+            }
+            // Redirect to the actions list page after creating
+            router.push(`/admin/actions?u=${Date.now()}`);
           }
-          if (response.error) {
-            setPopup({
-              message: "Failed to create action - " + response.error,
-              type: "error",
-            });
-            return;
-          }
-          router.push(`/admin/actions?u=${Date.now()}`);
         }}
       >
         {({ isSubmitting, values, setFieldValue }) => {

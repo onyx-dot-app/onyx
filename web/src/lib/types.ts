@@ -241,6 +241,7 @@ export interface FederatedConnectorDetail {
   source: ValidSources.FederatedSlack;
   name: string;
   credentials: Record<string, any>;
+  config: Record<string, any>;
   oauth_token_exists: boolean;
   oauth_token_expires_at: string | null;
   document_sets: Array<{
@@ -556,17 +557,28 @@ export interface CredentialFieldSpec {
   secret: boolean;
 }
 
+export interface ConfigurationFieldSpec {
+  type: string;
+  description: string;
+  required: boolean;
+  default?: any;
+  example?: any;
+  secret: boolean;
+  hidden_when?: Record<string, any>;
+}
+
 export interface CredentialSchemaResponse {
   credentials: Record<string, CredentialFieldSpec>;
 }
 
 export interface ConfigurationSchemaResponse {
-  configuration: Record<string, CredentialFieldSpec>;
+  configuration: Record<string, ConfigurationFieldSpec>;
 }
 
 export interface FederatedConnectorCreateRequest {
   source: string;
   credentials: Record<string, any>;
+  config?: Record<string, any>;
 }
 
 export interface FederatedConnectorCreateResponse {

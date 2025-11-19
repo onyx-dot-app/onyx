@@ -373,10 +373,13 @@ export class OnyxApiClient {
    * @returns The user group ID
    * @throws Error if the user group creation fails
    */
-  async createUserGroup(groupName: string): Promise<number> {
+  async createUserGroup(
+    groupName: string,
+    userIds: string[] = []
+  ): Promise<number> {
     const response = await this.post("/manage/admin/user-group", {
       name: groupName,
-      user_ids: [],
+      user_ids: userIds,
       cc_pair_ids: [],
     });
 
@@ -403,5 +406,206 @@ export class OnyxApiClient {
     );
 
     this.log(`Deleted user group: ${groupId}`);
+  }
+
+  async setUserRole(
+    email: string,
+    role: "admin" | "curator" | "global_curator" | "basic",
+    explicitOverride = false
+  ): Promise<void> {
+    const response = await this.page.request.patch(
+      `${this.baseUrl}/manage/set-user-role`,
+      {
+        data: {
+          user_email: email,
+          new_role: role,
+          explicit_override: explicitOverride,
+        },
+      }
+    );
+    await this.handleResponse(response, `Failed to set user role for ${email}`);
+    this.log(`Updated role for ${email} to ${role}`);
+  }
+
+  async deleteMcpServer(serverId: number): Promise<boolean> {
+    const response = await this.page.request.delete(
+      `${this.baseUrl}/admin/mcp/server/${serverId}`
+    );
+    const success = await this.handleResponseSoft(
+      response,
+      `Failed to delete MCP server ${serverId}`
+    );
+    if (success) {
+      this.log(`Deleted MCP server ${serverId}`);
+    }
+    return success;
+  }
+
+  async deleteAssistant(assistantId: number): Promise<boolean> {
+    const response = await this.page.request.delete(
+      `${this.baseUrl}/persona/${assistantId}`
+    );
+    const success = await this.handleResponseSoft(
+      response,
+      `Failed to delete assistant ${assistantId}`
+    );
+    if (success) {
+      this.log(`Deleted assistant ${assistantId}`);
+    }
+    return success;
+  }
+
+  async listMcpServers(): Promise<any[]> {
+    const response = await this.get(`/admin/mcp/servers`);
+    const data = await this.handleResponse<{ mcp_servers: any[] }>(
+      response,
+      "Failed to list MCP servers"
+    );
+    return data.mcp_servers;
+  }
+
+  async listAssistants(options?: {
+    includeDeleted?: boolean;
+    getEditable?: boolean;
+  }): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (options?.includeDeleted) {
+      params.set("include_deleted", "true");
+    }
+    if (options?.getEditable ?? true) {
+      params.set("get_editable", "true");
+    }
+    const query = params.toString();
+    const response = await this.get(
+      `/admin/persona${query ? `?${query}` : ""}`
+    );
+    return await this.handleResponse<any[]>(
+      response,
+      "Failed to list assistants"
+    );
+  }
+
+  async findAssistantByName(
+    name: string,
+    options?: { includeDeleted?: boolean; getEditable?: boolean }
+  ): Promise<any | null> {
+    const assistants = await this.listAssistants(options);
+    return assistants.find((assistant) => assistant.name === name) ?? null;
+  }
+
+  async registerUser(email: string, password: string): Promise<{ id: string }> {
+    const response = await this.page.request.post(
+      `${this.baseUrl}/auth/register`,
+      {
+        data: {
+          email,
+          username: email,
+          password,
+        },
+      }
+    );
+    const data = await this.handleResponse<{ id: string }>(
+      response,
+      `Failed to register user ${email}`
+    );
+    return data;
+  }
+
+  async getUserByEmail(email: string): Promise<{
+    id: string;
+    email: string;
+    role: string;
+  } | null> {
+    const response = await this.page.request.get(
+      `${this.baseUrl}/manage/users/accepted`,
+      {
+        params: {
+          q: email,
+          page_size: 1,
+        },
+      }
+    );
+    const data = await this.handleResponse<{ items: any[] }>(
+      response,
+      `Failed to fetch user ${email}`
+    );
+    const [user] = data.items;
+    return user
+      ? {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+        }
+      : null;
+  }
+
+  async setCuratorStatus(
+    userGroupId: string,
+    userId: string,
+    isCurator: boolean = true
+  ): Promise<void> {
+    const response = await this.page.request.post(
+      `${this.baseUrl}/manage/admin/user-group/${userGroupId}/set-curator`,
+      {
+        data: {
+          user_id: userId,
+          is_curator: isCurator,
+        },
+      }
+    );
+    await this.handleResponse(
+      response,
+      `Failed to update curator status for ${userId}`
+    );
+  }
+
+  /**
+   * Create and activate a web search provider for testing.
+   * Uses a dummy API key that won't actually work, but allows the tool to be available.
+   *
+   * @param providerType - Type of provider: "exa", "serper", or "google_pse"
+   * @param name - Optional name for the provider (defaults to "Test Provider")
+   * @returns The created provider ID
+   */
+  async createWebSearchProvider(
+    providerType: "exa" | "serper" | "google_pse" = "exa",
+    name: string = "Test Provider"
+  ): Promise<number> {
+    const config: Record<string, string> = {};
+    if (providerType === "google_pse") {
+      config.search_engine_id = "test-engine-id";
+    }
+
+    const response = await this.post("/admin/web-search/search-providers", {
+      name,
+      provider_type: providerType,
+      api_key: "test-api-key-12345",
+      api_key_changed: true,
+      config: Object.keys(config).length > 0 ? config : undefined,
+      activate: true,
+    });
+
+    const data = await this.handleResponse<{ id: number }>(
+      response,
+      `Failed to create web search provider ${providerType}`
+    );
+    return data.id;
+  }
+
+  /**
+   * Delete a web search provider.
+   *
+   * @param providerId - ID of the provider to delete
+   */
+  async deleteWebSearchProvider(providerId: number): Promise<void> {
+    const response = await this.delete(
+      `/admin/web-search/search-providers/${providerId}`
+    );
+    if (!response.ok()) {
+      const errorText = await response.text();
+      console.warn(
+        `Failed to delete web search provider ${providerId}: ${response.status()} - ${errorText}`
+      );
+    }
   }
 }
