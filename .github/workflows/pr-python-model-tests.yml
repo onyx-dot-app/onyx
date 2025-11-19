@@ -127,10 +127,12 @@ jobs:
         if: failure() && github.event_name == 'schedule'
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data '{"text":"Scheduled Model Tests failed! Check the run at: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            --data "{\"text\":\"Scheduled Model Tests failed! Check the run at: https://github.com/${REPO}/actions/runs/${RUN_ID}\"}" \
             $SLACK_WEBHOOK
 
       - name: Dump all-container logs (optional)

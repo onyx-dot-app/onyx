@@ -277,10 +277,12 @@ jobs:
 
       - name: Run Playwright tests
         working-directory: ./web
+        env:
+          PROJECT: ${{ matrix.project }}
         run: |
           # Create test-results directory to ensure it exists for artifact upload
           mkdir -p test-results
-          npx playwright test --project ${{ matrix.project }}
+          npx playwright test --project ${PROJECT}
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         if: always()
@@ -293,10 +295,12 @@ jobs:
       # save before stopping the containers so the logs can be captured
       - name: Save Docker logs
         if: success() || failure()
+        env:
+          WORKSPACE: ${{ github.workspace }}
         run: |
           cd deployment/docker_compose
           docker compose logs > docker-compose.log
-          mv docker-compose.log ${{ github.workspace }}/docker-compose.log
+          mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
         if: success() || failure()
