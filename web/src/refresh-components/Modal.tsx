@@ -341,15 +341,11 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
     return (
       <div
         ref={ref}
-        className={cn("relative z-10", className)}
-        style={
-          withBottomShadow
-            ? {
-                boxShadow:
-                  "0 2px 12px 0 var(--Shadow-02, rgba(0, 0, 0, 0.10)), 0 0 4px 1px var(--Shadow-01, rgba(0, 0, 0, 0.05))",
-              }
-            : undefined
-        }
+        className={cn(
+          "relative z-10",
+          withBottomShadow && "shadow-01",
+          className
+        )}
         {...props}
       >
         {children}
@@ -389,13 +385,15 @@ ModalIcon.displayName = "ModalIcon";
 /**
  * Modal Close Button Component
  *
- * Absolutely positioned close button. Place inside Modal.Content.
+ * Absolutely positioned close button. Place inside Modal.Header.
  *
  * @example
  * ```tsx
  * <Modal.Content>
- *   <Modal.CloseButton />
- *   <Modal.Header>...</Modal.Header>
+ *   <Modal.Header>
+ *     <Modal.CloseButton />
+ *   </Modal.Header>
+ *   ...
  * </Modal.Content>
  *
  * // Custom positioning
