@@ -98,7 +98,6 @@ jobs:
             type=registry,ref=onyxdotapp/onyx-backend:latest
           cache-to: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
-            type=registry,ref=onyxdotapp/onyx-backend:latest,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
