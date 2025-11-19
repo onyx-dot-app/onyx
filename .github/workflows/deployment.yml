@@ -234,10 +234,15 @@ jobs:
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
 
       - name: Create and push manifest
+        env:
+          IMAGE_REPO: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          AMD64_DIGEST: ${{ needs.build-web-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-web-arm64.outputs.digest }}
+          META_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          IMAGES="${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-web-amd64.outputs.digest }} ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-web-arm64.outputs.digest }}"
+          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
-            $(printf '%s\n' "${{ steps.meta.outputs.tags }}" | xargs -I {} echo -t {}) \
+            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
 
   build-web-cloud-amd64:
@@ -405,10 +410,15 @@ jobs:
             type=raw,value=${{ github.event_name == 'workflow_dispatch' && format('web-cloud-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
 
       - name: Create and push manifest
+        env:
+          IMAGE_REPO: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          AMD64_DIGEST: ${{ needs.build-web-cloud-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-web-cloud-arm64.outputs.digest }}
+          META_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          IMAGES="${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-web-cloud-amd64.outputs.digest }} ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-web-cloud-arm64.outputs.digest }}"
+          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
-            $(printf '%s\n' "${{ steps.meta.outputs.tags }}" | xargs -I {} echo -t {}) \
+            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
 
   build-backend-amd64:
@@ -561,10 +571,15 @@ jobs:
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
 
       - name: Create and push manifest
+        env:
+          IMAGE_REPO: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          AMD64_DIGEST: ${{ needs.build-backend-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-backend-arm64.outputs.digest }}
+          META_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          IMAGES="${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-backend-amd64.outputs.digest }} ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-backend-arm64.outputs.digest }}"
+          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
-            $(printf '%s\n' "${{ steps.meta.outputs.tags }}" | xargs -I {} echo -t {}) \
+            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
 
   build-model-server-amd64:
@@ -731,10 +746,15 @@ jobs:
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
 
       - name: Create and push manifest
+        env:
+          IMAGE_REPO: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          AMD64_DIGEST: ${{ needs.build-model-server-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-model-server-arm64.outputs.digest }}
+          META_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          IMAGES="${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-model-server-amd64.outputs.digest }} ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-model-server-arm64.outputs.digest }}"
+          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
-            $(printf '%s\n' "${{ steps.meta.outputs.tags }}" | xargs -I {} echo -t {}) \
+            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
 
   trivy-scan-web:
