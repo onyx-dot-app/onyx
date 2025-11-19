@@ -30,7 +30,7 @@ jobs:
       - name: Check which components to build and version info
         id: check
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="${GITHUB_REF_NAME}"
           # Sanitize tag name by replacing slashes with hyphens (for Docker tag compatibility)
           SANITIZED_TAG=$(echo "$TAG" | tr '/' '-')
           IS_CLOUD=false
@@ -96,6 +96,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -151,6 +153,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -250,6 +254,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -313,6 +319,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -417,6 +425,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -471,6 +481,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -570,6 +582,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -631,6 +645,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -813,6 +829,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Run Trivy vulnerability scanner
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
@@ -899,51 +917,66 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Determine failed jobs
         id: failed-jobs
         shell: bash
         run: |
           FAILED_JOBS=""
-          if [ "${{ needs.build-web-amd64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_WEB_AMD64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-web-amd64\\n"
           fi
-          if [ "${{ needs.build-web-arm64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_WEB_ARM64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-web-arm64\\n"
           fi
-          if [ "${{ needs.merge-web.result }}" == "failure" ]; then
+          if [ "${NEEDS_MERGE_WEB_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• merge-web\\n"
           fi
-          if [ "${{ needs.build-web-cloud-amd64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_WEB_CLOUD_AMD64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-web-cloud-amd64\\n"
           fi
-          if [ "${{ needs.build-web-cloud-arm64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_WEB_CLOUD_ARM64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-web-cloud-arm64\\n"
           fi
-          if [ "${{ needs.merge-web-cloud.result }}" == "failure" ]; then
+          if [ "${NEEDS_MERGE_WEB_CLOUD_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• merge-web-cloud\\n"
           fi
-          if [ "${{ needs.build-backend-amd64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_BACKEND_AMD64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-backend-amd64\\n"
           fi
-          if [ "${{ needs.build-backend-arm64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_BACKEND_ARM64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-backend-arm64\\n"
           fi
-          if [ "${{ needs.merge-backend.result }}" == "failure" ]; then
+          if [ "${NEEDS_MERGE_BACKEND_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• merge-backend\\n"
           fi
-          if [ "${{ needs.build-model-server-amd64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_MODEL_SERVER_AMD64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-model-server-amd64\\n"
           fi
-          if [ "${{ needs.build-model-server-arm64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_MODEL_SERVER_ARM64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-model-server-arm64\\n"
           fi
-          if [ "${{ needs.merge-model-server.result }}" == "failure" ]; then
+          if [ "${NEEDS_MERGE_MODEL_SERVER_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• merge-model-server\\n"
           fi
           # Remove trailing \n and set output
           FAILED_JOBS=$(printf '%s' "$FAILED_JOBS" | sed 's/\\n$//')
           echo "jobs=$FAILED_JOBS" >> "$GITHUB_OUTPUT"
+        env:
+          NEEDS_BUILD_WEB_AMD64_RESULT: ${{ needs.build-web-amd64.result }}
+          NEEDS_BUILD_WEB_ARM64_RESULT: ${{ needs.build-web-arm64.result }}
+          NEEDS_MERGE_WEB_RESULT: ${{ needs.merge-web.result }}
+          NEEDS_BUILD_WEB_CLOUD_AMD64_RESULT: ${{ needs.build-web-cloud-amd64.result }}
+          NEEDS_BUILD_WEB_CLOUD_ARM64_RESULT: ${{ needs.build-web-cloud-arm64.result }}
+          NEEDS_MERGE_WEB_CLOUD_RESULT: ${{ needs.merge-web-cloud.result }}
+          NEEDS_BUILD_BACKEND_AMD64_RESULT: ${{ needs.build-backend-amd64.result }}
+          NEEDS_BUILD_BACKEND_ARM64_RESULT: ${{ needs.build-backend-arm64.result }}
+          NEEDS_MERGE_BACKEND_RESULT: ${{ needs.merge-backend.result }}
+          NEEDS_BUILD_MODEL_SERVER_AMD64_RESULT: ${{ needs.build-model-server-amd64.result }}
+          NEEDS_BUILD_MODEL_SERVER_ARM64_RESULT: ${{ needs.build-model-server-arm64.result }}
+          NEEDS_MERGE_MODEL_SERVER_RESULT: ${{ needs.merge-model-server.result }}
 
       - name: Send Slack notification
         uses: ./.github/actions/slack-notify
