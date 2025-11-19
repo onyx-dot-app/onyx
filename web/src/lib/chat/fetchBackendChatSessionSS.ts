@@ -1,12 +1,10 @@
 import { BackendChatSession } from "@/app/chat/interfaces";
 import { fetchSS } from "@/lib/utilsSS";
 
-export async function fetchChatSessionSS(
+export async function fetchBackendChatSessionSS(
   chatId: string
 ): Promise<BackendChatSession | null> {
-  const response = await fetchSS(
-    `/chat/get-chat-session/${chatId}?is_shared=True`
-  );
+  const response = await fetchSS(`/chat/get-chat-session/${chatId}`);
   if (!response.ok) return null;
-  return await response.json();
+  return (await response.json()) as BackendChatSession;
 }

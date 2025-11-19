@@ -1,3 +1,5 @@
+"use client";
+
 import { ChatSession } from "@/app/chat/interfaces";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
@@ -12,12 +14,7 @@ interface AppPageProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
   chatSession: ChatSession | null;
 }
 
-async function AppPage({
-  settings,
-  chatSession,
-  className,
-  ...rest
-}: AppPageProps) {
+function AppPage({ settings, chatSession, className, ...rest }: AppPageProps) {
   const [showShareModal, setShowShareModal] = useState(false);
 
   const customHeaderContent =
@@ -34,7 +31,7 @@ async function AppPage({
 
       <div className="flex flex-col h-full w-full">
         {(customHeaderContent || chatSession) && (
-          <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16 dbg-red">
+          <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
             <div className="flex-1" />
             <div className="flex-1 flex flex-col items-center">
               <Text text03>{customHeaderContent}</Text>
@@ -46,7 +43,9 @@ async function AppPage({
                 tertiary
                 onClick={() => setShowShareModal(true)}
                 className={cn(!chatSession && "invisible")}
-              />
+              >
+                Share Chat
+              </Button>
             </div>
           </header>
         )}
