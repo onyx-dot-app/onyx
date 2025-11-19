@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export interface ScrollIndicatorDivProps
-  extends React.HtmlHTMLAttributes<HTMLDivElement> {
+  extends React.HTMLAttributes<HTMLDivElement> {
   // Mask/Shadow options
   disableIndicators?: boolean;
   backgroundColor?: string;
@@ -12,7 +12,6 @@ export interface ScrollIndicatorDivProps
 
   // Choose between gradient mask or box shadow
   variant?: "gradient" | "shadow";
-  shadowIntensity?: string;
 
   // Optional spacing at bottom (defaults to none)
   bottomSpacing?: string;
@@ -23,7 +22,6 @@ export default function ScrollIndicatorDiv({
   backgroundColor = "var(--background-tint-02)",
   indicatorHeight = "3rem",
   variant = "gradient",
-  shadowIntensity = "rgba(0, 0, 0, 0.1)",
   bottomSpacing,
 
   className,
@@ -111,11 +109,13 @@ export default function ScrollIndicatorDiv({
       {/* Scrollable content */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto flex flex-col"
+        className={cn(
+          "flex-1 min-h-0 overflow-y-auto flex flex-col",
+          className
+        )}
+        {...rest}
       >
-        <div className={cn("flex-1 flex flex-col", className)} {...rest}>
-          {children}
-        </div>
+        {children}
         {bottomSpacing && <div style={{ minHeight: bottomSpacing }} />}
       </div>
 
