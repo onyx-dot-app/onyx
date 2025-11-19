@@ -55,6 +55,7 @@ export default function SwitchList({
     });
   }, [items, searchTerm]);
 
+  console.log("filteredItems", filteredItems);
   return (
     <PopoverMenu medium footer={footer}>
       {[

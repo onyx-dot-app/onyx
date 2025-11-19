@@ -43,13 +43,13 @@ test.describe("Default Assistant Admin Page", () => {
     // Proactively log tool availability and current config
     try {
       const toolsResp = await page.request.get(
-        "http://localhost:3000/api/admin/default-assistant/available-tools"
+        "http://localhost:3000/api/tool"
       );
       const cfgResp = await page.request.get(
         "http://localhost:3000/api/admin/default-assistant/configuration"
       );
       console.log(
-        `[/available-tools] status=${toolsResp.status()} body=${(
+        `[/api/tool] status=${toolsResp.status()} body=${(
           await toolsResp.text()
         ).slice(0, 400)}`
       );

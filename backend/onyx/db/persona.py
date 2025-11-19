@@ -23,6 +23,8 @@ from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
+from onyx.db.enums import MCPAuthenticationPerformer
+from onyx.db.enums import MCPAuthenticationType
 from onyx.db.models import DocumentSet
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
@@ -40,6 +42,7 @@ from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.features.tool.models import should_expose_tool_to_fe
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -943,8 +946,41 @@ def update_default_assistant_configuration(
             tool = db_session.query(Tool).filter(Tool.id == tool_id).one_or_none()
             if not tool:
                 raise ValueError(f"Tool with ID {tool_id} not found")
-            if tool.in_code_tool_id is None:
-                raise ValueError(f"Tool with ID {tool_id} is not a built-in tool")
+
+            if not should_expose_tool_to_fe(tool):
+                raise ValueError(f"Tool with ID {tool_id} cannot be assigned")
+
+            if tool.mcp_server_id is not None:
+                server = tool.mcp_server
+                if server is None:
+                    raise ValueError(
+                        f"MCP server for tool with ID {tool_id} is not available"
+                    )
+                if not tool.enabled:
+                    raise ValueError(
+                        f"Enable MCP tool {tool.display_name or tool.name} before assigning it"
+                    )
+                if server.auth_type == MCPAuthenticationType.NONE:
+                    pass
+                elif server.auth_performer == MCPAuthenticationPerformer.ADMIN:
+                    if server.auth_type == MCPAuthenticationType.OAUTH:
+                        raise ValueError(
+                            "Admin-managed OAuth MCP servers cannot be added to the default assistant yet"
+                        )
+                    if server.admin_connection_config_id is None:
+                        raise ValueError(
+                            f"Configure admin credentials for MCP server {server.name} before assigning its tools"
+                        )
+                else:
+                    if server.admin_connection_config_id is None:
+                        raise ValueError(
+                            f"Set up an authentication template for MCP server {server.name} before assigning its tools"
+                        )
+
+            elif tool.in_code_tool_id is None and not tool.enabled:
+                raise ValueError(
+                    f"Enable custom tool {tool.display_name or tool.name} before assigning it"
+                )
 
             persona.tools.append(tool)
 
