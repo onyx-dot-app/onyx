@@ -5,6 +5,7 @@ import {
   waitForUnifiedGreeting,
   openActionManagement,
 } from "../utils/tools";
+import { OnyxApiClient } from "../utils/onyxApiClient";
 
 test.describe("Default Assistant Admin Page", () => {
   test.beforeEach(async ({ page }) => {
@@ -541,6 +542,18 @@ test.describe("Default Assistant Admin Page", () => {
   });
 
   test("should toggle all tools and verify in chat", async ({ page }) => {
+    const apiClient = new OnyxApiClient(page);
+    let webSearchProviderId: number | null = null;
+
+    try {
+      // Set up a web search provider so the tool is available
+      webSearchProviderId = await apiClient.createWebSearchProvider("exa");
+    } catch (error) {
+      console.warn(
+        `Failed to create web search provider for test: ${error}. Test may fail if web search is required.`
+      );
+    }
+
     await page.waitForSelector("text=Internal Search", { timeout: 10000 });
 
     // Store initial states
@@ -621,7 +634,6 @@ test.describe("Default Assistant Admin Page", () => {
     await waitForUnifiedGreeting(page);
     await expect(page.locator(TOOL_IDS.actionToggle)).toBeVisible();
     await openActionManagement(page);
-    await page.pause();
     expect(await page.$(TOOL_IDS.searchOption)).toBeTruthy();
     expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
     expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
@@ -647,6 +659,17 @@ test.describe("Default Assistant Admin Page", () => {
       if (currentState !== originalState) {
         await toggle.click();
         await page.waitForTimeout(3000);
+      }
+    }
+
+    // Clean up web search provider
+    if (webSearchProviderId !== null) {
+      try {
+        await apiClient.deleteWebSearchProvider(webSearchProviderId);
+      } catch (error) {
+        console.warn(
+          `Failed to delete web search provider ${webSearchProviderId}: ${error}`
+        );
       }
     }
   });

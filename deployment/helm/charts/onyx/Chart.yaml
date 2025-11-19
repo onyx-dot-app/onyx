@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.4.7
+version: 0.4.8
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,7 +16,7 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
     - name: vespa
-      image: vespaengine/vespa:8.526.15
+      image: vespaengine/vespa:8.609.39
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0
@@ -24,7 +24,7 @@ dependencies:
     condition: postgresql.enabled
     alias: postgresql
   - name: vespa
-    version: 0.2.24
+    version: 0.2.25
     repository: https://onyx-dot-app.github.io/vespa-helm-charts
     condition: vespa.enabled
   - name: ingress-nginx

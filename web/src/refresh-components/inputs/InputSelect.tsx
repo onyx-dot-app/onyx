@@ -93,17 +93,14 @@ function Item({
   );
 }
 
-interface RootProps {
+interface RootProps
+  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root> {
   disabled?: boolean;
   error?: boolean;
 
-  value?: string;
-  onValueChange?: (value: string) => void;
-  defaultValue?: string;
   placeholder?: React.ReactNode;
   className?: string;
   rightSection?: React.ReactNode;
-  children?: React.ReactNode;
 }
 
 function Root({
@@ -117,6 +114,7 @@ function Root({
   className,
   rightSection,
   children,
+  ...rest
 }: RootProps) {
   const variant = disabled ? "disabled" : error ? "error" : "main";
   const isControlled = value !== undefined;
@@ -167,6 +165,7 @@ function Root({
       defaultValue={defaultValue}
       onValueChange={handleValueChange}
       disabled={disabled}
+      {...rest}
     >
       <SelectPrimitive.Trigger
         className={cn(
