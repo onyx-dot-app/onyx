@@ -182,17 +182,22 @@ jobs:
         run: npx playwright install --with-deps
 
       - name: Create .env file for Docker Compose
+        env:
+          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
+          EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
-          GEN_AI_API_KEY=${{ env.OPENAI_API_KEY }}
-          EXA_API_KEY=${{ env.EXA_API_KEY }}
+          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
+          EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
-          ONYX_BACKEND_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
-          ONYX_MODEL_SERVER_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
-          ONYX_WEB_SERVER_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
+          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images

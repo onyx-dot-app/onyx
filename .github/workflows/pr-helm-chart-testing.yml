@@ -33,9 +33,11 @@ jobs:
     # even though we specify chart-dirs in ct.yaml, it isn't used by ct for the list-changed command...
     - name: Run chart-testing (list-changed)
       id: list-changed
+      env:
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       run: |
-        echo "default_branch: ${{ github.event.repository.default_branch }}"
-        changed=$(ct list-changed --remote origin --target-branch ${{ github.event.repository.default_branch }} --chart-dirs deployment/helm/charts)
+        echo "default_branch: ${DEFAULT_BRANCH}"
+        changed=$(ct list-changed --remote origin --target-branch ${DEFAULT_BRANCH} --chart-dirs deployment/helm/charts)
         echo "list-changed output: $changed"
         if [[ -n "$changed" ]]; then
           echo "changed=true" >> "$GITHUB_OUTPUT"

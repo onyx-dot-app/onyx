@@ -203,6 +203,9 @@ jobs:
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
       - name: Start Docker containers
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
@@ -211,8 +214,8 @@ jobs:
           POSTGRES_USE_NULL_POOL=true \
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
-          ONYX_BACKEND_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }} \
-          ONYX_MODEL_SERVER_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }} \
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           INTEGRATION_TESTS_MODE=true \
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001 \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
@@ -354,6 +357,9 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Start Docker containers for multi-tenant tests
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
@@ -361,8 +367,8 @@ jobs:
           AUTH_TYPE=cloud \
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
-          ONYX_BACKEND_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }} \
-          ONYX_MODEL_SERVER_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }} \
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           DEV_MODE=true \
           docker compose -f docker-compose.multitenant-dev.yml up \
             relational_db \
@@ -403,6 +409,9 @@ jobs:
           echo "Finished waiting for service."
 
       - name: Run Multi-Tenant Integration Tests
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           echo "Running multi-tenant integration tests..."
           docker run --rm --network onyx_default \
@@ -426,7 +435,7 @@ jobs:
             -e REQUIRE_EMAIL_VERIFICATION=false \
             -e DISABLE_TELEMETRY=true \
             -e DEV_MODE=true \
-            ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
+            ${ECR_CACHE}:integration-test-${RUN_ID} \
             /app/tests/integration/multitenant_tests
 
       - name: Dump API server logs (multi-tenant)
