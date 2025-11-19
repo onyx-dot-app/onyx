@@ -55,7 +55,7 @@ const ModalOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-[2000] bg-mask-03 backdrop-blur-03 pointer-events-none",
+      "fixed inset-0 z-[2000] bg-mask-03 backdrop-blur-03",
       "data-[state=open]:animate-in data-[state=closed]:animate-out",
       "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
       className
@@ -73,14 +73,16 @@ interface ModalContextValue {
   hasAttemptedClose: boolean;
   setHasAttemptedClose: (value: boolean) => void;
 }
+
 const ModalContext = React.createContext<ModalContextValue | null>(null);
-function useModalContext() {
+
+const useModalContext = () => {
   const context = React.useContext(ModalContext);
   if (!context) {
     throw new Error("Modal compound components must be used within Modal");
   }
   return context;
-}
+};
 
 /**
  * Size class names mapping for modal variants
@@ -89,7 +91,7 @@ const sizeClassNames = {
   large: ["w-[80dvw]", "h-[80dvh]"],
   medium: ["w-[60rem]", "h-fit"],
   small: ["w-[32rem]", "h-[30rem]"],
-  tall: ["w-[32rem]", "max-h-[calc(100dvh-4rem)]"],
+  tall: ["w-[32rem]"],
   mini: ["w-[32rem]", "h-fit"],
 } as const;
 
@@ -122,7 +124,7 @@ const sizeClassNames = {
  * </Modal.Content>
  *
  * // Custom size with className
- * // Highly discouraged; please use the default sizes above!
+ * // (Highly discouraged! Always try to default to predefined sizings, please.)
  * <Modal.Content className="w-[48rem]">
  *   {/* Custom sized modal *\/}
  * </Modal.Content>
@@ -142,12 +144,7 @@ const ModalContent = React.forwardRef<
     { className, children, large, medium, small, tall, mini, ...props },
     ref
   ) => {
-    const closeButtonRef = React.useRef<HTMLDivElement>(null);
-    const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
-    const hasUserTypedRef = React.useRef(false);
-
-    // Determine size based on flags
-    const size = large
+    const variant = large
       ? "large"
       : medium
         ? "medium"
@@ -158,6 +155,9 @@ const ModalContent = React.forwardRef<
             : mini
               ? "mini"
               : "medium";
+    const closeButtonRef = React.useRef<HTMLDivElement>(null);
+    const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
+    const hasUserTypedRef = React.useRef(false);
 
     // Reset state when modal closes or opens
     const resetState = React.useCallback(() => {
@@ -237,19 +237,6 @@ const ModalContent = React.forwardRef<
     // Handle escape key and outside clicks
     const handleInteractOutside = React.useCallback(
       (e: Event) => {
-        // Check if the click target is inside a dropdown/listbox (e.g., ComboBox dropdown)
-        const target = e.target as HTMLElement;
-        if (target) {
-          // Check if click is on a dropdown element or its children
-          const isDropdownClick = target.closest('[role="listbox"]');
-          const isOptionClick = target.closest('[role="option"]');
-          if (isDropdownClick || isOptionClick) {
-            // Prevent modal from closing but allow the dropdown interaction
-            e.preventDefault();
-            return;
-          }
-        }
-
         if (hasModifiedInputs()) {
           if (!hasAttemptedClose) {
             // First attempt: prevent close and focus the close button
@@ -290,15 +277,15 @@ const ModalContent = React.forwardRef<
             className={cn(
               "fixed left-[50%] top-[50%] z-[2001] translate-x-[-50%] translate-y-[-50%]",
               "bg-background-tint-00 border rounded-16 shadow-2xl",
-              "flex flex-col overflow-hidden pointer-events-auto",
+              "flex flex-col overflow-hidden",
               "data-[state=open]:animate-in data-[state=closed]:animate-out",
-              "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-              "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+              "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
+              "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
               "data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]",
-              "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
+              "data-[state=open]:slide-in-from-top-[48%] data-[state=open]:slide-in-from-left-1/2",
               "duration-200",
               // Size variants
-              size && sizeClassNames[size],
+              sizeClassNames[variant],
               className
             )}
             onOpenAutoFocus={(e) => {
@@ -484,7 +471,7 @@ const ModalDescription = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
 >(({ className, children, ...props }, ref) => (
   <DialogPrimitive.Description ref={ref} asChild {...props}>
-    <Text secondaryBody text02 className={className}>
+    <Text secondaryBody text03 className={className}>
       {children}
     </Text>
   </DialogPrimitive.Description>
@@ -544,7 +531,14 @@ interface ModalFooterProps extends React.HTMLAttributes<HTMLDivElement> {}
 const ModalFooter = React.forwardRef<HTMLDivElement, ModalFooterProps>(
   ({ className, children, ...props }, ref) => {
     return (
-      <div ref={ref} className={cn(className)} {...props}>
+      <div
+        ref={ref}
+        className={cn(
+          "flex flex-row items-center justify-end gap-1",
+          className
+        )}
+        {...props}
+      >
         {children}
       </div>
     );
@@ -552,7 +546,7 @@ const ModalFooter = React.forwardRef<HTMLDivElement, ModalFooterProps>(
 );
 ModalFooter.displayName = "ModalFooter";
 
-export const Modal = Object.assign(ModalRoot, {
+export default Object.assign(ModalRoot, {
   Portal: ModalPortal,
   Close: ModalClose,
   Overlay: ModalOverlay,
