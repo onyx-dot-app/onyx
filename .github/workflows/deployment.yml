@@ -600,6 +600,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64
@@ -610,7 +611,6 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
           provenance: false
           sbom: false
-          buildx-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
   build-model-server-arm64:
     needs: determine-builds
