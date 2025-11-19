@@ -48,16 +48,13 @@ import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
 import {
   useChatSessionStore,
   useMaxTokens,
+  useChatPageLayout,
   useUncaughtError,
 } from "@/app/chat/stores/useChatSessionStore";
 import {
   useCurrentChatState,
-  useSubmittedMessage,
-  useLoadingError,
   useIsReady,
-  useIsFetching,
   useCurrentMessageTree,
-  useCurrentMessageHistory,
   useHasPerformedInitialScroll,
   useDocumentSidebarVisible,
   useHasSentLocalUserMessage,
@@ -405,14 +402,10 @@ export default function ChatPage({
   // Access chat state directly from the store
   const currentChatState = useCurrentChatState();
   const chatSessionId = useChatSessionStore((state) => state.currentSessionId);
-  const submittedMessage = useSubmittedMessage();
-  const loadingError = useLoadingError();
   const uncaughtError = useUncaughtError();
   const isReady = useIsReady();
   const maxTokens = useMaxTokens();
-  const isFetchingChatMessages = useIsFetching();
   const completeMessageTree = useCurrentMessageTree();
-  const messageHistory = useCurrentMessageHistory();
   const hasPerformedInitialScroll = useHasPerformedInitialScroll();
   const currentSessionHasSentLocalUserMessage = useHasSentLocalUserMessage();
   const documentSidebarVisible = useDocumentSidebarVisible();
@@ -422,6 +415,8 @@ export default function ChatPage({
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
+  const { showCenteredInput, loadingError, messageHistory } =
+    useChatPageLayout();
 
   const clientScrollToBottom = useCallback(
     (fast?: boolean) => {
@@ -621,13 +616,6 @@ export default function ChatPage({
   const handleDesktopDocumentSidebarClose = useCallback(() => {
     setTimeout(() => updateCurrentDocumentSidebarVisible(false), 300);
   }, [updateCurrentDocumentSidebarVisible]);
-
-  // Determine whether to show the centered input (no messages yet)
-  const showCenteredInput =
-    messageHistory.length === 0 &&
-    !isFetchingChatMessages &&
-    !loadingError &&
-    !submittedMessage;
 
   // Only show the centered hero layout when there is NO project selected
   // and there are no messages yet. If a project is selected, prefer a top layout.

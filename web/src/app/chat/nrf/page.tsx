@@ -3,7 +3,7 @@ import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { cookies } from "next/headers";
 import NRFPage from "./NRFPage";
 import { NRFPreferencesProvider } from "../../../components/context/NRFPreferencesContext";
-import * as Layouts from "@/refresh-components/layouts/layouts";
+import * as Layouts from "@/refresh-components/layouts/Layouts";
 import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
 
 export default async function Page() {

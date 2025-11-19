@@ -8,14 +8,21 @@ import SvgShare from "@/icons/share";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { useState } from "react";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
+import { useChatPageLayout } from "@/app/chat/stores/useChatSessionStore";
 
 interface AppPageProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
   settings: CombinedSettings | null;
   chatSession: ChatSession | null;
 }
 
-function AppPage({ settings, chatSession, className, ...rest }: AppPageProps) {
+export function AppPage({
+  settings,
+  chatSession,
+  className,
+  ...rest
+}: AppPageProps) {
   const [showShareModal, setShowShareModal] = useState(false);
+  const { showCenteredInput } = useChatPageLayout();
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
@@ -30,7 +37,7 @@ function AppPage({ settings, chatSession, className, ...rest }: AppPageProps) {
       )}
 
       <div className="flex flex-col h-full w-full">
-        {(customHeaderContent || chatSession) && (
+        {(customHeaderContent || !showCenteredInput) && (
           <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
             <div className="flex-1" />
             <div className="flex-1 flex flex-col items-center">
@@ -42,7 +49,7 @@ function AppPage({ settings, chatSession, className, ...rest }: AppPageProps) {
                 transient={showShareModal}
                 tertiary
                 onClick={() => setShowShareModal(true)}
-                className={cn(!chatSession && "invisible")}
+                className={cn(showCenteredInput && "invisible")}
               >
                 Share Chat
               </Button>
@@ -55,5 +62,3 @@ function AppPage({ settings, chatSession, className, ...rest }: AppPageProps) {
     </>
   );
 }
-
-export { AppPage };
