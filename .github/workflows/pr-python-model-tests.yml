@@ -11,6 +11,9 @@ on:
         required: false
         default: 'main'
 
+permissions:
+  contents: read
+
 env:
   # Bedrock
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

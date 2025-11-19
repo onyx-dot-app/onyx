@@ -15,12 +15,15 @@ on:
 permissions:
   actions: read
   contents: read
-  security-events: write
 
 jobs:
   scan-licenses:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}-scan-licenses"]
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
 
     steps:
       - name: Checkout code

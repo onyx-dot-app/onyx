@@ -10,6 +10,9 @@ on:
       - main
       - 'release/**'
 
+permissions:
+  contents: read
+
 jobs:
   check-lazy-imports:
     runs-on: ubuntu-latest

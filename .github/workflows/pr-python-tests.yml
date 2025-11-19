@@ -10,6 +10,9 @@ on:
       - main
       - 'release/**'
 
+permissions:
+  contents: read
+
 jobs:
   backend-check:
     # See https://runs-on.com/runners/linux/

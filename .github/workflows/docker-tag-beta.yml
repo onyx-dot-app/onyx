@@ -10,6 +10,9 @@ on:
         description: "The version (ie v1.0.0-beta.0) to tag as beta"
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   tag:
     # See https://runs-on.com/runners/linux/

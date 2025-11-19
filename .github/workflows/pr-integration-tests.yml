@@ -10,6 +10,9 @@ on:
       - main
       - "release/**"
 
+permissions:
+  contents: read
+
 env:
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

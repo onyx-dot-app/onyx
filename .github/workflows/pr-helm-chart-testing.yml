@@ -9,6 +9,9 @@ on:
     branches: [ main ]
   workflow_dispatch:  # Allows manual triggering
 
+permissions:
+  contents: read
+
 jobs:
   helm-chart-check:
     # See https://runs-on.com/runners/linux/

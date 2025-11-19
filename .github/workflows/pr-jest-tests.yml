@@ -5,6 +5,9 @@ concurrency:
 
 on: push
 
+permissions:
+  contents: read
+
 jobs:
   jest-tests:
     name: Jest Tests

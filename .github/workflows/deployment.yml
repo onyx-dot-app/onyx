@@ -6,6 +6,9 @@ on:
       - "*"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   IS_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' }}
   EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}
