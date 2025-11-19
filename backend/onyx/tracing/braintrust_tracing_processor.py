@@ -27,7 +27,6 @@ def _span_type(span: Span[Any]) -> braintrust.SpanTypeAttribute:
 
 
 def _span_name(span: Span[Any]) -> str:
-    # TODO(sachin): span name should also come from the span_data.
     if isinstance(span.span_data, AgentSpanData) or isinstance(
         span.span_data, FunctionSpanData
     ):
@@ -89,16 +88,12 @@ class BraintrustTracingProcessor(TracingProcessor):
                 span_id=trace.trace_id,
                 root_span_id=trace.trace_id,
                 metadata=metadata,
-                # TODO(sachin): Add start time when SDK provides it.
-                # start_time=_timestamp_from_maybe_iso(trace.started_at),
             )
         else:
             self._spans[trace.trace_id] = braintrust.start_span(  # type: ignore[assignment]
                 id=trace.trace_id,
                 span_attributes={"type": "task", "name": trace.name},
                 metadata=metadata,
-                # TODO(sachin): Add start time when SDK provides it.
-                # start_time=_timestamp_from_maybe_iso(trace.started_at),
             )
 
     def on_trace_end(self, trace: Trace) -> None:
@@ -108,8 +103,6 @@ class BraintrustTracingProcessor(TracingProcessor):
         trace_last_output = self._last_output.pop(trace.trace_id, None)
         span.log(input=trace_first_input, output=trace_last_output)
         span.end()
-        # TODO(sachin): Add end time when SDK provides it.
-        # span.end(_timestamp_from_maybe_iso(trace.ended_at))
 
     def _agent_log_data(self, span: Span[AgentSpanData]) -> Dict[str, Any]:
         return {
