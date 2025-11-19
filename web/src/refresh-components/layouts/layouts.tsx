@@ -247,24 +247,26 @@ export function AppPage({
               >
                 Share Chat
               </Button>
-              <SimplePopover
-                trigger={
-                  <IconButton
-                    icon={SvgMoreHorizontal}
-                    className="ml-2"
-                    transient={popoverOpen}
-                    tertiary
-                  />
-                }
-                onOpenChange={(state) => {
-                  setPopoverOpen(state);
-                  if (!state) setShowMoveOptions(false);
-                }}
-                side="bottom"
-                align="end"
-              >
-                <PopoverMenu>{popoverItems}</PopoverMenu>
-              </SimplePopover>
+              <div className={cn(showCenteredInput && "invisible")}>
+                <SimplePopover
+                  trigger={
+                    <IconButton
+                      icon={SvgMoreHorizontal}
+                      className="ml-2"
+                      transient={popoverOpen}
+                      tertiary
+                    />
+                  }
+                  onOpenChange={(state) => {
+                    setPopoverOpen(state);
+                    if (!state) setShowMoveOptions(false);
+                  }}
+                  side="bottom"
+                  align="end"
+                >
+                  <PopoverMenu>{popoverItems}</PopoverMenu>
+                </SimplePopover>
+              </div>
             </div>
           </header>
         )}
