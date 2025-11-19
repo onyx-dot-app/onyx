@@ -129,6 +129,9 @@
       0px 2px 24px 0px var(--shadow-03),
       0px 0px 12px 1px var(--shadow-03);
   }
+  .focus-shadow {
+    box-shadow: 0px 0px 0px 2px var(--border-04);
+  }
 
   /* DEBUGGING UTILITIES
   If you ever want to highlight a component for debugging purposes, just type in `className="dbg-red ..."`, and a red box should appear around it.

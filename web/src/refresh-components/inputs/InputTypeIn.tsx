@@ -1,13 +1,18 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useCallback, useRef } from "react";
 import { cn, noProp } from "@/lib/utils";
 import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSearch from "@/icons/search";
 
 const divClasses = {
-  main: ["border", "hover:border-border-02", "active:border-border-05"],
+  main: [
+    "border",
+    "hover:border-border-02",
+    "active:!border-border-05",
+    "focus-within-nonactive:border-border-05 focus-within-nonactive:focus-shadow",
+  ],
   internal: ["border", "border-status-error-05"],
   error: [],
   disabled: [
@@ -65,10 +70,18 @@ function InputTypeInInner(
   }: InputTypeInProps,
   ref: React.ForwardedRef<HTMLInputElement>
 ) {
-  const localRef = useRef<HTMLInputElement>(null);
-
-  // Use forwarded ref if provided, otherwise use local ref
-  const inputRef = ref || localRef;
+  const localInputRef = useRef<HTMLInputElement | null>(null);
+  const setInputRef = useCallback(
+    (node: HTMLInputElement | null) => {
+      localInputRef.current = node;
+      if (typeof ref === "function") {
+        ref(node);
+      } else if (ref) {
+        (ref as React.MutableRefObject<HTMLInputElement | null>).current = node;
+      }
+    },
+    [ref]
+  );
 
   const variant = internal ? "internal" : disabled ? "disabled" : "main";
 
@@ -95,9 +108,7 @@ function InputTypeInInner(
         className
       )}
       onClick={() => {
-        if (inputRef && typeof inputRef === "object" && inputRef.current) {
-          inputRef.current.focus();
-        }
+        localInputRef.current?.focus();
       }}
     >
       {leftSearchIcon && (
@@ -109,7 +120,7 @@ function InputTypeInInner(
       )}
 
       <input
-        ref={inputRef}
+        ref={setInputRef}
         type="text"
         disabled={disabled}
         value={value}
