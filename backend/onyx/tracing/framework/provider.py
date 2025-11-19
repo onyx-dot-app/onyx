@@ -136,10 +136,6 @@ class TraceProvider(ABC):
         """Return the currently active span, if any."""
 
     @abstractmethod
-    def set_disabled(self, disabled: bool) -> None:
-        """Enable or disable tracing globally."""
-
-    @abstractmethod
     def time_iso(self) -> str:
         """Return the current time in ISO 8601 format."""
 
