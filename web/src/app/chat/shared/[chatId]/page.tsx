@@ -2,7 +2,7 @@ import { fetchSS } from "@/lib/utilsSS";
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { SharedChatDisplay } from "@/app/chat/shared/[chatId]/SharedChatDisplay";
-import * as Layouts from "@/refresh-components/layouts/layouts2";
+import * as Layouts from "@/refresh-components/layouts/layouts";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { constructMiniFiedPersona } from "@/lib/assistantIconUtils";
 import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";

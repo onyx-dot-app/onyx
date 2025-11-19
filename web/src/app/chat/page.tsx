@@ -1,4 +1,4 @@
-import * as Layouts from "@/refresh-components/layouts/layouts2";
+import * as Layouts from "@/refresh-components/layouts/layouts";
 import ChatPage from "@/app/chat/components/ChatPage";
 import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
 import { SEARCH_PARAM_NAMES } from "./services/searchParams";
