@@ -87,8 +87,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: /usr/bin/supervisord
-
+    command: >
+      /bin/sh -c "
+      if [ -f /etc/ssl/certs/custom-ca.crt ]; then
+        update-ca-certificates;
+      fi &&
+      /app/scripts/supervisord_entrypoint.sh"
     restart: always
     environment:
       # Gen AI Settings (Needed by DanswerBot)
