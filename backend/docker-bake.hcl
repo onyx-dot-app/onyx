@@ -2,7 +2,7 @@ group "default" {
   targets = ["backend", "model-server", "integration"]
 }
 
-variable "REPOSITORY" {
+variable "BACKEND_REPOSITORY" {
   default = "onyxdotapp/onyx-backend"
 }
 
@@ -22,10 +22,10 @@ target "backend" {
   context    = "."
   dockerfile = "Dockerfile"
 
-  cache-from = ["type=registry,ref=${REPOSITORY}:latest"]
+  cache-from = ["type=registry,ref=${BACKEND_REPOSITORY}:latest"]
   cache-to   = ["type=inline"]
 
-  tags      = ["${REPOSITORY}:${TAG}"]
+  tags      = ["${BACKEND_REPOSITORY}:${TAG}"]
 }
 
 target "model-server" {
