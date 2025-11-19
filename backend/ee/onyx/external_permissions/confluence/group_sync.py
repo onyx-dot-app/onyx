@@ -112,6 +112,32 @@ def _build_group_member_email_map_from_onyx_users(
     return group_member_emails
 
 
+def _build_final_group_to_member_email_map(
+    confluence_client: OnyxConfluence, cc_pair_id: int
+) -> dict[str, set[str]]:
+    group_to_member_email_map = _build_group_member_email_map(
+        confluence_client=confluence_client,
+        cc_pair_id=cc_pair_id,
+    )
+    group_to_member_email_map_from_onyx_users = (
+        _build_group_member_email_map_from_onyx_users(
+            confluence_client=confluence_client,
+        )
+    )
+
+    all_group_ids = set(group_to_member_email_map.keys()) | set(
+        group_to_member_email_map_from_onyx_users.keys()
+    )
+    final_group_to_member_email_map = {}
+    for group_id in all_group_ids:
+        group_member_emails = group_to_member_email_map.get(
+            group_id, set()
+        ) | group_to_member_email_map_from_onyx_users.get(group_id, set())
+        final_group_to_member_email_map[group_id] = group_member_emails
+
+    return final_group_to_member_email_map
+
+
 def confluence_group_sync(
     tenant_id: str,
     cc_pair: ConnectorCredentialPair,
@@ -135,21 +161,12 @@ def confluence_group_sync(
     confluence_client._probe_connection(**probe_kwargs)
     confluence_client._initialize_connection(**final_kwargs)
 
-    group_member_email_map = _build_group_member_email_map(
-        confluence_client=confluence_client,
-        cc_pair_id=cc_pair.id,
-    )
-    group_member_email_map_from_onyx_users = (
-        _build_group_member_email_map_from_onyx_users(
-            confluence_client=confluence_client,
-        )
-    )
-    group_member_email_map = (
-        group_member_email_map_from_onyx_users | group_member_email_map
+    group_to_member_email_map = _build_final_group_to_member_email_map(
+        confluence_client, cc_pair.id
     )
 
     all_found_emails = set()
-    for group_id, group_member_emails in group_member_email_map.items():
+    for group_id, group_member_emails in group_to_member_email_map.items():
         yield (
             ExternalUserGroup(
                 id=group_id,
