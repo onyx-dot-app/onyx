@@ -83,7 +83,13 @@ function InputTypeInInner(
     [ref]
   );
 
-  const variant = internal ? "internal" : disabled ? "disabled" : "main";
+  const variant = internal
+    ? "internal"
+    : error
+      ? "error"
+      : disabled
+        ? "disabled"
+        : "main";
 
   function handleClear() {
     if (onClear) {
