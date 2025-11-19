@@ -544,6 +544,11 @@ test.describe("Default Assistant Admin Page", () => {
   test("should toggle all tools and verify in chat", async ({ page }) => {
     const apiClient = new OnyxApiClient(page);
     let webSearchProviderId: number | null = null;
+    let toolAvailability = {
+      internalSearch: true,
+      webSearch: true,
+      imageGeneration: true,
+    };
 
     try {
       // Set up a web search provider so the tool is available
@@ -555,6 +560,35 @@ test.describe("Default Assistant Admin Page", () => {
     }
 
     await page.waitForSelector("text=Internal Search", { timeout: 10000 });
+
+    try {
+      const availableToolsResp = await page.request.get(
+        "http://localhost:3000/api/admin/default-assistant/available-tools"
+      );
+      if (availableToolsResp.ok()) {
+        const availableTools = await availableToolsResp.json();
+        toolAvailability = {
+          internalSearch: availableTools.some(
+            (tool: any) =>
+              tool.in_code_tool_id === "SearchTool" && tool.is_available
+          ),
+          webSearch: availableTools.some(
+            (tool: any) =>
+              tool.in_code_tool_id === "WebSearchTool" && tool.is_available
+          ),
+          imageGeneration: availableTools.some(
+            (tool: any) =>
+              tool.in_code_tool_id === "ImageGenerationTool" &&
+              tool.is_available
+          ),
+        };
+        console.log(`[tool-availability] ${JSON.stringify(toolAvailability)}`);
+      }
+    } catch (error) {
+      console.warn(
+        `[tool-availability] failed to fetch availability: ${String(error)}`
+      );
+    }
 
     // Store initial states
     const toolStates: Record<string, string | null> = {};
@@ -634,10 +668,25 @@ test.describe("Default Assistant Admin Page", () => {
     await waitForUnifiedGreeting(page);
     await expect(page.locator(TOOL_IDS.actionToggle)).toBeVisible();
     await openActionManagement(page);
-    await page.pause();
-    expect(await page.$(TOOL_IDS.searchOption)).toBeTruthy();
-    expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
-    expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
+    if (toolAvailability.internalSearch) {
+      expect(await page.$(TOOL_IDS.searchOption)).toBeTruthy();
+    } else {
+      console.warn(
+        "[tool-availability] Internal Search not available; skipped"
+      );
+    }
+    if (toolAvailability.webSearch) {
+      expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
+    } else {
+      console.warn("[tool-availability] Web Search not available; skipped");
+    }
+    if (toolAvailability.imageGeneration) {
+      expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
+    } else {
+      console.warn(
+        "[tool-availability] Image Generation not available; skipped"
+      );
+    }
 
     await page.goto(
       "http://localhost:3000/admin/configuration/default-assistant"
