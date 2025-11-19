@@ -167,11 +167,12 @@ function Root({
     >
       <SelectPrimitive.Trigger
         className={cn(
-          "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08 border outline-none",
+          "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08",
           triggerClasses[variant],
           className
         )}
         {...rest}
+        asChild
       >
         <div className="flex flex-row items-center justify-between w-full p-0.5 gap-1">
           <SelectedItem
