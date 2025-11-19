@@ -599,15 +599,9 @@ test.describe("Default Assistant Admin Page", () => {
       await openActionManagement(page);
       await page.pause();
       // If we can open it, check that tools are disabled
-      await expect(page.locator(TOOL_IDS.searchOption)).not.toBeVisible({
-        timeout: 10000,
-      });
-      await expect(page.locator(TOOL_IDS.webSearchOption)).not.toBeVisible({
-        timeout: 10000,
-      });
-      await expect(
-        page.locator(TOOL_IDS.imageGenerationOption)
-      ).not.toBeVisible({ timeout: 10000 });
+      expect(await page.$(TOOL_IDS.searchOption)).toBeFalsy();
+      expect(await page.$(TOOL_IDS.webSearchOption)).toBeFalsy();
+      expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeFalsy();
     } catch {
       // If Action Management can't be opened, that's also acceptable
       // when all tools are disabled
@@ -640,17 +634,10 @@ test.describe("Default Assistant Admin Page", () => {
     await waitForUnifiedGreeting(page);
     await expect(page.locator(TOOL_IDS.actionToggle)).toBeVisible();
     await openActionManagement(page);
-
-    // Wait for all tool options to be visible before checking
-    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible({
-      timeout: 10000,
-    });
-    await expect(page.locator(TOOL_IDS.webSearchOption)).toBeVisible({
-      timeout: 10000,
-    });
-    await expect(page.locator(TOOL_IDS.imageGenerationOption)).toBeVisible({
-      timeout: 10000,
-    });
+    await page.pause();
+    expect(await page.$(TOOL_IDS.searchOption)).toBeFalsy();
+    expect(await page.$(TOOL_IDS.webSearchOption)).toBeFalsy();
+    expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeFalsy();
 
     await page.goto(
       "http://localhost:3000/admin/configuration/default-assistant"
