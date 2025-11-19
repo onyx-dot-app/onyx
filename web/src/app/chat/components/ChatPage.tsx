@@ -200,23 +200,15 @@ export default function ChatPage({
     state: onboardingState,
     actions: onboardingActions,
     llmDescriptors,
-  } = useOnboardingState();
+  } = useOnboardingState(liveAssistant);
 
   const llmManager = useLlmManager(selectedChatSession, liveAssistant);
-
-  // Track if we've done the initial onboarding check
-  const hasCheckedOnboarding = useRef(false);
 
   // On first render, open onboarding if there are no configured LLM providers.
   // Only check once to avoid re-triggering onboarding when data refreshes.
   useEffect(() => {
-    if (!hasCheckedOnboarding.current) {
-      setShowOnboarding(
-        !llmManager.llmProviders || llmManager.llmProviders.length === 0
-      );
-      hasCheckedOnboarding.current = true;
-    }
-  }, [llmManager.llmProviders]);
+    setShowOnboarding(llmManager.hasAnyProvider === false);
+  }, []);
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
@@ -918,9 +910,7 @@ export default function ChatPage({
                           textAreaRef={textAreaRef}
                           setPresentingDocument={setPresentingDocument}
                           disabled={
-                            llmManager.llmProviders?.length === 0 ||
-                            (llmManager.llmProviders?.length === 0 &&
-                              !user?.personalization?.name) ||
+                            llmManager.hasAnyProvider === false ||
                             onboardingState.currentStep !==
                               OnboardingStep.Complete
                           }

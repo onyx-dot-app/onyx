@@ -4,12 +4,14 @@ import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import { MODAL_CONTENT_MAP } from "../constants";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { cn, noProp } from "@/lib/utils";
 
+//This component is responsible to render fields dynamically for tabs based llm providers
 interface DynamicProviderFieldsProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   fields: string[];
@@ -21,14 +23,12 @@ interface DynamicProviderFieldsProps {
       description?: string;
     }
   >;
-  onApiKeyBlur?: (apiKey: string) => void;
   showApiMessage?: boolean;
   apiStatus?: APIFormFieldState;
   errorMessage?: string;
   onFetchModels?: () => void;
   isFetchingModels?: boolean;
   canFetchModels?: boolean;
-  testModelChangeWithApiKey?: (modelName: string) => Promise<void>;
   modelsApiStatus?: APIFormFieldState;
   modelsErrorMessage?: string;
   showModelsApiErrorMessage?: boolean;
@@ -40,14 +40,12 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
   fields,
   modelOptions,
   fieldOverrides = {},
-  onApiKeyBlur,
   showApiMessage = false,
   apiStatus = "loading",
   errorMessage = "",
   onFetchModels,
   isFetchingModels = false,
   canFetchModels = false,
-  testModelChangeWithApiKey,
   modelsApiStatus = "loading",
   modelsErrorMessage = "",
   showModelsApiErrorMessage = false,
@@ -58,8 +56,6 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
     if (!apiKey) return;
     if (llmDescriptor?.name === "ollama_chat") {
       onFetchModels?.();
-    } else {
-      onApiKeyBlur?.(apiKey);
     }
   };
 
@@ -209,65 +205,40 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
             >
               <FormField.Label>Default Model</FormField.Label>
               <FormField.Control>
-                {modelOptions.length > 0 ? (
-                  <InputSelect
-                    value={field.value}
-                    onValueChange={(value) => {
-                      helper.setValue(value);
-                      if (testModelChangeWithApiKey && value) {
-                        testModelChangeWithApiKey(value);
-                      }
-                    }}
-                    isError={modelsApiStatus === "error"}
-                    options={modelOptions}
-                    disabled={
-                      disabled || modelOptions.length === 0 || isFetchingModels
-                    }
-                    rightSection={
-                      canFetchModels ? (
-                        <IconButton
-                          internal
-                          icon={SvgRefreshCw}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onFetchModels?.();
-                          }}
-                          tooltip="Fetch available models"
-                          disabled={disabled || isFetchingModels}
-                          className={isFetchingModels ? "animate-spin" : ""}
-                        />
-                      ) : undefined
-                    }
-                  />
-                ) : (
-                  <InputTypeIn
-                    value={field.value}
-                    onChange={(e) => {
-                      helper.setValue(e.target.value);
-                    }}
-                    isError={modelsApiStatus === "error"}
-                    placeholder="E.g. gpt-4"
-                    disabled={disabled}
-                    showClearButton={false}
-                    rightSection={
-                      canFetchModels ? (
-                        <IconButton
-                          internal
-                          icon={SvgRefreshCw}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onFetchModels?.();
-                          }}
-                          tooltip="Fetch available models"
-                          disabled={disabled || isFetchingModels}
-                          className={isFetchingModels ? "animate-spin" : ""}
-                        />
-                      ) : undefined
-                    }
-                  />
-                )}
+                <InputComboBox
+                  value={field.value}
+                  onValueChange={(value) => {
+                    helper.setValue(value);
+                  }}
+                  onChange={(e) => {
+                    helper.setValue(e.target.value);
+                  }}
+                  isError={modelsApiStatus === "error"}
+                  options={modelOptions}
+                  disabled={disabled || isFetchingModels}
+                  rightSection={
+                    canFetchModels ? (
+                      <IconButton
+                        internal
+                        icon={({ className }) => (
+                          <SvgRefreshCw
+                            className={cn(
+                              className,
+                              isFetchingModels && "animate-spin"
+                            )}
+                          />
+                        )}
+                        onClick={noProp((e) => {
+                          e.preventDefault();
+                          onFetchModels?.();
+                        })}
+                        tooltip="Fetch available models"
+                        disabled={disabled || isFetchingModels}
+                      />
+                    ) : undefined
+                  }
+                  placeholder="Select a model"
+                />
               </FormField.Control>
               {showModelsApiErrorMessage && (
                 <FormField.APIMessage

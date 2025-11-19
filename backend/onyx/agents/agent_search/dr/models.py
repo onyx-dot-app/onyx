@@ -1,6 +1,7 @@
 from enum import Enum
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 
 from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
@@ -74,8 +75,7 @@ class OrchestratorTool(BaseModel):
     cost: float
     tool_object: Tool | None = None  # None for CLOSER
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class IterationInstructions(BaseModel):

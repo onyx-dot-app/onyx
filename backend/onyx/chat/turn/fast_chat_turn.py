@@ -64,6 +64,26 @@ if TYPE_CHECKING:
 MAX_ITERATIONS = 10
 
 
+# TODO: We should be able to do this a bit more cleanly since we know the schema
+# ahead of time. I'll make sure to do that for when we replace AgentSDKMessage.
+def _extract_tokens_from_messages(messages: list[AgentSDKMessage]) -> int:
+    from onyx.llm.utils import check_number_of_tokens
+
+    total_input_text_parts: list[str] = []
+    for msg in messages:
+        if isinstance(msg, dict):
+            content = msg.get("content") or msg.get("output")
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict):
+                        text = item.get("text")
+                        if text:
+                            total_input_text_parts.append(text)
+            elif isinstance(content, str):
+                total_input_text_parts.append(content)
+    return check_number_of_tokens("\n".join(total_input_text_parts))
+
+
 # TODO -- this can be refactored out and played with in evals + normal demo
 def _run_agent_loop(
     messages: list[AgentSDKMessage],
@@ -116,6 +136,7 @@ def _run_agent_loop(
             + [current_user_message]
         )
         current_messages = previous_messages + agent_turn_messages
+        ctx.current_input_tokens = _extract_tokens_from_messages(current_messages)
 
         if not available_tools:
             tool_choice = None
@@ -216,6 +237,7 @@ def _fast_chat_turn_core(
         chat_session_id,
         dependencies.redis_client,
     )
+
     ctx = starter_context or ChatTurnContext(
         run_dependencies=dependencies,
         chat_session_id=chat_session_id,
