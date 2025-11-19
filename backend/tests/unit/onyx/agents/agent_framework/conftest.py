@@ -194,10 +194,7 @@ class FakeTool(Tool):
         self.calls.append({"queries": queries})
         context = run_context.context
         flag_name = f"{self._tool_name}_called"
-        if isinstance(context, dict):
-            context[flag_name] = True
-        else:
-            setattr(context, flag_name, True)
+        context[flag_name] = True
         return f"{self.display_name} results for: {', '.join(queries)}"
 
     def build_tool_message_content(self, *args: Any) -> str:
