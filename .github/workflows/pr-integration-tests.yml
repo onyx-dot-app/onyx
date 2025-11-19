@@ -467,20 +467,10 @@ jobs:
           docker compose -f docker-compose.multitenant-dev.yml down -v
 
   required:
-    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     needs: [integration-tests, multitenant-tests]
     if: ${{ always() }}
     steps:
-      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # ratchet:actions/github-script@v8
-        env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
-        with:
-          script: |
-            const needs = JSON.parse(process.env.NEEDS_JSON);
-            const failed = Object.values(needs).some(n => n.result !== 'success');
-            if (failed) {
-              core.setFailed('One or more upstream jobs failed or were cancelled.');
-            } else {
-              core.notice('All required jobs succeeded.');
-            }
+      - name: Check job status
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1
