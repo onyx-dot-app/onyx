@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
+import onyx.tracing.framework._error_tracing as _error_tracing
 from onyx.agents.agent_framework.models import RunItemStreamEvent
 from onyx.agents.agent_framework.models import StreamEvent
 from onyx.agents.agent_framework.models import ToolCallOutputStreamItem
@@ -17,11 +18,10 @@ from onyx.llm.message_types import ToolCall
 from onyx.llm.model_response import ModelResponseStream
 from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
-from onyx.tracing import _error_tracing
-from onyx.tracing.create import agent_span
-from onyx.tracing.create import function_span
-from onyx.tracing.create import generation_span
-from onyx.tracing.spans import SpanError
+from onyx.tracing.framework.create import agent_span
+from onyx.tracing.framework.create import function_span
+from onyx.tracing.framework.create import generation_span
+from onyx.tracing.framework.spans import SpanError
 
 
 @dataclass
@@ -232,6 +232,7 @@ def query(
 
                 if not finish_reason:
                     continue
+
                 if reasoning_started:
                     yield RunItemStreamEvent(type="reasoning_done")
                     reasoning_started = False
@@ -239,7 +240,7 @@ def query(
                     yield RunItemStreamEvent(type="message_done")
                     message_started = False
 
-                if finish_reason and tool_choice != "none":
+                if tool_choice != "none":
                     _try_convert_content_to_tool_calls_for_non_tool_calling_llms(
                         tool_calls_in_progress,
                         content_parts,
@@ -247,7 +248,7 @@ def query(
                         _next_synthetic_tool_call_id,
                     )
 
-                if finish_reason and content_parts:
+                if content_parts:
                     new_messages_stateful.append(
                         {
                             "role": "assistant",

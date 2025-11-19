@@ -10,9 +10,9 @@ from typing import TypeVar
 from typing_extensions import TypedDict
 
 from . import util
+from .processor_interface import TracingProcessor
 from .scope import Scope
 from .span_data import SpanData
-from onyx.tracing.processor_interface import TracingProcessor
 
 TSpanData = TypeVar("TSpanData", bound=SpanData)
 

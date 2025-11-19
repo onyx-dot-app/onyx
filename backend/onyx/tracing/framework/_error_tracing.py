@@ -1,8 +1,8 @@
 from typing import Any
 
-from onyx.tracing.create import get_current_span
-from onyx.tracing.spans import Span
-from onyx.tracing.spans import SpanError
+from .create import get_current_span
+from .spans import Span
+from .spans import SpanError
 from onyx.utils.logger import setup_logger
 
 

@@ -10,7 +10,7 @@ from . import util
 from .scope import Scope
 
 if TYPE_CHECKING:
-    from onyx.tracing.processor_interface import TracingProcessor
+    from .processor_interface import TracingProcessor
 
 
 class Trace(abc.ABC):

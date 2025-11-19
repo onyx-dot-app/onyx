@@ -6,13 +6,13 @@ from typing import Optional
 import braintrust
 from braintrust import NOOP_SPAN
 
-from .processor_interface import TracingProcessor
-from onyx.tracing.span_data import AgentSpanData
-from onyx.tracing.span_data import FunctionSpanData
-from onyx.tracing.span_data import GenerationSpanData
-from onyx.tracing.span_data import SpanData
-from onyx.tracing.spans import Span
-from onyx.tracing.traces import Trace
+from .framework.processor_interface import TracingProcessor
+from .framework.span_data import AgentSpanData
+from .framework.span_data import FunctionSpanData
+from .framework.span_data import GenerationSpanData
+from .framework.span_data import SpanData
+from .framework.spans import Span
+from .framework.traces import Trace
 
 
 def _span_type(span: Span[Any]) -> braintrust.SpanTypeAttribute:
