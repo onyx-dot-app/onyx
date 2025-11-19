@@ -544,13 +544,23 @@ test.describe("Default Assistant Admin Page", () => {
   test("should toggle all tools and verify in chat", async ({ page }) => {
     const apiClient = new OnyxApiClient(page);
     let webSearchProviderId: number | null = null;
+    let llmProviderId: number | null = null;
 
     try {
-      // Set up a web search provider so the tool is available
+      // Set up a web search provider so the Web Search tool is available
       webSearchProviderId = await apiClient.createWebSearchProvider("exa");
     } catch (error) {
       console.warn(
         `Failed to create web search provider for test: ${error}. Test may fail if web search is required.`
+      );
+    }
+
+    try {
+      // Set up an LLM provider so the Image Generation tool is available
+      llmProviderId = await apiClient.createLLMProvider();
+    } catch (error) {
+      console.warn(
+        `Failed to create LLM provider for test: ${error}. Test may fail if image generation is required.`
       );
     }
 
@@ -669,6 +679,17 @@ test.describe("Default Assistant Admin Page", () => {
       } catch (error) {
         console.warn(
           `Failed to delete web search provider ${webSearchProviderId}: ${error}`
+        );
+      }
+    }
+
+    // Clean up LLM provider
+    if (llmProviderId !== null) {
+      try {
+        await apiClient.deleteProvider(llmProviderId);
+      } catch (error) {
+        console.warn(
+          `Failed to delete LLM provider ${llmProviderId}: ${error}`
         );
       }
     }

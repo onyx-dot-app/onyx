@@ -254,13 +254,23 @@ test.describe("Default Assistant Tests", () => {
     }) => {
       const apiClient = new OnyxApiClient(page);
       let webSearchProviderId: number | null = null;
+      let llmProviderId: number | null = null;
 
       try {
-        // Set up a web search provider so the tool is available
+        // Set up a web search provider so the Web Search tool is available
         webSearchProviderId = await apiClient.createWebSearchProvider("exa");
       } catch (error) {
         console.warn(
           `Failed to create web search provider for test: ${error}. Test may fail if web search is required.`
+        );
+      }
+
+      try {
+        // Set up an LLM provider so the Image Generation tool is available
+        llmProviderId = await apiClient.createLLMProvider();
+      } catch (error) {
+        console.warn(
+          `Failed to create LLM provider for test: ${error}. Test may fail if image generation is required.`
         );
       }
 
@@ -280,9 +290,32 @@ test.describe("Default Assistant Tests", () => {
           );
         }
       }
+
+      // Clean up LLM provider
+      if (llmProviderId !== null) {
+        try {
+          await apiClient.deleteProvider(llmProviderId);
+        } catch (error) {
+          console.warn(
+            `Failed to delete LLM provider ${llmProviderId}: ${error}`
+          );
+        }
+      }
     });
 
     test("should be able to toggle tools on and off", async ({ page }) => {
+      const apiClient = new OnyxApiClient(page);
+      let llmProviderId: number | null = null;
+
+      try {
+        // Set up an LLM provider so the Image Generation tool is available
+        llmProviderId = await apiClient.createLLMProvider();
+      } catch (error) {
+        console.warn(
+          `Failed to create LLM provider for test: ${error}. Test may fail if image generation is required.`
+        );
+      }
+
       // Click action management toggle
       await page.click(TOOL_IDS.actionToggle);
 
@@ -320,11 +353,34 @@ test.describe("Default Assistant Tests", () => {
         // Check if the option has some visual state change
         // This is a fallback behavior if toggles work differently
       }
+
+      // Clean up LLM provider
+      if (llmProviderId !== null) {
+        try {
+          await apiClient.deleteProvider(llmProviderId);
+        } catch (error) {
+          console.warn(
+            `Failed to delete LLM provider ${llmProviderId}: ${error}`
+          );
+        }
+      }
     });
 
     test("tool toggle state should persist across page refresh", async ({
       page,
     }) => {
+      const apiClient = new OnyxApiClient(page);
+      let llmProviderId: number | null = null;
+
+      try {
+        // Set up an LLM provider so the Image Generation tool is available
+        llmProviderId = await apiClient.createLLMProvider();
+      } catch (error) {
+        console.warn(
+          `Failed to create LLM provider for test: ${error}. Test may fail if image generation is required.`
+        );
+      }
+
       // Click action management toggle
       await page.click(TOOL_IDS.actionToggle);
 
@@ -375,6 +431,17 @@ test.describe("Default Assistant Tests", () => {
         const stateAfterReload =
           await imageGenerationToggleAfterReload.isChecked();
         expect(stateAfterReload).toBe(toggledState);
+      }
+
+      // Clean up LLM provider
+      if (llmProviderId !== null) {
+        try {
+          await apiClient.deleteProvider(llmProviderId);
+        } catch (error) {
+          console.warn(
+            `Failed to delete LLM provider ${llmProviderId}: ${error}`
+          );
+        }
       }
     });
   });

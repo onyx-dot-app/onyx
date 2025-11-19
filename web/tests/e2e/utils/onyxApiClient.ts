@@ -367,6 +367,42 @@ export class OnyxApiClient {
   }
 
   /**
+   * Creates a public LLM provider (OpenAI).
+   * This enables tools like Image Generation that require an LLM provider.
+   *
+   * @param providerName - Name for the provider (defaults to "Test OpenAI Provider")
+   * @returns The provider ID
+   * @throws Error if the provider creation fails
+   */
+  async createLLMProvider(
+    providerName: string = "Test OpenAI Provider"
+  ): Promise<number> {
+    const response = await this.page.request.put(
+      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      {
+        data: {
+          name: providerName,
+          provider: "openai",
+          api_key: "test-key",
+          default_model_name: "gpt-4o",
+          fast_default_model_name: "gpt-4o-mini",
+          is_public: true,
+          groups: [],
+          personas: [],
+        },
+      }
+    );
+
+    const responseData = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create LLM provider"
+    );
+
+    this.log(`Created LLM provider: ${providerName} (ID: ${responseData.id})`);
+    return responseData.id;
+  }
+
+  /**
    * Creates a user group.
    *
    * @param groupName - Name for the user group
