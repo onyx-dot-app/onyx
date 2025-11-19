@@ -179,6 +179,7 @@ export default function EmailPasswordForm({
                 render={(field, helper, meta, state) => (
                   <FormField name="email" state={state} className="w-full">
                     <FormField.Label>Email Address</FormField.Label>
+                    <FormField.Description>Signup is restricted to eea domain mail address</FormField.Description>
                     <FormField.Control>
                       <InputTypeIn
                         {...field}
