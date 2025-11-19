@@ -187,12 +187,7 @@ export function AppPage({
       ];
       setPopoverItems(popoverItems);
     }
-  }, [
-    showMoveOptions,
-    filteredProjects,
-    handleMoveClick,
-    setDeleteConfirmationModalOpen,
-  ]);
+  }, [showMoveOptions, filteredProjects]);
 
   return (
     <>
