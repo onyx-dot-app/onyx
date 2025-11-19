@@ -1,6 +1,6 @@
 import InputPrompts from "@/app/chat/input-prompts/InputPrompts";
 import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
-import * as Layouts from "@/refresh-components/layouts/Layouts";
+import * as Layouts from "@/refresh-components/layouts/layouts";
 
 export default async function InputPromptsPage() {
   const headerData = await fetchHeaderDataSS();
