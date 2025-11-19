@@ -593,6 +593,8 @@ jobs:
       - name: Build and push AMD64
         id: build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        env:
+          DEBUG: ${{ vars.DOCKER_DEBUG == 'true' && 1 || 0 }}
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -610,7 +612,6 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
           provenance: false
           sbom: false
-          buildx-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
   build-model-server-arm64:
     needs: determine-builds
@@ -653,6 +654,8 @@ jobs:
       - name: Build and push ARM64
         id: build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        env:
+          DEBUG: ${{ vars.DOCKER_DEBUG == 'true' && 1 || 0 }}
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -670,7 +673,6 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
           provenance: false
           sbom: false
-          buildx-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
   merge-model-server:
     needs:
