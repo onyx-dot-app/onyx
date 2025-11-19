@@ -91,9 +91,10 @@ const LLMStepInner = ({
   disabled,
 }: LLMStepProps) => {
   const isLoading = !llmDescriptors || llmDescriptors.length === 0;
-  const modal = useCreateModal();
+
   const [llmConnectionModalProps, setLlmConnectionModalProps] =
     useState<LLMConnectionModalProps | null>(null);
+  const modal = useCreateModal();
 
   if (
     onboardingState.currentStep === OnboardingStep.LlmSetup ||
@@ -146,9 +147,12 @@ const LLMStepInner = ({
               </div>
             ))
           ) : (
-            <modal.Provider>
+            <>
               {llmConnectionModalProps && (
-                <LLMConnectionModal {...llmConnectionModalProps} />
+                <LLMConnectionModal
+                  {...llmConnectionModalProps}
+                  modal={modal}
+                />
               )}
 
               {llmDescriptors.map((llmDescriptor) => (
@@ -168,6 +172,8 @@ const LLMStepInner = ({
                       (provider) => provider === llmDescriptor.name
                     )}
                     onClick={setLlmConnectionModalProps}
+                    onOpenModal={() => modal.toggle(true)}
+                    modal={modal}
                   />
                 </div>
               ))}
@@ -183,9 +189,11 @@ const LLMStepInner = ({
                     (provider) => provider === "custom"
                   )}
                   onClick={setLlmConnectionModalProps}
+                  onOpenModal={() => modal.toggle(true)}
+                  modal={modal}
                 />
               </div>
-            </modal.Provider>
+            </>
           )}
         </div>
       </div>

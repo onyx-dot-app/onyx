@@ -11,8 +11,10 @@ import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/in
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/components/user/UserProvider";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 
-export function useOnboardingState(): {
+export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
   state: OnboardingState;
   llmDescriptors: WellKnownLLMProviderDescriptor[];
   actions: OnboardingActions;
@@ -20,6 +22,9 @@ export function useOnboardingState(): {
   const [state, dispatch] = useReducer(onboardingReducer, initialState);
   const { user, refreshUser } = useUser();
   const { llmProviders, refreshLlmProviders } = useChatContext();
+  const { refetch: refreshPersonaProviders } = useLLMProviders(
+    liveAssistant?.id
+  );
   const hasLlmProviders = llmProviders?.length > 0;
   const userName = user?.personalization?.name;
   const [llmDescriptors, setLlmDescriptors] = useState<
@@ -51,6 +56,12 @@ export function useOnboardingState(): {
   // If there are any configured LLM providers already present, skip to the final step
   useEffect(() => {
     if (hasLlmProviders) {
+      if (userName) {
+        dispatch({
+          type: OnboardingActionType.UPDATE_DATA,
+          payload: { userName },
+        });
+      }
       dispatch({
         type: OnboardingActionType.UPDATE_DATA,
         payload: { llmProviders: llmProviders.map((p) => p.provider) },
@@ -91,7 +102,8 @@ export function useOnboardingState(): {
     });
 
     if (state.currentStep === OnboardingStep.Name) {
-      if (hasLlmProviders) {
+      const hasProviders = state.data.llmProviders?.length || 0 > 0;
+      if (hasProviders) {
         dispatch({
           type: OnboardingActionType.SET_BUTTON_ACTIVE,
           isButtonActive: true,
@@ -106,9 +118,12 @@ export function useOnboardingState(): {
 
     if (state.currentStep === OnboardingStep.LlmSetup) {
       refreshLlmProviders();
+      if (liveAssistant) {
+        refreshPersonaProviders();
+      }
     }
     dispatch({ type: OnboardingActionType.NEXT_STEP });
-  }, [state, refreshLlmProviders, llmProviders]);
+  }, [state, refreshLlmProviders, llmProviders, refreshPersonaProviders]);
 
   const prevStep = useCallback(() => {
     dispatch({ type: OnboardingActionType.PREV_STEP });
@@ -116,7 +131,8 @@ export function useOnboardingState(): {
 
   const goToStep = useCallback(
     (step: OnboardingStep) => {
-      if (step === OnboardingStep.LlmSetup && hasLlmProviders) {
+      const hasProviders = state.data.llmProviders?.length || 0 > 0;
+      if (step === OnboardingStep.LlmSetup && hasProviders) {
         dispatch({
           type: OnboardingActionType.SET_BUTTON_ACTIVE,
           isButtonActive: true,
