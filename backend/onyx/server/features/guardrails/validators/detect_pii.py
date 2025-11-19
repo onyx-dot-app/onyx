@@ -1,6 +1,6 @@
 from presidio_anonymizer.entities import OperatorConfig
 
-# from onyx.server.features.guardrails.init_validators import _analyzer, _anonymizer
+from onyx.server.features.guardrails.init_validators import _analyzer, _anonymizer
 from onyx.server.features.guardrails.services import generate_fake_data
 
 
@@ -45,21 +45,21 @@ def mask_pii(
                 {"lambda": lambda x, entity=entity: ENTITY_GENERATORS[entity](x, mapping)}
             )
 
-    # # Анализируем текст
-    # analysis_results = _analyzer.analyze(
-    #     text=text,
-    #     entities=pii_entities,
-    #     language="en",
-    # )
-    #
-    # # Маскируем с фейковыми данными
-    # anonymized_result = _anonymizer.anonymize(
-    #     text=text,
-    #     analyzer_results=analysis_results,
-    #     operators=fake_operators
-    # )
-    #
-    # return anonymized_result.text, mapping
+    # Анализируем текст
+    analysis_results = _analyzer.analyze(
+        text=text,
+        entities=pii_entities,
+        language="en",
+    )
+
+    # Маскируем с фейковыми данными
+    anonymized_result = _anonymizer.anonymize(
+        text=text,
+        analyzer_results=analysis_results,
+        operators=fake_operators
+    )
+
+    return anonymized_result.text, mapping
 
 
 def unmask_pii(

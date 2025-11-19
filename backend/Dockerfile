@@ -55,8 +55,8 @@ RUN uv pip install --system --upgrade \
     ln -s /usr/local/bin/supervisord /usr/bin/supervisord
 
 # RU и EN модель для spaCy
-# RUN python -m spacy download ru_core_news_sm
-# RUN python -m spacy download en_core_web_sm
+RUN python -m spacy download ru_core_news_sm
+RUN python -m spacy download en_core_web_sm
 
 
 # Cleanup for CVEs and size reduction
