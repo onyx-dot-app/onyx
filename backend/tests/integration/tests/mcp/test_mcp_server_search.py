@@ -123,7 +123,7 @@ def test_mcp_pat_document_search_flow(reset: None, admin_user: DATestUser) -> No
 
     assert init_result.serverInfo.name == MCP_SERVER_NAME
 
-    resource_uris = {resource.uri for resource in resources_result.resources}
+    resource_uris = {str(resource.uri) for resource in resources_result.resources}
     assert "resource://available_sources" in resource_uris
 
     tool_names = {tool.name for tool in tools_result.tools}
