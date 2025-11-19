@@ -5,6 +5,7 @@ import { SettingsContext } from "./settings/SettingsProvider";
 import Image from "next/image";
 import { defaultTailwindCSS, IconProps } from "./icons/icons";
 import { SiZeromq } from "react-icons/si";
+import { HeaderTitle } from "@/components/header/HeaderTitle";
 
 export function Logo({
   height,
@@ -95,4 +96,30 @@ export const EEAIcon = ({
   return (
     <Image src="/EEA_logo_compact_EN.svg" alt="Logo" width={width} height={height} />
   );
+};
+
+
+export const EEALogoTypeIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  const aspectRatio = 2640 / 733; // Calculate the aspect ratio of the original SVG
+  const height = size / aspectRatio; // Calculate the height based on the aspect ratio
+
+  const width = size;
+
+  return (
+    <>
+      <Image src="/EEA_logo_compact_EN.svg" alt="Logo" width={width} height={height} />
+      <div className="w-full">
+        <HeaderTitle>
+          GPT Lab
+        </HeaderTitle>
+        <p className="text-xs text-left text-subtle whitespace-nowrap overflow-hidden text-ellipsis">
+          Powered by Onyx
+        </p>
+      </div>
+    </>
+  );
+
 };

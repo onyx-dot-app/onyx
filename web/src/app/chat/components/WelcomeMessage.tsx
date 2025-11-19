@@ -33,7 +33,7 @@ export default function WelcomeMessage() {
             data-testid="onyx-logo"
             className="flex flex-row items-center gap-4"
           >
-            <Logo size="default" />
+            <Logo size="eea_large" />
             <Text headingH2>{greeting}</Text>
           </div>
         ) : (

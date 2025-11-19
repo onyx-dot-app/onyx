@@ -1,12 +1,14 @@
 import { useMemo } from "react";
 import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
+import { EEAIcon, EEALogoTypeIcon  } from "../components/EEA_Logo";
+
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 
 export const FOLDED_SIZE = 24;
-const UNFOLDED_SIZE = 88;
+const UNFOLDED_SIZE = 80;
 
 export interface LogoProps {
   folded?: boolean;
@@ -67,6 +69,6 @@ export default function Logo({ folded, className }: LogoProps) {
   ) : folded ? (
     <OnyxIcon size={FOLDED_SIZE} className={cn("flex-shrink-0", className)} />
   ) : (
-    <OnyxLogoTypeIcon size={UNFOLDED_SIZE} className={className} />
+    <EEALogoTypeIcon size={UNFOLDED_SIZE} className={className} />
   );
 }
