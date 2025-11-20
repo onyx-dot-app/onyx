@@ -3,6 +3,7 @@ name: Nightly Tag Push
 on:
   schedule:
     - cron: "0 10 * * *" # Runs every day at 2 AM PST / 3 AM PDT / 10 AM UTC
+  workflow_dispatch:
 
 permissions:
   contents: write # Allows pushing tags to the repository
@@ -15,19 +16,16 @@ jobs:
       # actions using GITHUB_TOKEN cannot trigger another workflow, but we do want this to trigger docker pushes
       # see https://github.com/orgs/community/discussions/27028#discussioncomment-3254367 for the workaround we
       # implement here which needs an actual user's deploy key
-
-      # Additional NOTE: even though this is named "rkuo", the actual key is tied to the onyx repo
-      # and not rkuo's personal account. It is fine to leave this key as is!
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
         with:
-          ssh-key: "${{ secrets.RKUO_DEPLOY_KEY }}"
-          persist-credentials: false
+          ssh-key: "${{ secrets.DEPLOY_KEY }}"
+          persist-credentials: true
 
       - name: Set up Git user
         run: |
-          git config user.name "Richard Kuo [bot]"
-          git config user.email "rkuo[bot]@onyx.app"
+          git config user.name "Onyx Bot [bot]"
+          git config user.email "onyx-bot[bot]@onyx.app"
 
       - name: Check for existing nightly tag
         id: check_tag
@@ -55,3 +53,12 @@ jobs:
         run: |
           TAG_NAME="nightly-latest-$(date +'%Y%m%d')"
           git push origin $TAG_NAME
+
+      - name: Send Slack notification
+        if: failure() && steps.check_tag.outputs.tag_exists == 'false'
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
+          title: "🚨 Nightly Tag Push Failed"
+          ref-name: ${{ github.ref_name }}
+          failed-jobs: "create-and-push-tag"
