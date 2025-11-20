@@ -10,8 +10,6 @@ from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import InputType
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
@@ -384,6 +382,7 @@ def test_mock_connector_checkpoint_recovery(
     assert response.status_code == 200
 
     # Create CC Pair and run initial indexing attempt
+    # Note: Setting refresh_freq to allow manual retrigger after failure
     cc_pair = CCPairManager.create_from_scratch(
         name=f"mock-connector-checkpoint-{uuid.uuid4()}",
         source=DocumentSource.MOCK_CONNECTOR,
@@ -393,6 +392,7 @@ def test_mock_connector_checkpoint_recovery(
             "mock_server_port": MOCK_CONNECTOR_SERVER_PORT,
         },
         user_performing_action=admin_user,
+        refresh_freq=60 * 60,  # 1 hour
     )
 
     # Wait for first index attempt to complete
@@ -465,22 +465,10 @@ def test_mock_connector_checkpoint_recovery(
     )
     assert response.status_code == 200
 
-    # Since the connector doesn't have a refresh_freq, a single failed attempt
-    # puts it in repeated error state and pauses it. We need to unpause and
-    # clear the repeated error state flag before it can index again.
+    # After the failure, the connector is in repeated error state and paused.
+    # Unpausing it will allow the manual run_once trigger to override the repeated
+    # error state and create a new index attempt.
     CCPairManager.unpause_cc_pair(cc_pair, user_performing_action=admin_user)
-    with get_session_with_current_tenant() as db_session:
-        # Verify it was in repeated error state
-        cc_pair_obj = get_connector_credential_pair_from_id(
-            db_session=db_session,
-            cc_pair_id=cc_pair.id,
-        )
-        if cc_pair_obj and cc_pair_obj.in_repeated_error_state:
-            set_cc_pair_repeated_error_state(
-                db_session=db_session,
-                cc_pair_id=cc_pair.id,
-                in_repeated_error_state=False,
-            )
 
     # Trigger another indexing attempt
     CCPairManager.run_once(
