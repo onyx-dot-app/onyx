@@ -126,6 +126,43 @@ HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
 INDEX_ATTEMPT_BATCH_SIZE = 500
 
 
+def _auto_pause_cc_pair_after_repeated_failures(
+    db_session: Session,
+    cc_pair_id: int,
+    search_settings_id: int,
+) -> None:
+    """Pause problematic connectors in multi-tenant deployments once they repeatedly fail."""
+    if not MULTI_TENANT:
+        return
+
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+        eager_load_connector=True,
+    )
+    if not cc_pair:
+        task_logger.warning(
+            f"auto_pause_repeated_failures - CC pair not found: cc_pair={cc_pair_id}"
+        )
+        return
+
+    connector_refresh_freq = cc_pair.connector.refresh_freq
+    if (
+        connector_refresh_freq is None
+        or not cc_pair.status.is_active()
+        or cc_pair.status == ConnectorCredentialPairStatus.PAUSED
+    ):
+        return
+
+    cc_pair.status = ConnectorCredentialPairStatus.PAUSED
+    db_session.commit()
+    task_logger.warning(
+        f"Paused CC pair after repeated failures: "
+        f"cc_pair={cc_pair_id} connector={cc_pair.connector_id} "
+        f"search_settings={search_settings_id} refresh_freq={connector_refresh_freq}"
+    )
+
+
 def _get_fence_validation_block_expiration() -> int:
     """
     Compute the expiration time for the fence validation block signal.
@@ -844,6 +881,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         db_session=db_session,
                         cc_pair_id=cc_pair_id,
                         in_repeated_error_state=True,
+                    )
+                    _auto_pause_cc_pair_after_repeated_failures(
+                        db_session=db_session,
+                        cc_pair_id=cc_pair_id,
+                        search_settings_id=current_search_settings.id,
                     )
 
         # NOTE: At this point, we haven't done heavy checks on whether or not the CC pairs should actually be indexed
