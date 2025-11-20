@@ -32,6 +32,12 @@ class WebSearchToolResponse(BaseModel):
     provider_type: WebSearchProviderType | None = None
 
 
+class WebSearchWithContentResponse(BaseModel):
+    provider_type: WebSearchProviderType | None = None
+    search_results: list[LlmWebSearchResult]
+    fetched_results: list[LlmOpenUrlResult]
+
+
 class OpenUrlsToolRequest(BaseModel):
     urls: list[str] = Field(
         ...,
