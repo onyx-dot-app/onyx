@@ -349,6 +349,7 @@ api:
 
   nodeSelector: {}
   tolerations: []
+  affinity: {}
 
 
 ######################################################################
@@ -768,6 +769,9 @@ minio:
   consoleService:
     type: ClusterIP
     port: 9001
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 ingress:
   enabled: false
