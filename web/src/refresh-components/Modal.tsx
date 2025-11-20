@@ -248,6 +248,13 @@ const ModalContent = React.forwardRef<
     // Handle escape key and outside clicks
     const handleInteractOutside = React.useCallback(
       (e: Event) => {
+        // If preventAccidentalClose is disabled, always allow immediate close
+        if (!preventAccidentalClose) {
+          setHasAttemptedClose(false);
+          return;
+        }
+
+        // If preventAccidentalClose is enabled, check if user has modified inputs
         if (hasModifiedInputs()) {
           if (!hasAttemptedClose) {
             // First attempt: prevent close and focus the close button
@@ -261,7 +268,7 @@ const ModalContent = React.forwardRef<
             setHasAttemptedClose(false);
           }
         } else {
-          // No modified inputs or feature disabled: allow immediate close
+          // No modified inputs: allow immediate close
           setHasAttemptedClose(false);
         }
       },
