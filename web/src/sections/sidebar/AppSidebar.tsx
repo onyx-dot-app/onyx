@@ -184,10 +184,18 @@ function AppSidebarInner() {
           }
         }
 
-        return arrayMove(prev, activeIndex, overIndex);
+        // Use visibleAgents instead of prev to ensure the indices match
+        // with `visibleAgentIds`
+        return arrayMove(visibleAgents, activeIndex, overIndex);
       });
     },
-    [visibleAgentIds, setPinnedAgents, currentAgent, currentAgentIsPinned]
+    [
+      visibleAgentIds,
+      visibleAgents,
+      setPinnedAgents,
+      currentAgent,
+      currentAgentIsPinned,
+    ]
   );
 
   // Perform the actual move
@@ -479,7 +487,7 @@ function AppSidebarInner() {
                   {projects.map((project) => (
                     <ProjectFolderButton key={project.id} project={project} />
                   ))}
-                  {newProjectButton}
+                  {projects.length === 0 && newProjectButton}
                 </SidebarSection>
 
                 {/* Recents */}

@@ -193,7 +193,7 @@ export default function EmailPasswordForm({
                         placeholder="email@yourcompany.com"
                         onClear={() => helper.setValue("")}
                         data-testid="email"
-                        isError={apiStatus === "error"}
+                        error={apiStatus === "error"}
                         showClearButton={false}
                       />
                     </FormField.Control>
@@ -220,7 +220,7 @@ export default function EmailPasswordForm({
                         placeholder="**************"
                         onClear={() => helper.setValue("")}
                         data-testid="password"
-                        isError={apiStatus === "error"}
+                        error={apiStatus === "error"}
                         showClearButton={false}
                       />
                     </FormField.Control>

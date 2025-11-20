@@ -125,12 +125,17 @@ export const MCPServerSection = memo(function MCPServerSection({
         : "indeterminate";
 
   return (
-    <div className="border rounded-lg p-4 space-y-3 dark:border-gray-700">
+    <div
+      className="border rounded-lg p-4 space-y-3 dark:border-gray-700"
+      data-testid={`mcp-server-section-${serverId}`}
+    >
       <div className="flex items-center space-x-3">
         <button
           type="button"
           onClick={() => onToggleCollapse(serverId)}
           className="flex-shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+          data-testid={`mcp-server-toggle-${serverId}`}
+          aria-expanded={!isCollapsed}
         >
           {isCollapsed ? (
             <FiChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
@@ -146,6 +151,7 @@ export const MCPServerSection = memo(function MCPServerSection({
           }}
           onChange={onToggleServerTools}
           className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
+          data-testid={`mcp-server-select-${serverId}`}
         />
         <div className="flex-grow">
           <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
@@ -174,6 +180,9 @@ export const MCPServerSection = memo(function MCPServerSection({
                       form.setFieldValue(field.name, e.target.checked);
                     }}
                     className="w-4 h-4"
+                    data-testid={`mcp-server-tool-${serverId}-${tool.id}`}
+                    data-tool-name={tool.name}
+                    data-tool-display-name={tool.display_name}
                   />
                   <div>
                     <div className="text-sm font-medium">

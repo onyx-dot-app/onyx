@@ -2,19 +2,11 @@ from abc import ABC
 from abc import abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
-from enum import Enum
 
 from pydantic import BaseModel
 from pydantic import field_validator
 
 from onyx.utils.url import normalize_url
-
-
-class ProviderType(Enum):
-    """Enum for internet search provider types"""
-
-    GOOGLE = "google"
-    EXA = "exa"
 
 
 class WebSearchResult(BaseModel):
@@ -43,11 +35,13 @@ class WebContent(BaseModel):
         return normalize_url(v)
 
 
-class WebSearchProvider(ABC):
-    @abstractmethod
-    def search(self, query: str) -> Sequence[WebSearchResult]:
-        pass
-
+class WebContentProvider(ABC):
     @abstractmethod
     def contents(self, urls: Sequence[str]) -> list[WebContent]:
+        pass
+
+
+class WebSearchProvider(WebContentProvider):
+    @abstractmethod
+    def search(self, query: str) -> Sequence[WebSearchResult]:
         pass

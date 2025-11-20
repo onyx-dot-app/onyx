@@ -30,13 +30,13 @@ from opentelemetry.trace import StatusCode
 from opentelemetry.trace import Tracer
 from opentelemetry.util.types import AttributeValue
 
-from onyx.tracing.processor_interface import TracingProcessor
-from onyx.tracing.span_data import AgentSpanData
-from onyx.tracing.span_data import FunctionSpanData
-from onyx.tracing.span_data import GenerationSpanData
-from onyx.tracing.span_data import SpanData
-from onyx.tracing.spans import Span
-from onyx.tracing.traces import Trace
+from onyx.tracing.framework.processor_interface import TracingProcessor
+from onyx.tracing.framework.span_data import AgentSpanData
+from onyx.tracing.framework.span_data import FunctionSpanData
+from onyx.tracing.framework.span_data import GenerationSpanData
+from onyx.tracing.framework.span_data import SpanData
+from onyx.tracing.framework.spans import Span
+from onyx.tracing.framework.traces import Trace
 
 logger = logging.getLogger(__name__)
 

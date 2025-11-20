@@ -6,13 +6,13 @@ from typing import Optional
 import braintrust
 from braintrust import NOOP_SPAN
 
-from .processor_interface import TracingProcessor
-from onyx.tracing.span_data import AgentSpanData
-from onyx.tracing.span_data import FunctionSpanData
-from onyx.tracing.span_data import GenerationSpanData
-from onyx.tracing.span_data import SpanData
-from onyx.tracing.spans import Span
-from onyx.tracing.traces import Trace
+from .framework.processor_interface import TracingProcessor
+from .framework.span_data import AgentSpanData
+from .framework.span_data import FunctionSpanData
+from .framework.span_data import GenerationSpanData
+from .framework.span_data import SpanData
+from .framework.spans import Span
+from .framework.traces import Trace
 
 
 def _span_type(span: Span[Any]) -> braintrust.SpanTypeAttribute:
@@ -27,7 +27,6 @@ def _span_type(span: Span[Any]) -> braintrust.SpanTypeAttribute:
 
 
 def _span_name(span: Span[Any]) -> str:
-    # TODO(sachin): span name should also come from the span_data.
     if isinstance(span.span_data, AgentSpanData) or isinstance(
         span.span_data, FunctionSpanData
     ):
@@ -65,7 +64,7 @@ class BraintrustTracingProcessor(TracingProcessor):
 
     def __init__(self, logger: Optional[braintrust.Logger] = None):
         self._logger = logger
-        self._spans: Dict[str, Span] = {}
+        self._spans: Dict[str, Any] = {}
         self._first_input: Dict[str, Any] = {}
         self._last_output: Dict[str, Any] = {}
 
@@ -78,38 +77,32 @@ class BraintrustTracingProcessor(TracingProcessor):
 
         current_context = braintrust.current_span()
         if current_context != NOOP_SPAN:
-            self._spans[trace.trace_id] = current_context.start_span(
+            self._spans[trace.trace_id] = current_context.start_span(  # type: ignore[assignment]
                 name=trace.name,
                 span_attributes={"type": "task", "name": trace.name},
                 metadata=metadata,
             )
         elif self._logger is not None:
-            self._spans[trace.trace_id] = self._logger.start_span(
+            self._spans[trace.trace_id] = self._logger.start_span(  # type: ignore[assignment]
                 span_attributes={"type": "task", "name": trace.name},
                 span_id=trace.trace_id,
                 root_span_id=trace.trace_id,
                 metadata=metadata,
-                # TODO(sachin): Add start time when SDK provides it.
-                # start_time=_timestamp_from_maybe_iso(trace.started_at),
             )
         else:
-            self._spans[trace.trace_id] = braintrust.start_span(
+            self._spans[trace.trace_id] = braintrust.start_span(  # type: ignore[assignment]
                 id=trace.trace_id,
                 span_attributes={"type": "task", "name": trace.name},
                 metadata=metadata,
-                # TODO(sachin): Add start time when SDK provides it.
-                # start_time=_timestamp_from_maybe_iso(trace.started_at),
             )
 
     def on_trace_end(self, trace: Trace) -> None:
-        span = self._spans.pop(trace.trace_id)
+        span: Any = self._spans.pop(trace.trace_id)
         # Get the first input and last output for this specific trace
         trace_first_input = self._first_input.pop(trace.trace_id, None)
         trace_last_output = self._last_output.pop(trace.trace_id, None)
         span.log(input=trace_first_input, output=trace_last_output)
         span.end()
-        # TODO(sachin): Add end time when SDK provides it.
-        # span.end(_timestamp_from_maybe_iso(trace.ended_at))
 
     def _agent_log_data(self, span: Span[AgentSpanData]) -> Dict[str, Any]:
         return {
@@ -177,11 +170,12 @@ class BraintrustTracingProcessor(TracingProcessor):
             return {}
 
     def on_span_start(self, span: Span[SpanData]) -> None:
-        if span.parent_id is not None:
-            parent = self._spans[span.parent_id]
-        else:
-            parent = self._spans[span.trace_id]
-        created_span = parent.start_span(
+        parent: Any = (
+            self._spans[span.parent_id]
+            if span.parent_id is not None
+            else self._spans[span.trace_id]
+        )
+        created_span: Any = parent.start_span(
             id=span.span_id,
             name=_span_name(span),
             type=_span_type(span),
@@ -193,7 +187,7 @@ class BraintrustTracingProcessor(TracingProcessor):
         created_span.set_current()
 
     def on_span_end(self, span: Span[SpanData]) -> None:
-        s = self._spans.pop(span.span_id)
+        s: Any = self._spans.pop(span.span_id)
         event = dict(error=span.error, **self._log_data(span))
         s.log(**event)
         s.unset_current()

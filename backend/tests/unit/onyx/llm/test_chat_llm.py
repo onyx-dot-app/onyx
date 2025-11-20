@@ -298,4 +298,5 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             timeout=30,
             parallel_tool_calls=False,
             mock_response=MOCK_LLM_RESPONSE,
+            stream_options={"include_usage": True},
         )

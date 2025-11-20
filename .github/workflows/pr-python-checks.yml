@@ -10,6 +10,9 @@ on:
       - main
       - 'release/**'
 
+permissions:
+  contents: read
+
 jobs:
   mypy-check:
     # See https://runs-on.com/runners/linux/
@@ -21,6 +24,8 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # needed for pulling openapitools/openapi-generator-cli
       # otherwise, we hit the "Unauthenticated users" limit
@@ -48,6 +53,9 @@ jobs:
 
       - name: Run MyPy
         working-directory: ./backend
+        env:
+          MYPY_FORCE_COLOR: 1
+          TERM: xterm-256color
         run: mypy .
 
       - name: Check import order with reorder-python-imports
