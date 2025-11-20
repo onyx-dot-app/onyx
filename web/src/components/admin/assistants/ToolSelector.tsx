@@ -12,6 +12,7 @@ import { ToolSnapshot, MCPServer } from "@/lib/tools/interfaces";
 import { FastField } from "formik";
 import { MCPServerSection } from "./FormSections";
 import { MemoizedToolList } from "./MemoizedToolCheckboxes";
+import Text from "@/refresh-components/texts/Text";
 import {
   SEARCH_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
@@ -136,6 +137,9 @@ export function ToolSelector({
 
   return (
     <div className="space-y-2">
+      <Text mainUiBody text04 className="mb-2">
+        Built-in Actions
+      </Text>
       {!hideSearchTool && searchTool && (
         <FastField name={`enabled_tools_map.${searchTool.id}`}>
           {() => (
@@ -176,35 +180,48 @@ export function ToolSelector({
         </FastField>
       )}
 
-      {customTools.length > 0 && <MemoizedToolList tools={customTools} />}
+      {customTools.length > 0 && (
+        <>
+          <Text mainUiBody text04 className="mb-2">
+            OpenAPI Actions
+          </Text>
+          <MemoizedToolList tools={customTools} />
+        </>
+      )}
 
-      {Object.keys(mcpToolsByServer).length > 0 &&
-        Object.entries(mcpToolsByServer).map(([serverId, serverTools]) => {
-          const serverIdNum = parseInt(serverId);
-          const serverInfo =
-            mcpServers.find((server) => server.id === serverIdNum) || null;
-          const isCollapsed = collapsedServers.has(serverIdNum);
+      {Object.keys(mcpToolsByServer).length > 0 && (
+        <>
+          <Text mainUiBody text04 className="mb-2">
+            MCP Actions
+          </Text>
+          {Object.entries(mcpToolsByServer).map(([serverId, serverTools]) => {
+            const serverIdNum = parseInt(serverId);
+            const serverInfo =
+              mcpServers.find((server) => server.id === serverIdNum) || null;
+            const isCollapsed = collapsedServers.has(serverIdNum);
 
-          const firstTool = serverTools[0];
-          const serverName =
-            serverInfo?.name ||
-            firstTool?.name?.split("_").slice(0, -1).join("_") ||
-            `MCP Server ${serverId}`;
-          const serverUrl = serverInfo?.server_url || "Unknown URL";
+            const firstTool = serverTools[0];
+            const serverName =
+              serverInfo?.name ||
+              firstTool?.name?.split("_").slice(0, -1).join("_") ||
+              `MCP Server ${serverId}`;
+            const serverUrl = serverInfo?.server_url || "Unknown URL";
 
-          return (
-            <MCPServerSection
-              key={`mcp-server-${serverId}`}
-              serverId={serverIdNum}
-              serverTools={serverTools}
-              serverName={serverName}
-              serverUrl={serverUrl}
-              isCollapsed={isCollapsed}
-              onToggleCollapse={toggleServerCollapse}
-              onToggleServerTools={() => toggleMCPServerTools(serverIdNum)}
-            />
-          );
-        })}
+            return (
+              <MCPServerSection
+                key={`mcp-server-${serverId}`}
+                serverId={serverIdNum}
+                serverTools={serverTools}
+                serverName={serverName}
+                serverUrl={serverUrl}
+                isCollapsed={isCollapsed}
+                onToggleCollapse={toggleServerCollapse}
+                onToggleServerTools={() => toggleMCPServerTools(serverIdNum)}
+              />
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }

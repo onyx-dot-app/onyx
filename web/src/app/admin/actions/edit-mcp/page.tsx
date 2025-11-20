@@ -471,7 +471,10 @@ export default function NewMCPToolPage() {
                                   setFieldValue("auth_performer", value)
                                 }
                               >
-                                <SelectTrigger className="mt-1">
+                                <SelectTrigger
+                                  className="mt-1"
+                                  data-testid="auth-performer-select"
+                                >
                                   <SelectValue placeholder="Select authentication performer" />
                                 </SelectTrigger>
                                 <SelectContent>

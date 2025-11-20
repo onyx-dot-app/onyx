@@ -205,17 +205,12 @@ function DefaultAssistantConfig() {
 
               <Separator />
 
-              <div>
-                <Text mainUiBody text04 className="font-medium text-sm mb-2">
-                  Actions
-                </Text>
-                <ToolSelector
-                  tools={tools}
-                  mcpServers={mcpServersResponse?.mcp_servers}
-                  enabledToolsMap={values.enabled_tools_map}
-                  setFieldValue={setFieldValue}
-                />
-              </div>
+              <ToolSelector
+                tools={tools}
+                mcpServers={mcpServersResponse?.mcp_servers}
+                enabledToolsMap={values.enabled_tools_map}
+                setFieldValue={setFieldValue}
+              />
 
               <div className="flex justify-end pt-4">
                 <Button type="submit" disabled={isSubmitting}>

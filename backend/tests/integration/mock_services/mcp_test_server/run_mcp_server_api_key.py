@@ -27,6 +27,12 @@ if __name__ == "__main__":
         api_key = sys.argv[1]
     else:
         api_key = "dev-api-key-123"
+
+    if len(sys.argv) > 2:
+        port = int(sys.argv[2])
+    else:
+        port = 8001
+
     auth = StaticTokenVerifier(
         tokens={
             api_key: {"client_id": "evan", "scopes": ["mcp:use"]},
@@ -36,4 +42,4 @@ if __name__ == "__main__":
 
     mcp = FastMCP("My HTTP MCP", auth=auth)
     make_many_tools(mcp)
-    mcp.run(transport="http", host="127.0.0.1", port=8001, path="/mcp")
+    mcp.run(transport="http", host="127.0.0.1", port=port, path="/mcp")
