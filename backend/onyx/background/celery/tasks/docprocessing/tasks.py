@@ -147,11 +147,7 @@ def _auto_pause_cc_pair_after_repeated_failures(
         return
 
     connector_refresh_freq = cc_pair.connector.refresh_freq
-    if (
-        connector_refresh_freq is None
-        or not cc_pair.status.is_active()
-        or cc_pair.status == ConnectorCredentialPairStatus.PAUSED
-    ):
+    if connector_refresh_freq is None or not cc_pair.status.is_active():
         return
 
     cc_pair.status = ConnectorCredentialPairStatus.PAUSED
