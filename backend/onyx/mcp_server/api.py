@@ -12,8 +12,6 @@ from fastmcp import FastMCP
 from starlette.middleware.base import RequestResponseEndpoint
 
 from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
-from onyx.configs.app_configs import MCP_SERVER_NAME
-from onyx.configs.app_configs import MCP_SERVER_VERSION
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.mcp_server.auth import OnyxTokenVerifier
@@ -21,12 +19,11 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Create FastMCP server instance with PAT authentication
-logger.info(f"Creating MCP server: {MCP_SERVER_NAME} v{MCP_SERVER_VERSION}")
+logger.info("Creating Onyx MCP Server...")
 
 mcp_server = FastMCP(
-    name=MCP_SERVER_NAME,
-    version=MCP_SERVER_VERSION,
+    name="Onyx MCP Server",
+    version="1.0.0",
     auth=OnyxTokenVerifier(),
 )
 
