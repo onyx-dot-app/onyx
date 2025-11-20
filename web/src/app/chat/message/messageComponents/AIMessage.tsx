@@ -143,6 +143,22 @@ export default function AIMessage({
     finalAnswerComingRef.current = value;
   };
 
+  console.log("rawPackets", rawPackets);
+  console.log("finalAnswerComing", finalAnswerComing);
+  console.log(
+    "isFinalAnswerComing(rawPackets)",
+    isFinalAnswerComing(rawPackets)
+  );
+
+  useEffect(() => {
+    console.log("rawPackets", rawPackets);
+    console.log("finalAnswerComing", finalAnswerComing);
+    console.log(
+      "isFinalAnswerComing(rawPackets)",
+      isFinalAnswerComing(rawPackets)
+    );
+  }, []);
+
   const [displayComplete, _setDisplayComplete] = useState(
     isStreamingComplete(rawPackets)
   );
