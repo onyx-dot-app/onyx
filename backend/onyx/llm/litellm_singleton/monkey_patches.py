@@ -32,11 +32,7 @@ from litellm.utils import verbose_logger
 from pydantic import BaseModel
 
 
-def _patch_ollama_transform_request() -> None:
-    """
-    Patches OllamaChatConfig.transform_request to handle reasoning content
-    and tool calls properly for Ollama chat completions.
-    """
+def _patch_ollama_transform_request_so_tool_calls_streamed() -> None:
     if (
         getattr(OllamaChatConfig.transform_request, "__name__", "")
         == "_patched_transform_request"
@@ -128,11 +124,7 @@ def _patch_ollama_transform_request() -> None:
     OllamaChatConfig.transform_request = _patched_transform_request  # type: ignore[method-assign]
 
 
-def _patch_ollama_chunk_parser() -> None:
-    """
-    Patches OllamaChatCompletionResponseIterator.chunk_parser to properly handle
-    reasoning content and content in streaming responses.
-    """
+def _patch_ollama_chunk_parser_so_reasoning_streamed() -> None:
     if (
         getattr(OllamaChatCompletionResponseIterator.chunk_parser, "__name__", "")
         == "_patched_chunk_parser"
@@ -260,11 +252,7 @@ def _patch_ollama_chunk_parser() -> None:
     OllamaChatCompletionResponseIterator.chunk_parser = _patched_chunk_parser  # type: ignore[method-assign]
 
 
-def _patch_openai_responses_chunk_parser() -> None:
-    """
-    Patches OpenAiResponsesToChatCompletionStreamIterator.chunk_parser to properly
-    handle OpenAI Responses API streaming format and convert it to chat completion format.
-    """
+def _patch_openai_responses_chunk_parser_so_reasoning_streamed() -> None:
     if (
         getattr(
             OpenAiResponsesToChatCompletionStreamIterator.chunk_parser,
@@ -440,9 +428,9 @@ def apply_monkey_patches() -> None:
     - Patching OllamaChatCompletionResponseIterator.chunk_parser for streaming content
     - Patching OpenAiResponsesToChatCompletionStreamIterator.chunk_parser for OpenAI Responses API
     """
-    _patch_ollama_transform_request()
-    _patch_ollama_chunk_parser()
-    _patch_openai_responses_chunk_parser()
+    _patch_ollama_transform_request_so_tool_calls_streamed()
+    _patch_ollama_chunk_parser_so_reasoning_streamed()
+    _patch_openai_responses_chunk_parser_so_reasoning_streamed()
 
 
 def _extract_reasoning_content(message: dict) -> Tuple[Optional[str], Optional[str]]:
