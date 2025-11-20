@@ -8,6 +8,7 @@ from onyx.tools.tool_implementations_v2.tool_result_models import (
 from onyx.tools.tool_implementations_v2.tool_result_models import (
     LlmWebSearchResult,
 )
+from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 
 
@@ -48,9 +49,10 @@ class WebSearchToolResponse(BaseModel):
 
 
 class WebSearchWithContentResponse(BaseModel):
-    provider_type: WebSearchProviderType | None = None
+    search_provider_type: WebSearchProviderType
+    content_provider_type: WebContentProviderType | None = None
     search_results: list[LlmWebSearchResult]
-    fetched_results: list[LlmOpenUrlResult]
+    full_content_results: list[LlmOpenUrlResult]
 
 
 class OpenUrlsToolRequest(BaseModel):
@@ -71,3 +73,4 @@ class OpenUrlsToolRequest(BaseModel):
 
 class OpenUrlsToolResponse(BaseModel):
     results: list[LlmOpenUrlResult]
+    provider_type: WebContentProviderType | None = None

@@ -32,6 +32,7 @@ from onyx.server.features.web_search.models import OpenUrlsToolResponse
 from onyx.server.features.web_search.models import WebSearchToolRequest
 from onyx.server.features.web_search.models import WebSearchToolResponse
 from onyx.server.features.web_search.models import WebSearchWithContentResponse
+from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderView
 from onyx.tools.tool_implementations_v2.tool_result_models import (
     LlmOpenUrlResult,
@@ -54,7 +55,7 @@ def _get_active_search_provider(
     if provider_model is None:
         raise HTTPException(
             status_code=400,
-            detail="No active web search provider configured.",
+            detail="No web search provider configured.",
         )
 
     provider_view = WebSearchProviderView(
@@ -84,7 +85,9 @@ def _get_active_search_provider(
     return provider_view, provider
 
 
-def _get_content_provider(db_session: Session) -> WebContentProvider:
+def _get_active_content_provider(
+    db_session: Session,
+) -> tuple[WebContentProviderView | None, WebContentProvider]:
     provider_model = fetch_active_web_content_provider(db_session)
 
     if provider_model is not None:
@@ -104,21 +107,26 @@ def _get_content_provider(db_session: Session) -> WebContentProvider:
                 detail="Unable to initialize the configured web content provider.",
             )
 
-        return provider
+        provider_view = WebContentProviderView(
+            id=provider_model.id,
+            name=provider_model.name,
+            provider_type=provider_type,
+            is_active=provider_model.is_active,
+            config=provider_model.config or {},
+            has_api_key=bool(provider_model.api_key),
+        )
 
-    # Fall back to the built-in crawler if nothing is configured.
-    try:
-        return OnyxWebCrawlerClient()
-    except Exception as exc:  # pragma: no cover - defensive fallback
-        logger.exception("Failed to initialize Onyx web crawler fallback")
-        raise HTTPException(
-            status_code=503, detail="No web content provider available."
-        ) from exc
+        return provider_view, provider
+
+    # Default to the built-in crawler if nothing is configured. Always available.
+    # NOTE: the OnyxWebCrawlerClient is not stored in the content provider table,
+    # so we need to return it directly.
+    return None, OnyxWebCrawlerClient()
 
 
 def _run_web_search(
     request: WebSearchToolRequest, db_session: Session
-) -> tuple[WebSearchProviderView, list[LlmWebSearchResult]]:
+) -> tuple[WebSearchProviderType, list[LlmWebSearchResult]]:
     provider_view, provider = _get_active_search_provider(db_session)
 
     results: list[LlmWebSearchResult] = []
@@ -144,14 +152,14 @@ def _run_web_search(
                     unique_identifier_to_strip_away=search_result.link,
                 )
             )
-    return provider_view, results
+    return provider_view.provider_type, results
 
 
 def _open_urls(
     urls: list[str],
     db_session: Session,
-) -> list[LlmOpenUrlResult]:
-    provider = _get_content_provider(db_session)
+) -> tuple[WebContentProviderType | None, list[LlmOpenUrlResult]]:
+    provider_view, provider = _get_active_content_provider(db_session)
 
     try:
         docs = provider.contents(urls)
@@ -163,14 +171,21 @@ def _open_urls(
             status_code=502, detail="Web content provider failed to fetch URLs."
         ) from exc
 
-    return [
-        LlmOpenUrlResult(
-            document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
-            content=truncate_search_result_content(doc.full_content),
-            unique_identifier_to_strip_away=doc.link,
+    results: list[LlmOpenUrlResult] = []
+    for doc in docs:
+        results.append(
+            LlmOpenUrlResult(
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                content=truncate_search_result_content(doc.full_content),
+                unique_identifier_to_strip_away=doc.link,
+            )
         )
-        for doc in docs
-    ]
+    provider_type = (
+        provider_view.provider_type
+        if provider_view
+        else WebContentProviderType.ONYX_WEB_CRAWLER
+    )
+    return provider_type, results
 
 
 @router.post("/search", response_model=WebSearchWithContentResponse)
@@ -187,7 +202,15 @@ def execute_web_search(
     If you want to selectively fetch content (i.e. let the LLM decide which URLs to read),
     use `/search-lite` and then call `/open-urls` separately.
     """
-    provider_view, search_results = _run_web_search(request, db_session)
+    search_provider_type, search_results = _run_web_search(request, db_session)
+
+    if not search_results:
+        return WebSearchWithContentResponse(
+            search_provider_type=search_provider_type,
+            content_provider_type=None,
+            search_results=[],
+            full_content_results=[],
+        )
 
     # Fetch contents for unique URLs in the order they appear
     seen: set[str] = set()
@@ -198,12 +221,13 @@ def execute_web_search(
             seen.add(url)
             urls_to_fetch.append(url)
 
-    fetched_results = _open_urls(urls_to_fetch, db_session) if urls_to_fetch else []
+    content_provider_type, full_content_results = _open_urls(urls_to_fetch, db_session)
 
     return WebSearchWithContentResponse(
-        provider_type=provider_view.provider_type,
+        search_provider_type=search_provider_type,
+        content_provider_type=content_provider_type,
         search_results=search_results,
-        fetched_results=fetched_results,
+        full_content_results=full_content_results,
     )
 
 
@@ -218,11 +242,9 @@ def execute_web_search_lite(
     fetching page contents. Pair with `/open-urls` if you need to fetch content
     later.
     """
-    provider_view, search_results = _run_web_search(request, db_session)
+    provider_type, search_results = _run_web_search(request, db_session)
 
-    return WebSearchToolResponse(
-        results=search_results, provider_type=provider_view.provider_type
-    )
+    return WebSearchToolResponse(results=search_results, provider_type=provider_type)
 
 
 @router.post("/open-urls", response_model=OpenUrlsToolResponse)
@@ -235,5 +257,5 @@ def execute_open_urls(
     Fetch content for specific URLs using the configured content provider.
     Intended to complement `/search-lite` when you need content for a subset of URLs.
     """
-    results = _open_urls(request.urls, db_session)
-    return OpenUrlsToolResponse(results=results)
+    provider_type, results = _open_urls(request.urls, db_session)
+    return OpenUrlsToolResponse(results=results, provider_type=provider_type)
