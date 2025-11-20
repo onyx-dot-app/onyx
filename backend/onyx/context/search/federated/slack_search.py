@@ -1,20 +1,30 @@
+import json
 import re
+import time
 from datetime import datetime
-from datetime import timedelta
 from typing import Any
 
-from langchain_core.messages import HumanMessage
+from pydantic import ValidationError
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
-from onyx.configs.app_configs import MAX_SLACK_QUERY_EXPANSIONS
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import TextSection
 from onyx.context.search.federated.models import SlackMessage
+from onyx.context.search.federated.slack_search_utils import ALL_CHANNEL_TYPES
+from onyx.context.search.federated.slack_search_utils import build_channel_query_filter
+from onyx.context.search.federated.slack_search_utils import build_slack_queries
+from onyx.context.search.federated.slack_search_utils import ChannelTypeString
+from onyx.context.search.federated.slack_search_utils import get_channel_type
+from onyx.context.search.federated.slack_search_utils import (
+    get_channel_type_for_missing_scope,
+)
+from onyx.context.search.federated.slack_search_utils import is_recency_query
+from onyx.context.search.federated.slack_search_utils import should_include_message
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import SearchQuery
 from onyx.db.document import DocumentSource
@@ -22,15 +32,15 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.document_index_utils import (
     get_multipass_config,
 )
+from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
 from onyx.llm.factory import get_default_llms
-from onyx.llm.interfaces import LLM
-from onyx.llm.utils import message_to_string
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.onyxbot.slack.models import SlackContext
-from onyx.prompts.federated_search import SLACK_QUERY_EXPANSION_PROMPT
+from onyx.redis.redis_pool import get_redis_client
+from onyx.server.federated.models import FederatedConnectorDetail
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
@@ -40,6 +50,227 @@ logger = setup_logger()
 HIGHLIGHT_START_CHAR = "\ue000"
 HIGHLIGHT_END_CHAR = "\ue001"
 
+CHANNEL_METADATA_CACHE_TTL = 60 * 60 * 24  # 24 hours
+SLACK_THREAD_CONTEXT_WINDOW = 3  # Number of messages before matched message to include
+CHANNEL_METADATA_MAX_RETRIES = 3  # Maximum retry attempts for channel metadata fetching
+CHANNEL_METADATA_RETRY_DELAY = 1  # Initial retry delay in seconds (exponential backoff)
+
+
+def fetch_and_cache_channel_metadata(
+    access_token: str, team_id: str, include_private: bool = True
+) -> dict[str, dict[str, Any]]:
+    """
+    Fetch ALL channel metadata in one API call and cache it.
+
+    Returns a dict mapping channel_id -> metadata including name, type, etc.
+    This replaces multiple conversations.info calls with a single conversations.list.
+
+    Note: We ALWAYS fetch all channel types (including private) and cache them together.
+    This ensures a single cache entry per team, avoiding duplicate API calls.
+    """
+    # Use tenant-specific Redis client
+    redis_client = get_redis_client()
+    # (tenant_id prefix is added automatically by TenantRedis)
+    cache_key = f"slack_federated_search:{team_id}:channels:metadata"
+
+    try:
+        cached = redis_client.get(cache_key)
+        if cached:
+            logger.info(f"Channel metadata cache HIT for team {team_id}")
+            cached_str: str = (
+                cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
+            )
+            cached_data: dict[str, dict[str, Any]] = json.loads(cached_str)
+            logger.info(f"Loaded {len(cached_data)} channels from cache")
+            if not include_private:
+                filtered = {
+                    k: v
+                    for k, v in cached_data.items()
+                    if v.get("type") != "private_channel"
+                }
+                logger.info(f"Filtered to {len(filtered)} channels (exclude private)")
+                return filtered
+            return cached_data
+    except Exception as e:
+        logger.warning(f"Error reading from channel metadata cache: {e}")
+
+    # Cache miss - fetch from Slack API with retry logic
+    logger.info(f"Channel metadata cache MISS for team {team_id} - fetching from API")
+    slack_client = WebClient(token=access_token)
+    channel_metadata: dict[str, dict[str, Any]] = {}
+
+    # Retry logic with exponential backoff
+    last_exception = None
+    available_channel_types = ALL_CHANNEL_TYPES.copy()
+
+    for attempt in range(CHANNEL_METADATA_MAX_RETRIES):
+        try:
+            # Use available channel types (may be reduced if scopes are missing)
+            channel_types = ",".join(available_channel_types)
+
+            # Fetch all channels in one call
+            cursor = None
+            channel_count = 0
+            while True:
+                response = slack_client.conversations_list(
+                    types=channel_types,
+                    exclude_archived=True,
+                    limit=1000,
+                    cursor=cursor,
+                )
+                response.validate()
+
+                # Cast response.data to dict for type checking
+                response_data: dict[str, Any] = response.data  # type: ignore
+                for ch in response_data.get("channels", []):
+                    channel_id = ch.get("id")
+                    if not channel_id:
+                        continue
+
+                    # Determine channel type
+                    channel_type_enum = get_channel_type(channel_info=ch)
+                    channel_type = channel_type_enum.value
+
+                    channel_metadata[channel_id] = {
+                        "name": ch.get("name", ""),
+                        "type": channel_type,
+                        "is_private": ch.get("is_private", False),
+                        "is_member": ch.get("is_member", False),
+                    }
+                    channel_count += 1
+
+                cursor = response_data.get("response_metadata", {}).get("next_cursor")
+                if not cursor:
+                    break
+
+            logger.info(f"Fetched {channel_count} channels for team {team_id}")
+
+            # Cache the results
+            try:
+                redis_client.set(
+                    cache_key,
+                    json.dumps(channel_metadata),
+                    ex=CHANNEL_METADATA_CACHE_TTL,
+                )
+                logger.info(
+                    f"Cached {channel_count} channels for team {team_id} (TTL: {CHANNEL_METADATA_CACHE_TTL}s, key: {cache_key})"
+                )
+            except Exception as e:
+                logger.warning(f"Error caching channel metadata: {e}")
+
+            return channel_metadata
+
+        except SlackApiError as e:
+            last_exception = e
+
+            # Extract all needed fields from response upfront
+            if e.response:
+                error_response = e.response.get("error", "")
+                needed_scope = e.response.get("needed", "")
+            else:
+                error_response = ""
+                needed_scope = ""
+
+            # Check if this is a missing_scope error
+            if error_response == "missing_scope":
+
+                # Get the channel type that requires this scope
+                missing_channel_type = get_channel_type_for_missing_scope(needed_scope)
+
+                if (
+                    missing_channel_type
+                    and missing_channel_type in available_channel_types
+                ):
+                    # Remove the problematic channel type and retry
+                    available_channel_types.remove(missing_channel_type)
+                    logger.warning(
+                        f"Missing scope '{needed_scope}' for channel type '{missing_channel_type}'. "
+                        f"Continuing with reduced channel types: {available_channel_types}"
+                    )
+                    # Don't count this as a retry attempt, just try again with fewer types
+                    if available_channel_types:  # Only continue if we have types left
+                        continue
+                    # Otherwise fall through to retry logic
+                else:
+                    logger.error(
+                        f"Missing scope '{needed_scope}' but could not map to channel type or already removed. "
+                        f"Response: {e.response}"
+                    )
+
+            # For other errors, use retry logic
+            if attempt < CHANNEL_METADATA_MAX_RETRIES - 1:
+                retry_delay = CHANNEL_METADATA_RETRY_DELAY * (2**attempt)
+                logger.warning(
+                    f"Failed to fetch channel metadata (attempt {attempt + 1}/{CHANNEL_METADATA_MAX_RETRIES}): {e}. "
+                    f"Retrying in {retry_delay}s..."
+                )
+                time.sleep(retry_delay)
+            else:
+                logger.error(
+                    f"Failed to fetch channel metadata after {CHANNEL_METADATA_MAX_RETRIES} attempts: {e}"
+                )
+
+    # If we have some channel metadata despite errors, return it with a warning
+    if channel_metadata:
+        logger.warning(
+            f"Returning partial channel metadata ({len(channel_metadata)} channels) despite errors. "
+            f"Last error: {last_exception}"
+        )
+        return channel_metadata
+
+    # If we exhausted all retries and have no data, raise the last exception
+    if last_exception:
+        raise SlackApiError(
+            f"Channel metadata fetching failed after {CHANNEL_METADATA_MAX_RETRIES} attempts",
+            last_exception.response,
+        )
+
+    return {}
+
+
+def get_available_channels(
+    access_token: str, team_id: str, include_private: bool = False
+) -> list[str]:
+    """Fetch list of available channel names using cached metadata."""
+    metadata = fetch_and_cache_channel_metadata(access_token, team_id, include_private)
+    return [meta["name"] for meta in metadata.values() if meta["name"]]
+
+
+def _extract_channel_data_from_entities(
+    entities: dict[str, Any] | None,
+    channel_metadata_dict: dict[str, dict[str, Any]] | None,
+) -> list[str] | None:
+    """Extract available channels list from metadata based on entity configuration.
+
+    Args:
+        entities: Entity filter configuration dict
+        channel_metadata_dict: Pre-fetched channel metadata dictionary
+
+    Returns:
+        List of available channel names, or None if not needed
+    """
+    if not entities or not channel_metadata_dict:
+        return None
+
+    try:
+        parsed_entities = SlackEntities(**entities)
+        # Only extract if we have exclusions or channel filters
+        if parsed_entities.exclude_channels or parsed_entities.channels:
+            # Extract channel names from metadata dict
+            return [
+                meta["name"]
+                for meta in channel_metadata_dict.values()
+                if meta["name"]
+                and (
+                    parsed_entities.include_private_channels
+                    or meta.get("type") != ChannelTypeString.PRIVATE_CHANNEL.value
+                )
+            ]
+    except ValidationError:
+        logger.debug("Failed to parse entities for channel data extraction")
+
+    return None
+
 
 def _should_skip_channel(
     channel_id: str,
@@ -48,26 +279,23 @@ def _should_skip_channel(
     access_token: str,
     include_dm: bool,
 ) -> bool:
-    """
-    Determine if a channel should be skipped if in bot context. When an allowed_private_channel is passed in,
-    all other private channels are filtered out except that specific one.
-    """
+    """Bot context filtering: skip private channels unless explicitly allowed."""
     if bot_token and not include_dm:
         try:
-            # Use bot token if available (has full permissions), otherwise fall back to user token
             token_to_use = bot_token or access_token
             channel_client = WebClient(token=token_to_use)
             channel_info = channel_client.conversations_info(channel=channel_id)
 
-            if isinstance(channel_info.data, dict) and not _is_public_channel(
-                channel_info.data
-            ):
-                # This is a private channel - filter it out
-                if channel_id != allowed_private_channel:
-                    logger.debug(
-                        f"Skipping message from private channel {channel_id} "
-                        f"(not the allowed private channel: {allowed_private_channel})"
-                    )
+            if isinstance(channel_info.data, dict):
+                channel_data = channel_info.data.get("channel", {})
+                channel_type = get_channel_type(channel_info=channel_data)
+                is_private_or_dm = channel_type in [
+                    ChannelType.PRIVATE_CHANNEL,
+                    ChannelType.IM,
+                    ChannelType.MPIM,
+                ]
+
+                if is_private_or_dm and channel_id != allowed_private_channel:
                     return True
         except Exception as e:
             logger.warning(
@@ -75,50 +303,6 @@ def _should_skip_channel(
             )
             return True
     return False
-
-
-def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
-    # get time filter
-    time_filter = ""
-    time_cutoff = query.filters.time_cutoff
-    if time_cutoff is not None:
-        # slack after: is exclusive, so we need to subtract one day
-        time_cutoff = time_cutoff - timedelta(days=1)
-        time_filter = f" after:{time_cutoff.strftime('%Y-%m-%d')}"
-
-    # use llm to generate slack queries (use original query to use same keywords as the user)
-    prompt = SLACK_QUERY_EXPANSION_PROMPT.format(query=query.original_query)
-    try:
-        msg = HumanMessage(content=prompt)
-        response = llm.invoke_langchain([msg])
-        rephrased_queries = message_to_string(response).split("\n")
-    except Exception as e:
-        logger.error(f"Error expanding query: {e}")
-        rephrased_queries = [query.query]
-
-    return [
-        rephrased_query.strip() + time_filter
-        for rephrased_query in rephrased_queries[:MAX_SLACK_QUERY_EXPANSIONS]
-    ]
-
-
-def _is_public_channel(channel_info: dict[str, Any]) -> bool:
-    """Check if a channel is public based on its info"""
-    # The channel_info structure has a nested 'channel' object
-    channel = channel_info.get("channel", {})
-
-    is_channel = channel.get("is_channel", False)
-    is_private = channel.get("is_private", False)
-    is_group = channel.get("is_group", False)
-    is_mpim = channel.get("is_mpim", False)
-    is_im = channel.get("is_im", False)
-
-    # A public channel is: a channel that is NOT private, NOT a group, NOT mpim, NOT im
-    is_public = (
-        is_channel and not is_private and not is_group and not is_mpim and not is_im
-    )
-
-    return is_public
 
 
 def query_slack(
@@ -129,17 +313,52 @@ def query_slack(
     allowed_private_channel: str | None = None,
     bot_token: str | None = None,
     include_dm: bool = False,
+    entities: dict[str, Any] | None = None,
+    available_channels: list[str] | None = None,
 ) -> list[SlackMessage]:
-    # query slack
+
+    # Check if query has channel override (user specified channels in query)
+    has_channel_override = query_string.startswith("__CHANNEL_OVERRIDE__")
+
+    if has_channel_override:
+        # Remove the marker and use the query as-is (already has channel filters)
+        final_query = query_string.replace("__CHANNEL_OVERRIDE__", "").strip()
+    else:
+        # Normal flow: build channel filters from entity config
+        channel_filter = ""
+        if entities:
+            channel_filter = build_channel_query_filter(entities, available_channels)
+
+        final_query = query_string
+        if channel_filter:
+            # Add channel filter to query
+            final_query = f"{query_string} {channel_filter}"
+
+    logger.info(f"Final query to slack: {final_query}")
+
+    # Detect if query asks for most recent results
+    sort_by_time = is_recency_query(original_query.query)
+
     slack_client = WebClient(token=access_token)
     try:
-        response = slack_client.search_messages(
-            query=query_string, count=limit, highlight=True
-        )
+        search_params: dict[str, Any] = {
+            "query": final_query,
+            "count": limit,
+            "highlight": True,
+        }
+
+        # Sort by timestamp for recency-focused queries, otherwise by relevance
+        if sort_by_time:
+            search_params["sort"] = "timestamp"
+            search_params["sort_dir"] = "desc"
+
+        response = slack_client.search_messages(**search_params)
         response.validate()
+
         messages: dict[str, Any] = response.get("messages", {})
         matches: list[dict[str, Any]] = messages.get("matches", [])
-        logger.info(f"Successfully used search_messages, found {len(matches)} messages")
+
+        logger.info(f"Slack search found {len(matches)} messages")
     except SlackApiError as slack_error:
         logger.error(f"Slack API error in search_messages: {slack_error}")
         logger.error(
@@ -327,11 +546,26 @@ def get_contextualized_thread_text(message: SlackMessage, access_token: str) -> 
         if not message_id_idx:
             return thread_text
 
-        # add the message
-        thread_text += "\n..." if message_id_idx > 1 else ""
+        # Include a few messages BEFORE the matched message for context
+        # This helps understand what the matched message is responding to
+        start_idx = max(
+            1, message_id_idx - SLACK_THREAD_CONTEXT_WINDOW
+        )  # Start after thread starter
+
+        # Add ellipsis if we're skipping messages between thread starter and context window
+        if start_idx > 1:
+            thread_text += "\n..."
+
+        # Add context messages before the matched message
+        for i in range(start_idx, message_id_idx):
+            msg_text = messages[i].get("text", "")
+            msg_sender = messages[i].get("user", "")
+            thread_text += f"\n\n<@{msg_sender}>: {msg_text}"
+
+        # Add the matched message itself
         msg_text = messages[message_id_idx].get("text", "")
         msg_sender = messages[message_id_idx].get("user", "")
-        thread_text += f"\n<@{msg_sender}>: {msg_text}"
+        thread_text += f"\n\n<@{msg_sender}>: {msg_text}"
 
     # add the following replies to the thread text
     len_replies = 0
@@ -356,7 +590,13 @@ def get_contextualized_thread_text(message: SlackMessage, access_token: str) -> 
             profile: dict[str, Any] = response.get("profile", {})
             name: str | None = profile.get("real_name") or profile.get("email")
         except SlackApiError as e:
-            logger.error(f"Slack API error in get_contextualized_thread_text: {e}")
+            # user_not_found is common for deleted users, bots, etc. - not critical
+            if "user_not_found" in str(e):
+                logger.debug(
+                    f"User {userid} not found in Slack workspace (likely deleted/deactivated)"
+                )
+            else:
+                logger.warning(f"Could not fetch profile for user {userid}: {e}")
             continue
         if not name:
             continue
@@ -379,18 +619,84 @@ def slack_retrieval(
     query: SearchQuery,
     access_token: str,
     db_session: Session,
+    connector: FederatedConnectorDetail | None = None,
+    entities: dict[str, Any] | None = None,
     limit: int | None = None,
     slack_event_context: SlackContext | None = None,
     bot_token: str | None = None,  # Add bot token parameter
+    team_id: str | None = None,
 ) -> list[InferenceChunk]:
-    # query slack
-    _, fast_llm = get_default_llms()
-    query_strings = build_slack_queries(query, fast_llm)
+    """
+    Main entry point for Slack federated search with entity filtering.
 
+    Applies entity filtering including:
+    - Channel selection and exclusion
+    - Date range extraction and enforcement
+    - DM/private channel filtering
+    - Multi-layer caching
+
+    Args:
+        query: Search query object
+        access_token: User OAuth access token
+        db_session: Database session
+        connector: Federated connector detail (unused, kept for backwards compat)
+        entities: Connector-level config (entity filtering configuration)
+        limit: Maximum number of results
+        slack_event_context: Context when called from Slack bot
+        bot_token: Bot token for enhanced permissions
+        team_id: Slack team/workspace ID
+
+    Returns:
+        List of InferenceChunk objects
+    """
+    # Use connector-level config
+    entities = entities or {}
+
+    if not entities:
+        logger.info("No entity configuration found, using defaults")
+    else:
+        logger.info(f"Using entity configuration: {entities}")
+
+    # Extract limit from entity config if not explicitly provided
+    query_limit = limit
+    if entities:
+        try:
+            parsed_entities = SlackEntities(**entities)
+            if limit is None:
+                query_limit = parsed_entities.max_messages_per_query
+                logger.info(f"Using max_messages_per_query from config: {query_limit}")
+        except Exception as e:
+            logger.warning(f"Error parsing entities for limit: {e}")
+            if limit is None:
+                query_limit = 100  # Fallback default
+    elif limit is None:
+        query_limit = 100  # Default when no entities and no limit provided
+
+    # Pre-fetch channel metadata from Redis cache and extract available channels
+    # This avoids repeated Redis lookups during parallel search execution
+    available_channels = None
+    channel_metadata_dict = None
+    if team_id:
+        # Always fetch all channel types (include_private=True) to ensure single cache entry
+        channel_metadata_dict = fetch_and_cache_channel_metadata(
+            access_token, team_id, include_private=True
+        )
+
+        # Extract available channels list if needed for pattern matching
+        available_channels = _extract_channel_data_from_entities(
+            entities, channel_metadata_dict
+        )
+
+    # Query slack with entity filtering
+    _, fast_llm = get_default_llms()
+    query_strings = build_slack_queries(query, fast_llm, entities, available_channels)
+
+    # Determine filtering based on entities OR context (bot)
     include_dm = False
     allowed_private_channel = None
 
-    if slack_event_context:
+    # Bot context overrides (if entities not specified)
+    if slack_event_context and not entities:
         channel_type = slack_event_context.channel_type
         if channel_type == ChannelType.IM:  # DM with user
             include_dm = True
@@ -400,24 +706,94 @@ def slack_retrieval(
                 f"Private channel context: will only allow messages from {allowed_private_channel} + public channels"
             )
 
-    results = run_functions_tuples_in_parallel(
-        [
+    # Build search tasks
+    search_tasks = [
+        (
+            query_slack,
             (
-                query_slack,
+                query_string,
+                query,
+                access_token,
+                query_limit,
+                allowed_private_channel,
+                bot_token,
+                include_dm,
+                entities,
+                available_channels,
+            ),
+        )
+        for query_string in query_strings
+    ]
+
+    # If include_dm is True, add additional searches without channel filters
+    # This allows searching DMs/group DMs while still searching the specified channels
+    if entities and entities.get("include_dm"):
+        # Create a minimal entities dict that won't add channel filters
+        # This ensures we search ALL conversations (DMs, group DMs, private channels)
+        # BUT we still want to exclude channels specified in exclude_channels
+        dm_entities = {
+            "include_dm": True,
+            "include_private_channels": entities.get("include_private_channels", False),
+            "default_search_days": entities.get("default_search_days", 30),
+            "search_all_channels": True,
+            "channels": None,
+            "exclude_channels": entities.get(
+                "exclude_channels"
+            ),  # ALWAYS apply exclude_channels
+        }
+
+        for query_string in query_strings:
+            search_tasks.append(
                 (
-                    query_string,
-                    query,
-                    access_token,
-                    limit,
-                    allowed_private_channel,
-                    bot_token,
-                    include_dm,
-                ),
+                    query_slack,
+                    (
+                        query_string,
+                        query,
+                        access_token,
+                        query_limit,
+                        allowed_private_channel,
+                        bot_token,
+                        include_dm,
+                        dm_entities,
+                        available_channels,
+                    ),
+                )
             )
-            for query_string in query_strings
-        ]
-    )
+
+    # Execute searches in parallel
+    results = run_functions_tuples_in_parallel(search_tasks)
+
+    # Merge and post-filter results
     slack_messages, docid_to_message = merge_slack_messages(results)
+
+    # Post-filter by channel type (DM, private channel, etc.)
+    # NOTE: We must post-filter because Slack's search.messages API only supports
+    # filtering by channel NAME (via in:#channel syntax), not by channel TYPE.
+    # There's no way to specify "only public channels" or "exclude DMs" in the query.
+    if entities and team_id:
+        # Use pre-fetched channel metadata to avoid cache misses
+        # Pass it directly instead of relying on Redis cache
+
+        filtered_messages = []
+        removed_count = 0
+        for msg in slack_messages:
+            # Pass pre-fetched metadata to avoid cache lookups
+            channel_type = get_channel_type(
+                channel_id=msg.channel_id,
+                channel_metadata=channel_metadata_dict,
+            )
+            if should_include_message(channel_type, entities):
+                filtered_messages.append(msg)
+            else:
+                removed_count += 1
+
+        if removed_count > 0:
+            logger.info(
+                f"Post-filtering removed {removed_count} messages: "
+                f"{len(slack_messages)} -> {len(filtered_messages)}"
+            )
+        slack_messages = filtered_messages
+
     slack_messages = slack_messages[: limit or len(slack_messages)]
     if not slack_messages:
         return []
@@ -436,6 +812,9 @@ def slack_retrieval(
     for slack_message in slack_messages:
         highlighted_texts.update(slack_message.highlighted_texts)
     sorted_highlighted_texts = sorted(highlighted_texts, key=len)
+
+    # For queries without highlights (e.g., empty recency queries), we should keep all chunks
+    has_highlights = len(sorted_highlighted_texts) > 0
 
     # convert slack messages to index documents
     index_docs: list[IndexingDocument] = []
@@ -475,24 +854,36 @@ def slack_retrieval(
     chunks = chunker.chunk(index_docs)
 
     # prune chunks without any highlighted texts
+    # BUT: for recency queries without keywords, keep all chunks
     relevant_chunks: list[DocAwareChunk] = []
     chunkid_to_match_highlight: dict[str, str] = {}
-    for chunk in chunks:
-        match_highlight = chunk.content
-        for highlight in sorted_highlighted_texts:  # faster than re sub
-            match_highlight = match_highlight.replace(
-                highlight, f"<hi>{highlight}</hi>"
-            )
 
-        # if nothing got replaced, the chunk is irrelevant
-        if len(match_highlight) == len(chunk.content):
-            continue
+    if not has_highlights:
+        # No highlighted terms - keep all chunks (recency query)
+        for chunk in chunks:
+            chunk_id = f"{chunk.source_document.id}__{chunk.chunk_id}"
+            relevant_chunks.append(chunk)
+            chunkid_to_match_highlight[chunk_id] = chunk.content  # No highlighting
+            if limit and len(relevant_chunks) >= limit:
+                break
+    else:
+        # Prune chunks that don't contain highlighted terms
+        for chunk in chunks:
+            match_highlight = chunk.content
+            for highlight in sorted_highlighted_texts:  # faster than re sub
+                match_highlight = match_highlight.replace(
+                    highlight, f"<hi>{highlight}</hi>"
+                )
 
-        chunk_id = f"{chunk.source_document.id}__{chunk.chunk_id}"
-        relevant_chunks.append(chunk)
-        chunkid_to_match_highlight[chunk_id] = match_highlight
-        if limit and len(relevant_chunks) >= limit:
-            break
+            # if nothing got replaced, the chunk is irrelevant
+            if len(match_highlight) == len(chunk.content):
+                continue
+
+            chunk_id = f"{chunk.source_document.id}__{chunk.chunk_id}"
+            relevant_chunks.append(chunk)
+            chunkid_to_match_highlight[chunk_id] = match_highlight
+            if limit and len(relevant_chunks) >= limit:
+                break
 
     # convert to inference chunks
     top_chunks: list[InferenceChunk] = []

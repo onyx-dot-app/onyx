@@ -3,9 +3,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { ConnectorIcon } from "@/components/icons/icons";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
-import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
-import Link from "next/link";
 import {
   useCallback,
   useContext,

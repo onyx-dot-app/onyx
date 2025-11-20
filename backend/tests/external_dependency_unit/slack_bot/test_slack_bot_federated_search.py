@@ -1,4 +1,6 @@
 import os
+from typing import Any
+from unittest.mock import MagicMock
 from unittest.mock import Mock
 from unittest.mock import patch
 from uuid import uuid4
@@ -8,9 +10,11 @@ os.environ["MODEL_SERVER_HOST"] = "disabled"
 os.environ["MODEL_SERVER_PORT"] = "9000"
 
 from sqlalchemy.orm import Session
+from slack_sdk.errors import SlackApiError
 
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.enums import RecencyBiasSetting
+from onyx.context.search.federated.slack_search import fetch_and_cache_channel_metadata
 from onyx.db.models import DocumentSet
 from onyx.db.models import FederatedConnector
 from onyx.db.models import LLMProvider
@@ -346,6 +350,8 @@ class TestSlackBotFederatedSearch:
             allowed_private_channel: str | None = None,
             bot_token: str | None = None,
             include_dm: bool = False,
+            entities: dict | None = None,
+            available_channels: list | None = None,
         ) -> list:
             self._captured_filtering_params = {
                 "allowed_private_channel": allowed_private_channel,
@@ -571,3 +577,174 @@ class TestSlackBotFederatedSearch:
 
         finally:
             self._teardown_common_mocks(patches)
+
+
+@patch("onyx.context.search.federated.slack_search.get_redis_client")
+@patch("onyx.context.search.federated.slack_search.WebClient")
+def test_missing_scope_resilience(
+    mock_web_client: Mock, mock_redis_client: Mock
+) -> None:
+    """Test that missing scopes are handled gracefully"""
+    # Setup mock Redis client
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None  # Cache miss
+    mock_redis_client.return_value = mock_redis
+
+    # Setup mock Slack client that simulates missing_scope error
+    mock_client_instance = MagicMock()
+    mock_web_client.return_value = mock_client_instance
+
+    # Track which channel types were attempted
+    attempted_types: list[str] = []
+
+    def mock_conversations_list(types: str | None = None, **kwargs: Any) -> MagicMock:
+        if types:
+            attempted_types.append(types)
+
+        # First call: all types including mpim -> missing_scope error
+        if types and "mpim" in types:
+            error_response = {
+                "ok": False,
+                "error": "missing_scope",
+                "needed": "mpim:read",
+                "provided": "identify,channels:history,channels:read,groups:read,im:read,search:read",
+            }
+            raise SlackApiError("missing_scope", error_response)
+
+        # Second call: without mpim -> success
+        mock_response = MagicMock()
+        mock_response.validate.return_value = None
+        mock_response.data = {
+            "channels": [
+                {
+                    "id": "C1234567890",
+                    "name": "general",
+                    "is_channel": True,
+                    "is_private": False,
+                    "is_group": False,
+                    "is_mpim": False,
+                    "is_im": False,
+                    "is_member": True,
+                },
+                {
+                    "id": "D9876543210",
+                    "name": "",
+                    "is_channel": False,
+                    "is_private": False,
+                    "is_group": False,
+                    "is_mpim": False,
+                    "is_im": True,
+                    "is_member": True,
+                },
+            ],
+            "response_metadata": {},
+        }
+        return mock_response
+
+    mock_client_instance.conversations_list.side_effect = mock_conversations_list
+
+    # Call the function
+    result = fetch_and_cache_channel_metadata(
+        access_token="xoxp-test-token",
+        team_id="T1234567890",
+        include_private=True,
+    )
+
+    # Assertions
+    # Should have attempted twice: once with mpim, once without
+    assert len(attempted_types) == 2, f"Expected 2 attempts, got {len(attempted_types)}"
+    assert "mpim" in attempted_types[0], "First attempt should include mpim"
+    assert "mpim" not in attempted_types[1], "Second attempt should not include mpim"
+
+    # Should have successfully returned channels despite missing scope
+    assert len(result) == 2, f"Expected 2 channels, got {len(result)}"
+    assert "C1234567890" in result, "Should have public channel"
+    assert "D9876543210" in result, "Should have DM channel"
+
+    # Verify channel metadata structure
+    assert result["C1234567890"]["name"] == "general"
+    assert result["C1234567890"]["type"] == "public_channel"
+    assert result["D9876543210"]["type"] == "im"
+
+
+@patch("onyx.context.search.federated.slack_search.get_redis_client")
+@patch("onyx.context.search.federated.slack_search.WebClient")
+def test_multiple_missing_scopes_resilience(
+    mock_web_client: Mock, mock_redis_client: Mock
+) -> None:
+    """Test handling multiple missing scopes gracefully"""
+    # Setup mock Redis client
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None  # Cache miss
+    mock_redis_client.return_value = mock_redis
+
+    # Setup mock Slack client
+    mock_client_instance = MagicMock()
+    mock_web_client.return_value = mock_client_instance
+
+    # Track attempts
+    attempted_types: list[str] = []
+
+    def mock_conversations_list(types: str | None = None, **kwargs: Any) -> MagicMock:
+        if types:
+            attempted_types.append(types)
+
+        # First: mpim missing
+        if types and "mpim" in types:
+            error_response = {
+                "ok": False,
+                "error": "missing_scope",
+                "needed": "mpim:read",
+                "provided": "identify,channels:history,channels:read,groups:read",
+            }
+            raise SlackApiError("missing_scope", error_response)
+
+        # Second: im missing
+        if types and "im" in types:
+            error_response = {
+                "ok": False,
+                "error": "missing_scope",
+                "needed": "im:read",
+                "provided": "identify,channels:history,channels:read,groups:read",
+            }
+            raise SlackApiError("missing_scope", error_response)
+
+        # Third: success with only public and private channels
+        mock_response = MagicMock()
+        mock_response.validate.return_value = None
+        mock_response.data = {
+            "channels": [
+                {
+                    "id": "C1234567890",
+                    "name": "general",
+                    "is_channel": True,
+                    "is_private": False,
+                    "is_group": False,
+                    "is_mpim": False,
+                    "is_im": False,
+                    "is_member": True,
+                }
+            ],
+            "response_metadata": {},
+        }
+        return mock_response
+
+    mock_client_instance.conversations_list.side_effect = mock_conversations_list
+
+    # Call the function
+    result = fetch_and_cache_channel_metadata(
+        access_token="xoxp-test-token",
+        team_id="T1234567890",
+        include_private=True,
+    )
+
+    # Should gracefully handle multiple missing scopes
+    assert len(attempted_types) == 3, f"Expected 3 attempts, got {len(attempted_types)}"
+    assert "mpim" in attempted_types[0], "First attempt should include mpim"
+    assert "mpim" not in attempted_types[1], "Second attempt should not include mpim"
+    assert "im" in attempted_types[1], "Second attempt should include im"
+    assert "im" not in attempted_types[2], "Third attempt should not include im"
+
+    # Should still return available channels
+    assert len(result) == 1, f"Expected 1 channel, got {len(result)}"
+    assert result["C1234567890"]["name"] == "general"

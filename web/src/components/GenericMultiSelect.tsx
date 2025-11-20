@@ -121,7 +121,6 @@ export function GenericMultiSelect<
           {selectedItems.map((item) => (
             <Button
               key={item.id}
-              main
               secondary
               disabled={disabled}
               rightIcon={SvgX}

@@ -12,7 +12,6 @@ import SvgCheck from "@/icons/check";
 import SvgServer from "@/icons/server";
 import SvgChevronRight from "@/icons/chevron-right";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { cn, noProp } from "@/lib/utils";
@@ -21,6 +20,7 @@ import { SvgProps } from "@/icons";
 export interface MCPServer {
   id: number;
   name: string;
+  owner_email: string;
   server_url: string;
   auth_type: MCPAuthenticationType;
   auth_performer: MCPAuthenticationPerformer;
@@ -56,8 +56,7 @@ export default function MCPLineItem({
     server.auth_type !== MCPAuthenticationType.NONE;
   const showInlineReauth =
     showAuthTrigger && isAuthenticated && tools.length > 0;
-  const showReauthButton =
-    showAuthTrigger && isAuthenticated && !showInlineReauth;
+  const showReauthButton = showAuthTrigger && !showInlineReauth;
 
   function getServerIcon(): React.FunctionComponent<SvgProps> {
     if (isLoading) return SimpleLoader;
@@ -103,29 +102,25 @@ export default function MCPLineItem({
             tools.length > 0 &&
             enabledTools.length > 0 &&
             tools.length !== enabledTools.length && (
-              <Text secondaryBody nowrap>
-                <Text
-                  secondaryBody
-                  nowrap
-                  className="inline text-action-link-05"
-                >
+              <div className="flex flex-row items-center gap-1">
+                <Text secondaryBody nowrap className="text-action-link-05">
                   {enabledTools.length}
                 </Text>
-                {` of ${tools.length}`}
-              </Text>
+                <Text secondaryBody nowrap>
+                  {` of ${tools.length}`}
+                </Text>
+              </div>
             )}
-          {showReauthButton && (
-            <IconButton
-              icon={SvgKey}
-              internal
-              aria-label="Re-authenticate MCP server"
-              title="Re-authenticate"
-              tooltip="Re-authenticate"
-              onClick={noProp(onAuthenticate)}
-            />
+          {showInlineReauth && (
+            <SvgChevronRight className="h-3.5 w-3.5 stroke-text-03" />
           )}
-          {isAuthenticated && tools.length > 0 && (
-            <IconButton icon={SvgChevronRight} internal tooltip="More" />
+          {showReauthButton && (
+            <span
+              className="inline-flex h-6 w-6 items-center justify-center"
+              aria-hidden="true"
+            >
+              <SvgKey className="h-3.5 w-3.5 stroke-text-03" />
+            </span>
           )}
         </div>
       }

@@ -140,7 +140,6 @@ export function AccessTypeGroupSelector({
                           key={userGroup.id}
                           primary
                           action={isSelected}
-                          type="button"
                           leftIcon={SvgUsers}
                           onClick={() => {
                             if (isSelected) {

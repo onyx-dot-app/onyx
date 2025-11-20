@@ -1,5 +1,13 @@
 import AgentsPage from "@/refresh-pages/AgentsPage";
+import * as Layouts from "@/refresh-components/layouts/layouts";
+import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
 
-export default function Page() {
-  return <AgentsPage />;
+export default async function Page() {
+  const headerData = await fetchHeaderDataSS();
+
+  return (
+    <Layouts.AppPage {...headerData}>
+      <AgentsPage />
+    </Layouts.AppPage>
+  );
 }

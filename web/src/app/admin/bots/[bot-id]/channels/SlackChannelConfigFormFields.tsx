@@ -595,25 +595,23 @@ export function SlackChannelConfigFormFields({
                     Relevant Connectors:
                   </h4>
                   <div className="max-h-40 overflow-y-auto border-t border-text-subtle flex-col gap-y-2">
-                    {memoizedPrivateConnectors.map(
-                      (ccpairinfo: CCPairDescriptor<any, any>) => (
-                        <Link
-                          key={ccpairinfo.id}
-                          href={`/admin/connector/${ccpairinfo.id}`}
-                          className="flex items-center p-2 rounded-md hover:bg-background-100 transition-colors"
-                        >
-                          <div className="mr-2">
-                            <SourceIcon
-                              iconSize={16}
-                              sourceType={ccpairinfo.connector.source}
-                            />
-                          </div>
-                          <span className="text-sm text-text-darker font-medium">
-                            {ccpairinfo.name}
-                          </span>
-                        </Link>
-                      )
-                    )}
+                    {memoizedPrivateConnectors.map((ccpairinfo: any) => (
+                      <Link
+                        key={ccpairinfo.id}
+                        href={`/admin/connector/${ccpairinfo.id}`}
+                        className="flex items-center p-2 rounded-md hover:bg-background-100 transition-colors"
+                      >
+                        <div className="mr-2">
+                          <SourceIcon
+                            iconSize={16}
+                            sourceType={ccpairinfo.source}
+                          />
+                        </div>
+                        <span className="text-sm text-text-darker font-medium">
+                          {ccpairinfo.name}
+                        </span>
+                      </Link>
+                    ))}
                   </div>
                 </div>
               </TooltipContent>
@@ -621,7 +619,7 @@ export function SlackChannelConfigFormFields({
           </TooltipProvider>
         )}
         <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
-        <Button type="button" secondary onClick={() => router.back()}>
+        <Button secondary onClick={() => router.back()}>
           Cancel
         </Button>
       </div>

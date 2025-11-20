@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import { Callout } from "@/components/ui/callout";
@@ -113,7 +115,7 @@ export default function ShareChatSessionModal({
         icon={SvgShare}
         title="Share Chat"
         onClose={onClose}
-        submit={<Button>Share</Button>}
+        submit={<Button onClick={onClose}>Share</Button>}
       >
         {shareLink ? (
           <div>

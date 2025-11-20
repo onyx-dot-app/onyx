@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
@@ -78,6 +79,14 @@ class FakeDummyTool(CustomTool):
             ),
         )
 
+    def run_v2(
+        self,
+        run_context: RunContextWrapper[Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        return "Tool executed successfully"
+
 
 @pytest.fixture
 def fake_dummy_tool() -> FakeDummyTool:
@@ -90,8 +99,8 @@ __all__ = [
     "chat_turn_dependencies",
     "fake_db_session",
     "fake_dummy_tool",
-    "fake_llm",
     "fake_model",
+    "fake_llm",
     "fake_redis_client",
     "fake_tools",
 ]

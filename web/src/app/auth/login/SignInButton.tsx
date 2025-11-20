@@ -2,7 +2,6 @@
 
 import Button from "@/refresh-components/buttons/Button";
 import { AuthType } from "@/lib/constants";
-import Link from "next/link";
 import { FcGoogle } from "react-icons/fc";
 import { SvgProps } from "@/icons";
 
@@ -35,14 +34,13 @@ export default function SignInButton({
   }
 
   return (
-    <Link href={finalAuthorizeUrl}>
-      <Button
-        secondary={authType === "google_oauth" || authType === "cloud"}
-        className="!w-full"
-        leftIcon={icon}
-      >
-        {button}
-      </Button>
-    </Link>
+    <Button
+      secondary={authType === "google_oauth" || authType === "cloud"}
+      className="!w-full"
+      leftIcon={icon}
+      href={finalAuthorizeUrl}
+    >
+      {button}
+    </Button>
   );
 }

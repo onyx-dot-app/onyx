@@ -4,9 +4,12 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from langchain.schema.language_model import LanguageModelInput
+from langchain.schema.language_model import (
+    LanguageModelInput as LangChainLanguageModelInput,
+)
 from langchain_core.messages import BaseMessage
 
+from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
@@ -69,7 +72,7 @@ class _FakeLLM(LLM):
 
     def _invoke_implementation_langchain(
         self,
-        prompt: LanguageModelInput,
+        prompt: LangChainLanguageModelInput,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict[str, Any] | None = None,
@@ -80,7 +83,7 @@ class _FakeLLM(LLM):
 
     def _stream_implementation_langchain(
         self,
-        prompt: LanguageModelInput,
+        prompt: LangChainLanguageModelInput,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict[str, Any] | None = None,
@@ -137,7 +140,84 @@ def tool_call_chunk(
     )
 
 
-# Fake tools for testing
+class FakeErrorTool(Tool):
+    """Base fake tool for testing."""
+
+    def __init__(self, tool_name: str, tool_id: int = 1):
+        self._tool_name = tool_name
+        self._tool_id = tool_id
+        self.calls: list[dict[str, Any]] = []
+
+    @property
+    def id(self) -> int:
+        return self._tool_id
+
+    @property
+    def name(self) -> str:
+        return self._tool_name
+
+    @property
+    def description(self) -> str:
+        return f"{self._tool_name} tool"
+
+    @property
+    def display_name(self) -> str:
+        return self._tool_name.replace("_", " ").title()
+
+    def tool_definition(self) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name": self._tool_name,
+                "description": self.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "queries": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        }
+                    },
+                    "required": ["queries"],
+                },
+            },
+        }
+
+    def run_v2(
+        self,
+        run_context: RunContextWrapper[Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        raise Exception("Error running tool")
+
+    def build_tool_message_content(self, *args: Any) -> str:
+        return ""
+
+    def get_args_for_non_tool_calling_llm(
+        self, query: Any, history: Any, llm: Any, force_run: bool = False
+    ) -> None:
+        return None
+
+    def run(
+        self, override_kwargs: Any = None, **llm_kwargs: Any
+    ) -> Generator[ToolResponse, None, None]:
+        raise NotImplementedError
+        yield  # Make this a generator
+
+    def final_result(self, *args: Any) -> dict[str, Any]:
+        return {}
+
+    def build_next_prompt(
+        self,
+        prompt_builder: Any,
+        tool_call_summary: Any,
+        tool_responses: Any,
+        using_tool_calling_llm: Any,
+    ) -> Any:
+        return prompt_builder
+
+
 class FakeTool(Tool):
     """Base fake tool for testing."""
 
@@ -189,7 +269,9 @@ class FakeTool(Tool):
     ) -> Any:
         queries = kwargs.get("queries", [])
         self.calls.append({"queries": queries})
-        run_context.context[f"{self._tool_name}_called"] = True
+        context = run_context.context
+        flag_name = f"{self._tool_name}_called"
+        context[flag_name] = True
         return f"{self.display_name} results for: {', '.join(queries)}"
 
     def build_tool_message_content(self, *args: Any) -> str:
@@ -229,3 +311,9 @@ def fake_internal_search_tool() -> FakeTool:
 def fake_web_search_tool() -> FakeTool:
     """Fixture providing a fake web search tool."""
     return FakeTool("web_search", tool_id=2)
+
+
+@pytest.fixture
+def fake_error_tool() -> FakeErrorTool:
+    """Fixture providing a fake error tool."""
+    return FakeErrorTool("error_tool", tool_id=3)

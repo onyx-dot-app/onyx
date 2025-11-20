@@ -529,7 +529,7 @@ export default function AddConnector({
                     onSwitch={onSwap}
                   />
                   {!createCredentialFormToggle && (
-                    <div className="mt-6 flex space-x-4">
+                    <div className="mt-6 flex gap-4">
                       {/* Button to pop up a form to manually enter credentials */}
                       <Button
                         onClick={async () => {

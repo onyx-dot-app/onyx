@@ -5,6 +5,9 @@ concurrency:
 
 on: push
 
+permissions:
+  contents: read
+
 env:
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -16,7 +19,23 @@ env:
   SLACK_CLIENT_ID: ${{ secrets.SLACK_CLIENT_ID }}
   SLACK_CLIENT_SECRET: ${{ secrets.SLACK_CLIENT_SECRET }}
 
+  # for MCP Oauth tests
+  MCP_OAUTH_CLIENT_ID: ${{ secrets.MCP_OAUTH_CLIENT_ID }}
+  MCP_OAUTH_CLIENT_SECRET: ${{ secrets.MCP_OAUTH_CLIENT_SECRET }}
+  MCP_OAUTH_ISSUER: ${{ secrets.MCP_OAUTH_ISSUER }}
+  MCP_OAUTH_JWKS_URI: ${{ secrets.MCP_OAUTH_JWKS_URI }}
+  MCP_OAUTH_USERNAME: ${{ vars.MCP_OAUTH_USERNAME }}
+  MCP_OAUTH_PASSWORD: ${{ secrets.MCP_OAUTH_PASSWORD }}
+
   MOCK_LLM_RESPONSE: true
+  MCP_TEST_SERVER_PORT: 8004
+  MCP_TEST_SERVER_URL: http://host.docker.internal:8004/mcp
+  MCP_TEST_SERVER_PUBLIC_URL: http://host.docker.internal:8004/mcp
+  MCP_TEST_SERVER_BIND_HOST: 0.0.0.0
+  MCP_TEST_SERVER_PUBLIC_HOST: host.docker.internal
+  MCP_SERVER_HOST: 0.0.0.0
+  MCP_SERVER_PUBLIC_HOST: host.docker.internal
+  MCP_SERVER_PUBLIC_URL: http://host.docker.internal:8004/mcp
 
 jobs:
   build-web-image:
@@ -26,6 +45,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -46,8 +67,10 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
           push: true
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache
+            type=registry,ref=onyxdotapp/onyx-web-server:latest
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-image:
@@ -57,6 +80,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -77,8 +102,11 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
           push: true
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
+            type=registry,ref=onyxdotapp/onyx-backend:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
@@ -88,6 +116,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -108,8 +138,10 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
           push: true
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
+            type=registry,ref=onyxdotapp/onyx-model-server:latest
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   playwright-tests:
@@ -119,7 +151,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [admin, no-auth]
+        project: [admin, no-auth, exclusive]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -127,23 +159,7 @@ jobs:
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Pull Docker images
-        run: |
-          # Pull all images from ECR in parallel
-          echo "Pulling Docker images in parallel..."
-          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}) &
-          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}) &
-          (docker pull ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}) &
-
-          # Wait for all background jobs to complete
-          wait
-          echo "All Docker images pulled successfully"
-
-          # Re-tag with expected names for docker-compose
-          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }} onyxdotapp/onyx-web-server:test
-          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }} onyxdotapp/onyx-model-server:test
+          persist-credentials: false
 
       - name: Setup node
         uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # ratchet:actions/setup-node@v4
@@ -169,15 +185,22 @@ jobs:
         run: npx playwright install --with-deps
 
       - name: Create .env file for Docker Compose
+        env:
+          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
+          EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
-          GEN_AI_API_KEY=${{ env.OPENAI_API_KEY }}
-          EXA_API_KEY=${{ env.EXA_API_KEY }}
+          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
+          EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
-          IMAGE_TAG=test
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
+          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
@@ -192,7 +215,7 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml up -d
         id: start_docker
 
       - name: Wait for service to be ready
@@ -229,12 +252,37 @@ jobs:
           done
           echo "Finished waiting for service."
 
+      - name: Wait for MCP OAuth mock server
+        run: |
+          echo "Waiting for MCP OAuth mock server on port ${MCP_TEST_SERVER_PORT:-8004}..."
+          start_time=$(date +%s)
+          timeout=120
+
+          while true; do
+            current_time=$(date +%s)
+            elapsed_time=$((current_time - start_time))
+
+            if [ $elapsed_time -ge $timeout ]; then
+              echo "Timeout reached. MCP OAuth mock server did not become ready in ${timeout}s."
+              exit 1
+            fi
+
+            if curl -sf "http://localhost:${MCP_TEST_SERVER_PORT:-8004}/healthz" > /dev/null; then
+              echo "MCP OAuth mock server is ready!"
+              break
+            fi
+
+            sleep 3
+          done
+
       - name: Run Playwright tests
         working-directory: ./web
+        env:
+          PROJECT: ${{ matrix.project }}
         run: |
           # Create test-results directory to ensure it exists for artifact upload
           mkdir -p test-results
-          npx playwright test --project ${{ matrix.project }}
+          npx playwright test --project ${PROJECT}
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         if: always()
@@ -247,10 +295,12 @@ jobs:
       # save before stopping the containers so the logs can be captured
       - name: Save Docker logs
         if: success() || failure()
+        env:
+          WORKSPACE: ${{ github.workspace }}
         run: |
           cd deployment/docker_compose
           docker compose logs > docker-compose.log
-          mv docker-compose.log ${{ github.workspace }}/docker-compose.log
+          mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
         if: success() || failure()
@@ -258,6 +308,17 @@ jobs:
         with:
           name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
+
+  playwright-required:
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
+    needs: [playwright-tests]
+    if: ${{ always() }}
+    steps:
+      - name: Check job status
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1
+
 
 # NOTE: Chromatic UI diff testing is currently disabled.
 # We are using Playwright for local and CI testing without visual regression checks.

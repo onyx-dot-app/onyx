@@ -129,7 +129,12 @@ function InputSelectInner(
             valueClasses()[state]
           )}
           onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
+          onBlur={(e) => {
+            setIsFocused(false);
+            props.onBlur?.(e);
+          }}
+          name={name}
+          id={name}
           {...props}
         >
           <SelectPrimitive.Value placeholder={placeholder} />
@@ -157,7 +162,7 @@ function InputSelectInner(
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content
           className={cn(
-            "relative z-[2000] max-h-72 min-w-[8rem] overflow-hidden rounded-12 border border-border-01 bg-background-neutral-00 shadow-02",
+            "relative z-[2002] max-h-72 min-w-[8rem] overflow-hidden rounded-12 border border-border-01 bg-background-neutral-00 shadow-02",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
