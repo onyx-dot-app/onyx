@@ -133,7 +133,8 @@ def _run_web_search(
                 status_code=502, detail="Web search provider failed to execute query."
             ) from exc
 
-        for search_result in search_results:
+        trimmed_results = list(search_results)[: request.max_results]
+        for search_result in trimmed_results:
             results.append(
                 LlmWebSearchResult(
                     document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,

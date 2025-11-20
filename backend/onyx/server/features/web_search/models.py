@@ -17,6 +17,12 @@ class WebSearchToolRequest(BaseModel):
         min_length=1,
         description="List of search queries to send to the configured provider.",
     )
+    max_results: int | None = Field(
+        default=10,
+        description=(
+            "Optional cap on number of results to return per query. Defaults to 10."
+        ),
+    )
 
     @field_validator("queries")
     @classmethod
@@ -25,6 +31,15 @@ class WebSearchToolRequest(BaseModel):
         if not cleaned_queries:
             raise ValueError("queries must include at least one non-empty value")
         return cleaned_queries
+
+    @field_validator("max_results")
+    @classmethod
+    def _default_and_validate_max_results(cls, max_results: int | None) -> int:
+        # Default to 10 when not provided
+        max_results = 10 if max_results is None else max_results
+        if max_results < 1:
+            raise ValueError("max_results must be at least 1")
+        return max_results
 
 
 class WebSearchToolResponse(BaseModel):
