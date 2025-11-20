@@ -1,49 +1,30 @@
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from onyx.db.models import UserGroup as UserGroupDbModel
-from onyx.server.documents.models import (
-    ConnectorCredentialPairDescriptor,
-    ConnectorSnapshot,
-    CredentialSnapshot,
-)
+from onyx.db.models import UserGroup as UserGroupModel
+from onyx.server.documents.models import ConnectorCredentialPairDescriptor
+from onyx.server.documents.models import ConnectorSnapshot
+from onyx.server.documents.models import CredentialSnapshot
 from onyx.server.features.document_set.models import DocumentSet
 from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.manage.models import UserInfo, UserPreferences
+from onyx.server.manage.models import UserInfo
+from onyx.server.manage.models import UserPreferences
 
 
 class UserGroup(BaseModel):
-    id: int = Field(
-        description="Уникальный идентификатор группы",
-    )
-    name: str = Field(
-        description="Название группы пользователей",
-    )
-    users: list[UserInfo] = Field(
-        description="Список пользователей в группе,"
-    )
-    curator_ids: list[UUID] = Field(
-        description="Идентификаторы кураторов группы",
-    )
-    cc_pairs: list[ConnectorCredentialPairDescriptor] = Field(
-        description="Связанные коннектор-креденшиал пары"
-    )
-    document_sets: list[DocumentSet] = Field(
-        description="Наборы документов доступные группе",
-    )
-    personas: list[PersonaSnapshot] = Field(
-        description="Ассистенты, доступные группе",
-    )
-    is_up_to_date: bool = Field(
-        description="Флаг актуальности синхронизации с Vespa"
-    )
-    is_up_for_deletion: bool = Field(
-        description="Флаг помеченности на удаление"
-    )
+    id: int
+    name: str
+    users: list[UserInfo]
+    curator_ids: list[UUID]
+    cc_pairs: list[ConnectorCredentialPairDescriptor]
+    document_sets: list[DocumentSet]
+    personas: list[PersonaSnapshot]
+    is_up_to_date: bool
+    is_up_for_deletion: bool
 
     @classmethod
-    def from_model(cls, user_group_model: UserGroupDbModel) -> "UserGroup":
+    def from_model(cls, user_group_model: UserGroupModel) -> "UserGroup":
         return cls(
             id=user_group_model.id,
             name=user_group_model.name,
@@ -96,30 +77,16 @@ class UserGroup(BaseModel):
 
 
 class UserGroupCreate(BaseModel):
-    name: str = Field(
-        description="Название создаваемой группы пользователей",
-    )
-    user_ids: list[UUID] = Field(
-        description="Список идентификаторов пользователей для добавления в группу",
-    )
-    cc_pair_ids: list[int] = Field(
-        description="Список идентификаторов коннектор-креденшиал пар для связи с группой",
-    )
+    name: str
+    user_ids: list[UUID]
+    cc_pair_ids: list[int]
 
 
 class UserGroupUpdate(BaseModel):
-    user_ids: list[UUID] = Field(
-        description="Список идентификаторов пользователей группы",
-    )
-    cc_pair_ids: list[int] = Field(
-        description="Список идентификаторов коннектор-креденшиал пар",
-    )
+    user_ids: list[UUID]
+    cc_pair_ids: list[int]
 
 
 class SetCuratorRequest(BaseModel):
-    user_id: UUID = Field(
-        description="Идентификатор пользователя для изменения прав куратора",
-    )
-    is_curator: bool = Field(
-        description="Флаг назначения/снятия прав куратора",
-    )
+    user_id: UUID
+    is_curator: bool

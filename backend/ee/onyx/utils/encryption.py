@@ -3,7 +3,9 @@ from os import urandom
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers import algorithms
+from cryptography.hazmat.primitives.ciphers import Cipher
+from cryptography.hazmat.primitives.ciphers import modes
 
 from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
 from onyx.utils.logger import setup_logger
@@ -13,77 +15,71 @@ logger = setup_logger()
 
 
 @lru_cache(maxsize=1)
-def _get_trimmed_key(secret: str) -> bytes:
-    """Подготавливает ключ шифрования, обрезая до допустимой длины AES."""
-    raw_bytes = secret.encode('utf-8')
-    byte_size = len(raw_bytes)
-    if byte_size < 16:
-        raise RuntimeError("Секретный ключ шифрования слишком короткий")
-    if byte_size > 32:
-        return raw_bytes[:32]
-    if byte_size in (16, 24, 32):
-        return raw_bytes
-    # Обрезаем до ближайшей стандартной длины
-    aes_sizes = [16, 24, 32]
-    closest_size = min(aes_sizes, key=lambda size: abs(size - byte_size))
-    return raw_bytes[:closest_size]
+def _get_trimmed_key(key: str) -> bytes:
+    encoded_key = key.encode()
+    key_length = len(encoded_key)
+    if key_length < 16:
+        raise RuntimeError("Invalid ENCRYPTION_KEY_SECRET - too short")
+    elif key_length > 32:
+        key = key[:32]
+    elif key_length not in (16, 24, 32):
+        valid_lengths = [16, 24, 32]
+        key = key[: min(valid_lengths, key=lambda x: abs(x - key_length))]
+
+    return encoded_key
 
 
-def _encrypt_string(plain_text: str) -> bytes:
-    """Шифрует строку с использованием AES-CBC и PKCS7."""
+def _encrypt_string(input_str: str) -> bytes:
     if not ENCRYPTION_KEY_SECRET:
-        return plain_text.encode('utf-8')
+        return input_str.encode()
 
-    cipher_key = _get_trimmed_key(ENCRYPTION_KEY_SECRET)
-    init_vector = urandom(16)
-    data_padder = padding.PKCS7(algorithms.AES.block_size).padder()
-    padded_plain = data_padder.update(plain_text.encode('utf-8')) + data_padder.finalize()
+    key = _get_trimmed_key(ENCRYPTION_KEY_SECRET)
+    iv = urandom(16)
+    padder = padding.PKCS7(algorithms.AES.block_size).padder()
+    padded_data = padder.update(input_str.encode()) + padder.finalize()
 
-    crypto_engine = Cipher(algorithms.AES(cipher_key), modes.CBC(init_vector), backend=default_backend())
-    data_encryptor = crypto_engine.encryptor()
-    ciphered_output = data_encryptor.update(padded_plain) + data_encryptor.finalize()
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+    encrypted_data = encryptor.update(padded_data) + encryptor.finalize()
 
-    return init_vector + ciphered_output
+    return iv + encrypted_data
 
 
-def _decrypt_bytes(ciphered_input: bytes) -> str:
-    """Дешифрует байты обратно в строку с удалением padding."""
+def _decrypt_bytes(input_bytes: bytes) -> str:
     if not ENCRYPTION_KEY_SECRET:
-        return ciphered_input.decode('utf-8')
+        return input_bytes.decode()
 
-    cipher_key = _get_trimmed_key(ENCRYPTION_KEY_SECRET)
-    init_vector = ciphered_input[:16]
-    ciphered_payload = ciphered_input[16:]
+    key = _get_trimmed_key(ENCRYPTION_KEY_SECRET)
+    iv = input_bytes[:16]
+    encrypted_data = input_bytes[16:]
 
-    crypto_engine = Cipher(algorithms.AES(cipher_key), modes.CBC(init_vector), backend=default_backend())
-    data_decryptor = crypto_engine.decryptor()
-    unpadded_ciphered = data_decryptor.update(ciphered_payload) + data_decryptor.finalize()
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+    decrypted_padded_data = decryptor.update(encrypted_data) + decryptor.finalize()
 
-    data_unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
-    clean_output = data_unpadder.update(unpadded_ciphered) + data_unpadder.finalize()
+    unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
+    decrypted_data = unpadder.update(decrypted_padded_data) + unpadder.finalize()
 
-    return clean_output.decode('utf-8')
+    return decrypted_data.decode()
 
 
 def encrypt_string_to_bytes(input_str: str) -> bytes:
-    impl_encrypt = fetch_versioned_implementation(
+    versioned_encryption_fn = fetch_versioned_implementation(
         "onyx.utils.encryption", "_encrypt_string"
     )
-    return impl_encrypt(input_str)
+    return versioned_encryption_fn(input_str)
 
 
 def decrypt_bytes_to_string(input_bytes: bytes) -> str:
-    impl_decrypt = fetch_versioned_implementation(
+    versioned_decryption_fn = fetch_versioned_implementation(
         "onyx.utils.encryption", "_decrypt_bytes"
     )
-    return impl_decrypt(input_bytes)
+    return versioned_decryption_fn(input_bytes)
 
 
 def test_encryption() -> None:
-    """Проверяет корректность шифрования/дешифрования на тестовом примере."""
-    sample_text = "Onyx is the BEST!"
-    ciphered_data = encrypt_string_to_bytes(sample_text)
-    recovered_text = decrypt_bytes_to_string(ciphered_data)
-    if sample_text != recovered_text:
-        raise RuntimeError("Тест шифрования/дешифрования не пройден")
-
+    test_string = "Onyx is the BEST!"
+    encrypted_bytes = encrypt_string_to_bytes(test_string)
+    decrypted_string = decrypt_bytes_to_string(encrypted_bytes)
+    if test_string != decrypted_string:
+        raise RuntimeError("Encryption decryption test failed")

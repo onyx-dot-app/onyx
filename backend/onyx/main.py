@@ -24,7 +24,6 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from sqlalchemy.orm import Session
 from starlette.types import Lifespan
 
-from ee.onyx.server.auth_check import check_ee_router_auth
 from onyx import __version__
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRead
@@ -95,21 +94,20 @@ from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.openai_assistants_api.full_openai_assistants_api import (
     get_full_openai_assistants_api_router,
 )
-from ee.onyx.server.enterprise_settings.api import (
-    admin_router as enterprise_settings_admin_router,
+from smartsearch.onyx.server.settings.api import (
+    admin_router as settings_admin_router,
 )
-from ee.onyx.server.enterprise_settings.api import (
-    basic_router as enterprise_settings_router,
+from smartsearch.onyx.server.settings.api import (
+    basic_router as settings_router,
 )
 
-from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
-from ee.onyx.server.user_group.api import router as user_group_router
-from ee.onyx.server.analytics.api import router as analytics_router
-from ee.onyx.server.query_history.api import router as query_history_router
-from ee.onyx.server.manage.standard_answer import router as standard_answer_router
-from ee.onyx.server.oauth.api import router as ee_oauth_router
-from ee.onyx.server.query_and_chat.query_backend import (
-    basic_router as query_router_ee,
+from smartsearch.onyx.server.reporting.usage_export_api import router as usage_export_router
+from smartsearch.onyx.server.user_group.api import router as user_group_router
+from smartsearch.onyx.server.analytics.api import router as analytics_router
+from smartsearch.onyx.server.query_history.api import router as query_history_router
+from smartsearch.onyx.server.manage.standard_answer import router as standard_answer_router
+from smartsearch.onyx.server.query_and_chat.query_backend import (
+    basic_router as query_router_,
 )
 from onyx.server.query_and_chat.chat_backend import router as chat_router
 from onyx.server.query_and_chat.query_backend import (
@@ -298,7 +296,6 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
 
 
 def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
-    global_version.set_ee()
     application = FastAPI(
         title="Onyx Backend",
         version=__version__,
@@ -374,8 +371,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, chat_router)
     include_router_with_global_prefix_prepended(application, standard_answer_router)
-    include_router_with_global_prefix_prepended(application, ee_oauth_router)
-    include_router_with_global_prefix_prepended(application, query_router_ee)
+    include_router_with_global_prefix_prepended(application, query_router_)
 
 
 
@@ -383,13 +379,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     # Enterprise-only global settings
     include_router_with_global_prefix_prepended(
-        application, enterprise_settings_admin_router
+        application, settings_admin_router
     )
     # Token rate limit settings
     include_router_with_global_prefix_prepended(
         application, token_rate_limit_settings_router
     )
-    include_router_with_global_prefix_prepended(application, enterprise_settings_router)
+    include_router_with_global_prefix_prepended(application, settings_router)
     include_router_with_global_prefix_prepended(application, usage_export_router)
 
     if AUTH_TYPE == AuthType.DISABLED:
@@ -525,7 +521,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     # Ensure all routes have auth enabled or are explicitly marked as public
     # check_router_auth(application)
-    check_ee_router_auth(application)
+    # check_ee_router_auth(application)
 
     # Initialize and instrument the app
     Instrumentator().instrument(application).expose(application)

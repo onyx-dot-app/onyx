@@ -1,131 +1,97 @@
 import re
-from typing import cast, Union
+from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter
+from fastapi import Depends
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from ee.onyx.server.query_and_chat.models import AgentAnswer
+from ee.onyx.server.query_and_chat.models import AgentSubQuery
+from ee.onyx.server.query_and_chat.models import AgentSubQuestion
+from ee.onyx.server.query_and_chat.models import BasicCreateChatMessageRequest
 from ee.onyx.server.query_and_chat.models import (
-    AgentAnswer,
-    AgentSubQuery,
-    AgentSubQuestion,
-    BasicCreateChatMessageRequest,
     BasicCreateChatMessageWithHistoryRequest,
-    ChatBasicResponse,
 )
-from onyx.auth.users import api_key_dep
+from ee.onyx.server.query_and_chat.models import ChatBasicResponse
+from onyx.auth.users import current_user, api_key_dep
 from onyx.chat.chat_utils import combine_message_thread
 from onyx.chat.chat_utils import create_chat_chain
-from onyx.chat.models import (
-    AgentAnswerPiece,
-    AllCitations,
-    ExtendedToolResponse,
-    FinalUsedContextDocsResponse,
-    LlmDoc,
-    LLMRelevanceFilterResponse,
-    OnyxAnswerPiece,
-    QADocsResponse,
-    RefinedAnswerImprovement,
-    StreamingError,
-    SubQueryPiece,
-    SubQuestionIdentifier,
-    SubQuestionPiece,
-)
-from onyx.chat.process_message import (
-    ChatPacketStream,
-    stream_chat_message_objects,
-)
+from onyx.chat.models import AgentAnswerPiece
+from onyx.chat.models import AllCitations
+from onyx.chat.models import ExtendedToolResponse
+from onyx.chat.models import FinalUsedContextDocsResponse
+from onyx.chat.models import LlmDoc
+from onyx.chat.models import LLMRelevanceFilterResponse
+from onyx.chat.models import OnyxAnswerPiece
+from onyx.chat.models import QADocsResponse
+from onyx.chat.models import RefinedAnswerImprovement
+from onyx.chat.models import StreamingError
+from onyx.chat.models import SubQueryPiece
+from onyx.chat.models import SubQuestionIdentifier
+from onyx.chat.models import SubQuestionPiece
+from onyx.chat.process_message import ChatPacketStream
+from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import (
-    OptionalSearchSetting,
-    RetrievalDetails,
-    SavedSearchDoc,
-)
-from onyx.db.chat import (
-    create_chat_session,
-    create_new_chat_message,
-    get_or_create_root_message,
-)
+from onyx.context.search.models import OptionalSearchSetting
+from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import SavedSearchDoc
+from onyx.db.chat import create_chat_session
+from onyx.db.chat import create_new_chat_message
+from onyx.db.chat import get_or_create_root_message
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.secondary_llm_flows.query_expansion import thread_based_query_rephrase
-from onyx.server.query_and_chat.models import (
-    ChatMessageDetail,
-    CreateChatMessageRequest,
-)
+from onyx.server.query_and_chat.models import ChatMessageDetail
+from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-router = APIRouter(tags=["Обработка сообщений без стриминга (send-message)"])
+router = APIRouter(prefix="/chat")
 
 
 def _get_final_context_doc_indices(
     final_context_docs: list[LlmDoc] | None,
     top_docs: list[SavedSearchDoc] | None,
 ) -> list[int] | None:
-    """Возвращает список индексов документов простого поиска, 
-    которые были фактически переданы в LLM.
-
-    Args:
-        final_context_docs: Список документов, фактически использованных в контексте LLM
-        top_docs: Список топовых документов из поиска
-
-    Returns:
-        Список индексов документов из top_docs, которые были использованы в финальном контексте,
-        или None если входные данные некорректны
+    """
+    this function returns a list of indices of the simple search docs
+    that were actually fed to the LLM.
     """
     if final_context_docs is None or top_docs is None:
         return None
 
-    # Собираем ID документов из финального контекста
-    final_context_doc_ids = set()
-    for document in final_context_docs:
-        final_context_doc_ids.add(document.document_id)
-
-    # Находим индексы использованных документов в результатах поиска
-    used_doc_indices = []
-    for search_document_index, search_document in enumerate(top_docs):
-        if search_document.document_id in final_context_doc_ids:
-            used_doc_indices.append(search_document_index)
-
-    return used_doc_indices
+    final_context_doc_ids = {doc.document_id for doc in final_context_docs}
+    return [
+        i for i, doc in enumerate(top_docs) if doc.document_id in final_context_doc_ids
+    ]
 
 
-def _process_packets_loop(
+def _convert_packet_stream_to_response(
     packets: ChatPacketStream,
-    response: ChatBasicResponse,
-    agent_sub_questions: dict[tuple[int, int], AgentSubQuestion],
-    agent_answers: dict[tuple[int, int], AgentAnswer],
-    agent_sub_queries: dict[tuple[int, int, int], AgentSubQuery],
-    final_context_docs: list[LlmDoc],
-) -> str:
-    """Обрабатывает каждый пакет в потоке и заполняет соответствующие структуры данных.
+) -> ChatBasicResponse:
+    response = ChatBasicResponse()
+    final_context_docs: list[LlmDoc] = []
 
-    Args:
-        packets: Поток пакетов для обработки
-        response: Объект ответа для заполнения
-        agent_sub_questions: Словарь подвопросов агента
-        agent_answers: Словарь ответов агента
-        agent_sub_queries: Словарь подзапросов агента
-        final_context_docs: Список финальных документов
-
-    Returns:
-        Собранный текстовый ответ
-    """
     answer = ""
 
-    # Обработка каждого пакета в потоке
+    # accumulate stream data with these dicts
+    agent_sub_questions: dict[tuple[int, int], AgentSubQuestion] = {}
+    agent_answers: dict[tuple[int, int], AgentAnswer] = {}
+    agent_sub_queries: dict[tuple[int, int, int], AgentSubQuery] = {}
+
     for packet in packets:
         if isinstance(packet, OnyxAnswerPiece) and packet.answer_piece:
             answer += packet.answer_piece
         elif isinstance(packet, QADocsResponse):
             response.top_documents = packet.top_documents
 
-            # Это не будет работать, если agent_sub_questions еще не заполнен
+            # This is a no-op if agent_sub_questions hasn't already been filled
             if packet.level is not None and packet.level_question_num is not None:
                 id = (packet.level, packet.level_question_num)
                 if id in agent_sub_questions:
@@ -133,7 +99,6 @@ def _process_packets_loop(
                         saved_search_doc.document_id
                         for saved_search_doc in packet.top_documents
                     ]
-
         elif isinstance(packet, StreamingError):
             response.error_msg = packet.error
         elif isinstance(packet, ChatMessageDetail):
@@ -144,13 +109,13 @@ def _process_packets_loop(
             # TODO: deprecate `llm_chunks_indices`
             response.llm_chunks_indices = packet.llm_selected_doc_indices
         elif isinstance(packet, FinalUsedContextDocsResponse):
-            final_context_docs.extend(packet.final_context_docs)
+            final_context_docs = packet.final_context_docs
         elif isinstance(packet, AllCitations):
             response.cited_documents = {
                 citation.citation_num: citation.document_id
                 for citation in packet.citations
             }
-        # Пакеты агентного поиска
+        # agentic packets
         elif isinstance(packet, SubQuestionPiece):
             if packet.level is not None and packet.level_question_num is not None:
                 id = (packet.level, packet.level_question_num)
@@ -193,9 +158,9 @@ def _process_packets_loop(
                 else:
                     agent_sub_queries[sub_query_id].sub_query += packet.sub_query
         elif isinstance(packet, ExtendedToolResponse):
-            # Мы не должны получать это. Это перехватывается и преобразуется в QADocsResponse
+            # we shouldn't get this ... it gets intercepted and translated to QADocsResponse
             logger.warning(
-                "_convert_packet_stream_to_response: Неожиданный тип чат-пакета ExtendedToolResponse!"
+                "_convert_packet_stream_to_response: Unexpected chat packet type ExtendedToolResponse!"
             )
         elif isinstance(packet, RefinedAnswerImprovement):
             response.agent_refined_answer_improvement = (
@@ -203,29 +168,14 @@ def _process_packets_loop(
             )
         else:
             logger.warning(
-                "_convert_packet_stream_to_response - Неизвестный чат-пакет: type=%s",
-                type(packet),
+                f"_convert_packet_stream_to_response - Unrecognized chat packet: type={type(packet)}"
             )
 
-    return answer
+    response.final_context_doc_indices = _get_final_context_doc_indices(
+        final_context_docs, response.top_documents
+    )
 
-
-def _organize_agent_metadata(
-    response: ChatBasicResponse,
-    agent_sub_questions: dict[tuple[int, int], AgentSubQuestion],
-    agent_answers: dict[tuple[int, int], AgentAnswer],
-    agent_sub_queries: dict[tuple[int, int, int], AgentSubQuery],
-) -> None:
-    """Организует и сортирует метаданные агентного поиска для вывода.
-
-    Args:
-        response: Объект ответа для заполнения метаданными агента
-        agent_sub_questions: Словарь подвопросов агента
-        agent_answers: Словарь ответов агента
-        agent_sub_queries: Словарь подзапросов агента
-    """
-
-    # Организация / сортировка метаданных агентного поиска для вывода
+    # organize / sort agent metadata for output
     if len(agent_sub_questions) > 0:
         response.agent_sub_questions = cast(
             dict[int, list[AgentSubQuestion]],
@@ -233,8 +183,8 @@ def _organize_agent_metadata(
         )
 
     if len(agent_answers) > 0:
-        # Возвращает agent_level_answer с первого уровня или с последнего в зависимости
-        # от agent_refined_answer_improvement
+        # return the agent_level_answer from the first level or the last one depending
+        # on agent_refined_answer_improvement
         response.agent_answers = cast(
             dict[int, list[AgentAnswer]],
             SubQuestionIdentifier.make_dict_by_level(agent_answers),
@@ -254,8 +204,8 @@ def _organize_agent_metadata(
                 break
 
     if len(agent_sub_queries) > 0:
-        # Подзапросы часто отправляются с завершающими пробелами... очищаем здесь
-        # Возможно исправить в источнике?
+        # subqueries are often emitted with trailing whitespace ... clean it up here
+        # perhaps fix at the source?
         for v in agent_sub_queries.values():
             v.sub_query = v.sub_query.strip()
 
@@ -263,132 +213,51 @@ def _organize_agent_metadata(
             AgentSubQuery.make_dict_by_level_and_question_index(agent_sub_queries)
         )
 
-
-def _convert_packet_stream_to_response(
-    packets: ChatPacketStream,
-) -> ChatBasicResponse:
-    """Конвертирует потоковые пакеты чата в структурированный ответ.
-
-    Обрабатывает различные типы пакетов из потокового ответа и собирает их
-    в единый объект ChatBasicResponse. Поддерживает базовые ответы, агентный поиск,
-    документы, ошибки и цитаты.
-
-    Args:
-        packets: Поток пакетов от системы обработки сообщений
-
-    Returns:
-        Структурированный ответ со всеми собранными данными
-    """
-    response = ChatBasicResponse()
-    final_context_docs: list[LlmDoc] = []
-
-    # Словари для агрегации данных агентного поиска
-    agent_sub_questions: dict[tuple[int, int], AgentSubQuestion] = {}
-    agent_answers: dict[tuple[int, int], AgentAnswer] = {}
-    agent_sub_queries: dict[tuple[int, int, int], AgentSubQuery] = {}
-
-    # Обработка пакетов в отдельной функции
-    answer = _process_packets_loop(
-        packets=packets,
-        response=response,
-        agent_sub_questions=agent_sub_questions,
-        agent_answers=agent_answers,
-        agent_sub_queries=agent_sub_queries,
-        final_context_docs=final_context_docs,
-    )
-
-    response.final_context_doc_indices = _get_final_context_doc_indices(
-        final_context_docs=final_context_docs,
-        top_docs=response.top_documents,
-    )
-
-    # Организация метаданных агентного поиска
-    _organize_agent_metadata(
-        response=response,
-        agent_sub_questions=agent_sub_questions,
-        agent_answers=agent_answers,
-        agent_sub_queries=agent_sub_queries,
-    )
-
     response.answer = answer
     if answer:
-        pattern = r"\s*\[\[\d+\]\]\(http[s]?://[^\s]+\)"
-        response.answer_citationless = re.sub(pattern, "", answer)
+        response.answer_citationless = remove_answer_citations(answer)
 
     return response
 
 
-def _build_search_configuration(
-    request: Union[BasicCreateChatMessageRequest, BasicCreateChatMessageWithHistoryRequest],
-) -> RetrievalDetails | None:
-    """Формирует конфигурацию поиска на основе запроса"""
+def remove_answer_citations(answer: str) -> str:
+    pattern = r"\s*\[\[\d+\]\]\(http[s]?://[^\s]+\)"
 
-    if request.retrieval_options is None and request.search_doc_ids is None:
-        return RetrievalDetails(
-            run_search=OptionalSearchSetting.ALWAYS,
-            real_time=False,
-        )
-    else:
-        return request.retrieval_options
+    return re.sub(pattern, "", answer)
 
 
-@router.post(
-    "/chat/send-message-simple-api",
-    summary="Обработки сообщений без поддержки истории чата",
-    response_model=ChatBasicResponse,
-)
+@router.post("/send-message-simple-api")
 def handle_simplified_chat_message(
     chat_message_req: BasicCreateChatMessageRequest,
     user: User | None = Depends(api_key_dep),
     db_session: Session = Depends(get_session),
 ) -> ChatBasicResponse:
-    """Не стримингвоый эндпоинт для обработки сообщений без поддержки истории чата.
+    """This is a Non-Streaming version that only gives back a minimal set of information"""
+    logger.notice(f"Received new simple api chat message: {chat_message_req.message}")
 
-       Не-стриминговый эндпоинт, возвращающий минимальный набор информации.
-       Обрабатывает одиночные сообщения без учета контекста предыдущей переписки.
-
-       Отличия от версии с поддержкеой истории чата:
-           - Работает с существующей чат-сессией
-           - Не выполняет перефразирование на основе истории
-           - Поддерживает только линейную цепочку сообщений
-
-       Args:
-           chat_message_req: Запрос с данными сообщения
-           user: Авторизованный пользователь
-           db_session: Сессия базы данных
-
-       Returns:
-           Упрощенный ответ ассистента
-       """
-    logger.notice(
-        "Получено новое сообщение (без истории чата): %s",
-        chat_message_req.message,
-    )
-
-    # Проверка наличия текста сообщения
     if not chat_message_req.message:
-        raise HTTPException(
-            status_code=400,
-            detail="Пустое сообщение недопустимо",
-        )
+        raise HTTPException(status_code=400, detail="Empty chat message is invalid")
 
-    # Получение родительского сообщения для продолжения цепочки
     try:
         parent_message, _ = create_chat_chain(
-            chat_session_id=chat_message_req.chat_session_id,
-            db_session=db_session
+            chat_session_id=chat_message_req.chat_session_id, db_session=db_session
         )
     except Exception:
-        # Создание корневого сообщения, если цепочка не найдена
         parent_message = get_or_create_root_message(
-            chat_session_id=chat_message_req.chat_session_id,
-            db_session=db_session
+            chat_session_id=chat_message_req.chat_session_id, db_session=db_session
         )
 
-    # Конфигурация параметров поиска
-    retrieval_options = _build_search_configuration(request=chat_message_req)
+    if (
+        chat_message_req.retrieval_options is None
+        and chat_message_req.search_doc_ids is None
+    ):
+        retrieval_options: RetrievalDetails | None = RetrievalDetails(
+            run_search=OptionalSearchSetting.ALWAYS,
+            real_time=False,
+        )
+    else:
+        retrieval_options = chat_message_req.retrieval_options
 
-    # Формирование полного запроса для обработки
     full_chat_msg_info = CreateChatMessageRequest(
         chat_session_id=chat_message_req.chat_session_id,
         parent_message_id=parent_message.id,
@@ -397,10 +266,10 @@ def handle_simplified_chat_message(
         prompt_id=None,
         search_doc_ids=chat_message_req.search_doc_ids,
         retrieval_options=retrieval_options,
-        # Упрощенный API не поддерживает переранжирование
+        # Simple API does not support reranking, hide complexity from user
         rerank_settings=None,
         query_override=chat_message_req.query_override,
-        # В настоящее время применяется только к поиску, не к чату
+        # Currently only applies to search flow not chat
         chunks_above=0,
         chunks_below=0,
         full_doc=chat_message_req.full_doc,
@@ -408,113 +277,54 @@ def handle_simplified_chat_message(
         use_agentic_search=chat_message_req.use_agentic_search,
     )
 
-    # Обработка сообщения и получение потоковых пакетов
-    response_packets = stream_chat_message_objects(
+    packets = stream_chat_message_objects(
         new_msg_req=full_chat_msg_info,
         user=user,
         db_session=db_session,
         enforce_chat_session_id_for_search_docs=False,
     )
 
-    # Конвертация потоковых пакетов в финальный ответ
-    converted_packets = _convert_packet_stream_to_response(response_packets)
-
-    return converted_packets
+    return _convert_packet_stream_to_response(packets)
 
 
-@router.post(
-    "/chat/send-message-simple-with-history",
-    summary="Обработка сообщений с поддержкой истории чата",
-    response_model=ChatBasicResponse,
-)
+@router.post("/send-message-simple-with-history")
 def handle_send_message_simple_with_history(
     req: BasicCreateChatMessageWithHistoryRequest,
     user: User | None = Depends(api_key_dep),
     db_session: Session = Depends(get_session),
 ) -> ChatBasicResponse:
-    """Не стриминговый эндпоинт для обработки сообщений с поддержкой истории чата.
+    """This is a Non-Streaming version that only gives back a minimal set of information.
+    takes in chat history maintained by the caller
+    and does query rephrasing similar to answer-with-quote"""
 
-    Не стриминговый эндпоинт, возвращающий минимальный набор
-    информации без потоковой передачи. Принимает историю чата,
-    поддерживаемую вызывающей стороной, и выполняет перефразирование
-    запроса аналогично механизму answer-with-quote.
-
-    Эндпоинт принимает историю переписки и новое сообщение пользователя,
-    выполняет контекстуальное перефразирование запроса на основе истории
-    и возвращает ответ ассистента. Поддерживает как поиск по документам,
-    так и агентный поиск.
-
-    Особенности:
-        - Не-стриминговая обработка (единый ответ)
-        - Минимальный набор возвращаемых данных
-        - Перефразирование запроса с учетом контекста истории
-        - Поддержка истории чата от вызывающей стороны
-        - Автоматическое перефразирование запроса с учетом контекста истории
-        - Поддержка различных режимов поиска (базовый, агентный)
-        - Валидация структуры истории сообщений
-        - Создание временной чат-сессии для обработки
-
-    Args:
-        req: Запрос с историей сообщений и параметрами чата
-        user: Аутентифицированный пользователь (через API ключ)
-        db_session: Сессия базы данных
-
-    Returns:
-        Упрощенный ответ ассистента с минимальным набором данных
-
-    Raises:
-        HTTPException:
-            - 400: При пустой истории или некорректной структуре сообщений
-            - 500: При внутренних ошибках обработки
-    """
-
-    # Проверка что история сообщений не пустая
     if len(req.messages) == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Список сообщений не может быть пустым",
-        )
+        raise HTTPException(status_code=400, detail="Messages cannot be zero length")
 
-    # Проверка корректности структуры истории чата
-    # Должна начинаться с сообщения пользователя и чередоваться пользователь/ассистент
-    expected_message_role = MessageType.USER
+    # This is a sanity check to make sure the chat history is valid
+    # It must start with a user message and alternate beteen user and assistant
+    expected_role = MessageType.USER
     for msg in req.messages:
         if not msg.message:
             raise HTTPException(
-                status_code=400,
-                detail="Одно или несколько сообщений чата пустые",
+                status_code=400, detail="One or more chat messages were empty"
             )
 
-        if msg.role != expected_message_role:
+        if msg.role != expected_role:
             raise HTTPException(
                 status_code=400,
-                detail="Роли сообщений должны начинаться и заканчиваться "
-                       "MessageType.USER и чередоваться между ними.",
+                detail="Message roles must start and end with MessageType.USER and alternate in-between.",
             )
-
-        if expected_message_role == MessageType.USER:
-            expected_message_role = MessageType.ASSISTANT
+        if expected_role == MessageType.USER:
+            expected_role = MessageType.ASSISTANT
         else:
-            expected_message_role = MessageType.USER
+            expected_role = MessageType.USER
 
-    # Извлечение текущего запроса и истории сообщений
-    # req.messages содержит: [история..., текущий_запрос]
-    # Последний элемент (-1) - это текущий запрос пользователя
-    # Все элементы кроме последнего ([:-1]) - это история переписки
-    last_message = req.messages[-1]
-    current_user_query = last_message.message
+    query = req.messages[-1].message
     msg_history = req.messages[:-1]
 
-    logger.notice(
-        "Получено новое сообщение (с историей чата): %s",
-        current_user_query,
-    )
+    logger.notice(f"Received new simple with history chat message: {query}")
 
-    # Создание чат-сессии
-    if user is not None:
-        user_id = user.id
-    else:
-        user_id = None
+    user_id = user.id if user is not None else None
     chat_session = create_chat_session(
         db_session=db_session,
         description="handle_send_message_simple_with_history",
@@ -522,29 +332,23 @@ def handle_send_message_simple_with_history(
         persona_id=req.persona_id,
     )
 
-    # Получение LLM модели для ассистента
     llm, _ = get_llms_for_persona(persona=chat_session.persona)
 
-    # Получение токенизатора для подсчета токенов
     llm_tokenizer = get_tokenizer(
         model_name=llm.config.model_name,
         provider_type=llm.config.model_provider,
     )
 
-    # Расчет максимального количества токенов для истории
     input_tokens = get_max_input_tokens(
-        model_name=llm.config.model_name,
-        model_provider=llm.config.model_provider,
+        model_name=llm.config.model_name, model_provider=llm.config.model_provider
     )
     max_history_tokens = int(input_tokens * CHAT_TARGET_CHUNK_PERCENTAGE)
 
-    # Каждая чат-сессия начинается с пустого корневого сообщения
+    # Every chat Session begins with an empty root message
     root_message = get_or_create_root_message(
-        chat_session_id=chat_session.id,
-        db_session=db_session,
+        chat_session_id=chat_session.id, db_session=db_session
     )
 
-    # Создание цепочки сообщений в базе данных
     chat_message = root_message
     for msg in msg_history:
         chat_message = create_new_chat_message(
@@ -559,32 +363,34 @@ def handle_send_message_simple_with_history(
         )
     db_session.commit()
 
-    # Комбинирование истории в строку с учетом лимита токенов
     history_str = combine_message_thread(
         messages=msg_history,
         max_tokens=max_history_tokens,
         llm_tokenizer=llm_tokenizer,
     )
 
-    # Перефразирование запроса с учетом истории или использование переопределения
     rephrased_query = req.query_override or thread_based_query_rephrase(
-        user_query=current_user_query,
+        user_query=query,
         history_str=history_str,
     )
 
-    # Конфигурация параметров поиска
-    retrieval_options = _build_search_configuration(request=req)
+    if req.retrieval_options is None and req.search_doc_ids is None:
+        retrieval_options: RetrievalDetails | None = RetrievalDetails(
+            run_search=OptionalSearchSetting.ALWAYS,
+            real_time=False,
+        )
+    else:
+        retrieval_options = req.retrieval_options
 
-    # Формирование полного запроса для обработки
     full_chat_msg_info = CreateChatMessageRequest(
         chat_session_id=chat_session.id,
         parent_message_id=chat_message.id,
-        message=current_user_query,
+        message=query,
         file_descriptors=[],
         prompt_id=req.prompt_id,
         search_doc_ids=req.search_doc_ids,
         retrieval_options=retrieval_options,
-        # Simple API не поддерживает реранкинг, скрываем сложность от пользователя
+        # Simple API does not support reranking, hide complexity from user
         rerank_settings=None,
         query_override=rephrased_query,
         chunks_above=0,
@@ -594,15 +400,11 @@ def handle_send_message_simple_with_history(
         use_agentic_search=req.use_agentic_search,
     )
 
-    # Обработка сообщения и получение потоковых пакетов
-    response_packets = stream_chat_message_objects(
+    packets = stream_chat_message_objects(
         new_msg_req=full_chat_msg_info,
         user=user,
         db_session=db_session,
         enforce_chat_session_id_for_search_docs=False,
     )
 
-    # Конвертация потоковых пакетов в финальный ответ
-    converted_packets = _convert_packet_stream_to_response(response_packets)
-
-    return converted_packets
+    return _convert_packet_stream_to_response(packets)

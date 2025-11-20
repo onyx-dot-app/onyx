@@ -1,76 +1,75 @@
 from collections.abc import Sequence
 from datetime import datetime
-from typing import List
 
-from sqlalchemy import asc, BinaryExpression, ColumnElement, desc, distinct
-from sqlalchemy.orm import Session, contains_eager, joinedload
-from sqlalchemy.sql import case, func, select
-from sqlalchemy.sql.expression import literal, UnaryExpression
+from sqlalchemy import asc
+from sqlalchemy import BinaryExpression
+from sqlalchemy import ColumnElement
+from sqlalchemy import desc
+from sqlalchemy import distinct
+from sqlalchemy.orm import contains_eager
+from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import Session
+from sqlalchemy.sql import case
+from sqlalchemy.sql import func
+from sqlalchemy.sql import select
+from sqlalchemy.sql.expression import literal
+from sqlalchemy.sql.expression import UnaryExpression
 
 from onyx.configs.constants import QAFeedbackType
-from onyx.db.models import ChatMessage, ChatMessageFeedback, ChatSession
-
-
-def _construct_time_filters(
-    start_time: datetime | None, end_time: datetime | None
-) -> List[ColumnElement]:
-    """Формирует условия фильтрации по временным границам."""
-    time_filters: List[ColumnElement] = []
-    if start_time:
-        time_filters.append(ChatSession.time_created >= start_time)
-    if end_time:
-        time_filters.append(ChatSession.time_created <= end_time)
-    return time_filters
-
-
-def _construct_feedback_filter(
-    feedback_type: QAFeedbackType,
-) -> BinaryExpression:
-    """Создает подзапрос для фильтрации сессий по типу фидбека."""
-    return select(ChatMessage.chat_session_id).join(
-        ChatMessageFeedback
-    ).group_by(
-        ChatMessage.chat_session_id
-    ).having(
-        case(
-            (
-                case(
-                    {literal(feedback_type == QAFeedbackType.LIKE): True},
-                    else_=False,
-                ),
-                func.bool_and(ChatMessageFeedback.is_positive),
-            ),
-            (
-                case(
-                    {literal(feedback_type == QAFeedbackType.DISLIKE): True},
-                    else_=False,
-                ),
-                func.bool_and(func.not_(ChatMessageFeedback.is_positive)),
-            ),
-            else_=func.bool_or(ChatMessageFeedback.is_positive)
-            & func.bool_or(func.not_(ChatMessageFeedback.is_positive)),
-        )
-    )
+from onyx.db.models import ChatMessage
+from onyx.db.models import ChatMessageFeedback
+from onyx.db.models import ChatSession
 
 
 def _build_filter_conditions(
     start_time: datetime | None,
     end_time: datetime | None,
     feedback_filter: QAFeedbackType | None,
-) -> List[ColumnElement]:
+) -> list[ColumnElement]:
     """
-    Собирает все условия фильтрации для сессий чата.
-    Учитывает временные рамки, тип фидбека и сессии без сообщений.
+    Helper function to build all filter conditions for chat sessions.
+    Filters by start and end time, feedback type, and any sessions without messages.
+    start_time: Date from which to filter
+    end_time: Date to which to filter
+    feedback_filter: Feedback type to filter by
+    Returns: List of filter conditions
     """
-    all_conditions: List[ColumnElement] = _construct_time_filters(
-        start_time, end_time
-    )
+    conditions = []
 
-    if feedback_filter:
-        feedback_query = _construct_feedback_filter(feedback_filter)
-        all_conditions.append(ChatSession.id.in_(feedback_query))
+    if start_time is not None:
+        conditions.append(ChatSession.time_created >= start_time)
+    if end_time is not None:
+        conditions.append(ChatSession.time_created <= end_time)
 
-    return all_conditions
+    if feedback_filter is not None:
+        feedback_subq = (
+            select(ChatMessage.chat_session_id)
+            .join(ChatMessageFeedback)
+            .group_by(ChatMessage.chat_session_id)
+            .having(
+                case(
+                    (
+                        case(
+                            {literal(feedback_filter == QAFeedbackType.LIKE): True},
+                            else_=False,
+                        ),
+                        func.bool_and(ChatMessageFeedback.is_positive),
+                    ),
+                    (
+                        case(
+                            {literal(feedback_filter == QAFeedbackType.DISLIKE): True},
+                            else_=False,
+                        ),
+                        func.bool_and(func.not_(ChatMessageFeedback.is_positive)),
+                    ),
+                    else_=func.bool_or(ChatMessageFeedback.is_positive)
+                    & func.bool_or(func.not_(ChatMessageFeedback.is_positive)),
+                )
+            )
+        )
+        conditions.append(ChatSession.id.in_(feedback_subq))
+
+    return conditions
 
 
 def get_total_filtered_chat_sessions_count(
@@ -79,43 +78,13 @@ def get_total_filtered_chat_sessions_count(
     end_time: datetime | None,
     feedback_filter: QAFeedbackType | None,
 ) -> int:
-    filter_clauses = _build_filter_conditions(
-        start_time, end_time, feedback_filter
-    )
-    count_query = (
+    conditions = _build_filter_conditions(start_time, end_time, feedback_filter)
+    stmt = (
         select(func.count(distinct(ChatSession.id)))
         .select_from(ChatSession)
-        .filter(*filter_clauses)
+        .filter(*conditions)
     )
-    result = db_session.scalar(count_query)
-    return result if result is not None else 0
-
-
-def _create_pagination_subquery(
-    filter_clauses: List[ColumnElement],
-    offset: int,
-    limit: int,
-) -> UnaryExpression:
-    """Генерирует подзапрос для пагинации ID сессий."""
-    return (
-        select(ChatSession.id)
-        .filter(*filter_clauses)
-        .order_by(desc(ChatSession.time_created), ChatSession.id)
-        .limit(limit)
-        .offset(offset)
-        .subquery()
-    )
-
-
-def _apply_eager_loading(query: select) -> select:
-    """Добавляет жадную загрузку связанных сущностей к запросу."""
-    return query.options(
-        joinedload(ChatSession.user),
-        joinedload(ChatSession.persona),
-        contains_eager(ChatSession.messages).joinedload(
-            ChatMessage.chat_message_feedbacks
-        ),
-    )
+    return db_session.scalar(stmt) or 0
 
 
 def get_page_of_chat_sessions(
@@ -126,55 +95,36 @@ def get_page_of_chat_sessions(
     page_size: int,
     feedback_filter: QAFeedbackType | None = None,
 ) -> Sequence[ChatSession]:
-    filter_clauses = _build_filter_conditions(
-        start_time, end_time, feedback_filter
+    conditions = _build_filter_conditions(start_time, end_time, feedback_filter)
+
+    subquery = (
+        select(ChatSession.id)
+        .filter(*conditions)
+        .order_by(desc(ChatSession.time_created), ChatSession.id)
+        .limit(page_size)
+        .offset(page_num * page_size)
+        .subquery()
     )
 
-    paginated_ids = _create_pagination_subquery(
-        filter_clauses, page_num * page_size, page_size
-    )
-
-    base_query = (
+    stmt = (
         select(ChatSession)
-        .join(paginated_ids, ChatSession.id == paginated_ids.c.id)
+        .join(subquery, ChatSession.id == subquery.c.id)
         .outerjoin(ChatMessage, ChatSession.id == ChatMessage.chat_session_id)
+        .options(
+            joinedload(ChatSession.user),
+            joinedload(ChatSession.persona),
+            contains_eager(ChatSession.messages).joinedload(
+                ChatMessage.chat_message_feedbacks
+            ),
+        )
+        .order_by(
+            desc(ChatSession.time_created),
+            ChatSession.id,
+            asc(ChatMessage.id),  # Ensure chronological message order
+        )
     )
 
-    ordered_query = _apply_eager_loading(base_query).order_by(
-        desc(ChatSession.time_created),
-        ChatSession.id,
-        asc(ChatMessage.id),  # Гарантирует хронологический порядок сообщений
-    )
-
-    return db_session.scalars(ordered_query).unique().all()
-
-
-def _setup_time_based_filters(
-    start: datetime, end: datetime, initial: datetime | None
-) -> List[ColumnElement | BinaryExpression]:
-    """Настраивает фильтры по временному диапазону с опциональным сдвигом."""
-    base_filters: List[ColumnElement | BinaryExpression] = [
-        ChatSession.time_created.between(start, end)
-    ]
-    if initial:
-        base_filters.append(ChatSession.time_created > initial)
-    return base_filters
-
-
-def _generate_time_limited_subquery(
-    session: Session,
-    time_filters: List[ColumnElement | BinaryExpression],
-    max_count: int | None,
-) -> UnaryExpression:
-    """Создает подзапрос для ограниченного выборки сессий по времени."""
-    subq = (
-        session.query(ChatSession.id, ChatSession.time_created)
-        .filter(*time_filters)
-        .order_by(asc(ChatSession.time_created))
-    )
-    if max_count:
-        subq = subq.limit(max_count)
-    return subq.subquery()
+    return db_session.scalars(stmt).unique().all()
 
 
 def fetch_chat_sessions_eagerly_by_time(
@@ -184,27 +134,40 @@ def fetch_chat_sessions_eagerly_by_time(
     limit: int | None = 500,
     initial_time: datetime | None = None,
 ) -> list[ChatSession]:
-    """
-    Извлекает сессии чата в диапазоне времени с жадной загрузкой.
-    Сортировка: от старых к новым, затем по ID сообщения.
-    """
-    time_ordering: UnaryExpression = asc(ChatSession.time_created)
-    msg_ordering: UnaryExpression = asc(ChatMessage.id)
+    """Sorted by oldest to newest, then by message id"""
 
-    time_constraints = _setup_time_based_filters(start, end, initial_time)
+    asc_time_order: UnaryExpression = asc(ChatSession.time_created)
+    message_order: UnaryExpression = asc(ChatMessage.id)
 
-    limited_subquery = _generate_time_limited_subquery(
-        db_session, time_constraints, limit
+    filters: list[ColumnElement | BinaryExpression] = [
+        ChatSession.time_created.between(start, end)
+    ]
+
+    if initial_time:
+        filters.append(ChatSession.time_created > initial_time)
+
+    subquery = (
+        db_session.query(ChatSession.id, ChatSession.time_created)
+        .filter(*filters)
+        .order_by(asc_time_order)
+        .limit(limit)
+        .subquery()
     )
 
-    main_query = (
+    query = (
         db_session.query(ChatSession)
-        .join(limited_subquery, ChatSession.id == limited_subquery.c.id)
+        .join(subquery, ChatSession.id == subquery.c.id)
         .outerjoin(ChatMessage, ChatSession.id == ChatMessage.chat_session_id)
+        .options(
+            joinedload(ChatSession.user),
+            joinedload(ChatSession.persona),
+            contains_eager(ChatSession.messages).joinedload(
+                ChatMessage.chat_message_feedbacks
+            ),
+        )
+        .order_by(asc_time_order, message_order)
     )
 
-    fully_loaded_query = _apply_eager_loading(main_query).order_by(
-        time_ordering, msg_ordering
-    )
+    chat_sessions = query.all()
 
-    return fully_loaded_query.all()
+    return chat_sessions

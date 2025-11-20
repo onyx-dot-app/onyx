@@ -1,150 +1,110 @@
 import uuid
 from collections.abc import Generator
 from datetime import datetime
-from typing import IO, Optional
+from typing import IO
+from typing import Optional
 
 from fastapi_users_db_sqlalchemy import UUID_ID
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.query_history import fetch_chat_sessions_eagerly_by_time
-from ee.onyx.server.reporting.usage_export_models import (
-    ChatMessageSkeleton,
-    FlowType,
-    UsageReportMetadata,
-)
+from ee.onyx.server.reporting.usage_export_models import ChatMessageSkeleton
+from ee.onyx.server.reporting.usage_export_models import FlowType
+from ee.onyx.server.reporting.usage_export_models import UsageReportMetadata
 from onyx.configs.constants import MessageType
 from onyx.db.models import UsageReport
 from onyx.file_store.file_store import get_default_file_store
 
 
-def _create_message_skeleton(
-    msg_id: int,
-    session_id: int,
-    user_uuid: Optional[uuid.UUID],
-    flow: FlowType,
-    timestamp: datetime,
-) -> ChatMessageSkeleton:
-    """Формирует скелет сообщения чата."""
-    return ChatMessageSkeleton(
-        message_id=msg_id,
-        chat_session_id=session_id,
-        user_id=str(user_uuid) if user_uuid else None,
-        flow_type=flow,
-        time_sent=timestamp,
-    )
-
-
+# Gets skeletons of all messages in the given range
 def get_empty_chat_messages_entries__paginated(
     db_session: Session,
     period: tuple[datetime, datetime],
     limit: int | None = 500,
     initial_time: datetime | None = None,
 ) -> tuple[Optional[datetime], list[ChatMessageSkeleton]]:
-    """
-    Возвращает пагинированные скелеты пользовательских сообщений чата.
-    Первый элемент - время последней сессии для пагинации.
-    Второй - список скелетов сообщений.
-    """
-    session = db_session
-    time_range = period
+    """Returns a tuple where:
+    first element is the most recent timestamp out of the sessions iterated
+    - this timestamp can be used to paginate forward in time
+    second element is a list of messages belonging to all the sessions iterated
 
-    fetched_sessions = fetch_chat_sessions_eagerly_by_time(
-        start=time_range[0],
-        end=time_range[1],
-        db_session=session,
+    Only messages of type USER are returned
+    """
+    chat_sessions = fetch_chat_sessions_eagerly_by_time(
+        start=period[0],
+        end=period[1],
+        db_session=db_session,
         limit=limit,
         initial_time=initial_time,
     )
 
-    skeletons_list: list[ChatMessageSkeleton] = []
-    session_count = len(fetched_sessions)
-    idx = 0
-    while idx < session_count:
-        current_session = fetched_sessions[idx]
-        session_flow = (
-            FlowType.SLACK if current_session.onyxbot_flow else FlowType.CHAT
-        )
+    message_skeletons: list[ChatMessageSkeleton] = []
+    for chat_session in chat_sessions:
+        flow_type = FlowType.SLACK if chat_session.onyxbot_flow else FlowType.CHAT
 
-        msg_count = len(current_session.messages)
-        msg_idx = 0
-        while msg_idx < msg_count:
-            current_msg = current_session.messages[msg_idx]
-            if current_msg.message_type != MessageType.USER:
-                msg_idx += 1
+        for message in chat_session.messages:
+            # Only count user messages
+            if message.message_type != MessageType.USER:
                 continue
 
-            skeletons_list.append(
-                _create_message_skeleton(
-                    current_msg.id,
-                    current_session.id,
-                    current_session.user_id,
-                    session_flow,
-                    current_msg.time_sent,
+            message_skeletons.append(
+                ChatMessageSkeleton(
+                    message_id=message.id,
+                    chat_session_id=chat_session.id,
+                    user_id=str(chat_session.user_id) if chat_session.user_id else None,
+                    flow_type=flow_type,
+                    time_sent=message.time_sent,
                 )
             )
-            msg_idx += 1
-        idx += 1
-
-    if session_count == 0:
+    if len(chat_sessions) == 0:
         return None, []
 
-    return fetched_sessions[-1].time_created, skeletons_list
+    return chat_sessions[-1].time_created, message_skeletons
 
 
 def get_all_empty_chat_message_entries(
     db_session: Session,
     period: tuple[datetime, datetime],
 ) -> Generator[list[ChatMessageSkeleton], None, None]:
-    """Генерирует батчи скелетов сообщений в указанном временном диапазоне."""
-    session = db_session
-    time_bounds = period
-    next_start: Optional[datetime] = time_bounds[0]
-
-    while next_start is not None:
-        last_timestamp, batch_skeletons = get_empty_chat_messages_entries__paginated(
-            db_session=session,
-            period=time_bounds,
-            initial_time=next_start,
+    """period is the range of time over which to fetch messages."""
+    initial_time: Optional[datetime] = period[0]
+    while True:
+        # iterate from oldest to newest
+        time_created, message_skeletons = get_empty_chat_messages_entries__paginated(
+            db_session,
+            period,
+            initial_time=initial_time,
         )
 
-        if not batch_skeletons:
+        if not message_skeletons:
             return
 
-        yield batch_skeletons
-        next_start = last_timestamp
+        yield message_skeletons
+
+        # Update initial_time for the next iteration
+        initial_time = time_created
 
 
 def get_all_usage_reports(db_session: Session) -> list[UsageReportMetadata]:
-    """Извлекает метаданные всех отчетов использования."""
-    session = db_session
-    reports = session.query(UsageReport).all()
-    metadata_list: list[UsageReportMetadata] = []
-    idx = 0
-    reports_count = len(reports)
-    while idx < reports_count:
-        current_report = reports[idx]
-        metadata_list.append(
-            UsageReportMetadata(
-                report_name=current_report.report_name,
-                requestor=str(current_report.requestor_user_id)
-                if current_report.requestor_user_id
-                else None,
-                time_created=current_report.time_created,
-                period_from=current_report.period_from,
-                period_to=current_report.period_to,
-            )
+    return [
+        UsageReportMetadata(
+            report_name=r.report_name,
+            requestor=str(r.requestor_user_id) if r.requestor_user_id else None,
+            time_created=r.time_created,
+            period_from=r.period_from,
+            period_to=r.period_to,
         )
-        idx += 1
-    return metadata_list
+        for r in db_session.query(UsageReport).all()
+    ]
 
 
 def get_usage_report_data(
     db_session: Session,
     report_name: str,
 ) -> IO:
-    """Читает данные отчета использования как бинарный поток."""
-    store = get_default_file_store(db_session)
-    return store.read_file(file_name=report_name, mode="b", use_tempfile=True)
+    file_store = get_default_file_store(db_session)
+    # usage report may be very large, so don't load it all into memory
+    return file_store.read_file(file_name=report_name, mode="b", use_tempfile=True)
 
 
 def write_usage_report(
@@ -153,18 +113,12 @@ def write_usage_report(
     user_id: uuid.UUID | UUID_ID | None,
     period: tuple[datetime, datetime] | None,
 ) -> UsageReport:
-    """Создает и сохраняет запись отчета использования."""
-    session = db_session
-    filename = report_name
-    requester_id = user_id
-    time_period = period
-
-    new_entry = UsageReport(
-        report_name=filename,
-        requestor_user_id=requester_id,
-        period_from=time_period[0] if time_period else None,
-        period_to=time_period[1] if time_period else None,
+    new_report = UsageReport(
+        report_name=report_name,
+        requestor_user_id=user_id,
+        period_from=period[0] if period else None,
+        period_to=period[1] if period else None,
     )
-    session.add(new_entry)
-    session.commit()
-    return new_entry
+    db_session.add(new_report)
+    db_session.commit()
+    return new_report

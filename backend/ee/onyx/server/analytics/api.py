@@ -1,175 +1,141 @@
 import datetime
 from collections import defaultdict
+from typing import List
 
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.analytics import (
-    fetch_assistant_message_analytics,
-    fetch_assistant_unique_users,
-    fetch_assistant_unique_users_total,
-    fetch_per_user_query_analytics,
-    fetch_persona_message_analytics,
-    fetch_persona_unique_users,
-    fetch_query_analytics,
-    user_can_view_assistant_stats,
-)
-from ee.onyx.server.analytics.models import (
-    AssistantDailyUsageResponse,
-    AssistantStatsResponse,
-    PersonaMessageAnalyticsResponse,
-    PersonaUniqueUsersResponse,
-    QueryAnalyticsResponse,
-    UserAnalyticsResponse,
-)
-from onyx.auth.users import (
-    current_admin_user,
-    current_user,
-)
+from ee.onyx.db.analytics import fetch_assistant_message_analytics
+from ee.onyx.db.analytics import fetch_assistant_unique_users
+from ee.onyx.db.analytics import fetch_assistant_unique_users_total
+from ee.onyx.db.analytics import fetch_onyxbot_analytics
+from ee.onyx.db.analytics import fetch_per_user_query_analytics
+from ee.onyx.db.analytics import fetch_persona_message_analytics
+from ee.onyx.db.analytics import fetch_persona_unique_users
+from ee.onyx.db.analytics import fetch_query_analytics
+from ee.onyx.db.analytics import user_can_view_assistant_stats
+from onyx.auth.users import current_admin_user
+from onyx.auth.users import current_user
 from onyx.db.engine import get_session
 from onyx.db.models import User
 
-router = APIRouter(tags=["Analytics"])
+router = APIRouter(prefix="/analytics")
 
 
-_DEFAULT_ANALYTICS_PERIOD_DAYS = 30
+_DEFAULT_LOOKBACK_DAYS = 30
 
 
-@router.get(
-    "/analytics/admin/query",
-    summary="Получение аналитики по ассистентским сообщениям за период",
-    response_model=list[QueryAnalyticsResponse],
-)
+class QueryAnalyticsResponse(BaseModel):
+    total_queries: int
+    total_likes: int
+    total_dislikes: int
+    date: datetime.date
+
+
+@router.get("/admin/query")
 def get_query_analytics(
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[QueryAnalyticsResponse]:
-    """Получение аналитики по ассистентским сообщениям за период.
-
-    Считает для каждого дня:
-    - общее количество ответов ассистента
-    - количество лайков (положительных фидбеков)
-    - количество дизлайков (отрицательных фидбеков)
-
-    По умолчанию возвращает данные за последние 30 дней.
-    Фильтрует только сообщения типа ASSISTANT.
-
-    Args:
-        start: Начало периода (включительно). Если None - 30 дней назад.
-        end: Конец периода (включительно). Если None - текущее время.
-
-    Returns:
-        Список статистики по дням с агрегированными метриками.
-    """
-    start_time = start
-    end_time = end
-
-    default_period = datetime.timedelta(days=_DEFAULT_ANALYTICS_PERIOD_DAYS)
-    current_time = datetime.datetime.now(datetime.UTC)
-
-    if start_time is None:
-        analysis_start = current_time - default_period
-    else:
-        analysis_start = start_time
-
-    if end_time is None:
-        analysis_end = datetime.datetime.utcnow()
-    else:
-        analysis_end = end_time
-
     daily_query_usage_info = fetch_query_analytics(
-        start=analysis_start,
-        end=analysis_end,
+        start=start
+        or (
+            datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+        ),  # default is 30d lookback
+        end=end or datetime.datetime.utcnow(),
         db_session=db_session,
     )
-
-    analytics_result = []
-    for total_queries, total_likes, total_dislikes, date in daily_query_usage_info:
-        analytics_result.append(
-            QueryAnalyticsResponse(
-                total_queries=total_queries,
-                total_likes=total_likes,
-                total_dislikes=total_dislikes,
-                date=date,
-            )
+    return [
+        QueryAnalyticsResponse(
+            total_queries=total_queries,
+            total_likes=total_likes,
+            total_dislikes=total_dislikes,
+            date=date,
         )
+        for total_queries, total_likes, total_dislikes, date in daily_query_usage_info
+    ]
 
-    return analytics_result
+
+class UserAnalyticsResponse(BaseModel):
+    total_active_users: int
+    date: datetime.date
 
 
-@router.get(
-    "/analytics/admin/user",
-    summary = "Получение статистики по уникальным активным пользователям за период",
-    response_model = list[UserAnalyticsResponse],
-)
+@router.get("/admin/user")
 def get_user_analytics(
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserAnalyticsResponse]:
-    """Получение статистики по уникальным активным пользователям за период.
-
-    Считает количество пользователей, которые получили хотя бы один ответ ассистента
-    в течение каждого дня. Пользователь считается активным в день, если ему был
-    отправлен ответ ассистента.
-
-    По умолчанию возвращает данные за последние 30 дней.
-
-    Args:
-        start: Начало периода анализа. Если не указано - 30 дней назад.
-        end: Окончание периода анализа. Если не указано - текущее время.
-
-    Returns:
-        Список с количеством активных пользователей по дням.
-    """
-    start_time = start
-    end_time = end
-
-    default_period = datetime.timedelta(days=_DEFAULT_ANALYTICS_PERIOD_DAYS)
-    current_time = datetime.datetime.now(datetime.UTC)
-
-    if start_time is None:
-        analysis_start = current_time - default_period
-    else:
-        analysis_start = start_time
-
-    if end_time is None:
-        analysis_end = current_time
-    else:
-        analysis_end = end_time
-
-    user_activity_records = fetch_per_user_query_analytics(
-        start=analysis_start,
-        end=analysis_end,
+    daily_query_usage_info_per_user = fetch_per_user_query_analytics(
+        start=start
+        or (
+            datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+        ),  # default is 30d lookback
+        end=end or datetime.datetime.utcnow(),
         db_session=db_session,
     )
 
-    daily_active_users: dict[datetime.date, int] = defaultdict(int)
-    for count, likes, dislikes, date, user_id in user_activity_records:
-        daily_active_users[date] += 1
-
-    analytics_result = []
-    for activity_date, user_count in daily_active_users.items():
-        analytics_result.append(
-            UserAnalyticsResponse(
-                total_active_users=user_count,
-                date=activity_date,
-            )
+    user_analytics: dict[datetime.date, int] = defaultdict(int)
+    for __, ___, ____, date, _____ in daily_query_usage_info_per_user:
+        user_analytics[date] += 1
+    return [
+        UserAnalyticsResponse(
+            total_active_users=cnt,
+            date=date,
         )
+        for date, cnt in user_analytics.items()
+    ]
 
-    return analytics_result
+
+class OnyxbotAnalyticsResponse(BaseModel):
+    total_queries: int
+    auto_resolved: int
+    date: datetime.date
 
 
-@router.get(
-    "/analytics/admin/persona/messages",
-    summary = "Получение статистики по ответам конкретного ассистента",
-    response_model = list[PersonaMessageAnalyticsResponse],
-)
+@router.get("/admin/onyxbot")
+def get_onyxbot_analytics(
+    start: datetime.datetime | None = None,
+    end: datetime.datetime | None = None,
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[OnyxbotAnalyticsResponse]:
+    daily_onyxbot_info = fetch_onyxbot_analytics(
+        start=start
+        or (
+            datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+        ),  # default is 30d lookback
+        end=end or datetime.datetime.utcnow(),
+        db_session=db_session,
+    )
+
+    resolution_results = [
+        OnyxbotAnalyticsResponse(
+            total_queries=total_queries,
+            # If it hits negatives, something has gone wrong...
+            auto_resolved=max(0, total_queries - total_negatives),
+            date=date,
+        )
+        for total_queries, total_negatives, date in daily_onyxbot_info
+    ]
+
+    return resolution_results
+
+
+class PersonaMessageAnalyticsResponse(BaseModel):
+    total_messages: int
+    date: datetime.date
+    persona_id: int
+
+
+@router.get("/admin/persona/messages")
 def get_persona_messages(
     persona_id: int,
     start: datetime.datetime | None = None,
@@ -177,63 +143,37 @@ def get_persona_messages(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[PersonaMessageAnalyticsResponse]:
-    """Получение статистики по ответам конкретного ассистента.
+    """Fetch daily message counts for a single persona within the given time range."""
+    start = start or (
+        datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+    )
+    end = end or datetime.datetime.utcnow()
 
-    Считает количество ответов указанного ассистента за каждый день
-    в заданном периоде. Учитывает сообщения, где ассистент установлен
-    либо в сессии, либо как альтернативный ассистент.
-
-    По умолчанию возвращает данные за последние 30 дней.
-
-    Args:
-        persona_id: ID ассистента для анализа
-        start: Начало периода. Если не указано - 30 дней назад.
-        end: Конец периода. Если не указано - текущее время.
-
-    Returns:
-        Список с количеством ответов ассистента по дням.
-    """
-    start_time = start
-    end_time = end
-
-    default_period = datetime.timedelta(days=_DEFAULT_ANALYTICS_PERIOD_DAYS)
-    current_time = datetime.datetime.now(datetime.UTC)
-
-    if start_time is None:
-        analysis_start = current_time - default_period
-    else:
-        analysis_start = start_time
-
-    if end_time is None:
-        analysis_end = current_time
-    else:
-        analysis_end = end_time
-
-    persona_message_data = fetch_persona_message_analytics(
+    persona_message_counts = []
+    for count, date in fetch_persona_message_analytics(
         db_session=db_session,
         persona_id=persona_id,
-        start=analysis_start,
-        end=analysis_end,
-    )
-
-    analytics_result = []
-    for message_count, message_date in persona_message_data:
-        analytics_result.append(
+        start=start,
+        end=end,
+    ):
+        persona_message_counts.append(
             PersonaMessageAnalyticsResponse(
-                total_messages=message_count,
-                date=message_date,
+                total_messages=count,
+                date=date,
                 persona_id=persona_id,
             )
         )
 
-    return analytics_result
+    return persona_message_counts
 
 
-@router.get(
-    "/analytics/admin/persona/unique-users",
-    summary="Получение статистики по уникальным пользователям конкретного ассистента",
-    response_model=list[PersonaUniqueUsersResponse],
-)
+class PersonaUniqueUsersResponse(BaseModel):
+    unique_users: int
+    date: datetime.date
+    persona_id: int
+
+
+@router.get("/admin/persona/unique-users")
 def get_persona_unique_users(
     persona_id: int,
     start: datetime.datetime,
@@ -241,62 +181,38 @@ def get_persona_unique_users(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[PersonaUniqueUsersResponse]:
-    """Получение статистики по уникальным пользователям конкретного ассистента.
-
-    Считает количество уникальных пользователей, которые получили ответы
-    от указанного ассистента за каждый день в заданном периоде.
-
-    По умолчанию возвращает данные за последние 30 дней.
-
-    Args:
-        persona_id: ID ассистента для анализа
-        start: Начало периода. Если не указано - 30 дней назад.
-        end: Конец периода. Если не указано - текущее время.
-
-    Returns:
-        Список с количеством уникальных пользователей по дням для ассистента.
-    """
-    start_time = start
-    end_time = end
-
-    default_period = datetime.timedelta(days=_DEFAULT_ANALYTICS_PERIOD_DAYS)
-    current_time = datetime.datetime.now(datetime.UTC)
-
-    if start_time is None:
-        analysis_start = current_time - default_period
-    else:
-        analysis_start = start_time
-
-    if end_time is None:
-        analysis_end = current_time
-    else:
-        analysis_end = end_time
-
-    unique_users_data = fetch_persona_unique_users(
+    """Get unique users per day for a single persona."""
+    unique_user_counts = []
+    daily_counts = fetch_persona_unique_users(
         db_session=db_session,
         persona_id=persona_id,
-        start=analysis_start,
-        end=analysis_end,
+        start=start,
+        end=end,
     )
-
-    analytics_result = []
-    for user_count, activity_date in unique_users_data:
-        analytics_result.append(
+    for count, date in daily_counts:
+        unique_user_counts.append(
             PersonaUniqueUsersResponse(
-                unique_users=user_count,
-                date=activity_date,
+                unique_users=count,
+                date=date,
                 persona_id=persona_id,
             )
         )
+    return unique_user_counts
 
-    return analytics_result
+
+class AssistantDailyUsageResponse(BaseModel):
+    date: datetime.date
+    total_messages: int
+    total_unique_users: int
 
 
-@router.get(
-    "/analytics/assistant/{assistant_id}/stats",
-    summary="Получение статистики использования ассистента",
-    response_model=AssistantStatsResponse,
-)
+class AssistantStatsResponse(BaseModel):
+    daily_stats: List[AssistantDailyUsageResponse]
+    total_messages: int
+    total_unique_users: int
+
+
+@router.get("/assistant/{assistant_id}/stats")
 def get_assistant_stats(
     assistant_id: int,
     start: datetime.datetime | None = None,
@@ -304,80 +220,52 @@ def get_assistant_stats(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> AssistantStatsResponse:
-    """Получение статистики использования ассистента.
-
-    Возвращает ежедневные данные по сообщениям и уникальным пользователям
-    для указанного ассистента, а также общие итоги за весь период.
-
-    По умолчанию анализирует данные за последние 30 дней.
-    Требует прав доступа к статистике указанного ассистента.
-
-    Args:
-        assistant_id: ID ассистента для анализа
-        start: Начало периода анализа. Если не указано - 30 дней назад.
-        end: Конец периода анализа. Если не указано - текущее время.
-
-    Returns:
-        Статистика использования ассистента с ежедневной разбивкой и общими итогами.
     """
-    start_time = start
-    end_time = end
-
-    default_period = datetime.timedelta(days=_DEFAULT_ANALYTICS_PERIOD_DAYS)
-    current_time = datetime.datetime.now(datetime.UTC)
-
-    if start_time is None:
-        analysis_start = current_time - default_period
-    else:
-        analysis_start = start_time
-
-    if end_time is None:
-        analysis_end = current_time
-    else:
-        analysis_end = end_time
+    Returns daily message and unique user counts for a user's assistant,
+    along with the overall total messages and total distinct users.
+    """
+    start = start or (
+        datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+    )
+    end = end or datetime.datetime.utcnow()
 
     if not user_can_view_assistant_stats(db_session, user, assistant_id):
         raise HTTPException(
-            status_code=403,
-            detail="Недостаточно прав для просмотра статистики этого ассистента."
+            status_code=403, detail="Not allowed to access this assistant's stats."
         )
 
-    # Получаем данные по сообщениям и пользователям
-    daily_messages_data = fetch_assistant_message_analytics(
-        db_session, assistant_id, analysis_start, analysis_end
+    # Pull daily usage from the DB calls
+    messages_data = fetch_assistant_message_analytics(
+        db_session, assistant_id, start, end
     )
-    daily_users_data = fetch_assistant_unique_users(
-        db_session, assistant_id, analysis_start, analysis_end
+    unique_users_data = fetch_assistant_unique_users(
+        db_session, assistant_id, start, end
     )
 
-    # Создаем маппинги дат на значения
-    messages_by_date = {date: count for count, date in daily_messages_data}
-    users_by_date = {date: count for count, date in daily_users_data}
+    # Map each day => (messages, unique_users).
+    daily_messages_map = {date: count for count, date in messages_data}
+    daily_unique_users_map = {date: count for count, date in unique_users_data}
+    all_dates = set(daily_messages_map.keys()) | set(daily_unique_users_map.keys())
 
-    # Объединяем все даты из обоих наборов данных
-    all_dates = set(messages_by_date.keys()) | set(users_by_date.keys())
-
-    # Формируем ежедневную статистику
-    daily_statistics = []
+    # Merge both sets of metrics by date
+    daily_results: list[AssistantDailyUsageResponse] = []
     for date in sorted(all_dates):
-        daily_statistics.append(
+        daily_results.append(
             AssistantDailyUsageResponse(
                 date=date,
-                total_messages=messages_by_date.get(date, 0),
-                total_unique_users=users_by_date.get(date, 0),
+                total_messages=daily_messages_map.get(date, 0),
+                total_unique_users=daily_unique_users_map.get(date, 0),
             )
         )
 
-    # Вычисляем общие показатели за весь период
-    total_message_count = sum(stat.total_messages for stat in daily_statistics)
-    total_user_count = fetch_assistant_unique_users_total(
-        db_session, assistant_id, analysis_start, analysis_end
+    # Now pull a single total distinct user count across the entire time range
+    total_msgs = sum(d.total_messages for d in daily_results)
+    total_users = fetch_assistant_unique_users_total(
+        db_session, assistant_id, start, end
     )
 
-    analytics_result = AssistantStatsResponse(
-        daily_stats=daily_statistics,
-        total_messages=total_message_count,
-        total_unique_users=total_user_count,
+    return AssistantStatsResponse(
+        daily_stats=daily_results,
+        total_messages=total_msgs,
+        total_unique_users=total_users,
     )
-
-    return analytics_result
