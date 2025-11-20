@@ -1,0 +1,19 @@
+{{- if .Values.pgbouncer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "onyx.fullname" . }}-pgbouncer
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app: pgbouncer
+spec:
+  type: {{ .Values.pgbouncer.service.type }}
+  ports:
+  - port: {{ .Values.pgbouncer.service.port }}
+    targetPort: {{ .Values.pgbouncer.service.targetPort }}
+    protocol: TCP
+    name: pgbouncer
+  selector:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    app: pgbouncer
+{{- end }}

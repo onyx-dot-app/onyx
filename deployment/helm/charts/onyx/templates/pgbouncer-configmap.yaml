@@ -1,0 +1,94 @@
+{{- if .Values.pgbouncer.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "onyx.fullname" . }}-pgbouncer-config
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app: pgbouncer
+data:
+  pgbouncer.ini: |
+    [databases]
+    {{- $pgHost := "" }}
+    {{- $pgPort := "5432" }}
+    {{- $pgDatabase := "postgres" }}
+
+    {{- if .Values.pgbouncer.postgresql.host }}
+    {{- $pgHost = .Values.pgbouncer.postgresql.host }}
+    {{- else if .Values.postgresql.enabled }}
+    {{- $pgHost = printf "%s-postgresql-rw" .Release.Name }}
+    {{- end }}
+
+    {{- if .Values.pgbouncer.postgresql.port }}
+    {{- $pgPort = toString .Values.pgbouncer.postgresql.port }}
+    {{- end }}
+
+    {{- if .Values.pgbouncer.postgresql.database }}
+    {{- $pgDatabase = .Values.pgbouncer.postgresql.database }}
+    {{- else if .Values.auth.postgresql.values.username }}
+    {{- $pgDatabase = "postgres" }}
+    {{- end }}
+
+    * = host={{ $pgHost }} port={{ $pgPort }} pool_size={{ .Values.pgbouncer.config.defaultPoolSize }}
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = {{ .Values.pgbouncer.service.targetPort }}
+
+    auth_type = {{ .Values.pgbouncer.config.authType }}
+    auth_file = /etc/pgbouncer/userlist.txt
+
+    pool_mode = {{ .Values.pgbouncer.config.poolMode }}
+    max_client_conn = {{ .Values.pgbouncer.config.maxClientConn }}
+    default_pool_size = {{ .Values.pgbouncer.config.defaultPoolSize }}
+    min_pool_size = {{ .Values.pgbouncer.config.minPoolSize }}
+    reserve_pool_size = {{ .Values.pgbouncer.config.reservePoolSize }}
+    reserve_pool_timeout = {{ .Values.pgbouncer.config.reservePoolTimeout }}
+    max_db_connections = {{ .Values.pgbouncer.config.maxDbConnections }}
+
+    server_idle_timeout = {{ .Values.pgbouncer.config.serverIdleTimeout }}
+    server_lifetime = {{ .Values.pgbouncer.config.serverLifetime }}
+    server_check_delay = {{ .Values.pgbouncer.config.serverCheckDelay }}
+    {{- if eq .Values.pgbouncer.config.poolMode "transaction" }}
+    server_reset_query = {{ .Values.pgbouncer.config.serverResetQuery }}
+    {{- end }}
+
+    query_timeout = {{ .Values.pgbouncer.config.queryTimeout }}
+    client_idle_timeout = {{ .Values.pgbouncer.config.clientIdleTimeout }}
+
+    log_connections = {{ .Values.pgbouncer.config.logConnections }}
+    log_disconnections = {{ .Values.pgbouncer.config.logDisconnections }}
+
+    # Admin users
+    admin_users = postgres
+
+    # Stats users
+    stats_users = postgres
+
+    # Ignore startup parameters for compatibility
+    ignore_startup_parameters = extra_float_digits,options
+
+    # Application name passthrough
+    application_name_add_host = 1
+
+  userlist.txt: |
+    {{- $postgresUser := "postgres" }}
+    {{- $postgresPassword := "postgres" }}
+
+    {{- if .Values.auth.postgresql.enabled }}
+    {{- if .Values.auth.postgresql.values.username }}
+    {{- $postgresUser = .Values.auth.postgresql.values.username }}
+    {{- end }}
+    {{- if .Values.auth.postgresql.values.password }}
+    {{- $postgresPassword = .Values.auth.postgresql.values.password }}
+    {{- end }}
+    {{- end }}
+
+    "{{ $postgresUser }}" "{{ $postgresPassword }}"
+
+    {{- if .Values.auth.dbreadonly.enabled }}
+    {{- if and .Values.auth.dbreadonly.values.db_readonly_user .Values.auth.dbreadonly.values.db_readonly_password }}
+    "{{ .Values.auth.dbreadonly.values.db_readonly_user }}" "{{ .Values.auth.dbreadonly.values.db_readonly_password }}"
+    {{- end }}
+    {{- end }}
+{{- end }}

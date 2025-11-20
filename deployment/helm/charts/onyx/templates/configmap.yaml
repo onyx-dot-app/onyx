@@ -6,7 +6,10 @@ metadata:
     {{- include "onyx.labels" . | nindent 4 }}
 data:
   INTERNAL_URL: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.port | default 8080 }}"
-  {{- if .Values.postgresql.enabled }}
+  {{- if .Values.pgbouncer.enabled }}
+  POSTGRES_HOST: {{ include "onyx.fullname" . }}-pgbouncer
+  POSTGRES_USE_PGBOUNCER: "true"
+  {{- else if .Values.postgresql.enabled }}
   POSTGRES_HOST: {{ .Release.Name }}-postgresql-rw
   {{- end }}
   {{- if .Values.vespa.enabled }}
