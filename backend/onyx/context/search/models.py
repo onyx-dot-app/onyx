@@ -444,6 +444,7 @@ class SearchDoc(BaseModel):
 
 class SearchDocsResponse(BaseModel):
     search_docs: list[SearchDoc]
+    citation_mapping: dict[int, str]
 
 
 class SavedSearchDoc(SearchDoc):

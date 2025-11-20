@@ -16,14 +16,13 @@ from onyx.document_index.vespa.shared_utils.utils import (
 from onyx.llm.interfaces import LLM
 from onyx.prompts.prompt_utils import clean_up_source
 from onyx.secondary_llm_flows.document_filter import classify_section_relevance
+from onyx.tools.tool_implementations.search.constants import (
+    FULL_DOC_NUM_CHUNKS_AROUND,
+)
+from onyx.tools.tool_implementations.search.constants import RRF_K_VALUE
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-RRF_K_VALUE = 50
-
-FULL_DOC_NUM_CHUNKS_AROUND = 5
 
 
 T = TypeVar("T")
@@ -223,17 +222,161 @@ def _retrieve_adjacent_chunks(
     return chunks_above, chunks_below
 
 
+def merge_overlapping_sections(
+    sections: list[InferenceSection],
+) -> list[InferenceSection]:
+    """Merge sections from the same document that have adjacent or overlapping chunks.
+
+    Sections are merged if they come from the same document and their chunk ranges
+    are adjacent (chunk_ids differ by 1) or overlapping (share chunk_ids).
+    The merged sections maintain the position of the first section in the original list.
+
+    Args:
+        sections: List of InferenceSection objects to merge
+
+    Returns:
+        List of merged InferenceSection objects
+    """
+    if not sections:
+        return []
+
+    # Create a mapping from section to its original index for ordering
+    section_to_original_index: dict[tuple[str, int], int] = {}
+    for idx, section in enumerate(sections):
+        section_id = (section.center_chunk.document_id, section.center_chunk.chunk_id)
+        section_to_original_index[section_id] = idx
+
+    # Group sections by document_id
+    doc_sections: dict[str, list[InferenceSection]] = defaultdict(list)
+    for section in sections:
+        doc_sections[section.center_chunk.document_id].append(section)
+
+    # Track which sections have been merged into a result section
+    merged_sections: dict[tuple[str, int], InferenceSection] = {}
+
+    # Process each document's sections
+    for doc_id, doc_section_list in doc_sections.items():
+        if not doc_section_list:
+            continue
+
+        # Sort sections by their minimum chunk_id
+        doc_section_list.sort(key=lambda s: min(c.chunk_id for c in s.chunks))
+
+        # Track merged groups - start with first section
+        current_merged_chunks = set(doc_section_list[0].chunks)
+        sections_in_current_group = [doc_section_list[0]]
+
+        for i in range(1, len(doc_section_list)):
+            current_section = doc_section_list[i]
+            current_section_chunks = set(current_section.chunks)
+
+            # Get chunk_id ranges
+            merged_chunk_ids = {c.chunk_id for c in current_merged_chunks}
+            current_chunk_ids = {c.chunk_id for c in current_section_chunks}
+
+            # Check if adjacent or overlapping
+            min_merged = min(merged_chunk_ids)
+            max_merged = max(merged_chunk_ids)
+            min_current = min(current_chunk_ids)
+            max_current = max(current_chunk_ids)
+
+            is_adjacent = (min_current == max_merged + 1) or (
+                min_merged == max_current + 1
+            )
+            is_overlapping = bool(merged_chunk_ids & current_chunk_ids)
+
+            if is_adjacent or is_overlapping:
+                # Merge into current group
+                current_merged_chunks.update(current_section_chunks)
+                sections_in_current_group.append(current_section)
+            else:
+                # Finalize current group and start new one
+                # Find the section that appeared first in the original list
+                first_section = min(
+                    sections_in_current_group,
+                    key=lambda s: section_to_original_index.get(
+                        (s.center_chunk.document_id, s.center_chunk.chunk_id),
+                        float("inf"),
+                    ),
+                )
+
+                # Create merged section with all chunks
+                all_chunks = sorted(current_merged_chunks, key=lambda c: c.chunk_id)
+                merged_section = inference_section_from_chunks(
+                    center_chunk=first_section.center_chunk,
+                    chunks=all_chunks,
+                )
+
+                if merged_section:
+                    # Store the merged section for all sections in this group
+                    for section in sections_in_current_group:
+                        section_id = (
+                            section.center_chunk.document_id,
+                            section.center_chunk.chunk_id,
+                        )
+                        merged_sections[section_id] = merged_section
+
+                # Start new group
+                current_merged_chunks = current_section_chunks
+                sections_in_current_group = [current_section]
+
+        # Finalize the last group
+        if sections_in_current_group:
+            first_section = min(
+                sections_in_current_group,
+                key=lambda s: section_to_original_index.get(
+                    (s.center_chunk.document_id, s.center_chunk.chunk_id),
+                    float("inf"),
+                ),
+            )
+
+            all_chunks = sorted(current_merged_chunks, key=lambda c: c.chunk_id)
+            merged_section = inference_section_from_chunks(
+                center_chunk=first_section.center_chunk,
+                chunks=all_chunks,
+            )
+
+            if merged_section:
+                for section in sections_in_current_group:
+                    section_id = (
+                        section.center_chunk.document_id,
+                        section.center_chunk.chunk_id,
+                    )
+                    merged_sections[section_id] = merged_section
+
+    # Build result list maintaining original order
+    seen_section_ids: set[tuple[str, int]] = set()
+    result: list[InferenceSection] = []
+
+    for section in sections:
+        section_id = (section.center_chunk.document_id, section.center_chunk.chunk_id)
+        merged_section = merged_sections.get(section_id, section)
+
+        # Use merged section's center_chunk as identifier
+        merged_section_id = (
+            merged_section.center_chunk.document_id,
+            merged_section.center_chunk.chunk_id,
+        )
+
+        if merged_section_id not in seen_section_ids:
+            seen_section_ids.add(merged_section_id)
+            result.append(merged_section)
+
+    return result
+
+
 def expand_section_with_context(
     section: InferenceSection,
     user_query: str,
     llm: LLM,
     document_index: DocumentIndex,
+    expand_override: bool = False,
 ) -> InferenceSection | None:
     """Use LLM to classify section relevance and return expanded section with appropriate context.
 
     This function combines classification and expansion into a single operation:
     1. Retrieves chunks needed for classification (2 chunks for prompt)
-    2. Uses LLM to classify relevance (situations 1-4)
+    2. Uses LLM to classify relevance (situations 1-4) unless expand_override is True
     3. For FULL_DOCUMENT, fetches additional chunks (5 total above/below)
     4. Returns the expanded section or None if not relevant
 
@@ -242,58 +385,64 @@ def expand_section_with_context(
         search_query: The user's search query
         llm: LLM instance to use for classification
         document_index: Document index for retrieving adjacent chunks
+        expand_override: If True, skip LLM classification and use FULL_DOCUMENT expansion
 
     Returns:
         Expanded InferenceSection with appropriate context, or None if NOT_RELEVANT
     """
-    # Retrieve 2 chunks above and below for the LLM classification prompt
-    chunks_above_for_prompt, chunks_below_for_prompt = _retrieve_adjacent_chunks(
-        section=section,
-        document_index=document_index,
-        num_chunks_above=2,
-        num_chunks_below=2,
-    )
+    # If expand_override is True, skip LLM classification and use FULL_DOCUMENT
+    if expand_override:
+        classification = ContextExpansionType.FULL_DOCUMENT
+    else:
+        # Retrieve 2 chunks above and below for the LLM classification prompt
+        chunks_above_for_prompt, chunks_below_for_prompt = _retrieve_adjacent_chunks(
+            section=section,
+            document_index=document_index,
+            num_chunks_above=2,
+            num_chunks_below=2,
+        )
 
-    # Format the section content for the prompt
-    section_above_text = (
-        " ".join([c.content for c in chunks_above_for_prompt])
-        if chunks_above_for_prompt
-        else None
-    )
-    section_below_text = (
-        " ".join([c.content for c in chunks_below_for_prompt])
-        if chunks_below_for_prompt
-        else None
-    )
+        # Format the section content for the prompt
+        section_above_text = (
+            " ".join([c.content for c in chunks_above_for_prompt])
+            if chunks_above_for_prompt
+            else None
+        )
+        section_below_text = (
+            " ".join([c.content for c in chunks_below_for_prompt])
+            if chunks_below_for_prompt
+            else None
+        )
 
-    # Classify section relevance using LLM
-    classification = classify_section_relevance(
-        section_text=section.combined_content,
-        user_query=user_query,
-        llm=llm,
-        section_above_text=section_above_text,
-        section_below_text=section_below_text,
-    )
+        # Classify section relevance using LLM
+        classification = classify_section_relevance(
+            document_title=section.center_chunk.semantic_identifier,
+            section_text=section.combined_content,
+            user_query=user_query,
+            llm=llm,
+            section_above_text=section_above_text,
+            section_below_text=section_below_text,
+        )
 
     # Now build the expanded section based on classification
     if classification == ContextExpansionType.NOT_RELEVANT:
         # Filter out this section
         logger.debug(
-            f"Filtering out section (NOT_RELEVANT): {section.center_chunk.semantic_identifier}"
+            f"LLM classified section as NOT_RELEVANT: {section.center_chunk.semantic_identifier}"
         )
         return None
 
     elif classification == ContextExpansionType.MAIN_SECTION_ONLY:
         # Return original section unchanged
         logger.debug(
-            f"Using main section only (MAIN_SECTION_ONLY): {section.center_chunk.semantic_identifier}"
+            f"LLM classified section as MAIN_SECTION_ONLY: {section.center_chunk.semantic_identifier}"
         )
         return section
 
     elif classification == ContextExpansionType.INCLUDE_ADJACENT_SECTIONS:
         # Use the 2 chunks we already retrieved for the prompt
         logger.debug(
-            f"Including adjacent sections (INCLUDE_ADJACENT_SECTIONS): {section.center_chunk.semantic_identifier}"
+            f"LLM classified section as INCLUDE_ADJACENT_SECTIONS: {section.center_chunk.semantic_identifier}"
         )
 
         # Combine chunks: 2 above + section + 2 below
@@ -312,9 +461,14 @@ def expand_section_with_context(
 
     elif classification == ContextExpansionType.FULL_DOCUMENT:
         # Fetch 5 chunks above and below (optimal single retrieval)
-        logger.debug(
-            f"Including full document context (FULL_DOCUMENT): {section.center_chunk.semantic_identifier}"
-        )
+        if expand_override:
+            logger.debug(
+                f"Section marked for FULL_DOCUMENT expansion (override): {section.center_chunk.semantic_identifier}"
+            )
+        else:
+            logger.debug(
+                f"LLM classified section as FULL_DOCUMENT: {section.center_chunk.semantic_identifier}"
+            )
 
         chunks_above_full, chunks_below_full = _retrieve_adjacent_chunks(
             section=section,

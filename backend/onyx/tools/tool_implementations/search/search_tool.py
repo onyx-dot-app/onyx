@@ -6,6 +6,7 @@ from typing import cast
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
+from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkSearchRequest
 from onyx.context.search.models import InferenceChunk
@@ -19,8 +20,11 @@ from onyx.db.connector import check_federated_connectors_exist
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.llm.factory import get_llm_tokenizer_encode_func
 from onyx.llm.interfaces import LLM
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.secondary_llm_flows.document_filter import select_chunks_for_relevance
+from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
 from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -31,8 +35,27 @@ from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import SearchToolRunContext
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.search.constants import (
+    KEYWORD_QUERY_HYBRID_ALPHA,
+)
+from onyx.tools.tool_implementations.search.constants import (
+    LLM_KEYWORD_QUERY_WEIGHT,
+)
+from onyx.tools.tool_implementations.search.constants import (
+    LLM_NON_CUSTOM_QUERY_WEIGHT,
+)
+from onyx.tools.tool_implementations.search.constants import (
+    LLM_SEMANTIC_QUERY_WEIGHT,
+)
+from onyx.tools.tool_implementations.search.constants import (
+    MAX_CHUNKS_FOR_RELEVANCE,
+)
+from onyx.tools.tool_implementations.search.constants import ORIGINAL_QUERY_WEIGHT
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
+)
+from onyx.tools.tool_implementations.search.search_utils import (
+    merge_overlapping_sections,
 )
 from onyx.tools.tool_implementations.search.search_utils import (
     weighted_reciprocal_rank_fusion,
@@ -40,25 +63,11 @@ from onyx.tools.tool_implementations.search.search_utils import (
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
+from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
 logger = setup_logger()
 
 QUERY_FIELD = "query"
-
-
-# Taking an opinionated stance on the weights, no chance users can do a good job customizing this.
-# The dedicated rephrased/extracted semantic query is likely the best for hybrid search
-LLM_SEMANTIC_QUERY_WEIGHT = 1.3
-# The keyword expansions provide more breadth through a different search ranking function
-# This one is likely to produce the most different results.
-LLM_KEYWORD_QUERY_WEIGHT = 1.0
-# This is also lower because it is the LLM generated query without the custom instructions specifically for this purpose.
-LLM_NON_CUSTOM_QUERY_WEIGHT = 0.7
-# This is much lower weight because it is likely pretty similar to the LLM semantic query but just worse quality.
-ORIGINAL_QUERY_WEIGHT = 0.5
-
-# This may in the future just use an entirely keyword search. Currently it is a hybrid search with a keyword first phase.
-KEYWORD_QUERY_HYBRID_ALPHA = 0.2
 
 
 def deduplicate_queries(
@@ -85,11 +94,83 @@ def deduplicate_queries(
     return list(query_map.values())
 
 
+def _estimate_section_tokens(
+    section: InferenceSection,
+    tokenizer_encode_func: Callable[[str], list[int]],
+    max_chunks_per_section: int | None = None,
+) -> int:
+    """Estimate token count for a section using the LLM tokenizer.
+
+    Args:
+        section: InferenceSection to estimate tokens for
+        tokenizer_encode_func: Function that encodes text to tokens
+        max_chunks_per_section: Maximum chunks to consider per section (None for all)
+
+    Returns:
+        Token count for the section
+    """
+    # Estimate for metadata (title, source_type, etc.)
+    METADATA_TOKEN_ESTIMATE = 75
+
+    # If max_chunks_per_section is specified, only count tokens for selected chunks
+    if max_chunks_per_section is not None:
+        selected_chunks = select_chunks_for_relevance(section, max_chunks_per_section)
+        # Combine content from selected chunks
+        combined_content = "\n".join(chunk.content for chunk in selected_chunks)
+        content_tokens = len(tokenizer_encode_func(combined_content))
+    else:
+        content_tokens = len(tokenizer_encode_func(section.combined_content))
+
+    return content_tokens + METADATA_TOKEN_ESTIMATE
+
+
+@log_function_time(print_only=True)
+def _trim_sections_by_tokens(
+    sections: list[InferenceSection],
+    max_tokens: int,
+    tokenizer_encode_func: Callable[[str], list[int]],
+    max_chunks_per_section: int | None = None,
+) -> list[InferenceSection]:
+    """Trim sections to fit within a token budget using the LLM tokenizer.
+
+    Args:
+        sections: List of InferenceSection objects to trim
+        max_tokens: Maximum token budget
+        tokenizer_encode_func: Function that encodes text to tokens
+        max_chunks_per_section: Maximum chunks to consider per section (None for all)
+
+    Returns:
+        Trimmed list of sections that fit within the token budget
+    """
+    if not sections or max_tokens <= 0:
+        return sections
+
+    trimmed_sections = []
+    total_tokens = 0
+
+    for section in sections:
+        section_tokens = _estimate_section_tokens(
+            section, tokenizer_encode_func, max_chunks_per_section
+        )
+        if total_tokens + section_tokens <= max_tokens:
+            trimmed_sections.append(section)
+            total_tokens += section_tokens
+        else:
+            break
+
+    logger.debug(
+        f"Trimmed sections from {len(sections)} to {len(trimmed_sections)} "
+        f"({total_tokens} tokens, budget: {max_tokens})"
+    )
+
+    return trimmed_sections
+
+
 def _convert_inference_sections_to_llm_string(
     top_sections: list[InferenceSection],
     citation_start: int = 1,
     limit: int | None = None,
-) -> str:
+) -> tuple[str, dict[int, str]]:
     """Convert a list of InferenceSection objects to a JSON string for LLM consumption.
 
     Args:
@@ -98,29 +179,48 @@ def _convert_inference_sections_to_llm_string(
         limit: Maximum number of sections to include (None for no limit)
 
     Returns:
-        JSON string with the structure:
+        Tuple of (JSON string, citation_mapping) where:
+        - JSON string has the structure:
         {
             "results": [
                 {
                     "citation_id": int,
                     "title": str,  # semantic_identifier
-                    "content": str,  # combined_content (full content)
-                    "source_type": str,
-                    "authors": list[str] | None,
                     "updated_at": str | None,  # ISO format
-                    "metadata": str  # JSON string
+                    "authors": list[str] | None,
+                    "source_type": str,
+                    "metadata": str,  # JSON string
+                    "content": str  # combined_content (full content)
                 }
             ]
         }
+        - citation_mapping: dict mapping citation_id -> document_id
+          Multiple sections from the same document share the same citation_id
     """
     # Apply limit if specified
     if limit is not None:
         top_sections = top_sections[:limit]
 
+    # Group sections by document_id to assign same citation_id to sections from same document
+    document_id_to_citation_id: dict[str, int] = {}
+    citation_mapping: dict[int, str] = {}
+    current_citation_id = citation_start
+
+    # First pass: assign citation_ids to unique document_ids
+    for section in top_sections:
+        document_id = section.center_chunk.document_id
+        if document_id not in document_id_to_citation_id:
+            document_id_to_citation_id[document_id] = current_citation_id
+            citation_mapping[current_citation_id] = document_id
+            current_citation_id += 1
+
+    # Second pass: build results with citation_ids assigned per document
     results = []
 
-    for idx, section in enumerate(top_sections):
+    for section in top_sections:
         chunk = section.center_chunk
+        document_id = chunk.document_id
+        citation_id = document_id_to_citation_id[document_id]
 
         # Combine primary and secondary owners for authors
         authors = None
@@ -140,17 +240,17 @@ def _convert_inference_sections_to_llm_string(
         metadata_str = json.dumps(chunk.metadata)
 
         result = {
-            "citation_id": citation_start + idx,
+            "citation_id": citation_id,
             "title": chunk.semantic_identifier,
-            "content": section.combined_content,
-            "source_type": str(chunk.source_type),
-            "authors": authors,
             "updated_at": updated_at_str,
+            "authors": authors,
+            "source_type": str(chunk.source_type),
             "metadata": metadata_str,
+            "content": section.combined_content,
         }
         results.append(result)
 
-    return json.dumps({"results": results}, indent=4)
+    return json.dumps({"results": results}, indent=4), citation_mapping
 
 
 SEARCH_TOOL_DESCRIPTION = """
@@ -460,40 +560,101 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
                 )
             )
 
-            expanded_sections: list[InferenceSection] = []
-            # TODO must be parallelized
-            for section in top_sections:
+            secondary_flows_user_query = (
+                override_kwargs.original_query or semantic_query or llm_query
+            )
+
+            tokenizer_encode_func = get_llm_tokenizer_encode_func(self.llm)
+
+            # Trim sections to fit within token budget before LLM selection
+            # This is to account for very short chunks flooding the search context
+            # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
+            # documents with many matching sections
+            max_tokens_for_selection = (
+                override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT
+            ) * DOC_EMBEDDING_CONTEXT_SIZE
+
+            # This is approximate since it doesn't build the exact string of the call below
+            # Some things are estimated and may be under (like the metadata tokens)
+            sections_for_selection = _trim_sections_by_tokens(
+                sections=top_sections,
+                max_tokens=max_tokens_for_selection,
+                tokenizer_encode_func=tokenizer_encode_func,
+                max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+            )
+
+            # Use LLM to select the most relevant sections for expansion
+            selected_sections, best_doc_ids = select_sections_for_expansion(
+                sections=sections_for_selection,
+                user_query=secondary_flows_user_query,
+                llm=self.llm,
+                max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+            )
+
+            # Create a set of best document IDs for quick lookup
+            best_doc_ids_set = set(best_doc_ids) if best_doc_ids else set()
+
+            # Create wrapper function to handle errors gracefully
+            def expand_section_safe(
+                section: InferenceSection,
+                user_query: str,
+                llm: LLM,
+                document_index: DocumentIndex,
+                expand_override: bool,
+            ) -> InferenceSection:
+                """Wrapper that handles exceptions and returns original section on error."""
                 try:
-                    # Use LLM to classify and expand section with appropriate context
-                    # This combines classification and expansion into a single optimized operation
                     expanded_section = expand_section_with_context(
                         section=section,
-                        user_query=override_kwargs.original_query
-                        or semantic_query
-                        or llm_query,
-                        llm=self.llm,
-                        document_index=self.document_index,
+                        user_query=user_query,
+                        llm=llm,
+                        document_index=document_index,
+                        expand_override=expand_override,
                     )
-
-                    if expanded_section is not None:
-                        expanded_sections.append(expanded_section)
-
+                    # Return expanded section if not None, otherwise original
+                    return expanded_section if expanded_section is not None else section
                 except Exception as e:
                     logger.warning(
                         f"Error processing section context expansion: {e}. Using original section."
                     )
-                    # On error, use the original section
-                    expanded_sections.append(section)
+                    return section
 
-            docs_str = _convert_inference_sections_to_llm_string(
-                top_sections=expanded_sections,
+            # Build parallel function calls for all sections
+            expansion_functions: list[tuple[Callable, tuple]] = [
+                (
+                    expand_section_safe,
+                    (
+                        section,
+                        secondary_flows_user_query,
+                        self.llm,
+                        self.document_index,
+                        section.center_chunk.document_id in best_doc_ids_set,
+                    ),
+                )
+                for section in selected_sections
+            ]
+
+            # Run all expansions in parallel
+            expanded_sections = run_functions_tuples_in_parallel(expansion_functions)
+
+            if not expanded_sections:
+                expanded_sections = selected_sections
+
+            # Merge sections from the same document that have adjacent or overlapping chunks
+            # This prevents duplicate content and reduces token usage
+            merged_sections = merge_overlapping_sections(expanded_sections)
+
+            docs_str, citation_mapping = _convert_inference_sections_to_llm_string(
+                top_sections=merged_sections,
                 citation_start=override_kwargs.starting_citation_num,
                 limit=override_kwargs.max_llm_chunks,
             )
 
             return ToolResponse(
                 # Typically the rich response will give more docs in case it needs to be displayed in the UI
-                rich_response=SearchDocsResponse(search_docs=search_docs),
+                rich_response=SearchDocsResponse(
+                    search_docs=search_docs, citation_mapping=citation_mapping
+                ),
                 # The LLM facing response typically includes less docs to cut down on noise and token usage
                 llm_facing_response=docs_str,
             )

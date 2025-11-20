@@ -91,8 +91,16 @@ Here are some memories about the user:
 """
 
 
+# This prompt is intended to be fairly lenient since there are additional filters downstream.
+# There are now multiple places for misleading docs to get dropped so each one can be a bit more lax.
+# As models get better, it's likely better to include more context than not, some questionably
+# useful stuff may be helpful downstream.
+# Adding the ! option to allow better models to handle questions where all of the documents are
+# necessary to make a good determination.
+# If a document is by far the best and is a very obvious inclusion, add a ! after the section_id to indicate that it should \
+# be included in full. Example output: [8, 2!, 5].
 DOCUMENT_SELECTION_PROMPT = """
-Select the most relevant document sections for the search query (maximum 10).
+Select the most relevant document sections for the user's query (maximum {max_sections}). \
 
 # Document Sections
 ```
@@ -105,25 +113,36 @@ Select the most relevant document sections for the search query (maximum 10).
 ```
 
 # Selection Criteria
-- Choose sections most relevant to answering the query.
-- Include sections from highly relevant documents (the full document will be expanded later).
+- Choose sections most relevant to answering the query, if at all in doubt, include the section.
+- Even if only a tiny part of the section is relevant, include it.
 - It is ok to select multiple sections from the same document.
+- Consider indirect connections and supporting context to be valuable.
+- If the section is not directly helpful but the document seems relevant, there is an opportunity \
+later to expand the section and read more from the document so include the section.
 
 # Output Format
-Return ONLY section IDs as a comma-separated list, ordered by relevance:
-[most_relevant_id, second_most_relevant_id, ...]
+Return ONLY section_ids as a comma-separated list, ordered by relevance:
+[most_relevant_section_id, second_most_relevant_section_id, ...]
 
 Section IDs:
 """.strip()
 
 
-# Some models are trained heavily to reason in the actual output so we allow some flexibility in the prompt
+# Some models are trained heavily to reason in the actual output so we allow some flexibility in the prompt.
 # Downstream of the model, we will attempt to parse the output to extract the number.
 # This inference will not have a system prompt as it's a single message task more like the traditional ones.
 # LLMs should do better with just this type of next word prediction.
+# Opted to not include metadata here as the doc was already selected by the previous step that has it.
+# Also hopefully it leans not throwing out documents as there are not many bad ones that make it to this stage.
+# If anything, it's mostly because of something misleading, otherwise this step should be treated as 95% expansion/filtering.
 DOCUMENT_CONTEXT_SELECTION_PROMPT = """
 Analyze the relevance of document sections to a search query and classify according to the categories \
 described at the end of the prompt.
+
+# Document Title / Metadata
+```
+{document_title}
+```
 
 # Section Above:
 ```
@@ -147,9 +166,8 @@ described at the end of the prompt.
 
 # Classification Categories:
 **1 - NOT_RELEVANT**
-- Main section and surrounding sections do NOT help answer the query.
+- Main section and surrounding sections do not help answer the query.
 - Appears on topic but refers to a different context or subject.
-- No meaningful information related to the query.
 
 **2 - MAIN_SECTION_ONLY**
 - Main section contains useful information for the query.
@@ -159,11 +177,10 @@ described at the end of the prompt.
 - The main section AND adjacent sections are all useful for answering the user query.
 - The surrounding sections provide relevant information that does not exist in the main section.
 - Even if only 1 of the adjacent sections is useful or there is a small piece in either that is useful.
+- Additional unseen sections are unlikely to contain valuable related information.
 
 **4 - INCLUDE_FULL_DOCUMENT**
-- Sections shown are highly relevant to the query.
-- Document appears to be very pertinent to the query topic.
-- Additional unseen sections likely contain valuable related information.
+- Additional unseen sections are likely to contain valuable related information to the query.
 
 ## Additional Decision Notes
 - If only a small piece of the document is useful - use classification 2 or 3, do not use 1.
