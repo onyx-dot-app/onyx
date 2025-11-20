@@ -154,7 +154,7 @@ def test_versions_endpoint(client: TestClient) -> None:
     assert migration["onyx"] == "airgapped-intfloat-nomic-migration"
     assert migration["relational_db"] == "postgres:15.2-alpine"
     assert migration["index"] == "vespaengine/vespa:8.277.17"
-    assert migration["nginx"] == "nginx:1.23.4-alpine"
+    assert migration["nginx"] == "nginx:1.25-alpine"
 
     # Verify versions are different between stable and dev
     assert stable["onyx"] != dev["onyx"], "Stable and dev versions should be different"
