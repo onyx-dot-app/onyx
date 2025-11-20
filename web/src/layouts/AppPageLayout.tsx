@@ -37,6 +37,10 @@ interface AppPageLayoutProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
   chatSession: ChatSession | null;
 }
 
+// AppPageLayout wraps chat pages with the shared header/footer white-labelling chrome.
+// It also provides the "Share Chat" and kebab-menu on the right side of the header (for shareable chat pages).
+//
+// Since this is such a ubiquitous component, it's been moved to its own `layouts` directory.
 export default function AppPageLayout({
   settings,
   chatSession,
