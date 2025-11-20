@@ -22,11 +22,13 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import {
   Project,
   removeChatSessionFromProject,
+  createProject as createProjectService,
 } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import SvgFolderIn from "@/icons/folder-in";
 import SvgFolder from "@/icons/folder";
 import SvgChevronLeft from "@/icons/chevron-left";
+import SvgFolderPlus from "@/icons/folder-plus";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
@@ -44,6 +46,8 @@ import {
 } from "@/sections/sidebar/sidebarUtils";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { useAppFocus } from "@/lib/hooks";
+import Truncated from "@/refresh-components/texts/Truncated";
+import Text from "@/refresh-components/texts/Text";
 
 // (no local constants; use shared constants/imports)
 
@@ -133,6 +137,7 @@ function ChatButtonInner({
     projects,
     fetchProjects,
     currentProjectId,
+    createProject,
   } = useProjectsContext();
   const { popup, setPopup } = usePopup();
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -141,6 +146,9 @@ function ChatButtonInner({
   >(null);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
+  const [navigateAfterMoveProjectId, setNavigateAfterMoveProjectId] = useState<
+    number | null
+  >(null);
 
   // Drag and drop setup for chat sessions
   const dragId = `${DRAG_TYPES.CHAT}-${chatSession.id}`;
@@ -237,23 +245,45 @@ function ChatButtonInner({
       ];
       setPopoverItems(popoverItems);
     } else {
+      const availableProjects = filteredProjects.filter(
+        (candidateProject) => candidateProject.id !== project?.id
+      );
+
       const popoverItems = [
         <PopoverSearchInput
           key="search"
           setShowMoveOptions={setShowMoveOptions}
           onSearch={setSearchTerm}
         />,
-        ...filteredProjects
-          .filter((candidateProject) => candidateProject.id !== project?.id)
-          .map((targetProject) => (
-            <MenuButton
-              key={targetProject.id}
-              icon={SvgFolder}
-              onClick={noProp(() => handleChatMove(targetProject))}
-            >
-              {targetProject.name}
-            </MenuButton>
-          )),
+        ...availableProjects.map((targetProject) => (
+          <MenuButton
+            key={targetProject.id}
+            icon={SvgFolder}
+            onClick={noProp(() => handleChatMove(targetProject))}
+          >
+            {targetProject.name}
+          </MenuButton>
+        )),
+        // Show "Create New Project" option when no projects match the search
+        ...(availableProjects.length === 0 && searchTerm.trim() !== ""
+          ? [
+              null,
+              <MenuButton
+                key="create-new"
+                icon={SvgFolderPlus}
+                onClick={noProp(() =>
+                  handleCreateProjectAndMove(searchTerm.trim())
+                )}
+              >
+                <Text text03 mainUiMuted className="-mr-1">
+                  Create
+                </Text>
+                <Truncated text03 mainUiAction>
+                  {searchTerm.trim()}
+                </Truncated>
+              </MenuButton>,
+            ]
+          : []),
       ];
       setPopoverItems(popoverItems);
     }
@@ -266,6 +296,8 @@ function ChatButtonInner({
     refreshCurrentProjectDetails,
     project,
     chatSession.id,
+    searchTerm,
+    createProject,
   ]);
 
   async function handleRename(newName: string) {
@@ -341,6 +373,42 @@ function ChatButtonInner({
     }
   }
 
+  async function handleCreateProjectAndMove(projectName: string) {
+    try {
+      // Create the new project using the service directly (without navigation)
+      const newProject = await createProjectService(projectName);
+
+      // Refresh projects list to include the new project
+      await fetchProjects();
+
+      // Mark that we want to navigate to this project after moving
+      setNavigateAfterMoveProjectId(newProject.id);
+
+      // Check if we should show the move modal for custom agents
+      if (shouldShowMoveModal(chatSession)) {
+        setPendingMoveProjectId(newProject.id);
+        setShowMoveCustomAgentModal(true);
+        setShowMoveOptions(false);
+        setSearchTerm("");
+        return;
+      }
+
+      // Move the chat to the newly created project
+      await performMove(newProject.id);
+
+      // Navigate to the new project to see the chat
+      route({ projectId: newProject.id });
+      setNavigateAfterMoveProjectId(null);
+    } catch (error) {
+      console.error("Failed to create project and move chat:", error);
+      showErrorNotification(
+        setPopup,
+        "Failed to create project. Please try again."
+      );
+      setNavigateAfterMoveProjectId(null);
+    }
+  }
+
   const rightMenu = (
     <>
       <PopoverTrigger asChild onClick={noProp()}>
@@ -366,7 +434,10 @@ function ChatButtonInner({
     <Popover
       onOpenChange={(state) => {
         setPopoverOpen(state);
-        if (!state) setShowMoveOptions(false);
+        if (!state) {
+          setShowMoveOptions(false);
+          setSearchTerm("");
+        }
       }}
     >
       <PopoverAnchor>
@@ -430,10 +501,16 @@ function ChatButtonInner({
               );
             }
             const target = pendingMoveProjectId;
+            const shouldNavigate = navigateAfterMoveProjectId;
             setShowMoveCustomAgentModal(false);
             setPendingMoveProjectId(null);
             if (target != null) {
               await performMove(target);
+              // Navigate if this was triggered by creating a new project
+              if (shouldNavigate != null) {
+                route({ projectId: shouldNavigate });
+                setNavigateAfterMoveProjectId(null);
+              }
             }
           }}
         />
