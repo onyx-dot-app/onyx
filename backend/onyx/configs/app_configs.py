@@ -541,6 +541,11 @@ BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+# Maximum number of images to process per document
+# Documents with more images will have image processing limited to prevent OOM
+# Set to 0 to disable image processing entirely, -1 for unlimited
+MAX_IMAGES_PER_DOCUMENT = int(os.environ.get("MAX_IMAGES_PER_DOCUMENT", 100))
+
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
     for ignored_tag in os.environ.get("JIRA_CONNECTOR_LABELS_TO_SKIP", "").split(",")
