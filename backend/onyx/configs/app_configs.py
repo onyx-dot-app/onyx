@@ -582,7 +582,7 @@ EXPERIMENTAL_CHECKPOINTING_ENABLED = (
 )
 
 
-# TestRail connector configs
+# TestRail specific configs
 TESTRAIL_BASE_URL = os.environ.get("TESTRAIL_BASE_URL", "")
 TESTRAIL_USERNAME = os.environ.get("TESTRAIL_USERNAME", "")
 TESTRAIL_API_KEY = os.environ.get("TESTRAIL_API_KEY", "")
