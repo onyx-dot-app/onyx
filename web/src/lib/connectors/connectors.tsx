@@ -248,7 +248,32 @@ export const connectorConfigs: Record<
   testrail: {
     description: "Configure TestRail connector",
     values: [],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "number",
+        label: "Cases Page Size",
+        name: "cases_page_size",
+        optional: true,
+        description:
+          "Number of test cases to fetch per page from the TestRail API (default: 250)",
+      },
+      {
+        type: "number",
+        label: "Max Pages",
+        name: "max_pages",
+        optional: true,
+        description:
+          "Maximum number of pages to fetch to prevent infinite loops (default: 10000)",
+      },
+      {
+        type: "number",
+        label: "Skip Document Character Limit",
+        name: "skip_doc_absolute_chars",
+        optional: true,
+        description:
+          "Skip indexing test cases that exceed this character limit (default: 200000)",
+      },
+    ],
   },
   gitlab: {
     description: "Configure GitLab connector",
