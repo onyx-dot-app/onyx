@@ -3504,7 +3504,7 @@ class Project__UserFile(Base):
         ForeignKey("user_file.id"), primary_key=True
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(), index=True
     )
 
 

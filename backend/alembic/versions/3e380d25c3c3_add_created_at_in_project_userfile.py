@@ -27,8 +27,16 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
+    # Add index on created_at column
+    op.create_index(
+        "ix_project__user_file_created_at",
+        "project__user_file",
+        ["created_at"],
+    )
 
 
 def downgrade() -> None:
+    # Remove index on created_at column
+    op.drop_index("ix_project__user_file_created_at", table_name="project__user_file")
     # Remove created_at column from project__user_file table
     op.drop_column("project__user_file", "created_at")
