@@ -10,6 +10,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
 from onyx.connectors.models import InputType
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
@@ -151,8 +152,15 @@ def test_repeated_error_state_detection_and_recovery(
     )
     assert response.status_code == 200
 
-    # Unpause the connector since it was paused when entering repeated error state
+    # Unpause the connector and clear repeated error state flag
+    # so that it can resume indexing
     CCPairManager.unpause_cc_pair(cc_pair, user_performing_action=admin_user)
+    with get_session_with_current_tenant() as db_session:
+        set_cc_pair_repeated_error_state(
+            db_session=db_session,
+            cc_pair_id=cc_pair.id,
+            in_repeated_error_state=False,
+        )
 
     # Run another indexing attempt that should succeed
     CCPairManager.run_once(
