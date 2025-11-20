@@ -53,7 +53,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
         {icon && (
           <div
             className={cn(
-              "flex items-center justify-center p-0.5 shrink-0 w-5 h-5",
+              "flex items-center justify-center shrink-0",
               textOpacity
             )}
           >

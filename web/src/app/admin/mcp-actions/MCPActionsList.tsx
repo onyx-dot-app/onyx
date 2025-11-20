@@ -30,9 +30,13 @@ export default function MCPActionsList({
   mutateTools,
   setPopup,
 }: MCPActionsListProps) {
-  const convertTools = (toolSnapshots: ToolSnapshot[]): Tool[] => {
+  const convertTools = (
+    toolSnapshots: ToolSnapshot[],
+    server: MCPServer
+  ): Tool[] => {
     return toolSnapshots.map((tool) => ({
       id: tool.id.toString(),
+      icon: getMCPServerIcon(server),
       name: tool.display_name || tool.name,
       description: tool.description,
       isAvailable: true,
@@ -201,7 +205,7 @@ export default function MCPActionsList({
     <div className="flex flex-col gap-4 w-full">
       {mcpServers.map((server) => {
         const serverTools = toolsByServer[server.id] || [];
-        const tools = convertTools(serverTools);
+        const tools = convertTools(serverTools, server);
         const status = getStatus(server);
 
         return (
