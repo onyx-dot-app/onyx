@@ -155,6 +155,9 @@ def test_repeated_error_state_detection_and_recovery(
     # the repeated error state and create a new index attempt
     CCPairManager.unpause_cc_pair(cc_pair, user_performing_action=admin_user)
 
+    # Give the unpause a moment to complete and the CHECK_FOR_INDEXING task to process
+    time.sleep(2)
+
     # Run another indexing attempt that should succeed
     CCPairManager.run_once(
         cc_pair, from_beginning=True, user_performing_action=admin_user
