@@ -290,7 +290,7 @@ function ToolToggle({
 }) {
   const notEnabledReason = (() => {
     if (tool.in_code_tool_id === "WebSearchTool") {
-      return "Set EXA_API_KEY on the server and restart to enable Web Search.";
+      return "Configure a provider on the Web Search admin page to enable this tool.";
     }
     if (tool.in_code_tool_id === "ImageGenerationTool") {
       return "Add an OpenAI LLM provider with an API key under Admin → Configuration → LLM.";
