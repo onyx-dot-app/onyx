@@ -151,17 +151,13 @@ def test_repeated_error_state_detection_and_recovery(
     )
     assert response.status_code == 200
 
-    # Unpause the connector so that the manual run_once trigger can override
-    # the repeated error state and create a new index attempt
-    CCPairManager.unpause_cc_pair(cc_pair, user_performing_action=admin_user)
-
-    # Give the unpause a moment to complete and the CHECK_FOR_INDEXING task to process
-    time.sleep(2)
-
-    # Run another indexing attempt that should succeed
+    # Set the manual indexing trigger first (while paused), then unpause.
+    # This ensures the trigger is set before CHECK_FOR_INDEXING runs, which will
+    # prevent the connector from being re-paused when repeated error state is detected.
     CCPairManager.run_once(
         cc_pair, from_beginning=True, user_performing_action=admin_user
     )
+    CCPairManager.unpause_cc_pair(cc_pair, user_performing_action=admin_user)
 
     recovery_index_attempt = IndexAttemptManager.wait_for_index_attempt_start(
         cc_pair_id=cc_pair.id,

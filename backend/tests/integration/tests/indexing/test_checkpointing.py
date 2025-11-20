@@ -466,14 +466,13 @@ def test_mock_connector_checkpoint_recovery(
     assert response.status_code == 200
 
     # After the failure, the connector is in repeated error state and paused.
-    # Unpausing it will allow the manual run_once trigger to override the repeated
-    # error state and create a new index attempt.
-    CCPairManager.unpause_cc_pair(cc_pair, user_performing_action=admin_user)
-
-    # Trigger another indexing attempt
+    # Set the manual indexing trigger first (while paused), then unpause.
+    # This ensures the trigger is set before CHECK_FOR_INDEXING runs, which will
+    # prevent the connector from being re-paused when repeated error state is detected.
     CCPairManager.run_once(
         cc_pair, from_beginning=False, user_performing_action=admin_user
     )
+    CCPairManager.unpause_cc_pair(cc_pair, user_performing_action=admin_user)
     recovery_index_attempt = IndexAttemptManager.wait_for_index_attempt_start(
         cc_pair_id=cc_pair.id,
         index_attempts_to_ignore=[initial_index_attempt.id],
