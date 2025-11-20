@@ -144,8 +144,6 @@ Expected response:
 
 ### Environment Variables
 
-- `MCP_SERVER_NAME`: Server name (default: "onyx")
-- `MCP_SERVER_VERSION`: Server version
 - `MCP_SERVER_CORS_ORIGINS`: Comma-separated CORS origins (optional)
 - `API_SERVER_PROTOCOL`: Protocol for internal API calls (default: "http")
 - `API_SERVER_HOST`: Host for internal API calls (default: "127.0.0.1")

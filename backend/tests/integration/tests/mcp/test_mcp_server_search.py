@@ -13,7 +13,6 @@ from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import CallToolResult
 from mcp.types import TextContent
 
-from onyx.configs.app_configs import MCP_SERVER_NAME
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import MCP_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
@@ -120,8 +119,6 @@ def test_mcp_pat_document_search_flow(reset: None, admin_user: DATestUser) -> No
     init_result, resources_result, tools_result, search_result = _run_with_mcp_session(
         headers, _full_flow
     )
-
-    assert init_result.serverInfo.name == MCP_SERVER_NAME
 
     resource_uris = {str(resource.uri) for resource in resources_result.resources}
     assert "resource://available_sources" in resource_uris
