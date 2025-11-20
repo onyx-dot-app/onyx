@@ -619,5 +619,5 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.AIRTABLE: "airtable - database",
     DocumentSource.HIGHSPOT: "highspot - CRM data",
     DocumentSource.IMAP: "imap - email data",
-    DocumentSource.TESTRAIL: "testrail - test management data",
+    DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
 }

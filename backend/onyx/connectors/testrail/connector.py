@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import re
-import html as html_lib
 from typing import Any, ClassVar, Iterator, Optional
 
 import requests
 from bs4 import BeautifulSoup
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    TESTRAIL_CASES_PAGE_SIZE,
+    TESTRAIL_MAX_PAGES,
+    TESTRAIL_PROJECT_ID,
+    TESTRAIL_SKIP_DOC_ABSOLUTE_CHARS,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
@@ -27,14 +31,14 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.text_processing import remove_markdown_image_references
 from onyx.file_processing.html_utils import format_document_soup
 
 
 logger = setup_logger()
 
-# Size management to avoid oversized docs filling the index
-MAX_DOC_CHARS = 20000  # truncate content above this size
-SKIP_DOC_ABSOLUTE_CHARS = 200000  # skip documents entirely above this size
+# Size management (configurable via environment variables)
+SKIP_DOC_ABSOLUTE_CHARS = TESTRAIL_SKIP_DOC_ABSOLUTE_CHARS  # skip documents entirely above this size
 
 
 class TestRailConnector(LoadConnector, PollConnector):
@@ -47,36 +51,58 @@ class TestRailConnector(LoadConnector, PollConnector):
 
     def __init__(
         self,
-        base_url: str | None = None,
-        username: str | None = None,
-        api_key: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
         project_ids: list[int] | None = None,
     ) -> None:
-        self.base_url = base_url
-        self.username = username
-        self.api_key = api_key
+        self.base_url: str | None = None
+        self.username: str | None = None
+        self.api_key: str | None = None
         self.batch_size = batch_size
-        self.project_ids = project_ids
+
+        # Allow env var override for testing (e.g., TESTRAIL_PROJECT_ID=19 or 19,20)
+        if TESTRAIL_PROJECT_ID and not project_ids:
+            try:
+                self.project_ids = [
+                    int(pid.strip())
+                    for pid in TESTRAIL_PROJECT_ID.split(",")
+                ]
+                logger.info(
+                    f"Using TESTRAIL_PROJECT_ID override: {self.project_ids}"
+                )
+            except ValueError:
+                logger.warning(
+                    f"Invalid TESTRAIL_PROJECT_ID format: {TESTRAIL_PROJECT_ID}"
+                )
+                self.project_ids = project_ids
+        else:
+            self.project_ids = project_ids
 
     # --- Rich text sanitization helpers ---
+    # Note: TestRail stores some fields as HTML (e.g. shared test steps).
+    # This function handles both HTML and plain text.
     @staticmethod
     def _sanitize_rich_text(value: Any) -> str:
         if value is None:
             return ""
-        html = str(value)
-        # Replace explicit data:image URIs with a marker to avoid huge inlined payloads
-        html = re.sub(
-            r"data:image/[^\"' )]+;base64,[A-Za-z0-9+/=]+", "[image removed]", html
-        )
-        soup = BeautifulSoup(html, "html.parser")
-        # Drop <img> tags entirely
-        for img in soup.find_all("img"):
-            img.decompose()
-        # Use shared formatter to produce clean, structured text
+        text = str(value)
+
+        # Parse HTML and remove image tags
+        soup = BeautifulSoup(text, 'html.parser')
+
+        # Remove all img tags and their containers
+        for img_tag in soup.find_all('img'):
+            img_tag.decompose()
+        for span in soup.find_all('span', class_='markdown-img-container'):
+            span.decompose()
+
+        # Use format_document_soup for better HTML-to-text conversion
+        # This preserves document structure (paragraphs, lists, line breaks, etc.)
         text = format_document_soup(soup)
-        # Unescape any remaining HTML entities just in case
-        return html_lib.unescape(text)
+
+        # Also remove markdown-style image references (in case any remain)
+        text = remove_markdown_image_references(text)
+
+        return text.strip()
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         # Expected keys from UI credential JSON
@@ -91,7 +117,7 @@ class TestRailConnector(LoadConnector, PollConnector):
         if not projects:
             logger.warning("TestRail: no projects visible to this credential.")
 
-    # ---- HTTP helpers ----
+    # ---- API helpers ----
     def _api_get(self, endpoint: str, params: Optional[dict[str, Any]] = None) -> Any:
         if not self.base_url or not self.username or not self.api_key:
             raise ConnectorMissingCredentialError("testrail")
@@ -128,15 +154,9 @@ class TestRailConnector(LoadConnector, PollConnector):
 
     def _list_projects(self) -> list[dict[str, Any]]:
         projects = self._api_get("get_projects")
-        if isinstance(projects, list):
-            return projects
         if isinstance(projects, dict):
-            # Handle wrapped responses like {"projects": [...]} or {"items": [...]} or {"data": [...]}
-            for key in ("projects", "items", "data", "results"):
-                val = projects.get(key)
-                if isinstance(val, list):
-                    return val
-        logger.warning("Unexpected TestRail projects response shape")
+            projects_list = projects.get("projects")
+            return projects_list if isinstance(projects_list, list) else []
         return []
 
     def _list_suites(self, project_id: int) -> list[dict[str, Any]]:
@@ -145,15 +165,25 @@ class TestRailConnector(LoadConnector, PollConnector):
         gracefully fallback to calling get_cases without suite_id.
         """
         suites = self._api_get(f"get_suites/{project_id}")
-        if isinstance(suites, list):
-            return suites
         if isinstance(suites, dict):
-            for key in ("suites", "items", "data", "results"):
-                val = suites.get(key)
-                if isinstance(val, list):
-                    return val
-        logger.warning("Unexpected TestRail suites response shape")
+            suites_list = suites.get("suites")
+            return suites_list if isinstance(suites_list, list) else []
         return []
+
+    def _get_cases(
+        self, project_id: int, suite_id: Optional[int], limit: int, offset: int
+    ) -> list[dict[str, Any]]:
+        """Get cases for a project from the API."""
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if suite_id is not None:
+            params["suite_id"] = suite_id
+        cases_response = self._api_get(f"get_cases/{project_id}", params=params)
+        cases_list: list[dict[str, Any]] = []
+        if isinstance(cases_response, dict):
+            cases_items = cases_response.get("cases")
+            if isinstance(cases_items, list):
+                cases_list = cases_items
+        return cases_list
 
     def _iter_cases(
         self,
@@ -163,19 +193,11 @@ class TestRailConnector(LoadConnector, PollConnector):
         end: Optional[SecondsSinceUnixEpoch] = None,
     ) -> Iterator[dict[str, Any]]:
         # Pagination: TestRail supports 'limit' and 'offset' for many list endpoints
-        limit = 250
-        offset = 0
-        while True:
-            params: dict[str, Any] = {"limit": limit, "offset": offset}
-            if suite_id is not None:
-                params["suite_id"] = suite_id
-            cases = self._api_get(f"get_cases/{project_id}", params=params)
-            if isinstance(cases, dict):
-                for key in ("cases", "items", "data", "results"):
-                    val = cases.get(key)
-                    if isinstance(val, list):
-                        cases = val
-                        break
+        limit = TESTRAIL_CASES_PAGE_SIZE
+        # Use a bounded page loop to avoid infinite loops on API anomalies
+        for page_index in range(TESTRAIL_MAX_PAGES):
+            offset = page_index * limit
+            cases = self._get_cases(project_id, suite_id, limit, offset)
 
             if not cases:
                 break
@@ -192,7 +214,6 @@ class TestRailConnector(LoadConnector, PollConnector):
 
             if len(cases) < limit:
                 break
-            offset += limit
 
     def _build_case_link(self, project_id: int, case_id: int) -> str:
         # Standard UI link to a case
@@ -226,23 +247,31 @@ class TestRailConnector(LoadConnector, PollConnector):
             text_lines.append(f"Case ID: {case_key}")
         if case_id is not None:
             text_lines.append(f"ID: {case_id}")
-        if case.get("type_id") is not None:
-            text_lines.append(f"Type ID: {case['type_id']}")
-        if case.get("priority_id") is not None:
-            text_lines.append(f"Priority ID: {case['priority_id']}")
-        if case.get("estimate"):
-            text_lines.append(f"Estimate: {case['estimate']}")
         if case.get("refs"):
             text_lines.append(f"Refs: {case['refs']}")
+        doc_link = case.get("custom_documentation_link")
+        if doc_link:
+            text_lines.append(f"Documentation: {doc_link}")
         pre = self._sanitize_rich_text(case.get("custom_preconds"))
         if pre:
             text_lines.append(f"Preconditions: {pre}")
-        steps = self._sanitize_rich_text(case.get("custom_steps"))
-        if steps:
-            text_lines.append(f"Steps: {steps}")
-        exp = self._sanitize_rich_text(case.get("custom_expected"))
-        if exp:
-            text_lines.append(f"Expected: {exp}")
+        # Steps: only use separated steps format
+        steps_separated = case.get("custom_steps_separated")
+        if isinstance(steps_separated, list) and steps_separated:
+            rendered_steps: list[str] = []
+            for idx, step_item in enumerate(steps_separated, start=1):
+                step_content = self._sanitize_rich_text(step_item.get("content"))
+                step_expected = self._sanitize_rich_text(step_item.get("expected"))
+                parts: list[str] = []
+                if step_content:
+                    parts.append(f"Step {idx}: {step_content}")
+                else:
+                    parts.append(f"Step {idx}:")
+                if step_expected:
+                    parts.append(f"Expected: {step_expected}")
+                rendered_steps.append("\n".join(parts))
+            if rendered_steps:
+                text_lines.append("Steps:\n" + "\n".join(rendered_steps))
 
         link = self._build_case_link(project_id, case_id)
 
@@ -278,11 +307,6 @@ class TestRailConnector(LoadConnector, PollConnector):
         # Include the human-friendly case key in identifiers for easier search
         display_title = f"{case_key}: {title}" if case_key else title
 
-        # Apply truncation if needed
-        if len(full_text) > MAX_DOC_CHARS:
-            doc_metadata["truncated"] = "true"
-            full_text = full_text[:MAX_DOC_CHARS] + "\n[Truncated due to size]"
-
         return Document(
             id=f"TESTRAIL_CASE_{case_id}",
             source=DocumentSource.TESTRAIL,
@@ -308,15 +332,15 @@ class TestRailConnector(LoadConnector, PollConnector):
         project_filter: list[int] | None = self.project_ids
 
         for project in projects:
-            pid = project.get("id")
-            if project_filter and pid not in project_filter:
+            project_id = project.get("id")
+            if project_filter and project_id not in project_filter:
                 continue
 
-            suites = self._list_suites(pid)
+            suites = self._list_suites(project_id)
             if suites:
                 for s in suites:
-                    sid = s.get("id")
-                    for case in self._iter_cases(pid, sid, start, end):
+                    suite_id = s.get("id")
+                    for case in self._iter_cases(project_id, suite_id, start, end):
                         doc = self._doc_from_case(project, case, s)
                         if doc is None:
                             continue
@@ -326,7 +350,7 @@ class TestRailConnector(LoadConnector, PollConnector):
                             doc_batch = []
             else:
                 # single-suite mode fallback
-                for case in self._iter_cases(pid, None, start, end):
+                for case in self._iter_cases(project_id, None, start, end):
                     doc = self._doc_from_case(project, case, None)
                     if doc is None:
                         continue
@@ -350,28 +374,25 @@ class TestRailConnector(LoadConnector, PollConnector):
 
 
 if __name__ == "__main__":
-    # Simple local test harness similar to other connectors.
-    # Env vars (examples):
-    #   TESTRAIL_BASE_URL=https://yourcompany.testrail.io
-    #   TESTRAIL_USERNAME=you@example.com
-    #   TESTRAIL_API_KEY=your_api_key_or_password
-    #   TESTRAIL_PROJECT_ID=123            (optional)
-    import os
-
-    base = os.environ.get("TESTRAIL_BASE_URL", "").strip()
-    user = os.environ.get("TESTRAIL_USERNAME", "").strip()
-    key = os.environ.get("TESTRAIL_API_KEY", "").strip()
-    project_id = os.environ.get("TESTRAIL_PROJECT_ID")
-
-    cred = {
-        "testrail_base_url": base,
-        "testrail_username": user,
-        "testrail_api_key": key,
-    }
-    connector = TestRailConnector(
-        project_ids=[int(project_id)] if project_id else None,
+    from onyx.configs.app_configs import (
+        TESTRAIL_API_KEY,
+        TESTRAIL_BASE_URL,
+        TESTRAIL_PROJECT_ID,
+        TESTRAIL_USERNAME,
     )
-    connector.load_credentials(cred)
+
+    connector = TestRailConnector(
+        project_ids=[int(TESTRAIL_PROJECT_ID)] if TESTRAIL_PROJECT_ID else None,
+    )
+
+    connector.load_credentials(
+        {
+            "testrail_base_url": TESTRAIL_BASE_URL,
+            "testrail_username": TESTRAIL_USERNAME,
+            "testrail_api_key": TESTRAIL_API_KEY,
+        }
+    )
+
     connector.validate_connector_settings()
 
     # Probe a tiny batch from load

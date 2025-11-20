@@ -581,6 +581,29 @@ EXPERIMENTAL_CHECKPOINTING_ENABLED = (
     os.environ.get("EXPERIMENTAL_CHECKPOINTING_ENABLED", "").lower() == "true"
 )
 
+# TestRail connector pagination
+TESTRAIL_CASES_PAGE_SIZE = int(
+    os.environ.get("TESTRAIL_CASES_PAGE_SIZE")
+    or 250
+)
+
+# Maximum number of paginated calls to make when fetching TestRail cases
+TESTRAIL_MAX_PAGES = int(os.environ.get("TESTRAIL_MAX_PAGES") or 10000)
+
+# TestRail connector size limits
+# Skip documents entirely if they exceed this many characters (chunker will handle normal-sized docs)
+TESTRAIL_SKIP_DOC_ABSOLUTE_CHARS = int(
+    os.environ.get("TESTRAIL_SKIP_DOC_ABSOLUTE_CHARS") or 200000
+)
+
+# TestRail connector test harness configuration
+TESTRAIL_BASE_URL = os.environ.get("TESTRAIL_BASE_URL", "")
+TESTRAIL_USERNAME = os.environ.get("TESTRAIL_USERNAME", "")
+TESTRAIL_API_KEY = os.environ.get("TESTRAIL_API_KEY", "")
+# Can be single ID (19) or comma-separated (19,20) for testing with specific projects
+TESTRAIL_PROJECT_ID = os.environ.get("TESTRAIL_PROJECT_ID")
+
+
 LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE = (
     os.environ.get("LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE", "").lower()
     == "true"
