@@ -103,6 +103,8 @@ inferenceCapability:
     privileged: true
     runAsUser: 0
   nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 indexCapability:
   service:
@@ -137,6 +139,8 @@ indexCapability:
     privileged: true
     runAsUser: 0
   nodeSelector: {}
+  tolerations: []
+  affinity: {}
 config:
   envConfigMapName: env-configmap
 
@@ -677,6 +681,8 @@ slackbot:
       cpu: "1000m"
       memory: "2000Mi"
   nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 celery_worker_docfetching:
   replicaCount: 1
