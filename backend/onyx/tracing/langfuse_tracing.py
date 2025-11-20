@@ -2,7 +2,6 @@ from typing import cast
 
 from openinference.instrumentation import OITracer
 from openinference.instrumentation import TraceConfig
-from openinference.instrumentation.openai_agents.version import __version__
 from opentelemetry import trace as trace_api
 
 from onyx.configs.app_configs import LANGFUSE_PUBLIC_KEY
@@ -27,7 +26,7 @@ def setup_langfuse_if_creds_available() -> None:
     config = TraceConfig()
     tracer_provider = trace_api.get_tracer_provider()
     tracer = OITracer(
-        trace_api.get_tracer(__name__, __version__, tracer_provider),
+        trace_api.get_tracer(__name__, tracer_provider=tracer_provider),
         config=config,
     )
 

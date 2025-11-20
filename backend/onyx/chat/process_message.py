@@ -13,7 +13,7 @@ from agents import ModelSettings
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_sdk.message_format import (
+from onyx.agents.agent_framework.message_format import (
     base_messages_to_chat_completion_msgs,
 )
 from onyx.chat.answer import Answer
