@@ -35,7 +35,7 @@ export function CustomAnalyticsUpdateForm() {
           e.preventDefault();
 
           const response = await fetch(
-            "/api/admin/enterprise-settings/custom-analytics-script",
+            "/api/admin/settings/custom-analytics-script",
             {
               method: "PUT",
               headers: {
