@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+from pytest import MonkeyPatch
+
 from onyx.background.celery.tasks.docprocessing import tasks as docprocessing_tasks
 from onyx.db.enums import ConnectorCredentialPairStatus
 
@@ -8,7 +10,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 def _build_cc_pair(
     refresh_freq: int | None,
     status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
-):
+) -> SimpleNamespace:
     connector = SimpleNamespace(refresh_freq=refresh_freq)
     return SimpleNamespace(
         id=42,
@@ -18,10 +20,12 @@ def _build_cc_pair(
     )
 
 
-def test_auto_pause_pauses_active_connector_in_multi_tenant(monkeypatch):
-    session = Mock()
+def test_auto_pause_pauses_active_connector_in_multi_tenant(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    session: Mock = Mock()
     cc_pair = _build_cc_pair(refresh_freq=3600)
-    patched_get = Mock(return_value=cc_pair)
+    patched_get: Mock = Mock(return_value=cc_pair)
 
     monkeypatch.setattr(docprocessing_tasks, "MULTI_TENANT", True)
     monkeypatch.setattr(
@@ -37,14 +41,16 @@ def test_auto_pause_pauses_active_connector_in_multi_tenant(monkeypatch):
     )
 
     assert cc_pair.status == ConnectorCredentialPairStatus.PAUSED
-    session.commit.assert_called_once()
+    session.commit.assert_called_once()  # type: ignore[attr-defined]
     patched_get.assert_called_once()
 
 
-def test_auto_pause_skips_if_refresh_freq_missing(monkeypatch):
-    session = Mock()
+def test_auto_pause_skips_if_refresh_freq_missing(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    session: Mock = Mock()
     cc_pair = _build_cc_pair(refresh_freq=None)
-    patched_get = Mock(return_value=cc_pair)
+    patched_get: Mock = Mock(return_value=cc_pair)
 
     monkeypatch.setattr(docprocessing_tasks, "MULTI_TENANT", True)
     monkeypatch.setattr(
@@ -60,14 +66,16 @@ def test_auto_pause_skips_if_refresh_freq_missing(monkeypatch):
     )
 
     assert cc_pair.status == ConnectorCredentialPairStatus.ACTIVE
-    session.commit.assert_not_called()
+    session.commit.assert_not_called()  # type: ignore[attr-defined]
     patched_get.assert_called_once()
 
 
-def test_auto_pause_noop_when_not_multi_tenant(monkeypatch):
-    session = Mock()
+def test_auto_pause_noop_when_not_multi_tenant(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    session: Mock = Mock()
     cc_pair = _build_cc_pair(refresh_freq=3600)
-    patched_get = Mock(return_value=cc_pair)
+    patched_get: Mock = Mock(return_value=cc_pair)
 
     monkeypatch.setattr(docprocessing_tasks, "MULTI_TENANT", False)
     monkeypatch.setattr(
@@ -83,5 +91,5 @@ def test_auto_pause_noop_when_not_multi_tenant(monkeypatch):
     )
 
     assert cc_pair.status == ConnectorCredentialPairStatus.ACTIVE
-    session.commit.assert_not_called()
+    session.commit.assert_not_called()  # type: ignore[attr-defined]
     patched_get.assert_not_called()
