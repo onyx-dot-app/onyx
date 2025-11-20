@@ -60,6 +60,8 @@ import { useUser } from "@/components/user/UserProvider";
 import SvgSettings from "@/icons/settings";
 import { useAppFocus } from "@/lib/hooks";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useScreenSize } from "@/hooks/useScreenSize";
+import { useMobileSidebar } from "@/refresh-components/contexts/MobileSidebarContext";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -501,7 +503,46 @@ function AppSidebarInner() {
   );
 }
 
-const AppSidebar = memo(AppSidebarInner);
-AppSidebar.displayName = "AppSidebar";
+const MemoizedAppSidebarInner = memo(AppSidebarInner);
+MemoizedAppSidebarInner.displayName = "AppSidebar";
 
-export default AppSidebar;
+const MOBILE_SIDEBAR_BREAKPOINT_PX = 640;
+
+export default function AppSidebar() {
+  const { width } = useScreenSize();
+  const { isMobileSidebarOpen, closeSidebar } = useMobileSidebar();
+  const isCompact =
+    width !== undefined ? width <= MOBILE_SIDEBAR_BREAKPOINT_PX : false;
+
+  if (!isCompact) {
+    return (
+      <div className="flex-shrink-0">
+        <MemoizedAppSidebarInner />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 max-w-full transition-transform duration-200",
+          isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <div className="h-full overflow-y-auto">
+          <MemoizedAppSidebarInner />
+        </div>
+      </div>
+      <div
+        className={cn(
+          "fixed inset-0 z-40 transition-opacity duration-200",
+          isMobileSidebarOpen
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
+        )}
+        onClick={closeSidebar}
+      />
+    </>
+  );
+}
