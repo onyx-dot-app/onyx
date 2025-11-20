@@ -6,11 +6,11 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
-from connectors.models import ConnectorMissingCredentialError
-from connectors.models import Document
 
 from onyx.connectors.hubspot.connector import AVAILABLE_OBJECT_TYPES
 from onyx.connectors.hubspot.connector import HubSpotConnector
+from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import Document
 
 
 class TestHubSpotConnector:
