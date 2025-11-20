@@ -309,7 +309,7 @@ jobs:
           name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
 
-  required:
+  playwright-required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     needs: [playwright-tests]
