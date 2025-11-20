@@ -86,5 +86,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Preserve any manually configured Exa provider rows; nothing to undo here.
     return
