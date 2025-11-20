@@ -109,7 +109,7 @@ Resources:
       Family: !Sub ${Environment}-${ServiceName}-TaskDefinition
       ContainerDefinitions:
         - Name: nginx
-          Image: nginx:1.25.4-alpine
+          Image: nginx:1.25.5-alpine
           Cpu: 0
           PortMappings:
             - Name: nginx-80-tcp
