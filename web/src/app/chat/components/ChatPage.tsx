@@ -74,7 +74,7 @@ import { Suggestions } from "@/sections/Suggestions";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
 import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
-import * as Layouts from "@/refresh-components/layouts/layouts";
+import AppPageLayout from "@/layouts/AppPageLayout";
 import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
@@ -794,7 +794,7 @@ export default function ChatPage({
 
       <div className="flex h-full w-full flex-row-reverse">
         {desktopDocumentSidebar}
-        <Layouts.AppPage
+        <AppPageLayout
           settings={headerData.settings}
           chatSession={headerData.chatSession}
           className="flex flex-row h-full w-full"
@@ -966,7 +966,7 @@ export default function ChatPage({
               )}
             </div>
           </div>
-        </Layouts.AppPage>
+        </AppPageLayout>
       </div>
     </>
   );
