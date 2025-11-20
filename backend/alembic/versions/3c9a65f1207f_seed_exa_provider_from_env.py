@@ -13,6 +13,7 @@ import os
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from dotenv import load_dotenv, find_dotenv
 
 from onyx.utils.encryption import encrypt_string_to_bytes
 
@@ -22,7 +23,7 @@ branch_labels = None
 depends_on = None
 
 
-EXA_PROVIDER_NAME = "Exa (auto-imported)"
+EXA_PROVIDER_NAME = "Exa"
 
 
 def _get_internet_search_table(metadata: sa.MetaData) -> sa.Table:
@@ -35,10 +36,24 @@ def _get_internet_search_table(metadata: sa.MetaData) -> sa.Table:
         sa.Column("api_key", sa.LargeBinary),
         sa.Column("config", postgresql.JSONB),
         sa.Column("is_active", sa.Boolean),
+        sa.Column(
+            "time_created",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "time_updated",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
     )
 
 
 def upgrade() -> None:
+    load_dotenv(find_dotenv())
+
     exa_api_key = os.environ.get("EXA_API_KEY")
     if not exa_api_key:
         return
