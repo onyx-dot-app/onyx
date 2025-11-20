@@ -769,6 +769,105 @@ minio:
     type: ClusterIP
     port: 9001
 
+# PgBouncer configuration for connection pooling
+# When enabled, all database connections will be routed through PgBouncer
+# This reduces the number of direct connections to PostgreSQL and improves scalability
+pgbouncer:
+  # -- Enable or disable PgBouncer. When disabled, applications connect directly to PostgreSQL
+  enabled: false
+
+  # -- Number of PgBouncer replicas to run (1-2 recommended for HA)
+  replicaCount: 1
+
+  image:
+    repository: pgbouncer/pgbouncer
+    tag: "1.23.1"
+    pullPolicy: IfNotPresent
+
+  # PgBouncer connection pooling configuration
+  config:
+    # -- Pool mode: session, transaction, or statement
+    # session: Full PostgreSQL feature support, one server connection per client
+    # transaction: Recommended - Server connection returned after transaction ends
+    # statement: Most restrictive - Server connection returned after each statement
+    poolMode: "transaction"
+
+    # -- Maximum number of client connections allowed
+    maxClientConn: 1000
+
+    # -- Default number of server connections to allow per database/user pair
+    defaultPoolSize: 25
+
+    # -- Minimum pool size. If pool size drops below this, new connections are created
+    minPoolSize: 5
+
+    # -- How many additional connections to allow to a pool (per user/database pair)
+    reservePoolSize: 5
+
+    # -- If a client has been waiting this many seconds, use reserve pool
+    reservePoolTimeout: 5
+
+    # -- Maximum number of server connections per database (0 = unlimited)
+    maxDbConnections: 0
+
+    # -- Close server connection if it has been idle for this many seconds
+    serverIdleTimeout: 600
+
+    # -- Close server connection if it has been connected for this many seconds
+    serverLifetime: 3600
+
+    # -- Log connections
+    logConnections: 1
+
+    # -- Log disconnections with reasons
+    logDisconnections: 1
+
+    # -- Query to run on server connection release (transaction mode)
+    serverResetQuery: "DISCARD ALL"
+
+    # -- How long to wait before checking server health (seconds)
+    serverCheckDelay: 30
+
+    # -- Query timeout (0 = disabled)
+    queryTimeout: 0
+
+    # -- Close client connection if it has been idle this many seconds (0 = disabled)
+    clientIdleTimeout: 0
+
+    # -- Authentication type for PgBouncer (scram-sha-256, md5, or trust)
+    authType: "scram-sha-256"
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 5432
+    targetPort: 5432
+
+  # Resource limits for PgBouncer pods
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # PostgreSQL backend configuration
+  # By default, uses the postgresql configuration from this chart
+  postgresql:
+    # -- Override PostgreSQL host (leave empty to use chart's postgresql)
+    host: ""
+    # -- PostgreSQL port
+    port: 5432
+    # -- Override database name (leave empty to use POSTGRES_DB from secrets)
+    database: ""
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 ingress:
   enabled: false
   className: ""

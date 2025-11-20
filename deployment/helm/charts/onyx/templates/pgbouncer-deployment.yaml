@@ -1,0 +1,95 @@
+{{- if .Values.pgbouncer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx.fullname" . }}-pgbouncer
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app: pgbouncer
+spec:
+  replicas: {{ .Values.pgbouncer.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app: pgbouncer
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/pgbouncer-configmap.yaml") . | sha256sum }}
+        {{- with .Values.pgbouncer.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "onyx.selectorLabels" . | nindent 8 }}
+        app: pgbouncer
+        {{- with .Values.pgbouncer.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      {{- with .Values.pgbouncer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.pgbouncer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.pgbouncer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: pgbouncer
+        image: "{{ .Values.pgbouncer.image.repository }}:{{ .Values.pgbouncer.image.tag }}"
+        imagePullPolicy: {{ .Values.pgbouncer.image.pullPolicy }}
+        ports:
+        - name: pgbouncer
+          containerPort: {{ .Values.pgbouncer.service.targetPort }}
+          protocol: TCP
+        livenessProbe:
+          tcpSocket:
+            port: pgbouncer
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: pgbouncer
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          {{- toYaml .Values.pgbouncer.resources | nindent 10 }}
+        volumeMounts:
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer
+          readOnly: true
+        env:
+        - name: PGBOUNCER_CONFIG_FILE
+          value: /etc/pgbouncer/pgbouncer.ini
+        - name: PGBOUNCER_AUTH_FILE
+          value: /etc/pgbouncer/userlist.txt
+        {{- if .Values.auth.postgresql.enabled }}
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "onyx.secretName" .Values.auth.postgresql }}
+              key: {{ .Values.auth.postgresql.secretKeys.POSTGRES_USER }}
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "onyx.secretName" .Values.auth.postgresql }}
+              key: {{ .Values.auth.postgresql.secretKeys.POSTGRES_PASSWORD }}
+        {{- end }}
+      volumes:
+      - name: pgbouncer-config
+        configMap:
+          name: {{ include "onyx.fullname" . }}-pgbouncer-config
+{{- end }}

@@ -222,23 +222,49 @@ POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
 AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
 
-POSTGRES_API_SERVER_POOL_SIZE = int(
-    os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 40
-)
-POSTGRES_API_SERVER_POOL_OVERFLOW = int(
-    os.environ.get("POSTGRES_API_SERVER_POOL_OVERFLOW") or 10
-)
+# PgBouncer configuration
+# When using PgBouncer, the connection pooling should be handled by PgBouncer itself,
+# so we reduce SQLAlchemy's pool size and enable NullPool mode to avoid double-pooling
+POSTGRES_USE_PGBOUNCER = os.environ.get("POSTGRES_USE_PGBOUNCER", "").lower() == "true"
 
-POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE = int(
-    os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE") or 10
-)
-POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW = int(
-    os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW") or 5
-)
-
-# defaults to False
-# generally should only be used for
-POSTGRES_USE_NULL_POOL = os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() == "true"
+# Adjust pool settings based on whether PgBouncer is enabled
+if POSTGRES_USE_PGBOUNCER:
+    # When using PgBouncer, use minimal SQLAlchemy pooling
+    # PgBouncer handles the connection pooling to PostgreSQL
+    POSTGRES_API_SERVER_POOL_SIZE = int(
+        os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 5
+    )
+    POSTGRES_API_SERVER_POOL_OVERFLOW = int(
+        os.environ.get("POSTGRES_API_SERVER_POOL_OVERFLOW") or 0
+    )
+    POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE = int(
+        os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE") or 5
+    )
+    POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW = int(
+        os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW") or 0
+    )
+    # Enable NullPool by default when using PgBouncer (can be overridden)
+    POSTGRES_USE_NULL_POOL = (
+        os.environ.get("POSTGRES_USE_NULL_POOL", "true").lower() == "true"
+    )
+else:
+    # Default pool settings for direct PostgreSQL connections
+    POSTGRES_API_SERVER_POOL_SIZE = int(
+        os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 40
+    )
+    POSTGRES_API_SERVER_POOL_OVERFLOW = int(
+        os.environ.get("POSTGRES_API_SERVER_POOL_OVERFLOW") or 10
+    )
+    POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE = int(
+        os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE") or 10
+    )
+    POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW = int(
+        os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW") or 5
+    )
+    # defaults to False for direct connections
+    POSTGRES_USE_NULL_POOL = (
+        os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() == "true"
+    )
 
 # defaults to False
 POSTGRES_POOL_PRE_PING = os.environ.get("POSTGRES_POOL_PRE_PING", "").lower() == "true"
