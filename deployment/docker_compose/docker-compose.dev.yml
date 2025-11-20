@@ -31,3 +31,7 @@ services:
     ports:
       - "9004:9000"
       - "9005:9001"
+
+  code-interpreter:
+    ports:
+      - "8000:8000"
