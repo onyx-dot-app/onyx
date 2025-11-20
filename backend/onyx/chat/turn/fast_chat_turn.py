@@ -43,7 +43,7 @@ from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.force import filter_tools_for_force_tool_use
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
-from onyx.tracing.create import trace
+from onyx.tracing.framework.create import trace
 
 
 MAX_ITERATIONS = 10
