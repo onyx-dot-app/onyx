@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.app_configs import MAX_SLACK_QUERY_EXPANSIONS
 from onyx.configs.chat_configs import DOC_TIME_DECAY
-from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import TextSection
 from onyx.context.search.federated.models import SlackMessage
@@ -34,6 +33,7 @@ from onyx.prompts.federated_search import SLACK_QUERY_EXPANSION_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
+from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
 logger = setup_logger()
 

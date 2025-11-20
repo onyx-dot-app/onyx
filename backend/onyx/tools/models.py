@@ -9,6 +9,7 @@ from pydantic import model_validator
 from onyx.chat.turn.infra.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
+from onyx.configs.constants import MessageType
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDocsResponse
@@ -79,6 +80,11 @@ class ToolCallFinalResult(ToolCallKickoff):
     level_question_num: int | None = None
 
 
+class ChatMinimalTextMessage(BaseModel):
+    message: str
+    message_type: MessageType
+
+
 class DynamicSchemaInfo(BaseModel):
     chat_session_id: UUID | None
     message_id: int | None
@@ -96,7 +102,13 @@ class SearchToolOverrideKwargs(BaseModel):
     starting_citation_num: int
     # This is needed because the LLM won't be able to do a really detailed semantic query well
     original_query: str | None = None
+    message_history: list[ChatMinimalTextMessage] | None = None
+    memories: list[str] | None = None
+    user_info: str | None = None
+
+    # Number of results to return in the richer object format so that it can be rendered in the UI
     num_hits: int | None = NUM_RETURNED_HITS
+    # Number of chunks (token approx) to include in the string to the LLM
     max_llm_chunks: int | None = MAX_CHUNKS_FED_TO_CHAT
 
     class Config:

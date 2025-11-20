@@ -170,14 +170,8 @@ def get_query_embedding(query: str, db_session: Session) -> Embedding:
 def convert_inference_sections_to_search_docs(
     inference_sections: list[InferenceSection],
     is_internet: bool = False,
-) -> list[SavedSearchDoc]:
-    # Convert InferenceSections to SavedSearchDocs
+) -> list[SearchDoc]:
     search_docs = SearchDoc.from_chunks_or_sections(inference_sections)
     for search_doc in search_docs:
         search_doc.is_internet = is_internet
-
-    retrieved_saved_search_docs = [
-        SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
-        for search_doc in search_docs
-    ]
-    return retrieved_saved_search_docs
+    return search_docs

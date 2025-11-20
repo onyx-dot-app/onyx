@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 
 
 class StreamingType(Enum):
@@ -99,7 +100,9 @@ class SearchToolDocumentsDelta(BaseObj):
         StreamingType.SEARCH_TOOL_DOCUMENTS_DELTA.value
     )
 
-    documents: list[SavedSearchDoc]
+    # This cannot be the SavedSearchDoc as this is yielded by the SearchTool which does not
+    # save documents to the DB.
+    documents: list[SearchDoc]
 
 
 # This only needs to show which URLs are being fetched
@@ -107,7 +110,7 @@ class SearchToolDocumentsDelta(BaseObj):
 class OpenUrl(BaseObj):
     type: Literal["open_url_start"] = StreamingType.OPEN_URL_START.value
 
-    documents: list[SavedSearchDoc]
+    documents: list[SearchDoc]
 
 
 # Image generation starting, needs to allocate a placeholder block for it on the UI

@@ -163,7 +163,7 @@ class BasicChunkRequest(BaseModel):
 
     # Sometimes we may want to extract specific keywords from a more semantic query for
     # a better keyword search.
-    query_keywords: list[str] | None = None
+    query_keywords: list[str] | None = None  # Not used currently
 
     limit: int | None = None
     offset: int | None = None  # This one is not set currently
@@ -182,6 +182,13 @@ class ChunkSearchRequest(BasicChunkRequest):
 class ChunkIndexRequest(BasicChunkRequest):
     # Calculated final filters
     filters: IndexFilters
+
+
+class ContextExpansionType(str, Enum):
+    NOT_RELEVANT = "not_relevant"
+    MAIN_SECTION_ONLY = "main_section_only"
+    INCLUDE_ADJACENT_SECTIONS = "include_adjacent_sections"
+    FULL_DOCUMENT = "full_document"
 
 
 class SearchRequest(ChunkContext):
@@ -437,6 +444,7 @@ class SearchDoc(BaseModel):
 
 class SearchDocsResponse(BaseModel):
     search_docs: list[SearchDoc]
+    citation_mapping: dict[int, str]
 
 
 class SavedSearchDoc(SearchDoc):

@@ -432,16 +432,21 @@ def _embed_and_search(
 ) -> list[InferenceChunk]:
     query_embedding = get_query_embedding(query_request.query, db_session)
 
+    hybrid_alpha = query_request.hybrid_alpha or HYBRID_ALPHA
+
     top_chunks = document_index.hybrid_retrieval(
         query=query_request.query,
         query_embedding=query_embedding,
         final_keywords=query_request.query_keywords,
         filters=query_request.filters,
-        hybrid_alpha=query_request.hybrid_alpha or HYBRID_ALPHA,
+        hybrid_alpha=hybrid_alpha,
         time_decay_multiplier=query_request.recency_bias_multiplier,
         num_to_retrieve=query_request.limit or NUM_RETURNED_HITS,
-        # Hardcoded to this for now
-        ranking_profile_type=QueryExpansionType.SEMANTIC,
+        ranking_profile_type=(
+            QueryExpansionType.KEYWORD
+            if hybrid_alpha <= 0.3
+            else QueryExpansionType.SEMANTIC
+        ),
         offset=query_request.offset or 0,
     )
 
