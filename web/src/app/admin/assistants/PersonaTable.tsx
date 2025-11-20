@@ -185,7 +185,7 @@ export function PersonasTable({
 
           const title = isDefault
             ? "Remove Featured Assistant"
-            : "Set Featurd Assistant";
+            : "Set Featured Assistant";
           const buttonText = isDefault ? "Remove Feature" : "Set as Featured";
           const text = isDefault
             ? `Are you sure you want to remove the featured status of ${personaToToggleDefault.name}?`

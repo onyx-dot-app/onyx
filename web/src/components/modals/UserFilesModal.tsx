@@ -17,7 +17,7 @@ import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
-import { Modal } from "@/refresh-components/Modal";
+import Modal from "@/refresh-components/Modal";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 
@@ -174,7 +174,7 @@ export default function UserFilesModal({
 
       <Modal open={isOpen} onOpenChange={toggle}>
         <Modal.Content
-          size="tall"
+          tall
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             searchInputRef.current?.focus();

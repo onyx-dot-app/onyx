@@ -544,15 +544,27 @@ test.describe("Default Assistant Admin Page", () => {
   test("should toggle all tools and verify in chat", async ({ page }) => {
     const apiClient = new OnyxApiClient(page);
     let webSearchProviderId: number | null = null;
+    let imageGenProviderId: number | null = null;
 
     try {
       // Set up a web search provider so the tool is available
-      webSearchProviderId = await apiClient.createWebSearchProvider("exa");
+      webSearchProviderId = await apiClient.createWebSearchProvider(
+        "exa",
+        `Test Web Search Provider ${Date.now()}`
+      );
+      // Set up an image generation provider (OpenAI LLM provider) so the tool is available
+      imageGenProviderId = await apiClient.createImageGenProvider(
+        `Test Image Gen Provider ${Date.now()}`
+      );
     } catch (error) {
       console.warn(
-        `Failed to create web search provider for test: ${error}. Test may fail if web search is required.`
+        `Failed to create tool providers for test: ${error}. Test may fail if tools are required.`
       );
     }
+
+    // Reload the admin page to pick up the newly created providers
+    await page.reload();
+    await page.waitForLoadState("networkidle");
 
     await page.waitForSelector("text=Internal Search", { timeout: 10000 });
 
@@ -598,10 +610,15 @@ test.describe("Default Assistant Admin Page", () => {
     try {
       await openActionManagement(page);
       // If we can open it, check that tools are disabled
-      expect(await page.$(TOOL_IDS.searchOption)).toBeFalsy();
-      expect(await page.$(TOOL_IDS.webSearchOption)).toBeFalsy();
-      expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeFalsy();
-      // Image generation might still show as disabled
+      await expect(page.locator(TOOL_IDS.searchOption)).not.toBeVisible({
+        timeout: 10000,
+      });
+      await expect(page.locator(TOOL_IDS.webSearchOption)).not.toBeVisible({
+        timeout: 10000,
+      });
+      await expect(
+        page.locator(TOOL_IDS.imageGenerationOption)
+      ).not.toBeVisible({ timeout: 10000 });
     } catch {
       // If Action Management can't be opened, that's also acceptable
       // when all tools are disabled
@@ -631,12 +648,24 @@ test.describe("Default Assistant Admin Page", () => {
 
     // Navigate to chat and verify the Action Management toggle and actions exist
     await page.goto("http://localhost:3000/chat");
+    await page.waitForLoadState("networkidle");
+    // Reload to ensure ChatContext has fresh tool data after providers were created
+    await page.reload();
+    await page.waitForLoadState("networkidle");
     await waitForUnifiedGreeting(page);
     await expect(page.locator(TOOL_IDS.actionToggle)).toBeVisible();
     await openActionManagement(page);
-    expect(await page.$(TOOL_IDS.searchOption)).toBeTruthy();
-    expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
-    expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
+
+    // Wait for all tool options to be visible before checking
+    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.locator(TOOL_IDS.webSearchOption)).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.locator(TOOL_IDS.imageGenerationOption)).toBeVisible({
+      timeout: 10000,
+    });
 
     await page.goto(
       "http://localhost:3000/admin/configuration/default-assistant"
@@ -669,6 +698,17 @@ test.describe("Default Assistant Admin Page", () => {
       } catch (error) {
         console.warn(
           `Failed to delete web search provider ${webSearchProviderId}: ${error}`
+        );
+      }
+    }
+
+    // Clean up image generation provider
+    if (imageGenProviderId !== null) {
+      try {
+        await apiClient.deleteProvider(imageGenProviderId);
+      } catch (error) {
+        console.warn(
+          `Failed to delete image generation provider ${imageGenProviderId}: ${error}`
         );
       }
     }
