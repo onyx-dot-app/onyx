@@ -121,6 +121,7 @@ function DefaultAssistantConfig() {
     <div>
       {popup}
       <Formik
+        enableReinitialize
         initialValues={{
           enabled_tools_map: enabledToolsMap,
           system_prompt: config.system_prompt,
