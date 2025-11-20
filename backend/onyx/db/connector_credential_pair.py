@@ -442,10 +442,17 @@ def set_cc_pair_repeated_error_state(
     cc_pair_id: int,
     in_repeated_error_state: bool,
 ) -> None:
+    values: dict = {"in_repeated_error_state": in_repeated_error_state}
+
+    # When entering repeated error state, also pause the connector
+    # to prevent continued indexing retry attempts
+    if in_repeated_error_state:
+        values["status"] = ConnectorCredentialPairStatus.PAUSED
+
     stmt = (
         update(ConnectorCredentialPair)
         .where(ConnectorCredentialPair.id == cc_pair_id)
-        .values(in_repeated_error_state=in_repeated_error_state)
+        .values(**values)
     )
     db_session.execute(stmt)
     db_session.commit()
