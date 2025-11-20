@@ -6,13 +6,7 @@ from typing import Any, ClassVar, Iterator, Optional
 import requests
 from bs4 import BeautifulSoup
 
-from onyx.configs.app_configs import (
-    INDEX_BATCH_SIZE,
-    TESTRAIL_CASES_PAGE_SIZE,
-    TESTRAIL_MAX_PAGES,
-    TESTRAIL_PROJECT_ID,
-    TESTRAIL_SKIP_DOC_ABSOLUTE_CHARS,
-)
+from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
@@ -37,8 +31,6 @@ from onyx.file_processing.html_utils import format_document_soup
 
 logger = setup_logger()
 
-# Size management (configurable via environment variables)
-SKIP_DOC_ABSOLUTE_CHARS = TESTRAIL_SKIP_DOC_ABSOLUTE_CHARS  # skip documents entirely above this size
 
 
 class TestRailConnector(LoadConnector, PollConnector):
@@ -53,29 +45,21 @@ class TestRailConnector(LoadConnector, PollConnector):
         self,
         batch_size: int = INDEX_BATCH_SIZE,
         project_ids: list[int] | None = None,
+        cases_page_size: int | None = None,
+        max_pages: int | None = None,
+        skip_doc_absolute_chars: int | None = None,
     ) -> None:
         self.base_url: str | None = None
         self.username: str | None = None
         self.api_key: str | None = None
         self.batch_size = batch_size
-
-        # Allow env var override for testing (e.g., TESTRAIL_PROJECT_ID=19 or 19,20)
-        if TESTRAIL_PROJECT_ID and not project_ids:
-            try:
-                self.project_ids = [
-                    int(pid.strip())
-                    for pid in TESTRAIL_PROJECT_ID.split(",")
-                ]
-                logger.info(
-                    f"Using TESTRAIL_PROJECT_ID override: {self.project_ids}"
-                )
-            except ValueError:
-                logger.warning(
-                    f"Invalid TESTRAIL_PROJECT_ID format: {TESTRAIL_PROJECT_ID}"
-                )
-                self.project_ids = project_ids
-        else:
-            self.project_ids = project_ids
+        self.project_ids = project_ids
+        # Use provided values or fall back to defaults
+        self.cases_page_size = cases_page_size if cases_page_size is not None else 250
+        self.max_pages = max_pages if max_pages is not None else 10000
+        self.skip_doc_absolute_chars = (
+            skip_doc_absolute_chars if skip_doc_absolute_chars is not None else 200000
+        )
 
     # --- Rich text sanitization helpers ---
     # Note: TestRail stores some fields as HTML (e.g. shared test steps).
@@ -193,9 +177,9 @@ class TestRailConnector(LoadConnector, PollConnector):
         end: Optional[SecondsSinceUnixEpoch] = None,
     ) -> Iterator[dict[str, Any]]:
         # Pagination: TestRail supports 'limit' and 'offset' for many list endpoints
-        limit = TESTRAIL_CASES_PAGE_SIZE
+        limit = self.cases_page_size
         # Use a bounded page loop to avoid infinite loops on API anomalies
-        for page_index in range(TESTRAIL_MAX_PAGES):
+        for page_index in range(self.max_pages):
             offset = page_index * limit
             cases = self._get_cases(project_id, suite_id, limit, offset)
 
@@ -277,7 +261,7 @@ class TestRailConnector(LoadConnector, PollConnector):
 
         # Build full text and apply size policies
         full_text = "\n".join(text_lines)
-        if len(full_text) > SKIP_DOC_ABSOLUTE_CHARS:
+        if len(full_text) > self.skip_doc_absolute_chars:
             logger.warning(
                 f"Skipping TestRail case {case_id} due to excessive size: {len(full_text)} chars"
             )
@@ -377,13 +361,10 @@ if __name__ == "__main__":
     from onyx.configs.app_configs import (
         TESTRAIL_API_KEY,
         TESTRAIL_BASE_URL,
-        TESTRAIL_PROJECT_ID,
         TESTRAIL_USERNAME,
     )
 
-    connector = TestRailConnector(
-        project_ids=[int(TESTRAIL_PROJECT_ID)] if TESTRAIL_PROJECT_ID else None,
-    )
+    connector = TestRailConnector()
 
     connector.load_credentials(
         {
