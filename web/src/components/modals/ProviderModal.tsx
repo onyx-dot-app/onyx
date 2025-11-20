@@ -1,13 +1,11 @@
 import React from "react";
-import Text from "@/refresh-components/texts/Text";
 
 import Button from "@/refresh-components/buttons/Button";
-import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
-import { Modal } from "@/refresh-components/Modal";
+import Modal from "@/refresh-components/Modal";
 import SvgLoader from "@/icons/loader";
 
-interface ProviderModalProps {
+export interface ProviderModalProps {
   // Modal configurations
   clickOutsideToClose?: boolean;
 
@@ -15,7 +13,6 @@ interface ProviderModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   icon?: React.FunctionComponent<SvgProps>;
-  startAdornment?: React.ReactNode;
   title: string;
   description?: string;
   className?: string;
@@ -33,7 +30,6 @@ export default function ProviderModal({
   open,
   onOpenChange,
   icon: Icon,
-  startAdornment,
   title,
   description,
   children,
@@ -70,15 +66,11 @@ export default function ProviderModal({
 
   return (
     <Modal open={open} onOpenChange={handleOpenChange}>
-      <Modal.Content size="tall" onKeyDown={handleKeyDown}>
+      <Modal.Content tall onKeyDown={handleKeyDown}>
         <Modal.CloseButton />
 
         <Modal.Header className="flex flex-col gap-2 p-4">
-          {Icon ? (
-            <Modal.Icon icon={Icon} />
-          ) : startAdornment ? (
-            startAdornment
-          ) : null}
+          {Icon && <Modal.Icon icon={Icon} />}
           <Modal.Title>{title}</Modal.Title>
           {description && <Modal.Description>{description}</Modal.Description>}
         </Modal.Header>

@@ -1,3 +1,5 @@
+const plugin = require("tailwindcss/plugin");
+
 /** @type {import('tailwindcss').Config} */
 
 module.exports = {
@@ -293,5 +295,8 @@ module.exports = {
     require("@tailwindcss/typography"),
     require("@headlessui/tailwindcss"),
     require("tailwindcss-animate"),
+    plugin(({ addVariant }) => {
+      addVariant("focus-within-nonactive", "&:focus-within:not(:active)");
+    }),
   ],
 };

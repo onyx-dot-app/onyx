@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import { Callout } from "@/components/ui/callout";

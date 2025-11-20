@@ -1,6 +1,6 @@
 import { GREETING_MESSAGES } from "@/lib/chat/greetingMessages";
 import { test, expect } from "@chromatic-com/playwright";
-import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { loginAsRandomUser, loginAs } from "@tests/e2e/utils/auth";
 import {
   sendMessage,
   startNewChat,
@@ -252,17 +252,30 @@ test.describe("Default Assistant Tests", () => {
     test("should show web-search + image-generation tools options when clicked", async ({
       page,
     }) => {
+      // This test requires admin permissions to create tool providers
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await page.goto("http://localhost:3000/chat");
+      await page.waitForLoadState("networkidle");
+
       const apiClient = new OnyxApiClient(page);
       let webSearchProviderId: number | null = null;
 
       try {
         // Set up a web search provider so the tool is available
-        webSearchProviderId = await apiClient.createWebSearchProvider("exa");
+        webSearchProviderId = await apiClient.createWebSearchProvider(
+          "exa",
+          `Test Web Search Provider ${Date.now()}`
+        );
       } catch (error) {
         console.warn(
           `Failed to create web search provider for test: ${error}. Test may fail if web search is required.`
         );
       }
+
+      // Reload page to refresh ChatContext with new providers
+      await page.reload();
+      await page.waitForLoadState("networkidle");
 
       // Will NOT show the `internal-search` option since that will be excluded when there are no connectors connected.
       // (Since we removed pre-seeded docs, we will have NO connectors connected on a fresh install; therefore, `internal-search` will not be available.)

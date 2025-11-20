@@ -10,6 +10,9 @@ on:
         description: "The version (ie v1.0.0-beta.0) to tag as beta"
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   tag:
     # See https://runs-on.com/runners/linux/
@@ -29,13 +32,19 @@ jobs:
         run: echo "DOCKER_CLI_EXPERIMENTAL=enabled" >> $GITHUB_ENV
 
       - name: Pull, Tag and Push Web Server Image
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          docker buildx imagetools create -t onyxdotapp/onyx-web-server:beta onyxdotapp/onyx-web-server:${{ github.event.inputs.version }}
+          docker buildx imagetools create -t onyxdotapp/onyx-web-server:beta onyxdotapp/onyx-web-server:${VERSION}
 
       - name: Pull, Tag and Push API Server Image
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          docker buildx imagetools create -t onyxdotapp/onyx-backend:beta onyxdotapp/onyx-backend:${{ github.event.inputs.version }}
+          docker buildx imagetools create -t onyxdotapp/onyx-backend:beta onyxdotapp/onyx-backend:${VERSION}
 
       - name: Pull, Tag and Push Model Server Image
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          docker buildx imagetools create -t onyxdotapp/onyx-model-server:beta onyxdotapp/onyx-model-server:${{ github.event.inputs.version }}
+          docker buildx imagetools create -t onyxdotapp/onyx-model-server:beta onyxdotapp/onyx-model-server:${VERSION}

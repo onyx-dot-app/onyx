@@ -1063,6 +1063,107 @@ fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
 optional_fastapi_current_user = fastapi_users.current_user(active=True, optional=True)
 
 
+_JWT_EMAIL_CLAIM_KEYS = ("email", "preferred_username", "upn")
+
+
+def _extract_email_from_jwt(payload: dict[str, Any]) -> str | None:
+    """Return the best-effort email/username from a decoded JWT payload."""
+    for key in _JWT_EMAIL_CLAIM_KEYS:
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            try:
+                email_info = validate_email(value, check_deliverability=False)
+            except EmailNotValidError:
+                continue
+            normalized_email = email_info.normalized or email_info.email
+            return normalized_email.lower()
+    return None
+
+
+async def _sync_jwt_oidc_expiry(
+    user_manager: UserManager, user: User, payload: dict[str, Any]
+) -> None:
+    if TRACK_EXTERNAL_IDP_EXPIRY:
+        expires_at = payload.get("exp")
+        if expires_at is None:
+            return
+        try:
+            expiry_timestamp = int(expires_at)
+        except (TypeError, ValueError):
+            logger.warning("Invalid exp claim on JWT for user %s", user.email)
+            return
+
+        oidc_expiry = datetime.fromtimestamp(expiry_timestamp, tz=timezone.utc)
+        if user.oidc_expiry == oidc_expiry:
+            return
+
+        await user_manager.user_db.update(user, {"oidc_expiry": oidc_expiry})
+        user.oidc_expiry = oidc_expiry  # type: ignore
+        return
+
+    if user.oidc_expiry is not None:
+        await user_manager.user_db.update(user, {"oidc_expiry": None})
+        user.oidc_expiry = None  # type: ignore
+
+
+async def _get_or_create_user_from_jwt(
+    payload: dict[str, Any],
+    request: Request,
+    async_db_session: AsyncSession,
+) -> User | None:
+    email = _extract_email_from_jwt(payload)
+    if email is None:
+        logger.warning(
+            "JWT token decoded successfully but no email claim found; skipping auth"
+        )
+        return None
+
+    # Enforce the same allowlist/domain policies as other auth flows
+    verify_email_is_invited(email)
+    verify_email_domain(email)
+
+    user_db: SQLAlchemyUserAdminDB[User, uuid.UUID] = SQLAlchemyUserAdminDB(
+        async_db_session, User, OAuthAccount
+    )
+    user_manager = UserManager(user_db)
+
+    try:
+        user = await user_manager.get_by_email(email)
+        if not user.is_active:
+            logger.warning("Inactive user %s attempted JWT login; skipping", email)
+            return None
+        if not user.role.is_web_login():
+            raise exceptions.UserNotExists()
+    except exceptions.UserNotExists:
+        logger.info("Provisioning user %s from JWT login", email)
+        try:
+            user = await user_manager.create(
+                UserCreate(
+                    email=email,
+                    password=generate_password(),
+                    is_verified=True,
+                ),
+                request=request,
+            )
+        except exceptions.UserAlreadyExists:
+            user = await user_manager.get_by_email(email)
+            if not user.is_active:
+                logger.warning(
+                    "Inactive user %s attempted JWT login during provisioning race; skipping",
+                    email,
+                )
+                return None
+            if not user.role.is_web_login():
+                logger.warning(
+                    "Non-web-login user %s attempted JWT login during provisioning race; skipping",
+                    email,
+                )
+                return None
+
+    await _sync_jwt_oidc_expiry(user_manager, user, payload)
+    return user
+
+
 async def _check_for_saml_and_jwt(
     request: Request,
     user: User | None,
@@ -1073,7 +1174,11 @@ async def _check_for_saml_and_jwt(
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[len("Bearer ") :].strip()
-            user = await verify_jwt_token(token, async_db_session)
+            payload = await verify_jwt_token(token)
+            if payload is not None:
+                user = await _get_or_create_user_from_jwt(
+                    payload, request, async_db_session
+                )
 
     return user
 

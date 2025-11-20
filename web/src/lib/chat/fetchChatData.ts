@@ -8,9 +8,6 @@ import {
   ValidSources,
 } from "@/lib/types";
 import { ChatSession, InputPrompt } from "@/app/chat/interfaces";
-import { Persona } from "@/app/admin/assistants/interfaces";
-import { FullEmbeddingModelResponse } from "@/components/embedding/interfaces";
-import { Settings } from "@/app/admin/settings/interfaces";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { cookies, headers } from "next/headers";
