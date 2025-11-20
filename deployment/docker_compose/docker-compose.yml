@@ -283,7 +283,7 @@ services:
         max-file: "6"
 
   nginx:
-    image: nginx:1.25-alpine
+    image: nginx:1.25.4-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
