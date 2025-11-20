@@ -1,4 +1,3 @@
-import * as Layouts from "@/refresh-components/layouts/layouts";
 import ChatPage from "@/app/chat/components/ChatPage";
 import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
 import { SEARCH_PARAM_NAMES } from "./services/searchParams";
@@ -13,9 +12,7 @@ export default async function Page(props: PageProps) {
   const chatSessionId = searchParams[SEARCH_PARAM_NAMES.CHAT_ID];
   const headerData = await fetchHeaderDataSS(chatSessionId);
 
-  return (
-    <Layouts.AppPage {...headerData}>
-      <ChatPage firstMessage={firstMessage} />
-    </Layouts.AppPage>
-  );
+  // Other pages in `web/src/app/chat` are wrapped with `<Layouts.AppPage>`.
+  // `chat/page.tsx` is not because it also needs to handle rendering of the document-sidebar (`web/src/app/chat/components/documentSidebar/DocumentResults.tsx`).
+  return <ChatPage firstMessage={firstMessage} headerData={headerData} />;
 }
