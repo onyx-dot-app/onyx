@@ -4,9 +4,10 @@ import { loginAs, loginWithCredentials } from "../utils/auth";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 import { startMcpApiKeyServer, McpServerProcess } from "../utils/mcpServer";
 
-const API_KEY = "test-api-key-12345";
-const DEFAULT_PORT = 8005;
+const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
+const DEFAULT_PORT = Number(process.env.MCP_API_KEY_TEST_PORT || "8005");
 const APP_BASE_URL = "http://localhost:3000";
+const MCP_API_KEY_TEST_URL = process.env.MCP_API_KEY_TEST_URL;
 
 async function scrollToBottom(page: Page): Promise<void> {
   try {
@@ -25,17 +26,30 @@ test.describe("Default Assistant MCP Integration", () => {
   let serverProcess: McpServerProcess | null = null;
   let serverId: number | null = null;
   let serverName: string;
+  let serverUrl: string;
   let basicUserEmail: string;
   let basicUserPassword: string;
 
   test.beforeAll(async ({ browser }) => {
-    // Start the MCP API key server
-    serverProcess = await startMcpApiKeyServer({
-      port: DEFAULT_PORT,
-      apiKey: API_KEY,
-    });
-    const serverUrl = `http://${serverProcess.address.host}:${serverProcess.address.port}/mcp`;
-    console.log(`[test-setup] MCP API key server started at ${serverUrl}`);
+    // Use dockerized server if URL is provided, otherwise start local server
+    if (MCP_API_KEY_TEST_URL) {
+      serverUrl = MCP_API_KEY_TEST_URL;
+      console.log(
+        `[test-setup] Using dockerized MCP API key server at ${serverUrl}`
+      );
+    } else {
+      // Start the MCP API key server locally
+      serverProcess = await startMcpApiKeyServer({
+        port: DEFAULT_PORT,
+        apiKey: API_KEY,
+      });
+      serverUrl = `http://${serverProcess.address.host}:${serverProcess.address.port}/mcp`;
+      console.log(
+        `[test-setup] MCP API key server started locally at ${serverUrl}`
+      );
+    }
+
+    serverName = `PW API Key Server ${Date.now()}`;
 
     // Setup as admin
     const adminContext = await browser.newContext({
@@ -77,6 +91,7 @@ test.describe("Default Assistant MCP Integration", () => {
 
     await adminContext.close();
 
+    // Only stop the server if we started it locally
     if (serverProcess) {
       await serverProcess.stop();
     }
@@ -88,7 +103,6 @@ test.describe("Default Assistant MCP Integration", () => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    serverName = `PW API Key Server ${Date.now()}`;
     console.log(`[test] Starting with server name: ${serverName}`);
 
     // Navigate to MCP server creation page
@@ -97,9 +111,6 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Navigated to MCP edit page`);
 
     // Fill server details
-    const serverUrl = `http://${serverProcess!.address.host}:${
-      serverProcess!.address.port
-    }/mcp`;
     console.log(`[test] Filling server URL: ${serverUrl}`);
 
     await page.locator('input[name="name"]').fill(serverName);
