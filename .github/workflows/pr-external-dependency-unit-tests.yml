@@ -8,6 +8,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 env:
   # AWS
   S3_AWS_ACCESS_KEY_ID: ${{ secrets.S3_AWS_ACCESS_KEY_ID }}
@@ -101,10 +104,12 @@ jobs:
 
       - name: Run Tests for ${{ matrix.test-dir }}
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        env:
+          TEST_DIR: ${{ matrix.test-dir }}
         run: |
           py.test \
             --durations=8 \
             -o junit_family=xunit2 \
             -xv \
             --ff \
-            backend/tests/external_dependency_unit/${{ matrix.test-dir }}
+            backend/tests/external_dependency_unit/${TEST_DIR}
