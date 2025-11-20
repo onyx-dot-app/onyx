@@ -6,11 +6,11 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
+from connectors.models import ConnectorMissingCredentialError
+from connectors.models import Document
 
 from onyx.connectors.hubspot.connector import AVAILABLE_OBJECT_TYPES
 from onyx.connectors.hubspot.connector import HubSpotConnector
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
 
 
 class TestHubSpotConnector:
@@ -539,14 +539,19 @@ class TestHubSpotConnector:
 
         # Mock the HubSpot API client
         mock_api_client = MagicMock()
-        mock_page = MagicMock()
-        mock_page.results = [mock_ticket]
-        mock_page.paging = None
 
-        # Mock the API calls
-        with patch("onyx.connectors.hubspot.connector.HubSpot") as MockHubSpot:
+        # Mock the API calls and associated object methods
+        with patch(
+            "onyx.connectors.hubspot.connector.HubSpot"
+        ) as MockHubSpot, patch.object(
+            connector, "_paginated_results"
+        ) as mock_paginated, patch.object(
+            connector, "_get_associated_objects", return_value=[]
+        ), patch.object(
+            connector, "_get_associated_notes", return_value=[]
+        ):
             MockHubSpot.return_value = mock_api_client
-            mock_api_client.crm.tickets.basic_api.get_page.return_value = mock_page
+            mock_paginated.return_value = iter([mock_ticket])
 
             # This should not raise a validation error
             document_batches = connector._process_tickets()
