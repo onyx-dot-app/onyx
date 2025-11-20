@@ -45,7 +45,7 @@ class WebSearchToolRequest(BaseModel):
 
 class WebSearchToolResponse(BaseModel):
     results: list[LlmWebSearchResult]
-    provider_type: WebSearchProviderType | None = None
+    provider_type: WebSearchProviderType
 
 
 class WebSearchWithContentResponse(BaseModel):
