@@ -86,8 +86,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    metadata = sa.MetaData()
-    table = _get_internet_search_table(metadata)
-
-    bind.execute(table.delete().where(table.c.name == EXA_PROVIDER_NAME))
+    # Preserve any manually configured Exa provider rows; nothing to undo here.
+    return
