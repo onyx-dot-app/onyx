@@ -492,6 +492,7 @@ function ChatButtonInner({
           onCancel={() => {
             setShowMoveCustomAgentModal(false);
             setPendingMoveProjectId(null);
+            setNavigateAfterMoveProjectId(null);
           }}
           onConfirm={async (doNotShowAgain: boolean) => {
             if (doNotShowAgain && typeof window !== "undefined") {
