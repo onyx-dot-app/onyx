@@ -33,7 +33,6 @@ import SimplePopover from "@/refresh-components/SimplePopover";
 import { FOLDED_SIZE } from "@/refresh-components/Logo";
 import { useScreenSize } from "@/hooks/useScreenSize";
 import { useMobileSidebar } from "@/refresh-components/contexts/MobileSidebarContext";
-import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import SvgSidebar from "@/icons/sidebar";
 
 interface AppPageLayoutProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
