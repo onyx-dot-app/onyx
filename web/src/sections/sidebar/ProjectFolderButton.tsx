@@ -30,6 +30,7 @@ import ButtonRenaming from "./ButtonRenaming";
 import { SvgProps } from "@/icons";
 import { useAppFocus } from "@/lib/hooks";
 import SvgFolderOpen from "@/icons/folder-open";
+import SvgFolderPartialOpen from "@/icons/folder-partial-open";
 
 interface ProjectFolderProps {
   project: Project;
@@ -44,6 +45,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isHoveringIcon, setIsHoveringIcon] = useState(false);
+  const [allowHoverEffect, setAllowHoverEffect] = useState(true);
   const activeSidebar = useAppFocus();
 
   // Make project droppable
@@ -58,14 +60,25 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
 
   function getFolderIcon(): React.FunctionComponent<SvgProps> {
     if (open) {
-      return isHoveringIcon ? SvgFolder : SvgFolderOpen;
+      return SvgFolderOpen;
     } else {
-      return isHoveringIcon ? SvgFolderOpen : SvgFolder;
+      return isHoveringIcon && allowHoverEffect
+        ? SvgFolderPartialOpen
+        : SvgFolder;
     }
   }
 
   function handleIconClick() {
     setOpen((prev) => !prev);
+    setAllowHoverEffect(false);
+  }
+
+  function handleIconHover(hovering: boolean) {
+    setIsHoveringIcon(hovering);
+    // Re-enable hover effects when cursor leaves the icon
+    if (!hovering) {
+      setAllowHoverEffect(true);
+    }
   }
 
   function handleTextClick() {
@@ -132,7 +145,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
           <SidebarTab
             leftIcon={() => (
               <IconButton
-                onHover={setIsHoveringIcon}
+                onHover={handleIconHover}
                 icon={getFolderIcon()}
                 internal
                 onClick={noProp(handleIconClick)}
