@@ -19,6 +19,7 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import { Modal } from "@/refresh-components/Modal";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
 
 function getIcon(
   file: ProjectFile,
@@ -83,10 +84,6 @@ function FileAttachment({
 }
 
 export interface UserFilesModalProps {
-  // Modal state
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-
   // Modal content
   title: string;
   description: string;
@@ -103,8 +100,6 @@ export interface UserFilesModalProps {
 }
 
 export default function UserFilesModal({
-  open,
-  onOpenChange,
   title,
   description,
   icon,
@@ -117,6 +112,7 @@ export default function UserFilesModal({
   onPickRecent,
   onUnpickRecent,
 }: UserFilesModalProps) {
+  const { isOpen, toggle } = useModal();
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(selectedFileIds || [])
@@ -163,12 +159,6 @@ export default function UserFilesModal({
     return files;
   }, [recentFiles, search, showOnlySelected, selectedIds]);
 
-  const handleOpenChange = (isOpen: boolean) => {
-    if (!isOpen) {
-      onOpenChange(false);
-    }
-  };
-
   return (
     <>
       {/* Hidden file input */}
@@ -182,12 +172,11 @@ export default function UserFilesModal({
         />
       )}
 
-      <Modal open={open} onOpenChange={handleOpenChange}>
+      <Modal open={isOpen} onOpenChange={toggle}>
         <Modal.Content
           size="tall"
           onOpenAutoFocus={(e) => {
             e.preventDefault();
-            setSearch("");
             searchInputRef.current?.focus();
           }}
           preventAccidentalClose={false}
@@ -273,7 +262,7 @@ export default function UserFilesModal({
               </ScrollIndicatorDiv>
             )}
           </Modal.Body>
-          <Modal.Footer className="flex items-center justify-between p-4 border-t">
+          <Modal.Footer className="flex items-center justify-between p-4">
             {/* Left side: file count and controls */}
             <div className="flex items-center gap-2">
               <Text text03>
@@ -295,7 +284,7 @@ export default function UserFilesModal({
             </div>
 
             {/* Right side: Done button */}
-            <Button secondary onClick={() => onOpenChange(false)}>
+            <Button secondary onClick={() => toggle(false)}>
               Done
             </Button>
           </Modal.Footer>

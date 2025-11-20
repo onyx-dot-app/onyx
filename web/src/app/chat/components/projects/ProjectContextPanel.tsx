@@ -105,20 +105,20 @@ export default function ProjectContextPanel({
         <AddInstructionModal />
       </addInstructionModal.Provider>
 
-      <UserFilesModal
-        open={projectFilesModal.isOpen}
-        onOpenChange={projectFilesModal.toggle}
-        title="Project files"
-        description="Sessions in this project can access the files here."
-        icon={SvgFiles}
-        recentFiles={[...allCurrentProjectFiles]}
-        onView={handleOnView}
-        handleUploadChange={handleUploadChange}
-        onDelete={async (file: ProjectFile) => {
-          if (!currentProjectId) return;
-          await unlinkFileFromProject(currentProjectId, file.id);
-        }}
-      />
+      <projectFilesModal.Provider>
+        <UserFilesModal
+          title="Project files"
+          description="Sessions in this project can access the files here."
+          icon={SvgFiles}
+          recentFiles={[...allCurrentProjectFiles]}
+          onView={handleOnView}
+          handleUploadChange={handleUploadChange}
+          onDelete={async (file: ProjectFile) => {
+            if (!currentProjectId) return;
+            await unlinkFileFromProject(currentProjectId, file.id);
+          }}
+        />
+      </projectFilesModal.Provider>
 
       <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
         <div className="flex flex-col gap-1 text-text-04">

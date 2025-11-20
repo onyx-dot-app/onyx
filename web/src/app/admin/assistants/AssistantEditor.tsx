@@ -846,29 +846,35 @@ export default function AssistantEditor({
 
           return (
             <>
-              <UserFilesModal
-                open={userFilesModal.isOpen}
-                onOpenChange={userFilesModal.toggle}
-                title="User Files"
-                description="All files selected for this assistant"
-                icon={SvgFiles}
-                recentFiles={values.user_file_ids.map((userFileId: string) => {
-                  const rf = allRecentFiles.find((f) => f.id === userFileId);
-                  return (
-                    rf || {
-                      id: userFileId,
-                      name: `File ${userFileId.slice(0, 8)}`,
-                      status: "completed" as const,
+              <userFilesModal.Provider>
+                <UserFilesModal
+                  title="User Files"
+                  description="All files selected for this assistant"
+                  icon={SvgFiles}
+                  recentFiles={values.user_file_ids.map(
+                    (userFileId: string) => {
+                      const rf = allRecentFiles.find(
+                        (f) => f.id === userFileId
+                      );
+                      return (
+                        rf || {
+                          id: userFileId,
+                          name: `File ${userFileId.slice(0, 8)}`,
+                          status: "completed" as const,
+                        }
+                      );
                     }
-                  );
-                })}
-                onDelete={(file) => {
-                  setFieldValue(
-                    "user_file_ids",
-                    values.user_file_ids.filter((id: string) => id !== file.id)
-                  );
-                }}
-              />
+                  )}
+                  onDelete={(file) => {
+                    setFieldValue(
+                      "user_file_ids",
+                      values.user_file_ids.filter(
+                        (id: string) => id !== file.id
+                      )
+                    );
+                  }}
+                />
+              </userFilesModal.Provider>
 
               <Form className="w-full text-text-950 assistant-editor">
                 <FormErrorFocus />

@@ -272,24 +272,24 @@ export default function FilePickerPopover({
         accept={"*/*"}
       />
 
-      <UserFilesModal
-        open={recentFilesModal.isOpen}
-        onOpenChange={recentFilesModal.toggle}
-        title="Recent Files"
-        description="Upload files or pick from your recent files."
-        icon={SvgFiles}
-        recentFiles={recentFilesSnapshot}
-        onPickRecent={(file) => {
-          onPickRecent && onPickRecent(file);
-        }}
-        onUnpickRecent={(file) => {
-          onUnpickRecent && onUnpickRecent(file);
-        }}
-        handleUploadChange={handleUploadChange}
-        onView={onFileClick}
-        selectedFileIds={selectedFileIds}
-        onDelete={handleDeleteFile}
-      />
+      <recentFilesModal.Provider>
+        <UserFilesModal
+          title="Recent Files"
+          description="Upload files or pick from your recent files."
+          icon={SvgFiles}
+          recentFiles={recentFilesSnapshot}
+          onPickRecent={(file) => {
+            onPickRecent && onPickRecent(file);
+          }}
+          onUnpickRecent={(file) => {
+            onUnpickRecent && onUnpickRecent(file);
+          }}
+          handleUploadChange={handleUploadChange}
+          onView={onFileClick}
+          selectedFileIds={selectedFileIds}
+          onDelete={handleDeleteFile}
+        />
+      </recentFilesModal.Provider>
 
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
