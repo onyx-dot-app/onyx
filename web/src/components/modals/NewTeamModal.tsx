@@ -12,6 +12,7 @@ import SvgArrowUp from "@/icons/arrow-up";
 import SvgArrowRight from "@/icons/arrow-right";
 import SvgCheckCircle from "@/icons/check-circle";
 import SvgOrganization from "@/icons/organization";
+import SvgPlus from "@/icons/plus";
 
 export interface TenantByDomainResponse {
   tenant_id: string;
@@ -193,7 +194,7 @@ export default function NewTeamModal() {
               <p className="text-text-03 text-sm mb-2">
                 Your join request can be approved by any admin of {appDomain}.
               </p>
-              <div className="mt-4">
+              <div className="flex flex-col items-center justify-center gap-4 mt-4">
                 <Button
                   onClick={handleRequestInvite}
                   className="w-full"
@@ -205,12 +206,14 @@ export default function NewTeamModal() {
                     : "Request to join your team"}
                 </Button>
               </div>
-              <div
+              <Button
                 onClick={handleContinueToNewOrg}
-                className="flex hover:underline cursor-pointer text-action-text-link-05 text-sm flex-col space-y-3 pt-0"
+                className="w-full"
+                leftIcon={SvgPlus}
+                secondary
               >
-                + Continue with new team
-              </div>
+                Continue with new team
+              </Button>
             </div>
           )}
         </Dialog.Panel>
