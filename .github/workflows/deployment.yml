@@ -1003,10 +1003,10 @@ jobs:
           NEEDS_BUILD_MODEL_SERVER_ARM64_RESULT: ${{ needs.build-model-server-arm64.result }}
           NEEDS_MERGE_MODEL_SERVER_RESULT: ${{ needs.merge-model-server.result }}
 
-      - name: Send Slack notification
-        uses: ./.github/actions/slack-notify
-        with:
-          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
-          failed-jobs: ${{ steps.failed-jobs.outputs.jobs }}
-          title: "🚨 Deployment Workflow Failed"
-          ref-name: ${{ github.ref_name }}
+#      - name: Send Slack notification
+#        uses: ./.github/actions/slack-notify
+#        with:
+#          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
+#          failed-jobs: ${{ steps.failed-jobs.outputs.jobs }}
+#          title: "🚨 Deployment Workflow Failed"
+#          ref-name: ${{ github.ref_name }}
