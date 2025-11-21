@@ -93,7 +93,7 @@ function SettingsPopover({
           // )),
           <div key="user-settings" data-testid="Settings/user-settings">
             <MenuButton icon={SvgUser} onClick={onUserSettingsClick}>
-              User Settings
+              Paramètres utilisateur
             </MenuButton>
           </div>,
           <MenuButton
@@ -115,7 +115,7 @@ function SettingsPopover({
               danger
               onClick={handleLogout}
             >
-              Log out
+              Se déconnecter
             </MenuButton>
           ),
         ]}

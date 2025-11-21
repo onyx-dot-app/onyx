@@ -86,7 +86,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                   onClick={noProp(() =>
                     router.push(`/assistants/stats/${agent.id}`)
                   )}
-                  tooltip="View Agent Stats"
+                  tooltip="Voir les statistiques de l'agent"
                   className="hidden group-hover/AgentCard:flex"
                 />
               )}
@@ -97,7 +97,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                   onClick={noProp(() =>
                     router.push(`/assistants/edit/${agent.id}`)
                   )}
-                  tooltip="Edit Agent"
+                  tooltip="Modifier l'agent"
                   className="hidden group-hover/AgentCard:flex"
                 />
               )}
@@ -105,7 +105,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                 icon={pinned ? SvgPinned : SvgPin}
                 tertiary
                 onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
-                tooltip={pinned ? "Unpin from Sidebar" : "Pin to Sidebar"}
+                tooltip={pinned ? "Détacher de la barre latérale" : "Épingler à la barre latérale"}
                 transient={hovered && pinned}
                 className={cn(!pinned && "hidden group-hover/AgentCard:flex")}
               />
@@ -124,13 +124,13 @@ export default function AgentCard({ agent }: AgentCardProps) {
         <div className="bg-background-tint-01 p-1 flex flex-row items-end justify-between">
           {/* Left side - creator and actions */}
           <div className="flex flex-col gap-1 py-1 px-2">
-            <IconLabel icon={SvgUser}>{agent.owner?.email || "Onyx"}</IconLabel>
+            <IconLabel icon={SvgUser}>{agent.owner?.email || "Dom Engin."}</IconLabel>
             <IconLabel icon={SvgActions}>
               {agent.tools.length > 0
                 ? `${agent.tools.length} Action${
                     agent.tools.length > 1 ? "s" : ""
                   }`
-                : "No Actions"}
+                : "Aucune action"}
             </IconLabel>
           </div>
 
@@ -141,7 +141,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
               rightIcon={SvgBubbleText}
               onClick={noProp(() => route({ agentId: agent.id }))}
             >
-              Start Chat
+              Commencer à discuter
             </Button>
           </div>
         </div>

@@ -114,10 +114,10 @@ const LLMStepInner = ({
             </div>
             <div>
               <Text text04 mainUiAction>
-                Connect your LLM models
+                Connectez vos modèles LLM
               </Text>
               <Text text03 secondaryBody>
-                Onyx supports both self-hosted models and popular providers.
+                Dom Engin. prend en charge les modèles auto-hébergés et les fournisseurs populaires.
               </Text>
             </div>
           </div>
@@ -128,7 +128,7 @@ const LLMStepInner = ({
               disabled={disabled}
               href="admin/configuration/llm"
             >
-              View in Admin Panel
+              Voir dans le panneau d'administration
             </Button>
           </div>
         </div>
@@ -182,8 +182,8 @@ const LLMStepInner = ({
                 <LLMProvider
                   onboardingState={onboardingState}
                   onboardingActions={onboardingActions}
-                  title="Custom LLM Provider"
-                  subtitle="LiteLLM Compatible APIs"
+                  title="Fournisseur LLM personnalisé"
+                  subtitle="API compatibles LiteLLM"
                   disabled={disabled}
                   isConnected={onboardingState.data.llmProviders?.some(
                     (provider) => provider === "custom"
@@ -216,9 +216,9 @@ const LLMStepInner = ({
           <Text text04 mainUiAction>
             {onboardingState.data.llmProviders?.length || 0}{" "}
             {(onboardingState.data.llmProviders?.length || 0) === 1
-              ? "model"
-              : "models"}{" "}
-            connected
+              ? "modèle"
+              : "modèles"}{" "}
+            connectés
           </Text>
         </div>
         <div className="p-1">

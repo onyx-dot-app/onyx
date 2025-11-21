@@ -449,11 +449,11 @@ function ChatInputBarInner({
           aria-multiline
           placeholder={
             selectedAssistant.id === 0
-              ? `How can ${
+              ? `Comment peux-je ${
                   combinedSettings?.enterpriseSettings?.application_name ||
-                  "Onyx"
-                } help you today`
-              : `How can ${selectedAssistant.name} help you today`
+                  "Dom Engin."
+                } vous aider aujourd'hui ?`
+              : `Comment peux-${selectedAssistant.name} vous aider aujourd'hui ?`
           }
           value={message}
           onKeyDown={(event) => {

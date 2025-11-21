@@ -16,11 +16,12 @@ export interface LogoProps {
 export default function Logo({ folded, className }: LogoProps) {
   const settings = useSettingsContext();
 
+  const isCustom = true;
   const logo = useMemo(
     () =>
-      settings.enterpriseSettings?.use_custom_logo ? (
+      isCustom ? (
         <img
-          src="/api/enterprise-settings/logo"
+          src="/web/public/logo.png"
           alt="Logo"
           style={{
             objectFit: "contain",
@@ -30,15 +31,21 @@ export default function Logo({ folded, className }: LogoProps) {
           className={cn("flex-shrink-0", className)}
         />
       ) : (
-        <OnyxIcon
-          size={FOLDED_SIZE}
+        <img
+          src="/web/public/logo.png"
+          alt="Logo"
+          style={{
+            objectFit: "contain",
+            height: FOLDED_SIZE,
+            width: FOLDED_SIZE,
+          }}
           className={cn("flex-shrink-0", className)}
         />
       ),
     [className, settings.enterpriseSettings?.use_custom_logo]
   );
 
-  return settings.enterpriseSettings?.application_name ? (
+  return isCustom ? (
     <div className="flex flex-col">
       <div className="flex flex-row items-center gap-2">
         {logo}
@@ -47,22 +54,9 @@ export default function Logo({ folded, className }: LogoProps) {
           className={cn("line-clamp-1 truncate", folded && "invisible")}
           nowrap
         >
-          {settings.enterpriseSettings?.application_name}
+          Dom Engin.
         </Text>
       </div>
-      {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
-        <Text
-          secondaryBody
-          text03
-          className={cn(
-            "ml-[33px] line-clamp-1 truncate",
-            folded && "invisible"
-          )}
-          nowrap
-        >
-          Powered by Onyx
-        </Text>
-      )}
     </div>
   ) : folded ? (
     <OnyxIcon size={FOLDED_SIZE} className={cn("flex-shrink-0", className)} />

@@ -1777,7 +1777,7 @@ export const OnyxIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => {
   return (
-    <svg
+      <svg 
       style={{ width: `${size}px`, height: `${size}px` }}
       className={`w-[${size}px] h-[${size}px] ` + className}
       viewBox="0 0 56 56"

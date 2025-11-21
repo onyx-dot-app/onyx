@@ -36,22 +36,22 @@ export default function CreateProjectModal() {
   return (
     <DefaultModalLayout
       icon={SvgFolderPlus}
-      title="Create New Project"
-      description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
+      title="Créer un nouveau projet"
+      description="Utilisez les projets pour organiser vos fichiers et chats en un seul endroit, et ajoutez des instructions personnalisées pour votre travail en cours."
       mini
     >
       <div className="flex flex-col p-4 bg-background-tint-01">
         <FieldInput
-          label="Project Name"
-          placeholder="What are you working on?"
+          label="Nom du projet"
+          placeholder="Qu'êtes-vous en train de faire?"
           ref={fieldInputRef}
         />
       </div>
       <div className="flex flex-row justify-end gap-2 p-4">
         <Button secondary onClick={() => modal.toggle(false)}>
-          Cancel
+          Annuler
         </Button>
-        <Button onClick={handleSubmit}>Create Project</Button>
+        <Button onClick={handleSubmit}>Créer un projet</Button>
       </div>
     </DefaultModalLayout>
   );

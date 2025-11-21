@@ -22,17 +22,17 @@ export default function NonAdminStep() {
         </div>
         <div>
           <Text text04 mainUiAction>
-            What should Onyx call you?
+            Quel nom devrait-on vous appeler ?
           </Text>
           <Text text03 secondaryBody>
-            We will display this name in the app.
+            Nous afficherons ce nom dans l'application.
           </Text>
         </div>
       </div>
       <div className="flex items-center justify-end gap-2">
         <InputTypeIn
           ref={inputRef}
-          placeholder="Your name"
+          placeholder="Votre nom"
           value={name || ""}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
             setName(e.target.value)
@@ -51,7 +51,7 @@ export default function NonAdminStep() {
               });
           }}
         >
-          Save
+          Sauvegarder
         </Button>
       </div>
     </div>

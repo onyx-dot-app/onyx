@@ -24,26 +24,26 @@ type StepConfig = {
 export const STEP_CONFIG: Record<OnboardingStep, StepConfig> = {
   [OnboardingStep.Welcome]: {
     index: 0,
-    title: "Let's take a moment to get you set up.",
-    buttonText: "Let's Go",
+    title: "Commençons par configurer votre application.",
+    buttonText: "Commencer",
     iconPercentage: 10,
   },
   [OnboardingStep.Name]: {
     index: 1,
-    title: "Let's take a moment to get you set up.",
-    buttonText: "Next",
+    title: "Prenons un moment pour configurer votre environnement.",
+    buttonText: "Suivant",
     iconPercentage: 40,
   },
   [OnboardingStep.LlmSetup]: {
     index: 2,
-    title: "Almost there! Connect your models to start chatting.",
-    buttonText: "Next",
+    title: "Presque terminé ! Connectez vos modèles pour commencer à discuter.",
+    buttonText: "Suivant",
     iconPercentage: 70,
   },
   [OnboardingStep.Complete]: {
     index: 3,
-    title: "You're all set, review the optional settings or click Finish Setup",
-    buttonText: "Finish Setup",
+    title: "Tout est prêt ! Consultez les paramètres optionnels ou cliquez sur Terminer la configuration.",
+    buttonText: "Terminer la configuration",
     iconPercentage: 100,
   },
 } as const;
@@ -69,7 +69,7 @@ export const STEP_NAVIGATION: Record<
 export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
   {
     title: "Select web search provider",
-    description: "Enable Onyx to search the internet for information.",
+    description: "Enable Dom Engin. to search the internet for information.",
     icon: SvgGlobe,
     buttonText: "Web Search",
     buttonHref: "/admin/configuration/web-search",
@@ -118,7 +118,7 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         </>
       ),
       default_model_name:
-        "This model will be used by Onyx by default for chatGPT.",
+        "This model will be used by Dom Engin. by default for chatGPT.",
     },
   },
   [LLMProviderName.ANTHROPIC]: {
@@ -135,7 +135,7 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         </>
       ),
       default_model_name:
-        "This model will be used by Onyx by default for Claude.",
+        "This model will be used by Dom Engin. by default for Claude.",
     },
   },
   [LLMProviderName.OLLAMA_CHAT]: {
@@ -153,7 +153,7 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         </>
       ),
       default_model_name:
-        "This model will be used by Onyx by default for Ollama.",
+        "This model will be used by Dom Engin. by default for Ollama.",
     },
   },
   [LLMProviderName.VERTEX_AI]: {
@@ -171,7 +171,7 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         </>
       ),
       default_model_name:
-        "This model will be used by Onyx by default for Gemini.",
+        "This model will be used by Dom Engin. by default for Gemini.",
     },
   },
   [LLMProviderName.AZURE]: {
@@ -189,7 +189,7 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         </>
       ),
       default_model_name:
-        "This model will be used by Onyx by default for Azure OpenAI.",
+        "This model will be used by Dom Engin. by default for Azure OpenAI.",
     },
   },
   [LLMProviderName.OPENROUTER]: {
@@ -206,7 +206,7 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         </>
       ),
       default_model_name:
-        "This model will be used by Onyx by default for OpenRouter.",
+        "This model will be used by Dom Engin. by default for OpenRouter.",
     },
   },
   [LLMProviderName.BEDROCK]: {

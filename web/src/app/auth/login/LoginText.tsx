@@ -9,11 +9,11 @@ export default function LoginText() {
   return (
     <div className="w-full flex flex-col ">
       <Text headingH2 text05>
-        Welcome to{" "}
-        {(settings && settings?.enterpriseSettings?.application_name) || "Onyx"}
+        Bienvenue sur{" "}
+        {(settings && settings?.enterpriseSettings?.application_name) || "Dom Engin."}
       </Text>
       <Text text03 mainUiMuted>
-        Your open source AI platform for work
+        Votre plateforme AI open source pour le travail
       </Text>
     </div>
   );

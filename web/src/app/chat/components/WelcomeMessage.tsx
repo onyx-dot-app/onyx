@@ -34,7 +34,6 @@ export default function WelcomeMessage({ liveAssistant }: WelcomeMessageProps) {
           data-testid="onyx-logo"
           className="flex flex-row items-center gap-4"
         >
-          <Logo size="default" />
           <Text headingH2>{greeting}</Text>
         </div>
       ) : (

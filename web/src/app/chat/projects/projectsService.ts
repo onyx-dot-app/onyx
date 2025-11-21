@@ -107,11 +107,20 @@ export async function uploadFiles(
 }
 
 export async function getRecentFiles(): Promise<ProjectFile[]> {
-  const response = await fetch(`/api/user/files/recent`);
-  if (!response.ok) {
-    handleRequestError("Fetch recent files", response);
+  try {
+    const response = await fetch(`/api/user/files/recent`);
+    if (!response.ok) {
+      // Return empty array instead of throwing error to prevent frontend crashes
+      // This can happen if backend is temporarily unavailable (502 Bad Gateway)
+      console.warn(`Failed to fetch recent files: ${response.status}`);
+      return [];
+    }
+    return response.json();
+  } catch (error) {
+    // Handle network errors or other fetch failures gracefully
+    console.warn("Error fetching recent files:", error);
+    return [];
   }
-  return response.json();
 }
 
 export async function getFilesInProject(
