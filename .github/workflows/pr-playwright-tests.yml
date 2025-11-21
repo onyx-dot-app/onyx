@@ -202,6 +202,9 @@ jobs:
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF
+          if [ "${{ matrix.project }}" = "no-auth" ]; then
+            echo "PLAYWRIGHT_FORCE_EMPTY_LLM_PROVIDERS=true" >> deployment/docker_compose/.env
+          fi
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
@@ -282,6 +285,9 @@ jobs:
         run: |
           # Create test-results directory to ensure it exists for artifact upload
           mkdir -p test-results
+          if [ "${PROJECT}" = "no-auth" ]; then
+            export PLAYWRIGHT_FORCE_EMPTY_LLM_PROVIDERS=true
+          fi
           npx playwright test --project ${PROJECT}
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
