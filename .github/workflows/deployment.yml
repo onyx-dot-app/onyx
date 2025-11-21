@@ -643,8 +643,6 @@ jobs:
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64,mode=max
           outputs: type=image,name=${{ env.TARGET_REGISTRY }},push-by-digest=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
-          provenance: false
-          sbom: false
 
   build-model-server-arm64:
     needs: determine-builds
@@ -707,8 +705,6 @@ jobs:
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,mode=max
           outputs: type=image,name=${{ env.TARGET_REGISTRY }},push-by-digest=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
-          provenance: false
-          sbom: false
 
   merge-model-server:
     needs:
