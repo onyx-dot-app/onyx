@@ -14,6 +14,7 @@ from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.configs.onyxbot_configs import ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER
 from onyx.configs.onyxbot_configs import ONYX_BOT_DISPLAY_ERROR_MSGS
@@ -167,10 +168,18 @@ def handle_regular_answer(
             provider_type=llm.config.model_provider,
         )
 
-        thread_previous_messages = []
-        for thread_msg in history_messages:
+        # Work backwards from most recent messages, only keeping what fits in max token count
+        temp_messages = []
+        total_token_count = 0
+
+        for thread_msg in reversed(history_messages):
             token_count = len(llm_tokenizer.encode(thread_msg.message))
-            thread_previous_messages.append(
+
+            # Stop if adding this message would exceed the max token count
+            if total_token_count + token_count > GEN_AI_HISTORY_CUTOFF:
+                break
+
+            temp_messages.append(
                 PreviousMessage(
                     message=thread_msg.message,
                     token_count=token_count,
@@ -181,8 +190,14 @@ def handle_regular_answer(
                     research_answer_purpose=None,
                 )
             )
+            total_token_count += token_count
+
+        # Reverse back to chronological order (oldest to newest)
+        thread_previous_messages = list(reversed(temp_messages))
+
         logger.info(
-            f"Converted {len(thread_previous_messages)} thread messages for query rephrasing"
+            f"Converted {len(thread_previous_messages)} of {len(history_messages)} "
+            f"thread messages ({total_token_count} tokens) for query rephrasing"
         )
 
     # Always check for ACL permissions, also for documnt sets that were explicitly added

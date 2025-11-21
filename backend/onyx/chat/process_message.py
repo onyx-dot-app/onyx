@@ -791,6 +791,7 @@ def stream_chat_message_objects(
             user_query=final_msg.message,
             prompt_config=prompt_config,
             files=latest_query_files,
+            single_message_history=single_message_history,
         )
         memories = get_memories(user, db_session)
         system_message = (
