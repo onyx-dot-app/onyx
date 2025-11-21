@@ -398,7 +398,28 @@ def _convert_driveitem_to_document_with_permissions(
         sections.append(image_section)
     else:
         # Note: we don't process Onyx metadata for connectors like Drive & Sharepoint, but could
+        # Track total extracted size to prevent exceeding threshold
+        total_extracted_size = len(content_bytes)
+        extraction_aborted = False
+
         def _store_embedded_image(img_data: bytes, img_name: str) -> None:
+            nonlocal total_extracted_size, extraction_aborted
+
+            # Check if we've already aborted extraction
+            if extraction_aborted:
+                return
+
+            # Check if adding this image would exceed the threshold
+            img_size = len(img_data)
+            if total_extracted_size + img_size > SHAREPOINT_CONNECTOR_SIZE_THRESHOLD:
+                logger.warning(
+                    f"Aborting extraction for '{driveitem.name}': total extracted size "
+                    f"({total_extracted_size + img_size} bytes) would exceed threshold "
+                    f"({SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes). Skipping remaining embedded images."
+                )
+                extraction_aborted = True
+                return
+
             try:
                 mime_type = get_image_type_from_bytes(img_data)
             except ValueError:
@@ -427,11 +448,23 @@ def _convert_driveitem_to_document_with_permissions(
             image_section.link = driveitem.web_url
             sections.append(image_section)
 
+            # Update total extracted size after successfully storing the image
+            total_extracted_size += img_size
+
         extraction_result = extract_text_and_images(
             file=io.BytesIO(content_bytes),
             file_name=driveitem.name,
             image_callback=_store_embedded_image,
         )
+
+        # If extraction was aborted due to size, return None to skip this document
+        if extraction_aborted:
+            logger.warning(
+                f"Skipping '{driveitem.name}' due to excessive extracted content size "
+                f"(exceeded {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes)"
+            )
+            return None
+
         if extraction_result.text_content:
             sections.append(
                 TextSection(link=driveitem.web_url, text=extraction_result.text_content)
