@@ -55,8 +55,6 @@ services:
       - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-}
       - DISABLE_LITELLM_STREAMING=${DISABLE_LITELLM_STREAMING:-}
       - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
-      - BING_API_KEY=${BING_API_KEY:-}
-      - EXA_API_KEY=${EXA_API_KEY:-}
       - DISABLE_LLM_DOC_RELEVANCE=${DISABLE_LLM_DOC_RELEVANCE:-}
       - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
       - TOKEN_BUDGET_GLOBALLY_ENABLED=${TOKEN_BUDGET_GLOBALLY_ENABLED:-}
@@ -170,8 +168,6 @@ services:
       - DISABLE_LITELLM_STREAMING=${DISABLE_LITELLM_STREAMING:-}
       - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
       - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
-      - BING_API_KEY=${BING_API_KEY:-}
-      - EXA_API_KEY=${EXA_API_KEY:-}
       # Query Options
       - DOC_TIME_DECAY=${DOC_TIME_DECAY:-}
       - HYBRID_ALPHA=${HYBRID_ALPHA:-}
@@ -404,7 +400,7 @@ services:
         max-file: "6"
 
   nginx:
-    image: nginx:1.23.4-alpine
+    image: nginx:1.25.5-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up

@@ -32,17 +32,21 @@ import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { FOLDED_SIZE } from "@/refresh-components/Logo";
 
-interface AppPageProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
+interface AppPageLayoutProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
   settings: CombinedSettings | null;
   chatSession: ChatSession | null;
 }
 
-export function AppPage({
+// AppPageLayout wraps chat pages with the shared header/footer white-labelling chrome.
+// It also provides the "Share Chat" and kebab-menu on the right side of the header (for shareable chat pages).
+//
+// Since this is such a ubiquitous component, it's been moved to its own `layouts` directory.
+export default function AppPageLayout({
   settings,
   chatSession,
   className,
   ...rest
-}: AppPageProps) {
+}: AppPageLayoutProps) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
@@ -150,7 +154,7 @@ export function AppPage({
 
   useEffect(() => {
     if (!showMoveOptions) {
-      const popoverItems = [
+      const items = [
         <MenuButton
           key="move"
           icon={SvgFolderIn}
@@ -167,9 +171,9 @@ export function AppPage({
           Delete
         </MenuButton>,
       ];
-      setPopoverItems(popoverItems);
+      setPopoverItems(items);
     } else {
-      const popoverItems = [
+      const items = [
         <PopoverSearchInput
           key="search"
           setShowMoveOptions={setShowMoveOptions}
@@ -185,7 +189,7 @@ export function AppPage({
           </MenuButton>
         )),
       ];
-      setPopoverItems(popoverItems);
+      setPopoverItems(items);
     }
   }, [showMoveOptions, filteredProjects]);
 
