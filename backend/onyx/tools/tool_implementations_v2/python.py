@@ -278,7 +278,10 @@ def python(
     to give the user a way to download the file OR to display generated images.
 
     Use `openpyxl` to read and write Excel files. You have access to libraries like \
-    numpy, pandas, scipy, matplotlib, and PIL
+    numpy, pandas, scipy, matplotlib, and PIL.
+
+    IMPORTANT: each call to this tool is independent. Variables from previous calls will NOT \
+    be available in the current call.
 
     Args:
         code: Python source code to execute
@@ -287,10 +290,10 @@ def python(
         JSON string containing stdout, stderr, exit code, and any files \
         written to the file system.
     """
-    # Create client
-    client = CodeInterpreterClient()
+    # NOTE: `IMPORTANT: each call to this tool is independent` is for the GPT family of models,
+    # which have been fine-tuned to use a jupyter notebook which remembers variables from previous cells.
 
-    # Execute
+    client = CodeInterpreterClient()
     result = _python_execution_core(run_context, code, client)
 
     # Serialize and return
