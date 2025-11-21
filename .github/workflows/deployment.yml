@@ -135,9 +135,9 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest,ignore-error=1
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest,ignore-error=1,image-manifest=true
           cache-to: |
-            type=inline,ignore-error=1
+            type=inline,ignore-error=1,image-manifest=true
           outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
           provenance: false
@@ -196,9 +196,9 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,ignore-error=1
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,ignore-error=1,image-manifest=true
           cache-to: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,mode=max,ignore-error=1
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,mode=max,ignore-error=1,image-manifest=true
           outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
           provenance: false
