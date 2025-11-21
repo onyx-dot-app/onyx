@@ -1,4 +1,4 @@
-import React, { Dispatch, SetStateAction, useCallback } from "react";
+import React, { useCallback } from "react";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSidebar from "@/icons/sidebar";
@@ -6,10 +6,10 @@ import Logo from "@/refresh-components/Logo";
 
 interface LogoSectionProps {
   folded?: boolean;
-  setFolded?: Dispatch<SetStateAction<boolean>>;
+  onFoldClick?: () => void;
 }
 
-function LogoSection({ folded, setFolded }: LogoSectionProps) {
+function LogoSection({ folded, onFoldClick: onFoldClick }: LogoSectionProps) {
   const logo = useCallback(
     (className?: string) => <Logo folded={folded} className={className} />,
     [folded]
@@ -20,10 +20,10 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
         icon={SvgSidebar}
         tertiary
         tooltip="Close Sidebar"
-        onClick={() => setFolded?.(shouldFold)}
+        onClick={onFoldClick}
       />
     ),
-    [setFolded]
+    [onFoldClick]
   );
 
   return (
@@ -60,13 +60,13 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
 
 export interface SidebarWrapperProps {
   folded?: boolean;
-  setFolded?: Dispatch<SetStateAction<boolean>>;
+  onFoldClick?: () => void;
   children?: React.ReactNode;
 }
 
 export default function SidebarWrapper({
   folded,
-  setFolded,
+  onFoldClick,
   children,
 }: SidebarWrapperProps) {
   return (
@@ -83,7 +83,7 @@ export default function SidebarWrapper({
           folded ? "w-[3.25rem]" : "w-[15rem]"
         )}
       >
-        <LogoSection folded={folded} setFolded={setFolded} />
+        <LogoSection folded={folded} onFoldClick={onFoldClick} />
         {children}
       </div>
     </div>

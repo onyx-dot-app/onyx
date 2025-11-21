@@ -134,3 +134,6 @@ export const ART_ASSISTANT_ID = -3;
 // Used in the File Picker to show a max number of files.
 // The rest will be hidden behind an "All Recent Files" button.
 export const MAX_FILES_TO_SHOW = 3;
+
+// SIZES
+export const MOBILE_SIDEBAR_BREAKPOINT_PX = 640;
