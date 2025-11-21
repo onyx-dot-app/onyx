@@ -164,4 +164,4 @@ def count_punctuation(text: str) -> int:
 
 def remove_markdown_image_references(text: str) -> str:
     """Remove markdown-style image references like ![alt text](url)"""
-    return re.sub(r'!\[[^\]]*\]\([^\)]+\)', '', text)
+    return re.sub(r"!\[[^\]]*\]\([^\)]+\)", "", text)
