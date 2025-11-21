@@ -58,9 +58,6 @@ from sqlalchemy import nulls_last
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ee.onyx.utils.posthog_client import capture_and_sync_with_alternate_posthog
-from ee.onyx.utils.posthog_client import get_marketing_posthog_cookie_name
-from ee.onyx.utils.posthog_client import parse_marketing_cookie
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
@@ -614,7 +611,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             request=request,
         )
 
-        marketing_anonymous_id = None
         user_count = None
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
@@ -637,6 +633,23 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        # Fetch EE PostHog functions if available
+        get_marketing_posthog_cookie_name = fetch_ee_implementation_or_noop(
+            module="onyx.utils.posthog_client",
+            attribute="get_marketing_posthog_cookie_name",
+            noop_return_value=None,
+        )
+        parse_marketing_cookie = fetch_ee_implementation_or_noop(
+            module="onyx.utils.posthog_client",
+            attribute="parse_marketing_cookie",
+            noop_return_value=None,
+        )
+        capture_and_sync_with_alternate_posthog = fetch_ee_implementation_or_noop(
+            module="onyx.utils.posthog_client",
+            attribute="capture_and_sync_with_alternate_posthog",
+            noop_return_value=None,
+        )
 
         if (
             request
@@ -664,7 +677,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             # Add all other values from the marketing cookie (featureFlags, etc.)
             for key, value in parsed_cookie.items():
                 if key != "distinct_id":
-                    properties[key] = value
+                    properties.setdefault(key, value)
 
             capture_and_sync_with_alternate_posthog(
                 alternate_distinct_id=marketing_anonymous_id,

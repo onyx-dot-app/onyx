@@ -39,7 +39,7 @@ if MARKETING_POSTHOG_API_KEY:
 
 
 def capture_and_sync_with_alternate_posthog(
-    alternate_distinct_id: str, event: str, properties: dict
+    alternate_distinct_id: str, event: str, properties: dict[str, Any]
 ) -> None:
     """
     Identify in both PostHog projects and capture the event in marketing.
