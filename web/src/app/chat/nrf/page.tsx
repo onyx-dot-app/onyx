@@ -3,7 +3,7 @@ import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { cookies } from "next/headers";
 import NRFPage from "./NRFPage";
 import { NRFPreferencesProvider } from "../../../components/context/NRFPreferencesContext";
-import * as Layouts from "@/refresh-components/layouts/layouts";
+import AppPageLayout from "@/layouts/AppPageLayout";
 import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
 
 export default async function Page() {
@@ -12,11 +12,11 @@ export default async function Page() {
   const headerData = await fetchHeaderDataSS();
 
   return (
-    <Layouts.AppPage {...headerData} className="h-full w-full">
+    <AppPageLayout {...headerData} className="h-full w-full">
       <InstantSSRAutoRefresh />
       <NRFPreferencesProvider>
         <NRFPage requestCookies={requestCookies} />
       </NRFPreferencesProvider>
-    </Layouts.AppPage>
+    </AppPageLayout>
   );
 }
