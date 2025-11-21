@@ -41,6 +41,20 @@ class TestRailConnector(LoadConnector, PollConnector):
 
     document_source_type: ClassVar[DocumentSource] = DocumentSource.TESTRAIL
 
+    # Fields that need ID-to-label value mapping
+    FIELDS_NEEDING_VALUE_MAPPING: ClassVar[set[str]] = {
+        "priority_id",
+        "custom_automation_type",
+        "custom_scenario_db_automation",
+        "custom_case_golden_canvas_automation",
+        "custom_customers",
+        "custom_case_environments",
+        "custom_case_overall_automation",
+        "custom_case_team_ownership",
+        "custom_case_unit_or_integration_automation",
+        "custom_effort",
+    }
+
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -53,13 +67,27 @@ class TestRailConnector(LoadConnector, PollConnector):
         self.username: str | None = None
         self.api_key: str | None = None
         self.batch_size = batch_size
-        self.project_ids = project_ids
-        # Use provided values or fall back to defaults
-        self.cases_page_size = cases_page_size if cases_page_size is not None else 250
-        self.max_pages = max_pages if max_pages is not None else 10000
-        self.skip_doc_absolute_chars = (
-            skip_doc_absolute_chars if skip_doc_absolute_chars is not None else 200000
+
+        # Parse project_ids from string if needed
+        if isinstance(project_ids, str) and project_ids.strip():
+            self.project_ids = [int(x.strip()) for x in project_ids.split(",") if x.strip()]
+        else:
+            self.project_ids = project_ids
+
+        # Handle empty strings from UI and convert to int with defaults
+        self.cases_page_size = (
+            int(cases_page_size) if cases_page_size and str(cases_page_size).strip() else 250
         )
+        self.max_pages = (
+            int(max_pages) if max_pages and str(max_pages).strip() else 10000
+        )
+        self.skip_doc_absolute_chars = (
+            int(skip_doc_absolute_chars) if skip_doc_absolute_chars and str(skip_doc_absolute_chars).strip() else 200000
+        )
+
+        # Cache for field labels and value mappings - will be populated on first use
+        self._field_labels: dict[str, str] | None = None
+        self._value_maps: dict[str, dict[str, str]] | None = None
 
     # --- Rich text sanitization helpers ---
     # Note: TestRail stores some fields as HTML (e.g. shared test steps).
@@ -154,6 +182,110 @@ class TestRailConnector(LoadConnector, PollConnector):
             return suites_list if isinstance(suites_list, list) else []
         return []
 
+    def _get_case_fields(self) -> list[dict[str, Any]]:
+        """Get case field definitions from TestRail API."""
+        try:
+            fields = self._api_get("get_case_fields")
+            return fields if isinstance(fields, list) else []
+        except Exception as e:
+            logger.warning(f"Failed to fetch case fields from TestRail: {e}")
+            return []
+
+    def _parse_items_string(self, items_str: str) -> dict[str, str]:
+        """Parse items string from field config into ID -> label mapping.
+
+        Format: "1, Option A\\n2, Option B\\n3, Option C"
+        Returns: {"1": "Option A", "2": "Option B", "3": "Option C"}
+        """
+        id_to_label = {}
+        if not items_str:
+            return id_to_label
+
+        for line in items_str.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(',', 1)
+            if len(parts) == 2:
+                item_id = parts[0].strip()
+                item_label = parts[1].strip()
+                id_to_label[item_id] = item_label
+
+        return id_to_label
+
+    def _build_field_maps(self) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+        """Build both field labels and value mappings in one pass.
+
+        Returns:
+            (field_labels, value_maps) where:
+            - field_labels: system_name -> label
+            - value_maps: system_name -> {id -> label}
+        """
+        field_labels = {}
+        value_maps = {}
+
+        try:
+            fields = self._get_case_fields()
+            for field in fields:
+                system_name = field.get("system_name")
+
+                # Build field label map
+                label = field.get("label")
+                if system_name and label:
+                    field_labels[system_name] = label
+
+                # Build value map if needed
+                if system_name in self.FIELDS_NEEDING_VALUE_MAPPING:
+                    configs = field.get("configs", [])
+                    if configs and len(configs) > 0:
+                        options = configs[0].get("options", {})
+                        items_str = options.get("items")
+                        if items_str:
+                            value_maps[system_name] = self._parse_items_string(items_str)
+
+        except Exception as e:
+            logger.warning(f"Failed to build field maps from TestRail: {e}")
+
+        return field_labels, value_maps
+
+    def _get_field_labels(self) -> dict[str, str]:
+        """Get field labels, fetching from API if not cached."""
+        if self._field_labels is None:
+            self._field_labels, self._value_maps = self._build_field_maps()
+        return self._field_labels
+
+    def _get_value_maps(self) -> dict[str, dict[str, str]]:
+        """Get value maps, fetching from API if not cached."""
+        if self._value_maps is None:
+            self._field_labels, self._value_maps = self._build_field_maps()
+        return self._value_maps
+
+    def _map_field_value(self, field_name: str, field_value: Any) -> str:
+        """Map a field value using the value map if available.
+
+        Examples:
+        - priority_id: 2 -> "Medium"
+        - custom_case_team_ownership: [10] -> "Sim Platform"
+        - custom_case_environments: [1, 2] -> "Local, Cloud"
+        """
+        if field_value is None or field_value == "":
+            return ""
+
+        # Get value map for this field
+        value_maps = self._get_value_maps()
+        value_map = value_maps.get(field_name, {})
+
+        # Handle list values
+        if isinstance(field_value, list):
+            if not field_value:
+                return ""
+            mapped = [value_map.get(str(v), str(v)) for v in field_value]
+            return ", ".join(mapped)
+
+        # Handle single values
+        val_str = str(field_value)
+        return value_map.get(val_str, val_str)
+
     def _get_cases(
         self, project_id: int, suite_id: Optional[int], limit: int, offset: int
     ) -> list[dict[str, Any]]:
@@ -210,13 +342,9 @@ class TestRailConnector(LoadConnector, PollConnector):
         suite: dict[str, Any] | None = None,
     ) -> Document | None:
         project_id = project.get("id")
-        project_name = project.get("name", f"Project {project_id}")
         case_id = case.get("id")
         title = case.get("title", f"Case {case_id}")
         case_key = f"C{case_id}" if case_id is not None else None
-        suite_id = suite.get("id") if suite else None
-        suite_name = suite.get("name") if suite else None
-        section_name = case.get("section_id")
 
         # Convert epoch seconds to aware datetime if available
         updated = case.get("updated_on") or case.get("created_on")
@@ -231,15 +359,27 @@ class TestRailConnector(LoadConnector, PollConnector):
             text_lines.append(f"Case ID: {case_key}")
         if case_id is not None:
             text_lines.append(f"ID: {case_id}")
-        if case.get("refs"):
-            text_lines.append(f"Refs: {case['refs']}")
         doc_link = case.get("custom_documentation_link")
         if doc_link:
             text_lines.append(f"Documentation: {doc_link}")
+
+        # Add fields that need value mapping
+        field_labels = self._get_field_labels()
+        for field_name in self.FIELDS_NEEDING_VALUE_MAPPING:
+            field_value = case.get(field_name)
+            if field_value is not None and field_value != "" and field_value != []:
+                mapped_value = self._map_field_value(field_name, field_value)
+                if mapped_value:
+                    # Get label from TestRail field definition
+                    label = field_labels.get(field_name, field_name.replace("_", " ").title())
+                    text_lines.append(f"{label}: {mapped_value}")
+
         pre = self._sanitize_rich_text(case.get("custom_preconds"))
         if pre:
             text_lines.append(f"Preconditions: {pre}")
-        # Steps: only use separated steps format
+
+        # Steps: use separated steps format if available
+        steps_added = False
         steps_separated = case.get("custom_steps_separated")
         if isinstance(steps_separated, list) and steps_separated:
             rendered_steps: list[str] = []
@@ -256,6 +396,16 @@ class TestRailConnector(LoadConnector, PollConnector):
                 rendered_steps.append("\n".join(parts))
             if rendered_steps:
                 text_lines.append("Steps:\n" + "\n".join(rendered_steps))
+                steps_added = True
+
+        # Fallback to custom_steps and custom_expected if no separated steps
+        if not steps_added:
+            custom_steps = self._sanitize_rich_text(case.get("custom_steps"))
+            custom_expected = self._sanitize_rich_text(case.get("custom_expected"))
+            if custom_steps:
+                text_lines.append(f"Steps: {custom_steps}")
+            if custom_expected:
+                text_lines.append(f"Expected: {custom_expected}")
 
         link = self._build_case_link(project_id, case_id)
 
@@ -267,26 +417,10 @@ class TestRailConnector(LoadConnector, PollConnector):
             )
             return None
 
-        # Keep tags minimal and high-cardinality to avoid duplicate Tag insertions
-        # Store structural identifiers in doc_metadata instead
+        # Metadata for document identification
         metadata: dict[str, Any] = {}
         if case_key:
             metadata["case_key"] = case_key
-
-        # Non-tag metadata stored here to avoid tag uniqueness conflicts
-        doc_metadata: dict[str, Any] = {}
-        if project_id is not None:
-            doc_metadata["project_id"] = str(project_id)
-        if project_name is not None:
-            doc_metadata["project_name"] = str(project_name)
-        if section_name is not None:
-            doc_metadata["section_id"] = str(section_name)
-        if case_id is not None:
-            doc_metadata["numeric_id"] = str(case_id)
-        if suite_id is not None:
-            doc_metadata["suite_id"] = str(suite_id)
-        if suite_name is not None:
-            doc_metadata["suite_name"] = str(suite_name)
 
         # Include the human-friendly case key in identifiers for easier search
         display_title = f"{case_key}: {title}" if case_key else title
@@ -298,7 +432,6 @@ class TestRailConnector(LoadConnector, PollConnector):
             title=display_title,
             sections=[TextSection(link=link, text=full_text)],
             metadata=metadata,
-            doc_metadata=doc_metadata,
             doc_updated_at=updated_dt,
         )
 
