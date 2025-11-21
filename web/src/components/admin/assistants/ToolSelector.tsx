@@ -18,6 +18,8 @@ import {
   WEB_SEARCH_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
 } from "@/app/chat/components/tools/constants";
+import { HoverPopup } from "@/components/HoverPopup";
+import { Info } from "lucide-react";
 
 interface ToolSelectorProps {
   tools: ToolSnapshot[];
@@ -137,9 +139,30 @@ export function ToolSelector({
 
   return (
     <div className="space-y-2">
-      <Text mainUiBody text04 className="mb-2">
-        Built-in Actions
-      </Text>
+      <div className="flex items-center gap-1.5 mb-2">
+        <Text mainUiBody text04>
+          Built-in Actions
+        </Text>
+        <HoverPopup
+          mainContent={
+            <Info className="h-3.5 w-3.5 text-text-400 cursor-help" />
+          }
+          popupContent={
+            <div className="text-xs space-y-2 max-w-xs">
+              <div>
+                <span className="font-semibold">Web Search:</span> Configure a
+                provider on the Web Search admin page to enable this tool.
+              </div>
+              <div>
+                <span className="font-semibold">Image Generation:</span> Add an
+                OpenAI LLM provider with an API key under Admin → Configuration
+                → LLM.
+              </div>
+            </div>
+          }
+          direction="bottom"
+        />
+      </div>
       {!hideSearchTool && searchTool && (
         <FastField name={`enabled_tools_map.${searchTool.id}`}>
           {() => (
