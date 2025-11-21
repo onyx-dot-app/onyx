@@ -195,5 +195,5 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
