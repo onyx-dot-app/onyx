@@ -9,7 +9,7 @@ interface LogoSectionProps {
   onFoldClick?: () => void;
 }
 
-function LogoSection({ folded, onFoldClick: onFoldClick }: LogoSectionProps) {
+function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
   const logo = useCallback(
     (className?: string) => <Logo folded={folded} className={className} />,
     [folded]
