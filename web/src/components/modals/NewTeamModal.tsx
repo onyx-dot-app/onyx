@@ -5,17 +5,21 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Dialog } from "@headlessui/react";
 import Button from "@/refresh-components/buttons/Button";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { Building, ArrowRight, Send, CheckCircle } from "lucide-react";
 import { useUser } from "../user/UserProvider";
 import { useModalContext } from "../context/ModalContext";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import SvgArrowUp from "@/icons/arrow-up";
+import SvgArrowRight from "@/icons/arrow-right";
+import SvgCheckCircle from "@/icons/check-circle";
+import SvgOrganization from "@/icons/organization";
 
-interface TenantByDomainResponse {
+export interface TenantByDomainResponse {
   tenant_id: string;
   number_of_users: number;
   creator_email: string;
 }
 
-export function NewTeamModal() {
+export default function NewTeamModal() {
   const { showNewTeamModal, setShowNewTeamModal } = useModalContext();
   const [existingTenant, setExistingTenant] =
     useState<TenantByDomainResponse | null>(null);
@@ -131,19 +135,19 @@ export function NewTeamModal() {
       className="relative z-[1000]"
     >
       {/* Modal backdrop */}
-      <div className="fixed inset-0 bg-[#000]/50" aria-hidden="true" />
+      <div className="fixed inset-0 bg-mask-03" aria-hidden="true" />
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="mx-auto w-full max-w-md rounded-lg bg-white dark:bg-neutral-800 p-6 shadow-xl border border-neutral-200 dark:border-neutral-700">
+        <Dialog.Panel className="mx-auto w-full max-w-md rounded-lg bg-background-neutral-00 p-6 shadow-xl border">
           <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
             {hasRequestedInvite ? (
               <>
-                <CheckCircle className="mr-2 h-5 w-5 text-neutral-900 dark:text-[#fff]" />
+                <SvgCheckCircle className="mr-2 h-5 w-5 text-text-05" />
                 Join Request Sent
               </>
             ) : (
               <>
-                <Building className="mr-2 h-5 w-5" />
+                <SvgOrganization className="mr-2 h-5 w-5" />
                 We found an existing team for {appDomain}
               </>
             )}
@@ -151,25 +155,25 @@ export function NewTeamModal() {
 
           {isLoading ? (
             <div className="py-8 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900 dark:border-neutral-100 mx-auto mb-4"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-border-05 mx-auto mb-4"></div>
               <p>Loading team information...</p>
             </div>
           ) : error ? (
             <div className="space-y-4">
-              <p className="text-red-500 dark:text-red-400">{error}</p>
+              <p className="text-status-text-error-05">{error}</p>
               <div className="flex w-full pt-2">
                 <Button
                   onClick={handleContinueToNewOrg}
-                  className="flex w-full text-center items-center justify-center"
+                  className="w-full"
+                  rightIcon={SvgArrowRight}
                 >
                   Continue with new team
-                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             </div>
           ) : hasRequestedInvite ? (
             <div className="space-y-4">
-              <p className="text-neutral-700 dark:text-neutral-200">
+              <p className="text-text-04">
                 Your join request has been sent. You can explore as your own
                 team while waiting for an admin of {appDomain} to approve your
                 request.
@@ -177,40 +181,33 @@ export function NewTeamModal() {
               <div className="flex w-full pt-2">
                 <Button
                   onClick={handleContinueToNewOrg}
-                  className="flex w-full text-center items-center justify-center"
+                  className="w-full"
+                  rightIcon={SvgArrowRight}
                 >
                   Try Onyx while waiting
-                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
-              <p className="text-neutral-500 dark:text-neutral-200 text-sm mb-2">
+              <p className="text-text-03 text-sm mb-2">
                 Your join request can be approved by any admin of {appDomain}.
               </p>
               <div className="mt-4">
                 <Button
                   onClick={handleRequestInvite}
-                  className="flex w-full items-center justify-center"
+                  className="w-full"
                   disabled={isSubmitting}
+                  leftIcon={isSubmitting ? SimpleLoader : SvgArrowUp}
                 >
-                  {isSubmitting ? (
-                    <span className="flex items-center">
-                      <span className="animate-spin mr-2">⟳</span>
-                      Sending request...
-                    </span>
-                  ) : (
-                    <>
-                      <Send className="mr-2 h-4 w-4" />
-                      Request to join your team
-                    </>
-                  )}
+                  {isSubmitting
+                    ? "Sending request..."
+                    : "Request to join your team"}
                 </Button>
               </div>
               <div
                 onClick={handleContinueToNewOrg}
-                className="flex hover:underline cursor-pointer text-link text-sm flex-col space-y-3 pt-0"
+                className="flex hover:underline cursor-pointer text-action-text-link-05 text-sm flex-col space-y-3 pt-0"
               >
                 + Continue with new team
               </div>
