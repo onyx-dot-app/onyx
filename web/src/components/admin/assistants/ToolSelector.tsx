@@ -9,7 +9,6 @@ import React, {
 } from "react";
 import { BooleanFormField } from "@/components/Field";
 import { ToolSnapshot, MCPServer } from "@/lib/tools/interfaces";
-import { FastField } from "formik";
 import { MCPServerSection } from "./FormSections";
 import { MemoizedToolList } from "./MemoizedToolCheckboxes";
 import Text from "@/refresh-components/texts/Text";
@@ -150,6 +149,11 @@ export function ToolSelector({
           popupContent={
             <div className="text-xs space-y-2 max-w-xs">
               <div>
+                <span className="font-semibold">Internal Search:</span> Requires
+                at least one connector to be configured to search your
+                organization&apos;s knowledge base.
+              </div>
+              <div>
                 <span className="font-semibold">Web Search:</span> Configure a
                 provider on the Web Search admin page to enable this tool.
               </div>
@@ -164,43 +168,31 @@ export function ToolSelector({
         />
       </div>
       {!hideSearchTool && searchTool && (
-        <FastField name={`enabled_tools_map.${searchTool.id}`}>
-          {() => (
-            <BooleanFormField
-              name={`enabled_tools_map.${searchTool.id}`}
-              label={searchTool.display_name}
-              subtext="Search through your organization's knowledge base and documents"
-              disabled={searchToolDisabled}
-              disabledTooltip={searchToolDisabledTooltip}
-            />
-          )}
-        </FastField>
+        <BooleanFormField
+          name={`enabled_tools_map.${searchTool.id}`}
+          label={searchTool.display_name}
+          subtext="Search through your organization's knowledge base and documents"
+          disabled={searchToolDisabled}
+          disabledTooltip={searchToolDisabledTooltip}
+        />
       )}
 
       {webSearchTool && (
-        <FastField name={`enabled_tools_map.${webSearchTool.id}`}>
-          {() => (
-            <BooleanFormField
-              name={`enabled_tools_map.${webSearchTool.id}`}
-              label={webSearchTool.display_name}
-              subtext="Access real-time information and search the web for up-to-date results"
-            />
-          )}
-        </FastField>
+        <BooleanFormField
+          name={`enabled_tools_map.${webSearchTool.id}`}
+          label={webSearchTool.display_name}
+          subtext="Access real-time information and search the web for up-to-date results"
+        />
       )}
 
       {imageGenerationTool && (
-        <FastField name={`enabled_tools_map.${imageGenerationTool.id}`}>
-          {() => (
-            <BooleanFormField
-              name={`enabled_tools_map.${imageGenerationTool.id}`}
-              label={imageGenerationTool.display_name}
-              subtext="Generate and manipulate images using AI-powered tools."
-              disabled={imageGenerationDisabled}
-              disabledTooltip={imageGenerationDisabledTooltip}
-            />
-          )}
-        </FastField>
+        <BooleanFormField
+          name={`enabled_tools_map.${imageGenerationTool.id}`}
+          label={imageGenerationTool.display_name}
+          subtext="Generate and manipulate images using AI-powered tools."
+          disabled={imageGenerationDisabled}
+          disabledTooltip={imageGenerationDisabledTooltip}
+        />
       )}
 
       {customTools.length > 0 && (
