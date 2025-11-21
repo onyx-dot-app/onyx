@@ -1,4 +1,5 @@
 import { test, expect } from "@chromatic-com/playwright";
+import { Route } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 
 test.describe("First user onboarding flow", () => {
@@ -15,7 +16,7 @@ test.describe("First user onboarding flow", () => {
 
     // Force an empty provider list at first so onboarding shows, then return
     // a stub provider after the Connect flow completes.
-    const providerListResponder = async (route: any) => {
+    const providerListResponder = async (route: Route) => {
       if (route.request().method() !== "GET") {
         await route.continue();
         return;
