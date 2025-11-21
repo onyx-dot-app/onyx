@@ -13,17 +13,17 @@ const getAdvancedOptionsButton = (page: Page) =>
 const getReminderTextarea = (page: Page) =>
   page.locator('textarea[name="task_prompt"]');
 const getDateTimeAwareCheckbox = (page: Page) =>
-  page.getByLabel(/Date and Time Aware/i);
+  page.locator("#checkbox-datetime_aware");
 const getKnowledgeCutoffInput = (page: Page) =>
   page.locator('input[name="search_start_date"]');
+const getAiRelevanceCheckbox = (page: Page) =>
+  page.locator("#checkbox-llm_relevance_filter");
 const getKnowledgeToggle = (page: Page) =>
   page
     .locator('div:has(> p:has-text("Knowledge"))')
     .locator('button[role="switch"]');
 const getNumChunksInput = (page: Page) =>
   page.locator('input[name="num_chunks"]');
-const getAiRelevanceCheckbox = (page: Page) =>
-  page.getByLabel(/AI Relevance Filter/i);
 const getStarterMessageInput = (page: Page, index: number = 0) =>
   page.locator(`input[name="starter_messages.${index}.message"]`);
 const getCreateSubmitButton = (page: Page) =>

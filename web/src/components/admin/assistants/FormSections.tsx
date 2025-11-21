@@ -148,7 +148,7 @@ export const MCPServerSection = memo(function MCPServerSection({
           checked={checkboxState === true}
           indeterminate={checkboxState === "indeterminate"}
           onCheckedChange={onToggleServerTools}
-          data-testid={`mcp-server-select-${serverId}`}
+          aria-label={`mcp-server-select-all-checkbox-${serverName}`}
         />
         <div className="flex-grow">
           <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
@@ -176,9 +176,7 @@ export const MCPServerSection = memo(function MCPServerSection({
                       onCheckedChange={(checked) => {
                         form.setFieldValue(field.name, checked);
                       }}
-                      data-testid={`mcp-server-tool-${serverId}-${tool.id}`}
-                      data-tool-name={tool.name}
-                      data-tool-display-name={tool.display_name}
+                      aria-label={`mcp-server-tool-checkbox-${tool.display_name}`}
                     />
                   </div>
                   <div>
