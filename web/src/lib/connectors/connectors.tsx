@@ -247,7 +247,16 @@ export const connectorConfigs: Record<
   },
   testrail: {
     description: "Configure TestRail connector",
-    values: [],
+    values: [
+      {
+        type: "text",
+        label: "Project IDs",
+        name: "project_ids",
+        optional: true,
+        description:
+          "Comma-separated list of TestRail project IDs to index (e.g., 1 or 1,2,3). Leave empty to index all projects.",
+      },
+    ],
     advanced_values: [
       {
         type: "number",
