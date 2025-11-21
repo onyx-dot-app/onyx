@@ -10,8 +10,6 @@ from agents import FunctionTool
 from agents import HostedMCPTool
 from agents import ImageGenerationTool as AgentsImageGenerationTool
 from agents import LocalShellTool
-from agents import Model
-from agents import ModelSettings
 from agents import WebSearchTool
 from pydantic import BaseModel
 from redis.client import Redis
@@ -43,9 +41,6 @@ AgentToolType = (
 
 @dataclass
 class ChatTurnDependencies:
-    llm_model: Model
-    model_settings: ModelSettings
-    # TODO we can delete this field (combine them)
     llm: LLM
     db_session: Session
     tools: Sequence[Tool]

@@ -1,13 +1,6 @@
-from collections.abc import Sequence
-from typing import cast
-
-from onyx.agents.agent_sdk.message_types import AgentSDKMessage
-from onyx.agents.agent_sdk.message_types import AssistantMessageWithContent
-from onyx.agents.agent_sdk.message_types import InputTextContent
-from onyx.agents.agent_sdk.message_types import OutputTextContent
-from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.chat.models import PromptConfig
 from onyx.chat.turn.context_handler.reminder import maybe_append_reminder
+from onyx.llm.message_types import ChatCompletionMessage
 
 
 def test_reminder_handler_with_reminder() -> None:
@@ -19,11 +12,8 @@ def test_reminder_handler_with_reminder() -> None:
         reminder=reminder_text,
         datetime_aware=False,
     )
-    agent_turn_messages: Sequence[AgentSDKMessage] = [
-        AssistantMessageWithContent(
-            role="assistant",
-            content=[OutputTextContent(type="output_text", text="Assistant response")],
-        ),
+    agent_turn_messages: list[ChatCompletionMessage] = [
+        {"role": "assistant", "content": "Assistant response"},
     ]
 
     result = maybe_append_reminder(
@@ -34,14 +24,9 @@ def test_reminder_handler_with_reminder() -> None:
 
     # Should append a reminder message
     assert len(result) == 2
-    assert cast(AssistantMessageWithContent, result[0])["role"] == "assistant"
-    assert cast(UserMessage, result[1])["role"] == "user"
-    assert isinstance(cast(UserMessage, result[1])["content"], list)
-    assert cast(UserMessage, result[1])["content"][0]["type"] == "input_text"
-    assert (
-        reminder_text
-        in cast(InputTextContent, cast(UserMessage, result[1])["content"][0])["text"]
-    )
+    assert result[0]["role"] == "assistant"
+    assert result[1]["role"] == "user"
+    assert reminder_text in str(result[1]["content"])
 
 
 def test_reminder_handler_without_reminder() -> None:
@@ -52,11 +37,8 @@ def test_reminder_handler_without_reminder() -> None:
         reminder="",  # Empty reminder
         datetime_aware=False,
     )
-    agent_turn_messages: Sequence[AgentSDKMessage] = [
-        AssistantMessageWithContent(
-            role="assistant",
-            content=[OutputTextContent(type="output_text", text="Assistant message")],
-        ),
+    agent_turn_messages: list[ChatCompletionMessage] = [
+        {"role": "assistant", "content": "Assistant message"},
     ]
 
     result = maybe_append_reminder(
@@ -67,4 +49,4 @@ def test_reminder_handler_without_reminder() -> None:
 
     # Should return original messages unchanged since reminder is empty
     assert len(result) == 1
-    assert cast(AssistantMessageWithContent, result[0])["role"] == "assistant"
+    assert result[0]["role"] == "assistant"

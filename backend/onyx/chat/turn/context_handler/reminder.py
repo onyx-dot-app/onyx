@@ -2,19 +2,17 @@
 
 from collections.abc import Sequence
 
-from onyx.agents.agent_sdk.message_types import AgentSDKMessage
-from onyx.agents.agent_sdk.message_types import InputTextContent
-from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.chat.models import PromptConfig
+from onyx.llm.message_types import ChatCompletionMessage
 from onyx.prompts.prompt_utils import build_task_prompt_reminders_v2
 
 
 def maybe_append_reminder(
-    agent_turn_messages: Sequence[AgentSDKMessage],
+    agent_turn_messages: Sequence[ChatCompletionMessage],
     prompt_config: PromptConfig,
     should_cite_documents: bool,
     last_iteration_included_web_search: bool = False,
-) -> list[AgentSDKMessage]:
+) -> list[ChatCompletionMessage]:
     """Add task prompt reminder as a user message.
 
     This function simply appends the task prompt reminder to the agent turn messages.
@@ -39,10 +37,9 @@ def maybe_append_reminder(
     if not reminder_text:
         return list(agent_turn_messages)
 
-    text_content: InputTextContent = {
-        "type": "input_text",
-        "text": reminder_text,
+    reminder_message: ChatCompletionMessage = {
+        "role": "user",
+        "content": reminder_text,
     }
-    reminder_message: UserMessage = {"role": "user", "content": [text_content]}
 
     return list(agent_turn_messages) + [reminder_message]
