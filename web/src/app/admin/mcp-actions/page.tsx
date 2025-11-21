@@ -9,11 +9,15 @@ import Actionbar from "@/sections/actions/Actionbar";
 import { MCPServersResponse } from "@/lib/tools/interfaces";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import MCPActionsList from "./MCPActionsList";
+import AddMCPServerModal from "./AddMCPServerModal";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 
 export default function MCPActionsPage() {
   const { popup, setPopup } = usePopup();
+  const addServerModal = useCreateModal();
+
   // Fetch MCP servers
   const {
     data: mcpData,
@@ -46,7 +50,7 @@ export default function MCPActionsPage() {
     );
   }, [toolsData]);
 
-  const mcpServers = mcpData?.mcp_servers || [];
+  const mcpServers = (mcpData?.mcp_servers || []) as any[];
   const isLoading = isMcpLoading || isToolsLoading;
   const hasActions = mcpServers.length > 0;
 
@@ -71,7 +75,7 @@ export default function MCPActionsPage() {
       <Separator className="my-0 border border-border-01 mb-6" />
       <Actionbar
         hasActions={hasActions}
-        onAddMCPServer={() => console.log("Add MCP Server clicked")}
+        onAddMCPServer={() => addServerModal.toggle(true)}
         buttonText="Add MCP Server"
       />
       <MCPActionsList
@@ -81,6 +85,13 @@ export default function MCPActionsPage() {
         mutateTools={mutateTools}
         setPopup={setPopup}
       />
+      <addServerModal.Provider>
+        <AddMCPServerModal
+          mutateMcpServers={mutateMcpServers}
+          mutateTools={mutateTools}
+          setPopup={setPopup}
+        />
+      </addServerModal.Provider>
     </div>
   );
 }

@@ -1,27 +1,19 @@
 "use client";
-import { MCPServer } from "@/lib/tools/interfaces";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import ActionCard from "@/sections/actions/ActionCard";
 import { Tool } from "@/sections/actions/ToolsList";
-import type { MCPActionStatus } from "@/sections/actions/types";
 import { getMCPServerIcon } from "@/lib/mcpUtils";
-import { KeyedMutator } from "swr";
-import { MCPServersResponse } from "@/lib/tools/interfaces";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
   deleteMCPServer,
   refreshMCPServerTools,
   updateToolStatus,
   disableAllServerTools,
 } from "@/lib/mcpService";
-
-export interface MCPActionsListProps {
-  mcpServers: MCPServer[];
-  toolsByServer: Record<number, ToolSnapshot[]>;
-  mutateMcpServers: KeyedMutator<MCPServersResponse>;
-  mutateTools: KeyedMutator<ToolSnapshot[]>;
-  setPopup: (spec: PopupSpec) => void;
-}
+import {
+  MCPActionsListProps,
+  MCPActionStatus,
+  MCPServerWithStatus,
+} from "./types";
 
 export default function MCPActionsList({
   mcpServers,
@@ -32,7 +24,7 @@ export default function MCPActionsList({
 }: MCPActionsListProps) {
   const convertTools = (
     toolSnapshots: ToolSnapshot[],
-    server: MCPServer
+    server: MCPServerWithStatus
   ): Tool[] => {
     return toolSnapshots.map((tool) => ({
       id: tool.id.toString(),
@@ -44,11 +36,14 @@ export default function MCPActionsList({
     }));
   };
 
-  // Determine status based on authentication
-  const getStatus = (server: MCPServer): MCPActionStatus => {
-    if (server.is_authenticated) {
+  // Determine status based on server status field
+  const getStatus = (server: MCPServerWithStatus): MCPActionStatus => {
+    if (server.status === "CONNECTED") {
       return "connected";
-    } else if (server.auth_type !== "NONE") {
+    } else if (
+      server.status === "AWAITING_AUTH" ||
+      server.status === "CREATED"
+    ) {
       return "pending";
     }
     return "disconnected";

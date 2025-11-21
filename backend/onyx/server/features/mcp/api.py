@@ -65,6 +65,7 @@ from onyx.server.features.mcp.models import MCPOAuthCallbackResponse
 from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.server.features.mcp.models import MCPServer
 from onyx.server.features.mcp.models import MCPServerCreateResponse
+from onyx.server.features.mcp.models import MCPServerSimpleCreateRequest
 from onyx.server.features.mcp.models import MCPServersResponse
 from onyx.server.features.mcp.models import MCPServerUpdateResponse
 from onyx.server.features.mcp.models import MCPToolCreateRequest
@@ -996,6 +997,7 @@ def _db_mcp_server_to_api_mcp_server(
         auth_performer=auth_performer,
         is_authenticated=is_authenticated,
         user_authenticated=user_authenticated,
+        status=db_server.status,
         auth_template=auth_template,
         user_credentials=user_credentials,
         admin_credentials=admin_credentials,
@@ -1656,6 +1658,41 @@ def update_mcp_server_with_tools(
     return MCPServerUpdateResponse(
         server_id=mcp_server.id,
         updated_tools=updated_tools,
+    )
+
+
+@admin_router.post("/server", response_model=MCPServer)
+def create_mcp_server_simple(
+    request: MCPServerSimpleCreateRequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_curator_or_admin_user),
+) -> MCPServer:
+    """Create MCP server with minimal information - auth to be configured later"""
+
+    mcp_server = create_mcp_server__no_commit(
+        owner_email=user.email,
+        name=request.name,
+        description=request.description,
+        server_url=request.server_url,
+        auth_type=None,  # To be configured later
+        transport=None,  # To be configured later
+        auth_performer=None,  # To be configured later
+        db_session=db_session,
+    )
+
+    db_session.commit()
+
+    return MCPServer(
+        id=mcp_server.id,
+        name=mcp_server.name,
+        description=mcp_server.description,
+        server_url=mcp_server.server_url,
+        owner=mcp_server.owner,
+        transport=mcp_server.transport,
+        auth_type=mcp_server.auth_type,
+        auth_performer=mcp_server.auth_performer,
+        is_authenticated=False,  # Not authenticated yet
+        status=mcp_server.status,
     )
 
 

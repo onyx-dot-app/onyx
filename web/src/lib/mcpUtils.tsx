@@ -8,10 +8,12 @@ import { DatabaseIcon, FileIcon } from "@/components/icons/icons";
  * Get an appropriate icon for an MCP server based on its URL and name.
  * Leverages the existing SOURCE_METADATA_MAP for connector icons.
  *
- * @param server - The MCP server object
+ * @param server - The MCP server object (or compatible subset with server_url and name)
  * @returns A React component for the icon
  */
-export function getMCPServerIcon(server: MCPServer): React.ReactNode {
+export function getMCPServerIcon(
+  server: Pick<MCPServer, "server_url" | "name">
+): React.ReactNode {
   const url = server.server_url.toLowerCase();
   const name = server.name.toLowerCase();
 

@@ -429,7 +429,7 @@ const ModalCloseButton = React.forwardRef<
   return (
     <div
       ref={ref}
-      className={cn("absolute top-4 right-4 z-20", className)}
+      className={cn("absolute top-2 right-2 z-20", className)}
       {...props}
     >
       <div

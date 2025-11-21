@@ -101,6 +101,12 @@ class MCPAuthenticationPerformer(str, PyEnum):
     PER_USER = "PER_USER"
 
 
+class MCPServerStatus(str, PyEnum):
+    CREATED = "CREATED"  # Server created, needs auth configuration
+    AWAITING_AUTH = "AWAITING_AUTH"  # Auth configured, pending user authentication
+    CONNECTED = "CONNECTED"  # Fully configured and connected
+
+
 # Consistent with Celery task statuses
 class TaskStatus(str, PyEnum):
     PENDING = "PENDING"

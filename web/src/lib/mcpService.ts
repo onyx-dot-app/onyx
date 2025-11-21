@@ -2,6 +2,11 @@
  * Service layer for MCP (Model Context Protocol) related API calls
  */
 
+import {
+  MCPServerWithStatus,
+  MCPServerCreateRequest,
+} from "@/app/admin/mcp-actions/types";
+
 export interface ToolStatusUpdateRequest {
   tool_ids: number[];
   enabled: boolean;
@@ -81,4 +86,26 @@ export async function disableAllServerTools(
   toolIds: number[]
 ): Promise<ToolStatusUpdateResponse> {
   return updateToolsStatus(toolIds, false);
+}
+
+/**
+ * Create a new MCP server with basic information
+ */
+export async function createMCPServer(
+  data: MCPServerCreateRequest
+): Promise<MCPServerWithStatus> {
+  const response = await fetch("/api/admin/mcp/server", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to create MCP server");
+  }
+
+  return await response.json();
 }

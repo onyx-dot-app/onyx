@@ -90,9 +90,9 @@ def create_mcp_server__no_commit(
     name: str,
     description: str | None,
     server_url: str,
-    auth_type: MCPAuthenticationType,
-    transport: MCPTransport,
-    auth_performer: MCPAuthenticationPerformer,
+    auth_type: MCPAuthenticationType | None,
+    transport: MCPTransport | None,
+    auth_performer: MCPAuthenticationPerformer | None,
     db_session: Session,
     admin_connection_config_id: int | None = None,
 ) -> MCPServer:

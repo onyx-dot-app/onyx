@@ -12,6 +12,7 @@ from pydantic import model_validator
 
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 
 
@@ -136,6 +137,14 @@ class MCPToolUpdateRequest(BaseModel):
     selected_tools: Optional[List[str]] = Field(
         None, description="List of selected tool names to create"
     )
+
+
+class MCPServerSimpleCreateRequest(BaseModel):
+    name: str = Field(..., description="Name of the MCP server")
+    description: Optional[str] = Field(
+        None, description="Description of the MCP server"
+    )
+    server_url: str = Field(..., description="URL of the MCP server")
 
 
 class MCPToolResponse(BaseModel):
@@ -270,11 +279,12 @@ class MCPServer(BaseModel):
     description: Optional[str] = None
     server_url: str
     owner: str
-    transport: MCPTransport
-    auth_type: MCPAuthenticationType
-    auth_performer: MCPAuthenticationPerformer
+    transport: Optional[MCPTransport] = None
+    auth_type: Optional[MCPAuthenticationType] = None
+    auth_performer: Optional[MCPAuthenticationPerformer] = None
     is_authenticated: bool
     user_authenticated: Optional[bool] = None
+    status: MCPServerStatus
     auth_template: Optional[MCPAuthTemplate] = Field(
         None, description="Authentication template for per-user auth"
     )
