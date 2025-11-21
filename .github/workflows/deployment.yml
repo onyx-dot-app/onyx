@@ -6,6 +6,9 @@ on:
       - "*"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   IS_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' }}
   EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}
@@ -30,7 +33,7 @@ jobs:
       - name: Check which components to build and version info
         id: check
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="${GITHUB_REF_NAME}"
           # Sanitize tag name by replacing slashes with hyphens (for Docker tag compatibility)
           SANITIZED_TAG=$(echo "$TAG" | tr '/' '-')
           IS_CLOUD=false
@@ -96,6 +99,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -151,6 +156,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -227,10 +234,15 @@ jobs:
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
 
       - name: Create and push manifest
+        env:
+          IMAGE_REPO: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          AMD64_DIGEST: ${{ needs.build-web-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-web-arm64.outputs.digest }}
+          META_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          IMAGES="${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-web-amd64.outputs.digest }} ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-web-arm64.outputs.digest }}"
+          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
-            $(printf '%s\n' "${{ steps.meta.outputs.tags }}" | xargs -I {} echo -t {}) \
+            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
 
   build-web-cloud-amd64:
@@ -250,6 +262,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -313,6 +327,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -394,10 +410,15 @@ jobs:
             type=raw,value=${{ github.event_name == 'workflow_dispatch' && format('web-cloud-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
 
       - name: Create and push manifest
+        env:
+          IMAGE_REPO: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          AMD64_DIGEST: ${{ needs.build-web-cloud-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-web-cloud-arm64.outputs.digest }}
+          META_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          IMAGES="${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-web-cloud-amd64.outputs.digest }} ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-web-cloud-arm64.outputs.digest }}"
+          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
-            $(printf '%s\n' "${{ steps.meta.outputs.tags }}" | xargs -I {} echo -t {}) \
+            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
 
   build-backend-amd64:
@@ -417,6 +438,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -471,6 +494,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -546,10 +571,15 @@ jobs:
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
 
       - name: Create and push manifest
+        env:
+          IMAGE_REPO: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          AMD64_DIGEST: ${{ needs.build-backend-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-backend-arm64.outputs.digest }}
+          META_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          IMAGES="${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-backend-amd64.outputs.digest }} ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-backend-arm64.outputs.digest }}"
+          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
-            $(printf '%s\n' "${{ steps.meta.outputs.tags }}" | xargs -I {} echo -t {}) \
+            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
 
   build-model-server-amd64:
@@ -570,6 +600,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -593,6 +625,8 @@ jobs:
       - name: Build and push AMD64
         id: build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        env:
+          DEBUG: ${{ vars.DOCKER_DEBUG == 'true' && 1 || 0 }}
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -610,7 +644,6 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
           provenance: false
           sbom: false
-          buildx-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
   build-model-server-arm64:
     needs: determine-builds
@@ -630,6 +663,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Docker meta
         id: meta
@@ -653,6 +688,8 @@ jobs:
       - name: Build and push ARM64
         id: build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        env:
+          DEBUG: ${{ vars.DOCKER_DEBUG == 'true' && 1 || 0 }}
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -670,7 +707,6 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
           provenance: false
           sbom: false
-          buildx-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
   merge-model-server:
     needs:
@@ -710,10 +746,15 @@ jobs:
             type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
 
       - name: Create and push manifest
+        env:
+          IMAGE_REPO: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          AMD64_DIGEST: ${{ needs.build-model-server-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-model-server-arm64.outputs.digest }}
+          META_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          IMAGES="${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-model-server-amd64.outputs.digest }} ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}@${{ needs.build-model-server-arm64.outputs.digest }}"
+          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
-            $(printf '%s\n' "${{ steps.meta.outputs.tags }}" | xargs -I {} echo -t {}) \
+            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
 
   trivy-scan-web:
@@ -811,6 +852,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Run Trivy vulnerability scanner
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
@@ -897,51 +940,66 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Determine failed jobs
         id: failed-jobs
         shell: bash
         run: |
           FAILED_JOBS=""
-          if [ "${{ needs.build-web-amd64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_WEB_AMD64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-web-amd64\\n"
           fi
-          if [ "${{ needs.build-web-arm64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_WEB_ARM64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-web-arm64\\n"
           fi
-          if [ "${{ needs.merge-web.result }}" == "failure" ]; then
+          if [ "${NEEDS_MERGE_WEB_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• merge-web\\n"
           fi
-          if [ "${{ needs.build-web-cloud-amd64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_WEB_CLOUD_AMD64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-web-cloud-amd64\\n"
           fi
-          if [ "${{ needs.build-web-cloud-arm64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_WEB_CLOUD_ARM64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-web-cloud-arm64\\n"
           fi
-          if [ "${{ needs.merge-web-cloud.result }}" == "failure" ]; then
+          if [ "${NEEDS_MERGE_WEB_CLOUD_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• merge-web-cloud\\n"
           fi
-          if [ "${{ needs.build-backend-amd64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_BACKEND_AMD64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-backend-amd64\\n"
           fi
-          if [ "${{ needs.build-backend-arm64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_BACKEND_ARM64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-backend-arm64\\n"
           fi
-          if [ "${{ needs.merge-backend.result }}" == "failure" ]; then
+          if [ "${NEEDS_MERGE_BACKEND_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• merge-backend\\n"
           fi
-          if [ "${{ needs.build-model-server-amd64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_MODEL_SERVER_AMD64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-model-server-amd64\\n"
           fi
-          if [ "${{ needs.build-model-server-arm64.result }}" == "failure" ]; then
+          if [ "${NEEDS_BUILD_MODEL_SERVER_ARM64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-model-server-arm64\\n"
           fi
-          if [ "${{ needs.merge-model-server.result }}" == "failure" ]; then
+          if [ "${NEEDS_MERGE_MODEL_SERVER_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• merge-model-server\\n"
           fi
           # Remove trailing \n and set output
           FAILED_JOBS=$(printf '%s' "$FAILED_JOBS" | sed 's/\\n$//')
           echo "jobs=$FAILED_JOBS" >> "$GITHUB_OUTPUT"
+        env:
+          NEEDS_BUILD_WEB_AMD64_RESULT: ${{ needs.build-web-amd64.result }}
+          NEEDS_BUILD_WEB_ARM64_RESULT: ${{ needs.build-web-arm64.result }}
+          NEEDS_MERGE_WEB_RESULT: ${{ needs.merge-web.result }}
+          NEEDS_BUILD_WEB_CLOUD_AMD64_RESULT: ${{ needs.build-web-cloud-amd64.result }}
+          NEEDS_BUILD_WEB_CLOUD_ARM64_RESULT: ${{ needs.build-web-cloud-arm64.result }}
+          NEEDS_MERGE_WEB_CLOUD_RESULT: ${{ needs.merge-web-cloud.result }}
+          NEEDS_BUILD_BACKEND_AMD64_RESULT: ${{ needs.build-backend-amd64.result }}
+          NEEDS_BUILD_BACKEND_ARM64_RESULT: ${{ needs.build-backend-arm64.result }}
+          NEEDS_MERGE_BACKEND_RESULT: ${{ needs.merge-backend.result }}
+          NEEDS_BUILD_MODEL_SERVER_AMD64_RESULT: ${{ needs.build-model-server-amd64.result }}
+          NEEDS_BUILD_MODEL_SERVER_ARM64_RESULT: ${{ needs.build-model-server-arm64.result }}
+          NEEDS_MERGE_MODEL_SERVER_RESULT: ${{ needs.merge-model-server.result }}
 
       - name: Send Slack notification
         uses: ./.github/actions/slack-notify

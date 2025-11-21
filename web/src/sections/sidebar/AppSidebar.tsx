@@ -487,7 +487,7 @@ function AppSidebarInner() {
                   {projects.map((project) => (
                     <ProjectFolderButton key={project.id} project={project} />
                   ))}
-                  {newProjectButton}
+                  {projects.length === 0 && newProjectButton}
                 </SidebarSection>
 
                 {/* Recents */}

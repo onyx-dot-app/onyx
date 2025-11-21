@@ -2,6 +2,8 @@ import os
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -518,3 +520,52 @@ class TestHubSpotConnector:
         note_url = connector._get_object_url("notes", "44444")
         expected_note_url = "https://app.hubspot.com/contacts/12345/objects/0-4/44444"
         assert note_url == expected_note_url
+
+    def test_ticket_with_none_content(self) -> None:
+        """Test that tickets with None content are handled gracefully."""
+        connector = HubSpotConnector(object_types=["tickets"], batch_size=10)
+        connector._access_token = "mock_token"
+        connector._portal_id = "mock_portal_id"
+
+        # Create a mock ticket with None content
+        mock_ticket = MagicMock()
+        mock_ticket.id = "12345"
+        mock_ticket.properties = {
+            "subject": "Test Ticket",
+            "content": None,  # This is the key test case
+            "hs_ticket_priority": "HIGH",
+        }
+        mock_ticket.updated_at = datetime.now(timezone.utc)
+
+        # Mock the HubSpot API client
+        mock_api_client = MagicMock()
+
+        # Mock the API calls and associated object methods
+        with patch(
+            "onyx.connectors.hubspot.connector.HubSpot"
+        ) as MockHubSpot, patch.object(
+            connector, "_paginated_results"
+        ) as mock_paginated, patch.object(
+            connector, "_get_associated_objects", return_value=[]
+        ), patch.object(
+            connector, "_get_associated_notes", return_value=[]
+        ):
+            MockHubSpot.return_value = mock_api_client
+            mock_paginated.return_value = iter([mock_ticket])
+
+            # This should not raise a validation error
+            document_batches = connector._process_tickets()
+            first_batch = next(document_batches, None)
+
+            # Verify the document was created successfully
+            assert first_batch is not None
+            assert len(first_batch) == 1
+
+            doc = first_batch[0]
+            assert doc.id == "hubspot_ticket_12345"
+            assert doc.semantic_identifier == "Test Ticket"
+
+            # Verify the first section has an empty string, not None
+            assert len(doc.sections) > 0
+            assert doc.sections[0].text == ""  # Should be empty string, not None
+            assert doc.sections[0].link is not None

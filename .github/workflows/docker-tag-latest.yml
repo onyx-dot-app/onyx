@@ -10,6 +10,9 @@ on:
         description: "The version (ie v0.0.1) to tag as latest"
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   tag:
     # See https://runs-on.com/runners/linux/
@@ -29,13 +32,19 @@ jobs:
         run: echo "DOCKER_CLI_EXPERIMENTAL=enabled" >> $GITHUB_ENV
 
       - name: Pull, Tag and Push Web Server Image
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          docker buildx imagetools create -t onyxdotapp/onyx-web-server:latest onyxdotapp/onyx-web-server:${{ github.event.inputs.version }}
+          docker buildx imagetools create -t onyxdotapp/onyx-web-server:latest onyxdotapp/onyx-web-server:${VERSION}
 
       - name: Pull, Tag and Push API Server Image
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          docker buildx imagetools create -t onyxdotapp/onyx-backend:latest onyxdotapp/onyx-backend:${{ github.event.inputs.version }}
+          docker buildx imagetools create -t onyxdotapp/onyx-backend:latest onyxdotapp/onyx-backend:${VERSION}
 
       - name: Pull, Tag and Push Model Server Image
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          docker buildx imagetools create -t onyxdotapp/onyx-model-server:latest onyxdotapp/onyx-model-server:${{ github.event.inputs.version }}
+          docker buildx imagetools create -t onyxdotapp/onyx-model-server:latest onyxdotapp/onyx-model-server:${VERSION}

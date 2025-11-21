@@ -141,6 +141,22 @@ class CCPairManager:
         result.raise_for_status()
 
     @staticmethod
+    def unpause_cc_pair(
+        cc_pair: DATestCCPair,
+        user_performing_action: DATestUser | None = None,
+    ) -> None:
+        result = requests.put(
+            url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/status",
+            json={"status": "ACTIVE"},
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+        result.raise_for_status()
+
+    @staticmethod
     def delete(
         cc_pair: DATestCCPair,
         user_performing_action: DATestUser | None = None,
