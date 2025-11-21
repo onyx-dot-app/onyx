@@ -25,7 +25,9 @@ export function useToolDisplayTiming(
     getInitialTools(toolGroups, isComplete)
   );
   const [completedToolInds, setCompletedToolInds] = useState<Set<number>>(() =>
-    getInitialTools(toolGroups, isComplete)
+    isFinalAnswerComing
+      ? new Set(toolGroups.map((group) => group.ind))
+      : getInitialTools(toolGroups, isComplete)
   );
 
   // Track when each tool starts displaying
