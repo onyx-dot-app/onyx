@@ -143,12 +143,12 @@ export default function NewTeamModal() {
           <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
             {hasRequestedInvite ? (
               <>
-                <SvgCheckCircle className="mr-2 h-5 w-5 text-text-05" />
+                <SvgCheckCircle className="mr-2 h-5 w-5 stroke-text-05" />
                 Join Request Sent
               </>
             ) : (
               <>
-                <SvgOrganization className="mr-2 h-5 w-5" />
+                <SvgOrganization className="mr-2 h-5 w-5 stroke-text-04" />
                 We found an existing team for {appDomain}
               </>
             )}
