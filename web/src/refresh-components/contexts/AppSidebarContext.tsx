@@ -1,6 +1,6 @@
 "use client";
 
-import React, {
+import {
   createContext,
   useContext,
   useState,
@@ -11,7 +11,6 @@ import React, {
 } from "react";
 import Cookies from "js-cookie";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
-import useScreenSize from "@/hooks/useScreenSize";
 
 function setFoldedCookie(folded: boolean) {
   const foldedAsString = folded.toString();
@@ -30,7 +29,6 @@ export function AppSidebarProvider({
   folded: initiallyFolded,
   children,
 }: AppSidebarProviderProps) {
-  const { width } = useScreenSize();
   const [folded, setFoldedInternal] = useState(initiallyFolded);
 
   const setFolded: Dispatch<SetStateAction<boolean>> = (value) => {
