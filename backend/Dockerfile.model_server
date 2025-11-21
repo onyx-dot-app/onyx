@@ -1,4 +1,4 @@
-FROM python:3.11.7-slim-bookworm
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is for the Onyx model server which runs all of the \
