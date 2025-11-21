@@ -24,7 +24,7 @@ export interface MenuButtonProps {
   onClick?: React.MouseEventHandler<HTMLDivElement>;
   href?: string;
   icon: React.FunctionComponent<SvgProps>;
-  children?: string;
+  children?: string | React.ReactNode;
 }
 
 export default function MenuButton({
