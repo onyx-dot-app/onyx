@@ -521,7 +521,7 @@ export default function AppSidebar() {
     <>
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 transition-transform duration-300",
+          "fixed inset-y-0 left-0 z-50 transition-transform duration-200",
           folded ? "-translate-x-full" : "translate-x-0"
         )}
       >
