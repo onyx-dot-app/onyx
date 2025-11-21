@@ -11,8 +11,7 @@ import React, {
 } from "react";
 import Cookies from "js-cookie";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
-import { useScreenSize } from "@/hooks/useScreenSize";
-import { MOBILE_SIDEBAR_BREAKPOINT_PX } from "@/lib/constants";
+import useScreenSize from "@/hooks/useScreenSize";
 
 function setFoldedCookie(folded: boolean) {
   const foldedAsString = folded.toString();
@@ -32,8 +31,6 @@ export function AppSidebarProvider({
   children,
 }: AppSidebarProviderProps) {
   const { width } = useScreenSize();
-  const isMobile =
-    width !== undefined ? width <= MOBILE_SIDEBAR_BREAKPOINT_PX : false;
   const [folded, setFoldedInternal] = useState(initiallyFolded);
 
   const setFolded: Dispatch<SetStateAction<boolean>> = (value) => {
@@ -65,7 +62,6 @@ export function AppSidebarProvider({
       value={{
         folded,
         setFolded,
-        isMobile,
       }}
     >
       {children}
@@ -76,7 +72,6 @@ export function AppSidebarProvider({
 export interface AppSidebarContextType {
   folded: boolean;
   setFolded: Dispatch<SetStateAction<boolean>>;
-  isMobile: boolean;
 }
 
 const AppSidebarContext = createContext<AppSidebarContextType | undefined>(

@@ -33,6 +33,7 @@ import SimplePopover from "@/refresh-components/SimplePopover";
 import { FOLDED_SIZE } from "@/refresh-components/Logo";
 import SvgSidebar from "@/icons/sidebar";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
+import useScreenSize from "@/hooks/useScreenSize";
 
 interface AppPageLayoutProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
   settings: CombinedSettings | null;
@@ -49,7 +50,8 @@ export default function AppPageLayout({
   className,
   ...rest
 }: AppPageLayoutProps) {
-  const { isMobile, setFolded } = useAppSidebarContext();
+  const { isMobile } = useScreenSize();
+  const { setFolded } = useAppSidebarContext();
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =

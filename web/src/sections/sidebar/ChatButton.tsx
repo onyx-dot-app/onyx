@@ -43,7 +43,7 @@ import {
   handleMoveOperation,
 } from "@/sections/sidebar/sidebarUtils";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import { useAppFocus } from "@/lib/hooks";
+import useAppFocus from "@/hooks/useAppFocus";
 
 // (no local constants; use shared constants/imports)
 

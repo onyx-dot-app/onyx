@@ -58,8 +58,9 @@ import { ChatSession } from "@/app/chat/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import SvgSettings from "@/icons/settings";
-import { useAppFocus } from "@/lib/hooks";
+import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import useScreenSize from "@/hooks/useScreenSize";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -505,7 +506,8 @@ const MemoizedAppSidebarInner = memo(AppSidebarInner);
 MemoizedAppSidebarInner.displayName = "AppSidebar";
 
 export default function AppSidebar() {
-  const { folded, setFolded, isMobile } = useAppSidebarContext();
+  const { folded, setFolded } = useAppSidebarContext();
+  const { isMobile } = useScreenSize();
 
   if (!isMobile)
     return (
