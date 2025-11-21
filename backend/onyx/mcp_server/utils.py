@@ -6,6 +6,7 @@ import os
 
 import httpx
 from fastmcp.server.auth.auth import AccessToken
+from fastmcp.server.dependencies import get_access_token
 
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_PORT
@@ -15,6 +16,24 @@ logger = setup_logger()
 
 # Shared HTTP client reused across requests
 _http_client: httpx.AsyncClient | None = None
+
+
+def require_access_token() -> AccessToken:
+    """
+    Get and validate the access token from the current request.
+
+    Raises:
+        ValueError: If no access token is present in the request.
+
+    Returns:
+        AccessToken: The validated access token.
+    """
+    access_token = get_access_token()
+    if not access_token:
+        raise ValueError(
+            "MCP Server requires an Onyx access token to authenticate your request"
+        )
+    return access_token
 
 
 def get_api_server_url() -> str:
