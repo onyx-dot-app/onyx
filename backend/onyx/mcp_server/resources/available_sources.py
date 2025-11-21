@@ -6,10 +6,9 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
-from fastmcp.server.dependencies import get_access_token
-
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import fetch_indexed_source_types
+from onyx.mcp_server.utils import require_access_token
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -27,9 +26,7 @@ logger = setup_logger()
 async def available_sources_resource() -> dict[str, Any]:
     """Return the list of indexed source types for search filtering."""
 
-    access_token = get_access_token()
-    if not access_token:
-        raise ValueError("Authentication required")
+    access_token = require_access_token()
 
     sources = await fetch_indexed_source_types(access_token)
     if sources is None:

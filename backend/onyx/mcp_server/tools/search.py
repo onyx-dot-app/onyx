@@ -3,8 +3,6 @@
 from datetime import datetime
 from typing import Any
 
-from fastmcp.server.dependencies import get_access_token
-
 from ee.onyx.server.query_and_chat.models import DocumentSearchRequest
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.enums import LLMEvaluationType
@@ -15,6 +13,7 @@ from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import fetch_indexed_source_types
 from onyx.mcp_server.utils import get_api_server_url
 from onyx.mcp_server.utils import get_http_client
+from onyx.mcp_server.utils import require_access_token
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -58,15 +57,14 @@ async def onyx_search_documents(
         Dict with:
         - documents: List of search results with content snippets
         - total_results: Number of results found
+        - query: The query that was searched
     """
     logger.info(
         f"Onyx MCP Server: document search: query='{query}', sources={source_types}, limit={limit}"
     )
 
     # Get authenticated user from FastMCP's access token
-    access_token = get_access_token()
-    if not access_token:
-        raise ValueError("Authentication required")
+    access_token = require_access_token()
 
     if not await _tenant_has_indexed_sources(access_token):
         logger.info("Onyx MCP Server: No indexed sources available for tenant")
@@ -144,13 +142,13 @@ async def onyx_web_search(
     limit: int = 5,
 ) -> dict[str, Any]:
     """
-    Search the public web via the `/web-search/search-lite` API (snippets only).
+    Search the public web via Onyx's web search.
 
-    Returns snippets only. Use onyx_open_url for full content.
+    Returns snippets only. Use `onyx_open_url` to fetch full content from URLs in these results.
 
     Args:
         query: Search query for the public web
-        limit: Maximum results per query to return (1-20)
+        limit: Maximum results per query to return (1-20, default is 5)
 
     Returns:
         Dict with:
@@ -159,14 +157,10 @@ async def onyx_web_search(
           - title: Page title
           - snippet: Brief excerpt (NOT full content)
         - query: The query that was searched
-
-    Note: Use `onyx_open_url` to fetch full content from URLs in these results.
     """
     logger.info(f"Onyx MCP Server: Web search: query='{query}', limit={limit}")
 
-    access_token = get_access_token()
-    if not access_token:
-        raise ValueError("Authentication required")
+    access_token = require_access_token()
 
     try:
         request_payload = {"queries": [query], "max_results": limit}
@@ -196,7 +190,7 @@ async def onyx_open_url(
     urls: list[str],
 ) -> dict[str, Any]:
     """
-    This tool retrieves the complete text content of web pages, not just snippets.
+    This tool retrieves the complete text content of web pages.
 
     Typical workflow:
     1. Use `onyx_web_search` to find relevant URLs (returns snippets only)
@@ -212,9 +206,7 @@ async def onyx_open_url(
     """
     logger.info(f"Onyx MCP Server: Open URL: fetching {len(urls)} URLs")
 
-    access_token = get_access_token()
-    if not access_token:
-        raise ValueError("Authentication required")
+    access_token = require_access_token()
 
     try:
         response = await get_http_client().post(
