@@ -415,7 +415,7 @@ export function ToolList({
               indeterminate={!allFilteredSelected && someFilteredSelected}
               onCheckedChange={handleToggleAllFiltered}
               className="mt-0"
-              data-testid="tool-checkbox-select-all"
+              aria-label="tool-checkbox-select-all"
             />
           </div>
           <div className="flex-1 font-medium text-sm text-gray-700 dark:text-gray-300">
@@ -442,7 +442,7 @@ export function ToolList({
                     checked={selectedTools.has(tool.name)}
                     onCheckedChange={() => handleToggleTool(tool.name)}
                     className="mt-0"
-                    data-testid={`tool-checkbox-${tool.name}`}
+                    aria-label={`tool-checkbox-${tool.name}`}
                   />
                 </div>
                 <div className="flex-1">
