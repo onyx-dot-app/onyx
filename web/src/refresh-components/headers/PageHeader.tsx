@@ -52,7 +52,6 @@ export default function PageHeader({
       <div className="flex flex-col gap-6 px-4 pt-4 pb-2">
         <div className="flex flex-col">
           <div className="flex flex-row justify-between items-center gap-4">
-            <Icon className="stroke-text-04 h-[1.75rem] w-[1.75rem]" />
             {rightChildren}
           </div>
           <div className="flex flex-col">

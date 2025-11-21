@@ -110,6 +110,7 @@ export default function ChatPage({
 
   const router = useRouter();
   const searchParams = useSearchParams();
+  const assistantId = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
 
   const { chatSessions, ccPairs, tags, documentSets, refreshChatSessions } =
     useChatContext();
@@ -800,6 +801,8 @@ export default function ChatPage({
           settings={headerData.settings}
           chatSession={headerData.chatSession}
           className="flex flex-row h-full w-full"
+          showAssistantButton={!!assistantId}
+          assistantId={assistantId ? parseInt(assistantId) : null}
         >
           <div className="flex flex-row h-full w-full">
             <div

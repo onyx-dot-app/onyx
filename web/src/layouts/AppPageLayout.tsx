@@ -31,10 +31,14 @@ import { PopoverMenu } from "@/components/ui/popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { FOLDED_SIZE } from "@/refresh-components/Logo";
+import AssistantDocumentationModal from "@/components/modals/AssistantDocumentationModal";
 
 interface AppPageLayoutProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
   settings: CombinedSettings | null;
   chatSession: ChatSession | null;
+  showAssistantButton?: boolean;
+  assistantId?: number | null;
+  children?: React.ReactNode;
 }
 
 // AppPageLayout wraps chat pages with the shared header/footer white-labelling chrome.
@@ -45,10 +49,13 @@ export default function AppPageLayout({
   settings,
   chatSession,
   className,
+  showAssistantButton = false,
+  assistantId = null,
   ...rest
 }: AppPageLayoutProps) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [showDocumentationModal, setShowDocumentationModal] = useState(false);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
@@ -234,14 +241,31 @@ export default function AppPageLayout({
         </ConfirmationModalLayout>
       )}
 
+      {showAssistantButton && (
+        <AssistantDocumentationModal
+          open={showDocumentationModal}
+          onOpenChange={setShowDocumentationModal}
+          assistantId={assistantId}
+        />
+      )}
+
       <div className="flex flex-col h-full w-full">
-        {(customHeaderContent || !showCenteredInput) && (
+        {(customHeaderContent || !showCenteredInput || showAssistantButton) && (
           <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
             <div className="flex-1" />
             <div className="flex-1 flex flex-col items-center">
               <Text text03>{customHeaderContent}</Text>
             </div>
             <div className="flex-1 flex flex-row items-center justify-end px-1">
+              {showAssistantButton && (
+                <Button
+                  tertiary
+                  onClick={() => setShowDocumentationModal(true)}
+                  className="mr-2"
+                >
+                  Documentation
+                </Button>
+              )}
               <Button
                 leftIcon={SvgShare}
                 transient={showShareModal}
