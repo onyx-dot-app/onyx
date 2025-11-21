@@ -34,7 +34,7 @@ export default function useIsMounted(f?: () => void): boolean {
   useEffect(() => {
     setMounted(true);
     f?.();
-  }, []);
+  }, [f]);
 
   return mounted;
 }
