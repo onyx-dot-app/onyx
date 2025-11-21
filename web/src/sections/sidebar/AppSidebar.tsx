@@ -61,7 +61,6 @@ import SvgSettings from "@/icons/settings";
 import { useAppFocus } from "@/lib/hooks";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { useScreenSize } from "@/hooks/useScreenSize";
-import { useMobileSidebar } from "@/refresh-components/contexts/MobileSidebarContext";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -125,7 +124,7 @@ function RecentsSection({ chatSessions }: RecentsSectionProps) {
 function AppSidebarInner() {
   const route = useAppRouter();
   const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
-  const { folded, setFolded } = useAppSidebarContext();
+  const { collapsed, setCollapsed } = useAppSidebarContext();
   const { chatSessions, refreshChatSessions } = useChatContext();
   const combinedSettings = useSettingsContext();
   const { refreshCurrentProjectDetails, fetchProjects, currentProjectId } =
@@ -319,7 +318,7 @@ function AppSidebarInner() {
       <div data-testid="AppSidebar/new-session">
         <SidebarTab
           leftIcon={SvgEditBig}
-          folded={folded}
+          folded={collapsed}
           onClick={() => {
             if (
               combinedSettings?.settings?.disable_default_assistant &&
@@ -338,27 +337,27 @@ function AppSidebarInner() {
         </SidebarTab>
       </div>
     ),
-    [folded, route, activeSidebarTab, combinedSettings, currentAgent]
+    [collapsed, route, activeSidebarTab, combinedSettings, currentAgent]
   );
   const moreAgentsButton = useMemo(
     () => (
       <div data-testid="AppSidebar/more-agents">
         <SidebarTab
           leftIcon={
-            folded || visibleAgents.length === 0
+            collapsed || visibleAgents.length === 0
               ? SvgOnyxOctagon
               : SvgMoreHorizontal
           }
           href="/chat/agents"
-          folded={folded}
+          folded={collapsed}
           active={activeSidebarTab === "more-agents"}
-          lowlight={!folded}
+          lowlight={!collapsed}
         >
           {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
         </SidebarTab>
       </div>
     ),
-    [folded, activeSidebarTab, visibleAgents]
+    [collapsed, activeSidebarTab, visibleAgents]
   );
   const newProjectButton = useMemo(
     () => (
@@ -366,13 +365,13 @@ function AppSidebarInner() {
         leftIcon={SvgFolderPlus}
         onClick={() => createProjectModal.toggle(true)}
         active={createProjectModal.isOpen}
-        folded={folded}
-        lowlight={!folded}
+        folded={collapsed}
+        lowlight={!collapsed}
       >
         New Project
       </SidebarTab>
     ),
-    [folded, createProjectModal.toggle, createProjectModal.isOpen]
+    [collapsed, createProjectModal.toggle, createProjectModal.isOpen]
   );
   const settingsButton = useMemo(
     () => (
@@ -381,15 +380,15 @@ function AppSidebarInner() {
           <SidebarTab
             href="/admin/indexing/status"
             leftIcon={SvgSettings}
-            folded={folded}
+            folded={collapsed}
           >
             {isAdmin ? "Admin Panel" : "Curator Panel"}
           </SidebarTab>
         )}
-        <Settings folded={folded} />
+        <Settings folded={collapsed} />
       </div>
     ),
-    [folded, isAdmin, isCurator]
+    [collapsed, isAdmin, isCurator]
   );
 
   if (!combinedSettings) {
@@ -436,9 +435,9 @@ function AppSidebarInner() {
         />
       )}
 
-      <SidebarWrapper folded={folded} setFolded={setFolded}>
+      <SidebarWrapper collapsed={collapsed} setCollapsed={setCollapsed}>
         <SidebarBody footer={settingsButton} actionButton={newSessionButton}>
-          {folded ? (
+          {collapsed ? (
             <>
               {moreAgentsButton}
               {newProjectButton}
@@ -510,38 +509,34 @@ const MOBILE_SIDEBAR_BREAKPOINT_PX = 640;
 
 export default function AppSidebar() {
   const { width } = useScreenSize();
-  const { isMobileSidebarOpen, closeSidebar } = useMobileSidebar();
+  const { collapsed, setCollapsed } = useAppSidebarContext();
   const isCompact =
     width !== undefined ? width <= MOBILE_SIDEBAR_BREAKPOINT_PX : false;
 
-  if (!isCompact) {
-    return (
-      <div className="flex-shrink-0">
-        <MemoizedAppSidebarInner />
-      </div>
-    );
-  }
+  if (!isCompact) return <MemoizedAppSidebarInner />;
 
   return (
     <>
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 max-w-full transition-transform duration-200",
-          isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed inset-y-0 left-0 z-50 w-[min(18rem,90vw)] max-w-full bg-background-neutral-00 shadow-03 transition-transform duration-300",
+          collapsed ? "-translate-x-full" : "translate-x-0"
         )}
       >
         <div className="h-full overflow-y-auto">
           <MemoizedAppSidebarInner />
         </div>
       </div>
+
+      {/* Hitbox to close the sidebar if anything outside of it is touched */}
       <div
         className={cn(
-          "fixed inset-0 z-40 transition-opacity duration-200",
-          isMobileSidebarOpen
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
+          "fixed inset-0 z-40 bg-black/40 transition-opacity duration-200",
+          collapsed
+            ? "opacity-0 pointer-events-none"
+            : "opacity-100 pointer-events-auto"
         )}
-        onClick={closeSidebar}
+        onClick={() => setCollapsed(true)}
       />
     </>
   );

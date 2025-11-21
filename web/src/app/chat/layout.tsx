@@ -4,8 +4,6 @@ import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { ChatProvider } from "@/refresh-components/contexts/ChatContext";
 import { ProjectsProvider } from "./projects/ProjectsContext";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
-import { MobileSidebarProvider } from "@/refresh-components/contexts/MobileSidebarContext";
-
 export interface LayoutProps {
   children: React.ReactNode;
 }
@@ -59,12 +57,10 @@ export default async function Layout({ children }: LayoutProps) {
       defaultAssistantId={defaultAssistantId}
     >
       <ProjectsProvider initialProjects={projects}>
-        <MobileSidebarProvider>
-          <div className="flex flex-row w-full h-full relative">
-            <AppSidebar />
-            <div className="flex-1">{children}</div>
-          </div>
-        </MobileSidebarProvider>
+        <div className="flex flex-row w-full h-full relative">
+          <AppSidebar />
+          <div className="flex-1">{children}</div>
+        </div>
       </ProjectsProvider>
     </ChatProvider>
   );

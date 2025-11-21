@@ -41,7 +41,7 @@ export default function AppProvider({
               agents={assistants}
               pinnedAgentIds={user?.preferences.pinned_assistants || []}
             >
-              <AppSidebarProvider folded={!!folded}>
+              <AppSidebarProvider collapsed={!!folded}>
                 {children}
               </AppSidebarProvider>
             </AgentsProvider>

@@ -5,14 +5,14 @@ import SvgSidebar from "@/icons/sidebar";
 import Logo from "@/refresh-components/Logo";
 
 interface LogoSectionProps {
-  folded?: boolean;
-  setFolded?: Dispatch<SetStateAction<boolean>>;
+  collapsed?: boolean;
+  setCollapsed?: Dispatch<SetStateAction<boolean>>;
 }
 
-function LogoSection({ folded, setFolded }: LogoSectionProps) {
+function LogoSection({ collapsed, setCollapsed }: LogoSectionProps) {
   const logo = useCallback(
-    (className?: string) => <Logo folded={folded} className={className} />,
-    [folded]
+    (className?: string) => <Logo folded={collapsed} className={className} />,
+    [collapsed]
   );
   const closeButton = useCallback(
     (shouldFold: boolean) => (
@@ -20,10 +20,10 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
         icon={SvgSidebar}
         tertiary
         tooltip="Close Sidebar"
-        onClick={() => setFolded?.(shouldFold)}
+        onClick={() => setCollapsed?.(shouldFold)}
       />
     ),
-    [setFolded]
+    [setCollapsed]
   );
 
   return (
@@ -36,12 +36,12 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
         //
         // - @raunakab
         "flex flex-row items-center py-1 gap-1 min-h-[3.5rem] px-3.5",
-        folded ? "justify-start" : "justify-between"
+        collapsed ? "justify-start" : "justify-between"
       )}
     >
-      {folded === undefined ? (
+      {collapsed === undefined ? (
         logo()
-      ) : folded ? (
+      ) : collapsed ? (
         <>
           <div className="group-hover/SidebarWrapper:hidden">{logo()}</div>
           <div className="w-full justify-center hidden group-hover/SidebarWrapper:flex">
@@ -59,14 +59,14 @@ function LogoSection({ folded, setFolded }: LogoSectionProps) {
 }
 
 export interface SidebarWrapperProps {
-  folded?: boolean;
-  setFolded?: Dispatch<SetStateAction<boolean>>;
+  collapsed?: boolean;
+  setCollapsed?: Dispatch<SetStateAction<boolean>>;
   children?: React.ReactNode;
 }
 
 export default function SidebarWrapper({
-  folded,
-  setFolded,
+  collapsed,
+  setCollapsed,
   children,
 }: SidebarWrapperProps) {
   return (
@@ -80,10 +80,10 @@ export default function SidebarWrapper({
           // @HERE (size of sidebar)
           //
           // - @raunakab
-          folded ? "w-[3.25rem]" : "w-[15rem]"
+          collapsed ? "w-[3.25rem]" : "w-[15rem]"
         )}
       >
-        <LogoSection folded={folded} setFolded={setFolded} />
+        <LogoSection collapsed={collapsed} setCollapsed={setCollapsed} />
         {children}
       </div>
     </div>

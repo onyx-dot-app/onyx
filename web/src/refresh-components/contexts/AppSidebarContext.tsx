@@ -12,29 +12,31 @@ import React, {
 import Cookies from "js-cookie";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 
-function setFoldedCookie(folded: boolean) {
-  const foldedAsString = folded.toString();
-  Cookies.set(SIDEBAR_TOGGLED_COOKIE_NAME, foldedAsString, { expires: 365 });
+function setCollapsedCookie(collapsed: boolean) {
+  const collapsedAsString = collapsed.toString();
+  Cookies.set(SIDEBAR_TOGGLED_COOKIE_NAME, collapsedAsString, {
+    expires: 365,
+  });
   if (typeof window !== "undefined") {
-    localStorage.setItem(SIDEBAR_TOGGLED_COOKIE_NAME, foldedAsString);
+    localStorage.setItem(SIDEBAR_TOGGLED_COOKIE_NAME, collapsedAsString);
   }
 }
 
 export interface AppSidebarProviderProps {
-  folded: boolean;
+  collapsed: boolean;
   children: ReactNode;
 }
 
 export function AppSidebarProvider({
-  folded: initiallyFolded,
+  collapsed: initiallyCollapsed,
   children,
 }: AppSidebarProviderProps) {
-  const [folded, setFoldedInternal] = useState(initiallyFolded);
+  const [collapsed, setCollapsedInternal] = useState(initiallyCollapsed);
 
-  const setFolded: Dispatch<SetStateAction<boolean>> = (value) => {
-    setFoldedInternal((prev) => {
+  const setCollapsed: Dispatch<SetStateAction<boolean>> = (value) => {
+    setCollapsedInternal((prev) => {
       const newState = typeof value === "function" ? value(prev) : value;
-      setFoldedCookie(newState);
+      setCollapsedCookie(newState);
       return newState;
     });
   };
@@ -46,7 +48,7 @@ export function AppSidebarProvider({
       if (!isModifierPressed || event.key !== "e") return;
 
       event.preventDefault();
-      setFolded((prev) => !prev);
+      setCollapsed((prev) => !prev);
     }
 
     document.addEventListener("keydown", handleKeyDown);
@@ -58,8 +60,8 @@ export function AppSidebarProvider({
   return (
     <AppSidebarContext.Provider
       value={{
-        folded,
-        setFolded,
+        collapsed,
+        setCollapsed,
       }}
     >
       {children}
@@ -68,8 +70,8 @@ export function AppSidebarProvider({
 }
 
 export interface AppSidebarContextType {
-  folded: boolean;
-  setFolded: Dispatch<SetStateAction<boolean>>;
+  collapsed: boolean;
+  setCollapsed: Dispatch<SetStateAction<boolean>>;
 }
 
 const AppSidebarContext = createContext<AppSidebarContextType | undefined>(

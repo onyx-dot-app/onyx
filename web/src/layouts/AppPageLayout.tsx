@@ -6,7 +6,7 @@ import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import SvgShare from "@/icons/share";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
 import { useChatPageLayout } from "@/app/chat/stores/useChatSessionStore";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -32,7 +32,7 @@ import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { FOLDED_SIZE } from "@/refresh-components/Logo";
 import { useScreenSize } from "@/hooks/useScreenSize";
-import { useMobileSidebar } from "@/refresh-components/contexts/MobileSidebarContext";
+import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import SvgSidebar from "@/icons/sidebar";
 
 interface AppPageLayoutProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
@@ -51,8 +51,11 @@ export default function AppPageLayout({
   ...rest
 }: AppPageLayoutProps) {
   const { width } = useScreenSize();
-  const { toggleSidebar } = useMobileSidebar();
+  const { collapsed, setCollapsed } = useAppSidebarContext();
   const isCompactViewport = width !== undefined ? width < 640 : false; // Tailwind `sm` breakpoint
+  const handleSidebarButtonClick = useCallback(() => {
+    setCollapsed((prev) => !prev);
+  }, [setCollapsed]);
 
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -244,16 +247,21 @@ export default function AppPageLayout({
       <div className="flex flex-col h-full w-full">
         {(customHeaderContent || !showCenteredInput) && (
           <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
-            {/* Mobile AppSidebar toggle button here!*/}
             <div className="flex-1 flex flex-row items-center">
-              {isCompactViewport && (
-                <IconButton
-                  icon={SvgSidebar}
-                  aria-label="Open sidebar"
-                  onClick={toggleSidebar}
-                  internal
-                />
-              )}
+              <IconButton
+                icon={SvgSidebar}
+                aria-label={
+                  isCompactViewport
+                    ? collapsed
+                      ? "Show sidebar"
+                      : "Hide sidebar"
+                    : collapsed
+                      ? "Expand sidebar"
+                      : "Collapse sidebar"
+                }
+                onClick={handleSidebarButtonClick}
+                internal
+              />
             </div>
 
             <div className="flex-1 flex flex-col items-center">
