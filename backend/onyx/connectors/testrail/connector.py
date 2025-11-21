@@ -69,8 +69,13 @@ class TestRailConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
 
         # Parse project_ids from string if needed
-        if isinstance(project_ids, str) and project_ids.strip():
-            self.project_ids = [int(x.strip()) for x in project_ids.split(",") if x.strip()]
+        # None = all projects (no filtering), [] = no projects, [1,2,3] = specific projects
+        if isinstance(project_ids, str):
+            if project_ids.strip():
+                self.project_ids = [int(x.strip()) for x in project_ids.split(",") if x.strip()]
+            else:
+                # Empty string from UI means "all projects"
+                self.project_ids = None
         else:
             self.project_ids = project_ids
 
@@ -450,7 +455,8 @@ class TestRailConnector(LoadConnector, PollConnector):
 
         for project in projects:
             project_id = project.get("id")
-            if project_filter and project_id not in project_filter:
+            # None = index all, [] = index none, [1,2,3] = index only those
+            if project_filter is not None and project_id not in project_filter:
                 continue
 
             suites = self._list_suites(project_id)
