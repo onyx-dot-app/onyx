@@ -505,6 +505,9 @@ export enum ValidSources {
 
   // Federated Connectors
   FederatedSlack = "federated_slack",
+  
+  // Nextcloud
+  Nextcloud = "nextcloud",
 }
 
 export const federatedSourceToRegularSource = (

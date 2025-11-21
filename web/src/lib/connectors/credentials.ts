@@ -267,7 +267,16 @@ export interface ImapCredentialJson {
   imap_password: string;
 }
 
+export interface NextcloudCredentialJson {
+  nc_username: string;
+  nc_password: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
+  nextcloud: { 
+    nc_username: "", 
+    nc_password: "",
+  } as NextcloudCredentialJson,
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
     gitlab_url: "",
@@ -467,6 +476,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
 };
 
 export const credentialDisplayNames: Record<string, string> = {
+  // Nextcloud
+    nc_username: "Username", 
+    nc_password: "Password",
+	
   // Github
   github_access_token: "GitHub Access Token",
 
