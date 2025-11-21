@@ -137,7 +137,7 @@ jobs:
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64,mode=max
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          provence: true
+          provenance: false
           sbom: true
 
   build-model-server-arm64:
@@ -199,5 +199,5 @@ jobs:
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,mode=max
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          provence: true
+          provenance: false
           sbom: true
