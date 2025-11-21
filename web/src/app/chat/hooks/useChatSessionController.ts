@@ -310,19 +310,24 @@ export function useChatSessionController({
     // SKIP_RELOAD is used after completing the first message in a new session.
     // We don't need to re-fetch at that point, we have everything we need.
     // For safety, we should always re-fetch if there are no messages in the chat history.
-    const existingChatSession = existingChatSessionId
-      ? chatSessions.get(existingChatSessionId)
-      : null;
     if (
       !searchParams?.get(SEARCH_PARAM_NAMES.SKIP_RELOAD) ||
       currentChatHistory.length === 0
     ) {
+      const existingChatSession = existingChatSessionId
+        ? chatSessions.get(existingChatSessionId)
+        : null;
+
       if (
         !existingChatSession?.chatState ||
         existingChatSession.chatState === "input"
       ) {
         initialSessionFetch();
       } else {
+        // no need to fetch if the chat session is currently streaming (it would be )
+        // out of date).
+        // this means that the user kicked off a message, switched to a different
+        // chat, and then switched back.
         setCurrentSession(existingChatSessionId);
       }
     } else {
