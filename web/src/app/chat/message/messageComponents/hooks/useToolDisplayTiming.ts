@@ -25,6 +25,8 @@ export function useToolDisplayTiming(
     getInitialTools(toolGroups, isComplete)
   );
   const [completedToolInds, setCompletedToolInds] = useState<Set<number>>(() =>
+    // if the final answer is already coming, then we can just assume all tools
+    // are complete. This happens when you switch back into a mid-stream chat.
     isFinalAnswerComing
       ? new Set(toolGroups.map((group) => group.ind))
       : getInitialTools(toolGroups, isComplete)
