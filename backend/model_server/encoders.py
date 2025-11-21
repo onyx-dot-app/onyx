@@ -116,7 +116,7 @@ def _concurrent_embedding(
             # the model to fail to encode texts. It's pretty rare and we want to allow
             # concurrent embedding, hence we retry (the specific error is
             # "RuntimeError: Already borrowed" and occurs in the transformers library)
-            logger.error(f"Error encoding texts, retrying: {e}")
+            logger.warning(f"Error encoding texts, retrying: {e}")
             time.sleep(ENCODING_RETRY_DELAY)
     return model.encode(texts, normalize_embeddings=normalize_embeddings)
 

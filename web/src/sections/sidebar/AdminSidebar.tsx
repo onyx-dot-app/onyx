@@ -33,6 +33,7 @@ import {
   SearchIcon,
   DocumentIcon2,
   BrainIcon,
+  GlobeIcon,
 } from "@/components/icons/icons";
 import OnyxLogo from "@/icons/onyx-logo";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
@@ -163,6 +164,11 @@ const collections = (
               name: "LLM",
               icon: CpuIconSkeleton,
               link: "/admin/configuration/llm",
+            },
+            {
+              name: "Web Search",
+              icon: GlobeIcon,
+              link: "/admin/configuration/web-search",
             },
             ...(!enableCloud
               ? [

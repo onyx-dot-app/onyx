@@ -86,7 +86,7 @@ import {
 import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
 import { FileCard } from "@/app/chat/components/input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
-import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
+import UserFilesModal from "@/components/modals/UserFilesModal";
 import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMSelector } from "@/components/llm/LLMSelector";
@@ -847,7 +847,7 @@ export default function AssistantEditor({
           return (
             <>
               <userFilesModal.Provider>
-                <UserFilesModalContent
+                <UserFilesModal
                   title="User Files"
                   description="All files selected for this assistant"
                   icon={SvgFiles}
@@ -873,7 +873,6 @@ export default function AssistantEditor({
                       )
                     );
                   }}
-                  onClose={() => userFilesModal.toggle(false)}
                 />
               </userFilesModal.Provider>
 

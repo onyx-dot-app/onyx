@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.configs.chat_configs import EXA_API_KEY
-from onyx.configs.chat_configs import SERPER_API_KEY
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.message import ToolCallSummary
@@ -51,8 +51,10 @@ class WebSearchTool(Tool[None]):
     @override
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
-        """Available only if EXA or SERPER API key is configured."""
-        return bool(EXA_API_KEY) or bool(SERPER_API_KEY)
+        """Available only if an active web search provider is configured in the database."""
+        with get_session_with_current_tenant() as session:
+            provider = fetch_active_web_search_provider(session)
+            return provider is not None
 
     def tool_definition(self) -> dict:
         return {
