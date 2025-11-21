@@ -1,6 +1,7 @@
 # from uuid import UUID
 
 # from pydantic import BaseModel
+# from pydantic import ConfigDict
 # from sqlalchemy.orm import Session
 
 # from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
@@ -24,8 +25,7 @@
 #     structured_response_format: dict | None = None
 #     project_instructions: str | None = None
 
-#     class Config:
-#         arbitrary_types_allowed = True
+# model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 # class GraphTooling(BaseModel):
@@ -40,8 +40,7 @@
 #     force_use_tool: ForceUseTool
 #     using_tool_calling_llm: bool = False
 
-#     class Config:
-#         arbitrary_types_allowed = True
+# model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 # class GraphPersistence(BaseModel):
@@ -58,6 +57,7 @@
 
 #     class Config:
 #         arbitrary_types_allowed = True
+# model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 # class GraphSearchConfig(BaseModel):
@@ -85,5 +85,4 @@
 #     # Only needed for agentic search
 #     persistence: GraphPersistence
 
-#     class Config:
-#         arbitrary_types_allowed = True
+# model_config = ConfigDict(arbitrary_types_allowed=True)

@@ -151,6 +151,9 @@ class WWWAuthenticateMiddleware(BaseHTTPMiddleware):
 
 
 if __name__ == "__main__":
+    import sys
+
+    port = int(sys.argv[1] if len(sys.argv) > 1 else "8004")
 
     audience = os.getenv("MCP_OAUTH_AUDIENCE", "api://mcp")
     issuer = os.getenv(
@@ -179,13 +182,23 @@ if __name__ == "__main__":
         ),  # must be present in the token's `scp`
     )
 
+    bind_host = os.getenv("MCP_SERVER_HOST", "127.0.0.1")
+    public_host = os.getenv("MCP_SERVER_PUBLIC_HOST", bind_host)
+    public_url = os.getenv("MCP_SERVER_PUBLIC_URL")
+
     mcp = FastMCP("My HTTP MCP", auth=verifier)
     make_many_tools(mcp)
     mcp_app = mcp.http_app()
 
     app = FastAPI(title="MCP over HTTP/SSE with OAuth", lifespan=mcp_app.lifespan)
 
-    mcp_resource_url = "http://127.0.0.1:8004/mcp/"
+    if public_url:
+        normalized_public_url = public_url.rstrip("/")
+        if not normalized_public_url.endswith("/mcp"):
+            normalized_public_url = f"{normalized_public_url}/mcp"
+        mcp_resource_url = f"{normalized_public_url}/"
+    else:
+        mcp_resource_url = f"http://{public_host}:{port}/mcp/"
     authorization_servers = [issuer]
     scopes_supported = ["mcp:use"]
 
@@ -205,4 +218,4 @@ if __name__ == "__main__":
     # SSE transport (some clients still use this)
     # app.mount("/sse", mcp.sse_app()) # TODO: v2
 
-    uvicorn.run(app, host="127.0.0.1", port=8004)
+    uvicorn.run(app, host=bind_host, port=port)

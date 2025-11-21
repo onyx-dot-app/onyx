@@ -88,6 +88,7 @@ class ChatSessionManager:
         parent_message_id: int | None = None,
         user_performing_action: DATestUser | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
+        current_message_files: list[FileDescriptor] | None = None,
         search_doc_ids: list[int] | None = None,
         retrieval_options: RetrievalDetails | None = None,
         query_override: str | None = None,
@@ -105,6 +106,7 @@ class ChatSessionManager:
             parent_message_id=parent_message_id,
             message=message,
             file_descriptors=file_descriptors or [],
+            current_message_files=current_message_files or [],
             search_doc_ids=search_doc_ids or [],
             retrieval_options=retrieval_options,
             rerank_settings=None,  # Can be added if needed
@@ -223,11 +225,12 @@ class ChatSessionManager:
                     ind_to_tool_use[ind].documents.extend(
                         [SavedSearchDoc(**doc) for doc in documents]
                     )
-        if not assistant_message_id:
+        # If there's an error, assistant_message_id might not be present
+        if not assistant_message_id and not error:
             raise ValueError("Assistant message id not found")
         return StreamedResponse(
             full_message=full_message,
-            assistant_message_id=assistant_message_id,
+            assistant_message_id=assistant_message_id or -1,  # Use -1 for error cases
             top_documents=top_documents,
             used_tools=list(ind_to_tool_use.values()),
             heartbeat_packets=[dict(packet) for packet in heartbeat_packets],

@@ -382,8 +382,7 @@ class AnswerPostInfo(BaseModel):
     tool_result: ToolCallFinalResult | None = None
     message_specific_citations: MessageSpecificCitations | None = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class ChatBasicResponse(BaseModel):

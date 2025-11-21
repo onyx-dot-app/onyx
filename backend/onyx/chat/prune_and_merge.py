@@ -101,20 +101,31 @@ def _separate_federated_sections(
 
 
 def _compute_limit(
-    prompt_config: PromptConfig,
     llm_config: LLMConfig,
-    question: str,
+    existing_input_tokens: int,
     max_chunks: int | None,
     max_window_percentage: float | None,
     max_tokens: int | None,
     tool_token_count: int,
+    prompt_config: PromptConfig | None = None,
 ) -> int:
-    llm_max_document_tokens = compute_max_document_tokens(
-        prompt_config=prompt_config,
-        llm_config=llm_config,
-        tool_token_count=tool_token_count,
-        actual_user_input=question,
-    )
+    # If prompt_config is provided (backwards compatibility), compute using the old method
+    if prompt_config is not None:
+        llm_max_document_tokens = compute_max_document_tokens(
+            prompt_config=prompt_config,
+            llm_config=llm_config,
+            tool_token_count=tool_token_count,
+            actual_user_input=None,  # Will use default estimate
+        )
+    else:
+        # New path: existing_input_tokens is pre-computed total input token count
+        # This includes system prompt, history, user message, agent turns, etc.
+        llm_max_document_tokens = (
+            llm_config.max_input_tokens
+            - existing_input_tokens
+            - tool_token_count
+            - 40  # _MISC_BUFFER from compute_max_document_tokens
+        )
 
     window_percentage_based_limit = (
         max_window_percentage * llm_max_document_tokens
@@ -333,10 +344,10 @@ def _apply_pruning(
 def prune_sections(
     sections: list[InferenceSection],
     section_relevance_list: list[bool] | None,
-    prompt_config: PromptConfig,
     llm_config: LLMConfig,
-    question: str,
+    existing_input_tokens: int,
     contextual_pruning_config: ContextualPruningConfig,
+    prompt_config: PromptConfig | None = None,
 ) -> list[InferenceSection]:
     # Assumes the sections are score ordered with highest first
     if section_relevance_list is not None:
@@ -357,13 +368,13 @@ def prune_sections(
     )
 
     token_limit = _compute_limit(
-        prompt_config=prompt_config,
         llm_config=llm_config,
-        question=question,
+        existing_input_tokens=existing_input_tokens,
         max_chunks=actual_num_chunks,
         max_window_percentage=contextual_pruning_config.max_window_percentage,
         max_tokens=contextual_pruning_config.max_tokens,
         tool_token_count=contextual_pruning_config.tool_num_tokens,
+        prompt_config=prompt_config,
     )
 
     return _apply_pruning(
@@ -504,19 +515,19 @@ def _merge_sections(sections: list[InferenceSection]) -> list[InferenceSection]:
 def prune_and_merge_sections(
     sections: list[InferenceSection],
     section_relevance_list: list[bool] | None,
-    prompt_config: PromptConfig,
     llm_config: LLMConfig,
-    question: str,
+    existing_input_tokens: int,
     contextual_pruning_config: ContextualPruningConfig,
+    prompt_config: PromptConfig | None = None,
 ) -> list[InferenceSection]:
     # Assumes the sections are score ordered with highest first
     remaining_sections = prune_sections(
         sections=sections,
         section_relevance_list=section_relevance_list,
-        prompt_config=prompt_config,
         llm_config=llm_config,
-        question=question,
+        existing_input_tokens=existing_input_tokens,
         contextual_pruning_config=contextual_pruning_config,
+        prompt_config=prompt_config,
     )
 
     merged_sections = _merge_sections(sections=remaining_sections)

@@ -10,6 +10,9 @@ on:
       - main
       - 'release/**'
 
+permissions:
+  contents: read
+
 jobs:
   check-lazy-imports:
     runs-on: ubuntu-latest
@@ -17,9 +20,11 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+      with:
+        persist-credentials: false
 
     - name: Set up Python
-      uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c # ratchet:actions/setup-python@v4
+      uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # ratchet:actions/setup-python@v6
       with:
         python-version: '3.11'
 

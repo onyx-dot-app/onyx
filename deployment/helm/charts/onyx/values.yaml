@@ -37,7 +37,7 @@ vespa:
   replicaCount: 1
   image:
     repository: vespa
-    tag: "8.526.15"
+    tag: "8.609.39"
   podAnnotations: {}
   podLabels:
     app: vespa
@@ -103,6 +103,8 @@ inferenceCapability:
     privileged: true
     runAsUser: 0
   nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 indexCapability:
   service:
@@ -137,6 +139,8 @@ indexCapability:
     privileged: true
     runAsUser: 0
   nodeSelector: {}
+  tolerations: []
+  affinity: {}
 config:
   envConfigMapName: env-configmap
 
@@ -349,6 +353,7 @@ api:
 
   nodeSelector: {}
   tolerations: []
+  affinity: {}
 
 
 ######################################################################
@@ -676,6 +681,8 @@ slackbot:
       cpu: "1000m"
       memory: "2000Mi"
   nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 celery_worker_docfetching:
   replicaCount: 1
@@ -768,6 +775,9 @@ minio:
   consoleService:
     type: ClusterIP
     port: 9001
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 ingress:
   enabled: false
@@ -909,9 +919,6 @@ configMap:
   MULTILINGUAL_QUERY_EXPANSION: ""
   LANGUAGE_HINT: ""
   LANGUAGE_CHAT_NAMING_HINT: ""
-  # Internet Search Tool
-  BING_API_KEY: ""
-  EXA_API_KEY: ""
   # Don't change the NLP models unless you know what you're doing
   EMBEDDING_BATCH_SIZE: ""
   DOCUMENT_ENCODER_MODEL: ""

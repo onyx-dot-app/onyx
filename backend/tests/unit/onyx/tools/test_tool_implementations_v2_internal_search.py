@@ -5,6 +5,7 @@
 # import pytest
 # from agents import RunContextWrapper
 
+# from onyx.agents.agent_search.dr.enums import ResearchType
 # from onyx.agents.agent_search.dr.models import IterationAnswer
 # from onyx.agents.agent_search.dr.models import IterationInstructions
 # from onyx.chat.turn.models import ChatTurnContext
@@ -13,10 +14,10 @@
 # from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 # from onyx.server.query_and_chat.streaming_models import SearchToolStart
 # from onyx.server.query_and_chat.streaming_models import SectionEnd
-# from onyx.tools.tool_implementations.search.search_tool import SearchTool
-# from onyx.tools.tool_implementations.search_like_tool_utils import (
-#     SEARCH_INFERENCE_SECTIONS_ID,
+# from onyx.tools.tool_implementations.search.search_tool import (
+#     SEARCH_RESPONSE_SUMMARY_ID,
 # )
+# from onyx.tools.tool_implementations.search.search_tool import SearchTool
 # from onyx.tools.tool_implementations_v2.tool_result_models import (
 #     LlmInternalSearchResult,
 # )
@@ -61,6 +62,36 @@
 #         self.name = name
 
 
+# class FakeLLMConfig:
+#     """Fake LLM config for testing"""
+
+#     def __init__(self) -> None:
+#         self.max_input_tokens = 128000  # Default GPT-4 context
+#         self.model_name = "gpt-4"
+#         self.model_provider = "openai"
+
+
+# class FakeLLM:
+#     """Fake LLM for testing"""
+
+#     def __init__(self) -> None:
+#         self.config = FakeLLMConfig()
+
+
+# class FakeContextualPruningConfig:
+#     """Fake contextual pruning config for testing"""
+
+#     def __init__(self) -> None:
+#         self.max_chunks = None
+#         self.max_window_percentage = None
+#         self.max_tokens = None
+#         self.is_manually_selected_docs = False
+#         self.use_sections = True
+#         self.tool_num_tokens = 0
+#         self.using_tool_message = False
+#         self.num_chunk_multiple = 1
+
+
 # class FakeSearchPipeline:
 #     """Fake search pipeline for dependency injection"""
 
@@ -71,6 +102,9 @@
 #         self.should_raise_exception = should_raise_exception
 #         self.run_called = False
 #         self.run_kwargs: dict[str, Any] = {}
+#         # Add required attributes for SearchTool interface
+#         self.llm = FakeLLM()
+#         self.contextual_pruning_config = FakeContextualPruningConfig()
 
 #     def run(self, **kwargs: Any) -> list:
 #         self.run_called = True
@@ -83,9 +117,16 @@
 # class FakeSearchResponse:
 #     """Fake search response for testing"""
 
-#     def __init__(self, response_id: str, sections: list | None = None) -> None:
+#     def __init__(self, response_id: str, top_sections: list | None = None) -> None:
 #         self.id = response_id
-#         self.response = sections or []
+#         self.response = FakeSearchResponseSummary(top_sections or [])
+
+
+# class FakeSearchResponseSummary:
+#     """Fake search response summary for testing"""
+
+#     def __init__(self, top_sections: list) -> None:
+#         self.top_sections = top_sections
 
 
 # class FakeSessionContextManager:
@@ -145,8 +186,8 @@
 
 #     responses = [
 #         FakeSearchResponse(
-#             response_id=SEARCH_INFERENCE_SECTIONS_ID,
-#             sections=sections,
+#             response_id=SEARCH_RESPONSE_SUMMARY_ID,
+#             top_sections=sections,
 #         ),
 #     ]
 
@@ -164,12 +205,12 @@
 #     """Create a fake search pipeline with multiple responses"""
 #     test_sections = [create_test_inference_section()]
 #     responses = [
-#         FakeSearchResponse(response_id="other_response_id", sections=[]),
+#         FakeSearchResponse(response_id="other_response_id", top_sections=[]),
 #         FakeSearchResponse(
-#             response_id=SEARCH_INFERENCE_SECTIONS_ID,
-#             sections=test_sections,
+#             response_id=SEARCH_RESPONSE_SUMMARY_ID,
+#             top_sections=test_sections,
 #         ),
-#         FakeSearchResponse(response_id="another_response_id", sections=[]),
+#         FakeSearchResponse(response_id="another_response_id", top_sections=[]),
 #     ]
 #     return FakeSearchPipeline(responses=responses)
 
@@ -240,6 +281,12 @@
 # def message_id() -> int:
 #     """Fixture providing fake message ID."""
 #     return 123
+
+
+# @pytest.fixture
+# def research_type() -> ResearchType:
+#     """Fixture providing fake research type."""
+#     return ResearchType.FAST
 
 
 # @pytest.fixture
@@ -333,11 +380,6 @@
 #     assert answer.tool == SearchTool.__name__
 #     assert answer.tool_id == 1
 #     assert answer.iteration_nr == 1
-#     assert answer.question == query
-#     assert (
-#         answer.reasoning
-#         == f"I am now using Internal Search to gather information on {query}"
-#     )
 #     assert answer.answer == ""
 #     assert len(answer.cited_documents) == 2
 

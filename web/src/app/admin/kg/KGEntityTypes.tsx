@@ -1,6 +1,6 @@
+import { useEffect, useState } from "react";
 import { SourceIcon } from "@/components/SourceIcon";
-import React, { useEffect, useState } from "react";
-import { Switch } from "@/components/ui/switch";
+import Switch from "@/refresh-components/inputs/Switch";
 import Link from "next/link";
 import { EntityType, SourceAndEntityTypeView } from "@/app/admin/kg/interfaces";
 import CollapsibleCard from "@/components/CollapsibleCard";

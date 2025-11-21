@@ -1,15 +1,16 @@
-"use client";
+import InputPrompts from "@/app/chat/input-prompts/InputPrompts";
+import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
+import AppPageLayout from "@/layouts/AppPageLayout";
 
-import InputPrompts from "./InputPrompts";
+export default async function InputPromptsPage() {
+  const headerData = await fetchHeaderDataSS();
 
-export default function InputPromptsPage() {
   return (
-    <div className="w-full py-16">
-      <div className="px-32">
-        <div className="mx-auto container">
-          <InputPrompts />
-        </div>
-      </div>
-    </div>
+    <AppPageLayout
+      {...headerData}
+      className="w-full px-32 py-16 mx-auto container"
+    >
+      <InputPrompts />
+    </AppPageLayout>
   );
 }

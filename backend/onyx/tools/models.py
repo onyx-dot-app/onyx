@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import model_validator
 
 from onyx.chat.turn.infra.emitter import Emitter
@@ -111,8 +112,7 @@ class SearchToolOverrideKwargs(BaseModel):
     # Number of chunks (token approx) to include in the string to the LLM
     max_llm_chunks: int | None = MAX_CHUNKS_FED_TO_CHAT
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class SearchToolRunContext(BaseModel):

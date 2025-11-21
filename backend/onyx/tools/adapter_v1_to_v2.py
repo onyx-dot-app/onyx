@@ -73,10 +73,17 @@ async def _tool_run_wrapper(
 
 
 def custom_or_mcp_tool_to_function_tool(tool: Tool) -> FunctionTool:
+    # TODO: this logic is basically a hack to set strict_json_schema to False.
+    # Ideally we'd like to actually respect the True/False present in additionalProperties.
+    # However, we've seen some cases of a tool asking for strict json but not actually requiring it.
+    # This deserves a larger QA effort with a bunch of different MCP tools
+    tool_params = tool.tool_definition()["function"]["parameters"]
+    strict_json_schema = "additionalProperties" not in tool_params
     return FunctionTool(
         name=tool.name,
         description=tool.description,
-        params_json_schema=tool.tool_definition()["function"]["parameters"],
+        params_json_schema=tool_params,
+        strict_json_schema=strict_json_schema,
         on_invoke_tool=lambda context, json_string: _tool_run_wrapper(
             context, tool, json_string
         ),

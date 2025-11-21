@@ -180,7 +180,7 @@ def get_user_files(
     return user_files
 
 
-def get_user_files_as_user(
+def validate_user_files_ownership(
     user_file_ids: list[UUID],
     user_id: UUID | None,
     db_session: Session,
@@ -267,6 +267,28 @@ def save_files(urls: list[str], base64_files: list[str]) -> list[str]:
     ]
 
     return run_functions_tuples_in_parallel(funcs)
+
+
+def get_user_files_as_user(
+    user_file_ids: list[UUID],
+    user_id: UUID | None,
+    db_session: Session,
+) -> list[UserFile]:
+    """
+    Fetches all UserFile database records for a given user.
+    """
+    user_files = get_user_files(user_file_ids, db_session)
+    current_user_files = []
+    for user_file in user_files:
+        # Note: if user_id is None, then all files should be None as well
+        # (since auth must be disabled in this case)
+        if user_file.user_id != user_id:
+            raise ValueError(
+                f"User {user_id} does not have access to file {user_file.id}"
+            )
+        current_user_files.append(user_file)
+
+    return current_user_files
 
 
 @log_function_time(print_only=True)

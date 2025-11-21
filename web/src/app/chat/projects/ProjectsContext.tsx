@@ -98,6 +98,7 @@ interface ProjectsContextType {
   ) => Promise<ProjectFile[]>;
   allRecentFiles: ProjectFile[];
   allCurrentProjectFiles: ProjectFile[];
+  isLoadingProjectDetails: boolean;
   setCurrentMessageFiles: Dispatch<SetStateAction<ProjectFile[]>>;
   upsertInstructions: (instructions: string) => Promise<void>;
   fetchProjects: () => Promise<Project[]>;
@@ -154,6 +155,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   const [allCurrentProjectFiles, setAllCurrentProjectFiles] = useState<
     ProjectFile[]
   >([]);
+  const [isLoadingProjectDetails, setIsLoadingProjectDetails] = useState(false);
   const projectToUploadFilesMapRef = useRef<Map<number, ProjectFile[]>>(
     new Map()
   );
@@ -174,15 +176,20 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   // Load full details for current project
   const refreshCurrentProjectDetails = useCallback(async () => {
     if (currentProjectId) {
-      const details = await svcGetProjectDetails(currentProjectId);
-      await fetchProjects();
-      setCurrentProjectDetails(details);
-      setAllCurrentProjectFiles(details.files || []);
-      if (projectToUploadFilesMapRef.current.has(currentProjectId)) {
-        setAllCurrentProjectFiles((prev) => [
-          ...prev,
-          ...(projectToUploadFilesMapRef.current.get(currentProjectId) || []),
-        ]);
+      setIsLoadingProjectDetails(true);
+      try {
+        const details = await svcGetProjectDetails(currentProjectId);
+        await fetchProjects();
+        setCurrentProjectDetails(details);
+        setAllCurrentProjectFiles(details.files || []);
+        if (projectToUploadFilesMapRef.current.has(currentProjectId)) {
+          setAllCurrentProjectFiles((prev) => [
+            ...prev,
+            ...(projectToUploadFilesMapRef.current.get(currentProjectId) || []),
+          ]);
+        }
+      } finally {
+        setIsLoadingProjectDetails(false);
       }
     }
   }, [
@@ -532,6 +539,12 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     );
   }, [recentFiles]);
 
+  // Clear project details when switching projects to show skeleton
+  useEffect(() => {
+    setCurrentProjectDetails(null);
+    setAllCurrentProjectFiles([]);
+  }, [currentProjectId]);
+
   useEffect(() => {
     if (currentProjectId) {
       refreshCurrentProjectDetails();
@@ -697,6 +710,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       currentMessageFiles,
       allRecentFiles,
       allCurrentProjectFiles,
+      isLoadingProjectDetails,
       beginUpload,
       setCurrentMessageFiles,
       upsertInstructions,
@@ -769,6 +783,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       currentMessageFiles,
       allRecentFiles,
       allCurrentProjectFiles,
+      isLoadingProjectDetails,
       beginUpload,
       setCurrentMessageFiles,
       upsertInstructions,

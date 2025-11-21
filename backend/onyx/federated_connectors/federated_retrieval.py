@@ -1,16 +1,17 @@
 from collections import defaultdict
 from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import MAX_FEDERATED_CHUNKS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import SearchQuery
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
 )
@@ -18,6 +19,7 @@ from onyx.db.federated import list_federated_connector_oauth_tokens
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.federated_connectors.factory import get_federated_connector
+from onyx.federated_connectors.interfaces import FederatedConnector
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.utils.logger import setup_logger
 
@@ -86,15 +88,31 @@ def get_federated_retrieval_functions(
                     credentials,
                 )
 
-                federated_retrieval_infos_slack.append(
-                    FederatedRetrievalInfo(
-                        retrieval_function=lambda query: connector.search(
+                # Capture variables by value to avoid lambda closure issues
+                bot_token = tenant_slack_bot.bot_token
+
+                def create_slack_retrieval_function(
+                    conn: FederatedConnector,
+                    token: str,
+                    ctx: SlackContext,
+                    bot_tok: str,
+                ) -> Callable[[SearchQuery], list[InferenceChunk]]:
+                    def retrieval_fn(query: SearchQuery) -> list[InferenceChunk]:
+                        return conn.search(
                             query,
                             {},  # Empty entities for Slack context
-                            access_token=access_token,
-                            limit=MAX_FEDERATED_CHUNKS,
-                            slack_event_context=slack_context,
-                            bot_token=tenant_slack_bot.bot_token,
+                            access_token=token,
+                            limit=None,  # Let connector use its own max_messages_per_query config
+                            slack_event_context=ctx,
+                            bot_token=bot_tok,
+                        )
+
+                    return retrieval_fn
+
+                federated_retrieval_infos_slack.append(
+                    FederatedRetrievalInfo(
+                        retrieval_function=create_slack_retrieval_function(
+                            connector, access_token, slack_context, bot_token
                         ),
                         source=FederatedConnectorSource.FEDERATED_SLACK,
                     )
@@ -158,22 +176,33 @@ def get_federated_retrieval_functions(
         if document_set_names and not document_set_associations:
             continue
 
-        if document_set_associations:
-            entities = document_set_associations[0].entities
-        else:
-            entities = {}
+        # Only use connector-level config (no junction table entities)
+        entities = oauth_token.federated_connector.config or {}
 
         connector = get_federated_connector(
             oauth_token.federated_connector.source,
             oauth_token.federated_connector.credentials,
         )
+
+        # Capture variables by value to avoid lambda closure issues
+        access_token = oauth_token.token
+
+        def create_retrieval_function(
+            conn: FederatedConnector,
+            ent: dict[str, Any],
+            token: str,
+        ) -> Callable[[SearchQuery], list[InferenceChunk]]:
+            return lambda query: conn.search(
+                query,
+                ent,
+                access_token=token,
+                limit=None,  # Let connector use its own max_messages_per_query config
+            )
+
         federated_retrieval_infos.append(
             FederatedRetrievalInfo(
-                retrieval_function=lambda query: connector.search(
-                    query,
-                    entities,
-                    access_token=oauth_token.token,
-                    limit=MAX_FEDERATED_CHUNKS,
+                retrieval_function=create_retrieval_function(
+                    connector, entities, access_token
                 ),
                 source=oauth_token.federated_connector.source,
             )

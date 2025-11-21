@@ -11,7 +11,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import OnyxLogo from "@/icons/onyx-logo";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import { Switch } from "@/components/ui/switch";
+import Switch from "@/refresh-components/inputs/Switch";
 import { Separator } from "@/components/ui/separator";
 import { SubLabel } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
@@ -290,7 +290,7 @@ function ToolToggle({
 }) {
   const notEnabledReason = (() => {
     if (tool.in_code_tool_id === "WebSearchTool") {
-      return "Set EXA_API_KEY on the server and restart to enable Web Search.";
+      return "Configure a provider on the Web Search admin page to enable this tool.";
     }
     if (tool.in_code_tool_id === "ImageGenerationTool") {
       return "Add an OpenAI LLM provider with an API key under Admin → Configuration → LLM.";

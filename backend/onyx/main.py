@@ -1,6 +1,7 @@
 import logging
 import sys
 import traceback
+import warnings
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -87,6 +88,7 @@ from onyx.server.features.projects.api import router as projects_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
 from onyx.server.features.user_oauth_token.api import router as user_oauth_token_router
+from onyx.server.features.web_search.api import router as web_search_router
 from onyx.server.federated.api import router as federated_router
 from onyx.server.kg.api import admin_router as kg_admin_router
 from onyx.server.long_term_logs.long_term_logs_api import (
@@ -101,6 +103,9 @@ from onyx.server.manage.llm.api import basic_router as llm_router
 from onyx.server.manage.search_settings import router as search_settings_router
 from onyx.server.manage.slack_bot import router as slack_bot_management_router
 from onyx.server.manage.users import router as user_router
+from onyx.server.manage.web_search.api import (
+    admin_router as web_search_admin_router,
+)
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
 from onyx.server.middleware.rate_limiting import close_auth_limiter
 from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
@@ -141,6 +146,13 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import SENTRY_DSN
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+warnings.filterwarnings(
+    "ignore", category=ResourceWarning, message=r"Unclosed client session"
+)
+warnings.filterwarnings(
+    "ignore", category=ResourceWarning, message=r"Unclosed connector"
+)
 
 logger = setup_logger()
 
@@ -390,6 +402,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, llm_router)
     include_router_with_global_prefix_prepended(application, embedding_admin_router)
     include_router_with_global_prefix_prepended(application, embedding_router)
+    include_router_with_global_prefix_prepended(application, web_search_router)
+    include_router_with_global_prefix_prepended(application, web_search_admin_router)
     include_router_with_global_prefix_prepended(
         application, token_rate_limit_settings_router
     )

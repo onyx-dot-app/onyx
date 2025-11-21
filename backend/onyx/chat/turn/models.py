@@ -83,3 +83,6 @@ class ChatTurnContext:
     # not be emitted to the frontend (e.g. out of order packets)
     # TODO: remove this once Agents SDK fixes the bug with Anthropic reasoning
     current_output_index: int | None = None
+    # Token count of all current input context (system, history, user message, agent turns, etc.)
+    # Updated dynamically as the conversation progresses through tool calls
+    current_input_tokens: int = 0
