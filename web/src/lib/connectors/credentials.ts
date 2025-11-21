@@ -267,6 +267,10 @@ export interface ImapCredentialJson {
   imap_password: string;
 }
 
+export interface PylonCredentialJson {
+  pylon_api_key: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -277,6 +281,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
     bitbucket_email: "",
     bitbucket_api_token: "",
   } as BitbucketCredentialJson,
+  pylon: {
+    pylon_api_key: "",
+  } as PylonCredentialJson,
   slack: { slack_bot_token: "" } as SlackCredentialJson,
   bookstack: {
     bookstack_base_url: "",
@@ -620,6 +627,9 @@ export const credentialDisplayNames: Record<string, string> = {
   // Bitbucket
   bitbucket_email: "Bitbucket Account Email",
   bitbucket_api_token: "Bitbucket API Token",
+
+  // Pylon
+  pylon_api_key: "Pylon API Key",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {
