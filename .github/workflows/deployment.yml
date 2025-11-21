@@ -190,7 +190,6 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/arm64
-          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
