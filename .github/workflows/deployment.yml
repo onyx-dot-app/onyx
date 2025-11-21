@@ -134,9 +134,7 @@ jobs:
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-amd64
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-amd64,mode=max
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-amd64,mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -192,9 +190,7 @@ jobs:
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-arm64
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-arm64,mode=max
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-arm64,mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -307,9 +303,7 @@ jobs:
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64,mode=max
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64,mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -373,9 +367,7 @@ jobs:
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-arm64
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-arm64,mode=max
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-arm64,mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -476,9 +468,7 @@ jobs:
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64,mode=max
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64,mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -533,9 +523,7 @@ jobs:
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-arm64
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-arm64,mode=max
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-arm64,mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -644,9 +632,7 @@ jobs:
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64,mode=max
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64,mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
 
@@ -706,9 +692,7 @@ jobs:
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,mode=max
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
 
