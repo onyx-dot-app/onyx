@@ -20,10 +20,10 @@ export function Bubble({
         `
       px-1.5
       py-1
-      rounded-lg 
+      rounded-lg
       border
-      border-border 
-      w-fit 
+      border-border
+      w-fit
       flex` +
         (notSelectable
           ? " bg-background cursor-default"
@@ -36,7 +36,7 @@ export function Bubble({
       <div className="my-auto">{children}</div>
       {showCheckbox && (
         <div className="pl-2 my-auto">
-          <Checkbox checked={isSelected} onCheckedChange={() => null} />
+          <Checkbox checked={isSelected} />
         </div>
       )}
     </div>
