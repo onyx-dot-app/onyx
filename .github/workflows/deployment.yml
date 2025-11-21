@@ -136,7 +136,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-amd64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-web-arm64:
@@ -193,7 +193,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-arm64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   merge-web:
@@ -307,7 +307,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-web-cloud-arm64:
@@ -372,7 +372,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-arm64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   merge-web-cloud:
@@ -474,7 +474,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-arm64:
@@ -530,7 +530,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-arm64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   merge-backend:
@@ -641,7 +641,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64,mode=max
-          outputs: type=image,name=${{ env.TARGET_REGISTRY }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.TARGET_REGISTRY }},push-by-digest=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
           provenance: false
           sbom: false
@@ -705,7 +705,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,mode=max
-          outputs: type=image,name=${{ env.TARGET_REGISTRY }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.TARGET_REGISTRY }},push-by-digest=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
           provenance: false
           sbom: false
