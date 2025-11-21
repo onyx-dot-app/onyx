@@ -108,7 +108,7 @@ exa_py==1.15.4
 braintrust[openai-agents]==0.2.6
 braintrust-langchain==0.0.4
 openai-agents==0.4.2
-langfuse==3.7.0
+langfuse==3.10.0
 nest_asyncio==1.6.0
 openinference-instrumentation-openai-agents==1.3.0
 opentelemetry-proto==1.38.0

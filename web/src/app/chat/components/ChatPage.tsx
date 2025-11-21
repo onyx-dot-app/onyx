@@ -76,6 +76,8 @@ import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardin
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import AppPageLayout from "@/layouts/AppPageLayout";
 import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgChevronDown from "@/icons/chevron-down";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 interface ChatPageProps {
@@ -850,7 +852,7 @@ export default function ChatPage({
                       <div
                         ref={inputRef}
                         className={cn(
-                          "absolute pointer-events-none z-10 w-full",
+                          "absolute z-10 w-full",
                           showCenteredHero
                             ? "inset-0"
                             : currentProjectId !== null && showCenteredInput
@@ -859,13 +861,11 @@ export default function ChatPage({
                         )}
                       >
                         {!showCenteredInput && aboveHorizon && (
-                          <div className="mx-auto w-fit !pointer-events-none flex sticky justify-center">
-                            <button
+                          <div className="mx-auto flex justify-center py-4">
+                            <IconButton
+                              icon={SvgChevronDown}
                               onClick={() => clientScrollToBottom()}
-                              className="p-1 pointer-events-auto text-text-03 rounded-2xl bg-background-neutral-02 border border-border mx-auto"
-                            >
-                              <FiArrowDown size={18} />
-                            </button>
+                            />
                           </div>
                         )}
 

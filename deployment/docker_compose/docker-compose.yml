@@ -3,7 +3,7 @@
 # =============================================================================
 # This is the default configuration for Onyx. This file is fairly configurable,
 # also see env.template for possible settings.
-# 
+#
 # PRODUCTION DEPLOYMENT CHECKLIST:
 # To convert this setup to a production deployment following best practices,
 # follow the checklist below. Note that there are other ways to secure the Onyx
@@ -283,7 +283,7 @@ services:
         max-file: "6"
 
   nginx:
-    image: nginx:1.23.4-alpine
+    image: nginx:1.25.5-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
@@ -300,7 +300,7 @@ services:
       - NGINX_PROXY_SEND_TIMEOUT=${NGINX_PROXY_SEND_TIMEOUT:-300}
       - NGINX_PROXY_READ_TIMEOUT=${NGINX_PROXY_READ_TIMEOUT:-300}
     ports:
-      - "80:80"
+      - "${HOST_PORT_80:-80}:80"
       - "${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
     volumes:
       - ../data/nginx:/etc/nginx/conf.d
@@ -319,7 +319,7 @@ services:
     # in order to make this work on both Unix-like systems and windows
     # PRODUCTION: Change to app.conf.template.prod for production nginx config
     command: >
-      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
+      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh
       && /etc/nginx/conf.d/run-nginx.sh app.conf.template"
 
   cache:
