@@ -1,3 +1,5 @@
+"use client";
+
 // "AppFocus" is the current part of the main application which is active / focused on.
 // Namely, if the URL is pointing towards a "chat", then a `{ type: "chat", id: "..." }` is returned.
 //
