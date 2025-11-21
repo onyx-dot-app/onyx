@@ -1,36 +1,33 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, ClassVar, Iterator, Optional
+from collections.abc import Iterator
+from datetime import datetime
+from datetime import timezone
+from typing import Any
+from typing import ClassVar
+from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import (
-    GenerateDocumentsOutput,
-    LoadConnector,
-    PollConnector,
-    SecondsSinceUnixEpoch,
-)
-from onyx.connectors.models import (
-    ConnectorMissingCredentialError,
-    Document,
-    TextSection,
-)
-from onyx.connectors.exceptions import (
-    CredentialExpiredError,
-    InsufficientPermissionsError,
-    UnexpectedValidationError,
-)
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import LoadConnector
+from onyx.connectors.interfaces import PollConnector
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import Document
+from onyx.connectors.models import TextSection
+from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_markdown_image_references
-from onyx.file_processing.html_utils import format_document_soup
 
 
 logger = setup_logger()
-
 
 
 class TestRailConnector(LoadConnector, PollConnector):
@@ -58,7 +55,7 @@ class TestRailConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
-        project_ids: list[int] | None = None,
+        project_ids: str | list[int] | None = None,
         cases_page_size: int | None = None,
         max_pages: int | None = None,
         skip_doc_absolute_chars: int | None = None,
@@ -67,27 +64,38 @@ class TestRailConnector(LoadConnector, PollConnector):
         self.username: str | None = None
         self.api_key: str | None = None
         self.batch_size = batch_size
+        parsed_project_ids: list[int] | None
 
         # Parse project_ids from string if needed
         # None = all projects (no filtering), [] = no projects, [1,2,3] = specific projects
         if isinstance(project_ids, str):
             if project_ids.strip():
-                self.project_ids = [int(x.strip()) for x in project_ids.split(",") if x.strip()]
+                parsed_project_ids = [
+                    int(x.strip()) for x in project_ids.split(",") if x.strip()
+                ]
             else:
                 # Empty string from UI means "all projects"
-                self.project_ids = None
+                parsed_project_ids = None
+        elif project_ids is None:
+            parsed_project_ids = None
         else:
-            self.project_ids = project_ids
+            parsed_project_ids = [int(pid) for pid in project_ids]
+
+        self.project_ids: list[int] | None = parsed_project_ids
 
         # Handle empty strings from UI and convert to int with defaults
         self.cases_page_size = (
-            int(cases_page_size) if cases_page_size and str(cases_page_size).strip() else 250
+            int(cases_page_size)
+            if cases_page_size and str(cases_page_size).strip()
+            else 250
         )
         self.max_pages = (
             int(max_pages) if max_pages and str(max_pages).strip() else 10000
         )
         self.skip_doc_absolute_chars = (
-            int(skip_doc_absolute_chars) if skip_doc_absolute_chars and str(skip_doc_absolute_chars).strip() else 200000
+            int(skip_doc_absolute_chars)
+            if skip_doc_absolute_chars and str(skip_doc_absolute_chars).strip()
+            else 200000
         )
 
         # Cache for field labels and value mappings - will be populated on first use
@@ -104,12 +112,12 @@ class TestRailConnector(LoadConnector, PollConnector):
         text = str(value)
 
         # Parse HTML and remove image tags
-        soup = BeautifulSoup(text, 'html.parser')
+        soup = BeautifulSoup(text, "html.parser")
 
         # Remove all img tags and their containers
-        for img_tag in soup.find_all('img'):
+        for img_tag in soup.find_all("img"):
             img_tag.decompose()
-        for span in soup.find_all('span', class_='markdown-img-container'):
+        for span in soup.find_all("span", class_="markdown-img-container"):
             span.decompose()
 
         # Use format_document_soup for better HTML-to-text conversion
@@ -167,7 +175,9 @@ class TestRailConnector(LoadConnector, PollConnector):
         try:
             return response.json()
         except ValueError as e:
-            raise UnexpectedValidationError("Invalid JSON returned by TestRail API") from e
+            raise UnexpectedValidationError(
+                "Invalid JSON returned by TestRail API"
+            ) from e
 
     def _list_projects(self) -> list[dict[str, Any]]:
         projects = self._api_get("get_projects")
@@ -202,15 +212,15 @@ class TestRailConnector(LoadConnector, PollConnector):
         Format: "1, Option A\\n2, Option B\\n3, Option C"
         Returns: {"1": "Option A", "2": "Option B", "3": "Option C"}
         """
-        id_to_label = {}
+        id_to_label: dict[str, str] = {}
         if not items_str:
             return id_to_label
 
-        for line in items_str.split('\n'):
+        for line in items_str.split("\n"):
             line = line.strip()
             if not line:
                 continue
-            parts = line.split(',', 1)
+            parts = line.split(",", 1)
             if len(parts) == 2:
                 item_id = parts[0].strip()
                 item_label = parts[1].strip()
@@ -246,7 +256,9 @@ class TestRailConnector(LoadConnector, PollConnector):
                         options = configs[0].get("options", {})
                         items_str = options.get("items")
                         if items_str:
-                            value_maps[system_name] = self._parse_items_string(items_str)
+                            value_maps[system_name] = self._parse_items_string(
+                                items_str
+                            )
 
         except Exception as e:
             logger.warning(f"Failed to build field maps from TestRail: {e}")
@@ -347,14 +359,30 @@ class TestRailConnector(LoadConnector, PollConnector):
         suite: dict[str, Any] | None = None,
     ) -> Document | None:
         project_id = project.get("id")
+        if not isinstance(project_id, int):
+            logger.warning(
+                "Skipping TestRail case because project id is missing or invalid: %s",
+                project_id,
+            )
+            return None
+
         case_id = case.get("id")
+        if not isinstance(case_id, int):
+            logger.warning(
+                "Skipping TestRail case because case id is missing or invalid: %s",
+                case_id,
+            )
+            return None
+
         title = case.get("title", f"Case {case_id}")
-        case_key = f"C{case_id}" if case_id is not None else None
+        case_key = f"C{case_id}"
 
         # Convert epoch seconds to aware datetime if available
         updated = case.get("updated_on") or case.get("created_on")
         updated_dt = (
-            datetime.fromtimestamp(updated, tz=timezone.utc) if isinstance(updated, (int, float)) else None
+            datetime.fromtimestamp(updated, tz=timezone.utc)
+            if isinstance(updated, (int, float))
+            else None
         )
 
         text_lines: list[str] = []
@@ -376,7 +404,9 @@ class TestRailConnector(LoadConnector, PollConnector):
                 mapped_value = self._map_field_value(field_name, field_value)
                 if mapped_value:
                     # Get label from TestRail field definition
-                    label = field_labels.get(field_name, field_name.replace("_", " ").title())
+                    label = field_labels.get(
+                        field_name, field_name.replace("_", " ").title()
+                    )
                     text_lines.append(f"{label}: {mapped_value}")
 
         pre = self._sanitize_rich_text(case.get("custom_preconds"))
@@ -454,7 +484,13 @@ class TestRailConnector(LoadConnector, PollConnector):
         project_filter: list[int] | None = self.project_ids
 
         for project in projects:
-            project_id = project.get("id")
+            project_id_raw = project.get("id")
+            if not isinstance(project_id_raw, int):
+                logger.warning(
+                    "Skipping TestRail project with invalid id: %s", project_id_raw
+                )
+                continue
+            project_id = project_id_raw
             # None = index all, [] = index none, [1,2,3] = index only those
             if project_filter is not None and project_id not in project_filter:
                 continue
@@ -495,7 +531,6 @@ class TestRailConnector(LoadConnector, PollConnector):
         return self._generate_documents(start=start, end=end)
 
 
-
 if __name__ == "__main__":
     from onyx.configs.app_configs import (
         TESTRAIL_API_KEY,
@@ -523,4 +558,3 @@ if __name__ == "__main__":
         if total >= 10:
             break
     print(f"Total fetched in test: {total}")
-
