@@ -127,6 +127,7 @@ jobs:
           file: ./web/Dockerfile
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             NODE_OPTIONS=--max-old-space-size=8192
@@ -136,7 +137,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-amd64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-web-arm64:
@@ -184,6 +185,7 @@ jobs:
           file: ./web/Dockerfile
           platforms: linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             NODE_OPTIONS=--max-old-space-size=8192
@@ -193,7 +195,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-arm64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   merge-web:
@@ -290,6 +292,7 @@ jobs:
           file: ./web/Dockerfile
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
@@ -307,7 +310,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-web-cloud-arm64:
@@ -355,6 +358,7 @@ jobs:
           file: ./web/Dockerfile
           platforms: linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
@@ -372,7 +376,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-arm64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   merge-web-cloud:
@@ -466,6 +470,7 @@ jobs:
           file: ./backend/Dockerfile
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
@@ -474,7 +479,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-arm64:
@@ -522,6 +527,7 @@ jobs:
           file: ./backend/Dockerfile
           platforms: linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
@@ -530,7 +536,7 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-arm64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   merge-backend:
@@ -632,6 +638,7 @@ jobs:
           file: ./backend/Dockerfile.model_server
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
@@ -640,10 +647,8 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
-          provenance: false
-          sbom: false
 
   build-model-server-arm64:
     needs: determine-builds
@@ -695,6 +700,7 @@ jobs:
           file: ./backend/Dockerfile.model_server
           platforms: linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
@@ -703,10 +709,8 @@ jobs:
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,mode=max
-          outputs: type=image,name=${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
-          provenance: false
-          sbom: false
 
   merge-model-server:
     needs:
