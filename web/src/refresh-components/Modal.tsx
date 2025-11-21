@@ -130,16 +130,18 @@ const sizeClassNames = {
  * </Modal.Content>
  * ```
  */
+interface ModalContentProps
+  extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
+  large?: boolean;
+  medium?: boolean;
+  small?: boolean;
+  tall?: boolean;
+  mini?: boolean;
+  preventAccidentalClose?: boolean;
+}
 const ModalContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
-    large?: boolean;
-    medium?: boolean;
-    small?: boolean;
-    tall?: boolean;
-    mini?: boolean;
-    preventAccidentalClose?: boolean;
-  }
+  ModalContentProps
 >(
   (
     {
@@ -293,10 +295,9 @@ const ModalContent = React.forwardRef<
               contentRef(node);
             }}
             className={cn(
-              "fixed left-[50%] top-[50%] z-[2001] translate-x-[-50%] translate-y-[-50%]",
+              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[2001]",
               "bg-background-tint-00 border rounded-16 shadow-2xl",
               "flex flex-col overflow-hidden",
-              "data-[state=open]:animate-in data-[state=closed]:animate-out",
               "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
               "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
               "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
