@@ -25,11 +25,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 
 MCP_SEARCH_TOOL = "onyx_search_documents"
-
-
-def _streamable_http_url() -> str:
-    base = MCP_SERVER_URL.rstrip("/")
-    return f"{base}/?transportType=streamable-http"
+STREAMABLE_HTTP_URL = MCP_SERVER_URL.rstrip("/") + "/?transportType=streamable-http"
 
 
 def _run_with_mcp_session(
@@ -37,7 +33,7 @@ def _run_with_mcp_session(
     action: Callable[[ClientSession], Awaitable[Any]],
 ) -> Any:
     async def _runner() -> Any:
-        async with streamablehttp_client(_streamable_http_url(), headers=headers) as (
+        async with streamablehttp_client(STREAMABLE_HTTP_URL, headers=headers) as (
             read,
             write,
             _,
@@ -79,16 +75,16 @@ def _call_search_tool(
     return _run_with_mcp_session(headers, _action)
 
 
-def _pat_headers(user: DATestUser, name: str) -> dict[str, str]:
-    pat = PATManager.create(
+def _auth_headers(user: DATestUser, name: str) -> dict[str, str]:
+    token_data = PATManager.create(
         name=name,
         expiration_days=7,
         user_performing_action=user,
     )
-    return {"Authorization": f"Bearer {pat['token']}"}
+    return {"Authorization": f"Bearer {token_data['token']}"}
 
 
-def test_mcp_pat_document_search_flow(reset: None, admin_user: DATestUser) -> None:
+def test_mcp_document_search_flow(reset: None, admin_user: DATestUser) -> None:
     api_key = APIKeyManager.create(user_performing_action=admin_user)
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
 
@@ -99,7 +95,7 @@ def test_mcp_pat_document_search_flow(reset: None, admin_user: DATestUser) -> No
         api_key=api_key,
     )
 
-    headers = _pat_headers(admin_user, name="mcp-search-flow")
+    headers = _auth_headers(admin_user, name="mcp-search-flow")
 
     async def _full_flow(
         session: ClientSession,
@@ -156,8 +152,8 @@ def test_mcp_search_respects_acl_filters(reset: None, admin_user: DATestUser) ->
         api_key=api_key,
     )
 
-    privileged_headers = _pat_headers(privileged_user, "mcp-acl-allowed")
-    restricted_headers = _pat_headers(user_without_access, "mcp-acl-blocked")
+    privileged_headers = _auth_headers(privileged_user, "mcp-acl-allowed")
+    restricted_headers = _auth_headers(user_without_access, "mcp-acl-blocked")
 
     allowed_result = _call_search_tool(privileged_headers, restricted_doc.content)
     allowed_payload = _extract_tool_payload(allowed_result)

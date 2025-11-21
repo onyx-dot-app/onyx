@@ -2,35 +2,75 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from contextlib import contextmanager
+import os
 
+import httpx
 from fastmcp.server.auth.auth import AccessToken
 
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from onyx.configs.app_configs import APP_API_PREFIX
+from onyx.configs.app_configs import APP_PORT
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+# Shared HTTP client reused across requests
+_http_client: httpx.AsyncClient | None = None
 
 
-@contextmanager
-def tenant_context_from_token(
-    access_token: AccessToken | None,
-) -> Generator[None, None, None]:
-    """Ensure CURRENT_TENANT_ID_CONTEXTVAR is set for the request lifecycle."""
+def get_api_server_url() -> str:
+    """Construct the API server base URL for internal or external requests."""
+    override = os.getenv("API_SERVER_BASE_URL") or os.getenv("ONYX_URL")
+    if override:
+        return override.rstrip("/")
 
-    tenant_id = None
-    if access_token:
-        tenant_id = access_token.claims.get("tenant_id")
+    protocol = os.getenv("API_SERVER_PROTOCOL", "http")
+    host = os.getenv("API_SERVER_HOST", "127.0.0.1")
+    port = os.getenv("API_SERVER_PORT", str(APP_PORT))
+    prefix = (APP_API_PREFIX or "").strip("/")
 
-    if not tenant_id:
-        if MULTI_TENANT:
-            raise RuntimeError(
-                "Tenant ID missing from access token in multi-tenant mode"
-            )
-        tenant_id = POSTGRES_DEFAULT_SCHEMA
+    base = f"{protocol}://{host}:{port}"
+    return f"{base}/{prefix}" if prefix else base
 
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+
+def get_http_client() -> httpx.AsyncClient:
+    """Return a shared async HTTP client."""
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(timeout=60.0)
+    return _http_client
+
+
+async def shutdown_http_client() -> None:
+    """Close the shared HTTP client when the server shuts down."""
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
+
+
+async def fetch_indexed_source_types(
+    access_token: AccessToken,
+) -> list[str] | None:
+    """Fetch indexed document source types for the current user/tenant."""
+    headers = {"Authorization": f"Bearer {access_token.token}"}
     try:
-        yield
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+        response = await get_http_client().get(
+            f"{get_api_server_url()}/manage/indexed-source-types",
+            headers=headers,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        source_types = payload.get("source_types", [])
+        if not isinstance(source_types, list):
+            logger.error(
+                "Onyx MCP Server: Unexpected response shape for indexed source types"
+            )
+            return None
+        return [str(source_type) for source_type in source_types]
+    except Exception as exc:
+        logger.error(
+            "Onyx MCP Server: Failed to fetch indexed source types: %s",
+            exc,
+            exc_info=True,
+        )
+        return None

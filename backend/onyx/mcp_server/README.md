@@ -11,8 +11,9 @@ All access controls are managed within the main Onyx application.
 
 ### Authentication
 
-The Onyx MCP Server authenticates with Personal Access Tokens. 
-You can generate one in the User Settings panel of Onyx.
+Provide an Onyx bearer token in the `Authorization` header. The MCP server forwards
+the token to the main API server `/me` endpoint; the API validates the token and
+applies the correct user and tenant context.
 
 Depending on usage, the MCP Server may support OAuth in the future.
 
@@ -20,7 +21,7 @@ Depending on usage, the MCP Server may support OAuth in the future.
 - **Transport**: HTTP POST (MCP over HTTP)
 - **Port**: 8090 (shares domain with API server)
 - **Framework**: FastMCP with FastAPI wrapper
-- **Database**: Shared connection pool with main API server (minimal size for PAT validation)
+- **Database**: None (all work delegates to the API server)
 
 ### Architecture
 
@@ -32,12 +33,12 @@ The MCP server is built on [FastMCP](https://github.com/jlowin/fastmcp) and runs
 │  (Claude, etc)  │
 └────────┬────────┘
          │ MCP over HTTP
-         │ (POST with PAT)
+         │ (POST with bearer)
          ▼
 ┌─────────────────┐
 │  MCP Server     │
 │  Port 8090      │
-│  ├─ Auth (PAT)  │
+│  ├─ Auth (/me)  │
 │  ├─ Tools       │
 │  └─ DB Pool     │
 └────────┬────────┘
@@ -65,7 +66,7 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
       "url": "https://[YOUR_ONYX_DOMAIN]:8090/",
       "transport": "http",
       "headers": {
-        "Authorization": "Bearer YOUR_PAT_HERE"
+        "Authorization": "Bearer YOUR_ONYX_TOKEN_HERE"
       }
     }
   }
@@ -86,10 +87,10 @@ The server provides three tools for searching and retrieving information:
 Search your Onyx knowledge base with semantic search. Supports filtering by source type, time range, and result limits. Returns ranked documents with content snippets, metadata, and match scores.
 
 2. `onyx_web_search`
-Search the public web using your configured provider (Exa or Serper+Firecrawl). Returns URL, title, and snippet for each result. Requires `EXA_API_KEY` or `SERPER_API_KEY` + `FIRECRAWL_API_KEY` to be configured.
+Search the public web via the `/web-search/search-lite` API using your configured provider (Exa or Serper+Firecrawl). Returns URL, title, snippet, and the provider type for each query. Requires `EXA_API_KEY` or `SERPER_API_KEY` + `FIRECRAWL_API_KEY` to be configured. Use `onyx_open_url` to fetch full content for specific URLs.
 
 3. `onyx_open_url`
-Fetch and extract full page content from web URLs. Useful for retrieving complete articles after finding them with `onyx_web_search`. Uses the same provider as web search.
+Fetch and extract full page content from web URLs via `/web-search/open-urls`. Useful for retrieving complete articles after finding them with `onyx_web_search`. Returns the content provider type along with each fetched page.
 
 ### Resources
 
@@ -117,7 +118,7 @@ npx @modelcontextprotocol/inspector http://localhost:8090/
 1. Ignore the OAuth configuration menus
 2. Open the **Authentication** tab
 3. Select **Bearer Token** authentication
-4. Paste your Personal Access Token
+4. Paste your Onyx bearer token
 5. Click **Connect**
 
 Once connected, you can:
@@ -145,6 +146,7 @@ Expected response:
 ### Environment Variables
 
 - `MCP_SERVER_CORS_ORIGINS`: Comma-separated CORS origins (optional)
+- `API_SERVER_BASE_URL` (or `ONYX_URL`): Full API base URL (e.g., `https://cloud.onyx.app/api`). If set, overrides protocol/host/port below.
 - `API_SERVER_PROTOCOL`: Protocol for internal API calls (default: "http")
 - `API_SERVER_HOST`: Host for internal API calls (default: "127.0.0.1")
 - `API_SERVER_PORT`: Port for internal API calls (default: 8080)

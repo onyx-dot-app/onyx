@@ -10,7 +10,7 @@ MAX_DELAY = 300
 
 MCP_SERVER_HOST = os.getenv("MCP_SERVER_HOST") or "127.0.0.1"
 MCP_SERVER_PORT = os.getenv("MCP_SERVER_PORT") or "8090"
-MCP_SERVER_URL = f"{API_SERVER_PROTOCOL}://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}"  # Will always be the same as the API server
+MCP_SERVER_URL = f"{API_SERVER_PROTOCOL}://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}"
 
 GENERAL_HEADERS = {"Content-Type": "application/json"}
 

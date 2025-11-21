@@ -8,10 +8,8 @@ from typing import Any
 
 from fastmcp.server.dependencies import get_access_token
 
-from onyx.db.connector import fetch_unique_document_sources
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.mcp_server.api import mcp_server
-from onyx.mcp_server.utils import tenant_context_from_token
+from onyx.mcp_server.utils import fetch_indexed_source_types
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -26,18 +24,18 @@ logger = setup_logger()
     ),
     mime_type="application/json",
 )
-def available_sources_resource() -> dict[str, Any]:
+async def available_sources_resource() -> dict[str, Any]:
     """Return the list of indexed source types for search filtering."""
 
     access_token = get_access_token()
-    if not access_token or "_user" not in access_token.claims:
+    if not access_token:
         raise ValueError("Authentication required")
 
-    with tenant_context_from_token(access_token):
-        with get_session_with_current_tenant() as db_session:
-            sources = fetch_unique_document_sources(db_session)
+    sources = await fetch_indexed_source_types(access_token)
+    if sources is None:
+        raise ValueError("Failed to fetch indexed source types")
 
-    source_values = sorted(source.value for source in sources)
+    source_values = sorted(sources)
 
     logger.info(
         "Onyx MCP Server: available_sources resource returning %s entries",

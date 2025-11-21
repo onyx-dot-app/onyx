@@ -12,9 +12,8 @@ from fastmcp import FastMCP
 from starlette.middleware.base import RequestResponseEndpoint
 
 from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
-from onyx.configs.constants import POSTGRES_WEB_APP_NAME
-from onyx.db.engine.sql_engine import SqlEngine
 from onyx.mcp_server.auth import OnyxTokenVerifier
+from onyx.mcp_server.utils import shutdown_http_client
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -36,32 +35,24 @@ logger.info("MCP server instance created")
 
 
 def create_mcp_fastapi_app() -> FastAPI:
-    """Create FastAPI app wrapping MCP server with auth and DB initialization."""
+    """Create FastAPI app wrapping MCP server with auth and shared client lifecycle."""
     mcp_asgi_app = mcp_server.http_app(path="/")
 
     @asynccontextmanager
     async def combined_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-        """Initializes DB pool and MCP session manager."""
+        """Initializes MCP session manager."""
         logger.info("MCP server starting up")
-
-        SqlEngine.set_app_name(f"{POSTGRES_WEB_APP_NAME}_mcp_server")
-        SqlEngine.init_engine(
-            pool_size=1,  # Phase 1: minimal (only PAT validation)
-            max_overflow=3,  # Can grow to 5 connections under load
-        )
-        logger.info("Database connection pool initialized")
 
         try:
             async with mcp_asgi_app.lifespan(app):
                 yield
         finally:
             logger.info("MCP server shutting down")
-            await search.shutdown_http_client()
-            SqlEngine.reset_engine()
+            await shutdown_http_client()
 
     app = FastAPI(
         title="Onyx MCP Server",
-        description="HTTP POST transport with PAT auth",
+        description="HTTP POST transport with bearer auth delegated to API /me",
         version="1.0.0",
         lifespan=combined_lifespan,
     )

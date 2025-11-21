@@ -1,6 +1,4 @@
-"""Integration tests for MCP Server Phase 1 - HTTP + PAT Auth."""
-
-from typing import Any
+"""Integration tests for MCP Server auth delegated to API /me."""
 
 import requests
 
@@ -12,20 +10,6 @@ from tests.integration.common_utils.test_models import DATestUser
 STREAMABLE_HTTP_URL = f"{MCP_SERVER_URL.rstrip('/')}/?transportType=streamable-http"
 
 
-def _error_message(payload: dict[str, Any]) -> str:
-    """Extract message from either FastAPI-style or JSON-RPC error payloads."""
-    if "detail" in payload and isinstance(payload["detail"], str):
-        return payload["detail"]
-
-    error_block = payload.get("error")
-    if isinstance(error_block, dict):
-        message = error_block.get("message")
-        if isinstance(message, str):
-            return message
-
-    return ""
-
-
 def test_mcp_server_health_check(reset: None) -> None:
     """Test MCP server health check endpoint."""
     response = requests.get(f"{MCP_SERVER_URL}/health", timeout=10)
@@ -34,39 +18,36 @@ def test_mcp_server_health_check(reset: None) -> None:
     assert response.json()["service"] == "mcp_server"
 
 
-def test_mcp_server_auth_missing_pat(reset: None) -> None:
-    """Test MCP server rejects requests without PAT."""
+def test_mcp_server_auth_missing_token(reset: None) -> None:
+    """Test MCP server rejects requests without credentials."""
     response = requests.post(STREAMABLE_HTTP_URL)
     assert response.status_code == 401
-    assert "Missing Personal Access Token" in _error_message(response.json())
 
 
-def test_mcp_server_auth_invalid_pat(reset: None) -> None:
-    """Test MCP server rejects requests with invalid PAT."""
+def test_mcp_server_auth_invalid_token(reset: None) -> None:
+    """Test MCP server rejects requests with an invalid bearer token."""
     response = requests.post(
         STREAMABLE_HTTP_URL,
-        headers={"Authorization": "Bearer onyx_pat_invalid123"},
+        headers={"Authorization": "Bearer invalid-token"},
         json={"jsonrpc": "2.0", "method": "initialize", "id": 1},
     )
     assert response.status_code == 401
-    assert "Invalid or expired token" in _error_message(response.json())
 
 
-def test_mcp_server_auth_valid_pat(reset: None, admin_user: DATestUser) -> None:
-    """Test MCP server accepts requests with valid PAT."""
-    # Create PAT via API
-    pat_data = PATManager.create(
+def test_mcp_server_auth_valid_token(reset: None, admin_user: DATestUser) -> None:
+    """Test MCP server accepts requests with a valid bearer token."""
+    token_data = PATManager.create(
         name="Test MCP Token",
         expiration_days=7,
         user_performing_action=admin_user,
     )
-    pat_token = pat_data["token"]
+    access_token = token_data["token"]
 
     # Test connection with MCP protocol request
     response = requests.post(
         STREAMABLE_HTTP_URL,
         headers={
-            "Authorization": f"Bearer {pat_token}",
+            "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
             "MCP-Protocol-Version": "2025-03-26",
         },
