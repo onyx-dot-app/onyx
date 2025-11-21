@@ -90,38 +90,39 @@ def _get_active_content_provider(
 ) -> tuple[WebContentProviderView | None, WebContentProvider]:
     provider_model = fetch_active_web_content_provider(db_session)
 
-    if provider_model is not None:
-        try:
-            provider_type = WebContentProviderType(provider_model.provider_type)
-            provider: WebContentProvider | None = build_content_provider_from_config(
-                provider_type=provider_type,
-                api_key=provider_model.api_key,
-                config=provider_model.config or {},
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if provider_model is None:
+        # Default to the built-in crawler if nothing is configured. Always available.
+        # NOTE: the OnyxWebCrawlerClient is not stored in the content provider table,
+        # so we need to return it directly.
 
-        if provider is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Unable to initialize the configured web content provider.",
-            )
+        return None, OnyxWebCrawlerClient()
 
-        provider_view = WebContentProviderView(
-            id=provider_model.id,
-            name=provider_model.name,
+    try:
+        provider_type = WebContentProviderType(provider_model.provider_type)
+        provider: WebContentProvider | None = build_content_provider_from_config(
             provider_type=provider_type,
-            is_active=provider_model.is_active,
+            api_key=provider_model.api_key,
             config=provider_model.config or {},
-            has_api_key=bool(provider_model.api_key),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if provider is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to initialize the configured web content provider.",
         )
 
-        return provider_view, provider
+    provider_view = WebContentProviderView(
+        id=provider_model.id,
+        name=provider_model.name,
+        provider_type=provider_type,
+        is_active=provider_model.is_active,
+        config=provider_model.config or {},
+        has_api_key=bool(provider_model.api_key),
+    )
 
-    # Default to the built-in crawler if nothing is configured. Always available.
-    # NOTE: the OnyxWebCrawlerClient is not stored in the content provider table,
-    # so we need to return it directly.
-    return None, OnyxWebCrawlerClient()
+    return provider_view, provider
 
 
 def _run_web_search(
