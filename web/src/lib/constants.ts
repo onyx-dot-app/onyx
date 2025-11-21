@@ -7,8 +7,6 @@ export type AuthType =
   | "cloud";
 
 export const HOST_URL = process.env.WEB_DOMAIN || "http://127.0.0.1:3000";
-export const HEADER_HEIGHT = "h-16";
-export const SUB_HEADER = "h-12";
 
 export const INTERNAL_URL = process.env.INTERNAL_URL || "http://127.0.0.1:8080";
 
@@ -30,9 +28,6 @@ export const GOOGLE_DRIVE_AUTH_IS_ADMIN_COOKIE_NAME =
 
 export const SEARCH_TYPE_COOKIE_NAME = "search_type";
 export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
-
-export const SIDEBAR_WIDTH_CONST = "350px";
-export const SIDEBAR_WIDTH = `w-[350px]`;
 
 export const LOGOUT_DISABLED =
   process.env.NEXT_PUBLIC_DISABLE_LOGOUT?.toLowerCase() === "true";
