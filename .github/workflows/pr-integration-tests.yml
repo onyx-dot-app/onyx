@@ -181,6 +181,7 @@ jobs:
       - runner=8cpu-linux-arm64
       - ${{ format('run-id={0}-integration-tests-job-{1}', github.run_id, strategy['job-index']) }}
       - extras=ecr-cache
+      - volume=60gb
 
     strategy:
       fail-fast: false
@@ -347,7 +348,12 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
-    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-multitenant-tests", "extras=ecr-cache"]
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-arm64
+      - "run-id=${{ github.run_id }}-multitenant-tests"
+      - "extras=ecr-cache"
+      - volume=60gb
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2

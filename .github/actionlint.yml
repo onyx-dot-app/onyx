@@ -18,6 +18,7 @@ self-hosted-runner:
     - ubuntu-slim # Currently in public preview
     - volume=40gb
     - volume=50gb
+    - volume=60gb
 
 # Configuration variables in array of strings defined in your repository or
 # organization. `null` means disabling configuration variables check.
