@@ -42,6 +42,7 @@ from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.chat.turn.prompts.custom_instruction import build_custom_instructions
 from onyx.chat.turn.save_turn import extract_final_answer_from_packets
 from onyx.chat.turn.save_turn import save_turn
+from onyx.file_store.models import InMemoryChatFile
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
@@ -223,6 +224,7 @@ def _fast_chat_turn_core(
     force_use_tool: ForceUseTool | None = None,
     # Dependency injectable argument for testing
     starter_context: ChatTurnContext | None = None,
+    latest_query_files: list[InMemoryChatFile] | None = None,
 ) -> None:
     """Core fast chat turn logic that allows overriding global_iteration_responses for testing.
 
@@ -245,6 +247,7 @@ def _fast_chat_turn_core(
         chat_session_id=chat_session_id,
         message_id=message_id,
         research_type=research_type,
+        chat_files=latest_query_files or [],
     )
     with trace("fast_chat_turn"):
         _run_agent_loop(
@@ -301,6 +304,7 @@ def fast_chat_turn(
     research_type: ResearchType,
     prompt_config: PromptConfig,
     force_use_tool: ForceUseTool | None = None,
+    latest_query_files: list[InMemoryChatFile] | None = None,
 ) -> None:
     """Main fast chat turn function that calls the core logic with default parameters."""
     _fast_chat_turn_core(
@@ -311,6 +315,7 @@ def fast_chat_turn(
         research_type,
         prompt_config,
         force_use_tool=force_use_tool,
+        latest_query_files=latest_query_files,
     )
 
 

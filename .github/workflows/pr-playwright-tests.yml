@@ -154,7 +154,12 @@ jobs:
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
     name: Playwright Tests (${{ matrix.project }})
-    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}", "extras=ecr-cache"]
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-arm64
+      - "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}"
+      - "extras=ecr-cache"
+      - volume=50gb
     strategy:
       fail-fast: false
       matrix:
