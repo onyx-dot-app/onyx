@@ -203,8 +203,14 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           cd deployment/docker_compose
+          AUTH_TYPE=basic \
+          POSTGRES_POOL_PRE_PING=true \
+          POSTGRES_USE_NULL_POOL=true \
+          REQUIRE_EMAIL_VERIFICATION=false \
+          DISABLE_TELEMETRY=true \
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
+          INTEGRATION_TESTS_MODE=true \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
@@ -268,6 +274,16 @@ jobs:
             echo "Running integration tests for ${{ matrix.test-dir.path }}..."
             docker run --rm --network onyx_default \
               --name test-runner \
+              -e POSTGRES_HOST=relational_db \
+              -e POSTGRES_USER=postgres \
+              -e POSTGRES_PASSWORD=password \
+              -e POSTGRES_DB=postgres \
+              -e DB_READONLY_USER=db_readonly_user \
+              -e DB_READONLY_PASSWORD=password \
+              -e POSTGRES_POOL_PRE_PING=true \
+              -e POSTGRES_USE_NULL_POOL=true \
+              -e VESPA_HOST=index \
+              -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
@@ -283,6 +299,7 @@ jobs:
               -e PERM_SYNC_SHAREPOINT_PRIVATE_KEY="${PERM_SYNC_SHAREPOINT_PRIVATE_KEY}" \
               -e PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD=${PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD} \
               -e PERM_SYNC_SHAREPOINT_DIRECTORY_ID=${PERM_SYNC_SHAREPOINT_DIRECTORY_ID} \
+              -e TEST_WEB_HOSTNAME=test-runner \
               -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
