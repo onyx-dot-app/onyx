@@ -245,6 +245,45 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  testrail: {
+    description: "Configure TestRail connector",
+    values: [
+      {
+        type: "text",
+        label: "Project IDs",
+        name: "project_ids",
+        optional: true,
+        description:
+          "Comma-separated list of TestRail project IDs to index (e.g., 1 or 1,2,3). Leave empty to index all projects.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        label: "Cases Page Size",
+        name: "cases_page_size",
+        optional: true,
+        description:
+          "Number of test cases to fetch per page from the TestRail API (default: 250)",
+      },
+      {
+        type: "number",
+        label: "Max Pages",
+        name: "max_pages",
+        optional: true,
+        description:
+          "Maximum number of pages to fetch to prevent infinite loops (default: 10000)",
+      },
+      {
+        type: "number",
+        label: "Skip Document Character Limit",
+        name: "skip_doc_absolute_chars",
+        optional: true,
+        description:
+          "Skip indexing test cases that exceed this character limit (default: 200000)",
+      },
+    ],
+  },
   gitlab: {
     description: "Configure GitLab connector",
     values: [

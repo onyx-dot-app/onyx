@@ -153,7 +153,7 @@ export default function LLMConnectionFieldsBasic({
                 <PasswordInputTypeIn
                   {...field}
                   placeholder=""
-                  isError={apiStatus === "error"}
+                  error={apiStatus === "error"}
                   onBlur={(e) => {
                     field.onBlur(e);
                     if (llmDescriptor?.name !== "azure") {
@@ -255,7 +255,7 @@ export default function LLMConnectionFieldsBasic({
                         onValueSet={(value) =>
                           testFileInputChange({ [customConfigKey.name]: value })
                         }
-                        isError={apiStatus === "error"}
+                        error={apiStatus === "error"}
                         onBlur={(e) => {
                           field.onBlur(e);
                           if (field.value) {
@@ -273,7 +273,7 @@ export default function LLMConnectionFieldsBasic({
                         placeholder={customConfigKey.default_value || ""}
                         showClearButton={false}
                         disabled={disabled}
-                        isError={apiStatus === "error"}
+                        error={apiStatus === "error"}
                       />
                     ) : (
                       <InputTypeIn
@@ -281,7 +281,7 @@ export default function LLMConnectionFieldsBasic({
                         placeholder={customConfigKey.default_value || ""}
                         showClearButton={false}
                         disabled={disabled}
-                        isError={apiStatus === "error"}
+                        error={apiStatus === "error"}
                       />
                     )}
                   </FormField.Control>

@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Popover,
@@ -6,8 +8,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { getDisplayNameForModel, LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { modelSupportsImageInput, structureValue } from "@/lib/llm/utils";
+import { structureValue } from "@/lib/llm/utils";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/components/user/UserProvider";

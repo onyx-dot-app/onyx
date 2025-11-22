@@ -5,6 +5,9 @@ concurrency:
 
 on: push
 
+permissions:
+  contents: read
+
 env:
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -42,6 +45,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -62,8 +67,10 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
           push: true
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache
+            type=registry,ref=onyxdotapp/onyx-web-server:latest
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-image:
@@ -73,6 +80,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -93,8 +102,11 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
           push: true
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
+            type=registry,ref=onyxdotapp/onyx-backend:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
@@ -104,6 +116,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -124,8 +138,10 @@ jobs:
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
           push: true
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
+            type=registry,ref=onyxdotapp/onyx-model-server:latest
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   playwright-tests:
@@ -143,6 +159,7 @@ jobs:
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup node
         uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # ratchet:actions/setup-node@v4
@@ -168,18 +185,26 @@ jobs:
         run: npx playwright install --with-deps
 
       - name: Create .env file for Docker Compose
+        env:
+          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
+          EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
-          GEN_AI_API_KEY=${{ env.OPENAI_API_KEY }}
-          EXA_API_KEY=${{ env.EXA_API_KEY }}
+          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
+          EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
-          ONYX_BACKEND_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
-          ONYX_MODEL_SERVER_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
-          ONYX_WEB_SERVER_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
+          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF
+          if [ "${{ matrix.project }}" = "no-auth" ]; then
+            echo "PLAYWRIGHT_FORCE_EMPTY_LLM_PROVIDERS=true" >> deployment/docker_compose/.env
+          fi
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
@@ -255,10 +280,15 @@ jobs:
 
       - name: Run Playwright tests
         working-directory: ./web
+        env:
+          PROJECT: ${{ matrix.project }}
         run: |
           # Create test-results directory to ensure it exists for artifact upload
           mkdir -p test-results
-          npx playwright test --project ${{ matrix.project }}
+          if [ "${PROJECT}" = "no-auth" ]; then
+            export PLAYWRIGHT_FORCE_EMPTY_LLM_PROVIDERS=true
+          fi
+          npx playwright test --project ${PROJECT}
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         if: always()
@@ -271,10 +301,12 @@ jobs:
       # save before stopping the containers so the logs can be captured
       - name: Save Docker logs
         if: success() || failure()
+        env:
+          WORKSPACE: ${{ github.workspace }}
         run: |
           cd deployment/docker_compose
           docker compose logs > docker-compose.log
-          mv docker-compose.log ${{ github.workspace }}/docker-compose.log
+          mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
         if: success() || failure()
@@ -282,6 +314,16 @@ jobs:
         with:
           name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
+
+  playwright-required:
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
+    needs: [playwright-tests]
+    if: ${{ always() }}
+    steps:
+      - name: Check job status
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1
 
 
 # NOTE: Chromatic UI diff testing is currently disabled.

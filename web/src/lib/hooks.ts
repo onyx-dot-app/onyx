@@ -39,89 +39,8 @@ import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
-import { usePathname, useSearchParams } from "next/navigation";
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useLLMProviders } from "./hooks/useLLMProviders";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-
-export function useClickOutside(
-  callback: () => void,
-  refs: React.RefObject<any>[],
-  isActive: boolean = true
-) {
-  const mouseDownOutsideRef = useRef(false);
-
-  useEffect(() => {
-    if (!isActive) return;
-
-    function handleMouseDown(e: MouseEvent) {
-      const clickedOutside = refs.every(
-        (ref) => ref.current && !ref.current.contains(e.target as Node)
-      );
-      mouseDownOutsideRef.current = clickedOutside;
-    }
-
-    function handleMouseUp(e: MouseEvent) {
-      const clickedOutside = refs.every(
-        (ref) => ref.current && !ref.current.contains(e.target as Node)
-      );
-
-      if (mouseDownOutsideRef.current && clickedOutside) {
-        callback();
-      }
-      mouseDownOutsideRef.current = false;
-    }
-
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [refs, callback, isActive]);
-}
-
-export function useIsMounted() {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  return mounted;
-}
-
-// "AppFocus" is the current part of the main application which is active / focused on.
-// Namely, if the URL is pointing towards a "chat", then a `{ type: "chat", id: "..." }` is returned.
-//
-// This is useful in determining what `SidebarTab` should be active, for example.
-type AppFocus =
-  | { type: "agent" | "project" | "chat"; id: string }
-  | "new-session"
-  | "more-agents";
-
-export function useAppFocus(): AppFocus {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  // Check if we're on the agents page
-  if (pathname === "/chat/agents") {
-    return "more-agents";
-  }
-
-  // Check search params for chat, agent, or project
-  const chatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
-  if (chatId) return { type: "chat", id: chatId };
-
-  const agentId = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
-  if (agentId) return { type: "agent", id: agentId };
-
-  const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
-  if (projectId) return { type: "project", id: projectId };
-
-  // No search params means we're on a new session
-  return "new-session";
-}
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 

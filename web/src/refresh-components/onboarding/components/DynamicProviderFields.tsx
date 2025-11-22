@@ -73,7 +73,7 @@ export default function DynamicProviderFields({
               <FormField.Control>
                 <InputTypeIn
                   {...field}
-                  isError={apiStatus === "error"}
+                  error={apiStatus === "error"}
                   placeholder={
                     override?.placeholder ||
                     llmDescriptor.default_api_base ||
@@ -141,7 +141,7 @@ export default function DynamicProviderFields({
                       field.onBlur(e);
                       handleApiKeyInteraction(field.value);
                     }}
-                    isError={apiStatus === "error"}
+                    error={apiStatus === "error"}
                   />
                 ) : (
                   <InputTypeIn
@@ -149,7 +149,7 @@ export default function DynamicProviderFields({
                     placeholder={override?.placeholder || ""}
                     disabled={disabled}
                     showClearButton={false}
-                    isError={apiStatus === "error"}
+                    error={apiStatus === "error"}
                     onBlur={(e) => {
                       field.onBlur(e);
                       handleApiKeyInteraction(field.value);

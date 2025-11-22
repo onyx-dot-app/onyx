@@ -25,6 +25,11 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * - `createUserGroup(name)` - Creates a user group
  * - `deleteUserGroup(id)` - Deletes a user group
  *
+ * **Tool Providers:**
+ * - `createWebSearchProvider(type, name)` - Creates and activates a web search provider
+ * - `deleteWebSearchProvider(id)` - Deletes a web search provider
+ * - `createImageGenProvider(name)` - Creates an OpenAI LLM provider for image generation
+ *
  * **Usage Example:**
  * ```typescript
  * const client = new OnyxApiClient(page);
@@ -607,5 +612,43 @@ export class OnyxApiClient {
         `Failed to delete web search provider ${providerId}: ${response.status()} - ${errorText}`
       );
     }
+  }
+
+  /**
+   * Create an OpenAI LLM provider to enable image generation.
+   * Image generation requires an OpenAI provider with an API key.
+   *
+   * @param name - Optional name for the provider (defaults to "Test Image Gen Provider")
+   * @returns The provider ID
+   * @throws Error if the provider creation fails
+   */
+  async createImageGenProvider(
+    name: string = "Test Image Gen Provider"
+  ): Promise<number> {
+    const response = await this.page.request.put(
+      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      {
+        data: {
+          name,
+          provider: "openai",
+          api_key: "test-image-gen-key",
+          default_model_name: "gpt-4o",
+          fast_default_model_name: "gpt-4o-mini",
+          is_public: true,
+          groups: [],
+          personas: [],
+        },
+      }
+    );
+
+    const responseData = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create image generation provider"
+    );
+
+    this.log(
+      `Created image generation provider: ${name} (ID: ${responseData.id})`
+    );
+    return responseData.id;
   }
 }

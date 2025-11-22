@@ -510,6 +510,7 @@ class LitellmLLM(LLM):
                 # model params
                 temperature=(1 if is_reasoning else self._temperature),
                 timeout=timeout_override or self._timeout,
+                **({"stream_options": {"include_usage": True}} if stream else {}),
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
                 # or else OpenAI throws an error
