@@ -31,6 +31,9 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
+  # Code Interpreter
+  CODE_INTERPRETER_BASE_URL: http://localhost:8000
+
 jobs:
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -93,7 +96,15 @@ jobs:
       - name: Set up Standard Dependencies
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d minio relational_db cache index
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.dev.yml \
+            up -d \
+            minio \
+            relational_db \
+            cache \
+            index \
+            code-interpreter
 
       - name: Run migrations
         run: |
