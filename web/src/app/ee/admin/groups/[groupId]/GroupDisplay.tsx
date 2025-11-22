@@ -15,7 +15,7 @@ import {
 } from "@/lib/types";
 import { AddConnectorForm } from "./AddConnectorForm";
 import { Separator } from "@/components/ui/separator";
-import * as InputSelect from "@/refresh-components/inputs/InputSelect";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Text from "@/components/ui/text";
 import {
   Table,
@@ -131,16 +131,21 @@ const UserRoleDropdown = ({
       )}
 
       {isEditable ? (
-        <InputSelect.Root
+        <InputSelect
           value={localRole}
           onValueChange={handleChange}
           disabled={isSettingRole}
-          placeholder="Select role"
           className="w-40"
         >
-          <InputSelect.Item value={UserRole.BASIC}>Basic</InputSelect.Item>
-          <InputSelect.Item value={UserRole.CURATOR}>Curator</InputSelect.Item>
-        </InputSelect.Root>
+          <InputSelect.Trigger placeholder="Select role" />
+
+          <InputSelect.Content>
+            <InputSelect.Item value={UserRole.BASIC}>Basic</InputSelect.Item>
+            <InputSelect.Item value={UserRole.CURATOR}>
+              Curator
+            </InputSelect.Item>
+          </InputSelect.Content>
+        </InputSelect>
       ) : (
         <div>{USER_ROLE_LABELS[localRole]}</div>
       )}

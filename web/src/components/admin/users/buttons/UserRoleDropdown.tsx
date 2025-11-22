@@ -7,7 +7,7 @@ import {
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
 
-import * as InputSelect from "@/refresh-components/inputs/InputSelect";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
 import { useState } from "react";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -75,42 +75,46 @@ export default function UserRoleDropdown({
         />
       )}
 
-      <InputSelect.Root
+      <InputSelect
         value={user.role}
         onValueChange={handleChange}
         disabled={isSettingRole}
       >
-        {(Object.entries(USER_ROLE_LABELS) as [UserRole, string][]).map(
-          ([role, label]) => {
-            // Don't want to ever show external permissioned users because it's scary
-            if (role === UserRole.EXT_PERM_USER) return null;
+        <InputSelect.Trigger />
 
-            // Only want to show limited users if paid enterprise features are enabled
-            // Also, dont want to show these other roles in general
-            const isNotVisibleRole =
-              (!isPaidEnterpriseFeaturesEnabled &&
-                role === UserRole.GLOBAL_CURATOR) ||
-              role === UserRole.CURATOR ||
-              role === UserRole.LIMITED ||
-              role === UserRole.SLACK_USER;
+        <InputSelect.Content>
+          {(Object.entries(USER_ROLE_LABELS) as [UserRole, string][]).map(
+            ([role, label]) => {
+              // Don't want to ever show external permissioned users because it's scary
+              if (role === UserRole.EXT_PERM_USER) return null;
 
-            // Always show the current role
-            const isCurrentRole = user.role === role;
+              // Only want to show limited users if paid enterprise features are enabled
+              // Also, dont want to show these other roles in general
+              const isNotVisibleRole =
+                (!isPaidEnterpriseFeaturesEnabled &&
+                  role === UserRole.GLOBAL_CURATOR) ||
+                role === UserRole.CURATOR ||
+                role === UserRole.LIMITED ||
+                role === UserRole.SLACK_USER;
 
-            return isNotVisibleRole && !isCurrentRole ? null : (
-              <InputSelect.Item
-                key={role}
-                value={role}
-                data-testid={`user-role-dropdown-${role}`}
-                title={INVALID_ROLE_HOVER_TEXT[role] ?? ""}
-                data-tooltip-delay="0"
-              >
-                {label}
-              </InputSelect.Item>
-            );
-          }
-        )}
-      </InputSelect.Root>
+              // Always show the current role
+              const isCurrentRole = user.role === role;
+
+              return isNotVisibleRole && !isCurrentRole ? null : (
+                <InputSelect.Item
+                  key={role}
+                  value={role}
+                  data-testid={`user-role-dropdown-${role}`}
+                  title={INVALID_ROLE_HOVER_TEXT[role] ?? ""}
+                  data-tooltip-delay="0"
+                >
+                  {label}
+                </InputSelect.Item>
+              );
+            }
+          )}
+        </InputSelect.Content>
+      </InputSelect>
     </>
   );
 }

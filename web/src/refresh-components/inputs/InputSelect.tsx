@@ -113,11 +113,22 @@ interface InputSelectRootProps
   error?: boolean;
   /** Whether the select is disabled */
   disabled?: boolean;
+  /** Additional CSS classes for the wrapper element */
+  className?: string;
   children: React.ReactNode;
 }
 const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
   (
-    { disabled, error, value, defaultValue, onValueChange, children, ...props },
+    {
+      disabled,
+      error,
+      value,
+      defaultValue,
+      onValueChange,
+      className,
+      children,
+      ...props
+    },
     ref
   ) => {
     const variant: SelectVariant = disabled
@@ -185,7 +196,9 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
           disabled={disabled}
           {...props}
         >
-          <div ref={ref}>{children}</div>
+          <div ref={ref} className={className}>
+            {children}
+          </div>
         </SelectPrimitive.Root>
       </InputSelectContext.Provider>
     );

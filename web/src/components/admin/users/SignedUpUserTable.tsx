@@ -22,7 +22,7 @@ import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { InviteUserButton } from "./buttons/InviteUserButton";
-import * as InputSelect from "@/refresh-components/inputs/InputSelect";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   Select,
   SelectContent,
@@ -170,7 +170,7 @@ export default function SignedUpUserTable({
     <>
       <div className="flex flex-wrap items-center justify-between gap-4 py-4">
         <div className="flex flex-wrap items-center gap-4">
-          <InputSelect.Root
+          <InputSelect
             value={filters.is_active?.toString() || "all"}
             onValueChange={(selectedStatus) =>
               setFilters((prev) => {
@@ -185,10 +185,14 @@ export default function SignedUpUserTable({
               })
             }
           >
-            <InputSelect.Item value="all">All Status</InputSelect.Item>
-            <InputSelect.Item value="true">Active</InputSelect.Item>
-            <InputSelect.Item value="false">Inactive</InputSelect.Item>
-          </InputSelect.Root>
+            <InputSelect.Trigger />
+
+            <InputSelect.Content>
+              <InputSelect.Item value="all">All Status</InputSelect.Item>
+              <InputSelect.Item value="true">Active</InputSelect.Item>
+              <InputSelect.Item value="false">Inactive</InputSelect.Item>
+            </InputSelect.Content>
+          </InputSelect>
 
           <Select value="roles">
             <SelectTrigger className="w-[260px] h-[34px] bg-neutral">
