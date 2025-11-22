@@ -80,19 +80,6 @@ export class OnyxApiClient {
   }
 
   /**
-   * Generic PUT request to the API.
-   *
-   * @param endpoint - API endpoint path (e.g., "/manage/admin/cc-pair/123/status")
-   * @param data - Optional request body data
-   * @returns The API response
-   */
-  private async put(endpoint: string, data?: any): Promise<APIResponse> {
-    return await this.page.request.put(`${this.baseUrl}${endpoint}`, {
-      data,
-    });
-  }
-
-  /**
    * Handle API response - parse JSON and handle errors.
    *
    * @param response - The API response to handle
@@ -212,28 +199,7 @@ export class OnyxApiClient {
       `Created file connector: ${connectorName} (CC Pair ID: ${ccPairId})`
     );
 
-    // Pause the connector immediately to prevent indexing during tests
-    await this.pauseConnector(ccPairId);
-
     return ccPairId;
-  }
-
-  /**
-   * Pauses a connector-credential pair to prevent indexing.
-   *
-   * @param ccPairId - The connector-credential pair ID to pause
-   * @throws Error if the pause operation fails
-   */
-  async pauseConnector(ccPairId: number): Promise<void> {
-    const response = await this.put(
-      `/manage/admin/cc-pair/${ccPairId}/status`,
-      {
-        status: "PAUSED",
-      }
-    );
-
-    await this.handleResponse(response, "Failed to pause connector");
-    this.log(`Paused connector CC Pair ID: ${ccPairId}`);
   }
 
   /**

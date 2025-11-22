@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Any
 from typing import Dict
 from typing import TypeVar
+from urllib.parse import urlencode
 
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
@@ -129,11 +130,23 @@ def _create_mcp_client_function_runner(
 ) -> Callable[[], Awaitable[T]]:
     auth_headers = connection_headers or {}
     # Normalize URL
-    server_url = server_url.rstrip("/")
+    normalized_url = server_url.rstrip("/")
     # WARNING: httpx.Auth with requires_response_body=True (as in the MCP OAuth
     # provider) forces httpx to fully read the response body. That is incompatible
     # with SSE (infinite stream). Avoid passing auth for SSE; rely on headers.
-    auth_for_request = auth if transport == MCPTransport.STREAMABLE_HTTP else None
+    auth_for_request = None
+    if transport == MCPTransport.STREAMABLE_HTTP:
+        # Only append transportType for Streamable HTTP; SSE endpoints typically do not
+        # expect this parameter and some servers may misbehave when it is present.
+        sep = "?" if "?" not in normalized_url else "&"
+        server_url = (
+            normalized_url
+            + sep
+            + urlencode({"transportType": transport.value.lower().replace("_", "-")})
+        )
+        auth_for_request = auth
+    else:
+        server_url = normalized_url
 
     # doing this here for mypy
     client_func = (

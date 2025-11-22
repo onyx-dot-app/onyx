@@ -260,7 +260,6 @@ test.describe("Default Assistant Tests", () => {
 
       const apiClient = new OnyxApiClient(page);
       let webSearchProviderId: number | null = null;
-      let imageGenProviderId: number | null = null;
 
       try {
         // Set up a web search provider so the tool is available
@@ -268,60 +267,15 @@ test.describe("Default Assistant Tests", () => {
           "exa",
           `Test Web Search Provider ${Date.now()}`
         );
-        // Set up an image generation provider so the tool is available
-        imageGenProviderId = await apiClient.createImageGenProvider(
-          `Test Image Gen Provider ${Date.now()}`
-        );
       } catch (error) {
         console.warn(
-          `Failed to create tool providers for test: ${error}. Test may fail.`
+          `Failed to create web search provider for test: ${error}. Test may fail if web search is required.`
         );
       }
 
-      // Enable the tools in default assistant config via API
-      // Get current tools to find their IDs
-      const toolsListResp = await page.request.get(
-        "http://localhost:3000/api/tool"
-      );
-      const allTools = await toolsListResp.json();
-      const toolIdsByCodeId: { [key: string]: number } = {};
-      allTools.forEach((tool: any) => {
-        if (tool.in_code_tool_id) {
-          toolIdsByCodeId[tool.in_code_tool_id] = tool.id;
-        }
-      });
-
-      // Get current config
-      const currentConfigResp = await page.request.get(
-        "http://localhost:3000/api/admin/default-assistant/configuration"
-      );
-      const currentConfig = await currentConfigResp.json();
-
-      // Add Web Search and Image Generation tool IDs
-      const toolIdsToEnable = [
-        ...(currentConfig.tool_ids || []),
-        toolIdsByCodeId["WebSearchTool"],
-        toolIdsByCodeId["ImageGenerationTool"],
-      ].filter((id) => id !== undefined);
-
-      // Deduplicate
-      const uniqueToolIds = Array.from(new Set(toolIdsToEnable));
-
-      // Update config via API
-      await page.request.patch(
-        "http://localhost:3000/api/admin/default-assistant",
-        {
-          data: { tool_ids: uniqueToolIds },
-        }
-      );
-
-      console.log(`[test] Enabled tools via API: ${uniqueToolIds}`);
-
-      // Go back to chat
-      await page.goto("http://localhost:3000/chat");
+      // Reload page to refresh ChatContext with new providers
+      await page.reload();
       await page.waitForLoadState("networkidle");
-      // Wait for tools to be picked up
-      await page.waitForTimeout(2000);
 
       // Will NOT show the `internal-search` option since that will be excluded when there are no connectors connected.
       // (Since we removed pre-seeded docs, we will have NO connectors connected on a fresh install; therefore, `internal-search` will not be available.)
@@ -336,17 +290,6 @@ test.describe("Default Assistant Tests", () => {
         } catch (error) {
           console.warn(
             `Failed to delete web search provider ${webSearchProviderId}: ${error}`
-          );
-        }
-      }
-
-      // Clean up image generation provider
-      if (imageGenProviderId !== null) {
-        try {
-          await apiClient.deleteProvider(imageGenProviderId);
-        } catch (error) {
-          console.warn(
-            `Failed to delete image gen provider ${imageGenProviderId}: ${error}`
           );
         }
       }
