@@ -108,7 +108,7 @@ services:
 
       # Show extra/uncommon connectors
       - SHOW_EXTRA_CONNECTORS=${SHOW_EXTRA_CONNECTORS:-true}
-      
+
       # Enables the use of bedrock models or IAM Auth
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
@@ -118,7 +118,7 @@ services:
       - USE_IAM_AUTH=${USE_IAM_AUTH:-}
 
       # Vespa Language Forcing
-      # See: https://docs.vespa.ai/en/linguistics.html 
+      # See: https://docs.vespa.ai/en/linguistics.html
       - VESPA_LANGUAGE_OVERRIDE=${VESPA_LANGUAGE_OVERRIDE:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -410,8 +410,8 @@ services:
     environment:
       - DOMAIN=localhost
     ports:
-      - "80:80"
-      - "3000:80" # allow for localhost:3000 usage, since that is the norm
+      - "${HOST_PORT_80:-80}:80"
+      - "${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
     volumes:
       - ../data/nginx:/etc/nginx/conf.d
     logging:
@@ -425,7 +425,7 @@ services:
     # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
     # in order to make this work on both Unix-like systems and windows
     command: >
-      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
+      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh
       && /etc/nginx/conf.d/run-nginx.sh app.conf.template"
 
   minio:
