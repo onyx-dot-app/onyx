@@ -133,8 +133,6 @@ function CheckboxInner(
         tabIndex={disabled ? -1 : 0}
         className={cn(
           "flex h-4 w-4 shrink-0 items-center justify-center rounded-04 transition-colors",
-          "focus-visible:outline-none focus-visible:ring-0",
-          "peer-focus-visible:border peer-focus-visible:border-border-05",
           disabled ? "cursor-not-allowed" : "cursor-pointer",
           rootClasses[variant],
           className
