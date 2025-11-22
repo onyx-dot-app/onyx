@@ -255,7 +255,9 @@ export function PersonasTable({
                 onClick={() => {
                   openDefaultModal(persona);
                 }}
-                className={`px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit`}
+                className={`
+                  px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit items-center gap-2
+                  `}
               >
                 <div className="my-auto flex-none w-22">
                   {!persona.is_default_persona ? (
@@ -264,9 +266,7 @@ export function PersonasTable({
                     "Featured"
                   )}
                 </div>
-                <div className="ml-1 my-auto">
-                  <Checkbox checked={persona.is_default_persona} />
-                </div>
+                <Checkbox checked={persona.is_default_persona} />
               </div>,
               <div
                 key="is_visible"
@@ -284,18 +284,18 @@ export function PersonasTable({
                     });
                   }
                 }}
-                className={`px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit`}
+                className={`
+                  px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit items-center gap-2
+                  `}
               >
-                <div className="my-auto w-12">
+                <div className="my-auto w-fit">
                   {!persona.is_visible ? (
                     <div className="text-error">Hidden</div>
                   ) : (
                     "Visible"
                   )}
                 </div>
-                <div className="ml-1 my-auto">
-                  <Checkbox checked={persona.is_visible} />
-                </div>
+                <Checkbox checked={persona.is_visible} />
               </div>,
               <div key="edit" className="flex">
                 <div className="mr-auto my-auto">
