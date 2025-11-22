@@ -458,28 +458,34 @@ export default function NewMCPToolPage() {
                               <Label htmlFor="auth_performer">
                                 Who performs authentication?
                               </Label>
-                              <InputSelect
-                                value={values.auth_performer}
-                                onValueChange={(value) =>
-                                  setFieldValue("auth_performer", value)
-                                }
-                                className="mt-1"
-                              >
-                                <InputSelect.Trigger placeholder="Select authentication performer" />
 
-                                <InputSelect.Content>
-                                  <InputSelect.Item
-                                    value={MCPAuthenticationPerformer.ADMIN}
-                                  >
-                                    Admin (shared credentials)
-                                  </InputSelect.Item>
-                                  <InputSelect.Item
-                                    value={MCPAuthenticationPerformer.PER_USER}
-                                  >
-                                    Per-user (individual credentials)
-                                  </InputSelect.Item>
-                                </InputSelect.Content>
-                              </InputSelect>
+                              <div data-testid="auth-performer-select">
+                                <InputSelect
+                                  value={values.auth_performer}
+                                  onValueChange={(value) =>
+                                    setFieldValue("auth_performer", value)
+                                  }
+                                  className="mt-1"
+                                >
+                                  <InputSelect.Trigger placeholder="Select authentication performer" />
+
+                                  <InputSelect.Content>
+                                    <InputSelect.Item
+                                      value={MCPAuthenticationPerformer.ADMIN}
+                                    >
+                                      Admin (shared credentials)
+                                    </InputSelect.Item>
+                                    <InputSelect.Item
+                                      value={
+                                        MCPAuthenticationPerformer.PER_USER
+                                      }
+                                    >
+                                      Per-user (individual credentials)
+                                    </InputSelect.Item>
+                                  </InputSelect.Content>
+                                </InputSelect>
+                              </div>
+
                               {errors.auth_performer &&
                                 touched.auth_performer && (
                                   <div className="text-red-500 text-sm mt-1">
