@@ -22,6 +22,8 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
+from onyx.file_store.models import ChatFileType
+from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import get_default_file_store
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PythonToolDelta
@@ -410,17 +412,24 @@ def test_python_execution_context_updates(
 def test_python_tool_availability_with_url_set(db_session: Session) -> None:
     """Test PythonTool.is_available() returns True when URL is configured."""
     with patch(
-        "onyx.configs.app_configs.CODE_INTERPRETER_BASE_URL", "http://localhost:8000"
+        "onyx.tools.tool_implementations.python.python_tool.CODE_INTERPRETER_BASE_URL",
+        "http://localhost:8000",
     ):
         assert PythonTool.is_available(db_session) is True
 
 
 def test_python_tool_availability_without_url(db_session: Session) -> None:
     """Test PythonTool.is_available() returns False when URL is not configured."""
-    with patch("onyx.configs.app_configs.CODE_INTERPRETER_BASE_URL", None):
+    with patch(
+        "onyx.tools.tool_implementations.python.python_tool.CODE_INTERPRETER_BASE_URL",
+        None,
+    ):
         assert PythonTool.is_available(db_session) is False
 
-    with patch("onyx.configs.app_configs.CODE_INTERPRETER_BASE_URL", ""):
+    with patch(
+        "onyx.tools.tool_implementations.python.python_tool.CODE_INTERPRETER_BASE_URL",
+        "",
+    ):
         assert PythonTool.is_available(db_session) is False
 
 
@@ -544,12 +553,22 @@ print("Created 3 files")
     # Verify we can read all files back from the file store
     file_store = get_default_file_store()
 
-    for i, generated_file in enumerate(result.generated_files, 1):
+    # Create a mapping of filename to generated file for easier verification
+    files_by_name = {f.filename: f for f in result.generated_files}
+
+    # Verify each expected file
+    for i in range(1, 4):
+        filename = f"file{i}.txt"
+        assert filename in files_by_name, f"Expected file {filename} not found"
+
+        generated_file = files_by_name[filename]
         file_id = generated_file.file_link.split("/")[-1]
         file_io = file_store.read_file(file_id)
         file_content = file_io.read()
         expected_content = f"Content of file {i}".encode()
-        assert expected_content in file_content
+        assert (
+            expected_content in file_content
+        ), f"Expected content not found in {filename}"
 
 
 def test_python_execution_client_error_handling(
@@ -587,6 +606,277 @@ def test_python_execution_client_error_handling(
     ]
     assert len(delta_packets) >= 1
     assert "Service unavailable" in delta_packets[-1].obj.stderr
+
+
+def test_python_execution_with_excel_file(
+    mock_run_context: RunContextWrapper[ChatTurnContext],
+    code_interpreter_client: CodeInterpreterClient,
+    db_session: Session,  # Needed to initialize DB engine for file_store
+) -> None:
+    """Test Excel file generation with financial data."""
+    code = """
+import pandas as pd
+
+# Create financial sample data
+data = {
+    'Segment': ['Government', 'Government', 'Midmarket', 'Midmarket', 'Enterprise'],
+    'Country': ['Canada', 'Germany', 'France', 'Germany', 'Canada'],
+    'Product': ['Carretera', 'Carretera', 'Carretera', 'Carretera', 'Amarilla'],
+    'Units Sold': [1618.5, 1321, 2178, 888, 2470],
+    'Manufacturing Price': [3, 3, 3, 3, 260],
+    'Sale Price': [20, 20, 20, 20, 300],
+    'Gross Sales': [32370, 26420, 43560, 17760, 741000],
+    'Discounts': [0, 0, 0, 0, 0],
+    'Sales': [32370, 26420, 43560, 17760, 741000],
+    'COGS': [16850, 13940, 22800, 9390, 642000],
+    'Profit': [15520, 12480, 20760, 8370, 99000],
+    'Month': ['January', 'January', 'June', 'April', 'September']
+}
+
+# Create DataFrame
+df = pd.DataFrame(data)
+
+# Write to Excel
+df.to_excel('financial_report.xlsx', index=False, sheet_name='Financial Data')
+
+print(f"Excel file created with {len(df)} rows")
+"""
+
+    # Mock only get_tool_by_name (database lookup)
+    with patch(
+        "onyx.tools.tool_implementations_v2.python.get_tool_by_name"
+    ) as mock_get_tool:
+        mock_tool = Mock()
+        mock_tool.id = 1
+        mock_get_tool.return_value = mock_tool
+
+        # Execute code - file store operations happen for real
+        result = _python_execution_core(mock_run_context, code, code_interpreter_client)
+
+    # Verify result
+    assert isinstance(result, LlmPythonExecutionResult)
+    assert result.exit_code == 0
+    assert "Excel file created with 5 rows" in result.stdout
+    assert len(result.generated_files) == 1
+
+    # Verify file metadata
+    generated_file = result.generated_files[0]
+    assert generated_file.filename == "financial_report.xlsx"
+    assert ".xlsx" in generated_file.filename
+
+    # Extract file_id from file_link
+    file_id = generated_file.file_link.split("/")[-1]
+
+    # Verify we can read the file back from the file store
+    file_store = get_default_file_store()
+    file_io = file_store.read_file(file_id)
+    file_content = file_io.read()
+
+    # Verify the file is a valid Excel file (check ZIP magic bytes - xlsx is a ZIP archive)
+    # ZIP magic bytes: 50 4B 03 04
+    assert file_content[:4] == b"PK\x03\x04"
+    assert len(file_content) > 1000  # Excel file should be substantial
+
+    # Verify we can parse the Excel file with pandas
+    import io
+    import pandas as pd
+
+    file_io = io.BytesIO(file_content)
+    df = pd.read_excel(file_io, sheet_name="Financial Data")
+
+    # Verify data structure
+    assert len(df) == 5
+    expected_columns = [
+        "Segment",
+        "Country",
+        "Product",
+        "Units Sold",
+        "Manufacturing Price",
+        "Sale Price",
+        "Gross Sales",
+        "Discounts",
+        "Sales",
+        "COGS",
+        "Profit",
+        "Month",
+    ]
+    assert list(df.columns) == expected_columns
+
+    # Verify some sample data
+    assert "Government" in df["Segment"].values
+    assert "Canada" in df["Country"].values
+    assert df["Units Sold"].sum() > 8000  # Total units sold
+    assert df["Profit"].sum() > 155000  # Total profit
+
+
+def test_python_execution_with_excel_file_input(
+    mock_run_context: RunContextWrapper[ChatTurnContext],
+    code_interpreter_client: CodeInterpreterClient,
+    db_session: Session,  # Needed to initialize DB engine for file_store
+) -> None:
+    """Test processing an uploaded Excel file - reading and analyzing it."""
+    # Load the sample Excel file
+    import os
+
+    test_file_path = os.path.join(
+        os.path.dirname(__file__), "data", "financial-sample.xlsx"
+    )
+
+    with open(test_file_path, "rb") as f:
+        file_content = f.read()
+
+    # Create InMemoryChatFile with the Excel file
+    chat_file = InMemoryChatFile(
+        file_id="test-financial-sample",
+        content=file_content,
+        file_type=ChatFileType.DOC,
+        filename="financial-sample.xlsx",
+    )
+
+    # Add the file to the mock context's chat_files
+    mock_run_context.context.chat_files = [chat_file]
+
+    # Code to analyze the uploaded Excel file
+    code = """
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+# Read the uploaded Excel file
+df = pd.read_excel('financial-sample.xlsx')
+
+print(f"Loaded Excel file with {len(df)} rows and {len(df.columns)} columns")
+print(f"\\nColumns: {', '.join(df.columns.tolist())}")
+
+# Perform analysis
+print(f"\\n=== Analysis ===")
+
+# Group by segment and calculate total sales and profit
+segment_summary = df.groupby('Segment').agg({
+    ' Sales': 'sum',
+    'Profit': 'sum',
+    'Units Sold': 'sum'
+}).round(2)
+
+print(f"\\nSales by Segment:")
+print(segment_summary)
+
+# Find top 5 products by profit
+top_products = df.groupby('Product')['Profit'].sum().sort_values(ascending=False).head(5)
+print(f"\\nTop 5 Products by Profit:")
+print(top_products)
+
+# Calculate profit margin
+total_sales = df[' Sales'].sum()
+total_profit = df['Profit'].sum()
+profit_margin = (total_profit / total_sales * 100) if total_sales > 0 else 0
+print(f"\\nOverall Profit Margin: {profit_margin:.2f}%")
+
+# Create a visualization
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+# Sales by Segment
+segment_summary[' Sales'].plot(kind='bar', ax=ax1, color='steelblue')
+ax1.set_title('Total Sales by Segment')
+ax1.set_xlabel('Segment')
+ax1.set_ylabel('Sales ($)')
+ax1.tick_params(axis='x', rotation=45)
+
+# Top 5 Products by Profit
+top_products.plot(kind='barh', ax=ax2, color='seagreen')
+ax2.set_title('Top 5 Products by Profit')
+ax2.set_xlabel('Profit ($)')
+ax2.set_ylabel('Product')
+
+plt.tight_layout()
+plt.savefig('financial_analysis.png', dpi=100, bbox_inches='tight')
+print(f"\\nVisualization saved as financial_analysis.png")
+
+# Create summary report Excel file
+summary_data = {
+    'Metric': ['Total Sales', 'Total Profit', 'Profit Margin %', 'Total Units Sold', 'Number of Records'],
+    'Value': [
+        f"${total_sales:,.2f}",
+        f"${total_profit:,.2f}",
+        f"{profit_margin:.2f}%",
+        f"{df['Units Sold'].sum():,.0f}",
+        len(df)
+    ]
+}
+summary_df = pd.DataFrame(summary_data)
+
+with pd.ExcelWriter('financial_summary.xlsx') as writer:
+    summary_df.to_excel(writer, sheet_name='Summary', index=False)
+    segment_summary.to_excel(writer, sheet_name='By Segment')
+
+print(f"Summary report saved as financial_summary.xlsx")
+"""
+
+    # Mock only get_tool_by_name (database lookup)
+    with patch(
+        "onyx.tools.tool_implementations_v2.python.get_tool_by_name"
+    ) as mock_get_tool:
+        mock_tool = Mock()
+        mock_tool.id = 1
+        mock_get_tool.return_value = mock_tool
+
+        # Execute code - file store operations happen for real
+        result = _python_execution_core(mock_run_context, code, code_interpreter_client)
+
+    # Verify result
+    assert isinstance(result, LlmPythonExecutionResult)
+    assert result.exit_code == 0
+    assert "Loaded Excel file" in result.stdout
+    assert "Analysis" in result.stdout
+    assert "Sales by Segment" in result.stdout
+    assert "Top 5 Products by Profit" in result.stdout
+    assert "Profit Margin" in result.stdout
+
+    # Should generate 2 files: PNG visualization and Excel summary
+    assert len(result.generated_files) == 2
+
+    # Verify generated files
+    filenames = [f.filename for f in result.generated_files]
+    assert "financial_analysis.png" in filenames
+    assert "financial_summary.xlsx" in filenames
+
+    # Verify we can read and validate the generated files
+    file_store = get_default_file_store()
+
+    # Check the PNG file
+    png_file = next(
+        f for f in result.generated_files if f.filename == "financial_analysis.png"
+    )
+    png_file_id = png_file.file_link.split("/")[-1]
+    png_io = file_store.read_file(png_file_id)
+    png_content = png_io.read()
+    assert png_content[:8] == b"\x89PNG\r\n\x1a\n"  # PNG magic bytes
+    assert len(png_content) > 5000  # Should be substantial
+
+    # Check the Excel summary file
+    xlsx_file = next(
+        f for f in result.generated_files if f.filename == "financial_summary.xlsx"
+    )
+    xlsx_file_id = xlsx_file.file_link.split("/")[-1]
+    xlsx_io = file_store.read_file(xlsx_file_id)
+    xlsx_content = xlsx_io.read()
+    assert xlsx_content[:4] == b"PK\x03\x04"  # ZIP/Excel magic bytes
+
+    # Parse and verify the summary Excel file
+    import io
+    import pandas as pd
+
+    xlsx_io_obj = io.BytesIO(xlsx_content)
+    summary_df = pd.read_excel(xlsx_io_obj, sheet_name="Summary")
+
+    # Verify summary contains expected metrics
+    assert "Metric" in summary_df.columns
+    assert "Value" in summary_df.columns
+    metrics = summary_df["Metric"].tolist()
+    assert "Total Sales" in metrics
+    assert "Total Profit" in metrics
+    assert "Profit Margin %" in metrics
 
 
 if __name__ == "__main__":

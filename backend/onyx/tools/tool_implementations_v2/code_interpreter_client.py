@@ -43,6 +43,7 @@ class CodeInterpreterClient:
         if not base_url:
             raise ValueError("CODE_INTERPRETER_BASE_URL not configured")
         self.base_url = base_url.rstrip("/")
+        self.session = requests.Session()
 
     def execute(
         self,
@@ -65,7 +66,7 @@ class CodeInterpreterClient:
         if files:
             payload["files"] = files
 
-        response = requests.post(url, json=payload, timeout=timeout_ms / 1000 + 10)
+        response = self.session.post(url, json=payload, timeout=timeout_ms / 1000 + 10)
         response.raise_for_status()
 
         return ExecuteResponse(**response.json())
@@ -75,7 +76,7 @@ class CodeInterpreterClient:
         url = f"{self.base_url}/v1/files"
 
         files = {"file": (filename, file_content)}
-        response = requests.post(url, files=files, timeout=30)
+        response = self.session.post(url, files=files, timeout=30)
         response.raise_for_status()
 
         return response.json()["file_id"]
@@ -84,7 +85,7 @@ class CodeInterpreterClient:
         """Download file from Code Interpreter"""
         url = f"{self.base_url}/v1/files/{file_id}"
 
-        response = requests.get(url, timeout=30)
+        response = self.session.get(url, timeout=30)
         response.raise_for_status()
 
         return response.content
@@ -93,5 +94,5 @@ class CodeInterpreterClient:
         """Delete file from Code Interpreter"""
         url = f"{self.base_url}/v1/files/{file_id}"
 
-        response = requests.delete(url, timeout=10)
+        response = self.session.delete(url, timeout=10)
         response.raise_for_status()

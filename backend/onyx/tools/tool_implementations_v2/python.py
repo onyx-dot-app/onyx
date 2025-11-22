@@ -33,6 +33,54 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def _truncate_output(output: str, max_length: int, label: str = "output") -> str:
+    """
+    Truncate output string to max_length and append truncation message if needed.
+
+    Args:
+        output: The original output string to truncate
+        max_length: Maximum length before truncation
+        label: Label for logging (e.g., "stdout", "stderr")
+
+    Returns:
+        Truncated string with truncation message appended if truncated
+    """
+    truncated = output[:max_length]
+    if len(output) > max_length:
+        truncated += (
+            "\n... [output truncated, "
+            f"{len(output) - max_length} "
+            "characters omitted]"
+        )
+        logger.debug(f"Truncated {label}: {truncated}")
+    return truncated
+
+
+def _combine_outputs(stdout: str, stderr: str) -> str:
+    """
+    Combine stdout and stderr into a single string if both exist.
+
+    Args:
+        stdout: Standard output string
+        stderr: Standard error string
+
+    Returns:
+        Combined output string with labels if both exist, or the non-empty one
+        if only one exists, or empty string if both are empty
+    """
+    has_stdout = bool(stdout)
+    has_stderr = bool(stderr)
+
+    if has_stdout and has_stderr:
+        return f"stdout:\n\n{stdout}\n\nstderr:\n\n{stderr}"
+    elif has_stdout:
+        return stdout
+    elif has_stderr:
+        return stderr
+    else:
+        return ""
+
+
 @tool_accounting
 def _python_execution_core(
     run_context: RunContextWrapper[ChatTurnContext],
@@ -91,31 +139,16 @@ def _python_execution_core(
         response: ExecuteResponse = client.execute(
             code=code,
             timeout_ms=CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
-            files=files_to_stage if files_to_stage else None,
+            files=files_to_stage or None,
         )
 
         # Truncate output for LLM consumption
-        truncated_stdout = response.stdout[:CODE_INTERPRETER_MAX_OUTPUT_LENGTH]
-        truncated_stderr = response.stderr[:CODE_INTERPRETER_MAX_OUTPUT_LENGTH]
-
-        stdout_truncated = len(response.stdout) > CODE_INTERPRETER_MAX_OUTPUT_LENGTH
-        stderr_truncated = len(response.stderr) > CODE_INTERPRETER_MAX_OUTPUT_LENGTH
-
-        if stdout_truncated:
-            truncated_stdout += (
-                "\n... [output truncated, "
-                f"{len(response.stdout) - CODE_INTERPRETER_MAX_OUTPUT_LENGTH} "
-                "characters omitted]"
-            )
-            logger.debug(f"Truncated stdout: {truncated_stdout}")
-
-        if stderr_truncated:
-            truncated_stderr += (
-                "\n... [output truncated, "
-                f"{len(response.stderr) - CODE_INTERPRETER_MAX_OUTPUT_LENGTH} "
-                "characters omitted]"
-            )
-            logger.debug(f"Truncated stderr: {truncated_stderr}")
+        truncated_stdout = _truncate_output(
+            response.stdout, CODE_INTERPRETER_MAX_OUTPUT_LENGTH, "stdout"
+        )
+        truncated_stderr = _truncate_output(
+            response.stderr, CODE_INTERPRETER_MAX_OUTPUT_LENGTH, "stderr"
+        )
 
         # Handle generated files
         generated_files: list[PythonExecutionFile] = []
@@ -123,48 +156,51 @@ def _python_execution_core(
         file_ids_to_cleanup: list[str] = []
 
         for workspace_file in response.files:
-            if workspace_file.kind == "file" and workspace_file.file_id:
-                try:
-                    # Download file from Code Interpreter
-                    file_content = client.download_file(workspace_file.file_id)
+            if workspace_file.kind != "file" or not workspace_file.file_id:
+                continue
 
-                    # Determine MIME type from file extension
-                    filename = workspace_file.path.split("/")[-1]
-                    mime_type, _ = mimetypes.guess_type(filename)
-                    if not mime_type:
-                        # Default to binary if we can't determine the type
-                        mime_type = "application/octet-stream"
+            try:
+                # Download file from Code Interpreter
+                file_content = client.download_file(workspace_file.file_id)
 
-                    # Save to Onyx file store directly
-                    onyx_file_id = file_store.save_file(
-                        content=BytesIO(file_content),
-                        display_name=filename,
-                        file_origin=FileOrigin.CHAT_UPLOAD,
-                        file_type=mime_type,
+                # Determine MIME type from file extension
+                filename = workspace_file.path.split("/")[-1]
+                mime_type, _ = mimetypes.guess_type(filename)
+                # Default to binary if we can't determine the type
+                mime_type = mime_type or "application/octet-stream"
+
+                # Save to Onyx file store directly
+                onyx_file_id = file_store.save_file(
+                    content=BytesIO(file_content),
+                    display_name=filename,
+                    file_origin=FileOrigin.CHAT_UPLOAD,
+                    file_type=mime_type,
+                )
+
+                generated_files.append(
+                    PythonExecutionFile(
+                        filename=filename,
+                        file_link=build_full_frontend_file_url(onyx_file_id),
                     )
+                )
+                generated_file_ids.append(onyx_file_id)
 
-                    generated_files.append(
-                        PythonExecutionFile(
-                            filename=filename,
-                            file_link=build_full_frontend_file_url(onyx_file_id),
-                        )
-                    )
-                    generated_file_ids.append(onyx_file_id)
+                # Mark for cleanup
+                file_ids_to_cleanup.append(workspace_file.file_id)
 
-                    # Mark for cleanup
-                    file_ids_to_cleanup.append(workspace_file.file_id)
-
-                except Exception as e:
-                    logger.error(
-                        f"Failed to handle generated file {workspace_file.path}: {e}"
-                    )
+            except Exception as e:
+                logger.error(
+                    f"Failed to handle generated file {workspace_file.path}: {e}"
+                )
 
         # Cleanup Code Interpreter files (both generated and staged input files)
         for ci_file_id in file_ids_to_cleanup:
             try:
                 client.delete_file(ci_file_id)
             except Exception as e:
-                logger.warning(
+                # TODO: add TTL on code interpreter files themselves so they are automatically
+                # cleaned up after some time.
+                logger.error(
                     f"Failed to delete Code Interpreter generated file {ci_file_id}: {e}"
                 )
 
@@ -173,7 +209,9 @@ def _python_execution_core(
             try:
                 client.delete_file(file_mapping["file_id"])
             except Exception as e:
-                logger.warning(
+                # TODO: add TTL on code interpreter files themselves so they are automatically
+                # cleaned up after some time.
+                logger.error(
                     f"Failed to delete Code Interpreter staged file {file_mapping['file_id']}: {e}"
                 )
 
@@ -214,9 +252,7 @@ def _python_execution_core(
                 parallelization_nr=0,
                 question="Execute Python code",
                 reasoning="Executing Python code in secure environment",
-                answer=(
-                    truncated_stdout if response.exit_code == 0 else truncated_stderr
-                ),
+                answer=_combine_outputs(truncated_stdout, truncated_stderr),
                 cited_documents={},
                 file_ids=generated_file_ids,
                 additional_data={

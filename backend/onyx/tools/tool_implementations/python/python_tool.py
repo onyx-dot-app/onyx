@@ -71,10 +71,7 @@ class PythonTool(Tool[None]):
             f"returning {is_available}"
         )
 
-        if not is_available:
-            return False
-
-        return True
+        return is_available
 
     def tool_definition(self) -> dict:
         """Tool definition for LLMs that support explicit tool calling."""
