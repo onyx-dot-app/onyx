@@ -29,7 +29,7 @@ interface CreatedTokenState {
   token: string;
 }
 
-export function PATManagement() {
+export default function PATManagement() {
   const [isCreating, setIsCreating] = useState(false);
   const [newTokenName, setNewTokenName] = useState("");
   const [expirationDays, setExpirationDays] = useState<string>("30");
@@ -153,6 +153,7 @@ export function PATManagement() {
           &quot;? This action cannot be undone.
         </ConfirmationModalLayout>
       )}
+
       <div className="space-y-6">
         {/* Create New Token Form */}
         <div className="space-y-4">
@@ -167,21 +168,25 @@ export function PATManagement() {
               autoComplete="new-password"
             />
             {/* autoComplete="new-password" is a workaround for Safari browers to disable autoComplete*/}
-            <div className="space-y-1">
+            <div className="space-y-1" aria-label="Select token expiration">
               {/* NOTE: Use Select dropdown (not free text input) to guide users to common values.
                   Backend accepts any positive integer, but we provide curated options for UX. */}
               <InputSelect
                 value={expirationDays}
                 onValueChange={setExpirationDays}
                 disabled={isCreating}
-                aria-label="Select token expiration"
               >
                 <InputSelect.Trigger placeholder="Select expiration" />
-                <InputSelect.Item value="7">7 days</InputSelect.Item>
-                <InputSelect.Item value="30">30 days</InputSelect.Item>
-                <InputSelect.Item value="365">365 days</InputSelect.Item>
-                <InputSelect.Item value="null">No expiration</InputSelect.Item>
+                <InputSelect.Content>
+                  <InputSelect.Item value="7">7 days</InputSelect.Item>
+                  <InputSelect.Item value="30">30 days</InputSelect.Item>
+                  <InputSelect.Item value="365">365 days</InputSelect.Item>
+                  <InputSelect.Item value="null">
+                    No expiration
+                  </InputSelect.Item>
+                </InputSelect.Content>
               </InputSelect>
+
               <Text text02 secondaryBody>
                 Expires at end of day (23:59 UTC).
               </Text>

@@ -239,15 +239,17 @@ export default function LLMConnectionFieldsBasic({
                       >
                         <InputSelect.Trigger onBlur={field.onBlur} />
 
-                        {customConfigKey.options?.map((opt) => (
-                          <InputSelect.Item
-                            key={opt.value}
-                            value={opt.value}
-                            description={opt?.description ?? undefined}
-                          >
-                            {opt.label}
-                          </InputSelect.Item>
-                        )) ?? []}
+                        <InputSelect.Content>
+                          {customConfigKey.options?.map((opt) => (
+                            <InputSelect.Item
+                              key={opt.value}
+                              value={opt.value}
+                              description={opt?.description ?? undefined}
+                            >
+                              {opt.label}
+                            </InputSelect.Item>
+                          ))}
+                        </InputSelect.Content>
                       </InputSelect>
                     ) : customConfigKey.key_type === "file_input" ? (
                       <InputFile

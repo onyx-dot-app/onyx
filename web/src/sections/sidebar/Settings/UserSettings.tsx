@@ -26,7 +26,7 @@ import { useUserPersonalization } from "@/lib/hooks/useUserPersonalization";
 import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import Text from "@/refresh-components/texts/Text";
 import SvgXOctagon from "@/icons/x-octagon";
-import { PATManagement } from "@/components/user/PATManagement";
+import PATManagement from "@/components/user/PATManagement";
 import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import SvgSettings from "@/icons/settings";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
