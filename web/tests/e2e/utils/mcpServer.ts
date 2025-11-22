@@ -162,3 +162,51 @@ export async function startMcpOauthServer(
 
   return new McpServerProcess(proc, bindHost, publicHost, port);
 }
+
+export async function startMcpApiKeyServer(
+  options: StartServerOptions & { apiKey?: string } = {}
+): Promise<McpServerProcess> {
+  const bindHost = options.bindHost || DEFAULT_BIND_HOST;
+  const publicHost = options.publicHost || DEFAULT_PUBLIC_HOST;
+  const port = options.port ?? DEFAULT_PORT;
+  const pythonBinary = options.pythonBinary || "python3";
+  const readyTimeout = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
+  const apiKey = options.apiKey || "test-api-key-12345";
+
+  const scriptPath =
+    options.scriptPath ||
+    path.resolve(
+      __dirname,
+      "../../../..",
+      "backend/tests/integration/mock_services/mcp_test_server/run_mcp_server_api_key.py"
+    );
+  const scriptDir = path.dirname(scriptPath);
+
+  const proc = spawn(pythonBinary, [scriptPath, apiKey, port.toString()], {
+    cwd: scriptDir,
+    stdio: ["pipe", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      MCP_SERVER_PORT: port.toString(),
+      MCP_SERVER_HOST: bindHost,
+      MCP_SERVER_PUBLIC_HOST: publicHost,
+    },
+  });
+
+  proc.stdout.on("data", (chunk) => {
+    const message = chunk.toString();
+    console.log(`[mcp-api-key-server] ${message.trimEnd()}`);
+  });
+  proc.stderr.on("data", (chunk) => {
+    const message = chunk.toString();
+    console.error(`[mcp-api-key-server:stderr] ${message.trimEnd()}`);
+  });
+
+  proc.on("error", (err) => {
+    console.error("[mcp-api-key-server] failed to start", err);
+  });
+
+  await waitForPort(bindHost, port, proc, readyTimeout);
+
+  return new McpServerProcess(proc, bindHost, publicHost, port);
+}

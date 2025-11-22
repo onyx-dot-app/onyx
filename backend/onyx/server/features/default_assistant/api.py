@@ -7,22 +7,11 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.models import Tool as ToolDBModel
 from onyx.db.models import User
 from onyx.db.persona import get_default_assistant
 from onyx.db.persona import update_default_assistant_configuration
-from onyx.server.features.default_assistant.models import AvailableTool
 from onyx.server.features.default_assistant.models import DefaultAssistantConfiguration
 from onyx.server.features.default_assistant.models import DefaultAssistantUpdateRequest
-from onyx.tools.built_in_tools import get_built_in_tool_by_id
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
-from onyx.tools.tool_implementations.python.python_tool import PythonTool
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.web_search.web_search_tool import (
-    WebSearchTool,
-)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -91,55 +80,3 @@ def update_default_assistant(
         if "Default assistant not found" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.get("/available-tools")
-def list_available_tools(
-    _: User = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),
-) -> list[AvailableTool]:
-    """List available built-in tools that can be enabled for the default assistant."""
-    tools = (
-        db_session.query(ToolDBModel)
-        .filter(ToolDBModel.in_code_tool_id.isnot(None))
-        .all()
-    )
-    ORDERED_TOOL_IDS = [
-        SearchTool.__name__,
-        WebSearchTool.__name__,
-        ImageGenerationTool.__name__,
-        PythonTool.__name__,
-    ]
-    tool_by_in_code_id = {
-        tool.in_code_tool_id: tool
-        for tool in tools
-        if tool.in_code_tool_id in ORDERED_TOOL_IDS
-    }
-    ordered_tools = [
-        tool_by_in_code_id[t] for t in ORDERED_TOOL_IDS if t in tool_by_in_code_id
-    ]
-
-    # Use the same approach as tools/api.py - check tool's is_available method
-    def _is_available(in_code_id: str) -> bool:
-        try:
-            tool_cls = get_built_in_tool_by_id(in_code_id)
-            is_avail = tool_cls.is_available(db_session)
-            logger.info(f"Checking availability for {in_code_id}: {is_avail}")
-            return is_avail
-        except KeyError:
-            # If tool ID not found in registry, include it by default
-            logger.warning(
-                f"Tool {in_code_id} not found in registry, assuming not available"
-            )
-            return False
-
-    return [
-        AvailableTool(
-            id=tool.id,
-            in_code_tool_id=tool.in_code_tool_id or "",
-            display_name=tool.display_name or tool.name,
-            description=tool.description or "",
-            is_available=_is_available(tool.in_code_tool_id or ""),
-        )
-        for tool in ordered_tools
-    ]

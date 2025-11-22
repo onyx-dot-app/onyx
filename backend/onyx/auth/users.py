@@ -611,6 +611,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             request=request,
         )
 
+        user_count = None
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
@@ -632,6 +633,57 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        # Fetch EE PostHog functions if available
+        get_marketing_posthog_cookie_name = fetch_ee_implementation_or_noop(
+            module="onyx.utils.posthog_client",
+            attribute="get_marketing_posthog_cookie_name",
+            noop_return_value=None,
+        )
+        parse_marketing_cookie = fetch_ee_implementation_or_noop(
+            module="onyx.utils.posthog_client",
+            attribute="parse_marketing_cookie",
+            noop_return_value=None,
+        )
+        capture_and_sync_with_alternate_posthog = fetch_ee_implementation_or_noop(
+            module="onyx.utils.posthog_client",
+            attribute="capture_and_sync_with_alternate_posthog",
+            noop_return_value=None,
+        )
+
+        if (
+            request
+            and user_count is not None
+            and (marketing_cookie_name := get_marketing_posthog_cookie_name())
+            and (marketing_cookie_value := request.cookies.get(marketing_cookie_name))
+            and (parsed_cookie := parse_marketing_cookie(marketing_cookie_value))
+        ):
+            marketing_anonymous_id = parsed_cookie["distinct_id"]
+
+            # Technically, USER_SIGNED_UP is only fired from the cloud site when
+            # it is the first user in a tenant. However, it is semantically correct
+            # for the marketing site and should probably be refactored for the cloud site
+            # to also be semantically correct.
+            properties = {
+                "email": user.email,
+                "onyx_cloud_user_id": str(user.id),
+                "tenant_id": str(tenant_id) if tenant_id else None,
+                "role": user.role.value,
+                "is_first_user": user_count == 1,
+                "source": "marketing_site_signup",
+                "conversion_timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+
+            # Add all other values from the marketing cookie (featureFlags, etc.)
+            for key, value in parsed_cookie.items():
+                if key != "distinct_id":
+                    properties.setdefault(key, value)
+
+            capture_and_sync_with_alternate_posthog(
+                alternate_distinct_id=marketing_anonymous_id,
+                event=MilestoneRecordType.USER_SIGNED_UP,
+                properties=properties,
+            )
 
         logger.debug(f"User {user.id} has registered.")
         optional_telemetry(

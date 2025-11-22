@@ -437,9 +437,9 @@ def _default_packet_translation(
             # (e.g. if we've already sent the MessageStart / MessageDelta packets, then we
             # shouldn't do anything)
             if ctx.current_output_index == output_index:
+                packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
                 ctx.current_run_step += 1
                 ctx.current_output_index = None
-                packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
 
         # ------------------------------------------------------------
         # Message packets

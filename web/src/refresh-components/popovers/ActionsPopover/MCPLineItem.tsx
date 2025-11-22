@@ -54,8 +54,9 @@ export default function MCPLineItem({
   const showAuthTrigger =
     server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
     server.auth_type !== MCPAuthenticationType.NONE;
-  const showInlineReauth =
-    showAuthTrigger && isAuthenticated && tools.length > 0;
+
+  const canClickIntoServer = isAuthenticated && tools.length > 0;
+  const showInlineReauth = showAuthTrigger && canClickIntoServer;
   const showReauthButton = showAuthTrigger && !showInlineReauth;
 
   function getServerIcon(): React.FunctionComponent<SvgProps> {
@@ -77,7 +78,7 @@ export default function MCPLineItem({
   }
 
   const handleClick = noProp(() => {
-    if (isAuthenticated && tools.length > 0) {
+    if (canClickIntoServer) {
       onSelect();
       return;
     }
@@ -111,7 +112,7 @@ export default function MCPLineItem({
                 </Text>
               </div>
             )}
-          {showInlineReauth && (
+          {canClickIntoServer && (
             <SvgChevronRight className="h-3.5 w-3.5 stroke-text-03" />
           )}
           {showReauthButton && (

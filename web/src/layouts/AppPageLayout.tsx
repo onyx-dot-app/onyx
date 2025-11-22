@@ -31,6 +31,9 @@ import { PopoverMenu } from "@/components/ui/popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { FOLDED_SIZE } from "@/refresh-components/Logo";
+import SvgSidebar from "@/icons/sidebar";
+import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
+import useScreenSize from "@/hooks/useScreenSize";
 
 interface AppPageLayoutProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
   settings: CombinedSettings | null;
@@ -47,6 +50,8 @@ export default function AppPageLayout({
   className,
   ...rest
 }: AppPageLayoutProps) {
+  const { isMobile } = useScreenSize();
+  const { setFolded } = useAppSidebarContext();
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
@@ -196,12 +201,14 @@ export default function AppPageLayout({
   return (
     <>
       {popup}
+
       {showShareModal && chatSession && (
         <ShareChatSessionModal
           chatSession={chatSession}
           onClose={() => setShowShareModal(false)}
         />
       )}
+
       {showMoveCustomAgentModal && (
         <MoveCustomAgentChatModal
           onCancel={resetMoveState}
@@ -218,6 +225,7 @@ export default function AppPageLayout({
           }}
         />
       )}
+
       {deleteModalOpen && (
         <ConfirmationModalLayout
           title="Delete Chat"
@@ -235,9 +243,16 @@ export default function AppPageLayout({
       )}
 
       <div className="flex flex-col h-full w-full">
-        {(customHeaderContent || !showCenteredInput) && (
+        {(isMobile || customHeaderContent || !showCenteredInput) && (
           <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
-            <div className="flex-1" />
+            <div className="flex-1">
+              <IconButton
+                icon={SvgSidebar}
+                onClick={() => setFolded(false)}
+                className={cn(!isMobile && "invisible")}
+                internal
+              />
+            </div>
             <div className="flex-1 flex flex-col items-center">
               <Text text03>{customHeaderContent}</Text>
             </div>
