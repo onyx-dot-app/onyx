@@ -89,6 +89,6 @@ def test_tool_seeding_migration() -> None:
         python_tool = next((t for t in tools if t[1] == "PythonTool"), None)
         assert python_tool is not None, "PythonTool should exist"
         assert (
-            python_tool[2] == "Analysis"
-        ), "PythonTool display name should be 'Analysis'"
+            python_tool[2] == "Code Interpreter"
+        ), "PythonTool display name should be 'Code Interpreter'"
         assert python_tool[5] is None, "PythonTool should not have a user_id (builtin)"
