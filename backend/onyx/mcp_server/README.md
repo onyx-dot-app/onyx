@@ -38,9 +38,9 @@ The MCP server is built on [FastMCP](https://github.com/jlowin/fastmcp) and runs
 ┌─────────────────┐
 │  MCP Server     │
 │  Port 8090      │
-│  ├─ Auth (/me)  │
+│  ├─ Auth        │
 │  ├─ Tools       │
-│  └─ DB Pool     │
+│  └─ Resources   │
 └────────┬────────┘
          │ Internal HTTP
          │ (authenticated)
@@ -48,6 +48,7 @@ The MCP server is built on [FastMCP](https://github.com/jlowin/fastmcp) and runs
 ┌─────────────────┐
 │  API Server     │
 │  Port 8080      │
+│  ├─ /me (auth)  │
 │  ├─ Search API  │
 │  └─ ACL checks  │
 └─────────────────┘
@@ -87,10 +88,10 @@ The server provides three tools for searching and retrieving information:
 Search your Onyx knowledge base with semantic search. Supports filtering by source type, time range, and result limits. Returns ranked documents with content snippets, metadata, and match scores.
 
 2. `onyx_web_search`
-Search the public web via the `/web-search/search-lite` API using your configured provider (Exa or Serper+Firecrawl). Returns URL, title, snippet, and the provider type for each query. Requires `EXA_API_KEY` or `SERPER_API_KEY` + `FIRECRAWL_API_KEY` to be configured. Use `onyx_open_url` to fetch full content for specific URLs.
+Search the public web via the `/web-search/search-lite` API using your configured provider (Exa or Serper+Firecrawl). Returns URL, title, and snippet for each result. Requires `EXA_API_KEY` or `SERPER_API_KEY` + `FIRECRAWL_API_KEY` to be configured. Use `onyx_open_url` to fetch full content for specific URLs.
 
 3. `onyx_open_url`
-Fetch and extract full page content from web URLs via `/web-search/open-urls`. Useful for retrieving complete articles after finding them with `onyx_web_search`. Returns the content provider type along with each fetched page.
+Fetch and extract full page content from web URLs via `/web-search/open-urls`. Useful for retrieving complete articles after finding them with `onyx_web_search`. Returns the full text content of each fetched page.
 
 ### Resources
 
@@ -145,8 +146,14 @@ Expected response:
 
 ### Environment Variables
 
+**MCP Server Configuration:**
+- `MCP_SERVER_ENABLED`: Enable MCP server (set to "true" to enable, default: disabled)
+- `MCP_SERVER_PORT`: Port for MCP server (default: 8090)
 - `MCP_SERVER_CORS_ORIGINS`: Comma-separated CORS origins (optional)
-- `API_SERVER_BASE_URL` (or `ONYX_URL`): Full API base URL (e.g., `https://cloud.onyx.app/api`). If set, overrides protocol/host/port below.
+
+**API Server Connection:**
+- `API_SERVER_BASE_URL`: Full API base URL (e.g., `https://cloud.onyx.app/api`). If set, overrides protocol/host/port below.
+- `ONYX_URL`: Alternative to `API_SERVER_BASE_URL` (same purpose, either can be used)
 - `API_SERVER_PROTOCOL`: Protocol for internal API calls (default: "http")
 - `API_SERVER_HOST`: Host for internal API calls (default: "127.0.0.1")
 - `API_SERVER_PORT`: Port for internal API calls (default: 8080)

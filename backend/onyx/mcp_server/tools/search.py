@@ -3,6 +3,8 @@
 from datetime import datetime
 from typing import Any
 
+from fastmcp.server.auth import AccessToken
+
 from ee.onyx.server.query_and_chat.models import DocumentSearchRequest
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.enums import LLMEvaluationType
@@ -19,7 +21,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-async def _tenant_has_indexed_sources(access_token) -> bool:
+async def _tenant_has_indexed_sources(access_token: AccessToken) -> bool:
     """Check if the current tenant has any indexed document sources."""
     try:
         sources = await fetch_indexed_source_types(access_token)
