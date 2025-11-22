@@ -162,7 +162,7 @@ def handle_regular_answer(
     # Convert ThreadMessage objects to PreviousMessage for query rephrasing
     thread_previous_messages: list[PreviousMessage] | None = None
     if history_messages:
-        llm, _ = get_llms_for_persona(persona)
+        llm, _ = get_llms_for_persona(persona, user)
         llm_tokenizer = get_tokenizer(
             model_name=llm.config.model_name,
             provider_type=llm.config.model_provider,
