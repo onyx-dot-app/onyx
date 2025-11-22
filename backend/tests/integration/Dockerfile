@@ -34,7 +34,22 @@ FROM integration-base AS integration
 COPY --from=openapi-schema /app/openapi.json /app/generated/openapi.json
 COPY --from=openapi-client /local/onyx_openapi_client /app/generated/onyx_openapi_client
 
-
+ENV POSTGRES_HOST=relational_db
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=password
+ENV DB_READONLY_USER=db_readonly_user
+ENV DB_READONLY_PASSWORD=password
+ENV POSTGRES_DB=postgres
+ENV POSTGRES_USE_NULL_POOL=true
+ENV VESPA_HOST=index
+ENV REDIS_HOST=cache
+ENV TEST_WEB_HOSTNAME=test-runner
+ENV AUTH_TYPE=cloud
+ENV MULTI_TENANT=true
+ENV SKIP_RESET=true
+ENV REQUIRE_EMAIL_VERIFICATION=false
+ENV DISABLE_TELEMETRY=true
+ENV DEV_MODE=true
 ENV PYTHONPATH=/app
 
 ENTRYPOINT ["pytest", "-s"]
