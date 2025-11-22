@@ -59,11 +59,17 @@ export function DocumentSetSelectable({
               ))}
             </div>
           </div>
-          <div className="ml-auto my-auto pl-1">
+          <div
+            className="ml-auto my-auto pl-1"
+            // Prevent the checkbox click from bubbling up to all document set cards.
+            // Not sure why this was happening but stopping propogation here while
+            // setting onCheckedChanged in the Checkbox component fixes it.
+            onClick={(e) => e.stopPropagation()}
+          >
             <Checkbox
               checked={isSelected}
-              onCheckedChange={() => null}
               disabled={disabled}
+              onCheckedChange={disabled ? undefined : onSelect}
             />
           </div>
         </div>
