@@ -14,6 +14,7 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { AnonymousUserPath } from "./AnonymousUserPath";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import { useVisionProviders } from "./hooks/useVisionProviders";
+import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 
 export function Checkbox({
   label,
@@ -242,10 +243,10 @@ export function SettingsForm() {
           Provide a short description of the company for search and chat
           context.
         </SubLabel>
-        <textarea
-          className="mt-1 p-2 border rounded w-full max-w-xl"
+        <InputTextArea
+          className="mt-1 w-full max-w-xl"
           value={companyDescription}
-          onChange={(e) => setCompanyDescription(e.target.value)}
+          onChange={(event) => setCompanyDescription(event.target.value)}
           onBlur={handleCompanyDescriptionBlur}
           placeholder="Enter company description"
           rows={4}
