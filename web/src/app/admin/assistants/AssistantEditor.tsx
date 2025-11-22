@@ -89,7 +89,7 @@ import { hasNonImageFiles } from "@/lib/utils";
 import UserFilesModal from "@/components/modals/UserFilesModal";
 import { TagIcon, UserIcon, FileIcon, InfoIcon, BookIcon } from "lucide-react";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { LLMSelector } from "@/components/llm/LLMSelector";
+import LLMSelector from "@/components/llm/LLMSelector";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";

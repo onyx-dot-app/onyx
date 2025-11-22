@@ -4,7 +4,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { Separator } from "@/components/ui/separator";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
-import * as InputSelect from "@/refresh-components/inputs/InputSelect";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import InputFile from "@/refresh-components/inputs/InputFile";
 import {
@@ -228,16 +228,17 @@ export default function LLMConnectionFieldsBasic({
                   </FormField.Label>
                   <FormField.Control>
                     {customConfigKey.key_type === "select" ? (
-                      <InputSelect.Root
+                      <InputSelect
                         value={
                           (field.value as string) ??
                           (customConfigKey.default_value as string) ??
                           ""
                         }
                         onValueChange={(value) => helper.setValue(value)}
-                        onBlur={field.onBlur}
                         disabled={disabled}
                       >
+                        <InputSelect.Trigger onBlur={field.onBlur} />
+
                         {customConfigKey.options?.map((opt) => (
                           <InputSelect.Item
                             key={opt.value}
@@ -247,7 +248,7 @@ export default function LLMConnectionFieldsBasic({
                             {opt.label}
                           </InputSelect.Item>
                         )) ?? []}
-                      </InputSelect.Root>
+                      </InputSelect>
                     ) : customConfigKey.key_type === "file_input" ? (
                       <InputFile
                         placeholder={customConfigKey.default_value || ""}
