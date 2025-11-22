@@ -16,6 +16,7 @@ import {
   SEARCH_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
+  PYTHON_TOOL_ID,
 } from "@/app/chat/components/tools/constants";
 import { HoverPopup } from "@/components/HoverPopup";
 import { Info } from "lucide-react";
@@ -50,13 +51,15 @@ export function ToolSelector({
   const imageGenerationTool = tools.find(
     (t) => t.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
   );
+  const pythonTool = tools.find((t) => t.in_code_tool_id === PYTHON_TOOL_ID);
 
   const { mcpTools, customTools, mcpToolsByServer } = useMemo(() => {
     const allCustom = tools.filter(
       (tool) =>
         tool.in_code_tool_id !== SEARCH_TOOL_ID &&
         tool.in_code_tool_id !== IMAGE_GENERATION_TOOL_ID &&
-        tool.in_code_tool_id !== WEB_SEARCH_TOOL_ID
+        tool.in_code_tool_id !== WEB_SEARCH_TOOL_ID &&
+        tool.in_code_tool_id !== PYTHON_TOOL_ID
     );
 
     const mcp = allCustom.filter((tool) => tool.mcp_server_id);
@@ -162,6 +165,11 @@ export function ToolSelector({
                 OpenAI LLM provider with an API key under Admin → Configuration
                 → LLM.
               </div>
+              <div>
+                <span className="font-semibold">Code Interpreter:</span>{" "}
+                Requires the Code Interpreter service to be configured with a
+                valid base URL.
+              </div>
             </div>
           }
           direction="bottom"
@@ -192,6 +200,17 @@ export function ToolSelector({
           subtext="Generate and manipulate images using AI-powered tools."
           disabled={imageGenerationDisabled}
           disabledTooltip={imageGenerationDisabledTooltip}
+        />
+      )}
+
+      {pythonTool && (
+        <BooleanFormField
+          name={`enabled_tools_map.${pythonTool.id}`}
+          label={pythonTool.display_name}
+          subtext={
+            "Execute Python code in a secure, isolated environment to " +
+            "analyze data, create visualizations, and perform computations"
+          }
         />
       )}
 
