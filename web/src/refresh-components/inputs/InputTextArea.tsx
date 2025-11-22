@@ -2,28 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { useBoundingBox } from "@/hooks/useBoundingBox";
-
-const divClasses = {
-  main: [
-    "border",
-    "hover:border-border-02",
-    "active:!border-border-05",
-    "focus-within:!border-border-05",
-  ],
-  internal: [],
-  error: ["border", "border-status-error-05"],
-  disabled: ["bg-background-neutral-03"],
-} as const;
-
-const textareaClasses = {
-  main: [
-    "text-text-04 placeholder:!font-secondary-body placeholder:text-text-02",
-  ],
-  internal: [],
-  error: [],
-  disabled: ["text-text-02"],
-} as const;
+import { divClasses, innerClasses } from "./InputTypeIn";
 
 /**
  * InputTextArea Component
@@ -81,23 +60,6 @@ function InputTextAreaInner(
   }: InputTextAreaProps,
   ref: React.ForwardedRef<HTMLTextAreaElement>
 ) {
-  const { ref: boundingBoxRef, inside: hovered } = useBoundingBox();
-  const localRef = React.useRef<HTMLTextAreaElement>(null);
-
-  // Combine forwarded ref with local ref
-  const textareaRef = React.useCallback(
-    (node: HTMLTextAreaElement | null) => {
-      localRef.current = node;
-      if (typeof ref === "function") {
-        ref(node);
-      } else if (ref) {
-        (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current =
-          node;
-      }
-    },
-    [ref]
-  );
-
   const variant = main
     ? "main"
     : internal
@@ -108,37 +70,20 @@ function InputTextAreaInner(
           ? "disabled"
           : "main";
 
-  // Set cursor style based on disabled state and hover
-  React.useEffect(() => {
-    if (disabled && hovered) {
-      document.body.style.cursor = "not-allowed";
-    } else if (!disabled && hovered) {
-      document.body.style.cursor = "text";
-    } else {
-      document.body.style.cursor = "default";
-    }
-  }, [disabled, hovered]);
-
   return (
     <div
-      ref={boundingBoxRef}
       className={cn(
-        "flex flex-row items-start justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
         divClasses[variant],
+        "flex flex-row items-start justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
         className
       )}
-      onClick={() => {
-        if (hovered && localRef.current) {
-          localRef.current.focus();
-        }
-      }}
     >
       <textarea
-        ref={textareaRef}
+        ref={ref}
         disabled={disabled}
         className={cn(
-          "w-full min-h-[3rem] bg-transparent p-0.5 focus:outline-none resize-y",
-          textareaClasses[variant]
+          innerClasses[variant],
+          "w-full min-h-[3rem] bg-transparent p-0.5 focus:outline-none resize-y"
         )}
         rows={rows}
         {...props}

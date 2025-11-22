@@ -6,7 +6,8 @@ import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSearch from "@/icons/search";
 
-const divClasses = {
+// Used for other, similar components (e.g., `InputTextArea`).
+export const divClasses = {
   main: [
     "border",
     "hover:border-border-02",
@@ -23,7 +24,8 @@ const divClasses = {
   ],
 } as const;
 
-const inputClasses = {
+// Used for other, similar components (e.g., `InputTextArea`).
+export const innerClasses = {
   main: [
     "text-text-04 placeholder:!font-secondary-body placeholder:text-text-02",
   ],
@@ -175,7 +177,7 @@ function InputTypeInInner(
         onChange={onChange}
         className={cn(
           "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
-          inputClasses[variant]
+          innerClasses[variant]
         )}
         {...props}
       />
