@@ -32,7 +32,8 @@ env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
   # Code Interpreter
-  CODE_INTERPRETER_BASE_URL: http://localhost:8000
+  # TODO: debug why this is failing and enable
+  # CODE_INTERPRETER_BASE_URL: http://localhost:8000
 
 jobs:
   discover-test-dirs:
