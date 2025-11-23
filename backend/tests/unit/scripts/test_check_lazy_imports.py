@@ -14,8 +14,8 @@ from scripts.check_lazy_imports import main
 def test_find_eager_imports_basic_violations() -> None:
     """Test detection of basic eager import violations."""
     test_content = """
-import vertexai
-from vertexai import generative_models
+import google.genai
+from google.genai import generative_models
 import transformers
 from transformers import AutoTokenizer
 import os  # This should not be flagged
@@ -27,17 +27,17 @@ from typing import Dict
         test_path = Path(f.name)
 
     try:
-        protected_modules = {"vertexai", "transformers"}
+        protected_modules = {"google.genai", "transformers"}
         result = find_eager_imports(test_path, protected_modules)
 
         # Should find 4 violations (lines 2, 3, 4, 5)
         assert len(result.violation_lines) == 4
-        assert result.violated_modules == {"vertexai", "transformers"}
+        assert result.violated_modules == {"google.genai", "transformers"}
 
         # Check specific violations
         violation_line_numbers = [line_num for line_num, _ in result.violation_lines]
-        assert 2 in violation_line_numbers  # import vertexai
-        assert 3 in violation_line_numbers  # from vertexai import generative_models
+        assert 2 in violation_line_numbers  # import google.genai
+        assert 3 in violation_line_numbers  # from google.genai import generative_models
         assert 4 in violation_line_numbers  # import transformers
         assert 5 in violation_line_numbers  # from transformers import AutoTokenizer
 
@@ -54,17 +54,17 @@ def test_find_eager_imports_function_level_allowed() -> None:
     test_content = """import os
 
 def some_function():
-    import vertexai
+    import google.genai
     from transformers import AutoTokenizer
-    return vertexai.some_method()
+    return google.genai.some_method()
 
 class MyClass:
     def method(self):
-        import vertexai
-        return vertexai.other_method()
+        import google.genai
+        return google.genai.other_method()
 
 # Top-level imports should be flagged
-import vertexai
+import google.genai
 from transformers import BertModel
 """
 
@@ -73,25 +73,25 @@ from transformers import BertModel
         test_path = Path(f.name)
 
     try:
-        protected_modules = {"vertexai", "transformers"}
+        protected_modules = {"google.genai", "transformers"}
         result = find_eager_imports(test_path, protected_modules)
 
         # Should only find violations for top-level imports (lines 14, 15)
         assert len(result.violation_lines) == 2
-        assert result.violated_modules == {"vertexai", "transformers"}
+        assert result.violated_modules == {"google.genai", "transformers"}
 
         violation_line_numbers = [line_num for line_num, _ in result.violation_lines]
-        assert 14 in violation_line_numbers  # import vertexai (top-level)
+        assert 14 in violation_line_numbers  # import google.genai (top-level)
         assert (
             15 in violation_line_numbers
         )  # from transformers import BertModel (top-level)
 
         # Function-level imports should not be flagged
-        assert 4 not in violation_line_numbers  # import vertexai (in function)
+        assert 4 not in violation_line_numbers  # import google.genai (in function)
         assert (
             5 not in violation_line_numbers
         )  # from transformers import AutoTokenizer (in function)
-        assert 9 not in violation_line_numbers  # import vertexai (in method)
+        assert 9 not in violation_line_numbers  # import google.genai (in method)
 
     finally:
         test_path.unlink()
@@ -100,11 +100,11 @@ from transformers import BertModel
 def test_find_eager_imports_complex_patterns() -> None:
     """Test detection of various import patterns."""
     test_content = """
-import vertexai.generative_models  # Should be flagged
-from some_package import vertexai  # Should be flagged
-import vertexai_utils  # Should not be flagged (different module)
-from vertexai_wrapper import something  # Should not be flagged
-import myvertexai  # Should not be flagged
+import google.genai.generative_models  # Should be flagged
+from some_package import google.genai  # Should be flagged
+import google.genai_utils  # Should not be flagged (different module)
+from google.genai_wrapper import something  # Should not be flagged
+import mygoogle.genai  # Should not be flagged
 """
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
@@ -112,16 +112,16 @@ import myvertexai  # Should not be flagged
         test_path = Path(f.name)
 
     try:
-        protected_modules = {"vertexai"}
+        protected_modules = {"google.genai"}
         result = find_eager_imports(test_path, protected_modules)
 
         # Should find 2 violations (lines 2, 3)
         assert len(result.violation_lines) == 2
-        assert result.violated_modules == {"vertexai"}
+        assert result.violated_modules == {"google.genai"}
 
         violation_line_numbers = [line_num for line_num, _ in result.violation_lines]
-        assert 2 in violation_line_numbers  # import vertexai.generative_models
-        assert 3 in violation_line_numbers  # from some_package import vertexai
+        assert 2 in violation_line_numbers  # import google.genai.generative_models
+        assert 3 in violation_line_numbers  # from some_package import google.genai
 
         # Lines 4, 5, 6 should not be flagged
         assert 4 not in violation_line_numbers
@@ -135,9 +135,9 @@ import myvertexai  # Should not be flagged
 def test_find_eager_imports_comments_ignored() -> None:
     """Test that commented imports are ignored."""
     test_content = """
-# import vertexai  # This should be ignored
+# import google.genai  # This should be ignored
 import os
-# from vertexai import something  # This should be ignored
+# from google.genai import something  # This should be ignored
 """
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
@@ -145,7 +145,7 @@ import os
         test_path = Path(f.name)
 
     try:
-        protected_modules = {"vertexai"}
+        protected_modules = {"google.genai"}
         result = find_eager_imports(test_path, protected_modules)
 
         # Should find no violations
@@ -164,8 +164,8 @@ from typing import Dict, List
 from pathlib import Path
 
 def some_function():
-    import vertexai
-    return vertexai.some_method()
+    import google.genai
+    return google.genai.some_method()
 """
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
@@ -173,7 +173,7 @@ def some_function():
         test_path = Path(f.name)
 
     try:
-        protected_modules = {"vertexai", "transformers"}
+        protected_modules = {"google.genai", "transformers"}
         result = find_eager_imports(test_path, protected_modules)
 
         # Should find no violations
@@ -189,7 +189,7 @@ def test_find_eager_imports_file_read_error() -> None:
     # Create a file path that will cause read errors
     nonexistent_path = Path("/nonexistent/path/test.py")
 
-    protected_modules = {"vertexai"}
+    protected_modules = {"google.genai"}
     result = find_eager_imports(nonexistent_path, protected_modules)
 
     # Should return empty result on error
@@ -266,7 +266,7 @@ class SomeClass:
 def test_find_eager_imports_return_type() -> None:
     """Test that function returns correct EagerImportResult type."""
     test_content = """
-import vertexai
+import google.genai
 """
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
@@ -274,7 +274,7 @@ import vertexai
         test_path = Path(f.name)
 
     try:
-        protected_modules = {"vertexai"}
+        protected_modules = {"google.genai"}
         result = find_eager_imports(test_path, protected_modules)
 
         # Check return type
@@ -282,7 +282,7 @@ import vertexai
         assert hasattr(result, "violation_lines")
         assert hasattr(result, "violated_modules")
         assert len(result.violation_lines) == 1
-        assert result.violated_modules == {"vertexai"}
+        assert result.violated_modules == {"google.genai"}
 
     finally:
         test_path.unlink()
@@ -301,9 +301,9 @@ def test_main_function_no_violations(tmp_path: Path) -> None:
 import os
 from pathlib import Path
 
-def use_vertexai():
-    import vertexai
-    return vertexai.some_method()
+def use_google_genai():
+    import google.genai
+    return google.genai.some_method()
 
 def use_playwright():
     from playwright.sync_api import sync_playwright
@@ -323,7 +323,7 @@ def use_nltk():
         # Should not raise an exception since all imports are inside functions
         main(
             {
-                "vertexai": LazyImportSettings(),
+                "google.genai": LazyImportSettings(),
                 "playwright": LazyImportSettings(),
                 "nltk": LazyImportSettings(),
             }
@@ -340,7 +340,7 @@ def test_main_function_with_violations(tmp_path: Path) -> None:
     violation_file = backend_dir / "violation_module.py"
     violation_file.write_text(
         """
-import vertexai
+import google.genai
 import nltk
 from playwright.sync_api import sync_playwright
 """
@@ -358,7 +358,7 @@ from playwright.sync_api import sync_playwright
         ):
             main(
                 {
-                    "vertexai": LazyImportSettings(),
+                    "google.genai": LazyImportSettings(),
                     "playwright": LazyImportSettings(),
                     "nltk": LazyImportSettings(),
                 }
@@ -369,7 +369,7 @@ def test_main_function_specific_modules_only() -> None:
     """Test that only specific modules in protected list are flagged."""
     test_content = """
 import requests  # Should not be flagged
-import vertexai  # Should be flagged
+import google.genai  # Should be flagged
 import nltk  # Should be flagged
 from playwright.sync_api import sync_playwright  # Should be flagged
 import numpy  # Should not be flagged
@@ -380,15 +380,15 @@ import numpy  # Should not be flagged
         test_path = Path(f.name)
 
     try:
-        protected_modules = {"vertexai", "playwright", "nltk"}
+        protected_modules = {"google.genai", "playwright", "nltk"}
         result = find_eager_imports(test_path, protected_modules)
 
-        # Should only flag vertexai, nltk, and playwright
+        # Should only flag google.genai, nltk, and playwright
         assert len(result.violation_lines) == 3
-        assert result.violated_modules == {"vertexai", "playwright", "nltk"}
+        assert result.violated_modules == {"google.genai", "playwright", "nltk"}
 
         violation_line_numbers = [line_num for line_num, _ in result.violation_lines]
-        assert 3 in violation_line_numbers  # import vertexai
+        assert 3 in violation_line_numbers  # import google.genai
         assert 4 in violation_line_numbers  # import nltk
         assert (
             5 in violation_line_numbers
@@ -404,14 +404,14 @@ def test_mixed_violations_and_clean_imports() -> None:
     """Test files with both violations and allowed function-level imports."""
     test_content = """
 # Top-level violation
-import vertexai
+import google.genai
 import nltk
 
 import os  # This is fine, not protected
 
 def process_data():
     # Function-level import is allowed
-    import vertexai
+    import google.genai
     import nltk
     from playwright.sync_api import sync_playwright
     return "processed"
@@ -431,22 +431,22 @@ from playwright.sync_api import BrowserContext
         test_path = Path(f.name)
 
     try:
-        protected_modules = {"vertexai", "playwright", "nltk"}
+        protected_modules = {"google.genai", "playwright", "nltk"}
         result = find_eager_imports(test_path, protected_modules)
 
         # Should find 3 top-level violations
         assert len(result.violation_lines) == 3
-        assert result.violated_modules == {"vertexai", "playwright", "nltk"}
+        assert result.violated_modules == {"google.genai", "playwright", "nltk"}
 
         violation_line_numbers = [line_num for line_num, _ in result.violation_lines]
-        assert 3 in violation_line_numbers  # import vertexai (top-level)
+        assert 3 in violation_line_numbers  # import google.genai (top-level)
         assert 4 in violation_line_numbers  # import nltk (top-level)
         assert (
             22 in violation_line_numbers
         )  # from playwright.sync_api import BrowserContext (top-level)
 
         # Function and method level imports should not be flagged
-        assert 9 not in violation_line_numbers  # import vertexai (in function)
+        assert 9 not in violation_line_numbers  # import google.genai (in function)
         assert 10 not in violation_line_numbers  # import nltk (in function)
         assert (
             11 not in violation_line_numbers
@@ -507,7 +507,7 @@ def test_find_python_files_ignore_venv_directories() -> None:
         dot_venv_dir = backend_dir / ".venv"
         dot_venv_dir.mkdir()
         (dot_venv_dir / "should_be_ignored.py").write_text(
-            "import vertexai"
+            "import google.genai"
         )  # Should be excluded
 
         # Create a file with venv in filename (should be included)
@@ -624,15 +624,15 @@ def allowed_function():
 
 
 def test_all_three_protected_modules() -> None:
-    """Test detection of vertexai, playwright, and nltk violations together."""
+    """Test detection of google.genai, playwright, and nltk violations together."""
     test_content = """
-import vertexai
+import google.genai
 import nltk
 from playwright.sync_api import sync_playwright
 import os  # This should not be flagged
 
 def allowed_usage():
-    import vertexai
+    import google.genai
     import nltk
     from playwright.sync_api import sync_playwright
     return "all good"
@@ -643,15 +643,15 @@ def allowed_usage():
         test_path = Path(f.name)
 
     try:
-        protected_modules = {"vertexai", "playwright", "nltk"}
+        protected_modules = {"google.genai", "playwright", "nltk"}
         result = find_eager_imports(test_path, protected_modules)
 
         # Should find 3 violations (lines 2, 3, 4)
         assert len(result.violation_lines) == 3
-        assert result.violated_modules == {"vertexai", "playwright", "nltk"}
+        assert result.violated_modules == {"google.genai", "playwright", "nltk"}
 
         violation_line_numbers = [line_num for line_num, _ in result.violation_lines]
-        assert 2 in violation_line_numbers  # import vertexai
+        assert 2 in violation_line_numbers  # import google.genai
         assert 3 in violation_line_numbers  # import nltk
         assert (
             4 in violation_line_numbers
@@ -659,7 +659,7 @@ def allowed_usage():
         assert 5 not in violation_line_numbers  # import os (not protected)
 
         # Function-level imports should not be flagged
-        assert 7 not in violation_line_numbers  # import vertexai (in function)
+        assert 7 not in violation_line_numbers  # import google.genai (in function)
         assert 8 not in violation_line_numbers  # import nltk (in function)
         assert (
             9 not in violation_line_numbers
