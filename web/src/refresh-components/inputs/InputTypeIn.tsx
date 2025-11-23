@@ -71,108 +71,109 @@ export interface InputTypeInProps
   showClearButton?: boolean;
   onClear?: () => void;
 }
-
-function InputTypeInInner(
-  {
-    internal,
-    error,
-    disabled,
-    leftSearchIcon,
-    rightSection,
-    showClearButton = true,
-    onClear,
-    className,
-    value,
-    onChange,
-    ...props
-  }: InputTypeInProps,
-  ref: React.ForwardedRef<HTMLInputElement>
-) {
-  const localInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  // Combine forwarded ref with local ref
-  const setInputRef = React.useCallback(
-    (node: HTMLInputElement | null) => {
-      localInputRef.current = node;
-      if (typeof ref === "function") {
-        ref(node);
-      } else if (ref) {
-        (ref as React.MutableRefObject<HTMLInputElement | null>).current = node;
-      }
+const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
+  (
+    {
+      internal,
+      error,
+      disabled,
+      leftSearchIcon,
+      rightSection,
+      showClearButton = true,
+      onClear,
+      className,
+      value,
+      onChange,
+      ...props
     },
-    [ref]
-  );
+    ref
+  ) => {
+    const localInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  const variant = internal
-    ? "internal"
-    : error
-      ? "error"
-      : disabled
-        ? "disabled"
-        : "main";
+    // Combine forwarded ref with local ref
+    const setInputRef = React.useCallback(
+      (node: HTMLInputElement | null) => {
+        localInputRef.current = node;
+        if (typeof ref === "function") {
+          ref(node);
+        } else if (ref) {
+          (ref as React.MutableRefObject<HTMLInputElement | null>).current =
+            node;
+        }
+      },
+      [ref]
+    );
 
-  const handleClear = React.useCallback(() => {
-    if (onClear) {
-      onClear();
-      return;
-    }
+    const variant = internal
+      ? "internal"
+      : error
+        ? "error"
+        : disabled
+          ? "disabled"
+          : "main";
 
-    onChange?.({
-      target: { value: "" },
-      currentTarget: { value: "" },
-      type: "change",
-      bubbles: true,
-      cancelable: true,
-    } as React.ChangeEvent<HTMLInputElement>);
-  }, [onClear, onChange]);
+    const handleClear = React.useCallback(() => {
+      if (onClear) {
+        onClear();
+        return;
+      }
 
-  return (
-    <div
-      className={cn(
-        "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 relative",
-        wrapperClasses[variant],
-        className
-      )}
-      onClick={() => {
-        localInputRef.current?.focus();
-      }}
-    >
-      {leftSearchIcon && (
-        <div className="pr-2">
-          <div className="pl-1">
-            <SvgSearch className="w-[1rem] h-[1rem] stroke-text-02" />
-          </div>
-        </div>
-      )}
+      onChange?.({
+        target: { value: "" },
+        currentTarget: { value: "" },
+        type: "change",
+        bubbles: true,
+        cancelable: true,
+      } as React.ChangeEvent<HTMLInputElement>);
+    }, [onClear, onChange]);
 
-      <input
-        ref={setInputRef}
-        type="text"
-        disabled={disabled}
-        value={value}
-        onChange={onChange}
+    return (
+      <div
         className={cn(
-          "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
-          innerClasses[variant]
+          "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 relative",
+          wrapperClasses[variant],
+          className
         )}
-        {...props}
-      />
+        onClick={() => {
+          localInputRef.current?.focus();
+        }}
+      >
+        {leftSearchIcon && (
+          <div className="pr-2">
+            <div className="pl-1">
+              <SvgSearch className="w-[1rem] h-[1rem] stroke-text-02" />
+            </div>
+          </div>
+        )}
 
-      {showClearButton && value && (
-        <IconButton
-          icon={SvgX}
+        <input
+          ref={setInputRef}
+          type="text"
           disabled={disabled}
-          onClick={noProp(handleClear)}
-          type="button"
-          internal
+          value={value}
+          onChange={onChange}
+          className={cn(
+            "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
+            innerClasses[variant]
+          )}
+          {...props}
         />
-      )}
 
-      {rightSection}
-    </div>
-  );
-}
+        {showClearButton && value && (
+          <IconButton
+            icon={SvgX}
+            disabled={disabled}
+            onClick={noProp(handleClear)}
+            type="button"
+            internal
+          />
+        )}
 
-const InputTypeIn = React.forwardRef(InputTypeInInner);
+        {rightSection}
+      </div>
+    );
+  }
+);
 InputTypeIn.displayName = "InputTypeIn";
+
 export default InputTypeIn;

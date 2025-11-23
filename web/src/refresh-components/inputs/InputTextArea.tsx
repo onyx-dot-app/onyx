@@ -50,51 +50,40 @@ export interface InputTextAreaProps
   error?: boolean;
   disabled?: boolean;
 }
+const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
+  ({ main, internal, error, disabled, className, rows = 4, ...props }, ref) => {
+    const variant = main
+      ? "main"
+      : internal
+        ? "internal"
+        : error
+          ? "error"
+          : disabled
+            ? "disabled"
+            : "main";
 
-function InputTextAreaInner(
-  {
-    main,
-    internal,
-    error,
-    disabled,
-    className,
-    rows = 4,
-    ...props
-  }: InputTextAreaProps,
-  ref: React.ForwardedRef<HTMLTextAreaElement>
-) {
-  const variant = main
-    ? "main"
-    : internal
-      ? "internal"
-      : error
-        ? "error"
-        : disabled
-          ? "disabled"
-          : "main";
-
-  return (
-    <div
-      className={cn(
-        wrapperClasses[variant],
-        "flex flex-row items-start justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
-        className
-      )}
-    >
-      <textarea
-        ref={ref}
-        disabled={disabled}
+    return (
+      <div
         className={cn(
-          innerClasses[variant],
-          "w-full min-h-[3rem] bg-transparent p-0.5 focus:outline-none resize-y"
+          wrapperClasses[variant],
+          "flex flex-row items-start justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
+          className
         )}
-        rows={rows}
-        {...props}
-      />
-    </div>
-  );
-}
-
-const InputTextArea = React.forwardRef(InputTextAreaInner);
+      >
+        <textarea
+          ref={ref}
+          disabled={disabled}
+          className={cn(
+            innerClasses[variant],
+            "w-full min-h-[3rem] bg-transparent p-0.5 focus:outline-none resize-y"
+          )}
+          rows={rows}
+          {...props}
+        />
+      </div>
+    );
+  }
+);
 InputTextArea.displayName = "InputTextArea";
+
 export default InputTextArea;
