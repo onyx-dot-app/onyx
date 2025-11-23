@@ -6,7 +6,7 @@ import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { Separator } from "@/refresh-components/Separator";
+import Separator from "@/refresh-components/Separator";
 import {
   Table,
   TableHead,

@@ -3,7 +3,7 @@ import { use } from "react";
 
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import { Separator } from "@/refresh-components/Separator";
+import Separator from "@/refresh-components/Separator";
 import { ChatSessionSnapshot, MessageSnapshot } from "../../usage/types";
 import { FiBook } from "react-icons/fi";
 import { timestampToReadableDate } from "@/lib/dateUtils";

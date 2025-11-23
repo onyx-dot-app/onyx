@@ -17,7 +17,7 @@ import Text from "@/components/ui/text";
 import { ImageUpload } from "./ImageUpload";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Link from "next/link";
-import { Separator } from "@/refresh-components/Separator";
+import Separator from "@/refresh-components/Separator";
 
 export function WhitelabelingForm() {
   const router = useRouter();

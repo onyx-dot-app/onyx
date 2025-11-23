@@ -3,7 +3,7 @@
 import { PersonasTable } from "./PersonaTable";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import { Separator } from "@/refresh-components/Separator";
+import Separator from "@/refresh-components/Separator";
 import { AssistantsIcon } from "@/components/icons/icons";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { SubLabel } from "@/components/Field";

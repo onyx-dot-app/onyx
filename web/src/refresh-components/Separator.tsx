@@ -53,4 +53,4 @@ function SeparatorInner(
 
 const Separator = React.forwardRef(SeparatorInner);
 Separator.displayName = SeparatorPrimitive.Root.displayName;
-export { Separator };
+export default Separator;

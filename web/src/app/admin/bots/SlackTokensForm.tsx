@@ -5,7 +5,7 @@ import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { createSlackBot, updateSlackBot } from "./new/lib";
 import Button from "@/refresh-components/buttons/Button";
-import { Separator } from "@/refresh-components/Separator";
+import Separator from "@/refresh-components/Separator";
 import { useEffect } from "react";
 
 export const SlackTokensForm = ({

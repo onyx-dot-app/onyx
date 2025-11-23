@@ -1,6 +1,6 @@
 import { TextFormField } from "@/components/Field";
 import { ValidAutoSyncSource } from "@/lib/types";
-import { Separator } from "@/refresh-components/Separator";
+import Separator from "@/refresh-components/Separator";
 import { autoSyncConfigBySource } from "@/lib/connectors/AutoSyncOptionFields";
 
 export function AutoSyncOptions({

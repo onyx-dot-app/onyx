@@ -1,4 +1,4 @@
-import { Separator } from "@/refresh-components/Separator";
+import Separator from "@/refresh-components/Separator";
 import {
   Table,
   TableHead,

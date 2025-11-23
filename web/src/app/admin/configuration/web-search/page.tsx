@@ -15,7 +15,7 @@ import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { CheckmarkIcon, GlobeIcon, InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { Separator } from "@/refresh-components/Separator";
+import Separator from "@/refresh-components/Separator";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";

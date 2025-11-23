@@ -33,7 +33,7 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Separator } from "@/refresh-components/Separator";
+import Separator from "@/refresh-components/Separator";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;

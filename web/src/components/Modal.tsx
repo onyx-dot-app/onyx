@@ -1,5 +1,5 @@
 "use client";
-import { Separator } from "@/refresh-components/Separator";
+import Separator from "@/refresh-components/Separator";
 import { IconProps, XIcon } from "./icons/icons";
 import { useRef, useEffect, useState, JSX } from "react";
 import ReactDOM from "react-dom";

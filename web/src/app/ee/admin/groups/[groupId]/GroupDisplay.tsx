@@ -14,7 +14,7 @@ import {
   ConnectorStatus,
 } from "@/lib/types";
 import { AddConnectorForm } from "./AddConnectorForm";
-import { Separator } from "@/refresh-components/Separator";
+import Separator from "@/refresh-components/Separator";
 import {
   Select,
   SelectContent,
