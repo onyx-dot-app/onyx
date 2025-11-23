@@ -30,7 +30,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
 import { DatePicker } from "./ui/datePicker";
-import { Textarea, TextareaProps } from "./ui/textarea";
 import { RichTextSubtext } from "./RichTextSubtext";
 import {
   TypedFile,
@@ -44,6 +43,9 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 import SvgEye from "@/icons/eye";
 import SvgEyeClosed from "@/icons/eye-closed";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import InputTextArea, {
+  InputTextAreaProps,
+} from "@/refresh-components/inputs/InputTextArea";
 
 export function SectionHeader({
   children,
@@ -1045,7 +1047,7 @@ export function DatePickerField({
   );
 }
 
-export interface TextAreaFieldProps extends TextareaProps {
+export interface TextAreaFieldProps extends InputTextAreaProps {
   name: string;
 }
 
@@ -1053,10 +1055,10 @@ export function TextAreaField(props: TextAreaFieldProps) {
   const [field, _, helper] = useField<string>(props.name);
 
   return (
-    <Textarea
+    <InputTextArea
       value={field.value}
-      onChange={(e) => {
-        helper.setValue(e.target.value);
+      onChange={(event) => {
+        helper.setValue(event.target.value);
       }}
       {...props}
     />

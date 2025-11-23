@@ -21,6 +21,7 @@ import Link from "next/link";
 import { Callout } from "@/components/ui/callout";
 import { ToolSnapshot, MCPServersResponse } from "@/lib/tools/interfaces";
 import { ToolSelector } from "@/components/admin/assistants/ToolSelector";
+import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 
 interface DefaultAssistantConfiguration {
   tool_ids: number[];
@@ -179,20 +180,11 @@ function DefaultAssistantConfig() {
                   Add instructions to tailor the behavior of the assistant.
                 </SubLabel>
                 <div>
-                  <textarea
-                    className={cn(
-                      "w-full",
-                      "p-3",
-                      "border",
-                      "border-border",
-                      "rounded-lg",
-                      "text-sm",
-                      "[&::placeholder]:text-text-muted/50"
-                    )}
+                  <InputTextArea
                     rows={8}
                     value={values.system_prompt}
-                    onChange={(e) =>
-                      setFieldValue("system_prompt", e.target.value)
+                    onChange={(event) =>
+                      setFieldValue("system_prompt", event.target.value)
                     }
                     placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
                   />

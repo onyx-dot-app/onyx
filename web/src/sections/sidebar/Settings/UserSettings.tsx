@@ -23,7 +23,6 @@ import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { useUserPersonalization } from "@/lib/hooks/useUserPersonalization";
-import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import Text from "@/refresh-components/texts/Text";
 import SvgXOctagon from "@/icons/x-octagon";
 import PATManagement from "@/components/user/PATManagement";
@@ -35,6 +34,7 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SvgCpu from "@/icons/cpu";
 import SvgMoon from "@/icons/moon";
 import SvgSun from "@/icons/sun";
+import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 
 type SettingsSection =
   | "general"
@@ -595,12 +595,12 @@ export default function UserSettings() {
                   ) : (
                     <div className="max-h-64 overflow-y-auto flex flex-col gap-3 pr-1">
                       {personalizationValues.memories.map((memory, index) => (
-                        <AutoResizeTextarea
+                        <InputTextArea
                           key={index}
                           value={memory}
                           placeholder="Write something Onyx should remember"
-                          onChange={(value) =>
-                            updateMemoryAtIndex(index, value)
+                          onChange={(event) =>
+                            updateMemoryAtIndex(index, event.target.value)
                           }
                         />
                       ))}

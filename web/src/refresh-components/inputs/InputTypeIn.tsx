@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useCallback, useRef } from "react";
+import * as React from "react";
 import { cn, noProp } from "@/lib/utils";
 import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSearch from "@/icons/search";
 
-const divClasses = {
+// Used for other, similar components (e.g., `InputTextArea`).
+export const divClasses = {
   main: [
     "border",
     "hover:border-border-02",
@@ -23,7 +24,8 @@ const divClasses = {
   ],
 } as const;
 
-const inputClasses = {
+// Used for other, similar components (e.g., `InputTextArea`).
+export const innerClasses = {
   main: [
     "text-text-04 placeholder:!font-secondary-body placeholder:text-text-02",
   ],
@@ -32,23 +34,65 @@ const inputClasses = {
   disabled: ["text-text-02"],
 } as const;
 
+/**
+ * InputTypeIn Component
+ *
+ * A styled text input component with support for search icon, clear button,
+ * and custom right section content.
+ *
+ * @example
+ * ```tsx
+ * // Basic usage
+ * <InputTypeIn
+ *   value={value}
+ *   onChange={(e) => setValue(e.target.value)}
+ *   placeholder="Enter text..."
+ * />
+ *
+ * // With search icon
+ * <InputTypeIn
+ *   leftSearchIcon
+ *   value={search}
+ *   onChange={(e) => setSearch(e.target.value)}
+ *   placeholder="Search..."
+ * />
+ *
+ * // With error state
+ * <InputTypeIn
+ *   error
+ *   value={value}
+ *   onChange={(e) => setValue(e.target.value)}
+ * />
+ *
+ * // Disabled state
+ * <InputTypeIn disabled value="Cannot edit" />
+ *
+ * // With custom right section
+ * <InputTypeIn
+ *   value={password}
+ *   onChange={(e) => setPassword(e.target.value)}
+ *   type={showPassword ? "text" : "password"}
+ *   rightSection={<IconButton icon={SvgEye} onClick={togglePassword} />}
+ * />
+ *
+ * // Without clear button
+ * <InputTypeIn
+ *   showClearButton={false}
+ *   value={value}
+ *   onChange={(e) => setValue(e.target.value)}
+ * />
+ * ```
+ */
 export interface InputTypeInProps
   extends React.InputHTMLAttributes<HTMLInputElement> {
-  // Input states:
+  // input-type-in variants
   internal?: boolean;
   error?: boolean;
   disabled?: boolean;
 
-  // Stylings:
   leftSearchIcon?: boolean;
-
-  // Right section of the input, e.g. password toggle icon
   rightSection?: React.ReactNode;
-
-  // Controls whether the clear (X) button is shown when there is a value
   showClearButton?: boolean;
-
-  // Optional callback invoked when the clear icon is clicked for Formik compatibility
   onClear?: () => void;
 }
 
@@ -57,12 +101,10 @@ function InputTypeInInner(
     internal,
     error,
     disabled,
-
     leftSearchIcon,
     rightSection,
     showClearButton = true,
     onClear,
-
     className,
     value,
     onChange,
@@ -70,8 +112,10 @@ function InputTypeInInner(
   }: InputTypeInProps,
   ref: React.ForwardedRef<HTMLInputElement>
 ) {
-  const localInputRef = useRef<HTMLInputElement | null>(null);
-  const setInputRef = useCallback(
+  const localInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  // Combine forwarded ref with local ref
+  const setInputRef = React.useCallback(
     (node: HTMLInputElement | null) => {
       localInputRef.current = node;
       if (typeof ref === "function") {
@@ -91,7 +135,7 @@ function InputTypeInInner(
         ? "disabled"
         : "main";
 
-  function handleClear() {
+  const handleClear = React.useCallback(() => {
     if (onClear) {
       onClear();
       return;
@@ -104,7 +148,7 @@ function InputTypeInInner(
       bubbles: true,
       cancelable: true,
     } as React.ChangeEvent<HTMLInputElement>);
-  }
+  }, [onClear, onChange]);
 
   return (
     <div
@@ -133,10 +177,11 @@ function InputTypeInInner(
         onChange={onChange}
         className={cn(
           "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
-          inputClasses[variant]
+          innerClasses[variant]
         )}
         {...props}
       />
+
       {showClearButton && value && (
         <IconButton
           icon={SvgX}
@@ -146,6 +191,7 @@ function InputTypeInInner(
           internal
         />
       )}
+
       {rightSection}
     </div>
   );
@@ -153,5 +199,4 @@ function InputTypeInInner(
 
 const InputTypeIn = React.forwardRef(InputTypeInInner);
 InputTypeIn.displayName = "InputTypeIn";
-
 export default InputTypeIn;
