@@ -358,7 +358,7 @@ def run_llm_step(
     emitter: Emitter,
     llm: LLM,
     turn_index: int,
-    citation_processor: DynamicCitationProcessor | None = None,
+    citation_processor: DynamicCitationProcessor,
 ) -> LlmStepResult:
     llm_msg_history = translate_history_to_llm_format(history)
 
@@ -397,7 +397,6 @@ def run_llm_step(
                 reasoning_start = True
 
         if delta.content:
-            accumulated_answer += delta.content
             if reasoning_start:
                 emitter.emit(
                     Packet(
@@ -416,30 +415,22 @@ def run_llm_step(
                 )
                 answer_start = True
 
-            # Process through citation processor if available
-            if citation_processor:
-                for result in citation_processor.process_token(delta.content):
-                    if isinstance(result, str):
-                        emitter.emit(
-                            Packet(
-                                turn_index=turn_index,
-                                obj=AgentResponseDelta(content=result),
-                            )
+            for result in citation_processor.process_token(delta.content):
+                if isinstance(result, str):
+                    accumulated_answer += result
+                    emitter.emit(
+                        Packet(
+                            turn_index=turn_index,
+                            obj=AgentResponseDelta(content=result),
                         )
-                    elif isinstance(result, CitationInfo):
-                        emitter.emit(
-                            Packet(
-                                turn_index=turn_index,
-                                obj=result,
-                            )
-                        )
-            else:
-                emitter.emit(
-                    Packet(
-                        turn_index=turn_index,
-                        obj=AgentResponseDelta(content=delta.content),
                     )
-                )
+                elif isinstance(result, CitationInfo):
+                    emitter.emit(
+                        Packet(
+                            turn_index=turn_index,
+                            obj=result,
+                        )
+                    )
 
         if delta.tool_calls:
             if reasoning_start:
