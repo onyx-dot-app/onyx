@@ -198,8 +198,8 @@ test.describe("Default Assistant MCP Integration", () => {
     expect(serverId).toBeGreaterThan(0);
     console.log(`[test] Server ID: ${serverId}`);
 
-    // Select all tools
-    const selectAllCheckbox = page.getByTestId("tool-checkbox-select-all");
+    // Select all toolss
+    const selectAllCheckbox = page.getByLabel("tool-checkbox-select-all");
     await expect(selectAllCheckbox).toBeVisible({ timeout: 5000 });
     await selectAllCheckbox.scrollIntoViewIfNeeded();
     await selectAllCheckbox.click();
@@ -272,7 +272,7 @@ test.describe("Default Assistant MCP Integration", () => {
     }
 
     // Select the MCP server checkbox (to enable all tools)
-    const serverCheckbox = page.getByTestId(`mcp-server-select-${serverId}`);
+    const serverCheckbox = page.getByLabel("tool-checkbox-select-all");
     await expect(serverCheckbox).toBeVisible({ timeout: 5000 });
     await serverCheckbox.scrollIntoViewIfNeeded();
     await serverCheckbox.check();

@@ -143,21 +143,17 @@ test.describe("Default Assistant Admin Page", () => {
     await page.waitForSelector("text=Internal Search", { timeout: 10000 });
 
     // Find the Internal Search checkbox using a more robust selector
-    const searchToggle = page
-      .locator('div:has-text("Internal Search")')
-      .filter({ hasText: "Internal Search" })
-      .locator('[role="checkbox"]')
-      .first();
+    const searchCheckbox = page.getByLabel("internal-search-checkbox").first();
 
     // Get initial state
-    const initialState = await searchToggle.getAttribute("data-state");
-    const isDisabled = await searchToggle.isDisabled().catch(() => false);
+    const initialState = await searchCheckbox.getAttribute("aria-checked");
+    const isDisabled = initialState === "false";
     console.log(
       `[toggle] Internal Search initial data-state=${initialState} disabled=${isDisabled}`
     );
 
     // Toggle it
-    await searchToggle.click();
+    await searchCheckbox.click();
     await page.waitForTimeout(500);
 
     // Save changes
@@ -188,20 +184,14 @@ test.describe("Default Assistant Admin Page", () => {
     await page.reload();
     await page.waitForSelector("text=Internal Search", { timeout: 10000 });
 
-    // Check that state persisted
-    const searchToggleAfter = page
-      .locator('div:has-text("Internal Search")')
-      .filter({ hasText: "Internal Search" })
-      .locator('[role="checkbox"]')
-      .first();
-    const newState = await searchToggleAfter.getAttribute("data-state");
+    const newState = await searchCheckbox.getAttribute("aria-checked");
     console.log(`[toggle] Internal Search after reload data-state=${newState}`);
 
     // State should have changed
     expect(initialState).not.toBe(newState);
 
     // Toggle back to original state
-    await searchToggleAfter.click();
+    await searchCheckbox.click();
     await page.waitForTimeout(500);
 
     // Save the restoration
@@ -219,21 +209,17 @@ test.describe("Default Assistant Admin Page", () => {
     await page.waitForSelector("text=Web Search", { timeout: 10000 });
 
     // Find the Web Search checkbox using a more robust selector
-    const webSearchToggle = page
-      .locator('div:has-text("Web Search")')
-      .filter({ hasText: "Web Search" })
-      .locator('[role="checkbox"]')
-      .first();
+    const webSearchCheckbox = page.getByLabel("web-search-checkbox").first();
 
     // Get initial state
-    const initialState = await webSearchToggle.getAttribute("data-state");
-    const isDisabled = await webSearchToggle.isDisabled().catch(() => false);
+    const initialState = await webSearchCheckbox.getAttribute("aria-checked");
+    const isDisabled = initialState === "false";
     console.log(
       `[toggle] Web Search initial data-state=${initialState} disabled=${isDisabled}`
     );
 
     // Toggle it
-    await webSearchToggle.click();
+    await webSearchCheckbox.click();
     await page.waitForTimeout(500);
 
     // Save changes
@@ -265,19 +251,14 @@ test.describe("Default Assistant Admin Page", () => {
     await page.waitForSelector("text=Web Search", { timeout: 10000 });
 
     // Check that state persisted
-    const webSearchToggleAfter = page
-      .locator('div:has-text("Web Search")')
-      .filter({ hasText: "Web Search" })
-      .locator('[role="checkbox"]')
-      .first();
-    const newState = await webSearchToggleAfter.getAttribute("data-state");
+    const newState = await webSearchCheckbox.getAttribute("aria-checked");
     console.log(`[toggle] Web Search after reload data-state=${newState}`);
 
     // State should have changed
     expect(initialState).not.toBe(newState);
 
     // Toggle back to original state
-    await webSearchToggleAfter.click();
+    await webSearchCheckbox.click();
     await page.waitForTimeout(500);
 
     // Save the restoration
@@ -295,21 +276,19 @@ test.describe("Default Assistant Admin Page", () => {
     await page.waitForSelector("text=Image Generation", { timeout: 10000 });
 
     // Find the Image Generation checkbox using a more robust selector
-    const imageGenToggle = page
-      .locator('div:has-text("Image Generation")')
-      .filter({ hasText: "Image Generation" })
-      .locator('[role="checkbox"]')
+    const imageGenCheckbox = page
+      .getByLabel("image-generation-checkbox")
       .first();
 
     // Get initial state
-    const initialState = await imageGenToggle.getAttribute("data-state");
-    const isDisabled = await imageGenToggle.isDisabled().catch(() => false);
+    const initialState = await imageGenCheckbox.getAttribute("aria-checked");
+    const isDisabled = initialState === "false";
     console.log(
       `[toggle] Image Generation initial data-state=${initialState} disabled=${isDisabled}`
     );
 
     // Toggle it
-    await imageGenToggle.click();
+    await imageGenCheckbox.click();
     await page.waitForTimeout(500);
 
     // Save changes
@@ -341,12 +320,7 @@ test.describe("Default Assistant Admin Page", () => {
     await page.waitForSelector("text=Image Generation", { timeout: 10000 });
 
     // Check that state persisted
-    const imageGenToggleAfter = page
-      .locator('div:has-text("Image Generation")')
-      .filter({ hasText: "Image Generation" })
-      .locator('[role="checkbox"]')
-      .first();
-    const newState = await imageGenToggleAfter.getAttribute("data-state");
+    const newState = await imageGenCheckbox.getAttribute("aria-checked");
     console.log(
       `[toggle] Image Generation after reload data-state=${newState}`
     );
@@ -355,7 +329,7 @@ test.describe("Default Assistant Admin Page", () => {
     expect(initialState).not.toBe(newState);
 
     // Toggle back to original state
-    await imageGenToggleAfter.click();
+    await imageGenCheckbox.click();
     await page.waitForTimeout(500);
 
     // Save the restoration
@@ -657,12 +631,10 @@ test.describe("Default Assistant Admin Page", () => {
       "Web Search",
       "Image Generation",
     ]) {
-      const toggle = page
-        .locator(`div:has-text("${toolName}")`)
-        .filter({ hasText: toolName })
-        .locator('[role="checkbox"]')
+      const toolCheckbox = page
+        .getByLabel(`${toolName.toLowerCase().replace(" ", "-")}-checkbox`)
         .first();
-      const state = await toggle.getAttribute("data-state");
+      const state = await toolCheckbox.getAttribute("aria-checked");
       toolStates[toolName] = state;
       console.log(`[toggle-all] Initial state for ${toolName}: ${state}`);
     }
@@ -673,20 +645,14 @@ test.describe("Default Assistant Admin Page", () => {
       "Web Search",
       "Image Generation",
     ]) {
-      const toggle = page
-        .locator(`div:has-text("${toolName}")`)
-        .filter({ hasText: toolName })
-        .locator('[role="checkbox"]')
+      const toolCheckbox = page
+        .getByLabel(`${toolName.toLowerCase().replace(" ", "-")}-checkbox`)
         .first();
-      const currentState = await toggle.getAttribute("data-state");
-      const count = await toggle.count();
-      console.log(
-        `[toggle-all] Disabling ${toolName}: count=${count} state=${currentState}`
-      );
-      if (currentState === "checked") {
-        await toggle.click();
+      const currentState = await toolCheckbox.getAttribute("aria-checked");
+      if (currentState === "true") {
+        await toolCheckbox.click();
         await page.waitForTimeout(300);
-        const newState = await toggle.getAttribute("data-state");
+        const newState = await toolCheckbox.getAttribute("aria-checked");
         console.log(`[toggle-all] Clicked ${toolName}, new state=${newState}`);
       }
     }
@@ -737,20 +703,13 @@ test.describe("Default Assistant Admin Page", () => {
       "Web Search",
       "Image Generation",
     ]) {
-      const toggle = page
-        .locator(`div:has-text("${toolName}")`)
-        .filter({ hasText: toolName })
-        .locator('[role="checkbox"]')
+      const toolCheckbox = page
+        .getByLabel(`${toolName.toLowerCase().replace(" ", "-")}-checkbox`)
         .first();
-      const currentState = await toggle.getAttribute("data-state");
-      const count = await toggle.count();
-      console.log(
-        `[toggle-all] Re-enabling ${toolName}: count=${count} state=${currentState}`
-      );
-      if (currentState === "unchecked") {
-        await toggle.click();
-        await page.waitForTimeout(300);
-        const newState = await toggle.getAttribute("data-state");
+      const currentState = await toolCheckbox.getAttribute("aria-checked");
+      if (currentState === "false") {
+        await toolCheckbox.click();
+        const newState = await toolCheckbox.getAttribute("aria-checked");
         console.log(`[toggle-all] Clicked ${toolName}, new state=${newState}`);
       }
     }
@@ -851,16 +810,14 @@ test.describe("Default Assistant Admin Page", () => {
       "Web Search",
       "Image Generation",
     ]) {
-      const toggle = page
-        .locator(`div:has-text("${toolName}")`)
-        .filter({ hasText: toolName })
-        .locator('[role="checkbox"]')
+      const toolCheckbox = page
+        .getByLabel(`${toolName.toLowerCase().replace(" ", "-")}-checkbox`)
         .first();
-      const currentState = await toggle.getAttribute("data-state");
+      const currentState = await toolCheckbox.getAttribute("aria-checked");
       const originalState = toolStates[toolName];
 
       if (currentState !== originalState) {
-        await toggle.click();
+        await toolCheckbox.click();
         await page.waitForTimeout(300);
         needsSave = true;
       }

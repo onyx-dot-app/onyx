@@ -721,6 +721,7 @@ export const BooleanFormField = memo(function BooleanFormField({
               tooltip={disabledTooltip}
             >
               <Checkbox
+                aria-label={`${label.toLowerCase().replace(" ", "-")}-checkbox`}
                 id={checkboxId}
                 className={`
                      ${disabled ? "opacity-50" : ""}

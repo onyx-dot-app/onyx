@@ -86,11 +86,7 @@ export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
   // Find the Image Generation tool checkbox
   // The tool display name is "Image Generation" based on the description in the code
   // Note: The UI changed from switches to checkboxes
-  const checkboxElement = page
-    .locator('div:has-text("Image Generation")')
-    .filter({ hasText: "Image Generation" })
-    .locator('button[role="checkbox"]')
-    .first();
+  const checkboxElement = page.getByLabel("image-generation-checkbox").first();
 
   // Check if it's already enabled
   const isEnabled = await checkboxElement.getAttribute("data-state");
