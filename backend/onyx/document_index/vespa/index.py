@@ -60,6 +60,7 @@ from onyx.document_index.vespa.shared_utils.utils import (
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
+from onyx.document_index.vespa.shared_utils.vespa_request_builders import build_yql_base
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import BATCH_SIZE
 from onyx.document_index.vespa_constants import BOOST
@@ -72,7 +73,6 @@ from onyx.document_index.vespa_constants import NUM_THREADS
 from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
-from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.key_value_store.factory import get_shared_kv_store
 from onyx.kg.utils.formatting_utils import split_relationship_id
@@ -951,7 +951,7 @@ class VespaIndex(DocumentIndex):
         target_hits = max(10 * num_to_retrieve, 1000)
 
         yql = (
-            YQL_BASE.format(index_name=self.index_name)
+            build_yql_base(index_name=self.index_name, include_acl=False)
             + vespa_where_clauses
             + f"(({{targetHits: {target_hits}}}nearestNeighbor(embeddings, query_embedding)) "
             + f"or ({{targetHits: {target_hits}}}nearestNeighbor(title_embedding, query_embedding)) "
@@ -998,7 +998,7 @@ class VespaIndex(DocumentIndex):
     ) -> list[InferenceChunkUncleaned]:
         vespa_where_clauses = build_vespa_filters(filters, include_hidden=True)
         yql = (
-            YQL_BASE.format(index_name=self.index_name)
+            build_yql_base(index_name=self.index_name, include_acl=True)
             + vespa_where_clauses
             + '({grammar: "weakAnd"}userInput(@query) '
             # `({defaultIndex: "content_summary"}userInput(@query))` section is
@@ -1232,7 +1232,10 @@ class VespaIndex(DocumentIndex):
         """
         vespa_where_clauses = build_vespa_filters(filters, remove_trailing_and=True)
 
-        yql = YQL_BASE.format(index_name=self.index_name) + vespa_where_clauses
+        yql = (
+            build_yql_base(index_name=self.index_name, include_acl=True)
+            + vespa_where_clauses
+        )
 
         random_seed = random.randint(0, 1000000)
 
