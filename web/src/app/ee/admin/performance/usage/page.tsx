@@ -9,7 +9,7 @@ import { useTimeRange } from "../lib";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { FiActivity } from "react-icons/fi";
 import UsageReports from "./UsageReports";
-import { Separator } from "@/components/ui/separator";
+import { Separator } from "@/refresh-components/Separator";
 import { useAdminPersonas } from "@/app/admin/assistants/hooks";
 
 export default function AnalyticsPage() {

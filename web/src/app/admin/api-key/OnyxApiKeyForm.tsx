@@ -4,7 +4,7 @@ import { SelectorFormField, TextFormField } from "@/components/Field";
 import { createApiKey, updateApiKey } from "./lib";
 import { Modal } from "@/components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import { Separator } from "@/components/ui/separator";
+import { Separator } from "@/refresh-components/Separator";
 import Text from "@/components/ui/text";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { APIKey } from "./types";

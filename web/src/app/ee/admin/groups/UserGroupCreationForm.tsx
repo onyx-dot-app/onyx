@@ -8,7 +8,7 @@ import { UserEditor } from "./UserEditor";
 import { ConnectorEditor } from "./ConnectorEditor";
 import { Modal } from "@/components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import { Separator } from "@/components/ui/separator";
+import { Separator } from "@/refresh-components/Separator";
 
 interface UserGroupCreationFormProps {
   onClose: () => void;

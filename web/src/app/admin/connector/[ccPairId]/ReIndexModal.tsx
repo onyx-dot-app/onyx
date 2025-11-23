@@ -6,7 +6,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { triggerIndexing } from "./lib";
 import { Modal } from "@/components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import { Separator } from "@/components/ui/separator";
+import { Separator } from "@/refresh-components/Separator";
 
 // Hook to handle re-indexing functionality
 export function useReIndexModal(

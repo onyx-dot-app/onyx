@@ -3,7 +3,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { TextFormField } from "@/components/Field";
 import RawModal from "@/refresh-components/RawModal";
 import Button from "@/refresh-components/buttons/Button";
-import { Separator } from "@/components/ui/separator";
+import { Separator } from "@/refresh-components/Separator";
 import { Callout } from "@/components/ui/callout";
 import Text from "@/refresh-components/texts/Text";
 import {

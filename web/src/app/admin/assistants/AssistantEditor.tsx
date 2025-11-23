@@ -10,7 +10,7 @@ import {
   UserGroup,
   UserRole,
 } from "@/lib/types";
-import { Separator } from "@/components/ui/separator";
+import { Separator } from "@/refresh-components/Separator";
 import Button from "@/refresh-components/buttons/Button";
 import {
   ArrayHelpers,

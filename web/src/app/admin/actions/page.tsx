@@ -1,6 +1,6 @@
 import { ActionsTable } from "./ActionTable";
 import { ToolSnapshot, MCPServersResponse } from "@/lib/tools/interfaces";
-import { Separator } from "@/components/ui/separator";
+import { Separator } from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import Title from "@/components/ui/title";
 import { fetchSS } from "@/lib/utilsSS";
