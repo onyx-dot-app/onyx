@@ -201,21 +201,22 @@ const InputSelectTrigger = React.forwardRef<
 >(({ placeholder, rightSection, className, children, ...props }, ref) => {
   const { variant, selectedItemDisplay } = useInputSelectContext();
 
-  const displayContent = React.useMemo(() => {
-    if (!selectedItemDisplay) {
-      return placeholder ? (
-        typeof placeholder === "string" ? (
-          <Text text03>{placeholder}</Text>
-        ) : (
-          placeholder
-        )
-      ) : (
-        <Text text03>Select an option</Text>
-      );
-    }
+  // Don't memoize - we need to read the latest ref values on every render
+  let displayContent: React.ReactNode;
 
+  if (!selectedItemDisplay) {
+    displayContent = placeholder ? (
+      typeof placeholder === "string" ? (
+        <Text text03>{placeholder}</Text>
+      ) : (
+        placeholder
+      )
+    ) : (
+      <Text text03>Select an option</Text>
+    );
+  } else {
     const Icon = selectedItemDisplay.iconRef.current;
-    return (
+    displayContent = (
       <div className="flex flex-row items-center gap-2 flex-1">
         {Icon && <Icon className={cn("h-4 w-4", iconClasses[variant])} />}
         <Text className={cn(textClasses[variant])}>
@@ -223,7 +224,7 @@ const InputSelectTrigger = React.forwardRef<
         </Text>
       </div>
     );
-  }, [selectedItemDisplay, placeholder, variant]);
+  }
 
   return (
     <SelectPrimitive.Trigger
