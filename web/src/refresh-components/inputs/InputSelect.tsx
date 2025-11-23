@@ -41,19 +41,19 @@ type SelectVariant = keyof typeof triggerClasses;
 // Context
 // ============================================================================
 
-interface ItemRegistration {
-  value: string;
-  children: React.ReactNode;
-  icon?: React.FunctionComponent<SvgProps>;
+interface SelectedItemDisplay {
+  childrenRef: React.MutableRefObject<React.ReactNode>;
+  iconRef: React.MutableRefObject<
+    React.FunctionComponent<SvgProps> | undefined
+  >;
 }
 
 interface InputSelectContextValue {
   variant: SelectVariant;
   currentValue?: string;
   disabled?: boolean;
-  registerItem: (item: ItemRegistration) => void;
-  unregisterItem: (value: string) => void;
-  getItem: (value: string) => ItemRegistration | undefined;
+  selectedItemDisplay: SelectedItemDisplay | null;
+  setSelectedItemDisplay: (display: SelectedItemDisplay | null) => void;
 }
 
 const InputSelectContext = React.createContext<InputSelectContextValue | null>(
@@ -145,67 +145,44 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
     const currentValue = isControlled ? value : internalValue;
 
     React.useEffect(() => {
-      if (!isControlled) {
-        setInternalValue(defaultValue);
-      }
+      if (isControlled) return;
+      setInternalValue(defaultValue);
     }, [defaultValue, isControlled]);
 
     const handleValueChange = React.useCallback(
       (nextValue: string) => {
-        if (!isControlled) {
-          setInternalValue(nextValue);
-        }
         onValueChange?.(nextValue);
+
+        if (isControlled) return;
+        setInternalValue(nextValue);
       },
       [isControlled, onValueChange]
     );
 
-    // Item registry for displaying selected item with icon in trigger
-    // Using useState instead of useRef so registration triggers re-renders
-    const [items, setItems] = React.useState<Map<string, ItemRegistration>>(
-      () => new Map()
-    );
+    // Store the selected item's display data (children/icon refs)
+    // Only the currently selected item registers itself
+    const [selectedItemDisplay, setSelectedItemDisplay] =
+      React.useState<SelectedItemDisplay | null>(null);
 
-    const registerItem = React.useCallback((item: ItemRegistration) => {
-      setItems((prev) => {
-        const next = new Map(prev);
-        next.set(item.value, item);
-        return next;
-      });
-    }, []);
-
-    const unregisterItem = React.useCallback((value: string) => {
-      setItems((prev) => {
-        const next = new Map(prev);
-        next.delete(value);
-        return next;
-      });
-    }, []);
-
-    const getItem = React.useCallback(
-      (value: string) => {
-        return items.get(value);
-      },
-      [items]
-    );
+    React.useEffect(() => {
+      if (!currentValue) setSelectedItemDisplay(null);
+    }, [currentValue]);
 
     const contextValue = React.useMemo<InputSelectContextValue>(
       () => ({
         variant,
         currentValue,
         disabled,
-        registerItem,
-        unregisterItem,
-        getItem,
+        selectedItemDisplay,
+        setSelectedItemDisplay,
       }),
-      [variant, currentValue, disabled, registerItem, unregisterItem, getItem]
+      [variant, currentValue, disabled, selectedItemDisplay]
     );
 
     return (
       <InputSelectContext.Provider value={contextValue}>
         <SelectPrimitive.Root
-          value={currentValue}
-          defaultValue={defaultValue}
+          {...(isControlled ? { value: currentValue } : { defaultValue })}
           onValueChange={handleValueChange}
           disabled={disabled}
           {...props}
@@ -249,32 +226,31 @@ const InputSelectTrigger = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Trigger>,
   InputSelectTriggerProps
 >(({ placeholder, rightSection, className, children, ...props }, ref) => {
-  const { variant, currentValue, getItem } = useInputSelectContext();
-
-  const selectedItem = currentValue ? getItem(currentValue) : undefined;
+  const { variant, selectedItemDisplay } = useInputSelectContext();
 
   const displayContent = React.useMemo(() => {
-    if (!selectedItem) {
-      if (!placeholder) {
-        return <Text text03>Select an option</Text>;
-      }
-      return typeof placeholder === "string" ? (
-        <Text text03>{placeholder}</Text>
+    if (!selectedItemDisplay) {
+      return placeholder ? (
+        typeof placeholder === "string" ? (
+          <Text text03>{placeholder}</Text>
+        ) : (
+          placeholder
+        )
       ) : (
-        placeholder
+        <Text text03>Select an option</Text>
       );
     }
 
-    const Icon = selectedItem.icon;
+    const Icon = selectedItemDisplay.iconRef.current;
     return (
       <div className="flex flex-row items-center gap-2 flex-1">
         {Icon && <Icon className={cn("h-4 w-4", iconClasses[variant])} />}
         <Text className={cn(textClasses[variant])}>
-          {selectedItem.children}
+          {selectedItemDisplay.childrenRef.current}
         </Text>
       </div>
     );
-  }, [selectedItem, placeholder, variant]);
+  }, [selectedItemDisplay, placeholder, variant]);
 
   return (
     <SelectPrimitive.Trigger
@@ -383,27 +359,24 @@ const InputSelectItem = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Item>,
   InputSelectItemProps
 >(({ value, children, description, onClick, icon, ...props }, ref) => {
-  const { currentValue, registerItem, unregisterItem } =
-    useInputSelectContext();
+  const { currentValue, setSelectedItemDisplay } = useInputSelectContext();
   const isSelected = value === currentValue;
 
-  // Use refs to capture latest children/icon without triggering effect re-runs
+  // Use refs to hold latest children/icon - these are passed to the context
+  // so the trigger always reads current values without needing re-registration
   const childrenRef = React.useRef(children);
   const iconRef = React.useRef(icon);
   childrenRef.current = children;
   iconRef.current = icon;
 
-  // Register this item so the trigger can display it when selected
-  // Only re-register when value changes to avoid infinite loops with unstable children references
+  // Only the selected item registers its display data
   React.useEffect(() => {
-    registerItem({
-      value,
-      children: childrenRef.current,
-      icon: iconRef.current,
-    });
-    return () => unregisterItem(value);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, registerItem, unregisterItem]);
+    if (!isSelected) return;
+    setSelectedItemDisplay({ childrenRef, iconRef });
+
+    // Clean up functions only need to return for items which are selected.
+    return () => setSelectedItemDisplay(null);
+  }, [isSelected]);
 
   return (
     <SelectPrimitive.Item
