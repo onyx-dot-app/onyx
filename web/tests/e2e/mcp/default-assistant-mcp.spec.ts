@@ -492,11 +492,8 @@ test.describe("Default Assistant MCP Integration", () => {
     await expect(firstToolCheckboxAfter).toBeVisible({ timeout: 5000 });
     const finalChecked =
       await firstToolCheckboxAfter.getAttribute("aria-checked");
-    expect(Boolean(finalChecked)).toBe(!Boolean(initialChecked));
-
-    console.log(
-      `[test] Tool state persisted across page reload (${initialChecked} -> ${finalChecked})`
-    );
+    console.log(`[test] Final tool state: ${finalChecked}`);
+    expect(Boolean(finalChecked)).toEqual(!Boolean(initialChecked));
   });
 
   test("Instructions persist when saving default assistant", async ({
