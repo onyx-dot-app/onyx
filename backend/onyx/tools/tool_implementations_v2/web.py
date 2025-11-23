@@ -7,10 +7,10 @@ from pydantic import TypeAdapter
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import FetchedDocumentCacheEntry
+from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.server.query_and_chat.streaming_models import OpenUrl
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import SavedSearchDoc
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import re
 
-from backend.onyx.chat.temp_translation import SectionEnd
 from sqlalchemy.orm import Session
 
+from onyx.chat.temp_translation import SectionEnd
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_db_search_doc_by_document_id
