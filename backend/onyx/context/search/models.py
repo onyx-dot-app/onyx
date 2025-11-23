@@ -337,6 +337,7 @@ class SearchDoc(BaseModel):
     semantic_identifier: str
     link: str | None = None
     blurb: str
+    content: str | None = None
     source_type: DocumentSource
     boost: int
     # Whether the document is hidden when doing a standard search
@@ -379,6 +380,9 @@ class SearchDoc(BaseModel):
                 semantic_identifier=chunk.semantic_identifier or "Unknown",
                 link=chunk.source_links[0] if chunk.source_links else None,
                 blurb=chunk.blurb,
+                content=(
+                    item.combined_content if isinstance(item, InferenceSection) else None
+                ),
                 source_type=chunk.source_type,
                 boost=chunk.boost,
                 hidden=chunk.hidden,
