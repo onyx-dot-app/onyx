@@ -168,6 +168,11 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
 
     const registerItem = React.useCallback((item: ItemRegistration) => {
       setItems((prev) => {
+        // Skip update if item is already registered (prevents infinite loops
+        // when children is a React element with unstable reference)
+        if (prev.has(item.value)) {
+          return prev;
+        }
         const next = new Map(prev);
         next.set(item.value, item);
         return next;
