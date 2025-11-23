@@ -19,7 +19,7 @@ def _build_group_member_email_map(
 ) -> dict[str, set[str]]:
     group_member_emails: dict[str, set[str]] = {}
     for user in confluence_client.paginated_cql_user_retrieval():
-        logger.debug(f"Processing groups for user: {user}")
+        logger.info(f"Processing groups for user: {user}")
 
         email = user.email
         if not email:
@@ -31,6 +31,8 @@ def _build_group_member_email_map(
                     confluence_client=confluence_client,
                     user_name=user_name,
                 )
+            else:
+                logger.error(f"user result missing username field: {user}")
 
         if not email:
             # If we still don't have an email, skip this user
@@ -54,7 +56,7 @@ def _build_group_member_email_map(
             emit_background_error(msg, cc_pair_id=cc_pair_id)
             logger.error(msg)
         else:
-            logger.debug(f"Found groups {all_users_groups} for user with email {email}")
+            logger.info(f"Found groups {all_users_groups} for user with email {email}")
 
     if not group_member_emails:
         msg = "No groups found for any users."

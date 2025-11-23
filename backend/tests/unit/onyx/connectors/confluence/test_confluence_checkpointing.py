@@ -318,6 +318,29 @@ def test_retrieve_all_slim_docs_perm_sync(
         MagicMock(json=lambda: {"results": []}),
     ]
 
+    confluence_client.get_space = MagicMock(
+        return_value={
+            "permissions": [
+                {"subjects": {"user": {"results": [{"email": "test@example.com"}]}}}
+            ]
+        }
+    )
+
+    confluence_client.get_mobile_parameters = MagicMock(
+        # real response
+        return_value={
+            "userName": "admin",
+            "fullName": "Admin Test",
+            "avatarUrl": "/images/icons/profilepics/default.svg",
+            "url": "/display/~admin",
+            "email": "admin@onyx-test.com",
+            "userPreferences": {"watchOwnContent": True},
+            "unknownUser": False,
+            "about": "",
+            "anonymous": False,
+        }
+    )
+
     # Call retrieve_all_slim_docs_perm_sync
     batches = list(confluence_connector.retrieve_all_slim_docs_perm_sync(0, 100))
     assert get_mock.call_count == 4
