@@ -168,11 +168,6 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
 
     const registerItem = React.useCallback((item: ItemRegistration) => {
       setItems((prev) => {
-        // Skip update if item is already registered (prevents infinite loops
-        // when children is a React element with unstable reference)
-        if (prev.has(item.value)) {
-          return prev;
-        }
         const next = new Map(prev);
         next.set(item.value, item);
         return next;
@@ -392,11 +387,23 @@ const InputSelectItem = React.forwardRef<
     useInputSelectContext();
   const isSelected = value === currentValue;
 
+  // Use refs to capture latest children/icon without triggering effect re-runs
+  const childrenRef = React.useRef(children);
+  const iconRef = React.useRef(icon);
+  childrenRef.current = children;
+  iconRef.current = icon;
+
   // Register this item so the trigger can display it when selected
+  // Only re-register when value changes to avoid infinite loops with unstable children references
   React.useEffect(() => {
-    registerItem({ value, children, icon });
+    registerItem({
+      value,
+      children: childrenRef.current,
+      icon: iconRef.current,
+    });
     return () => unregisterItem(value);
-  }, [value, children, icon, registerItem, unregisterItem]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, registerItem, unregisterItem]);
 
   return (
     <SelectPrimitive.Item
