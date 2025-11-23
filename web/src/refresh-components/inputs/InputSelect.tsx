@@ -241,7 +241,7 @@ const InputSelectTrigger = React.forwardRef<
       className={cn(
         "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08 focus:outline-none",
         wrapperClasses[variant],
-        "data-[state=open]:border-border-05",
+        variant === "main" && "data-[state=open]:border-border-05",
         className
       )}
       {...props}
