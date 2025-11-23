@@ -97,6 +97,9 @@ from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.question_qualification import (
+    QuestionQualificationService,
+)
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import MessageDelta
@@ -376,6 +379,29 @@ def stream_chat_message_objects(
         reference_doc_ids = new_msg_req.search_doc_ids
         retrieval_options = new_msg_req.retrieval_options
         new_msg_req.alternate_assistant_id
+
+        # Question Qualification Check - Block sensitive questions early
+        if message_text and not use_existing_user_message:
+            try:
+                qualification_service = QuestionQualificationService()
+                qualification_result = qualification_service.qualify_question(
+                    message_text, db_session
+                )
+
+                if qualification_result.is_blocked:
+                    logger.info(
+                        f"Question blocked by qualification service: "
+                        f"confidence={qualification_result.similarity_score:.3f}, "
+                        f"matched_index={qualification_result.matched_question_index}"
+                    )
+
+                    # Return error immediately - don't create chat messages
+                    yield StreamingError(error=qualification_result.standard_response)
+                    return  # Exit early, question is blocked
+
+            except Exception as e:
+                logger.warning(f"Question qualification check failed: {e}")
+                # Continue with normal processing if qualification fails
 
         # permanent "log" store, used primarily for debugging
         long_term_logger = LongTermLogger(

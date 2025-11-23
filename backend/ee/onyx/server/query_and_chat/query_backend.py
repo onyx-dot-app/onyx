@@ -40,6 +40,9 @@ from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.server.query_and_chat.question_qualification import (
+    QuestionQualificationService,
+)
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
@@ -201,6 +204,25 @@ def get_answer_stream(
     query = query_request.messages[0].message
     logger.notice(f"Received query for Answer API: {query}")
 
+    # Question Qualification Check - Block sensitive questions early
+    try:
+        qualification_service = QuestionQualificationService()
+        qualification_result = qualification_service.qualify_question(query, db_session)
+
+        if qualification_result.is_blocked:
+            logger.info(f"One-shot query blocked by qualification service: {query}")
+
+            # Return HTTP error immediately
+            raise HTTPException(
+                status_code=403, detail=qualification_result.standard_response
+            )
+
+    except HTTPException:
+        raise  # Re-raise HTTPException
+    except Exception as e:
+        logger.warning(f"Question qualification check failed for one-shot query: {e}")
+        # Continue with normal processing if qualification fails
+
     if (
         query_request.persona_override_config is None
         and query_request.persona_id is None
@@ -288,6 +310,8 @@ def get_answer_with_citation(
                 recency_bias_multiplier=0.0,
             ),
         )
+    except HTTPException:
+        raise  # Re-raise HTTPException to preserve status code (e.g., 403 for blocked queries)
     except Exception as e:
         logger.error(f"Error in get_answer_with_citation: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal server error occurred")
@@ -299,9 +323,15 @@ def stream_answer_with_citation(
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
 ) -> StreamingResponse:
+    # Catch HTTPException before creating StreamingResponse to preserve status code
+    try:
+        answer_stream = get_answer_stream(request, user, db_session)
+    except HTTPException:
+        raise  # Re-raise HTTPException to preserve status code (e.g., 403 for blocked queries)
+
     def stream_generator() -> Generator[str, None, None]:
         try:
-            for packet in get_answer_stream(request, user, db_session):
+            for packet in answer_stream:
                 serialized = get_json_line(packet.model_dump())
                 yield serialized
         except Exception as e:
