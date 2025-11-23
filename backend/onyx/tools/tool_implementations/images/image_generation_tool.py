@@ -34,18 +34,15 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
-IMAGE_GENERATION_TOOL_NAME = "image_generation"
 # Heartbeat interval in seconds to prevent timeouts
 HEARTBEAT_INTERVAL = 5.0
 
 
 # override_kwargs is not supported for image generation tools
 class ImageGenerationTool(Tool[None]):
-    _NAME = IMAGE_GENERATION_TOOL_NAME
-    _DESCRIPTION = (
-        "NEVER use generate_image unless the user specifically requests an image."
-    )
-    _DISPLAY_NAME = "Image Generation"
+    NAME = "generate_image"
+    DESCRIPTION = "Generate an image based on a prompt. Do not use unless the user specifically requests an image."
+    DISPLAY_NAME = "Image Generation"
 
     def __init__(
         self,
@@ -74,15 +71,15 @@ class ImageGenerationTool(Tool[None]):
 
     @property
     def name(self) -> str:
-        return self._NAME
+        return self.NAME
 
     @property
     def description(self) -> str:
-        return self._DESCRIPTION
+        return self.DESCRIPTION
 
     @property
     def display_name(self) -> str:
-        return self._DISPLAY_NAME
+        return self.DISPLAY_NAME
 
     @override
     @classmethod
@@ -126,11 +123,10 @@ class ImageGenerationTool(Tool[None]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int) -> None:
+    def emit_start(self, turn_index: int) -> None:
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                tab_index=tab_index,
                 obj=ImageGenerationToolStart(),
             )
         )
@@ -216,7 +212,6 @@ class ImageGenerationTool(Tool[None]):
     def run(
         self,
         turn_index: int,
-        tab_index: int,
         override_kwargs: None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -265,7 +260,6 @@ class ImageGenerationTool(Tool[None]):
             self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
-                    tab_index=tab_index,
                     obj=ImageGenerationToolHeartbeat(),
                 )
             )
@@ -310,7 +304,6 @@ class ImageGenerationTool(Tool[None]):
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                tab_index=tab_index,
                 obj=ImageGenerationFinal(images=generated_images),
             )
         )

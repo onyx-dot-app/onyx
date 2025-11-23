@@ -215,12 +215,10 @@ PacketObj = Union[
 
 class Packet(BaseModel):
     turn_index: int | None
-    tab_index: int | None
     obj: Annotated[PacketObj, Field(discriminator="type")]
 
 
 # This is for replaying it back from the DB to the frontend
 class EndStepPacketList(BaseModel):
     turn_index: int
-    tab_index: int
     packet_list: list[Packet]

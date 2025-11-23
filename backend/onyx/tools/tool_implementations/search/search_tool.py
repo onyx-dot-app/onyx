@@ -236,40 +236,28 @@ def _convert_inference_sections_to_llm_string(
         if chunk.updated_at:
             updated_at_str = chunk.updated_at.isoformat()
 
-        # Convert metadata to JSON string
-        metadata_str = json.dumps(chunk.metadata)
-
+        # Build result dictionary in desired order, only including non-None/empty fields
         result = {
             "citation_id": citation_id,
             "title": chunk.semantic_identifier,
-            "updated_at": updated_at_str,
-            "authors": authors,
-            "source_type": str(chunk.source_type),
-            "metadata": metadata_str,
-            "content": section.combined_content,
         }
+        if updated_at_str is not None:
+            result["updated_at"] = updated_at_str
+        if authors is not None:
+            result["authors"] = authors
+        result["source_type"] = chunk.source_type.value
+        if chunk.metadata:
+            result["metadata"] = json.dumps(chunk.metadata)
+        result["content"] = section.combined_content
         results.append(result)
 
     return json.dumps({"results": results}, indent=4), citation_mapping
 
 
-SEARCH_TOOL_DESCRIPTION = """
-Use the `internal_search` tool to search connected applications for information. Use `internal_search` when:
-- Internal information: any time where there may be some information stored in internal applications that could help better \
-answer the query.
-- Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, \
-team, process, etc.
-- Keyword Queries: queries that are heavily keyword based are often internal document search queries.
-- Ambiguity: questions about something that is not widely known or understood.
-Between internal and web search, think about if the user's query is likely better answered by team internal sources or online \
-web pages. If very ambiguious, prioritize internal search or call both tools.
-"""
-
-
 class SearchTool(Tool[SearchToolOverrideKwargs]):
-    _NAME = "internal_search"
-    _DISPLAY_NAME = "Internal Search"
-    _DESCRIPTION = SEARCH_TOOL_DESCRIPTION
+    NAME = "internal_search"
+    DISPLAY_NAME = "Internal Search"
+    DESCRIPTION = "Search connected applications for information."
 
     def __init__(
         self,
@@ -372,15 +360,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     @property
     def name(self) -> str:
-        return self._NAME
+        return self.NAME
 
     @property
     def description(self) -> str:
-        return self._DESCRIPTION
+        return self.DESCRIPTION
 
     @property
     def display_name(self) -> str:
-        return self._DISPLAY_NAME
+        return self.DISPLAY_NAME
 
     """For explicit tool calling"""
 
@@ -403,11 +391,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int) -> None:
+    def emit_start(self, turn_index: int) -> None:
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                tab_index=tab_index,
                 obj=SearchToolStart(),
             )
         )
@@ -416,7 +403,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     def run(
         self,
         turn_index: int,
-        tab_index: int,
         override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -500,7 +486,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
-                    tab_index=tab_index,
                     obj=SearchToolQueriesDelta(
                         queries=all_queries,
                     ),
@@ -555,16 +540,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 top_sections, is_internet=False
             )
 
-            # Emit the documents
-            self.emitter.emit(
-                Packet(
-                    turn_index=turn_index,
-                    tab_index=tab_index,
-                    obj=SearchToolDocumentsDelta(
-                        documents=search_docs,
-                    ),
-                )
-            )
+            # Emit the full set of found documents, this isn't used today in the UI though
+            # self.emitter.emit(
+            #     Packet(
+            #         turn_index=turn_index,
+            #         obj=SearchToolDocumentsDelta(
+            #             documents=search_docs,
+            #         ),
+            #     )
+            # )
 
             secondary_flows_user_query = (
                 override_kwargs.original_query or semantic_query or llm_query
@@ -599,6 +583,20 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             # Create a set of best document IDs for quick lookup
             best_doc_ids_set = set(best_doc_ids) if best_doc_ids else set()
+
+            # To show the users, we only pass in the docs that are determined to be good by the LLM
+            final_ui_docs = convert_inference_sections_to_search_docs(
+                selected_sections, is_internet=False
+            )
+
+            self.emitter.emit(
+                Packet(
+                    turn_index=turn_index,
+                    obj=SearchToolDocumentsDelta(
+                        documents=final_ui_docs,
+                    ),
+                )
+            )
 
             # Create wrapper function to handle errors gracefully
             def expand_section_safe(
@@ -656,6 +654,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 limit=override_kwargs.max_llm_chunks,
             )
 
+            # TODO: extension - this can include the smaller set of approved docs to be saved/displayed in the UI
+            # for replaying. Currently the full set is returned and saved.
             return ToolResponse(
                 # Typically the rich response will give more docs in case it needs to be displayed in the UI
                 rich_response=SearchDocsResponse(

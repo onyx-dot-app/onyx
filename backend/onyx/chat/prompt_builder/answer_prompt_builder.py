@@ -12,7 +12,6 @@ from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.message_types import SystemMessage
 from onyx.llm.message_types import UserMessage
-from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
 from onyx.prompts.chat_prompts import CITATION_REMINDER
@@ -26,10 +25,10 @@ from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
 from onyx.prompts.chat_prompts import TOOL_PERSISTENCE_PROMPT
 from onyx.prompts.chat_prompts import TOOL_SECTION_HEADER
+from onyx.prompts.chat_prompts import USER_INFO_HEADER
 from onyx.prompts.chat_prompts import WEB_SEARCH_GUIDANCE
 from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
-from onyx.prompts.prompt_utils import handle_company_awareness
-from onyx.prompts.prompt_utils import handle_memories
+from onyx.prompts.prompt_utils import get_company_context
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
@@ -144,14 +143,38 @@ def build_system_prompt(
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
     """
+    base_system_prompt = DEFAULT_SYSTEM_PROMPT  # TODO remove this
+
     # See https://simonwillison.net/tags/markdown/ for context on why this is needed
     # for OpenAI reasoning models to have correct markdown generation
     if open_ai_formatting_enabled:
         system_prompt = CODE_BLOCK_MARKDOWN + base_system_prompt
 
     system_prompt = handle_onyx_date_awareness(base_system_prompt, datetime_aware)
-    system_prompt = handle_company_awareness(system_prompt)
-    system_prompt = handle_memories(system_prompt, memories)
+    try:
+        citation_guidance = (
+            REQUIRE_CITATION_GUIDANCE
+            if should_cite_documents or include_all_guidance
+            else ""
+        )
+        system_prompt = system_prompt.format(
+            citation_reminder_or_empty=citation_guidance
+        )
+    except Exception:
+        # Even if the prompt is modified and there is not an explicit spot for citations, always require it
+        # This is more a product decision as it's likely better to always enforce citations
+        if should_cite_documents or include_all_guidance:
+            system_prompt += REQUIRE_CITATION_GUIDANCE
+
+    company_context = get_company_context()
+    if company_context or memories:
+        system_prompt += USER_INFO_HEADER
+        if company_context:
+            system_prompt += company_context
+        if memories:
+            system_prompt += "\n".join(
+                memory.strip() for memory in memories if memory.strip()
+            )
 
     if should_cite_documents or include_all_guidance:
         system_prompt += REQUIRE_CITATION_GUIDANCE
@@ -181,6 +204,7 @@ def build_system_prompt(
         if has_web_search or has_internal_search or include_all_guidance:
             system_prompt += TOOL_DESCRIPTION_SEARCH_GUIDANCE
 
+        # These are not included at the Tool level because the ordering may matter.
         if has_internal_search or include_all_guidance:
             system_prompt += INTERNAL_SEARCH_GUIDANCE
 
@@ -217,10 +241,10 @@ def default_build_system_message_v2(
         datetime_aware=prompt_config.datetime_aware,
     )
 
-    tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
+    # tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
 
-    if memories:
-        tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
+    # if memories:
+    #     tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
 
     if tools:
         tag_handled_prompt += "\n\n# Tools\n"
@@ -302,10 +326,10 @@ def default_build_system_message(
     if not tag_handled_prompt:
         return None
 
-    tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
+    # tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
 
-    if memories:
-        tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
+    # if memories:
+    #     tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
 
     return SystemMessage(role="system", content=tag_handled_prompt)
 
@@ -333,16 +357,10 @@ def default_build_user_message(
     )
 
     user_prompt = user_prompt.strip()
-    tag_handled_prompt = handle_onyx_date_awareness(
-        user_prompt, prompt_config.datetime_aware
-    )
-    user_msg = UserMessage(
-        content=(
-            build_content_with_imgs(tag_handled_prompt, files)
-            if files
-            else tag_handled_prompt
-        )
-    )
+    # tag_handled_prompt = handle_onyx_date_awareness(
+    #     user_prompt, prompt_config.datetime_aware
+    # )
+    user_msg = UserMessage(content="N/A")
     return user_msg
 
 

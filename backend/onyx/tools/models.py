@@ -13,6 +13,7 @@ from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import IndexFilters
+from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 
@@ -138,14 +139,13 @@ class CustomToolRunContext(BaseModel):
 class ToolCallInfo(BaseModel):
     parent_tool_call_id: str | None  # None if attached to the Chat Message directly
     turn_index: int
-    tab_index: int
-    tool_id: int  # DB tool type id
+    tool_name: str
     tool_call_id: str
+    tool_id: int
     reasoning_tokens: str | None
     tool_call_arguments: dict[str, Any]
-    tool_call_response: (
-        Any  # we would like to use JSON_ro, but can't due to its recursive nature
-    )
+    tool_call_response: str
+    search_docs: list[SearchDoc] | None = None
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

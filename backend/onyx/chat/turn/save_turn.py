@@ -34,10 +34,8 @@ def _create_and_link_tool_calls(
     2. Flushing to get DB IDs
     3. Building mappings and updating parent references
 
-    Note: Depth is now passed in via tool_call_info.tab_index and does not need to be calculated.
-
     Args:
-        tool_calls: List of tool call information to create (tab_index is expected to be set)
+        tool_calls: List of tool call information to create
         assistant_message: The ChatMessage these tool calls belong to
         db_session: Database session
         default_tokenizer: Tokenizer for calculating token counts
@@ -79,7 +77,6 @@ def _create_and_link_tool_calls(
             tool_call_tokens=tool_call_tokens,
             db_session=db_session,
             parent_tool_call_id=None,  # Will be updated after flush
-            depth=tool_call_info.tab_index,
             reasoning_tokens=tool_call_info.reasoning_tokens,
             add_only=True,
         )

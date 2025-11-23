@@ -34,9 +34,9 @@ DEFAULT_MAX_RESULTS = 10
 
 
 class WebSearchTool(Tool[None]):
-    _NAME = "web_search"
-    _DESCRIPTION = "Search the web for information."
-    _DISPLAY_NAME = "Web Search"
+    NAME = "web_search"
+    DESCRIPTION = "Search the web for information. Returns a list of search results with document IDs, titles, and snippets."
+    DISPLAY_NAME = "Web Search"
 
     def __init__(self, tool_id: int, emitter: Emitter) -> None:
         super().__init__(emitter=emitter)
@@ -48,15 +48,15 @@ class WebSearchTool(Tool[None]):
 
     @property
     def name(self) -> str:
-        return self._NAME
+        return self.NAME
 
     @property
     def description(self) -> str:
-        return self._DESCRIPTION
+        return self.DESCRIPTION
 
     @property
     def display_name(self) -> str:
-        return self._DISPLAY_NAME
+        return self.DISPLAY_NAME
 
     @override
     @classmethod
@@ -77,7 +77,7 @@ class WebSearchTool(Tool[None]):
                     "properties": {
                         QUERY_FIELD: {
                             "type": "string",
-                            "description": "What to search for",
+                            "description": "The search query to look up on the web.",
                         },
                     },
                     "required": [QUERY_FIELD],
@@ -85,11 +85,10 @@ class WebSearchTool(Tool[None]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int) -> None:
+    def emit_start(self, turn_index: int) -> None:
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                tab_index=tab_index,
                 obj=SearchToolStart(is_internet_search=True),
             )
         )
@@ -97,7 +96,6 @@ class WebSearchTool(Tool[None]):
     def run(
         self,
         turn_index: int,
-        tab_index: int,
         override_kwargs: None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -160,7 +158,6 @@ class WebSearchTool(Tool[None]):
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                tab_index=tab_index,
                 obj=SearchToolQueriesDelta(queries=queries),
             )
         )
@@ -194,7 +191,6 @@ class WebSearchTool(Tool[None]):
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                tab_index=tab_index,
                 obj=SearchToolDocumentsDelta(documents=search_docs),
             )
         )

@@ -3,39 +3,71 @@ from pydantic import BaseModel
 from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.prompts.constants import QUESTION_PAT
 
+# ruff: noqa: E501, W605 start
 
+# Note this uses a string pattern replacement so the user can also include it in their custom prompts. Keeps the replacement logic simple
+# This is editable by the user in the admin UI.
+DEFAULT_SYSTEM_PROMPT = """
+You are a highly capable, thoughtful, and precise assistant. Your goal is to deeply understand the user's intent, ask clarifying questions when needed, think step-by-step through complex problems, provide clear and accurate answers, and proactively anticipate helpful follow-up information. Always prioritize being truthful, nuanced, insightful, and efficient.
+
+The current date is [[CURRENT_DATETIME]].{citation_reminder_or_empty}
+
+# Response Style
+You use different text styles, bolding, emojis (sparingly), block quotes, and other formatting to make your responses more readable and engaging.
+You use proper Markdown and LaTeX to format your responses for math, scientific, and chemical formulas, symbols, etc.: '$$\\n[expression]\\n$$' for standalone cases and '\\( [expression] \\)' when inline.
+For code you prefer to use Markdown and specify the language.
+You can use horizontal rules (---) to separate sections of your responses.
+You can use Markdown tables to format your responses for data, lists, and other structured information.
+""".lstrip()
+
+
+# Section for information about the user if provided such as their name, role, memories, etc.
+USER_INFO_HEADER = "\n\n# User Information\n"
+
+COMPANY_NAME_BLOCK = """
+The user is at an organization called `{company_name}`.
+"""
+
+COMPANY_DESCRIPTION_BLOCK = """
+Organization description: {company_description}
+"""
+
+# This is added to the system prompt prior to the tools section and is applied only if search tools have been run
+REQUIRE_CITATION_GUIDANCE = """
+
+CRITICAL: If referencing knowledge from searches, cite relevant statements INLINE using the format [1], [2], [3], etc. to reference the citation_id. \
+DO NOT provide any links following the citations. Avoid using double brackets like [[1]]. To cite multiple documents, use [1], [2] format instead of [1, 2]. \
+Cite inline as opposed to leaving all citations until the very end of the response.
+"""
+
+
+# If there are any tools, this section is included, the sections below are for the available tools
 TOOL_SECTION_HEADER = "\n\n# Tools\n"
 
 
+# This section is included if there are search type tools, currently internal_search and web_search
 TOOL_DESCRIPTION_SEARCH_GUIDANCE = """
-When using any search type tool, do not make any assumptions and stay as faithful to the user's query as possible. \
-Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. \
-If very ambiguious, prioritize internal search or call both tools.
-
-When searching for information, if the initial results cannot fully answer the user's query, try again with different tools or arguments. \
-For knowledge that you already have and that is unlikely to change, answer the user directly without using any tools.
-
+When using any search type tool, do not make any assumptions and stay as faithful to the user's query as possible. Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. If ambiguious, prioritize internal search.
 For queries that are short phrases, ambiguous/unclear, or keyword heavy, prioritize internal search.
+When searching for information, if the initial results cannot fully answer the user's query, try again with different tools or arguments. For knowledge that you already have and that is unlikely to change, answer the user directly without using any tools.
 """
 
 
 INTERNAL_SEARCH_GUIDANCE = """
 
 ## internal_search
-Use the `internal_search` tool to search connected applications for information. Use `internal_search` when:
+Use the `internal_search` tool to search connected applications for information. Some examples of when to use `internal_search` include:
 - Internal information: any time where there may be some information stored in internal applications that could help better answer the query.
 - Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, team, process, etc.
 - Keyword Queries: queries that are heavily keyword based are often internal document search queries.
 - Ambiguity: questions about something that is not widely known or understood.
-Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. \
-If very ambiguious, prioritize internal search or call both tools.
 """
 
 
 WEB_SEARCH_GUIDANCE = """
 
 ## web_search
-Use the `web_search` tool to access up-to-date information from the web. Some examples of when to use the `web_search` tool include:
+Use the `web_search` tool to access up-to-date information from the web. Some examples of when to use `web_search` include:
 - Freshness: if up-to-date information on a topic could change or enhance the answer. Very important for topics that are changing or evolving.
 - Niche Information: detailed info not widely known or understood (but that is likely found on the internet).
 - Accuracy: if the cost of outdated information is high, use web sources directly.
@@ -47,7 +79,7 @@ OPEN_URLS_GUIDANCE = """
 ## open_urls
 Use the `open_urls` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches.
 You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources.
-You should almost always use open_urls after a web_search call.
+You should almost always use open_urls after a web_search call. Use this tool when a user asks about a specific provided URL.
 """
 
 GENERATE_IMAGE_GUIDANCE = """
@@ -57,18 +89,13 @@ NEVER use generate_image unless the user specifically requests an image.
 """
 
 
-REQUIRE_CITATION_GUIDANCE = """
-
-CRITICAL: If referencing knowledge from searches, cite relevant statements INLINE using the format [1], [2], [3], etc. to reference the document_id. \
-DO NOT provide any links following the citations. Avoid using double brackets like [[1]]. To cite multiple documents, use [1], [2] format instead of [1, 2]. \
-Cite inline as opposed to leaving all citations until the very end of the response.
-"""
-
-
+# Reminder message if any search tool has been run anytime in the chat turn
 CITATION_REMINDER = """
-Remember to provide inline citations in the format [1], [2], [3], etc.
+Remember to provide inline citations in the format [1], [2], [3], etc. based on the citation_id of the documents.
 """.strip()
 
+
+# Reminder message that replaces the usual reminder if web_search was the last tool call
 OPEN_URL_REMINDER = """
 Remember that after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
 Open the pages that look the most promising and high quality by calling the open_urls tool with an array of URLs.
@@ -76,6 +103,17 @@ Open the pages that look the most promising and high quality by calling the open
 Do not acknowledge this hint in your response.
 """.strip()
 
+
+# Specifically for OpenAI models, this prefix needs to be in place for the model to output markdown and correct styling
+CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
+
+# ruff: noqa: E501, W605 end
+
+
+"""
+THE PROMPTS BELOW ARE NO LONGER USED AND SHOULD BE REMOVED
+"""
+# TODO the prompts below should be removed
 PROJECT_INSTRUCTIONS_SEPARATOR = (
     "\n\n[[USER-PROVIDED INSTRUCTIONS — allowed to override default prompt guidance, "
     "but only for style, formatting, and context]]\n"
@@ -89,7 +127,7 @@ This is added to the end of the person’s message. Behave in accordance with th
 if they are relevant, and continue normally if they are not.
 """
 
-INTERNAL_SEARCH_GUIDANCE = """
+INTERNAL_SEARCH_GUIDANCE_OLD = """
 For queries that are short phrases, ambiguous/unclear, or keyword heavy, prioritize internal search.
 """.strip()
 
@@ -97,19 +135,6 @@ INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE = """
 Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. \
 If very ambiguious, prioritize internal search or call both tools.
 """.strip()
-
-# ruff: noqa: E501, W605 start
-DEFAULT_SYSTEM_PROMPT = """
-You are a highly capable, thoughtful, and precise assistant. Your goal is to deeply understand the user's intent, ask clarifying questions when needed, think step-by-step through complex problems, provide clear and accurate answers, and proactively anticipate helpful follow-up information. Always prioritize being truthful, nuanced, insightful, and efficient.
-The current date is [[CURRENT_DATETIME]]
-
-You use different text styles, bolding, emojis (sparingly), block quotes, and other formatting to make your responses more readable and engaging.
-You use proper Markdown and LaTeX to format your responses for math, scientific, and chemical formulas, symbols, etc.: '$$\\n[expression]\\n$$' for standalone cases and '\( [expression] \)' when inline.
-For code you prefer to use Markdown and specify the language.
-You can use Markdown horizontal rules (---) to separate sections of your responses.
-You can use Markdown tables to format your responses for data, lists, and other structured information.
-"""
-# ruff: noqa: E501, W605 end
 
 TOOL_PERSISTENCE_PROMPT = """
 You are an agent with the following tools. Please keep going until the user's query is
@@ -123,8 +148,6 @@ The user has provided the following instructions, these are VERY IMPORTANT and m
 """
 
 ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
-
-CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
 
 CHAT_USER_PROMPT = f"""
 Refer to the following context documents when responding to me.{{optional_ignore_statement}}

@@ -515,6 +515,26 @@ def add_search_docs_to_chat_message(
         db_session.add(chat_message_search_doc)
 
 
+def add_search_docs_to_tool_call(
+    tool_call_id: int, search_doc_ids: list[int], db_session: Session
+) -> None:
+    """
+    Link SearchDocs to a ToolCall by creating entries in the tool_call__search_doc junction table.
+
+    Args:
+        tool_call_id: The ID of the tool call
+        search_doc_ids: List of search document IDs to link
+        db_session: The database session
+    """
+    from onyx.db.models import ToolCall__SearchDoc
+
+    for search_doc_id in search_doc_ids:
+        tool_call_search_doc = ToolCall__SearchDoc(
+            tool_call_id=tool_call_id, search_doc_id=search_doc_id
+        )
+        db_session.add(tool_call_search_doc)
+
+
 def get_chat_messages_by_session(
     chat_session_id: UUID,
     user_id: UUID | None,

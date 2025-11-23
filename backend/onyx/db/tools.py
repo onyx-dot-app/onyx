@@ -178,7 +178,6 @@ def create_tool_call_no_commit(
     db_session: Session,
     *,
     parent_tool_call_id: int | None = None,
-    depth: int = -1,
     reasoning_tokens: str | None = None,
     add_only: bool = True,
 ) -> ToolCall:
@@ -196,7 +195,6 @@ def create_tool_call_no_commit(
         tool_call_tokens: The number of tokens in the tool call arguments
         db_session: The database session
         parent_tool_call_id: Optional parent tool call ID (for nested tool calls)
-        depth: The depth in the tool call tree (default -1, should be calculated after parent references are set)
         reasoning_tokens: Optional reasoning tokens
         commit: If True, commit the transaction; if False, flush only
 
@@ -208,7 +206,6 @@ def create_tool_call_no_commit(
         parent_chat_message_id=parent_chat_message_id,
         parent_tool_call_id=parent_tool_call_id,
         turn_number=turn_number,
-        depth=depth,
         tool_id=tool_id,
         tool_call_id=tool_call_id,
         reasoning_tokens=reasoning_tokens,

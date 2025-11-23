@@ -76,6 +76,9 @@ def run_tool_calls(
     for tool_call in tool_calls:
         tool = tools_by_name[tool_call.tool_name]
 
+        # Emit the tool start packet before running the tool
+        tool.emit_start(turn_index=turn_index)
+
         run_context = SearchToolRunContext(emitter=emitter)
         override_kwargs = None
 
@@ -106,7 +109,6 @@ def run_tool_calls(
         tool_response = tool.run(
             run_context=run_context,
             turn_index=turn_index,
-            tab_index=0,
             override_kwargs=override_kwargs,
             **tool_call.tool_args,
         )

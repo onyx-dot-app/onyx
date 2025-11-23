@@ -84,11 +84,10 @@ class MCPTool(Tool[None]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int) -> None:
+    def emit_start(self, turn_index: int) -> None:
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                tab_index=tab_index,
                 obj=CustomToolStart(tool_name=self._name),
             )
         )
@@ -96,7 +95,6 @@ class MCPTool(Tool[None]):
     def run(
         self,
         turn_index: int,
-        tab_index: int,
         override_kwargs: None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -135,7 +133,6 @@ class MCPTool(Tool[None]):
                 self.emitter.emit(
                     Packet(
                         turn_index=turn_index,
-                        tab_index=tab_index,
                         obj=CustomToolDelta(
                             tool_name=self._name,
                             response_type="json",
@@ -171,7 +168,6 @@ class MCPTool(Tool[None]):
             self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
-                    tab_index=tab_index,
                     obj=CustomToolDelta(
                         tool_name=self._name,
                         response_type="json",
@@ -226,7 +222,6 @@ class MCPTool(Tool[None]):
             self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
-                    tab_index=tab_index,
                     obj=CustomToolDelta(
                         tool_name=self._name,
                         response_type="json",

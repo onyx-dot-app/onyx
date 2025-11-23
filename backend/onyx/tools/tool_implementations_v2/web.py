@@ -48,7 +48,6 @@ def _web_search_core(
     run_context.context.run_dependencies.emitter.emit(
         Packet(
             turn_index=index,
-            tab_index=None,
             obj=SearchToolStart(type="search_tool_start", is_internet_search=True),
         )
     )
@@ -57,7 +56,6 @@ def _web_search_core(
     run_context.context.run_dependencies.emitter.emit(
         Packet(
             turn_index=index,
-            tab_index=None,
             obj=SearchToolQueriesDelta(
                 queries=queries,
             ),
@@ -90,7 +88,6 @@ def _web_search_core(
     run_context.context.run_dependencies.emitter.emit(
         Packet(
             turn_index=index,
-            tab_index=0,
             obj=SearchToolDocumentsDelta(
                 documents=saved_search_docs,
             ),
@@ -164,7 +161,6 @@ def _open_url_core(
     run_context.context.run_dependencies.emitter.emit(
         Packet(
             turn_index=index,
-            tab_index=None,
             obj=OpenUrl(documents=saved_search_docs),
         )
     )

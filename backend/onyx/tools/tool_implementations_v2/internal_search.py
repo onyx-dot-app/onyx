@@ -33,16 +33,14 @@ def _internal_search_core(
     search_tool: SearchTool,
 ) -> list[LlmInternalSearchResult]:
     """Core internal search logic that can be tested with dependency injection"""
-    # Use current_run_step as tab_index, and 0 as turn_index (since we don't have turn_index in context)
-    # In practice, turn_index would come from the chat turn, but for now we use 0
+    # Use current_run_step as turn_index (since we don't have turn_index in context)
+    # In practice, turn_index would come from the chat turn, but for now we use current_run_step
     turn_index = run_context.context.current_run_step
-    tab_index = None
 
     # Emit SearchToolStart packet
     run_context.context.run_dependencies.emitter.emit(
         Packet(
             turn_index=turn_index,
-            tab_index=tab_index,
             obj=SearchToolStart(is_internet_search=False),
         )
     )
@@ -51,7 +49,6 @@ def _internal_search_core(
     run_context.context.run_dependencies.emitter.emit(
         Packet(
             turn_index=turn_index,
-            tab_index=tab_index,
             obj=SearchToolQueriesDelta(queries=queries),
         )
     )
@@ -108,7 +105,6 @@ def _internal_search_core(
             run_context.context.run_dependencies.emitter.emit(
                 Packet(
                     turn_index=turn_index,
-                    tab_index=tab_index,
                     obj=SearchToolDocumentsDelta(
                         documents=convert_inference_sections_to_search_docs(
                             retrieved_sections, is_internet=False
@@ -175,7 +171,6 @@ def _internal_search_core(
     run_context.context.run_dependencies.emitter.emit(
         Packet(
             turn_index=turn_index,
-            tab_index=tab_index,
             obj=SearchToolDocumentsDelta(
                 documents=convert_inference_sections_to_search_docs(
                     pruned_sections, is_internet=False

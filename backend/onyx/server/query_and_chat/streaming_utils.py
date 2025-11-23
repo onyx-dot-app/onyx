@@ -65,7 +65,6 @@ def create_message_packets(
     message_text: str,
     final_documents: list[SavedSearchDoc] | None,
     turn_index: int,
-    tab_index: int,
     is_legacy_agentic: bool = False,
 ) -> list[Packet]:
     packets: list[Packet] = []
@@ -73,7 +72,6 @@ def create_message_packets(
     packets.append(
         Packet(
             turn_index=turn_index,
-            tab_index=tab_index,
             obj=AgentResponseStart(
                 final_documents=final_documents,
             ),
@@ -95,7 +93,6 @@ def create_message_packets(
     packets.append(
         Packet(
             turn_index=turn_index,
-            tab_index=tab_index,
             obj=AgentResponseDelta(
                 content=adjusted_message_text,
             ),
@@ -105,7 +102,6 @@ def create_message_packets(
     packets.append(
         Packet(
             turn_index=turn_index,
-            tab_index=tab_index,
             obj=SectionEnd(),
         )
     )
@@ -114,7 +110,7 @@ def create_message_packets(
 
 
 def create_citation_packets(
-    citation_info_list: list[CitationInfo], turn_index: int, tab_index: int
+    citation_info_list: list[CitationInfo], turn_index: int
 ) -> list[Packet]:
     packets: list[Packet] = []
 
@@ -123,49 +119,42 @@ def create_citation_packets(
         packets.append(
             Packet(
                 turn_index=turn_index,
-                tab_index=tab_index,
                 obj=citation_info,
             )
         )
 
-    packets.append(Packet(turn_index=turn_index, tab_index=tab_index, obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
 
 
-def create_reasoning_packets(
-    reasoning_text: str, turn_index: int, tab_index: int
-) -> list[Packet]:
+def create_reasoning_packets(reasoning_text: str, turn_index: int) -> list[Packet]:
     packets: list[Packet] = []
 
-    packets.append(
-        Packet(turn_index=turn_index, tab_index=tab_index, obj=ReasoningStart())
-    )
+    packets.append(Packet(turn_index=turn_index, obj=ReasoningStart()))
 
     packets.append(
         Packet(
             turn_index=turn_index,
-            tab_index=tab_index,
             obj=ReasoningDelta(
                 reasoning=reasoning_text,
             ),
         ),
     )
 
-    packets.append(Packet(turn_index=turn_index, tab_index=tab_index, obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
 
 
 def create_image_generation_packets(
-    images: list[GeneratedImage], turn_index: int, tab_index: int
+    images: list[GeneratedImage], turn_index: int
 ) -> list[Packet]:
     packets: list[Packet] = []
 
     packets.append(
         Packet(
             turn_index=turn_index,
-            tab_index=tab_index,
             obj=ImageGenerationToolStart(),
         )
     )
@@ -173,12 +162,11 @@ def create_image_generation_packets(
     packets.append(
         Packet(
             turn_index=turn_index,
-            tab_index=tab_index,
             obj=ImageGenerationFinal(images=images),
         ),
     )
 
-    packets.append(Packet(turn_index=turn_index, tab_index=tab_index, obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
 
@@ -187,7 +175,6 @@ def create_custom_tool_packets(
     tool_name: str,
     response_type: str,
     turn_index: int,
-    tab_index: int,
     data: dict | list | str | int | float | bool | None = None,
     file_ids: list[str] | None = None,
 ) -> list[Packet]:
@@ -196,7 +183,6 @@ def create_custom_tool_packets(
     packets.append(
         Packet(
             turn_index=turn_index,
-            tab_index=tab_index,
             obj=CustomToolStart(tool_name=tool_name),
         )
     )
@@ -204,7 +190,6 @@ def create_custom_tool_packets(
     packets.append(
         Packet(
             turn_index=turn_index,
-            tab_index=tab_index,
             obj=CustomToolDelta(
                 tool_name=tool_name,
                 response_type=response_type,
@@ -214,28 +199,23 @@ def create_custom_tool_packets(
         ),
     )
 
-    packets.append(Packet(turn_index=turn_index, tab_index=tab_index, obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
 
 
 def create_fetch_packets(
-    fetches: list[list[SavedSearchDoc]], turn_index: int, tab_index: int
+    fetches: list[list[SavedSearchDoc]], turn_index: int
 ) -> list[Packet]:
     packets: list[Packet] = []
-    current_depth = tab_index
     for fetch in fetches:
         packets.append(
             Packet(
                 turn_index=turn_index,
-                tab_index=current_depth,
                 obj=OpenUrl(documents=fetch),
             )
         )
-        packets.append(
-            Packet(turn_index=turn_index, tab_index=current_depth, obj=SectionEnd())
-        )
-        current_depth += 1
+        packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
     return packets
 
 
@@ -244,14 +224,12 @@ def create_search_packets(
     saved_search_docs: list[SavedSearchDoc],
     is_internet_search: bool,
     turn_index: int,
-    tab_index: int,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
     packets.append(
         Packet(
             turn_index=turn_index,
-            tab_index=tab_index,
             obj=SearchToolStart(
                 is_internet_search=is_internet_search,
             ),
@@ -263,7 +241,6 @@ def create_search_packets(
         packets.append(
             Packet(
                 turn_index=turn_index,
-                tab_index=tab_index,
                 obj=SearchToolQueriesDelta(queries=search_queries),
             ),
         )
@@ -273,12 +250,11 @@ def create_search_packets(
         packets.append(
             Packet(
                 turn_index=turn_index,
-                tab_index=tab_index,
                 obj=SearchToolDocumentsDelta(documents=saved_search_docs),
             ),
         )
 
-    packets.append(Packet(turn_index=turn_index, tab_index=tab_index, obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
 
@@ -413,7 +389,6 @@ def translate_db_message_to_packets_simple(
         #                 step_nr += 1
 
         turn_index = getattr(chat_message, "turn_index", 0)
-        tab_index = step_nr
 
         if chat_message.message:
             packet_list.extend(
@@ -424,7 +399,6 @@ def translate_db_message_to_packets_simple(
                         for doc in chat_message.search_docs
                     ],
                     turn_index=turn_index,
-                    tab_index=tab_index,
                     is_legacy_agentic=False,
                 )
             )
@@ -442,19 +416,16 @@ def translate_db_message_to_packets_simple(
                     )
 
             packet_list.extend(
-                create_search_packets([], saved_search_docs, False, turn_index, step_nr)
+                create_search_packets([], saved_search_docs, False, turn_index)
             )
 
             step_nr += 1
 
-        packet_list.extend(
-            create_citation_packets(citation_info_list, turn_index, step_nr)
-        )
+        packet_list.extend(create_citation_packets(citation_info_list, turn_index))
         step_nr += 1
 
     return EndStepPacketList(
         turn_index=getattr(chat_message, "turn_index", 0),
-        tab_index=step_nr,
         packet_list=packet_list,
     )
 
@@ -621,7 +592,6 @@ def translate_db_message_to_packets(
         #                 step_nr += 1
 
         turn_index = getattr(chat_message, "turn_index", 0)
-        tab_index = step_nr
 
         if chat_message.message:
             packet_list.extend(
@@ -632,7 +602,6 @@ def translate_db_message_to_packets(
                         for doc in chat_message.search_docs
                     ],
                     turn_index=turn_index,
-                    tab_index=tab_index,
                     is_legacy_agentic=False,
                 )
             )
@@ -650,24 +619,19 @@ def translate_db_message_to_packets(
                     )
 
             packet_list.extend(
-                create_search_packets([], saved_search_docs, False, turn_index, step_nr)
+                create_search_packets([], saved_search_docs, False, turn_index)
             )
 
             step_nr += 1
 
-        packet_list.extend(
-            create_citation_packets(citation_info_list, turn_index, step_nr)
-        )
+        packet_list.extend(create_citation_packets(citation_info_list, turn_index))
 
         step_nr += 1
 
     turn_index = getattr(chat_message, "turn_index", 0)
-    packet_list.append(
-        Packet(turn_index=turn_index, tab_index=step_nr, obj=OverallStop())
-    )
+    packet_list.append(Packet(turn_index=turn_index, obj=OverallStop()))
 
     return EndStepPacketList(
         turn_index=getattr(chat_message, "turn_index", 0),
-        tab_index=getattr(chat_message, "tab_index", step_nr),
         packet_list=packet_list,
     )

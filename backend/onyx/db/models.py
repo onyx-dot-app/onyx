@@ -445,6 +445,17 @@ class ChatMessage__SearchDoc(Base):
     )
 
 
+class ToolCall__SearchDoc(Base):
+    __tablename__ = "tool_call__search_doc"
+
+    tool_call_id: Mapped[int] = mapped_column(
+        ForeignKey("tool_call.id"), primary_key=True
+    )
+    search_doc_id: Mapped[int] = mapped_column(
+        ForeignKey("search_doc.id"), primary_key=True
+    )
+
+
 class Document__Tag(Base):
     __tablename__ = "document__tag"
 
@@ -2237,7 +2248,6 @@ class ToolCall(Base):
     # The tools with the same turn number (and parent) were called in parallel
     # Ones with different turn numbers (and same parent) were called sequentially
     turn_number: Mapped[int] = mapped_column(Integer)
-    tab_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Not a FK because we want to be able to delete the tool without deleting
     # this entry
@@ -2250,7 +2260,7 @@ class ToolCall(Base):
     # For "Agents" like the Research Agent for Deep Research -
     # the argument and final report are stored as the argument and response.
     tool_call_arguments: Mapped[dict[str, JSON_ro]] = mapped_column(postgresql.JSONB())
-    tool_call_response: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
+    tool_call_response: Mapped[str] = mapped_column(Text)
     # This just counts the number of tokens in the arg because it's all that's kept for the history
     # Only the top level tools (the ones with a parent_chat_message_id) have token counts that are counted
     # towards the session total.
@@ -2273,6 +2283,15 @@ class ToolCall(Base):
         "ToolCall",
         foreign_keys=[parent_tool_call_id],
         back_populates="parent_tool_call",
+    )
+    # Other tools may need to save other things, might need to figure out a more generic way to store
+    # rich tool returns
+    search_docs: Mapped[list["SearchDoc"]] = relationship(
+        "SearchDoc",
+        secondary=ToolCall__SearchDoc.__table__,
+        back_populates="tool_calls",
+        cascade="all, delete-orphan",
+        single_parent=True,
     )
 
 
@@ -2318,6 +2337,12 @@ class SearchDoc(Base):
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage",
         secondary=ChatMessage__SearchDoc.__table__,
+        back_populates="search_docs",
+    )
+
+    tool_calls: Mapped[list["ToolCall"]] = relationship(
+        "ToolCall",
+        secondary=ToolCall__SearchDoc.__table__,
         back_populates="search_docs",
     )
 

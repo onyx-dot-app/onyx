@@ -208,8 +208,12 @@ class DynamicCitationProcessor:
                 if self.non_citation_count > 5:
                     self.recent_cited_documents.clear()
 
-                # Process the citation (returns empty string since citation is removed)
-                citation_info_list = self._process_citation(match)
+                # Process the citation (returns formatted citation text and CitationInfo objects)
+                citation_text, citation_info_list = self._process_citation(match)
+                # Yield the formatted citation text first
+                if citation_text:
+                    yield citation_text
+                # Then yield the CitationInfo objects
                 for citation in citation_info_list:
                     yield citation
                 self.non_citation_count = 0
@@ -227,9 +231,9 @@ class DynamicCitationProcessor:
         if result:
             yield result
 
-    def _process_citation(self, match: re.Match) -> list[CitationInfo]:
+    def _process_citation(self, match: re.Match) -> tuple[str, list[CitationInfo]]:
         """
-        Process a single citation match and return citation info objects.
+        Process a single citation match and return formatted citation text and citation info objects.
 
         The match string can look like '[1]', '[1, 13, 6]', '[[4]]', '【1】', etc.
 
@@ -237,14 +241,16 @@ class DynamicCitationProcessor:
         1. Extracts citation numbers from the match
         2. Looks up the corresponding SearchDoc from the mapping
         3. Skips duplicate citations if they were recently cited
-        4. Creates CitationInfo objects for new citations
-        5. Does NOT return any text (citation markers are removed)
+        4. Creates formatted citation text like [n](link) for each citation
+        5. Creates CitationInfo objects for new citations
 
         Args:
             match: Regex match object containing the citation
 
         Returns:
-            List of CitationInfo objects
+            Tuple of (formatted_citation_text, list[CitationInfo])
+            - formatted_citation_text: Markdown-formatted citation text like [1](link) [2](link)
+            - citation_info_list: List of CitationInfo objects
         """
         citation_str: str = match.group()  # e.g., '[1]', '[1, 2, 3]', '[[1]]', '【1】'
         formatted = (
@@ -252,6 +258,7 @@ class DynamicCitationProcessor:
         )  # True means already in form '[[1]]' or '【【1】】'
 
         citation_info_list: list[CitationInfo] = []
+        formatted_citation_parts: list[str] = []
 
         # Extract citation numbers - regex ensures matched brackets, so we can simply slice
         citation_content = citation_str[2:-2] if formatted else citation_str[1:-1]
@@ -279,13 +286,17 @@ class DynamicCitationProcessor:
             # Get the SearchDoc
             search_doc = self.citation_to_doc[num]
             doc_id = search_doc.document_id
+            link = search_doc.link or ""
 
-            # Skip citations of the same work if cited recently (deduplication)
+            # Always format the citation text as [n](link)
+            formatted_citation_parts.append(f"[{num}]({link})")
+
+            # Skip creating CitationInfo for citations of the same work if cited recently (deduplication)
             if doc_id in self.recent_cited_documents:
                 continue
             self.recent_cited_documents.add(doc_id)
 
-            # Track cited documents
+            # Track cited documents and create CitationInfo only for new citations
             if doc_id not in self.cited_document_ids:
                 self.cited_document_ids.add(doc_id)
                 self.cited_documents_in_order.append(search_doc)
@@ -296,7 +307,10 @@ class DynamicCitationProcessor:
                     )
                 )
 
-        return citation_info_list
+        # Join all citation parts with spaces
+        formatted_citation_text = " ".join(formatted_citation_parts)
+
+        return formatted_citation_text, citation_info_list
 
     def get_cited_documents(self) -> list[SearchDoc]:
         """

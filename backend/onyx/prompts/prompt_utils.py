@@ -12,12 +12,12 @@ from onyx.context.search.models import InferenceChunk
 from onyx.db.models import Persona
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CITATION_REMINDER
+from onyx.prompts.chat_prompts import COMPANY_DESCRIPTION_BLOCK
+from onyx.prompts.chat_prompts import COMPANY_NAME_BLOCK
 from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_TAG_CLOSED
 from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_TAG_OPEN
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.prompts.constants import CODE_BLOCK_PAT
-from onyx.prompts.direct_qa_prompts import COMPANY_DESCRIPTION_BLOCK
-from onyx.prompts.direct_qa_prompts import COMPANY_NAME_BLOCK
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -30,11 +30,17 @@ _BASIC_TIME_STR = "The current date is {datetime_info}."
 
 
 def get_current_llm_day_time(
-    include_day_of_week: bool = True, full_sentence: bool = True
+    include_day_of_week: bool = True,
+    full_sentence: bool = True,
+    include_hour_min: bool = False,
 ) -> str:
     current_datetime = datetime.now()
-    # Format looks like: "October 16, 2023 14:30"
-    formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M")
+    # Format looks like: "October 16, 2023 14:30" if include_hour_min, otherwise "October 16, 2023"
+    formatted_datetime = (
+        current_datetime.strftime("%B %d, %Y %H:%M")
+        if include_hour_min
+        else current_datetime.strftime("%B %d, %Y")
+    )
     day_of_week = current_datetime.strftime("%A")
     if full_sentence:
         return f"The current day and time is {day_of_week} {formatted_datetime}"
@@ -94,11 +100,14 @@ def handle_onyx_date_awareness(
     return prompt_str
 
 
-def handle_company_awareness(prompt_str: str) -> str:
+def get_company_context() -> str | None:
+    prompt_str = None
     try:
         workspace_settings = load_settings()
         company_name = workspace_settings.company_name
         company_description = workspace_settings.company_description
+        if company_name or company_description:
+            prompt_str = ""
         if company_name:
             prompt_str += COMPANY_NAME_BLOCK.format(company_name=company_name)
         if company_description:
@@ -108,15 +117,7 @@ def handle_company_awareness(prompt_str: str) -> str:
         return prompt_str
     except Exception as e:
         logger.error(f"Error handling company awareness: {e}")
-        return prompt_str
-
-
-def handle_memories(prompt_str: str, memories: list[str] | None) -> str:
-    if not memories:
-        return prompt_str
-    memories_str = "\n".join(memories)
-    prompt_str += f"Information about the user asking the question:\n{memories_str}\n"
-    return prompt_str
+        return None
 
 
 def build_task_prompt_reminders(

@@ -9,7 +9,6 @@ from collections.abc import Generator
 from typing import Any
 from typing import Literal
 
-from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import BaseObj
@@ -42,13 +41,14 @@ def translate_llm_loop_packets(
 
     Args:
         packet_stream: Generator yielding packets from run_llm_loop
-        message_id: The message ID to use as 'ind' in frontend
+        message_id: The message ID (not used for ind, only for reference)
 
     Yields:
         Translated packet dictionaries ready for frontend consumption
 
     Translation notes:
         - Packet structure: {turn_index, tab_index, obj} → {ind, obj}
+        - CRITICAL: Each packet's turn_index becomes its ind (different sections use different ind values!)
         - MessageStart: Add id, content fields, preserve final_documents
         - SearchTool: search_tool_start → internal_search_tool_start
         - SearchTool: Combine queries + documents → internal_search_tool_delta
@@ -56,30 +56,30 @@ def translate_llm_loop_packets(
         - CitationInfo → Accumulate and emit as CitationStart + CitationDelta
         - Add SectionEnd packets after tool completions
     """
-    # Track search tool state to combine queries and documents
+    # Track search tool state
     search_tool_active = False
-    accumulated_queries: list[str] | None = None
-    accumulated_documents: list[SearchDoc] | None = None
+    # search_tool_turn_index: int | None = None
 
-    # Track citations to batch them
+    # Track citations to batch them (emitted AFTER message with different ind)
     accumulated_citations: list[dict[str, Any]] = []
-    citation_section_active = False
 
-    # Track reasoning state
-    # Track if we've seen AgentResponseStart but not yet the first AgentResponseDelta
-    answer_started = False
-    first_answer_delta_emitted = False
+    # Track the last seen turn_index for sections
+    last_turn_index = 0
 
     for packet in packet_stream:
         obj = packet.obj
+        # Use the packet's turn_index as the ind (CRITICAL!)
+        turn_index = (
+            packet.turn_index if packet.turn_index is not None else last_turn_index
+        )
+        last_turn_index = turn_index
 
         # Translate AgentResponseStart (message_start)
         if isinstance(obj, AgentResponseStart):
-            answer_started = True
             # Old format expects: id (string), content (string), final_documents
             translated_obj = {
                 "type": "message_start",
-                "id": str(message_id),  # Add id field
+                "id": str(message_id),  # Keep message_id for the id field
                 "content": "",  # Initial content is empty
                 "final_documents": None,  # Will be set if available
             }
@@ -92,23 +92,16 @@ def translate_llm_loop_packets(
                 ]
 
             yield {
-                "ind": message_id,
+                "ind": turn_index,  # Use packet's turn_index as ind
                 "obj": translated_obj,
             }
             continue
 
         # Translate AgentResponseDelta (message_delta) - pass through
+        # DO NOT emit section_end between message_start and message_delta!
         if isinstance(obj, AgentResponseDelta):
-            # Emit section_end before the first answer delta to mark end of preparation phase
-            if answer_started and not first_answer_delta_emitted:
-                yield {
-                    "ind": message_id,
-                    "obj": {"type": "section_end"},
-                }
-                first_answer_delta_emitted = True
-
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {
                     "type": "message_delta",
                     "content": obj.content,
@@ -119,11 +112,10 @@ def translate_llm_loop_packets(
         # Translate SearchToolStart
         if isinstance(obj, SearchToolStart):
             search_tool_active = True
-            accumulated_queries = None
-            accumulated_documents = None
+            # search_tool_turn_index = turn_index  # Save turn_index for this tool
 
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {
                     "type": "internal_search_tool_start",
                     "is_internet_search": getattr(obj, "is_internet_search", False),
@@ -131,47 +123,49 @@ def translate_llm_loop_packets(
             }
             continue
 
-        # Accumulate SearchToolQueriesDelta
+        # Emit SearchToolQueriesDelta immediately with empty documents
         if isinstance(obj, SearchToolQueriesDelta):
-            accumulated_queries = obj.queries
-            continue
-
-        # Accumulate SearchToolDocumentsDelta and emit combined delta
-        if isinstance(obj, SearchToolDocumentsDelta):
-            accumulated_documents = obj.documents
-
-            # Emit combined search tool delta
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {
                     "type": "internal_search_tool_delta",
-                    "queries": accumulated_queries if accumulated_queries else [],
+                    "queries": obj.queries if obj.queries else [],
+                    "documents": [],  # Empty documents array
+                },
+            }
+            continue
+
+        # Emit SearchToolDocumentsDelta immediately with empty queries
+        if isinstance(obj, SearchToolDocumentsDelta):
+            yield {
+                "ind": turn_index,
+                "obj": {
+                    "type": "internal_search_tool_delta",
+                    "queries": [],  # Empty queries array
                     "documents": (
                         [
                             doc.model_dump() if hasattr(doc, "model_dump") else doc
-                            for doc in accumulated_documents
+                            for doc in obj.documents
                         ]
-                        if accumulated_documents
+                        if obj.documents
                         else []
                     ),
                 },
             }
 
-            # Emit section_end for search tool
+            # Emit section_end for search tool after documents
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {"type": "section_end"},
             }
 
             search_tool_active = False
-            accumulated_queries = None
-            accumulated_documents = None
             continue
 
         # Translate ReasoningStart
         if isinstance(obj, ReasoningStart):
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {"type": "reasoning_start"},
             }
             continue
@@ -179,7 +173,7 @@ def translate_llm_loop_packets(
         # Translate ReasoningDelta - pass through
         if isinstance(obj, ReasoningDelta):
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {
                     "type": "reasoning_delta",
                     "reasoning": obj.reasoning,
@@ -192,35 +186,26 @@ def translate_llm_loop_packets(
             pass
             # Old format doesn't have a reasoning_end packet type, just emit section_end
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {"type": "section_end"},
             }
             continue
 
-        # Accumulate CitationInfo packets
+        # Accumulate CitationInfo packets (emitted individually in new backend, batched in old)
         if isinstance(obj, CitationInfo):
-            if not citation_section_active:
-                # Emit citation_start when first citation arrives
-                yield {
-                    "ind": message_id,
-                    "obj": {"type": "citation_start"},
-                }
-                citation_section_active = True
-
             accumulated_citations.append(
                 {
                     "citation_num": obj.citation_number,
                     "document_id": obj.document_id,
-                    "level": None,  # Old format had level for sub-questions
-                    "level_question_num": None,
                 }
             )
+            # Don't yield anything yet - citations are batched at the end
             continue
 
         # Translate ImageGenerationToolStart
         if isinstance(obj, ImageGenerationToolStart):
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {"type": "image_generation_tool_start"},
             }
             continue
@@ -228,7 +213,7 @@ def translate_llm_loop_packets(
         # Translate ImageGenerationFinal
         if isinstance(obj, ImageGenerationFinal):
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {
                     "type": "image_generation_tool_delta",
                     "images": [
@@ -240,7 +225,7 @@ def translate_llm_loop_packets(
 
             # Emit section_end for image generation
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {"type": "section_end"},
             }
             continue
@@ -248,7 +233,7 @@ def translate_llm_loop_packets(
         # Translate OpenUrl to fetch_tool_start
         if isinstance(obj, OpenUrl):
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {
                     "type": "fetch_tool_start",
                     "documents": (
@@ -264,7 +249,7 @@ def translate_llm_loop_packets(
 
             # Emit section_end for fetch tool
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {"type": "section_end"},
             }
             continue
@@ -272,7 +257,7 @@ def translate_llm_loop_packets(
         # Translate CustomToolStart
         if isinstance(obj, CustomToolStart):
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {
                     "type": "custom_tool_start",
                     "tool_name": obj.tool_name,
@@ -283,7 +268,7 @@ def translate_llm_loop_packets(
         # Translate CustomToolDelta
         if isinstance(obj, CustomToolDelta):
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {
                     "type": "custom_tool_delta",
                     "tool_name": obj.tool_name,
@@ -295,17 +280,33 @@ def translate_llm_loop_packets(
 
             # Emit section_end for custom tool
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": {"type": "section_end"},
             }
             continue
 
         # Translate OverallStop
         if isinstance(obj, OverallStop):
-            # Before emitting stop, emit any accumulated citations
-            if accumulated_citations:
+            # First emit section_end to close the message section
+            # (Frontend looks for SECTION_END to determine if final answer is complete)
+            yield {
+                "ind": turn_index,
+                "obj": {"type": "section_end"},
+            }
+
+            # Then emit any accumulated citations AFTER the message
+            # Citations use a DIFFERENT ind (turn_index + 1) to separate them from the message
+            has_citations = len(accumulated_citations) > 0
+            if has_citations:
+                citation_ind = turn_index + 1
+
                 yield {
-                    "ind": message_id,
+                    "ind": citation_ind,
+                    "obj": {"type": "citation_start"},
+                }
+
+                yield {
+                    "ind": citation_ind,
                     "obj": {
                         "type": "citation_delta",
                         "citations": accumulated_citations,
@@ -313,58 +314,50 @@ def translate_llm_loop_packets(
                 }
 
                 yield {
-                    "ind": message_id,
+                    "ind": citation_ind,
                     "obj": {"type": "section_end"},
                 }
 
-                accumulated_citations = []
-                citation_section_active = False
-
+            # Finally emit stop with the last ind used
             yield {
-                "ind": message_id,
+                "ind": turn_index + 1 if has_citations else turn_index,
                 "obj": {"type": "stop"},
             }
-            continue
+            # Don't continue - we want to exit the loop after stop
+            return
 
         # For any other packet types, try to pass through
         if hasattr(obj, "model_dump"):
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": obj.model_dump(),
             }
         else:
             yield {
-                "ind": message_id,
+                "ind": turn_index,
                 "obj": obj,
             }
 
-    # Handle any incomplete sections at end of stream
-    if search_tool_active and (accumulated_queries or accumulated_documents):
+    # Handle any incomplete sections at end of stream (in case stream ended without OverallStop)
+    if search_tool_active:
+        # If search tool was active but never closed, emit section_end
         yield {
-            "ind": message_id,
-            "obj": {
-                "type": "internal_search_tool_delta",
-                "queries": accumulated_queries if accumulated_queries else [],
-                "documents": (
-                    [
-                        doc.model_dump() if hasattr(doc, "model_dump") else doc
-                        for doc in accumulated_documents
-                    ]
-                    if accumulated_documents
-                    else []
-                ),
-            },
-        }
-
-        yield {
-            "ind": message_id,
+            "ind": last_turn_index,
             "obj": {"type": "section_end"},
         }
 
-    # Emit any remaining citations before final stop
-    if accumulated_citations:
+    # Emit any remaining citations before final stop (in case stream ended without OverallStop)
+    has_citations = len(accumulated_citations) > 0
+    if has_citations:
+        citation_ind = last_turn_index + 1
+
         yield {
-            "ind": message_id,
+            "ind": citation_ind,
+            "obj": {"type": "citation_start"},
+        }
+
+        yield {
+            "ind": citation_ind,
             "obj": {
                 "type": "citation_delta",
                 "citations": accumulated_citations,
@@ -372,12 +365,12 @@ def translate_llm_loop_packets(
         }
 
         yield {
-            "ind": message_id,
+            "ind": citation_ind,
             "obj": {"type": "section_end"},
         }
 
-    # Emit final stop packet if not already emitted
+    # Emit final stop packet (only if we didn't already return from OverallStop)
     yield {
-        "ind": message_id,
+        "ind": last_turn_index + 1 if has_citations else last_turn_index,
         "obj": {"type": "stop"},
     }

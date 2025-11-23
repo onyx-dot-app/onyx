@@ -186,21 +186,6 @@ def upgrade() -> None:
                 sa.Column(col_name, sa.Integer(), nullable=False, server_default="0"),
             )
 
-    # Add tab_number (nullable, no default for existing rows)
-    result = conn.execute(
-        sa.text(
-            """
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'tool_call' AND column_name = 'tab_number'
-        """
-        )
-    )
-    if not result.fetchone():
-        op.add_column(
-            "tool_call",
-            sa.Column("tab_number", sa.Integer(), nullable=True),
-        )
-
     # Add tool_call_id as String (if not exists)
     result = conn.execute(
         sa.text(
@@ -244,19 +229,51 @@ def upgrade() -> None:
             "tool_call", "tool_arguments", new_column_name="tool_call_arguments"
         )
 
-    # Rename tool_result to tool_call_response (if not already done)
+    # Rename tool_result to tool_call_response and change type from JSONB to Text (if not already done)
     result = conn.execute(
         sa.text(
             """
-        SELECT column_name FROM information_schema.columns
+        SELECT column_name, data_type FROM information_schema.columns
         WHERE table_name = 'tool_call' AND column_name = 'tool_result'
     """
         )
     )
-    if result.fetchone():
+    tool_result_row = result.fetchone()
+    if tool_result_row:
         op.alter_column(
             "tool_call", "tool_result", new_column_name="tool_call_response"
         )
+        # Change type from JSONB to Text
+        op.execute(
+            sa.text(
+                """
+            ALTER TABLE tool_call
+            ALTER COLUMN tool_call_response TYPE TEXT
+            USING tool_call_response::text
+        """
+            )
+        )
+    else:
+        # Check if tool_call_response already exists and is JSONB, then convert to Text
+        result = conn.execute(
+            sa.text(
+                """
+            SELECT data_type FROM information_schema.columns
+            WHERE table_name = 'tool_call' AND column_name = 'tool_call_response'
+        """
+            )
+        )
+        tool_call_response_row = result.fetchone()
+        if tool_call_response_row and tool_call_response_row[0] == "jsonb":
+            op.execute(
+                sa.text(
+                    """
+                ALTER TABLE tool_call
+                ALTER COLUMN tool_call_response TYPE TEXT
+                USING tool_call_response::text
+            """
+                )
+            )
 
     # Add tool_call_tokens (if not exists)
     result = conn.execute(
@@ -287,6 +304,29 @@ def upgrade() -> None:
     if result.fetchone():
         op.drop_column("tool_call", "tool_name")
 
+    # Create tool_call__search_doc association table (if not exists)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT table_name FROM information_schema.tables
+        WHERE table_name = 'tool_call__search_doc'
+    """
+        )
+    )
+    if not result.fetchone():
+        op.create_table(
+            "tool_call__search_doc",
+            sa.Column("tool_call_id", sa.Integer(), nullable=False),
+            sa.Column("search_doc_id", sa.Integer(), nullable=False),
+            sa.ForeignKeyConstraint(
+                ["tool_call_id"], ["tool_call.id"], ondelete="CASCADE"
+            ),
+            sa.ForeignKeyConstraint(
+                ["search_doc_id"], ["search_doc.id"], ondelete="CASCADE"
+            ),
+            sa.PrimaryKeyConstraint("tool_call_id", "search_doc_id"),
+        )
+
     # Add replace_base_system_prompt to persona table (if not exists)
     result = conn.execute(
         sa.text(
@@ -312,17 +352,29 @@ def downgrade() -> None:
     # Reverse persona changes
     op.drop_column("persona", "replace_base_system_prompt")
 
+    # Drop tool_call__search_doc association table
+    op.execute("DROP TABLE IF EXISTS tool_call__search_doc CASCADE")
+
     # Reverse ToolCall changes
     op.add_column("tool_call", sa.Column("tool_name", sa.String(), nullable=False))
     op.drop_column("tool_call", "tool_id")
     op.drop_column("tool_call", "tool_call_tokens")
+    # Change tool_call_response back to JSONB before renaming
+    op.execute(
+        sa.text(
+            """
+        ALTER TABLE tool_call
+        ALTER COLUMN tool_call_response TYPE JSONB
+        USING tool_call_response::jsonb
+    """
+        )
+    )
     op.alter_column("tool_call", "tool_call_response", new_column_name="tool_result")
     op.alter_column(
         "tool_call", "tool_call_arguments", new_column_name="tool_arguments"
     )
     op.drop_column("tool_call", "reasoning_tokens")
     op.drop_column("tool_call", "tool_call_id")
-    op.drop_column("tool_call", "tab_number")
     op.drop_column("tool_call", "turn_number")
     op.drop_constraint(
         "fk_tool_call_parent_tool_call_id", "tool_call", type_="foreignkey"

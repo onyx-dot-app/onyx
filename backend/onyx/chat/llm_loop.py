@@ -16,7 +16,9 @@ from onyx.chat.prompt_builder.answer_prompt_builder import build_system_prompt
 from onyx.chat.prompt_builder.answer_prompt_builder import (
     get_default_base_system_prompt,
 )
+from onyx.chat.save_chat import save_chat_turn
 from onyx.configs.constants import MessageType
+from onyx.context.search.models import CitationDocInfo
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.models import ChatMessage
@@ -38,12 +40,19 @@ from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
@@ -296,6 +305,8 @@ def translate_history_to_llm_format(
                             tool_call_data if isinstance(tool_call_data, dict) else {}
                         )
 
+                    # NOTE: if the model is trained on a different tool call format, this may slightly interfere
+                    # with the future tool calls, if it doesn't look like this. Almost certainly not a big deal.
                     tool_call: ToolCall = {
                         "id": msg.tool_call_id,
                         "type": "function",
@@ -313,7 +324,7 @@ def translate_history_to_llm_format(
 
             assistant_msg_with_tool: AssistantMessage = {
                 "role": "assistant",
-                "content": msg.message or None,
+                "content": None,  # The tool call is parsed, doesn't need to be duplicated in the content
             }
             if tool_calls:
                 assistant_msg_with_tool["tool_calls"] = tool_calls
@@ -347,7 +358,6 @@ def run_llm_step(
     emitter: Emitter,
     llm: LLM,
     turn_index: int,
-    tab_index: int,
     citation_processor: DynamicCitationProcessor | None = None,
 ) -> LlmStepResult:
     llm_msg_history = translate_history_to_llm_format(history)
@@ -375,14 +385,12 @@ def run_llm_step(
                 emitter.emit(
                     Packet(
                         turn_index=turn_index,
-                        tab_index=tab_index,
                         obj=ReasoningStart(),
                     )
                 )
                 emitter.emit(
                     Packet(
                         turn_index=turn_index,
-                        tab_index=tab_index,
                         obj=ReasoningDelta(reasoning=delta.reasoning_content),
                     )
                 )
@@ -394,7 +402,6 @@ def run_llm_step(
                 emitter.emit(
                     Packet(
                         turn_index=turn_index,
-                        tab_index=tab_index,
                         obj=ReasoningDone(),
                     )
                 )
@@ -404,7 +411,6 @@ def run_llm_step(
                 emitter.emit(
                     Packet(
                         turn_index=turn_index,
-                        tab_index=tab_index,
                         obj=AgentResponseStart(),
                     )
                 )
@@ -417,7 +423,6 @@ def run_llm_step(
                         emitter.emit(
                             Packet(
                                 turn_index=turn_index,
-                                tab_index=tab_index,
                                 obj=AgentResponseDelta(content=result),
                             )
                         )
@@ -425,7 +430,6 @@ def run_llm_step(
                         emitter.emit(
                             Packet(
                                 turn_index=turn_index,
-                                tab_index=tab_index,
                                 obj=result,
                             )
                         )
@@ -433,7 +437,6 @@ def run_llm_step(
                 emitter.emit(
                     Packet(
                         turn_index=turn_index,
-                        tab_index=tab_index,
                         obj=AgentResponseDelta(content=delta.content),
                     )
                 )
@@ -443,7 +446,6 @@ def run_llm_step(
                 emitter.emit(
                     Packet(
                         turn_index=turn_index,
-                        tab_index=tab_index,
                         obj=ReasoningDone(),
                     )
                 )
@@ -462,7 +464,6 @@ def run_llm_step(
                 emitter.emit(
                     Packet(
                         turn_index=turn_index,
-                        tab_index=tab_index,
                         obj=AgentResponseDelta(content=result),
                     )
                 )
@@ -470,7 +471,6 @@ def run_llm_step(
                 emitter.emit(
                     Packet(
                         turn_index=turn_index,
-                        tab_index=tab_index,
                         obj=result,
                     )
                 )
@@ -557,13 +557,19 @@ def run_llm_loop(
 
     initialize_litellm()
 
+    stopping_tools_names: list[str] = [ImageGenerationTool.NAME]
+    citeable_tools_names: list[str] = [SearchTool.NAME, WebSearchTool.NAME]
+
     # Initialize citation processor for handling citations dynamically
     citation_processor = DynamicCitationProcessor()
 
     # Pass the total budget to construct_message_history, which will handle token allocation
     available_tokens = llm.config.max_input_tokens
-    citations_suggested = False
     tool_choice: ToolChoiceOptions = "auto"
+    collected_tool_calls: list[ToolCallInfo] = []
+    all_search_docs: list[SearchDoc] | None = None
+    final_search_docs: list[SearchDoc] | None = None
+    should_cite_documents: bool = False
     for llm_cycle_count in range(MAX_LLM_CYCLES):
 
         if force_use_tool_name:
@@ -601,7 +607,7 @@ def run_llm_loop(
                 datetime_aware=persona.datetime_aware if persona else True,
                 memories=memories,
                 tools=tools,
-                should_cite_documents=False,
+                should_cite_documents=should_cite_documents,
                 open_ai_formatting_enabled=open_ai_formatting_enabled,
             )
             system_prompt = ChatMessageSimple(
@@ -624,7 +630,7 @@ def run_llm_loop(
             reminder_text=(
                 persona.task_prompt if persona and persona.task_prompt else None
             ),
-            include_citation_reminder=citations_suggested,
+            include_citation_reminder=should_cite_documents,
         )
         reminder_msg = (
             ChatMessageSimple(
@@ -653,8 +659,7 @@ def run_llm_loop(
             tool_choice=tool_choice,
             emitter=emitter,
             llm=llm,
-            turn_index=assistant_response.id,
-            tab_index=llm_cycle_count,
+            turn_index=llm_cycle_count,
             citation_processor=citation_processor,
         )
 
@@ -665,19 +670,57 @@ def run_llm_loop(
             tool_responses = run_tool_calls(
                 tool_calls=llm_step_result.tool_calls,
                 tools=final_tools,
-                turn_index=assistant_response.id,
+                turn_index=llm_cycle_count,
                 emitter=emitter,
                 message_history=truncated_message_history,
                 memories=memories,
                 user_info=None,  # TODO, this is part of memories right now, might want to separate it out
-                starting_citation_num=0,  # TODO this needs to increment
+                starting_citation_num=1,  # TODO this needs to increment
             )
+
+            # Build a mapping of tool names to tool objects for getting tool_id
+            tools_by_name = {tool.name: tool for tool in final_tools}
 
             # Add the results to the chat history, note that even if the tools were run in parallel, this isn't supported
             # as all the LLM APIs require linear history, so these will just be included sequentially
             for tool_call, tool_response in zip(
                 llm_step_result.tool_calls, tool_responses
             ):
+                # Get the tool object to retrieve tool_id
+                tool = tools_by_name.get(tool_call.tool_name)
+                if not tool:
+                    raise ValueError(
+                        f"Tool '{tool_call.tool_name}' not found in tools list"
+                    )
+
+                # Collect tool call info with reasoning tokens from this LLM step
+                # All tool calls from the same loop iteration share the same reasoning tokens
+
+                # Extract search_docs if this is a search tool response
+                search_docs = None
+                if isinstance(tool_response.rich_response, SearchDocsResponse):
+                    search_docs = tool_response.rich_response.search_docs
+                    # Add to all_search_docs (accumulate across all steps)
+                    if all_search_docs is None:
+                        all_search_docs = search_docs
+                    else:
+                        all_search_docs.extend(search_docs)
+                    # Update final_search_docs (set to the last tool call's search docs)
+                    final_search_docs = search_docs
+
+                tool_call_info = ToolCallInfo(
+                    parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
+                    turn_index=llm_cycle_count,
+                    tool_name=tool_call.tool_name,
+                    tool_call_id=tool_call.tool_call_id,
+                    tool_id=tool.id,
+                    reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
+                    tool_call_arguments=tool_call.tool_args,
+                    tool_call_response=tool_response.llm_facing_response,
+                    search_docs=search_docs,
+                )
+                collected_tool_calls.append(tool_call_info)
+
                 # Store tool call with function name and arguments in separate layers
                 tool_call_data = {
                     TOOL_CALL_MSG_FUNC_NAME: tool_call.tool_name,
@@ -708,7 +751,7 @@ def run_llm_loop(
                 simple_chat_history.append(tool_response_msg)
 
                 # Update citation processor if this was a search tool
-                if tool_call.tool_name == "internal_search":
+                if tool_call.tool_name in citeable_tools_names:
                     # Check if the rich_response is a SearchDocsResponse
                     if isinstance(tool_response.rich_response, SearchDocsResponse):
                         search_response = tool_response.rich_response
@@ -734,11 +777,52 @@ def run_llm_loop(
                         # Update the citation processor
                         citation_processor.update_citation_mapping(citation_to_doc)
 
-    # save_chat_turn(
-    #     message_text=llm_step_result.answer,
-    #     reasoning_tokens=llm_step_result.reasoning,
-    #     tool_calls=llm_step_result.tool_calls,
-    #     citation_docs_info=[],
-    #     db_session=db_session,
-    #     assistant_message=assistant_response,
-    # )
+        # After the LLM call has happened, we may be done. If no tools, then it has answered
+        # certain tools also do not allow further actions
+        if (
+            not llm_step_result.tool_calls
+            or len(llm_step_result.tool_calls) == 0
+            or any(
+                tool.tool_name in stopping_tools_names
+                for tool in llm_step_result.tool_calls
+            )
+        ):
+            break
+
+        if llm_step_result.tool_calls and any(
+            tool.tool_name in citeable_tools_names
+            for tool in llm_step_result.tool_calls
+        ):
+            # As long as 1 tool with citeable documents is called, we ask the LLM to try to cite
+            should_cite_documents = True
+
+    # Chat turn is complete at this point
+    emitter.emit(Packet(turn_index=llm_cycle_count, obj=OverallStop(type="stop")))
+
+    if not llm_step_result.answer:
+        raise RuntimeError("LLM did not return an answer.")
+
+    # Build citation_docs_info from the accumulated citation_to_doc mapping
+    # citation_info is the accumulation of citation_to_doc from the citation processor
+    citation_docs_info: list[CitationDocInfo] = []
+    seen_citation_nums: set[int] = set()
+    for citation_num, search_doc in citation_processor.citation_to_doc.items():
+        if citation_num not in seen_citation_nums:
+            seen_citation_nums.add(citation_num)
+            citation_docs_info.append(
+                CitationDocInfo(
+                    search_doc=search_doc,
+                    citation_number=citation_num,
+                )
+            )
+
+    save_chat_turn(
+        message_text=llm_step_result.answer,
+        reasoning_tokens=llm_step_result.reasoning,
+        all_search_docs=all_search_docs,
+        final_search_docs=final_search_docs,
+        citation_docs_info=citation_docs_info,
+        tool_calls=collected_tool_calls,
+        db_session=db_session,
+        assistant_message=assistant_response,
+    )

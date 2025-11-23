@@ -65,7 +65,6 @@ def emitter_generator_wrapper(
                 emitter.emit(
                     Packet(
                         turn_index=0,
-                        tab_index=0,
                         obj=PacketException(type="error", exception=e),
                     )
                 )

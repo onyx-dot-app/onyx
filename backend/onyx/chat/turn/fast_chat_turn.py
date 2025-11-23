@@ -293,7 +293,6 @@ def _fast_chat_turn_core(
     dependencies.emitter.emit(
         Packet(
             turn_index=ctx.message_id,
-            tab_index=ctx.current_run_step,
             obj=OverallStop(type="stop"),
         )
     )
@@ -370,14 +369,12 @@ def _emit_clean_up_packets(
         dependencies.emitter.emit(
             Packet(
                 turn_index=ctx.message_id,
-                tab_index=ctx.current_run_step,
                 obj=AgentResponseStart(type="message_start", final_documents=None),
             )
         )
     dependencies.emitter.emit(
         Packet(
             turn_index=ctx.message_id,
-            tab_index=ctx.current_run_step,
             obj=SectionEnd(type="section_end"),
         )
     )
@@ -394,14 +391,12 @@ def _emit_citations_for_final_answer(
             dependencies.emitter.emit(
                 Packet(
                     turn_index=ctx.message_id,
-                    tab_index=index,
                     obj=citation,
                 )
             )
         dependencies.emitter.emit(
             Packet(
                 turn_index=ctx.message_id,
-                tab_index=index,
                 obj=SectionEnd(type="section_end"),
             )
         )
@@ -437,7 +432,6 @@ def _default_packet_translation(
             packets.append(
                 Packet(
                     turn_index=ctx.message_id,
-                    tab_index=ctx.current_run_step,
                     obj=ReasoningStart(),
                 )
             )
@@ -446,7 +440,6 @@ def _default_packet_translation(
             packets.append(
                 Packet(
                     turn_index=ctx.message_id,
-                    tab_index=ctx.current_run_step,
                     obj=ReasoningDelta(reasoning=ev.data.delta),
                 )
             )
@@ -460,7 +453,6 @@ def _default_packet_translation(
                 packets.append(
                     Packet(
                         turn_index=ctx.message_id,
-                        tab_index=ctx.current_run_step,
                         obj=SectionEnd(),
                     )
                 )
@@ -501,7 +493,6 @@ def _default_packet_translation(
                 packets.append(
                     Packet(
                         turn_index=ctx.message_id,
-                        tab_index=ctx.current_run_step,
                         obj=AgentResponseStart(final_documents=retrieved_search_docs),
                     )
                 )
@@ -510,7 +501,6 @@ def _default_packet_translation(
                 packets.append(
                     Packet(
                         turn_index=ctx.message_id,
-                        tab_index=ctx.current_run_step,
                         obj=obj,
                     )
                 )
@@ -518,7 +508,6 @@ def _default_packet_translation(
             packets.append(
                 Packet(
                     turn_index=ctx.message_id,
-                    tab_index=ctx.current_run_step,
                     obj=SectionEnd(),
                 )
             )
