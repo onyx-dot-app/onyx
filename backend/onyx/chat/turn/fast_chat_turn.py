@@ -9,6 +9,7 @@ from agents import RawResponsesStreamEvent
 from agents import RunResultStreaming
 from agents import ToolCallItem
 from agents.tracing import trace
+from backend.onyx.chat.temp_translation import SectionEnd
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import InputTextContent
@@ -47,7 +48,6 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 from onyx.tools.force import filter_tools_for_force_tool_use
 from onyx.tools.force import ForceUseTool

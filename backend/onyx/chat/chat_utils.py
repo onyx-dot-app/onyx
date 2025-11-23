@@ -469,12 +469,15 @@ def create_temporary_persona(
 
     persona.tools = []
     if persona_config.custom_tools_openapi:
+        from onyx.chat.infra import get_default_emitter
+
         for schema in persona_config.custom_tools_openapi:
             tools = cast(
                 list[Tool],
                 build_custom_tools_from_openapi_schema_and_headers(
                     tool_id=0,  # dummy tool id
                     openapi_schema=schema,
+                    emitter=get_default_emitter(),
                 ),
             )
             persona.tools.extend(tools)
@@ -743,6 +746,10 @@ def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str 
     Returns:
         The custom agent prompt string, or None if neither persona nor project has one
     """
+    # Not considered a custom agent if it's the default behavior persona
+    if persona.id == DEFAULT_PERSONA_ID:
+        return None
+
     if persona.system_prompt:
         return persona.system_prompt
     elif chat_session.project and chat_session.project.instructions:

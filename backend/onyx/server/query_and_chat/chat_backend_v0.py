@@ -41,7 +41,6 @@ from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
@@ -204,10 +203,6 @@ def transform_packet_to_v0_format(packet: Any) -> dict[str, Any] | None:
         # Handle OverallStop
         if isinstance(obj, OverallStop):
             # This signals the end of streaming
-            return None
-
-        # Handle SectionEnd
-        if isinstance(obj, SectionEnd):
             return None
 
     # Unknown packet type - log and skip

@@ -3,24 +3,6 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.dr.sub_agents.web_search.clients.onyx_web_crawler_client import (
-    OnyxWebCrawlerClient,
-)
-from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
-    WebContentProvider,
-)
-from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
-    WebSearchProvider,
-)
-from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    build_content_provider_from_config,
-)
-from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    build_search_provider_from_config,
-)
-from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
-    truncate_search_result_content,
-)
 from onyx.auth.users import current_user
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.db.engine.sql_engine import get_session
@@ -34,6 +16,24 @@ from onyx.server.features.web_search.models import WebSearchToolResponse
 from onyx.server.features.web_search.models import WebSearchWithContentResponse
 from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderView
+from onyx.tools.tool_implementations.web_search.clients.onyx_web_crawler_client import (
+    OnyxWebCrawlerClient,
+)
+from onyx.tools.tool_implementations.web_search.models import (
+    WebContentProvider,
+)
+from onyx.tools.tool_implementations.web_search.models import (
+    WebSearchProvider,
+)
+from onyx.tools.tool_implementations.web_search.providers import (
+    build_content_provider_from_config,
+)
+from onyx.tools.tool_implementations.web_search.providers import (
+    build_search_provider_from_config,
+)
+from onyx.tools.tool_implementations.web_search.utils import (
+    truncate_search_result_content,
+)
 from onyx.tools.tool_implementations_v2.tool_result_models import (
     LlmOpenUrlResult,
 )

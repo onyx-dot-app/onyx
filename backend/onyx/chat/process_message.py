@@ -19,11 +19,12 @@ from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import create_temporary_persona
 from onyx.chat.chat_utils import get_custom_agent_prompt
 from onyx.chat.chat_utils import load_all_chat_files
+from onyx.chat.infra import get_default_emitter
+from onyx.chat.llm_loop import run_llm_loop
 from onyx.chat.memories import get_memories
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.models import ChatLoadedFile
-from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import MessageResponseIDInfo
@@ -32,8 +33,9 @@ from onyx.chat.models import PromptConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import StreamingError
 from onyx.chat.prompt_builder.answer_prompt_builder import calculate_reserved_tokens
+from onyx.chat.stop_signal_checker import reset_cancel_status
+from onyx.chat.temp_translation import translate_llm_loop_packets
 from onyx.chat.turn import fast_chat_turn
-from onyx.chat.turn.infra.emitter import get_default_emitter
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
@@ -65,6 +67,7 @@ from onyx.llm.factory import get_llm_tokenizer_encode_func
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import litellm_exception_to_error_msg
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -530,10 +533,13 @@ def stream_chat_message_objects(
             )
         )
 
+        emitter = get_default_emitter()
+
         # Construct tools based on the persona configurations
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
+            emitter=emitter,
             user=user,
             llm=llm,
             fast_llm=fast_llm,
@@ -589,7 +595,16 @@ def stream_chat_message_objects(
             project_image_files=extracted_project_files.project_image_files,
         )
 
-        yield from run_agent_loop(
+        redis_client = get_redis_client()
+
+        reset_cancel_status(
+            chat_session_id,
+            redis_client,
+        )
+
+        # Run the LLM loop and translate packets for frontend
+        llm_loop_packets = run_llm_loop(
+            emitter=emitter,
             simple_chat_history=simple_chat_history,
             tools=tools,
             custom_agent_prompt=custom_agent_prompt,
@@ -597,10 +612,16 @@ def stream_chat_message_objects(
             persona=persona,
             memories=memories,
             llm=llm,
-            fast_llm=fast_llm,
             tokenizer_func=tokenizer_encode_func,
             assistant_response=assistant_response,
             db_session=db_session,
+            redis_client=redis_client,
+        )
+
+        # Translate packets to frontend-expected format
+        yield from translate_llm_loop_packets(
+            packet_stream=llm_loop_packets,
+            message_id=assistant_response.id,
         )
 
     except ValueError as e:
@@ -632,54 +653,6 @@ def stream_chat_message_objects(
 
         db_session.rollback()
         return
-
-
-def run_agent_loop(
-    simple_chat_history: list[ChatMessageSimple],
-    tools: list[Tool],
-    custom_agent_prompt: str | None,
-    project_files: ExtractedProjectFiles,
-    persona: Persona | None,
-    memories: list[str] | None,
-    llm: LLM,
-    fast_llm: LLM,
-    tokenizer_func: Callable[[str], list[int]],
-    assistant_response: ChatMessage,
-    db_session: Session,
-) -> Generator[Packet, None, None]:
-    # # The loop should happen in between here
-    # reminder_text = None
-
-    # # The section below calculates the available tokens for history a bit more accurately
-    # # now that project files are loaded in.
-    # if persona.replace_base_system_prompt:
-    #     system_prompt = SystemMessage(content=persona.system_prompt)
-    #     custom_agent_prompt = None
-    # else:
-    #     system_prompt = build_system_prompt(
-    #         base_system_prompt=get_default_base_system_prompt(db_session),
-    #         datetime_aware=persona.datetime_aware,
-    #         memories=memories,
-    #         # Tools may change over iterations but for this, it's ok
-    #         tools=tools,
-    #         # Not that many tokens, just keep it in
-    #         should_cite_documents=True,
-    #     )
-    #     custom_agent_prompt = SystemMessage(content=custom_agent_prompt)
-
-    # system_prompt_token_count = len(tokenizer_func(system_prompt.content))
-    # custom_agent_prompt_token_count = len(tokenizer_func(custom_agent_prompt.content)) if custom_agent_prompt else 0
-    # project_token_tokens = project_files.total_token_count
-
-    # reserved_tokens = system_prompt_token_count + custom_agent_prompt_token_count + project_token_tokens
-    # available_tokens = llm.config.max_input_tokens - reserved_tokens - 200 # approximate upper bound for reminder text
-
-    # chat_messages = construct_message_history(
-    #     simple_chat_history=simple_chat_history,
-    #     project_files=project_files,
-    #     available_tokens=available_tokens,
-    # )
-    raise NotImplementedError("Not implemented")
 
 
 def _fast_message_stream(
@@ -752,7 +725,11 @@ def stream_chat_message(
                 document_retrieval_latency = time.time() - start_time
                 logger.debug(f"First doc time: {document_retrieval_latency}")
 
-            yield get_json_line(obj.model_dump())
+            # Handle both Pydantic objects and plain dicts (from translation layer)
+            if isinstance(obj, dict):
+                yield get_json_line(obj)
+            else:
+                yield get_json_line(obj.model_dump())
 
 
 def remove_answer_citations(answer: str) -> str:

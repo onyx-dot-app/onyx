@@ -1,22 +1,20 @@
 import json
-from collections.abc import Generator
 from typing import Any
-from typing import cast
 
+from onyx.chat.infra import Emitter
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
+from onyx.server.query_and_chat.streaming_models import CustomToolDelta
+from onyx.server.query_and_chat.streaming_models import CustomToolStart
+from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
-from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
-from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
 from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
 from onyx.utils.logger import setup_logger
-from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
-
-MCP_TOOL_RESPONSE_ID = "mcp_tool_response"
 
 # TODO: for now we're fitting MCP tool responses into the CustomToolCallSummary class
 # In the future we may want custom handling for MCP tool responses
@@ -27,12 +25,13 @@ MCP_TOOL_RESPONSE_ID = "mcp_tool_response"
 #     server_name: str
 
 
-class MCPTool(Tool[None, None]):
+class MCPTool(Tool[None]):
     """Tool implementation for MCP (Model Context Protocol) servers"""
 
     def __init__(
         self,
         tool_id: int,
+        emitter: Emitter,
         mcp_server: MCPServer,  # TODO: these should be basemodels instead of db objects
         tool_name: str,
         tool_description: str,
@@ -40,6 +39,8 @@ class MCPTool(Tool[None, None]):
         connection_config: MCPConnectionConfig | None = None,
         user_email: str = "",
     ) -> None:
+        super().__init__(emitter=emitter)
+
         self._id = tool_id
         self.mcp_server = mcp_server
         self.connection_config = connection_config
@@ -83,18 +84,22 @@ class MCPTool(Tool[None, None]):
             },
         }
 
-    def get_llm_tool_response(
-        self, *args: ToolResponse
-    ) -> str | list[str | dict[str, Any]]:
-        """Build message content from tool response"""
-        response = cast(CustomToolCallSummary, args[0].response)
-        # For now, just return the JSON result
-        # Future versions might handle base64 content differently
-        return json.dumps(response.tool_result)
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
+        self.emitter.emit(
+            Packet(
+                turn_index=turn_index,
+                tab_index=tab_index,
+                obj=CustomToolStart(tool_name=self._name),
+            )
+        )
 
     def run(
-        self, override_kwargs: dict[str, Any] | None = None, **kwargs: Any
-    ) -> Generator[ToolResponse, None, None]:
+        self,
+        turn_index: int,
+        tab_index: int,
+        override_kwargs: None,
+        **llm_kwargs: Any,
+    ) -> ToolResponse:
         """Execute the MCP tool by calling the MCP server"""
         try:
             # Build headers from connection config; prefer explicit headers
@@ -123,33 +128,65 @@ class MCPTool(Tool[None, None]):
                     f"Authentication required for MCP tool '{self._name}' but no credentials found"
                 )
 
-                yield ToolResponse(
-                    id=CUSTOM_TOOL_RESPONSE_ID,
-                    response=CustomToolCallSummary(
+                error_result = {"error": auth_error_msg}
+                llm_facing_response = json.dumps(error_result)
+
+                # Emit CustomToolDelta packet
+                self.emitter.emit(
+                    Packet(
+                        turn_index=turn_index,
+                        tab_index=tab_index,
+                        obj=CustomToolDelta(
+                            tool_name=self._name,
+                            response_type="json",
+                            data=error_result,
+                        ),
+                    )
+                )
+
+                return ToolResponse(
+                    rich_response=CustomToolCallSummary(
                         tool_name=self._name,
                         response_type="json",
-                        tool_result={"error": auth_error_msg},
+                        tool_result=error_result,
                     ),
+                    llm_facing_response=llm_facing_response,
                 )
-                return
 
             tool_result = call_mcp_tool(
                 self.mcp_server.server_url,
                 self._name,
-                kwargs,
+                llm_kwargs,
                 connection_headers=headers,
                 transport=self.mcp_server.transport,
             )
 
             logger.info(f"MCP tool '{self._name}' executed successfully")
 
-            yield ToolResponse(
-                id=CUSTOM_TOOL_RESPONSE_ID,
-                response=CustomToolCallSummary(
+            # Format the tool result for response
+            tool_result_dict = {"tool_result": tool_result}
+            llm_facing_response = json.dumps(tool_result_dict)
+
+            # Emit CustomToolDelta packet
+            self.emitter.emit(
+                Packet(
+                    turn_index=turn_index,
+                    tab_index=tab_index,
+                    obj=CustomToolDelta(
+                        tool_name=self._name,
+                        response_type="json",
+                        data=tool_result_dict,
+                    ),
+                )
+            )
+
+            return ToolResponse(
+                rich_response=CustomToolCallSummary(
                     tool_name=self._name,
                     response_type="json",
-                    tool_result=json.dumps({"tool_result": tool_result}),
+                    tool_result=tool_result_dict,
                 ),
+                llm_facing_response=llm_facing_response,
             )
 
         except Exception as e:
@@ -183,17 +220,26 @@ class MCPTool(Tool[None, None]):
             else:
                 error_result = {"error": f"Tool execution failed: {str(e)}"}
 
-            # Return error as tool result
-            yield ToolResponse(
-                id=CUSTOM_TOOL_RESPONSE_ID,
-                response=CustomToolCallSummary(
+            llm_facing_response = json.dumps(error_result)
+
+            # Emit CustomToolDelta packet
+            self.emitter.emit(
+                Packet(
+                    turn_index=turn_index,
+                    tab_index=tab_index,
+                    obj=CustomToolDelta(
+                        tool_name=self._name,
+                        response_type="json",
+                        data=error_result,
+                    ),
+                )
+            )
+
+            return ToolResponse(
+                rich_response=CustomToolCallSummary(
                     tool_name=self._name,
                     response_type="json",
                     tool_result=error_result,
                 ),
+                llm_facing_response=llm_facing_response,
             )
-
-    def get_final_result(self, *args: ToolResponse) -> JSON_ro:
-        """Return the final result for storage in the database"""
-        response = cast(CustomToolCallSummary, args[0].response)
-        return response.tool_result

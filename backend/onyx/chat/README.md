@@ -38,7 +38,7 @@ the system can RAG over the project files.
 
 
 ## How documents are represented
-Documents from search or uploaded files are represented as a json so that the LLM can easily understand it. It is represented with a prefix to make the
+Documents from search or uploaded Project files are represented as a json so that the LLM can easily understand it. It is represented with a prefix to make the
 context clearer to the LLM. Note that for search results (whether web or internal, it will just be the json) and it will be a Tool Call type of message
 rather than a user message.
 ```

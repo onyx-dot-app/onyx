@@ -6,7 +6,6 @@ from typing import Union
 from pydantic import BaseModel
 from pydantic import Field
 
-from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
 
 
@@ -17,7 +16,6 @@ class StreamingType(Enum):
     MESSAGE_DELTA = "message_delta"
     ERROR = "error"
     STOP = "stop"
-    SECTION_END = "section_end"
     SEARCH_TOOL_START = "search_tool_start"
     SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta"
     SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta"
@@ -29,6 +27,7 @@ class StreamingType(Enum):
     CUSTOM_TOOL_DELTA = "custom_tool_delta"
     REASONING_START = "reasoning_start"
     REASONING_DELTA = "reasoning_delta"
+    REASONING_DONE = "reasoning_done"
     CITATION_INFO = "citation_info"
 
 
@@ -36,23 +35,50 @@ class BaseObj(BaseModel):
     type: str = ""
 
 
+"""Reasoning Packets"""
+
+
+# Tells the frontend to display the reasoning block
+class ReasoningStart(BaseObj):
+    type: Literal["reasoning_start"] = StreamingType.REASONING_START.value
+
+
+# The stream of tokens for the reasoning
+class ReasoningDelta(BaseObj):
+    type: Literal["reasoning_delta"] = StreamingType.REASONING_DELTA.value
+
+    reasoning: str
+
+
+class ReasoningDone(BaseObj):
+    type: Literal["reasoning_done"] = StreamingType.REASONING_DONE.value
+
+
 """Final Agent Response Packets"""
 
 
-# The begining of the final response from the agent, starts with the final best documents
-# Not every response will have docs though.
+# Start of the final answer
 class AgentResponseStart(BaseObj):
     type: Literal["message_start"] = StreamingType.MESSAGE_START.value
 
-    # Merged set of all documents considered
-    final_documents: list[SavedSearchDoc] | None
-
 
 # The stream of tokens for the final response
+# There is no end packet for this as the stream is over and a final OverallStop packet is emitted
 class AgentResponseDelta(BaseObj):
     type: Literal["message_delta"] = StreamingType.MESSAGE_DELTA.value
 
     content: str
+
+
+# Citation info for the sidebar and inline citations
+class CitationInfo(BaseObj):
+    type: Literal["citation_info"] = StreamingType.CITATION_INFO.value
+
+    # The numerical number of the citation as provided by the LLM
+    citation_number: int
+    # The document id of the SearchDoc (same as the field stored in the DB)
+    # This is the actual document id from the connector, not the int id
+    document_id: str
 
 
 """Control Packets"""
@@ -67,11 +93,6 @@ class PacketException(BaseObj):
 
 class OverallStop(BaseObj):
     type: Literal["stop"] = StreamingType.STOP.value
-
-
-# Currently frontend does not depend on this packet.
-class SectionEnd(BaseObj):
-    type: Literal["section_end"] = StreamingType.SECTION_END.value
 
 
 """Tool Packets"""
@@ -162,35 +183,6 @@ class CustomToolDelta(BaseObj):
     file_ids: list[str] | None = None
 
 
-"""Reasoning Packets"""
-
-
-# Tells the frontend to display the reasoning block
-class ReasoningStart(BaseObj):
-    type: Literal["reasoning_start"] = StreamingType.REASONING_START.value
-
-
-# The stream of tokens for the reasoning
-class ReasoningDelta(BaseObj):
-    type: Literal["reasoning_delta"] = StreamingType.REASONING_DELTA.value
-
-    reasoning: str
-
-
-"""Citation Packets"""
-
-
-# Citation info for the sidebar and inline citations
-class CitationInfo(BaseObj):
-    type: Literal["citation_info"] = StreamingType.CITATION_INFO.value
-
-    # The numerical number of the citation as provided by the LLM
-    citation_number: int
-    # The document id of the SearchDoc (same as the field stored in the DB)
-    # This is the actual document id from the connector, not the int id
-    document_id: str
-
-
 """Packet"""
 
 # Discriminated union of all possible packet object types
@@ -200,7 +192,6 @@ PacketObj = Union[
     AgentResponseDelta,
     # Control Packets
     OverallStop,
-    SectionEnd,
     # Error Packets
     PacketException,
     # Tool Packets
@@ -216,6 +207,7 @@ PacketObj = Union[
     # Reasoning Packets
     ReasoningStart,
     ReasoningDelta,
+    ReasoningDone,
     # Citation Packets
     CitationInfo,
 ]

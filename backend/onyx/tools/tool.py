@@ -6,7 +6,7 @@ from typing import Generic
 from typing import TYPE_CHECKING
 from typing import TypeVar
 
-from pydantic import BaseModel
+from onyx.chat.infra import Emitter
 
 
 if TYPE_CHECKING:
@@ -15,20 +15,22 @@ if TYPE_CHECKING:
 
 
 TOverride = TypeVar("TOverride")
-TContext = TypeVar("TContext")
 
 
-class RunContextWrapper(BaseModel, Generic[TContext]):
-    """This wraps the context object that you passed to the agent framework query function.
+class Tool(abc.ABC, Generic[TOverride]):
+    def __init__(self, emitter: Emitter | None = None):
+        """Initialize tool with optional emitter. Emitter can be set later via set_emitter()."""
+        self._emitter = emitter
 
-    NOTE: Contexts are not passed to the LLM. They're a way to pass dependencies and data to code
-    you implement, like tool functions.
-    """
+    @property
+    def emitter(self) -> Emitter:
+        """Get the emitter. Raises if not set."""
+        if self._emitter is None:
+            raise ValueError(
+                f"Emitter not set on tool {self.name}. Call set_emitter() first."
+            )
+        return self._emitter
 
-    context: TContext
-
-
-class Tool(abc.ABC, Generic[TOverride, TContext]):
     @property
     @abc.abstractmethod
     def id(self) -> int:
@@ -71,12 +73,20 @@ class Tool(abc.ABC, Generic[TOverride, TContext]):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
+        """
+        Emit the start packet for this tool. Each tool implementation should
+        emit its specific start packet type.
+
+        Args:
+            turn_index: The turn index for this tool execution
+            tab_index: The tab index for this tool execution
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def run(
         self,
-        # Shared context and dependencies necessary for the tool to run
-        # May acrrue bad state/mutations if not used carefully
-        # Typically includes things like the packet emitter, redis client, etc.
-        run_context: TContext,
         # The run must know its turn and depth because the "Tool" may actually be more of an "Agent" which can call
         # other tools and must pass in this information potentially deeper down.
         turn_index: int,

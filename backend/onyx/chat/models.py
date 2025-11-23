@@ -407,7 +407,10 @@ class ChatMessageSimple(BaseModel):
     message: str
     token_count: int
     message_type: MessageType
+    # Only for USER type messages
     image_files: list[ChatLoadedFile] | None = None
+    # Only for TOOL_CALL_RESPONSE type messages
+    tool_call_id: str | None = None
 
 
 class ExtractedProjectFiles(BaseModel):
@@ -415,3 +418,9 @@ class ExtractedProjectFiles(BaseModel):
     project_image_files: list[ChatLoadedFile]
     project_as_filter: int | bool
     total_token_count: int
+
+
+class LlmStepResult(BaseModel):
+    reasoning: str | None
+    answer: str | None
+    tool_calls: list[ToolCallKickoff] | None

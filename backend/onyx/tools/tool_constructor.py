@@ -6,6 +6,7 @@ from pydantic import Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
+from onyx.chat.infra import Emitter
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import DocumentPruningConfig
@@ -158,6 +159,7 @@ def _configure_document_pruning_for_tool_config(
 def construct_tools(
     persona: Persona,
     db_session: Session,
+    emitter: Emitter,
     user: User | None,
     llm: LLM,
     fast_llm: LLM,
@@ -215,6 +217,7 @@ def construct_tools(
                 search_tool = SearchTool(
                     tool_id=db_tool_model.id,
                     db_session=db_session,
+                    emitter=emitter,
                     user=user,
                     persona=persona,
                     llm=llm,
@@ -241,6 +244,7 @@ def construct_tools(
                         api_version=img_generation_llm_config.api_version,
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
+                        emitter=emitter,
                     )
                 ]
 
@@ -248,7 +252,7 @@ def construct_tools(
             elif tool_cls.__name__ == WebSearchTool.__name__:
                 try:
                     tool_dict[db_tool_model.id] = [
-                        WebSearchTool(tool_id=db_tool_model.id)
+                        WebSearchTool(tool_id=db_tool_model.id, emitter=emitter)
                     ]
                 except ValueError as e:
                     logger.error(f"Failed to initialize Internet Search Tool: {e}")
@@ -306,6 +310,7 @@ def construct_tools(
                 build_custom_tools_from_openapi_schema_and_headers(
                     tool_id=db_tool_model.id,
                     openapi_schema=db_tool_model.openapi_schema,
+                    emitter=emitter,
                     dynamic_schema_info=DynamicSchemaInfo(
                         chat_session_id=custom_tool_config.chat_session_id,
                         message_id=custom_tool_config.message_id,
@@ -359,6 +364,7 @@ def construct_tools(
                 # Create MCPTool instance for this specific tool
                 mcp_tool = MCPTool(
                     tool_id=saved_tool.id,
+                    emitter=emitter,
                     mcp_server=mcp_server,
                     tool_name=saved_tool.name,
                     tool_description=saved_tool.description,

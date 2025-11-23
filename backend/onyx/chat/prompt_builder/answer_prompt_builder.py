@@ -15,6 +15,7 @@ from onyx.llm.message_types import UserMessage
 from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
+from onyx.prompts.chat_prompts import CITATION_REMINDER
 from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
 from onyx.prompts.chat_prompts import GENERATE_IMAGE_GUIDANCE
@@ -92,7 +93,7 @@ def calculate_reserved_tokens(
             # Annoying that the dict has no attributes now
             custom_agent_prompt
             + " "
-            + str(fake_system_prompt["content"])
+            + fake_system_prompt
         )
     )
 
@@ -120,6 +121,17 @@ def calculate_reserved_tokens(
     return reserved_token_count
 
 
+def build_reminder_message(
+    reminder_text: str | None,
+    include_citation_reminder: bool,
+) -> str | None:
+    reminder = reminder_text.strip() if reminder_text else ""
+    if include_citation_reminder:
+        reminder += "\n\n" + CITATION_REMINDER
+    reminder = reminder.strip()
+    return reminder if reminder else None
+
+
 def build_system_prompt(
     base_system_prompt: str,
     datetime_aware: bool = False,
@@ -127,10 +139,16 @@ def build_system_prompt(
     tools: Sequence[Tool] | None = None,
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
-) -> SystemMessage:
+    open_ai_formatting_enabled: bool = False,
+) -> str:
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
     """
+    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
+    # for OpenAI reasoning models to have correct markdown generation
+    if open_ai_formatting_enabled:
+        system_prompt = CODE_BLOCK_MARKDOWN + base_system_prompt
+
     system_prompt = handle_onyx_date_awareness(base_system_prompt, datetime_aware)
     system_prompt = handle_company_awareness(system_prompt)
     system_prompt = handle_memories(system_prompt, memories)
@@ -147,7 +165,7 @@ def build_system_prompt(
             + OPEN_URLS_GUIDANCE
             + GENERATE_IMAGE_GUIDANCE
         )
-        return SystemMessage(role="system", content=system_prompt)
+        return system_prompt
 
     if tools:
         system_prompt += TOOL_SECTION_HEADER
@@ -175,7 +193,7 @@ def build_system_prompt(
         if has_generate_image or include_all_guidance:
             system_prompt += GENERATE_IMAGE_GUIDANCE
 
-    return SystemMessage(role="system", content=system_prompt)
+    return system_prompt
 
 
 def default_build_system_message_v2(

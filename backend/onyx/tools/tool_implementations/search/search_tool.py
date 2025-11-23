@@ -6,6 +6,7 @@ from typing import cast
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
+from onyx.chat.infra import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkSearchRequest
@@ -32,7 +33,6 @@ from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.models import SearchToolOverrideKwargs
-from onyx.tools.models import SearchToolRunContext
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.constants import (
@@ -266,7 +266,7 @@ web pages. If very ambiguious, prioritize internal search or call both tools.
 """
 
 
-class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
+class SearchTool(Tool[SearchToolOverrideKwargs]):
     _NAME = "internal_search"
     _DISPLAY_NAME = "Internal Search"
     _DESCRIPTION = SEARCH_TOOL_DESCRIPTION
@@ -275,6 +275,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
         self,
         tool_id: int,
         db_session: Session,
+        emitter: Emitter,
         # Used for ACLs and federated search
         user: User | None,
         # Used for filter settings
@@ -290,6 +291,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
         # Needed to help the Slack Federated search
         slack_context: SlackContext | None = None,
     ) -> None:
+        super().__init__(emitter=emitter)
+
         self.user = user
         self.persona = persona
         self.llm = llm
@@ -400,10 +403,18 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
             },
         }
 
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
+        self.emitter.emit(
+            Packet(
+                turn_index=turn_index,
+                tab_index=tab_index,
+                obj=SearchToolStart(),
+            )
+        )
+
     @log_function_time(print_only=True)
     def run(
         self,
-        run_context: SearchToolRunContext,
         turn_index: int,
         tab_index: int,
         override_kwargs: SearchToolOverrideKwargs,
@@ -415,18 +426,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
         try:
             llm_query = cast(str, llm_kwargs[QUERY_FIELD])
 
-            # Emit SearchToolStart packet at the beginning
-            run_context.emitter.emit(
-                Packet(
-                    turn_index=turn_index,
-                    tab_index=tab_index,
-                    obj=SearchToolStart(),
-                )
-            )
-
             # Run semantic and keyword query expansion in parallel
             # Use message history, memories, and user info from override_kwargs
-            message_history = override_kwargs.message_history or []
+            message_history = (
+                override_kwargs.message_history
+                if override_kwargs.message_history
+                else []
+            )
             memories = override_kwargs.memories
             user_info = override_kwargs.user_info
 
@@ -491,7 +497,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
             )
 
             # Emit the queries early so the UI can display them immediately
-            run_context.emitter.emit(
+            self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
                     tab_index=tab_index,
@@ -550,7 +556,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs, SearchToolRunContext]):
             )
 
             # Emit the documents
-            run_context.emitter.emit(
+            self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
                     tab_index=tab_index,

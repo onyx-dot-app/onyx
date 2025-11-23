@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import model_validator
 
-from onyx.chat.turn.infra.emitter import Emitter
+from onyx.chat.infra import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
@@ -15,8 +15,9 @@ from onyx.context.search.enums import SearchType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDocsResponse
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
-from onyx.tools.tool_implementations.web_search.models import WebContentResponse
-from onyx.tools.tool_implementations.web_search.models import WebSearchResultsResponse
+
+# from onyx.tools.tool_implementations.web_search.models import WebContentResponse
+# from onyx.tools.tool_implementations.web_search.models import WebSearchResultsResponse
 
 
 class CustomToolUserFileSnapshot(BaseModel):
@@ -38,9 +39,9 @@ class ToolResponse(BaseModel):
         # This comes from internal search, search docs need to be saved, no need to be emitted, already emitted by the tool
         | SearchDocsResponse
         # This comes from web search, search results need to be saved
-        | WebSearchResultsResponse
+        # | WebSearchResultsResponse
         # This comes from open url, web content needs to be saved
-        | WebContentResponse
+        # | WebContentResponse
         # This comes from custom tools, tool result needs to be saved
         | CustomToolCallSummary
     )
@@ -49,6 +50,7 @@ class ToolResponse(BaseModel):
 
 
 class ToolCallKickoff(BaseModel):
+    tool_call_id: str
     tool_name: str
     tool_args: dict[str, Any]
 

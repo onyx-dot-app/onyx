@@ -444,6 +444,9 @@ class SearchDoc(BaseModel):
 
 class SearchDocsResponse(BaseModel):
     search_docs: list[SearchDoc]
+    # Maps the citation number to the document id
+    # Since these are no longer just links on the frontend but instead document cards, mapping it to the
+    # document id is  the most staightforward way.
     citation_mapping: dict[int, str]
 
 

@@ -8,14 +8,15 @@ from onyx.chat.models import ResponsePart
 from onyx.chat.prompt_builder.answer_prompt_builder import LLMCall
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
-from onyx.tools.message import build_tool_message
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
-from onyx.tools.tool_runner import ToolRunner
 from onyx.utils.logger import setup_logger
+
+# to be removed
+# from onyx.tools.tool_runner import ToolRunner
 
 
 logger = setup_logger()
@@ -35,7 +36,9 @@ class ToolResponseHandler:
         self.tool_call_chunk: AIMessageChunk | None = None
         self.tool_call_requests: list[ToolCall] = []
 
-        self.tool_runner: ToolRunner | None = None
+        # to be removed
+        # self.tool_runner: ToolRunner | None = None
+        self.tool_runner = None
         self.tool_call_summary: ToolCallSummary | None = None
 
         self.tool_kickoff: ToolCallKickoff | None = None
@@ -78,23 +81,24 @@ class ToolResponseHandler:
 
         logger.info(f"Selected tool: {selected_tool.name}")
         logger.debug(f"Selected tool call request: {selected_tool_call_request}")
-        self.tool_runner = ToolRunner(selected_tool, selected_tool_call_request["args"])
-        self.tool_kickoff = self.tool_runner.kickoff()
-        yield self.tool_kickoff
-
-        for response in self.tool_runner.tool_responses():
-            self.tool_responses.append(response)
-            yield response
-
-        self.tool_final_result = self.tool_runner.tool_final_result()
-        yield self.tool_final_result
-
-        self.tool_call_summary = ToolCallSummary(
-            tool_call_request=self.tool_call_chunk,
-            tool_call_result=build_tool_message(
-                selected_tool_call_request, self.tool_runner.tool_message_content()
-            ),
-        )
+        # to be removed
+        # self.tool_runner = ToolRunner(selected_tool, selected_tool_call_request["args"])
+        # self.tool_kickoff = self.tool_runner.kickoff()
+        # yield self.tool_kickoff
+        #
+        # for response in self.tool_runner.tool_responses():
+        #     self.tool_responses.append(response)
+        #     yield response
+        #
+        # self.tool_final_result = self.tool_runner.tool_final_result()
+        # yield self.tool_final_result
+        #
+        # self.tool_call_summary = ToolCallSummary(
+        #     tool_call_request=self.tool_call_chunk,
+        #     tool_call_result=build_tool_message(
+        #         selected_tool_call_request, self.tool_runner.tool_message_content()
+        #     ),
+        # )
 
     def handle_response_part(
         self,

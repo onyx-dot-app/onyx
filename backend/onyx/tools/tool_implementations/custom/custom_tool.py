@@ -10,6 +10,8 @@ from typing import List
 import requests
 from requests import JSONDecodeError
 
+from onyx.chat.infra import Emitter
+from onyx.chat.infra import get_default_emitter
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
@@ -17,7 +19,6 @@ from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import CHAT_SESSION_ID_PLACEHOLDER
 from onyx.tools.models import CustomToolCallSummary
-from onyx.tools.models import CustomToolRunContext
 from onyx.tools.models import CustomToolUserFileSnapshot
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import MESSAGE_ID_PLACEHOLDER
@@ -42,15 +43,18 @@ CUSTOM_TOOL_RESPONSE_ID = "custom_tool_response"
 
 
 # override_kwargs is not supported for custom tools
-class CustomTool(Tool[None, CustomToolRunContext]):
+class CustomTool(Tool[None]):
     def __init__(
         self,
         id: int,
         method_spec: MethodSpec,
         base_url: str,
+        emitter: Emitter,
         custom_headers: list[HeaderItemDict] | None = None,
         user_oauth_token: str | None = None,
     ) -> None:
+        super().__init__(emitter=emitter)
+
         self._base_url = base_url
         self._method_spec = method_spec
         self._tool_definition = self._method_spec.to_tool_definition()
@@ -129,9 +133,17 @@ class CustomTool(Tool[None, CustomToolRunContext]):
 
     """Actual execution of the tool"""
 
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
+        self.emitter.emit(
+            Packet(
+                turn_index=turn_index,
+                tab_index=tab_index,
+                obj=CustomToolStart(tool_name=self._name),
+            )
+        )
+
     def run(
         self,
-        run_context: CustomToolRunContext,
         turn_index: int,
         tab_index: int,
         override_kwargs: None,
@@ -155,15 +167,6 @@ class CustomTool(Tool[None, CustomToolRunContext]):
 
         url = self._method_spec.build_url(self._base_url, path_params, query_params)
         method = self._method_spec.method
-
-        # Emit CustomToolStart packet
-        run_context.emitter.emit(
-            Packet(
-                turn_index=turn_index,
-                tab_index=tab_index,
-                obj=CustomToolStart(tool_name=self._name),
-            )
-        )
 
         response = requests.request(
             method, url, json=request_body, headers=self.headers
@@ -207,7 +210,7 @@ class CustomTool(Tool[None, CustomToolRunContext]):
         )
 
         # Emit CustomToolDelta packet
-        run_context.emitter.emit(
+        self.emitter.emit(
             Packet(
                 turn_index=turn_index,
                 tab_index=tab_index,
@@ -235,6 +238,7 @@ class CustomTool(Tool[None, CustomToolRunContext]):
 def build_custom_tools_from_openapi_schema_and_headers(
     tool_id: int,
     openapi_schema: dict[str, Any],
+    emitter: Emitter | None = None,
     custom_headers: list[HeaderItemDict] | None = None,
     dynamic_schema_info: DynamicSchemaInfo | None = None,
     user_oauth_token: str | None = None,
@@ -256,11 +260,16 @@ def build_custom_tools_from_openapi_schema_and_headers(
     url = openapi_to_url(openapi_schema)
     method_specs = openapi_to_method_specs(openapi_schema)
 
+    # Use default emitter if none provided
+    if emitter is None:
+        emitter = get_default_emitter()
+
     return [
         CustomTool(
             id=tool_id,
             method_spec=method_spec,
             base_url=url,
+            emitter=emitter,
             custom_headers=custom_headers,
             user_oauth_token=user_oauth_token,
         )
@@ -322,6 +331,7 @@ if __name__ == "__main__":
     tools = build_custom_tools_from_openapi_schema_and_headers(
         tool_id=0,  # dummy tool id
         openapi_schema=openapi_schema,
+        emitter=get_default_emitter(),
         dynamic_schema_info=None,
     )
 

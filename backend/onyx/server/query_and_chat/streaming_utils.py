@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from backend.onyx.chat.temp_translation import SectionEnd
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
@@ -29,7 +30,6 @@ from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
 from shared_configs.contextvars import get_current_tenant_id
 
 

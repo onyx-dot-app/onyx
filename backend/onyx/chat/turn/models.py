@@ -18,8 +18,8 @@ from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
+from onyx.chat.infra import Emitter
 from onyx.chat.models import PromptConfig
-from onyx.chat.turn.infra.emitter import Emitter
 from onyx.context.search.models import InferenceSection
 from onyx.db.models import User
 from onyx.llm.interfaces import LLM

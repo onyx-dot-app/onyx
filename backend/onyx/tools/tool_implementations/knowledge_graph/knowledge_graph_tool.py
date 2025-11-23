@@ -2,6 +2,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from onyx.chat.infra import Emitter
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
@@ -12,12 +13,17 @@ logger = setup_logger()
 QUERY_FIELD = "query"
 
 
-class KnowledgeGraphTool(Tool[None, None]):
+class KnowledgeGraphTool(Tool[None]):
     _NAME = "run_kg_search"
     _DESCRIPTION = "Search the knowledge graph for information. Never call this tool."
     _DISPLAY_NAME = "Knowledge Graph Search"
 
-    def __init__(self, tool_id: int) -> None:
+    def __init__(self, tool_id: int, emitter: Emitter) -> None:
+        raise NotImplementedError(
+            "KnowledgeGraphTool should not be getting used right now."
+        )
+        super().__init__(emitter=emitter)
+
         self._id = tool_id
 
     @property
@@ -60,6 +66,9 @@ class KnowledgeGraphTool(Tool[None, None]):
                 },
             },
         }
+
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
+        raise NotImplementedError("KnowledgeGraphTool.emit_start is not implemented.")
 
     def run(
         self,

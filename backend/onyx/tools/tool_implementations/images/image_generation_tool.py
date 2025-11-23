@@ -7,6 +7,7 @@ import requests
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
+from onyx.chat.infra import Emitter
 from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.db.llm import fetch_existing_llm_providers
@@ -18,7 +19,6 @@ from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.models import ImageGenerationToolRunContext
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.models import (
@@ -40,7 +40,7 @@ HEARTBEAT_INTERVAL = 5.0
 
 
 # override_kwargs is not supported for image generation tools
-class ImageGenerationTool(Tool[None, ImageGenerationToolRunContext]):
+class ImageGenerationTool(Tool[None]):
     _NAME = IMAGE_GENERATION_TOOL_NAME
     _DESCRIPTION = (
         "NEVER use generate_image unless the user specifically requests an image."
@@ -53,9 +53,12 @@ class ImageGenerationTool(Tool[None, ImageGenerationToolRunContext]):
         api_base: str | None,
         api_version: str | None,
         tool_id: int,
+        emitter: Emitter,
         model: str = IMAGE_MODEL_NAME,
         num_imgs: int = 1,
     ) -> None:
+        super().__init__(emitter=emitter)
+
         self.api_key = api_key
         self.api_base = api_base
         self.api_version = api_version
@@ -122,6 +125,15 @@ class ImageGenerationTool(Tool[None, ImageGenerationToolRunContext]):
                 },
             },
         }
+
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
+        self.emitter.emit(
+            Packet(
+                turn_index=turn_index,
+                tab_index=tab_index,
+                obj=ImageGenerationToolStart(),
+            )
+        )
 
     def _generate_image(
         self, prompt: str, shape: ImageShape
@@ -203,7 +215,6 @@ class ImageGenerationTool(Tool[None, ImageGenerationToolRunContext]):
 
     def run(
         self,
-        run_context: ImageGenerationToolRunContext,
         turn_index: int,
         tab_index: int,
         override_kwargs: None,
@@ -211,15 +222,6 @@ class ImageGenerationTool(Tool[None, ImageGenerationToolRunContext]):
     ) -> ToolResponse:
         prompt = cast(str, llm_kwargs["prompt"])
         shape = ImageShape(llm_kwargs.get("shape", ImageShape.SQUARE.value))
-
-        # Emit start packet
-        run_context.emitter.emit(
-            Packet(
-                turn_index=turn_index,
-                tab_index=tab_index,
-                obj=ImageGenerationToolStart(),
-            )
-        )
 
         # Use threading to generate images in parallel while emitting heartbeats
         results: list[tuple[ImageGenerationResponse, Any] | None] = [
@@ -260,7 +262,7 @@ class ImageGenerationTool(Tool[None, ImageGenerationToolRunContext]):
         heartbeat_count = 0
         while not completed.is_set():
             # Emit a heartbeat packet to prevent timeout
-            run_context.emitter.emit(
+            self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
                     tab_index=tab_index,
@@ -305,7 +307,7 @@ class ImageGenerationTool(Tool[None, ImageGenerationToolRunContext]):
         ]
 
         # Emit final packet with generated images
-        run_context.emitter.emit(
+        self.emitter.emit(
             Packet(
                 turn_index=turn_index,
                 tab_index=tab_index,
