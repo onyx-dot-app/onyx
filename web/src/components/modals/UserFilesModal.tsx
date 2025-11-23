@@ -20,7 +20,7 @@ import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import Modal from "@/refresh-components/Modal";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import { Separator } from "@/components/ui/separator";
+import CounterSeparator from "@/refresh-components/CounterSeparator";
 
 function getIcon(
   file: ProjectFile,
@@ -263,14 +263,10 @@ export default function UserFilesModal({
 
                 {/* File count divider - only show when not searching or filtering */}
                 {!search.trim() && !showOnlySelected && (
-                  <div className="flex items-center justify-center gap-2 px-4 pb-2">
-                    <Separator className="flex-1 my-0 bg-border-01" />
-                    <Text text03 secondaryBody>
-                      {recentFiles.length}{" "}
-                      {recentFiles.length === 1 ? "File" : "Files"}
-                    </Text>
-                    <Separator className="flex-1 my-0 bg-border-01" />
-                  </div>
+                  <CounterSeparator
+                    count={recentFiles.length}
+                    text={recentFiles.length === 1 ? "File" : "Files"}
+                  />
                 )}
               </ScrollIndicatorDiv>
             )}
