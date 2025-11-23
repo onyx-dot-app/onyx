@@ -53,7 +53,7 @@ openai==2.6.1
 openpyxl==3.0.10
 passlib==1.7.4
 playwright==1.55.0
-psutil==5.9.5
+psutil==7.1.3
 psycopg2-binary==2.9.9
 puremagic==1.28
 pyairtable==3.0.1
