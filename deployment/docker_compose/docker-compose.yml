@@ -64,6 +64,7 @@ services:
     #   - "8080:8080"
     environment:
       # Auth Settings
+      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
       - AUTH_TYPE=${AUTH_TYPE:-basic}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - VESPA_HOST=${VESPA_HOST:-index}
@@ -109,6 +110,7 @@ services:
     restart: unless-stopped
     environment:
       - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
+      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - VESPA_HOST=${VESPA_HOST:-index}
       - REDIS_HOST=${REDIS_HOST:-cache}
