@@ -12,7 +12,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { Modal } from "@/components/Modal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { AnonymousUserPath } from "./AnonymousUserPath";
-import { LLMSelector } from "@/components/llm/LLMSelector";
+import LLMSelector from "@/components/llm/LLMSelector";
 import { useVisionProviders } from "./hooks/useVisionProviders";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 

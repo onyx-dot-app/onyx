@@ -31,7 +31,7 @@ test("Non-image-generation model visibility in chat input bar", async ({
   // Use .first() since there might be multiple providers with the same model
   const modelButton = page
     .locator('[role="dialog"]')
-    .locator("div.cursor-pointer")
+    .locator("button")
     .filter({ hasText: testModelDisplayName })
     .first();
 

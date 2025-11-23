@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getDisplayNameForModel, useAuthType } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
@@ -8,15 +10,7 @@ import { useUser } from "@/components/user/UserProvider";
 import { ThemePreference } from "@/lib/types";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SubLabel } from "@/components/Field";
-import { LLMSelector } from "@/components/llm/LLMSelector";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Loader2, Monitor, Moon, Sun } from "lucide-react";
+import LLMSelector from "@/components/llm/LLMSelector";
 import { useTheme } from "next-themes";
 import Button from "@/refresh-components/buttons/Button";
 import { deleteAllChatSessions } from "@/app/chat/services/lib";
@@ -31,10 +25,15 @@ import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { useUserPersonalization } from "@/lib/hooks/useUserPersonalization";
 import Text from "@/refresh-components/texts/Text";
 import SvgXOctagon from "@/icons/x-octagon";
-import { PATManagement } from "@/components/user/PATManagement";
+import PATManagement from "@/components/user/PATManagement";
 import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import SvgSettings from "@/icons/settings";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import SvgCpu from "@/icons/cpu";
+import SvgMoon from "@/icons/moon";
+import SvgSun from "@/icons/sun";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 
 type SettingsSection =
@@ -385,34 +384,39 @@ export default function UserSettings() {
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-medium">Theme</h3>
-                  <Select
-                    value={theme}
+                  <InputSelect
+                    defaultValue={theme}
                     onValueChange={(value) => {
                       setTheme(value);
                       updateUserThemePreference(value as ThemePreference);
                     }}
                   >
-                    <SelectTrigger className="w-full mt-2">
-                      <SelectValue placeholder="Select theme" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem
+                    <InputSelect.Trigger />
+
+                    <InputSelect.Content>
+                      <InputSelect.Item
+                        key={ThemePreference.SYSTEM}
                         value={ThemePreference.SYSTEM}
-                        icon={<Monitor className="h-4 w-4" />}
+                        icon={SvgCpu}
                       >
                         System
-                      </SelectItem>
-                      <SelectItem
+                      </InputSelect.Item>
+                      <InputSelect.Item
+                        key={ThemePreference.LIGHT}
                         value={ThemePreference.LIGHT}
-                        icon={<Sun className="h-4 w-4" />}
+                        icon={SvgSun}
                       >
                         Light
-                      </SelectItem>
-                      <SelectItem icon={<Moon />} value={ThemePreference.DARK}>
+                      </InputSelect.Item>
+                      <InputSelect.Item
+                        key={ThemePreference.DARK}
+                        value={ThemePreference.DARK}
+                        icon={SvgMoon}
+                      >
                         Dark
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                      </InputSelect.Item>
+                    </InputSelect.Content>
+                  </InputSelect>
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
@@ -455,9 +459,7 @@ export default function UserSettings() {
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <h3 className="text-lg font-medium">Default Model</h3>
-                    {isModelUpdating && (
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    )}
+                    {isModelUpdating && <SimpleLoader />}
                   </div>
                   <LLMSelector
                     userSettings

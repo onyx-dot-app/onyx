@@ -21,9 +21,8 @@ const textClassNames = {
 const iconClassNames = (forced?: boolean) =>
   forced ? ["stroke-action-link-05"] : ["stroke-text-03"];
 
-export interface LineItemProps extends React.HTMLAttributes<HTMLDivElement> {
+export interface LineItemProps extends React.HTMLAttributes<HTMLButtonElement> {
   // Button variants
-  main?: boolean;
   forced?: boolean;
   heavyForced?: boolean;
   strikethrough?: boolean;
@@ -32,12 +31,10 @@ export interface LineItemProps extends React.HTMLAttributes<HTMLDivElement> {
   description?: string;
   children?: string;
   rightChildren?: React.ReactNode;
-  onClick?: React.MouseEventHandler<HTMLDivElement>;
   href?: string;
 }
 
 export default function LineItem({
-  main,
   forced,
   heavyForced,
   strikethrough,
@@ -47,26 +44,23 @@ export default function LineItem({
   className,
   children,
   rightChildren,
-  onClick,
   href,
   ...props
 }: LineItemProps) {
-  const variant = main
-    ? "main"
-    : strikethrough
-      ? "strikeThrough"
-      : forced || heavyForced
-        ? "forced"
-        : "main";
+  const variant = strikethrough
+    ? "strikeThrough"
+    : forced || heavyForced
+      ? "forced"
+      : "main";
 
   const content = (
-    <div
+    <button
       className={cn(
-        "flex flex-col w-full justify-center items-start p-2 rounded-08 group/LineItem cursor-pointer",
+        "flex flex-col w-full justify-center items-start p-2 rounded-08 group/LineItem",
         buttonClassNames(heavyForced),
         className
       )}
-      onClick={onClick}
+      type="button"
       {...props}
     >
       <div className="flex flex-row items-center justify-start w-full gap-2">
@@ -103,7 +97,7 @@ export default function LineItem({
           </Text>
         </div>
       )}
-    </div>
+    </button>
   );
 
   if (!href) return content;

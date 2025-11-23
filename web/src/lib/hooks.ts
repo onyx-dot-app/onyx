@@ -39,8 +39,6 @@ import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
-import { usePathname, useSearchParams } from "next/navigation";
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useLLMProviders } from "./hooks/useLLMProviders";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 
