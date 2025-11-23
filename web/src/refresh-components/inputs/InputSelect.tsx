@@ -161,19 +161,33 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
     );
 
     // Item registry for displaying selected item with icon in trigger
-    const itemsRef = React.useRef<Map<string, ItemRegistration>>(new Map());
+    // Using useState instead of useRef so registration triggers re-renders
+    const [items, setItems] = React.useState<Map<string, ItemRegistration>>(
+      () => new Map()
+    );
 
     const registerItem = React.useCallback((item: ItemRegistration) => {
-      itemsRef.current.set(item.value, item);
+      setItems((prev) => {
+        const next = new Map(prev);
+        next.set(item.value, item);
+        return next;
+      });
     }, []);
 
     const unregisterItem = React.useCallback((value: string) => {
-      itemsRef.current.delete(value);
+      setItems((prev) => {
+        const next = new Map(prev);
+        next.delete(value);
+        return next;
+      });
     }, []);
 
-    const getItem = React.useCallback((value: string) => {
-      return itemsRef.current.get(value);
-    }, []);
+    const getItem = React.useCallback(
+      (value: string) => {
+        return items.get(value);
+      },
+      [items]
+    );
 
     const contextValue = React.useMemo<InputSelectContextValue>(
       () => ({
