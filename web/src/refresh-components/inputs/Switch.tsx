@@ -69,6 +69,8 @@ function SwitchInner(
       className={cn(
         "peer inline-flex h-[1.125rem] w-[2rem] shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none disabled:cursor-not-allowed",
         rootClasses(checked)[variant],
+        "border border-transparent",
+        "focus-within:focus-shadow focus-within:hover:!border-border-01",
         className
       )}
       disabled={disabled}
@@ -78,7 +80,7 @@ function SwitchInner(
       <span
         data-state={checked ? "checked" : "unchecked"}
         className={cn(
-          "pointer-events-none block h-[0.875rem] w-[0.875rem] rounded-full ring-0 transition-transform data-[state=checked]:translate-x-[1rem] data-[state=unchecked]:translate-x-[0.125rem]",
+          "pointer-events-none block h-[0.875rem] w-[0.875rem] rounded-full ring-0 transition-transform data-[state=checked]:translate-x-[15px] data-[state=unchecked]:translate-x-[1px]",
           thumbClasses[variant]
         )}
       />
