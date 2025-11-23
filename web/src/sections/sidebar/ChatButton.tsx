@@ -424,7 +424,7 @@ function ChatButtonInner({
           />
         </div>
       </PopoverTrigger>
-      <PopoverContent side="right" align="end">
+      <PopoverContent side="right" align="start">
         <PopoverMenu>{popoverItems}</PopoverMenu>
       </PopoverContent>
     </>
