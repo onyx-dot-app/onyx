@@ -4,7 +4,7 @@ import {
 } from "@/lib/tools/interfaces";
 import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/components/ui/text";
 import { SearchIcon } from "lucide-react";
 import { useMemo, useState, useEffect } from "react";
@@ -412,16 +412,10 @@ export function ToolList({
           <div className="w-6 flex-none mr-3">
             <Checkbox
               checked={allFilteredSelected}
+              indeterminate={!allFilteredSelected && someFilteredSelected}
               onCheckedChange={handleToggleAllFiltered}
               className="mt-0"
-              data-state={
-                allFilteredSelected
-                  ? "checked"
-                  : someFilteredSelected
-                    ? "indeterminate"
-                    : "unchecked"
-              }
-              data-testid="tool-checkbox-select-all"
+              aria-label="tool-checkbox-select-all"
             />
           </div>
           <div className="flex-1 font-medium text-sm text-gray-700 dark:text-gray-300">
@@ -448,7 +442,7 @@ export function ToolList({
                     checked={selectedTools.has(tool.name)}
                     onCheckedChange={() => handleToggleTool(tool.name)}
                     className="mt-0"
-                    data-testid={`tool-checkbox-${tool.name}`}
+                    aria-label={`tool-checkbox-${tool.name}`}
                   />
                 </div>
                 <div className="flex-1">

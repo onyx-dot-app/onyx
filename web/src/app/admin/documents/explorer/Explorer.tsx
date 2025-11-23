@@ -5,7 +5,7 @@ import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useState, useEffect, useCallback } from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
-import { CustomCheckbox } from "@/components/CustomCheckbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { updateHiddenStatus } from "../lib";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { getErrorMsg } from "@/lib/fetchUtils";
@@ -90,7 +90,7 @@ const DocumentDisplay = ({
             )}
           </div>
           <div className="ml-1 my-auto">
-            <CustomCheckbox checked={!document.hidden} />
+            <Checkbox checked={!document.hidden} />
           </div>
         </div>
       </div>

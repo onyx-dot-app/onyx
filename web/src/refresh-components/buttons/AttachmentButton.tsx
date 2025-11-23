@@ -8,7 +8,7 @@ import SvgTrash from "@/icons/trash";
 import Text from "@/refresh-components/texts/Text";
 import SvgExternalLink from "@/icons/external-link";
 import { SvgProps } from "@/icons";
-import { Checkbox } from "@/components/ui/checkbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 
 const bgClassNames = {
   defaulted: ["bg-background-tint-00 "],

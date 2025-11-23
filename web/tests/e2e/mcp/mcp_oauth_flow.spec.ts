@@ -642,8 +642,8 @@ async function ensurePublicAssistant(page: Page) {
     .filter({ hasText: "Organization Public" })
     .first();
   const switchLocator = publicRow.locator('[role="switch"]').first();
-  const state = await switchLocator.getAttribute("data-state");
-  if (state !== "checked") {
+  const state = await switchLocator.getAttribute("aria-checked");
+  if (state !== "true") {
     await switchLocator.click();
   }
 }
@@ -667,19 +667,16 @@ async function selectMcpTools(
   }
 
   for (const toolName of toolNames) {
-    const attributeLocator = sectionLocator.locator(
-      `[data-tool-name="${toolName}"], [data-tool-display-name="${toolName}"]`
+    const checkboxLocator = sectionLocator.getByLabel(
+      `mcp-server-tool-checkbox-${toolName}`
     );
-    if ((await attributeLocator.count()) > 0) {
-      await attributeLocator.first().check({ force: true });
-      continue;
-    }
-
-    const labelLocator = sectionLocator.getByRole("checkbox", {
-      name: new RegExp(toolName, "i"),
-    });
-    if ((await labelLocator.count()) > 0) {
-      await labelLocator.first().check({ force: true });
+    if ((await checkboxLocator.count()) > 0) {
+      const isChecked = await checkboxLocator
+        .first()
+        .getAttribute("aria-checked");
+      if (isChecked !== "true") {
+        await checkboxLocator.first().click();
+      }
       continue;
     }
 
@@ -1274,7 +1271,7 @@ test.describe("MCP OAuth flows", () => {
     await page.waitForTimeout(500); // allow filtering to apply
 
     const adminToolCheckboxLocator = page
-      .getByTestId(`tool-checkbox-${TOOL_NAMES.admin}`)
+      .getByLabel(`tool-checkbox-${TOOL_NAMES.admin}`)
       .first();
     const checkboxCount = await adminToolCheckboxLocator.count();
 
@@ -1282,10 +1279,13 @@ test.describe("MCP OAuth flows", () => {
       await toolSearchInput.fill("");
       await page.waitForTimeout(500);
       const selectAllCheckbox = page
-        .getByTestId("tool-checkbox-select-all")
+        .getByLabel("tool-checkbox-select-all")
         .first();
-      await selectAllCheckbox.click({ force: true });
-      await expect(selectAllCheckbox).toHaveAttribute("data-state", "checked", {
+      const isChecked = await selectAllCheckbox.getAttribute("aria-checked");
+      if (isChecked !== "true") {
+        await selectAllCheckbox.click();
+      }
+      await expect(selectAllCheckbox).toHaveAttribute("aria-checked", "true", {
         timeout: 10000,
       });
       logStep("Selected tool via select-all fallback");
@@ -1296,14 +1296,13 @@ test.describe("MCP OAuth flows", () => {
       });
       // Ensure the tool ends up selected before proceeding
       if (
-        (await adminToolCheckboxLocator.getAttribute("data-state")) !==
-        "checked"
+        (await adminToolCheckboxLocator.getAttribute("aria-checked")) !== "true"
       ) {
-        await adminToolCheckboxLocator.click({ force: true });
+        await adminToolCheckboxLocator.click();
       }
       await expect(adminToolCheckboxLocator).toHaveAttribute(
-        "data-state",
-        "checked",
+        "aria-checked",
+        "true",
         {
           timeout: 10000,
         }
@@ -1461,15 +1460,12 @@ test.describe("MCP OAuth flows", () => {
       timeout: 15000,
     });
     const retentionCheckbox = page
-      .getByTestId(`tool-checkbox-${TOOL_NAMES.admin}`)
+      .getByLabel(`tool-checkbox-${TOOL_NAMES.admin}`)
       .first();
     if ((await retentionCheckbox.count()) > 0) {
       const isVisible = await retentionCheckbox.isVisible().catch(() => false);
       if (isVisible) {
-        await expect(retentionCheckbox).toHaveAttribute(
-          "data-state",
-          "checked"
-        );
+        await expect(retentionCheckbox).toHaveAttribute("aria-checked", "true");
         logStep(
           "Verified MCP server retains tool selection (checkbox visible)"
         );
@@ -1599,14 +1595,14 @@ test.describe("MCP OAuth flows", () => {
       }
 
       // Click the checkbox and wait for it to be checked
-      const curatorCheckbox = page.getByTestId(
+      const curatorCheckbox = page.getByLabel(
         `tool-checkbox-${TOOL_NAMES.curator}`
       );
       await curatorCheckbox.waitFor({ state: "visible", timeout: 10000 });
       await curatorCheckbox.click();
 
       // Verify the checkbox is actually checked
-      await expect(curatorCheckbox).toHaveAttribute("data-state", "checked", {
+      await expect(curatorCheckbox).toHaveAttribute("aria-checked", "true", {
         timeout: 10000,
       });
 
