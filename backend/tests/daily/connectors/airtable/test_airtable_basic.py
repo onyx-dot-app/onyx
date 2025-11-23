@@ -191,6 +191,7 @@ def compare_documents(
             ), f"Section {i} link mismatch for document {doc_id}"
 
 
+@pytest.mark.xdist_group(name="airtable")
 def test_airtable_connector_basic(
     mock_get_unstructured_api_key: MagicMock, airtable_config: AirtableConfig
 ) -> None:
@@ -255,6 +256,7 @@ def test_airtable_connector_basic(
     compare_documents(doc_batch, expected_docs)
 
 
+@pytest.mark.xdist_group(name="airtable")
 def test_airtable_connector_all_metadata(
     mock_get_unstructured_api_key: MagicMock, airtable_config: AirtableConfig
 ) -> None:
@@ -307,6 +309,7 @@ def test_airtable_connector_all_metadata(
     compare_documents(doc_batch, expected_docs)
 
 
+@pytest.mark.xdist_group(name="airtable")
 def test_airtable_connector_with_share_and_view(
     mock_get_unstructured_api_key: MagicMock, airtable_config: AirtableConfig
 ) -> None:
