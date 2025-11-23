@@ -45,9 +45,9 @@ import {
   handleMoveOperation,
 } from "@/sections/sidebar/sidebarUtils";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import { useAppFocus } from "@/lib/hooks";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Text from "@/refresh-components/texts/Text";
+import useAppFocus from "@/hooks/useAppFocus";
 
 // (no local constants; use shared constants/imports)
 

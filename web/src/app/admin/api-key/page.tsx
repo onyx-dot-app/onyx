@@ -6,7 +6,7 @@ import { KeyIcon } from "@/components/icons/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR, { mutate } from "swr";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import {
   TableBody,
   TableCell,

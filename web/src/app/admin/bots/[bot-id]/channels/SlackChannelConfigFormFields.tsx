@@ -36,7 +36,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 
 import { CheckFormField } from "@/components/ui/CheckField";
 

@@ -12,7 +12,8 @@ import { getAgentIcon } from "@/sections/sidebar/utils";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import SvgX from "@/icons/x";
-import { useAppFocus, useIsMounted } from "@/lib/hooks";
+import useAppFocus from "@/hooks/useAppFocus";
+import useIsMounted from "@/hooks/useIsMounted";
 
 interface SortableItemProps {
   id: number;

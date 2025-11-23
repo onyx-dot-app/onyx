@@ -365,6 +365,31 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+  
+  code-interpreter:
+    image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-latest}
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "
+      if [ \"$$CODE_INTERPRETER_BETA_ENABLED\" = \"true\" ]; then
+        exec bash ./entrypoint.sh code-interpreter-api;
+      else
+        echo 'Skipping code interpreter';
+        exec tail -f /dev/null;
+      fi
+      "
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+
+    # Below is needed for the `docker-out-of-docker` execution mode 
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    # uncomment below + comment out the above to use the `docker-in-docker` execution mode
+    # privileged: true
 
   # PRODUCTION: Uncomment the following certbot service for SSL certificate management
   # certbot:

@@ -502,6 +502,7 @@ export enum ValidSources {
   Highspot = "highspot",
   Imap = "imap",
   Bitbucket = "bitbucket",
+  TestRail = "testrail",
 
   // Federated Connectors
   FederatedSlack = "federated_slack",

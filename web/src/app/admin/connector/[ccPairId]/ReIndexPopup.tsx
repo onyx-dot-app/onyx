@@ -4,7 +4,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/components/ui/text";
 import { Modal } from "@/components/Modal";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import { useState } from "react";
 
 interface ReIndexPopupProps {

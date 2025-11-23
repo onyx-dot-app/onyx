@@ -58,8 +58,9 @@ import { ChatSession } from "@/app/chat/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import SvgSettings from "@/icons/settings";
-import { useAppFocus } from "@/lib/hooks";
+import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import useScreenSize from "@/hooks/useScreenSize";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -120,10 +121,14 @@ function RecentsSection({ chatSessions }: RecentsSectionProps) {
   );
 }
 
-function AppSidebarInner() {
+interface AppSidebarInnerProps {
+  folded: boolean;
+  onFoldClick: () => void;
+}
+
+function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
   const route = useAppRouter();
   const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
-  const { folded, setFolded } = useAppSidebarContext();
   const { chatSessions, refreshChatSessions } = useChatContext();
   const combinedSettings = useSettingsContext();
   const { refreshCurrentProjectDetails, fetchProjects, currentProjectId } =
@@ -390,10 +395,6 @@ function AppSidebarInner() {
     [folded, isAdmin, isCurator]
   );
 
-  if (!combinedSettings) {
-    return null;
-  }
-
   return (
     <>
       {popup}
@@ -434,7 +435,7 @@ function AppSidebarInner() {
         />
       )}
 
-      <SidebarWrapper folded={folded} setFolded={setFolded}>
+      <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
         <SidebarBody footer={settingsButton} actionButton={newSessionButton}>
           {folded ? (
             <>
@@ -501,7 +502,45 @@ function AppSidebarInner() {
   );
 }
 
-const AppSidebar = memo(AppSidebarInner);
-AppSidebar.displayName = "AppSidebar";
+const MemoizedAppSidebarInner = memo(AppSidebarInner);
+MemoizedAppSidebarInner.displayName = "AppSidebar";
 
-export default AppSidebar;
+export default function AppSidebar() {
+  const { folded, setFolded } = useAppSidebarContext();
+  const { isMobile } = useScreenSize();
+
+  if (!isMobile)
+    return (
+      <MemoizedAppSidebarInner
+        folded={folded}
+        onFoldClick={() => setFolded((prev) => !prev)}
+      />
+    );
+
+  return (
+    <>
+      <div
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 transition-transform duration-200",
+          folded ? "-translate-x-full" : "translate-x-0"
+        )}
+      >
+        <MemoizedAppSidebarInner
+          folded={false}
+          onFoldClick={() => setFolded(true)}
+        />
+      </div>
+
+      {/* Hitbox to close the sidebar if anything outside of it is touched */}
+      <div
+        className={cn(
+          "fixed inset-0 z-40 bg-mask-03 backdrop-blur-03 transition-opacity duration-200",
+          folded
+            ? "opacity-0 pointer-events-none"
+            : "opacity-100 pointer-events-auto"
+        )}
+        onClick={() => setFolded(true)}
+      />
+    </>
+  );
+}
