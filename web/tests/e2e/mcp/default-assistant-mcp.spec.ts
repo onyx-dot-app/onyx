@@ -493,7 +493,7 @@ test.describe("Default Assistant MCP Integration", () => {
     const finalChecked =
       await firstToolCheckboxAfter.getAttribute("aria-checked");
     console.log(`[test] Final tool state: ${finalChecked}`);
-    expect(Boolean(finalChecked)).toEqual(!Boolean(initialChecked));
+    expect(finalChecked).not.toEqual(initialChecked);
   });
 
   test("Instructions persist when saving default assistant", async ({
