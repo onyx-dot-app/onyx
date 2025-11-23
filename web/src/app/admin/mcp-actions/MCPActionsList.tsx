@@ -14,6 +14,9 @@ import {
   MCPActionStatus,
   MCPServerWithStatus,
 } from "./types";
+import { useState } from "react";
+import MCPAuthenticationModal from "./MCPAuthenticationModal";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 
 export default function MCPActionsList({
   mcpServers,
@@ -22,6 +25,10 @@ export default function MCPActionsList({
   mutateTools,
   setPopup,
 }: MCPActionsListProps) {
+  const authModal = useCreateModal();
+  const [selectedServer, setSelectedServer] =
+    useState<MCPServerWithStatus | null>(null);
+
   const convertTools = (
     toolSnapshots: ToolSnapshot[],
     server: MCPServerWithStatus
@@ -84,7 +91,11 @@ export default function MCPActionsList({
   };
 
   const handleAuthenticate = async (serverId: number) => {
-    console.log("Authenticate server:", serverId);
+    const server = mcpServers.find((s) => s.id === serverId);
+    if (server) {
+      setSelectedServer(server);
+      authModal.toggle(true);
+    }
   };
 
   const handleReconnect = async (serverId: number) => {
@@ -226,6 +237,13 @@ export default function MCPActionsList({
           />
         );
       })}
+
+      <authModal.Provider>
+        <MCPAuthenticationModal
+          serverName={selectedServer?.name}
+          serverId={selectedServer?.id.toString() ?? ""}
+        />
+      </authModal.Provider>
     </div>
   );
 }

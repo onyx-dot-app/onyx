@@ -195,7 +195,7 @@ function InputSelectInner(
                   {option.label}
                 </SelectPrimitive.ItemText>
                 {option.description && (
-                  <span className="text-sm text-text-03 font-secondary-body group-data-[state=checked]:text-text-00 mt-0.5">
+                  <span className="text-sm text-text-03 font-secondary-body group-data-[state=checked]:text-text-00">
                     {option.description}
                   </span>
                 )}

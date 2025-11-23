@@ -237,6 +237,8 @@ export interface KeyValueInputProps
   validateEmptyKeys?: boolean;
   /** Optional name for the field (for accessibility) */
   name?: string;
+  /** Custom label for the add button (defaults to "Add Line") */
+  addButtonLabel?: string;
 }
 
 const KeyValueInput = ({
@@ -256,6 +258,7 @@ const KeyValueInput = ({
   validateDuplicateKeys = true,
   validateEmptyKeys = true,
   name,
+  addButtonLabel = "Add Line",
   className,
   ...rest
 }: KeyValueInputProps) => {
@@ -482,7 +485,7 @@ const KeyValueInput = ({
           aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
           type="button"
         >
-          Add Line
+          {addButtonLabel}
         </Button>
       </div>
     </div>

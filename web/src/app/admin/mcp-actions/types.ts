@@ -7,7 +7,8 @@ export type MCPServerStatus = "CREATED" | "AWAITING_AUTH" | "CONNECTED";
 export type MCPActionStatus = "connected" | "pending" | "disconnected";
 
 // Extended interface with status field
-export interface MCPServerWithStatus extends MCPServer {
+export interface MCPServerWithStatus
+  extends Omit<MCPServer, "transport" | "auth_type" | "auth_performer"> {
   status: MCPServerStatus;
   transport: string | null;
   auth_type: string | null;

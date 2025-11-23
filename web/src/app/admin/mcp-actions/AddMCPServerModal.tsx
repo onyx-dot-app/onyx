@@ -123,7 +123,6 @@ export default function AddMCPServerModal({
                   <FormField.Message
                     messages={{
                       error: errors.name,
-                      idle: "",
                     }}
                   />
                 </FormField>
@@ -155,7 +154,6 @@ export default function AddMCPServerModal({
                   <FormField.Message
                     messages={{
                       error: errors.description,
-                      idle: "",
                     }}
                   />
                 </FormField>
@@ -192,7 +190,6 @@ export default function AddMCPServerModal({
                   <FormField.Message
                     messages={{
                       error: errors.server_url,
-                      idle: "",
                     }}
                   />
                 </FormField>
