@@ -7,35 +7,12 @@ import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import { SvgProps } from "@/icons";
-
-// ============================================================================
-// Style Variants
-// ============================================================================
-
-const triggerClasses = {
-  main: [
-    "bg-background-neutral-00",
-    "border",
-    "hover:border-border-02",
-    "active:!border-border-05",
-  ],
-  error: ["bg-background-neutral-00", "border", "border-status-error-05"],
-  disabled: ["bg-background-neutral-03", "border", "cursor-not-allowed"],
-} as const;
-
-const iconClasses = {
-  main: ["stroke-text-03"],
-  error: ["stroke-text-03"],
-  disabled: ["stroke-text-01"],
-} as const;
-
-const textClasses = {
-  main: ["text-text-04"],
-  error: ["text-text-04"],
-  disabled: ["text-text-01"],
-} as const;
-
-type SelectVariant = keyof typeof triggerClasses;
+import {
+  iconClasses,
+  textClasses,
+  Variants,
+  wrapperClasses,
+} from "@/refresh-components/inputs/styles";
 
 // ============================================================================
 // Context
@@ -49,7 +26,7 @@ interface SelectedItemDisplay {
 }
 
 interface InputSelectContextValue {
-  variant: SelectVariant;
+  variant: Variants;
   currentValue?: string;
   disabled?: boolean;
   selectedItemDisplay: SelectedItemDisplay | null;
@@ -131,11 +108,7 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
     },
     ref
   ) => {
-    const variant: SelectVariant = disabled
-      ? "disabled"
-      : error
-        ? "error"
-        : "main";
+    const variant: Variants = disabled ? "disabled" : error ? "error" : "main";
 
     // Support both controlled and uncontrolled modes
     const isControlled = value !== undefined;
@@ -256,8 +229,9 @@ const InputSelectTrigger = React.forwardRef<
     <SelectPrimitive.Trigger
       ref={ref}
       className={cn(
-        "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08",
-        triggerClasses[variant],
+        "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08 focus:outline-none",
+        wrapperClasses[variant],
+        variant === "main" && "data-[state=open]:border-border-05",
         className
       )}
       {...props}

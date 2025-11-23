@@ -5,34 +5,10 @@ import { cn, noProp } from "@/lib/utils";
 import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSearch from "@/icons/search";
-
-// Used for other, similar components (e.g., `InputTextArea`).
-export const divClasses = {
-  main: [
-    "border",
-    "hover:border-border-02",
-    "active:!border-border-05",
-    "focus-within-nonactive:border-border-05 focus-within-nonactive:focus-shadow",
-  ],
-  internal: [],
-  error: ["border", "border-status-error-05"],
-  disabled: [
-    "bg-background-neutral-03",
-    "border",
-    "border-border-01",
-    "cursor-not-allowed",
-  ],
-} as const;
-
-// Used for other, similar components (e.g., `InputTextArea`).
-export const innerClasses = {
-  main: [
-    "text-text-04 placeholder:!font-secondary-body placeholder:text-text-02",
-  ],
-  internal: [],
-  error: [],
-  disabled: ["text-text-02"],
-} as const;
+import {
+  innerClasses,
+  wrapperClasses,
+} from "@/refresh-components/inputs/styles";
 
 /**
  * InputTypeIn Component
@@ -153,8 +129,8 @@ function InputTypeInInner(
   return (
     <div
       className={cn(
-        "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
-        divClasses[variant],
+        "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 relative",
+        wrapperClasses[variant],
         className
       )}
       onClick={() => {
