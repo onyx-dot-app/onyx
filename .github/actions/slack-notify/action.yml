@@ -21,26 +21,27 @@ runs:
       shell: bash
       env:
         SLACK_WEBHOOK_URL: ${{ inputs.webhook-url }}
+        FAILED_JOBS: ${{ inputs.failed-jobs }}
+        TITLE: ${{ inputs.title }}
+        REF_NAME: ${{ inputs.ref-name }}
+        REPO: ${{ github.repository }}
+        WORKFLOW: ${{ github.workflow }}
+        RUN_NUMBER: ${{ github.run_number }}
+        RUN_ID: ${{ github.run_id }}
+        SERVER_URL: ${{ github.server_url }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
       run: |
         if [ -z "$SLACK_WEBHOOK_URL" ]; then
           echo "webhook-url input or SLACK_WEBHOOK_URL env var is not set, skipping notification"
           exit 0
         fi
 
-        # Get inputs with defaults
-        FAILED_JOBS="${{ inputs.failed-jobs }}"
-        TITLE="${{ inputs.title }}"
-        REF_NAME="${{ inputs.ref-name }}"
-        REPO="${{ github.repository }}"
-        WORKFLOW="${{ github.workflow }}"
-        RUN_NUMBER="${{ github.run_number }}"
-        RUN_ID="${{ github.run_id }}"
-        SERVER_URL="${{ github.server_url }}"
+        # Build workflow URL
         WORKFLOW_URL="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
 
         # Use ref_name from input or fall back to github.ref_name
         if [ -z "$REF_NAME" ]; then
-          REF_NAME="${{ github.ref_name }}"
+          REF_NAME="$GITHUB_REF_NAME"
         fi
 
         # Escape JSON special characters

@@ -24,10 +24,17 @@ runs:
 
     - name: Create virtual environment
       shell: bash
-      run: |
-        uv venv ${{ runner.temp }}/venv
-        echo "VENV_PATH=${{ runner.temp }}/venv" >> $GITHUB_ENV
-        echo "${{ runner.temp }}/venv/bin" >> $GITHUB_PATH
+      env:
+        VENV_DIR: ${{ runner.temp }}/venv
+      run: | # zizmor: ignore[github-env]
+        uv venv "$VENV_DIR"
+        # Validate path before adding to GITHUB_PATH to prevent code injection
+        if [ -d "$VENV_DIR/bin" ]; then
+          realpath "$VENV_DIR/bin" >> "$GITHUB_PATH"
+        else
+          echo "Error: $VENV_DIR/bin does not exist"
+          exit 1
+        fi
 
     - name: Install Python dependencies with uv
       shell: bash
