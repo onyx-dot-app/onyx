@@ -42,8 +42,8 @@ function SeparatorInner(
       className={cn(
         "shrink-0 border-t",
         orientation === "horizontal"
-          ? "py-4 h-[1px] w-full"
-          : "px-4 h-full w-[1px]",
+          ? "my-4 h-[1px] w-full"
+          : "mx-4 h-full w-[1px]",
         className
       )}
       {...props}
