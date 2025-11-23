@@ -20,6 +20,7 @@ import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import Modal from "@/refresh-components/Modal";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
+import CounterSeparator from "@/refresh-components/CounterSeparator";
 
 function getIcon(
   file: ProjectFile,
@@ -259,32 +260,42 @@ export default function UserFilesModal({
                     />
                   );
                 })}
+
+                {/* File count divider - only show when not searching or filtering */}
+                {!search.trim() && !showOnlySelected && (
+                  <CounterSeparator
+                    count={recentFiles.length}
+                    text={recentFiles.length === 1 ? "File" : "Files"}
+                  />
+                )}
               </ScrollIndicatorDiv>
             )}
           </Modal.Body>
           <Modal.Footer className="flex items-center justify-between p-4">
             {/* Left side: file count and controls */}
-            <div className="flex items-center gap-2">
-              <Text text03>
-                {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
-                selected
-              </Text>
-              <IconButton
-                icon={SvgEye}
-                internal
-                onClick={() => setShowOnlySelected(!showOnlySelected)}
-                className={showOnlySelected ? "bg-background-tint-02" : ""}
-              />
-              <IconButton
-                icon={SvgXCircle}
-                internal
-                onClick={handleDeselectAll}
-                disabled={selectedCount === 0}
-              />
-            </div>
+            {onPickRecent && (
+              <div className="flex items-center gap-2">
+                <Text text03>
+                  {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
+                  selected
+                </Text>
+                <IconButton
+                  icon={SvgEye}
+                  internal
+                  onClick={() => setShowOnlySelected(!showOnlySelected)}
+                  className={showOnlySelected ? "bg-background-tint-02" : ""}
+                />
+                <IconButton
+                  icon={SvgXCircle}
+                  internal
+                  onClick={handleDeselectAll}
+                  disabled={selectedCount === 0}
+                />
+              </div>
+            )}
 
             {/* Right side: Done button */}
-            <Button secondary onClick={() => toggle(false)}>
+            <Button secondary onClick={() => toggle(false)} className="ml-auto">
               Done
             </Button>
           </Modal.Footer>
