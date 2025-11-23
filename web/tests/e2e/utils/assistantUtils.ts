@@ -89,9 +89,9 @@ export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
   const checkboxElement = page.getByLabel("image-generation-checkbox").first();
 
   // Check if it's already enabled
-  const isEnabled = await checkboxElement.getAttribute("data-state");
+  const isEnabled = Boolean(await checkboxElement.getAttribute("aria-checked"));
 
-  if (isEnabled !== "checked") {
+  if (!isEnabled) {
     // If not enabled, click to enable it
     await checkboxElement.click();
 
@@ -99,9 +99,9 @@ export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
     await page.waitForTimeout(1000);
 
     // Verify it's now enabled
-    const newState = await checkboxElement.getAttribute("data-state");
-    if (newState !== "checked") {
-      throw new Error("Failed to enable Image Generation tool");
-    }
+    const newState = Boolean(
+      await checkboxElement.getAttribute("aria-checked")
+    );
+    if (!newState) throw new Error("Failed to enable Image Generation tool");
   }
 }

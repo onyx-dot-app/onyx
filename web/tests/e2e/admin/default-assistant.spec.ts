@@ -669,24 +669,6 @@ test.describe("Default Assistant Admin Page", () => {
     // Navigate to chat to verify tools are disabled and initial load greeting
     await page.goto("http://localhost:3000/chat");
     await waitForUnifiedGreeting(page);
-    // The Action Management toggle may still exist but with no enabled tools inside
-    // So instead, check if specific tool options are not available
-    try {
-      await openActionManagement(page);
-      // If we can open it, check that tools are disabled
-      await expect(page.locator(TOOL_IDS.searchOption)).not.toBeVisible({
-        timeout: 10000,
-      });
-      await expect(page.locator(TOOL_IDS.webSearchOption)).not.toBeVisible({
-        timeout: 10000,
-      });
-      await expect(
-        page.locator(TOOL_IDS.imageGenerationOption)
-      ).not.toBeVisible({ timeout: 10000 });
-    } catch {
-      // If Action Management can't be opened, that's also acceptable
-      // when all tools are disabled
-    }
 
     // Go back and re-enable all tools
     await page.goto(

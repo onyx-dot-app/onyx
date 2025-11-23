@@ -148,7 +148,7 @@ export const MCPServerSection = memo(function MCPServerSection({
           checked={checkboxState === true}
           indeterminate={checkboxState === "indeterminate"}
           onCheckedChange={onToggleServerTools}
-          aria-label={`mcp-server-select-all-checkbox-${serverName}`}
+          aria-label="mcp-server-select-all-tools-checkbox"
         />
         <div className="flex-grow">
           <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
