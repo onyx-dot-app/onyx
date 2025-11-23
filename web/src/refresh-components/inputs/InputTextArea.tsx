@@ -2,7 +2,10 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { divClasses, innerClasses } from "./InputTypeIn";
+import {
+  wrapperClasses,
+  innerClasses,
+} from "@/refresh-components/inputs/styles";
 
 /**
  * InputTextArea Component
@@ -73,7 +76,7 @@ function InputTextAreaInner(
   return (
     <div
       className={cn(
-        divClasses[variant],
+        wrapperClasses[variant],
         "flex flex-row items-start justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
         className
       )}
