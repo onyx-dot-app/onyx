@@ -76,7 +76,7 @@ def create_test_user(db_session: Session, email_prefix: str) -> User:
     return user
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def initialize_file_store() -> Generator[None, None, None]:
     """Initialize the file store for testing"""
     get_default_file_store().initialize()

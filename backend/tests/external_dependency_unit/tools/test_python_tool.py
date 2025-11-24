@@ -77,6 +77,7 @@ def code_interpreter_client() -> CodeInterpreterClient:
 def test_python_execution_basic(
     mock_run_context: RunContextWrapper[ChatTurnContext],
     code_interpreter_client: CodeInterpreterClient,
+    initialize_file_store: None,
 ) -> None:
     """Test basic Python execution with simple code."""
     code = 'print("Hello, World!")'
@@ -138,6 +139,7 @@ def test_python_execution_basic(
 def test_python_execution_with_syntax_error(
     mock_run_context: RunContextWrapper[ChatTurnContext],
     code_interpreter_client: CodeInterpreterClient,
+    initialize_file_store: None,
 ) -> None:
     """Test Python execution with syntax error."""
     code = "print('missing closing quote"
@@ -167,6 +169,7 @@ def test_python_execution_with_syntax_error(
 def test_python_execution_with_runtime_error(
     mock_run_context: RunContextWrapper[ChatTurnContext],
     code_interpreter_client: CodeInterpreterClient,
+    initialize_file_store: None,
 ) -> None:
     """Test Python execution with runtime error."""
     code = """
@@ -196,6 +199,7 @@ print(result)
 
 def test_python_execution_timeout(
     mock_run_context: RunContextWrapper[ChatTurnContext],
+    initialize_file_store: None,
 ) -> None:
     """Test execution timeout handling."""
     # Code that will run longer than the timeout
@@ -236,6 +240,7 @@ def test_python_execution_file_generation(
     mock_run_context: RunContextWrapper[ChatTurnContext],
     code_interpreter_client: CodeInterpreterClient,
     db_session: Session,  # Needed to initialize DB engine for file_store
+    initialize_file_store: None,
 ) -> None:
     """Test file generation and retrieval."""
     code = """
@@ -297,6 +302,7 @@ def test_python_execution_with_matplotlib(
     mock_run_context: RunContextWrapper[ChatTurnContext],
     code_interpreter_client: CodeInterpreterClient,
     db_session: Session,  # Needed to initialize DB engine for file_store
+    initialize_file_store: None,
 ) -> None:
     """Test matplotlib plot generation."""
     code = """
@@ -361,6 +367,7 @@ print("Plot saved successfully")
 def test_python_execution_context_updates(
     mock_run_context: RunContextWrapper[ChatTurnContext],
     code_interpreter_client: CodeInterpreterClient,
+    initialize_file_store: None,
 ) -> None:
     """Test that run_context is properly updated."""
     code = 'print("Context update test")'
@@ -471,6 +478,7 @@ def test_python_function_tool_wrapper(
 def test_python_execution_output_truncation(
     mock_run_context: RunContextWrapper[ChatTurnContext],
     code_interpreter_client: CodeInterpreterClient,
+    initialize_file_store: None,
 ) -> None:
     """Test that large outputs are properly truncated."""
     # Generate code that produces output larger than truncation limit
@@ -507,6 +515,7 @@ def test_python_execution_multiple_files(
     mock_run_context: RunContextWrapper[ChatTurnContext],
     code_interpreter_client: CodeInterpreterClient,
     db_session: Session,  # Needed to initialize DB engine for file_store
+    initialize_file_store: None,
 ) -> None:
     """Test generation of multiple files."""
     code = """
