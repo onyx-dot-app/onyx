@@ -659,6 +659,50 @@ def test_fast_chat_turn_catch_exception(
         list(generator)
 
 
+def test_fast_chat_turn_second_call_uses_auto_tool_choice(
+    chat_turn_dependencies: ChatTurnDependencies,
+    sample_messages: list[ChatCompletionMessage],
+    chat_session_id: UUID,
+    message_id: int,
+    research_type: ResearchType,
+    fake_internal_search_tool_instance: FakeTool,
+) -> None:
+    """Test that after a tool call, the follow-up LLM call uses tool_choice='auto'."""
+    call_id = "toolu_auto_choice"
+    first_call = [
+        stream_chunk(
+            tool_calls=[
+                tool_call_chunk(call_id=call_id, name="internal_search", arguments="")
+            ]
+        ),
+        stream_chunk(
+            tool_calls=[tool_call_chunk(arguments='{"queries": ["test query"]}')]
+        ),
+        stream_chunk(finish_reason="tool_calls"),
+    ]
+    second_call = [
+        stream_chunk(content="Here is the answer based on the search."),
+        stream_chunk(finish_reason="stop"),
+    ]
+
+    llm = configure_llm(chat_turn_dependencies, [first_call, second_call])
+    chat_turn_dependencies.tools = [fake_internal_search_tool_instance]
+
+    packets = run_fast_chat_turn(
+        sample_messages,
+        chat_turn_dependencies,
+        chat_session_id,
+        message_id,
+        research_type,
+    )
+
+    assert_packets_contain_stop(packets)
+    assert len(llm.stream_calls) == 2
+
+    # The second call should use tool_choice='auto'
+    assert llm.stream_calls[1]["tool_choice"] == "auto"
+
+
 def test_fast_chat_turn_citation_processing(
     chat_turn_context: ChatTurnContext,
     sample_messages: list[ChatCompletionMessage],

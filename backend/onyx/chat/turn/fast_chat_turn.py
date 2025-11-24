@@ -44,6 +44,7 @@ from onyx.tools.force import filter_tools_for_force_tool_use
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
 from onyx.tracing.framework.create import trace
+from shared_configs.contextvars import get_current_tenant_id
 
 
 MAX_ITERATIONS = 10
@@ -224,7 +225,8 @@ def _fast_chat_turn_core(
                 None
                 if force_use_tool is None
                 else force_use_tool.tool_name if force_use_tool.force_use else None
-            )
+            ),
+            "tenant_id": get_current_tenant_id(),
         },
     ):
         _run_agent_loop(
