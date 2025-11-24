@@ -3,8 +3,6 @@
 from datetime import datetime
 from typing import Any
 
-from fastmcp.server.auth import AccessToken
-
 from ee.onyx.server.query_and_chat.models import DocumentSearchRequest
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.enums import LLMEvaluationType
@@ -19,22 +17,6 @@ from onyx.mcp_server.utils import require_access_token
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-async def _tenant_has_indexed_sources(access_token: AccessToken) -> bool:
-    """Check if the current tenant has any indexed document sources."""
-    try:
-        sources = await fetch_indexed_source_types(access_token)
-        if sources is None:
-            logger.warning("Onyx MCP Server: Failed to determine indexed sources.")
-            return False
-        return len(sources) > 0
-    except Exception:
-        logger.warning(
-            "Onyx MCP Server: Failed to determine indexed sources.",
-            exc_info=True,
-        )
-        return False
 
 
 @mcp_server.tool()
@@ -68,7 +50,23 @@ async def search_indexed_documents(
     # Get authenticated user from FastMCP's access token
     access_token = require_access_token()
 
-    if not await _tenant_has_indexed_sources(access_token):
+    try:
+        sources = await fetch_indexed_source_types(access_token)
+    except Exception as e:
+        # Error fetching sources (network error, API failure, etc.)
+        logger.error(
+            "Onyx MCP Server: Error checking indexed sources: %s",
+            e,
+            exc_info=True,
+        )
+        return {
+            "documents": [],
+            "total_results": 0,
+            "query": query,
+            "error": (f"Failed to check indexed sources: {str(e)}. "),
+        }
+
+    if not sources:
         logger.info("Onyx MCP Server: No indexed sources available for tenant")
         return {
             "documents": [],

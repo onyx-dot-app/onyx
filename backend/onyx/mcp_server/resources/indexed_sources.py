@@ -27,9 +27,6 @@ async def indexed_sources_resource() -> dict[str, Any]:
     access_token = require_access_token()
 
     sources = await fetch_indexed_source_types(access_token)
-    if sources is None:
-        raise ValueError("Failed to fetch indexed source types")
-
     indexed_sources = sorted(sources)
 
     logger.info(

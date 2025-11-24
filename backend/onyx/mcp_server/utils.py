@@ -69,8 +69,13 @@ async def shutdown_http_client() -> None:
 
 async def fetch_indexed_source_types(
     access_token: AccessToken,
-) -> list[str] | None:
-    """Fetch indexed document source types for the current user/tenant."""
+) -> list[str]:
+    """
+    Fetch indexed document source types for the current user/tenant.
+
+    Returns:
+        List of indexed source type strings. Empty list if no sources are indexed.
+    """
     headers = {"Authorization": f"Bearer {access_token.token}"}
     try:
         response = await get_http_client().get(
@@ -81,15 +86,19 @@ async def fetch_indexed_source_types(
         payload = response.json()
         source_types = payload.get("source_types", [])
         if not isinstance(source_types, list):
-            logger.error(
-                "Onyx MCP Server: Unexpected response shape for indexed source types"
-            )
-            return None
+            raise ValueError("Unexpected response shape for indexed source types")
         return [str(source_type) for source_type in source_types]
-    except Exception as exc:
+    except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
+        # Re-raise known exception types (httpx errors and validation errors)
         logger.error(
-            "Onyx MCP Server: Failed to fetch indexed source types: %s",
-            exc,
+            "Onyx MCP Server: Failed to fetch indexed source types",
             exc_info=True,
         )
-        return None
+        raise
+    except Exception as exc:
+        # Wrap unexpected exceptions
+        logger.error(
+            "Onyx MCP Server: Unexpected error fetching indexed source types",
+            exc_info=True,
+        )
+        raise RuntimeError(f"Failed to fetch indexed source types: {exc}") from exc
