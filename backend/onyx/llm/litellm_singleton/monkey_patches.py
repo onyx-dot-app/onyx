@@ -473,7 +473,9 @@ def _patch_litellm_responses_transformation_handler_so_tool_choice_formatted() -
                     )
                 )
             elif key == "tool_choice" and value is not None:
-                # TODO this needs to be way more sophisticated
+                # TODO Right now, we're only supporting function tools and tool choice
+                # mode. In reality this should support all the possible tool_choice inputs
+                # documented in the API docs, but these are the only formats Onyx uses.
                 responses_api_request["tool_choice"] = (
                     {
                         "type": "function",
