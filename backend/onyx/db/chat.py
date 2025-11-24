@@ -28,7 +28,6 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ChatSession
 from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import SearchDoc
 from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
@@ -181,7 +180,7 @@ def get_chat_sessions_by_user(
 
 def delete_orphaned_search_docs(db_session: Session) -> None:
     orphaned_docs = (
-        db_session.query(SearchDoc)
+        db_session.query(DBSearchDoc)
         .outerjoin(ChatMessage__SearchDoc)
         .filter(ChatMessage__SearchDoc.chat_message_id.is_(None))
         .all()
@@ -485,11 +484,12 @@ def add_chats_to_session_from_slack_thread(
 
 def get_search_docs_for_chat_message(
     chat_message_id: int, db_session: Session
-) -> list[SearchDoc]:
+) -> list[DBSearchDoc]:
     stmt = (
-        select(SearchDoc)
+        select(DBSearchDoc)
         .join(
-            ChatMessage__SearchDoc, ChatMessage__SearchDoc.search_doc_id == SearchDoc.id
+            ChatMessage__SearchDoc,
+            ChatMessage__SearchDoc.search_doc_id == DBSearchDoc.id,
         )
         .where(ChatMessage__SearchDoc.chat_message_id == chat_message_id)
     )
@@ -732,7 +732,7 @@ def get_doc_query_identifiers_from_model(
 ) -> list[tuple[str, int]]:
     """Given a list of search_doc_ids"""
     search_docs = (
-        db_session.query(SearchDoc).filter(SearchDoc.id.in_(search_doc_ids)).all()
+        db_session.query(DBSearchDoc).filter(DBSearchDoc.id.in_(search_doc_ids)).all()
     )
 
     if user_id != chat_session.user_id:
@@ -763,7 +763,7 @@ def get_doc_query_identifiers_from_model(
 
 def update_search_docs_table_with_relevance(
     db_session: Session,
-    reference_db_search_docs: list[SearchDoc],
+    reference_db_search_docs: list[DBSearchDoc],
     relevance_summary: DocumentRelevance,
 ) -> None:
     for search_doc in reference_db_search_docs:
@@ -772,8 +772,8 @@ def update_search_docs_table_with_relevance(
         )
         if relevance_data is not None:
             db_session.execute(
-                update(SearchDoc)
-                .where(SearchDoc.id == search_doc.id)
+                update(DBSearchDoc)
+                .where(DBSearchDoc.id == search_doc.id)
                 .values(
                     is_relevant=relevance_data.relevant,
                     relevance_explanation=relevance_data.content,
@@ -786,8 +786,8 @@ def create_db_search_doc(
     server_search_doc: ServerSearchDoc,
     db_session: Session,
     commit: bool = True,
-) -> SearchDoc:
-    db_search_doc = SearchDoc(
+) -> DBSearchDoc:
+    db_search_doc = DBSearchDoc(
         document_id=server_search_doc.document_id,
         chunk_ind=server_search_doc.chunk_ind,
         semantic_id=server_search_doc.semantic_identifier or "Unknown",
@@ -818,7 +818,7 @@ def create_db_search_doc(
 
 def get_db_search_doc_by_id(doc_id: int, db_session: Session) -> DBSearchDoc | None:
     """There are no safety checks here like user permission etc., use with caution"""
-    search_doc = db_session.query(SearchDoc).filter(SearchDoc.id == doc_id).first()
+    search_doc = db_session.query(DBSearchDoc).filter(DBSearchDoc.id == doc_id).first()
     return search_doc
 
 
@@ -827,17 +827,20 @@ def get_db_search_doc_by_document_id(
 ) -> DBSearchDoc | None:
     """Get SearchDoc by document_id field. There are no safety checks here like user permission etc., use with caution"""
     search_doc = (
-        db_session.query(SearchDoc).filter(SearchDoc.document_id == document_id).first()
+        db_session.query(DBSearchDoc)
+        .filter(DBSearchDoc.document_id == document_id)
+        .first()
     )
     return search_doc
 
 
 def translate_db_search_doc_to_server_search_doc(
-    db_search_doc: SearchDoc,
+    db_search_doc: DBSearchDoc,
     remove_doc_content: bool = False,
 ) -> SavedSearchDoc:
     return SavedSearchDoc(
         db_doc_id=db_search_doc.id,
+        score=db_search_doc.score,
         document_id=db_search_doc.document_id,
         chunk_ind=db_search_doc.chunk_ind,
         semantic_identifier=db_search_doc.semantic_id,
@@ -847,7 +850,6 @@ def translate_db_search_doc_to_server_search_doc(
         boost=db_search_doc.boost,
         hidden=db_search_doc.hidden,
         metadata=db_search_doc.doc_metadata if not remove_doc_content else {},
-        score=db_search_doc.score,
         match_highlights=(
             db_search_doc.match_highlights if not remove_doc_content else []
         ),
@@ -863,7 +865,7 @@ def translate_db_search_doc_to_server_search_doc(
 
 
 def get_retrieval_docs_from_search_docs(
-    search_docs: list[SearchDoc],
+    search_docs: list[DBSearchDoc],
     remove_doc_content: bool = False,
     sort_by_score: bool = True,
 ) -> RetrievalDocs:
@@ -874,7 +876,9 @@ def get_retrieval_docs_from_search_docs(
         for db_doc in search_docs
     ]
     if sort_by_score:
-        top_documents = sorted(top_documents, key=lambda doc: doc.score, reverse=True)  # type: ignore
+        top_documents = sorted(
+            top_documents, key=lambda doc: (doc.score or 0.0), reverse=True
+        )
     return RetrievalDocs(top_documents=top_documents)
 
 
@@ -972,10 +976,10 @@ def create_search_doc_from_inference_section(
     is_relevant: bool | None = None,
     relevance_explanation: str | None = None,
     commit: bool = False,
-) -> SearchDoc:
+) -> DBSearchDoc:
     """Create a SearchDoc in the database from an InferenceSection."""
 
-    db_search_doc = SearchDoc(
+    db_search_doc = DBSearchDoc(
         document_id=inference_section.center_chunk.document_id,
         chunk_ind=inference_section.center_chunk.chunk_id,
         semantic_id=inference_section.center_chunk.semantic_identifier,
@@ -1010,9 +1014,9 @@ def create_search_doc_from_inference_section(
 
 def create_search_doc_from_saved_search_doc(
     saved_search_doc: SavedSearchDoc,
-) -> SearchDoc:
+) -> DBSearchDoc:
     """Convert SavedSearchDoc (server model) into DB SearchDoc with correct field mapping."""
-    return SearchDoc(
+    return DBSearchDoc(
         document_id=saved_search_doc.document_id,
         chunk_ind=saved_search_doc.chunk_ind,
         # Map Pydantic semantic_identifier -> DB semantic_id; ensure non-null

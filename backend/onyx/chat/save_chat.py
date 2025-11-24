@@ -244,6 +244,9 @@ def save_chat_turn(
             logger.warning(
                 f"Citation doc {search_doc_py.document_id} not found in tool call search_docs, creating it"
             )
+            # NOTE it is important that this maps to the saved DB Document ID, this is because
+            # the match-highlights are specific to this saved version, not any document that has
+            # the same document_id.
             db_search_doc = create_db_search_doc(
                 server_search_doc=search_doc_py,
                 db_session=db_session,

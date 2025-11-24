@@ -30,7 +30,6 @@ from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
 from onyx.chat.stream_processing.utils import map_document_id_order_v2
-from onyx.chat.temp_translation import SectionEnd
 from onyx.chat.turn.context_handler.citation import (
     assign_citation_numbers_recent_tool_calls,
 )
@@ -48,6 +47,7 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 from onyx.tools.force import filter_tools_for_force_tool_use
 from onyx.tools.force import ForceUseTool

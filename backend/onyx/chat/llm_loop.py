@@ -565,6 +565,11 @@ def run_llm_loop(
     collected_tool_calls: list[ToolCallInfo] = []
     gathered_documents: list[SearchDoc] | None = None
     should_cite_documents: bool = False
+
+    current_tool_call_index = (
+        0  # TODO: just use the cycle count after parallel tool calls are supported
+    )
+
     for llm_cycle_count in range(MAX_LLM_CYCLES):
 
         if force_use_tool_name:
@@ -654,7 +659,7 @@ def run_llm_loop(
             tool_choice=tool_choice,
             emitter=emitter,
             llm=llm,
-            turn_index=llm_cycle_count,
+            turn_index=current_tool_call_index,
             citation_processor=citation_processor,
             # The rich docs representation is passed in so that when yielding the answer, it can also immediately yield the full
             # set of found documents. This gives us the option to show the final set of documents immediately if desired.
@@ -664,11 +669,13 @@ def run_llm_loop(
         # Run the LLM selected tools, there is some more logic here than a simple execution
         # each tool might have custom logic here
         tool_responses = []
-        if llm_step_result.tool_calls:
+        tool_calls = llm_step_result.tool_calls or []
+        for tool_call in tool_calls:
+            # TODO replace the [tool_call] with the list of tool calls once parallel tool calls are supported
             tool_responses = run_tool_calls(
-                tool_calls=llm_step_result.tool_calls,
+                tool_calls=[tool_call],
                 tools=final_tools,
-                turn_index=llm_cycle_count,
+                turn_index=current_tool_call_index,
                 emitter=emitter,
                 message_history=truncated_message_history,
                 memories=memories,
@@ -681,9 +688,7 @@ def run_llm_loop(
 
             # Add the results to the chat history, note that even if the tools were run in parallel, this isn't supported
             # as all the LLM APIs require linear history, so these will just be included sequentially
-            for tool_call, tool_response in zip(
-                llm_step_result.tool_calls, tool_responses
-            ):
+            for tool_call, tool_response in zip([tool_call], tool_responses):
                 # Get the tool object to retrieve tool_id
                 tool = tools_by_name.get(tool_call.tool_name)
                 if not tool:
@@ -705,7 +710,7 @@ def run_llm_loop(
 
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
-                    turn_index=llm_cycle_count,
+                    turn_index=current_tool_call_index,
                     tool_name=tool_call.tool_name,
                     tool_call_id=tool_call.tool_call_id,
                     tool_id=tool.id,
@@ -772,6 +777,8 @@ def run_llm_loop(
                         # Update the citation processor
                         citation_processor.update_citation_mapping(citation_to_doc)
 
+            current_tool_call_index += 1
+
         # After the LLM call has happened, we may be done. If no tools, then it has answered
         # certain tools also do not allow further actions
         if (
@@ -818,4 +825,6 @@ def run_llm_loop(
     )
 
     # Very important that this happens at the end, otherwise the commit may get rolled back
-    emitter.emit(Packet(turn_index=llm_cycle_count, obj=OverallStop(type="stop")))
+    emitter.emit(
+        Packet(turn_index=current_tool_call_index, obj=OverallStop(type="stop"))
+    )

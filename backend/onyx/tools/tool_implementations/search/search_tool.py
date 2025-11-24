@@ -67,7 +67,7 @@ from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
 logger = setup_logger()
 
-QUERY_FIELD = "query"
+QUERIES_FIELD = "queries"
 
 
 def deduplicate_queries(
@@ -381,12 +381,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        QUERY_FIELD: {
-                            "type": "string",
-                            "description": "What to search for",
+                        QUERIES_FIELD: {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of search queries to execute",
                         },
                     },
-                    "required": [QUERY_FIELD],
+                    "required": [QUERIES_FIELD],
                 },
             },
         }
@@ -410,7 +411,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # This prevents transaction conflicts when multiple search tools run in parallel
         db_session = self._get_thread_safe_session()
         try:
-            llm_query = cast(str, llm_kwargs[QUERY_FIELD])
+            llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
             # Run semantic and keyword query expansion in parallel
             # Use message history, memories, and user info from override_kwargs
@@ -449,10 +450,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
             # Group 2: Semantic/LLM/Original queries (use hybrid_alpha=None)
+            # Include all LLM-provided queries with their weight
             semantic_queries_with_weights = [
                 (semantic_query, LLM_SEMANTIC_QUERY_WEIGHT),
-                (llm_query, LLM_NON_CUSTOM_QUERY_WEIGHT),
             ]
+            for llm_query in llm_queries:
+                semantic_queries_with_weights.append(
+                    (llm_query, LLM_NON_CUSTOM_QUERY_WEIGHT)
+                )
             if override_kwargs.original_query:
                 semantic_queries_with_weights.append(
                     (override_kwargs.original_query, ORIGINAL_QUERY_WEIGHT)
@@ -551,7 +556,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # )
 
             secondary_flows_user_query = (
-                override_kwargs.original_query or semantic_query or llm_query
+                override_kwargs.original_query
+                or semantic_query
+                or (llm_queries[0] if llm_queries else "")
             )
 
             tokenizer_encode_func = get_llm_tokenizer_encode_func(self.llm)

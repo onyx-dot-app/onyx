@@ -452,7 +452,7 @@ class SearchDocsResponse(BaseModel):
 
 class SavedSearchDoc(SearchDoc):
     db_doc_id: int
-    score: float = 0.0
+    score: float | None = 0.0
 
     @classmethod
     def from_search_doc(
@@ -502,7 +502,9 @@ class SavedSearchDoc(SearchDoc):
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, SavedSearchDoc):
             return NotImplemented
-        return self.score < other.score
+        self_score = self.score if self.score is not None else 0.0
+        other_score = other.score if other.score is not None else 0.0
+        return self_score < other_score
 
 
 class CitationDocInfo(BaseModel):

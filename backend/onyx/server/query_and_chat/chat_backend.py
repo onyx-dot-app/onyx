@@ -27,6 +27,7 @@ from onyx.chat.prompt_builder.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
 from onyx.chat.stop_signal_checker import set_fence
+from onyx.chat.temp_translation import translate_session_packets_to_frontend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
@@ -85,9 +86,10 @@ from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
-from onyx.server.query_and_chat.streaming_models import OverallStop
+from onyx.server.query_and_chat.session_loading import (
+    translate_assistant_message_to_packets,
+)
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_utils import translate_db_message_to_packets
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
@@ -236,18 +238,17 @@ def get_chat_session(
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
-    simplified_packet_lists: list[list[Packet]] = []
-    end_step_nr = 1
+    # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
+    # Each list is the set of tool calls for the given assistant message.
+    replay_packet_lists: list[list[Packet]] = []
     for msg in session_messages:
         if msg.message_type == MessageType.ASSISTANT:
-            msg_packet_object = translate_db_message_to_packets(
-                msg, db_session=db_session, start_step_nr=end_step_nr
+            replay_packet_lists.append(
+                translate_assistant_message_to_packets(
+                    chat_message=msg, db_session=db_session
+                )
             )
-            end_step_nr = msg_packet_object.end_step_nr
-            msg_packet_list = msg_packet_object.packet_list
-
-            msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
-            simplified_packet_lists.append(msg_packet_list)
+            # msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
 
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
@@ -266,8 +267,10 @@ def get_chat_session(
         shared_status=chat_session.shared_status,
         current_temperature_override=chat_session.temperature_override,
         deleted=chat_session.deleted,
-        # specifically for the Onyx Chat UI
-        packets=simplified_packet_lists,
+        packets=[
+            translate_session_packets_to_frontend(packet_list)
+            for packet_list in replay_packet_lists
+        ],
     )
 
 

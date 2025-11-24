@@ -24,7 +24,6 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.onyxbot.slack.models import SlackContext
-from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import ToolCallFinalResult
 
 
@@ -278,7 +277,8 @@ class ChatSessionDetailResponse(BaseModel):
     current_temperature_override: float | None
     deleted: bool = False
 
-    packets: list[list[Packet]]
+    # TODO make this the backend recognized packets
+    packets: list[list[dict[str, Any]]]
 
 
 # This one is not used anymore

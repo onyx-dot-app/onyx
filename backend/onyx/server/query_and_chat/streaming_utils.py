@@ -4,13 +4,13 @@ import re
 
 from sqlalchemy.orm import Session
 
-from onyx.chat.temp_translation import SectionEnd
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_db_search_doc_by_document_id
 from onyx.db.chat import get_db_search_doc_by_id
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
 from onyx.db.models import ChatMessage
+from onyx.db.tools import get_tool_by_id
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.feature_flags_keys import DISABLE_SIMPLE_AGENT_FRAMEWORK
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
@@ -30,6 +30,8 @@ from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
+from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -262,13 +264,11 @@ def create_search_packets(
 def translate_db_message_to_packets_simple(
     chat_message: ChatMessage,
     db_session: Session,
-    start_step_nr: int = 1,
 ) -> EndStepPacketList:
     """
     Translation function for simple agent framework.
-    Includes support for OpenUrlStart packets for web fetch operations.
+    Translates ChatMessage with tool_calls to packet format.
     """
-    step_nr = start_step_nr
     packet_list: list[Packet] = []
 
     if chat_message.message_type == MessageType.ASSISTANT:
@@ -286,109 +286,101 @@ def translate_db_message_to_packets_simple(
                         )
                     )
 
-        # research_iterations = []
-        # if chat_message.research_iterations:
-        #     research_iterations = sorted(
-        #         chat_message.research_iterations, key=lambda x: x.iteration_nr
-        #     )
-        #     for research_iteration in research_iterations:
+        # Process tool calls if they exist
+        if chat_message.tool_calls:
+            # Group tool calls by turn_number
+            tool_calls_by_turn: dict[int, list] = {}
+            for tool_call in chat_message.tool_calls:
+                turn_num = tool_call.turn_number
+                if turn_num not in tool_calls_by_turn:
+                    tool_calls_by_turn[turn_num] = []
+                tool_calls_by_turn[turn_num].append(tool_call)
 
-        #         sub_steps = research_iteration.sub_steps
-        #         tasks: list[str] = []
-        #         tool_call_ids: list[int | None] = []
-        #         cited_docs: list[SavedSearchDoc] = []
-        #         fetches: list[list[SavedSearchDoc]] = []
-        #         is_web_fetch: bool = False
+            # Process each turn in order
+            for turn_num in sorted(tool_calls_by_turn.keys()):
+                tool_calls_in_turn = tool_calls_by_turn[turn_num]
 
-        #         for sub_step in sub_steps:
-        #             # For v2 tools, use the queries field if available, otherwise fall back to sub_step_instructions
-        #             if sub_step.queries:
-        #                 tasks.extend(sub_step.queries)
-        #             else:
-        #                 tasks.append(sub_step.sub_step_instructions or "")
-        #             tool_call_ids.append(sub_step.sub_step_tool_id)
+                # Process each tool call in this turn
+                for tool_call in tool_calls_in_turn:
+                    try:
+                        tool = get_tool_by_id(tool_call.tool_id, db_session)
+                        tool_name = tool.in_code_tool_id or tool.name
 
-        #             sub_step_cited_docs = sub_step.cited_doc_results
-        #             sub_step_saved_search_docs: list[SavedSearchDoc] = []
-        #             if isinstance(sub_step_cited_docs, list):
-        #                 for doc_data in sub_step_cited_docs:
-        #                     doc_data["db_doc_id"] = 1
-        #                     doc_data["boost"] = 1
-        #                     doc_data["hidden"] = False
-        #                     doc_data["chunk_ind"] = 0
+                        # Convert search_docs to SavedSearchDoc format
+                        saved_search_docs: list[SavedSearchDoc] = []
+                        if tool_call.search_docs:
+                            for doc in tool_call.search_docs:
+                                saved_search_docs.append(
+                                    translate_db_search_doc_to_server_search_doc(doc)
+                                )
 
-        #                     if (
-        #                         doc_data["updated_at"] is None
-        #                         or doc_data["updated_at"] == "None"
-        #                     ):
-        #                         doc_data["updated_at"] = datetime.now()
+                        # Handle different tool types
+                        if tool_name == SearchTool.NAME:
+                            # Extract queries from tool_call_arguments
+                            queries = tool_call.tool_call_arguments.get("queries", [])
+                            if isinstance(queries, str):
+                                queries = [queries]
 
-        #                     sub_step_saved_search_docs.append(
-        #                         SavedSearchDoc.from_dict(doc_data)
-        #                         if isinstance(doc_data, dict)
-        #                         else doc_data
-        #                     )
+                            packet_list.extend(
+                                create_search_packets(
+                                    queries, saved_search_docs, False, turn_num
+                                )
+                            )
 
-        #                 cited_docs.extend(sub_step_saved_search_docs)
-        #             step_nr += 1
+                        elif tool_name == "WebSearchTool":
+                            # Extract queries from tool_call_arguments
+                            queries = tool_call.tool_call_arguments.get("queries", [])
+                            if isinstance(queries, str):
+                                queries = [queries]
 
-        #             if sub_step.is_web_fetch and len(sub_step_saved_search_docs) > 0:
-        #                 is_web_fetch = True
-        #                 fetches.append(sub_step_saved_search_docs)
+                            # Check if this is a fetch operation (has URLs in response)
+                            if saved_search_docs and any(
+                                doc.link for doc in saved_search_docs
+                            ):
+                                packet_list.extend(
+                                    create_fetch_packets([saved_search_docs], turn_num)
+                                )
+                            else:
+                                packet_list.extend(
+                                    create_search_packets(
+                                        queries, saved_search_docs, True, turn_num
+                                    )
+                                )
 
-        #         if len(set(tool_call_ids)) > 1:
-        #             step_nr += 1
+                        elif tool_name == "ImageGenerationTool":
+                            # Extract images from tool_call_response or arguments
+                            # For now, skip if we can't parse images properly
+                            pass
 
-        #         elif len(sub_steps) == 0:
-        #             # no sub steps, no tool calls. But iteration can have reasoning or purpose
-        #             continue
+                        else:
+                            # Custom tool or unknown tool
+                            packet_list.extend(
+                                create_custom_tool_packets(
+                                    tool_name=tool.display_name or tool.name,
+                                    response_type="text",
+                                    turn_index=turn_num,
+                                    data=tool_call.tool_call_response,
+                                )
+                            )
 
-        #         else:
-        #             tool_id = tool_call_ids[0]
-        #             if not tool_id:
-        #                 raise ValueError("Tool ID is required")
-        #             tool = get_tool_by_id(tool_id, db_session)
-        #             tool_name = tool.name
+                    except Exception as e:
+                        # Log error but continue processing
+                        import logging
 
-        #             if tool_name in [SearchTool.__name__, KnowledgeGraphTool.__name__]:
-        #                 cited_docs = cast(list[SavedSearchDoc], cited_docs)
-        #                 packet_list.extend(
-        #                     create_search_packets(tasks, cited_docs, False, step_nr)
-        #                 )
-        #                 step_nr += 1
+                        logger = logging.getLogger(__name__)
+                        logger.warning(
+                            f"Error processing tool call {tool_call.id}: {e}"
+                        )
+                        continue
 
-        #             elif tool_name == WebSearchTool.__name__:
-        #                 cited_docs = cast(list[SavedSearchDoc], cited_docs)
-        #                 if is_web_fetch:
-        #                     packet_list.extend(create_fetch_packets(fetches, step_nr))
-        #                 else:
-        #                     packet_list.extend(
-        #                         create_search_packets(tasks, cited_docs, True, step_nr)
-        #                     )
+        # Determine the next turn_index for the final message
+        # It should come after all tool calls
+        max_tool_turn = 0
+        if chat_message.tool_calls:
+            max_tool_turn = max(tc.turn_number for tc in chat_message.tool_calls)
 
-        #                 step_nr += 1
-
-        #             elif tool_name == ImageGenerationTool.__name__:
-        #                 if sub_step.generated_images:
-        #                     packet_list.extend(
-        #                         create_image_generation_packets(
-        #                             sub_step.generated_images.images, step_nr
-        #                         )
-        #                     )
-        #                 step_nr += 1
-
-        #             else:
-        #                 packet_list.extend(
-        #                     create_custom_tool_packets(
-        #                         tool_name=tool_name,
-        #                         response_type="text",
-        #                         step_nr=step_nr,
-        #                         data=sub_step.sub_answer,
-        #                     )
-        #                 )
-        #                 step_nr += 1
-
-        turn_index = getattr(chat_message, "turn_index", 0)
+        # Message comes after tool calls
+        message_turn_index = max_tool_turn + 1
 
         if chat_message.message:
             packet_list.extend(
@@ -398,11 +390,15 @@ def translate_db_message_to_packets_simple(
                         translate_db_search_doc_to_server_search_doc(doc)
                         for doc in chat_message.search_docs
                     ],
-                    turn_index=turn_index,
+                    turn_index=message_turn_index,
                     is_legacy_agentic=False,
                 )
             )
-            step_nr += 1
+
+        # Citations come after the message
+        citation_turn_index = (
+            message_turn_index + 1 if citation_info_list else message_turn_index
+        )
 
         if len(citation_info_list) > 0:
             saved_search_docs: list[SavedSearchDoc] = []
@@ -416,16 +412,32 @@ def translate_db_message_to_packets_simple(
                     )
 
             packet_list.extend(
-                create_search_packets([], saved_search_docs, False, turn_index)
+                create_search_packets([], saved_search_docs, False, citation_turn_index)
             )
 
-            step_nr += 1
+            packet_list.extend(
+                create_citation_packets(citation_info_list, citation_turn_index)
+            )
 
-        packet_list.extend(create_citation_packets(citation_info_list, turn_index))
-        step_nr += 1
+    # Return the highest turn_index used
+    final_turn_index = 0
+    if chat_message.message_type == MessageType.ASSISTANT:
+        # Determine the final turn based on what was added
+        max_tool_turn = 0
+        if chat_message.tool_calls:
+            max_tool_turn = max(tc.turn_number for tc in chat_message.tool_calls)
+
+        # Start from tool turns, then message, then citations
+        final_turn_index = max_tool_turn
+        if chat_message.message:
+            final_turn_index = max_tool_turn + 1
+        if citation_info_list:
+            final_turn_index = (
+                final_turn_index + 1 if chat_message.message else max_tool_turn + 1
+            )
 
     return EndStepPacketList(
-        turn_index=getattr(chat_message, "turn_index", 0),
+        turn_index=final_turn_index,
         packet_list=packet_list,
     )
 

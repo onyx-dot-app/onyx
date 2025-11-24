@@ -7,11 +7,9 @@ translating from the new backend format to the old frontend-expected format.
 
 from collections.abc import Generator
 from typing import Any
-from typing import Literal
 
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import BaseObj
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -26,10 +24,6 @@ from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
-
-
-class SectionEnd(BaseObj):
-    type: Literal["section_end"] = "section_end"
 
 
 def translate_llm_loop_packets(
@@ -374,3 +368,319 @@ def translate_llm_loop_packets(
         "ind": last_turn_index + 1 if has_citations else last_turn_index,
         "obj": {"type": "stop"},
     }
+
+
+def translate_session_packets_to_frontend(
+    packets: list[Packet],
+) -> list[dict[str, Any]]:
+    """
+    Translates packets from session_loading (new format) to frontend-expected format.
+
+    This is used when replaying saved messages from the database. The packets are
+    already created in the new format by translate_assistant_message_to_packets,
+    and need to be converted to the old frontend format.
+
+    Args:
+        packets: List of Packet objects from session_loading
+
+    Returns:
+        List of translated packet dictionaries ready for frontend consumption
+
+    Translation notes:
+        - Packet structure: {turn_index, obj} → {ind, obj}
+        - AgentResponseStart → message_start with id, content fields
+        - AgentResponseDelta → message_delta
+        - SearchToolStart → internal_search_tool_start
+        - SearchToolQueriesDelta → internal_search_tool_delta (with empty documents)
+        - SearchToolDocumentsDelta → internal_search_tool_delta (with empty queries)
+        - CitationInfo → Accumulate and emit as citation_start + citation_delta
+        - OpenUrl → fetch_tool_start
+        - SectionEnd packets are passed through
+    """
+    from onyx.server.query_and_chat.streaming_models import SectionEnd
+
+    result: list[dict[str, Any]] = []
+
+    # Track citations to batch them
+    accumulated_citations: list[dict[str, Any]] = []
+    citation_turn_index: int | None = None
+
+    # Track the last seen turn_index
+    last_turn_index = 0
+
+    for packet in packets:
+        obj = packet.obj
+        turn_index = (
+            packet.turn_index if packet.turn_index is not None else last_turn_index
+        )
+        last_turn_index = turn_index
+
+        # Translate AgentResponseStart (message_start)
+        if isinstance(obj, AgentResponseStart):
+            translated_obj: dict[str, Any] = {
+                "type": "message_start",
+                "content": "",
+                "final_documents": None,
+            }
+
+            if hasattr(obj, "final_documents") and obj.final_documents:
+                translated_obj["final_documents"] = [
+                    doc.model_dump() if hasattr(doc, "model_dump") else doc
+                    for doc in obj.final_documents
+                ]
+
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": translated_obj,
+                }
+            )
+            continue
+
+        # Translate AgentResponseDelta (message_delta)
+        if isinstance(obj, AgentResponseDelta):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {
+                        "type": "message_delta",
+                        "content": obj.content,
+                    },
+                }
+            )
+            continue
+
+        # Translate SearchToolStart
+        if isinstance(obj, SearchToolStart):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {
+                        "type": "internal_search_tool_start",
+                        "is_internet_search": getattr(obj, "is_internet_search", False),
+                    },
+                }
+            )
+            continue
+
+        # Translate SearchToolQueriesDelta
+        if isinstance(obj, SearchToolQueriesDelta):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {
+                        "type": "internal_search_tool_delta",
+                        "queries": obj.queries if obj.queries else [],
+                        "documents": [],
+                    },
+                }
+            )
+            continue
+
+        # Translate SearchToolDocumentsDelta
+        if isinstance(obj, SearchToolDocumentsDelta):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {
+                        "type": "internal_search_tool_delta",
+                        "queries": [],
+                        "documents": (
+                            [
+                                doc.model_dump() if hasattr(doc, "model_dump") else doc
+                                for doc in obj.documents
+                            ]
+                            if obj.documents
+                            else []
+                        ),
+                    },
+                }
+            )
+            continue
+
+        # Translate ReasoningStart
+        if isinstance(obj, ReasoningStart):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {"type": "reasoning_start"},
+                }
+            )
+            continue
+
+        # Translate ReasoningDelta
+        if isinstance(obj, ReasoningDelta):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {
+                        "type": "reasoning_delta",
+                        "reasoning": obj.reasoning,
+                    },
+                }
+            )
+            continue
+
+        # Translate ReasoningDone
+        if isinstance(obj, ReasoningDone):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {"type": "section_end"},
+                }
+            )
+            continue
+
+        # Accumulate CitationInfo packets
+        if isinstance(obj, CitationInfo):
+            accumulated_citations.append(
+                {
+                    "citation_num": obj.citation_number,
+                    "document_id": obj.document_id,
+                }
+            )
+            citation_turn_index = turn_index
+            continue
+
+        # Translate ImageGenerationToolStart
+        if isinstance(obj, ImageGenerationToolStart):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {"type": "image_generation_tool_start"},
+                }
+            )
+            continue
+
+        # Translate ImageGenerationFinal
+        if isinstance(obj, ImageGenerationFinal):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {
+                        "type": "image_generation_tool_delta",
+                        "images": [
+                            img.model_dump() if hasattr(img, "model_dump") else img
+                            for img in obj.images
+                        ],
+                    },
+                }
+            )
+            continue
+
+        # Translate OpenUrl to fetch_tool_start
+        if isinstance(obj, OpenUrl):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {
+                        "type": "fetch_tool_start",
+                        "documents": (
+                            [
+                                doc.model_dump() if hasattr(doc, "model_dump") else doc
+                                for doc in obj.documents
+                            ]
+                            if obj.documents
+                            else []
+                        ),
+                    },
+                }
+            )
+            continue
+
+        # Translate CustomToolStart
+        if isinstance(obj, CustomToolStart):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {
+                        "type": "custom_tool_start",
+                        "tool_name": obj.tool_name,
+                    },
+                }
+            )
+            continue
+
+        # Translate CustomToolDelta
+        if isinstance(obj, CustomToolDelta):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {
+                        "type": "custom_tool_delta",
+                        "tool_name": obj.tool_name,
+                        "response_type": obj.response_type,
+                        "data": obj.data,
+                        "file_ids": obj.file_ids,
+                    },
+                }
+            )
+            continue
+
+        # Pass through SectionEnd
+        if isinstance(obj, SectionEnd):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {"type": "section_end"},
+                }
+            )
+            continue
+
+        # Translate OverallStop
+        if isinstance(obj, OverallStop):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": {"type": "stop"},
+                }
+            )
+            continue
+
+        # For any other packet types, try to pass through
+        if hasattr(obj, "model_dump"):
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": obj.model_dump(),
+                }
+            )
+        else:
+            result.append(
+                {
+                    "ind": turn_index,
+                    "obj": obj,  # type: ignore
+                }
+            )
+
+    # Emit accumulated citations at the end (if any)
+    if accumulated_citations:
+        ind = (
+            citation_turn_index if citation_turn_index is not None else last_turn_index
+        )
+
+        result.append(
+            {
+                "ind": ind,
+                "obj": {"type": "citation_start"},
+            }
+        )
+
+        result.append(
+            {
+                "ind": ind,
+                "obj": {
+                    "type": "citation_delta",
+                    "citations": accumulated_citations,
+                },
+            }
+        )
+
+        result.append(
+            {
+                "ind": ind,
+                "obj": {"type": "section_end"},
+            }
+        )
+
+    return result

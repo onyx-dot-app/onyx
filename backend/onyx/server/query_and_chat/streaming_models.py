@@ -86,6 +86,11 @@ class CitationInfo(BaseObj):
 """Control Packets"""
 
 
+# This one isn't strictly necessary, remove in the future
+class SectionEnd(BaseObj):
+    type: Literal["section_end"] = "section_end"
+
+
 class PacketException(BaseObj):
     type: Literal["error"] = StreamingType.ERROR.value
 
@@ -123,8 +128,8 @@ class SearchToolDocumentsDelta(BaseObj):
         StreamingType.SEARCH_TOOL_DOCUMENTS_DELTA.value
     )
 
-    # This cannot be the SavedSearchDoc as this is yielded by the SearchTool which does not
-    # save documents to the DB.
+    # This cannot be the SavedSearchDoc as this is yielded by the SearchTool directly
+    # which does not save documents to the DB.
     documents: list[SearchDoc]
 
 
@@ -194,6 +199,7 @@ PacketObj = Union[
     AgentResponseDelta,
     # Control Packets
     OverallStop,
+    SectionEnd,
     # Error Packets
     PacketException,
     # Tool Packets
