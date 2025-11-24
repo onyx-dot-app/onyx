@@ -3,12 +3,17 @@ import time
 import uuid
 from typing import Any
 from typing import cast
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
 from typing import Union
 
 from litellm import AllMessageValues
+from litellm import LiteLLMLoggingObj
+from litellm.completion_extras.litellm_responses_transformation.transformation import (
+    LiteLLMResponsesTransformationHandler,
+)
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     OpenAiResponsesToChatCompletionStreamIterator,
 )
@@ -419,6 +424,125 @@ def _patch_openai_responses_chunk_parser_so_reasoning_streamed() -> None:
     OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_openai_responses_chunk_parser  # type: ignore[method-assign]
 
 
+def _patch_litellm_responses_transformation_handler_so_tool_choice_formatted() -> None:
+    if (
+        getattr(
+            LiteLLMResponsesTransformationHandler.transform_request,
+            "__name__",
+            "",
+        )
+        == "_patched_transform_request"
+    ):
+        return
+
+    def _patched_transform_request(
+        self,
+        model: str,
+        messages: List["AllMessageValues"],
+        optional_params: dict,
+        litellm_params: dict,
+        headers: dict,
+        litellm_logging_obj: "LiteLLMLoggingObj",
+        client: Optional[Any] = None,
+    ) -> dict:
+        from litellm.types.llms.openai import ResponsesAPIOptionalRequestParams
+
+        (
+            input_items,
+            instructions,
+        ) = self.convert_chat_completion_messages_to_responses_api(messages)
+
+        # Build responses API request using the reverse transformation logic
+        responses_api_request = ResponsesAPIOptionalRequestParams()
+
+        # Set instructions if we found a system message
+        if instructions:
+            responses_api_request["instructions"] = instructions
+
+        # Map optional parameters
+        for key, value in optional_params.items():
+            if value is None:
+                continue
+            if key in ("max_tokens", "max_completion_tokens"):
+                responses_api_request["max_output_tokens"] = value
+            elif key == "tools" and value is not None:
+                # Convert chat completion tools to responses API tools format
+                responses_api_request["tools"] = (
+                    LiteLLMResponsesTransformationHandler._convert_tools_to_responses_format(
+                        None, cast(List[Dict[str, Any]], value)
+                    )
+                )
+            elif key == "tool_choice" and value is not None:
+                responses_api_request["tool_choice"] = {
+                    "type": "function",
+                    "name": (
+                        value if isinstance(value, str) else value["function"]["name"]
+                    ),
+                }
+            elif key in ResponsesAPIOptionalRequestParams.__annotations__.keys():
+                responses_api_request[key] = value  # type: ignore
+            elif key in ("metadata"):
+                responses_api_request["metadata"] = value
+            elif key in ("previous_response_id"):
+                responses_api_request["previous_response_id"] = value
+            elif key == "reasoning_effort":
+                responses_api_request["reasoning"] = self._map_reasoning_effort(value)
+
+        # Get stream parameter from litellm_params if not in optional_params
+        stream = optional_params.get("stream") or litellm_params.get("stream", False)
+        verbose_logger.debug(f"Chat provider: Stream parameter: {stream}")
+
+        # Ensure stream is properly set in the request
+        if stream:
+            responses_api_request["stream"] = True
+
+        # Handle session management if previous_response_id is provided
+        previous_response_id = optional_params.get("previous_response_id")
+        if previous_response_id:
+            # Use the existing session handler for responses API
+            verbose_logger.debug(
+                f"Chat provider: Warning ignoring previous response ID: {previous_response_id}"
+            )
+
+        # Convert back to responses API format for the actual request
+
+        api_model = model
+
+        from litellm.types.utils import CallTypes
+
+        setattr(litellm_logging_obj, "call_type", CallTypes.responses.value)
+
+        request_data = {
+            "model": api_model,
+            "input": input_items,
+            "litellm_logging_obj": litellm_logging_obj,
+            **litellm_params,
+            "client": client,
+        }
+
+        verbose_logger.debug(
+            f"Chat provider: Final request model={api_model}, input_items={len(input_items)}"
+        )
+
+        # Add non-None values from responses_api_request
+        for key, value in responses_api_request.items():
+            if value is not None:
+                if key == "instructions" and instructions:
+                    request_data["instructions"] = instructions
+                elif key == "stream_options" and isinstance(value, dict):
+                    request_data["stream_options"] = value.get("include_obfuscation")
+                elif key == "user":  # string can't be longer than 64 characters
+                    if isinstance(value, str) and len(value) <= 64:
+                        request_data["user"] = value
+                else:
+                    request_data[key] = value
+
+        return request_data
+
+    _patched_transform_request.__name__ = "_patched_transform_request"
+    LiteLLMResponsesTransformationHandler.transform_request = _patched_transform_request  # type: ignore[method-assign]
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -427,10 +551,12 @@ def apply_monkey_patches() -> None:
     - Patching OllamaChatConfig.transform_request for reasoning content support
     - Patching OllamaChatCompletionResponseIterator.chunk_parser for streaming content
     - Patching OpenAiResponsesToChatCompletionStreamIterator.chunk_parser for OpenAI Responses API
+    - Patching LiteLLMResponsesTransformationHandler.transform_request for tool choice formatting
     """
     _patch_ollama_transform_request_so_tool_calls_streamed()
     _patch_ollama_chunk_parser_so_reasoning_streamed()
     _patch_openai_responses_chunk_parser_so_reasoning_streamed()
+    _patch_litellm_responses_transformation_handler_so_tool_choice_formatted()
 
 
 def _extract_reasoning_content(message: dict) -> Tuple[Optional[str], Optional[str]]:

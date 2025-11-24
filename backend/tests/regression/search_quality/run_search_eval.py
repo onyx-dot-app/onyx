@@ -37,8 +37,8 @@ load_dotenv(env_path)
 # pylint: disable=E402
 # flake8: noqa: E402
 
-from ee.onyx.server.query_and_chat.models import OneShotQARequest
-from ee.onyx.server.query_and_chat.models import OneShotQAResponse
+from onyx.server.query_and_chat.models import OneShotQARequest
+from onyx.server.query_and_chat.models import OneShotQAResponse
 from onyx.chat.models import ThreadMessage
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE

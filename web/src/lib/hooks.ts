@@ -919,6 +919,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-3-7-sonnet-202502019": "Claude 3.7 Sonnet",
   "claude-sonnet-4-5-20250929": "Claude 4.5 Sonnet",
   "claude-haiku-4-5-20251001": "Claude 4.5 Haiku",
+  "claude-opus-4-5-20251101": "Claude 4.5 Opus",
 
   // Google Models
 
@@ -1010,6 +1011,20 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "us.anthropic.claude-sonnet-4-20250514-v1:0": "Claude 4 Sonnet (US)",
   "us.anthropic.claude-sonnet-4-5-20250929-v1:0": "Claude 4.5 Sonnet (US)",
   "us.anthropic.claude-haiku-4-5-20251001-v1:0": "Claude 4.5 Haiku (US)",
+  "us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0":
+    "Claude 4.5 Sonnet (US Gov)",
+  "us-gov.anthropic.claude-sonnet-4-20250514-v1:0": "Claude 4 Sonnet (US Gov)",
+  "us-gov.anthropic.claude-haiku-4-5-20251001-v1:0":
+    "Claude 4.5 Haiku (US Gov)",
+  "us-gov.anthropic.claude-3-5-haiku-20241022-v1:0":
+    "Claude 3.5 Haiku (US Gov)",
+  "us-gov.anthropic.claude-3-5-sonnet-20241022-v2:0":
+    "Claude 3.5 Sonnet v2 (US Gov)",
+  "us-gov.anthropic.claude-3-7-sonnet-20250219-v1:0":
+    "Claude 3.7 Sonnet (US Gov)",
+  "us-gov.anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku (US Gov)",
+  "us-gov.anthropic.claude-opus-4-1-20250805-v1:0": "Claude Opus 4.1 (US Gov)",
+  "us-gov.anthropic.claude-opus-4-20250514-v1:0": "Claude Opus 4 (US Gov)",
   "us.deepseek.r1-v1:0": "DeepSeek R1 (US)",
   "us.meta.llama3-1-405b-instruct-v1:0": "Llama 3.1 405B (US)",
   "us.meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B (US)",

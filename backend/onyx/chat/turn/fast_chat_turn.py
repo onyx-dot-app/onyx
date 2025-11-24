@@ -214,7 +214,6 @@ def _fast_chat_turn_core(
         run_dependencies=dependencies,
         chat_session_id=chat_session_id,
         message_id=message_id,
-        research_type=research_type,
         chat_files=latest_query_files or [],
     )
     with trace(

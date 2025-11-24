@@ -15,7 +15,6 @@ from pydantic import BaseModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.chat.models import PromptConfig
@@ -62,7 +61,6 @@ class ChatTurnContext:
 
     chat_session_id: UUID
     message_id: int
-    research_type: ResearchType
     run_dependencies: ChatTurnDependencies
     current_run_step: int = 0
     iteration_instructions: list[IterationInstructions] = dataclasses.field(
