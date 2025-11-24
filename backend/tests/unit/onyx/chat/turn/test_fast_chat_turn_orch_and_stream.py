@@ -37,6 +37,7 @@ from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.force import ForceUseTool
 from tests.unit.onyx.agents.agent_framework.conftest import FakeTool
 from tests.unit.onyx.chat.turn.utils import create_test_inference_section
 from tests.unit.onyx.chat.turn.utils import create_test_iteration_answer
@@ -229,6 +230,7 @@ def run_fast_chat_turn(
     message_id: int,
     research_type: ResearchType,
     prompt_config: PromptConfig | None = None,
+    force_use_tool: ForceUseTool | None = None,
 ) -> list[Packet]:
     if prompt_config is None:
         prompt_config = PromptConfig(
@@ -245,6 +247,7 @@ def run_fast_chat_turn(
         message_id,
         research_type,
         prompt_config,
+        force_use_tool=force_use_tool,
     )
     return list(generator)
 
@@ -659,7 +662,7 @@ def test_fast_chat_turn_catch_exception(
         list(generator)
 
 
-def test_fast_chat_turn_second_call_uses_auto_tool_choice(
+def test_fast_chat_turn_forced_tool_choice(
     chat_turn_dependencies: ChatTurnDependencies,
     sample_messages: list[ChatCompletionMessage],
     chat_session_id: UUID,
@@ -694,12 +697,14 @@ def test_fast_chat_turn_second_call_uses_auto_tool_choice(
         chat_session_id,
         message_id,
         research_type,
+        force_use_tool=ForceUseTool(force_use=True, tool_name="internal_search"),
     )
 
     assert_packets_contain_stop(packets)
     assert len(llm.stream_calls) == 2
 
     # The second call should use tool_choice='auto'
+    assert llm.stream_calls[0]["tool_choice"] == "internal_search"
     assert llm.stream_calls[1]["tool_choice"] == "auto"
 
 
