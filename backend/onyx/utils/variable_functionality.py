@@ -147,7 +147,7 @@ def fetch_ee_implementation_or_noop(
     try:
         return fetch_versioned_implementation(module, attribute)
     except Exception as e:
-        logger.error(f"Failed to fetch implementation for {module}.{attribute}: {e}")
+        logger.warning(f"Failed to fetch implementation for {module}.{attribute}: {e}")
         if inspect.iscoroutinefunction(noop_return_value):
 
             async def async_noop(*args: Any, **kwargs: Any) -> Any:
