@@ -49,6 +49,7 @@ def test_mcp_server_auth_valid_token(reset: None, admin_user: DATestUser) -> Non
         headers={
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
             "MCP-Protocol-Version": "2025-03-26",
         },
         json={"jsonrpc": "2.0", "method": "initialize", "id": 1},

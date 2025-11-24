@@ -47,6 +47,9 @@ async def search_indexed_documents(
         f"Onyx MCP Server: document search: query='{query}', sources={source_types}, limit={limit}"
     )
 
+    # Initialize source_type_enums early to avoid UnboundLocalError
+    source_type_enums: list[DocumentSource] | None = None
+
     # Get authenticated user from FastMCP's access token
     access_token = require_access_token()
 
@@ -80,8 +83,7 @@ async def search_indexed_documents(
 
     # Convert source_types strings to DocumentSource enums if provided
     # Invalid values will be handled by the API server
-    source_type_enums = None
-    if source_types:
+    if source_types is not None:
         source_type_enums = []
         for src in source_types:
             try:
