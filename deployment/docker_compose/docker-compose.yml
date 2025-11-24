@@ -180,7 +180,8 @@ services:
     #           count: all
     #           capabilities: [gpu]
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "val=\"${DISABLE_MODEL_SERVER:-false}\";
+      if [ \"$val\" = \"True\" ] || [ \"$val\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -216,7 +217,8 @@ services:
     #           count: all
     #           capabilities: [gpu]
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "val=\"${DISABLE_MODEL_SERVER:-false}\";
+      if [ \"$val\" = \"True\" ] || [ \"$val\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -371,7 +373,8 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command: >
       "
-      if [ \"$$CODE_INTERPRETER_BETA_ENABLED\" = \"true\" ]; then
+      val=\"$${CODE_INTERPRETER_BETA_ENABLED:-false}\";
+      if [ \"$val\" = \"True\" ] || [ \"$val\" = \"true\" ]; then
         exec bash ./entrypoint.sh code-interpreter-api;
       else
         echo 'Skipping code interpreter';

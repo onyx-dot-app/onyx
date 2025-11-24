@@ -7,7 +7,8 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "val=\"${DISABLE_MODEL_SERVER:-false}\";
+      if [ \"$val\" = \"True\" ] || [ \"$val\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
