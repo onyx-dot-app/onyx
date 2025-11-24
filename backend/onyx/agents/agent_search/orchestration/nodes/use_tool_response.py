@@ -20,6 +20,12 @@ from onyx.tools.tool_implementations.search_like_tool_utils import (
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
+from requests import Timeout
+from litellm.exceptions import APIConnectionError
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.chat.models import StreamingError
+
+
 logger = setup_logger()
 
 
@@ -63,20 +69,33 @@ def basic_use_tool_response(
 
     new_tool_call_chunk = AIMessageChunk(content="")
     if not agent_config.behavior.skip_gen_ai_answer_generation:
-        stream = llm.stream(
-            prompt=new_prompt_builder.build(),
-            structured_response_format=structured_response_format,
-        )
+        try:
+            timeout_override = 60
 
-        # For now, we don't do multiple tool calls, so we ignore the tool_message
-        new_tool_call_chunk = process_llm_stream(
-            stream,
-            True,
-            writer,
-            final_search_results=final_search_results,
-            # when the search tool is called with specific doc ids, initial search
-            # results are not output. But, we still want i.e. citations to be processed.
-            displayed_search_results=initial_search_results or final_search_results,
-        )
+            stream = llm.stream(
+                prompt=new_prompt_builder.build(),
+                structured_response_format=structured_response_format,
+                timeout_override=timeout_override,
+            )
+
+            new_tool_call_chunk = process_llm_stream(
+                stream,
+                True,
+                writer,
+                final_search_results=final_search_results,
+                displayed_search_results=initial_search_results or final_search_results,
+            )
+        except (Timeout, APIConnectionError, Exception) as e:
+            logger.error(f"Ollama LLM error in basic_use_tool_response: {e}")
+            error_msg = "Модель (Ollama) перегружена или недоступна. Попробуйте позже."
+            if "300.0 seconds" in str(e):
+                error_msg = "Время ожидания ответа от модели истекло (Ollama busy)."
+
+            write_custom_event(
+                "basic_response",
+                StreamingError(error=error_msg),
+                writer,
+            )
+            return BasicOutput(tool_call_chunk=AIMessageChunk(content=""))
 
     return BasicOutput(tool_call_chunk=new_tool_call_chunk)
