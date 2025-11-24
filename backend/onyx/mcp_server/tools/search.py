@@ -80,7 +80,6 @@ async def search_indexed_documents(
 
     # Convert source_types strings to DocumentSource enums if provided
     # Invalid values will be handled by the API server
-    source_type_enums = None
     if source_types:
         source_type_enums = []
         for src in source_types:
@@ -96,7 +95,7 @@ async def search_indexed_documents(
         search_type=SearchType.SEMANTIC,
         retrieval_options=RetrievalDetails(
             filters=IndexFilters(
-                source_type=source_type_enums,
+                source_type=source_type_enums if source_type_enums else None,
                 time_cutoff=time_cutoff,
                 access_control_list=None,  # Server handles ACL using the access token
             ),
