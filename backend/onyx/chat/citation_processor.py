@@ -198,19 +198,43 @@ class DynamicCitationProcessor:
             for match in citation_matches:
                 match_span = match.span()
 
-                # Add text before/between citations
+                # Get text before/between citations
                 intermatch_str = self.curr_segment[match_idx : match_span[0]]
                 self.non_citation_count += len(intermatch_str)
                 match_idx = match_span[1]
-                result += intermatch_str
+
+                # Check if there is already a space before this citation
+                if intermatch_str:
+                    has_leading_space = intermatch_str[-1].isspace()
+                else:
+                    # No text between citations (consecutive citations)
+                    # If match_idx > 0, we've already processed a citation, so don't add space
+                    if match_idx > 0:
+                        # Consecutive citations - don't add space between them
+                        has_leading_space = True
+                    else:
+                        # Citation at start of segment - check if previous output has space
+                        segment_start_idx = len(self.llm_out) - len(self.curr_segment)
+                        if segment_start_idx > 0:
+                            has_leading_space = self.llm_out[
+                                segment_start_idx - 1
+                            ].isspace()
+                        else:
+                            has_leading_space = False
 
                 # Reset recent citations if no citations found for a while
                 if self.non_citation_count > 5:
                     self.recent_cited_documents.clear()
 
+                # Yield text before citation FIRST (preserve order)
+                if intermatch_str:
+                    yield intermatch_str
+
                 # Process the citation (returns formatted citation text and CitationInfo objects)
-                citation_text, citation_info_list = self._process_citation(match)
-                # Yield the formatted citation text first
+                citation_text, citation_info_list = self._process_citation(
+                    match, has_leading_space
+                )
+                # Yield the formatted citation text
                 if citation_text:
                     yield citation_text
                 # Then yield the CitationInfo objects
@@ -231,7 +255,9 @@ class DynamicCitationProcessor:
         if result:
             yield result
 
-    def _process_citation(self, match: re.Match) -> tuple[str, list[CitationInfo]]:
+    def _process_citation(
+        self, match: re.Match, has_leading_space: bool
+    ) -> tuple[str, list[CitationInfo]]:
         """
         Process a single citation match and return formatted citation text and citation info objects.
 
@@ -246,7 +272,7 @@ class DynamicCitationProcessor:
 
         Args:
             match: Regex match object containing the citation
-
+            has_leading_space: Whether the text before the citation has a leading space
         Returns:
             Tuple of (formatted_citation_text, list[CitationInfo])
             - formatted_citation_text: Markdown-formatted citation text like [1](link) [2](link)
@@ -288,8 +314,8 @@ class DynamicCitationProcessor:
             doc_id = search_doc.document_id
             link = search_doc.link or ""
 
-            # Always format the citation text as [n](link)
-            formatted_citation_parts.append(f"[{num}]({link})")
+            # Always format the citation text as [[n]](link)
+            formatted_citation_parts.append(f"[[{num}]]({link})")
 
             # Skip creating CitationInfo for citations of the same work if cited recently (deduplication)
             if doc_id in self.recent_cited_documents:
@@ -309,6 +335,10 @@ class DynamicCitationProcessor:
 
         # Join all citation parts with spaces
         formatted_citation_text = " ".join(formatted_citation_parts)
+
+        # Apply leading space only if the text didn't already have one
+        if formatted_citation_text and not has_leading_space:
+            formatted_citation_text = " " + formatted_citation_text
 
         return formatted_citation_text, citation_info_list
 
