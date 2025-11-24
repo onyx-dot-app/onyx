@@ -273,7 +273,12 @@ jobs:
           }
 
           wait_for_service "http://localhost:8080/health" "API server"
-          wait_for_service "http://localhost:8090/health" "MCP server"
+          test_dir="${{ matrix.test-dir.path }}"
+          if [ "$test_dir" = "tests/mcp" ]; then
+            wait_for_service "http://localhost:8090/health" "MCP server"
+          else
+            echo "Skipping MCP server wait for non-MCP suite: $test_dir"
+          fi
           echo "Finished waiting for services."
 
       - name: Start Mock Services
