@@ -127,3 +127,30 @@ jobs:
             -xv \
             --ff \
             backend/tests/external_dependency_unit/${TEST_DIR}
+
+      - name: Collect Docker logs on failure
+        if: failure()
+        run: |
+          mkdir -p docker-logs
+          cd deployment/docker_compose
+
+          # Get list of running containers
+          containers=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q)
+
+          # Collect logs from each container
+          for container in $containers; do
+            container_name=$(docker inspect --format='{{.Name}}' $container | sed 's/^\///')
+            echo "Collecting logs from $container_name..."
+            docker logs $container > ../../docker-logs/${container_name}.log 2>&1
+          done
+
+          cd ../..
+          echo "Docker logs collected in docker-logs directory"
+
+      - name: Upload Docker logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-logs-${{ matrix.test-dir }}
+          path: docker-logs/
+          retention-days: 7
