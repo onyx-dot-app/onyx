@@ -3,7 +3,6 @@
 from datetime import datetime
 from typing import Any
 
-from ee.onyx.server.query_and_chat.models import DocumentSearchRequest
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import SearchType
@@ -14,6 +13,7 @@ from onyx.mcp_server.utils import fetch_indexed_source_types
 from onyx.mcp_server.utils import get_api_server_url
 from onyx.mcp_server.utils import get_http_client
 from onyx.mcp_server.utils import require_access_token
+from onyx.server.query_and_chat.models import DocumentSearchRequest
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
