@@ -603,6 +603,9 @@ def stream_chat_message_objects(
         )
 
         # Run the LLM loop and translate packets for frontend
+        # Note, this uses the emitter_generator_wrapper decorator which runs the entire thing
+        # in a background thread. Technical the DB session is not thread safe but nothing else
+        # uses it and the reference is passed directly so it's ok.
         llm_loop_packets = run_llm_loop(
             emitter=emitter,
             simple_chat_history=simple_chat_history,

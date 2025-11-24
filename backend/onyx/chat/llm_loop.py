@@ -554,11 +554,12 @@ def run_llm_loop(
     # Initialize citation processor for handling citations dynamically
     citation_processor = DynamicCitationProcessor()
 
+    llm_step_result: LlmStepResult | None = None
+
     # Pass the total budget to construct_message_history, which will handle token allocation
     available_tokens = llm.config.max_input_tokens
     tool_choice: ToolChoiceOptions = "auto"
     collected_tool_calls: list[ToolCallInfo] = []
-    all_search_docs: list[SearchDoc] | None = None
     final_search_docs: list[SearchDoc] | None = None
     should_cite_documents: bool = False
     for llm_cycle_count in range(MAX_LLM_CYCLES):
@@ -691,11 +692,6 @@ def run_llm_loop(
                 search_docs = None
                 if isinstance(tool_response.rich_response, SearchDocsResponse):
                     search_docs = tool_response.rich_response.search_docs
-                    # Add to all_search_docs (accumulate across all steps)
-                    if all_search_docs is None:
-                        all_search_docs = search_docs
-                    else:
-                        all_search_docs.extend(search_docs)
                     # Update final_search_docs (set to the last tool call's search docs)
                     final_search_docs = search_docs
 
@@ -787,10 +783,7 @@ def run_llm_loop(
             # As long as 1 tool with citeable documents is called, we ask the LLM to try to cite
             should_cite_documents = True
 
-    # Chat turn is complete at this point
-    emitter.emit(Packet(turn_index=llm_cycle_count, obj=OverallStop(type="stop")))
-
-    if not llm_step_result.answer:
+    if not llm_step_result or not llm_step_result.answer:
         raise RuntimeError("LLM did not return an answer.")
 
     # Build citation_docs_info from the accumulated citation_to_doc mapping
@@ -810,10 +803,12 @@ def run_llm_loop(
     save_chat_turn(
         message_text=llm_step_result.answer,
         reasoning_tokens=llm_step_result.reasoning,
-        all_search_docs=all_search_docs,
         final_search_docs=final_search_docs,
         citation_docs_info=citation_docs_info,
         tool_calls=collected_tool_calls,
         db_session=db_session,
         assistant_message=assistant_response,
     )
+
+    # Very important that this happens at the end, otherwise the commit may get rolled back
+    emitter.emit(Packet(turn_index=llm_cycle_count, obj=OverallStop(type="stop")))

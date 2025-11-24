@@ -608,21 +608,30 @@ def reserve_message_id(
     parent_message: int,
     message_type: MessageType = MessageType.ASSISTANT,
 ) -> ChatMessage:
-    # Create an empty chat message
+    # Create an temporary holding chat message to the updated and saved at the end
     empty_message = ChatMessage(
         chat_session_id=chat_session_id,
         parent_message_id=parent_message,
         latest_child_message_id=None,
-        message="",
-        token_count=0,
+        message="Response was termination prior to completion, try regenerating.",
+        token_count=15,
         message_type=message_type,
     )
 
     # Add the empty message to the session
     db_session.add(empty_message)
-
-    # Flush the session to get an ID for the new chat message
     db_session.flush()
+
+    # Get the parent message and set its child pointer to the current message
+    parent_chat_message = (
+        db_session.query(ChatMessage).filter(ChatMessage.id == parent_message).first()
+    )
+    if parent_chat_message:
+        parent_chat_message.latest_child_message_id = empty_message.id
+
+    # Committing because it's ok to recover this state. More clear to the user than it is now.
+    # Ideally there's a special UI for a case like this with a regenerate button but not needed for now.
+    db_session.commit()
 
     return empty_message
 

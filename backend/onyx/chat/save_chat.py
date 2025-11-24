@@ -3,7 +3,6 @@
 # level session manager and span sink], potentially has some robustness off the critical path,
 # and promotes clean separation of concerns.
 import json
-import logging
 
 from sqlalchemy.orm import Session
 
@@ -18,8 +17,9 @@ from onyx.db.tools import create_tool_call_no_commit
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.tools.models import ToolCallInfo
+from onyx.utils.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger()
 
 
 def _create_search_doc_key(search_doc: SearchDoc) -> tuple[str, int, tuple[str, ...]]:
@@ -142,7 +142,6 @@ def _create_and_link_tool_calls(
 def save_chat_turn(
     message_text: str,
     reasoning_tokens: str | None,
-    all_search_docs: list[SearchDoc] | None,
     final_search_docs: list[SearchDoc] | None,
     tool_calls: list[ToolCallInfo],
     citation_docs_info: list[CitationDocInfo],
