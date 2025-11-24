@@ -33,14 +33,17 @@ def tool_accounting(func: F) -> F:
 
     @functools.wraps(func)
     def wrapper(
-        run_context: RunContextWrapper[ChatTurnContext], *args: Any, **kwargs: Any
+        selfobj: Any,
+        run_context: RunContextWrapper[ChatTurnContext],
+        *args: Any,
+        **kwargs: Any
     ) -> Any:
         # Increment current_run_step at the beginning
         run_context.context.current_run_step += 1
 
         try:
-            # Call the original function
-            result = func(run_context, *args, **kwargs)
+            # Call the original function (pass selfobj for class methods)
+            result = func(selfobj, run_context, *args, **kwargs)
 
             # If it's a coroutine, we need to handle it differently
             if inspect.iscoroutine(result):
