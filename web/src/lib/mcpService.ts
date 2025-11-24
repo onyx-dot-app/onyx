@@ -6,6 +6,7 @@ import {
   MCPServerWithStatus,
   MCPServerCreateRequest,
 } from "@/app/admin/mcp-actions/types";
+import { ToolSnapshot } from "@/lib/tools/interfaces";
 
 export interface ToolStatusUpdateRequest {
   tool_ids: number[];
@@ -32,15 +33,21 @@ export async function deleteMCPServer(serverId: number): Promise<void> {
 }
 
 /**
- * Refresh/sync tools from an MCP server
+ * This performs actual discovery from the MCP server and syncs to DB
  */
-export async function refreshMCPServerTools(serverId: number): Promise<void> {
-  const response = await fetch(`/api/admin/mcp/server/${serverId}/tools`);
-
+export async function refreshMCPServerTools(
+  serverId: number
+): Promise<ToolSnapshot[]> {
+  // Discovers tools from MCP server, upserts to DB, and returns ToolSnapshot format
+  const response = await fetch(
+    `/api/admin/mcp/server/${serverId}/tools/snapshots?source=mcp`
+  );
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || "Failed to refresh tools");
   }
+
+  return await response.json();
 }
 
 /**

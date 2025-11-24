@@ -285,6 +285,9 @@ class MCPServer(BaseModel):
     is_authenticated: bool
     user_authenticated: Optional[bool] = None
     status: MCPServerStatus
+    tool_count: int = Field(
+        default=0, description="Number of tools associated with this server"
+    )
     auth_template: Optional[MCPAuthTemplate] = Field(
         None, description="Authentication template for per-user auth"
     )

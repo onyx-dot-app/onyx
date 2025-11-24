@@ -13,14 +13,14 @@ export interface MCPServerWithStatus
   transport: string | null;
   auth_type: string | null;
   auth_performer: string | null;
+  tool_count: number;
 }
 
 export interface MCPActionsListProps {
   mcpServers: MCPServerWithStatus[];
-  toolsByServer: Record<number, ToolSnapshot[]>;
   mutateMcpServers: KeyedMutator<MCPServersResponse>;
-  mutateTools: KeyedMutator<ToolSnapshot[]>;
   setPopup: (spec: PopupSpec) => void;
+  toolsFetchingServerIds: string[];
 }
 
 export interface MCPServerCreateRequest {

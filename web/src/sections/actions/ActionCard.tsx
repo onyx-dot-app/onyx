@@ -5,11 +5,19 @@ import SvgServer from "@/icons/server";
 import ActionCardHeader from "./ActionCardHeader";
 import MCPActions from "./MCPActions";
 import ToolsSection from "./ToolsSection";
-import ToolsList, { Tool } from "./ToolsList";
+import ToolsList from "./ToolsList";
 import { cn } from "@/lib/utils";
 import type { MCPActionStatus } from "./types";
+import { useServerTools } from "@/app/admin/mcp-actions/useServerTools";
+import { MCPServerWithStatus } from "@/app/admin/mcp-actions/types";
+import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { KeyedMutator } from "swr";
 
 export interface ActionCardProps {
+  // Server identification
+  serverId: number;
+  server: MCPServerWithStatus;
+
   // Core content
   title: string;
   description: string;
@@ -21,9 +29,6 @@ export interface ActionCardProps {
   // Tool count (only for connected state)
   toolCount?: number;
 
-  // Tools (optional - for expanded view)
-  tools?: Tool[];
-
   // Actions
   onDisconnect?: () => void;
   onManage?: () => void;
@@ -32,23 +37,39 @@ export interface ActionCardProps {
   onAuthenticate?: () => void; // For pending state
   onReconnect?: () => void; // For disconnected state
 
-  // Tool-related actions
-  onToolToggle?: (toolId: string, enabled: boolean) => void;
-  onRefreshTools?: () => void;
-  onDisableAllTools?: () => void;
+  // Tool-related actions (now includes SWR mutate function for optimistic updates)
+  onToolToggle?: (
+    serverId: number,
+    toolId: string,
+    enabled: boolean,
+    mutate: KeyedMutator<ToolSnapshot[]>
+  ) => void;
+  onRefreshTools?: (
+    serverId: number,
+    mutate: KeyedMutator<ToolSnapshot[]>
+  ) => void;
+  onDisableAllTools?: (
+    serverId: number,
+    toolIds: number[],
+    mutate: KeyedMutator<ToolSnapshot[]>
+  ) => void;
 
   // Optional styling
   className?: string;
+
+  // Whether the tools are still being fetched
+  isInitialToolsFetching?: boolean;
 }
 
 // Main Component
 export default function ActionCard({
+  serverId,
+  server,
   title,
   description,
   logo,
   status = "connected",
   toolCount,
-  tools,
   onDisconnect,
   onManage,
   onEdit,
@@ -58,10 +79,18 @@ export default function ActionCard({
   onToolToggle,
   onRefreshTools,
   onDisableAllTools,
+  isInitialToolsFetching,
   className,
 }: ActionCardProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Lazy load tools only when expanded
+  const { tools, isLoading, mutate } = useServerTools({
+    serverId,
+    server,
+    isExpanded: isToolsExpanded,
+  });
 
   const isConnected = status === "connected";
   const isPending = status === "pending";
@@ -144,8 +173,11 @@ export default function ActionCard({
         {/* Tools Section (Only when expanded) */}
         {isToolsExpanded && (
           <ToolsSection
-            onRefresh={onRefreshTools}
-            onDisableAll={onDisableAllTools}
+            onRefresh={() => onRefreshTools?.(serverId, mutate)}
+            onDisableAll={() => {
+              const toolIds = tools.map((tool) => parseInt(tool.id));
+              onDisableAllTools?.(serverId, toolIds, mutate);
+            }}
             onFold={handleFold}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
@@ -159,7 +191,10 @@ export default function ActionCard({
           <ToolsList
             tools={filteredTools}
             searchQuery={searchQuery}
-            onToolToggle={onToolToggle}
+            onToolToggle={(toolId, enabled) =>
+              onToolToggle?.(serverId, toolId, enabled, mutate)
+            }
+            isInitialToolsFetching={isInitialToolsFetching || isLoading}
           />
         </div>
       )}

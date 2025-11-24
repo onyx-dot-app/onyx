@@ -4,6 +4,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import ToolItem from "./ToolItem";
+import ToolItemSkeleton from "./skeleton/ToolItemSkeleton";
 
 export interface Tool {
   id: string;
@@ -19,6 +20,7 @@ interface ToolsListProps {
   searchQuery?: string;
   onToolToggle?: (toolId: string, enabled: boolean) => void;
   className?: string;
+  isInitialToolsFetching?: boolean;
 }
 
 const ToolsList: React.FC<ToolsListProps> = ({
@@ -26,6 +28,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
   searchQuery,
   onToolToggle,
   className,
+  isInitialToolsFetching,
 }) => {
   return (
     <div
@@ -34,7 +37,14 @@ const ToolsList: React.FC<ToolsListProps> = ({
         className
       )}
     >
-      {tools.length > 0 ? (
+      {isInitialToolsFetching ? (
+        // Show 5 skeleton items while loading
+        <>
+          {[...Array(5)].map((_, index) => (
+            <ToolItemSkeleton key={`skeleton-${index}`} />
+          ))}
+        </>
+      ) : tools.length > 0 ? (
         tools.map((tool) => (
           <ToolItem
             key={tool.id}

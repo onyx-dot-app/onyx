@@ -13,15 +13,12 @@ import { createMCPServer } from "@/lib/mcpService";
 import { MCPServerCreateRequest } from "./types";
 import { KeyedMutator } from "swr";
 import { MCPServersResponse } from "@/lib/tools/interfaces";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import { SP } from "next/dist/shared/lib/utils";
 import { Separator } from "@/components/ui/separator";
 
 interface AddMCPServerModalProps {
   mutateMcpServers: KeyedMutator<MCPServersResponse>;
-  mutateTools: KeyedMutator<ToolSnapshot[]>;
   setPopup: (spec: PopupSpec) => void;
 }
 
@@ -35,7 +32,6 @@ const validationSchema = Yup.object().shape({
 
 export default function AddMCPServerModal({
   mutateMcpServers,
-  mutateTools,
   setPopup,
 }: AddMCPServerModalProps) {
   const { isOpen, toggle } = useModal();
@@ -57,8 +53,8 @@ export default function AddMCPServerModal({
         type: "success",
       });
 
-      // Refresh the data
-      await Promise.all([mutateMcpServers(), mutateTools()]);
+      // Refresh the servers list
+      await mutateMcpServers();
 
       // Close modal
       toggle(false);

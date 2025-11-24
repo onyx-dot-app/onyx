@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from onyx.db.enums import MCPAuthenticationPerformer
+from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPAuthenticationType
 from onyx.db.models import MCPConnectionConfig
@@ -122,6 +123,7 @@ def update_mcp_server__no_commit(
     admin_connection_config_id: int | None = None,
     auth_performer: MCPAuthenticationPerformer | None = None,
     transport: MCPTransport | None = None,
+    status: MCPServerStatus | None = None,
 ) -> MCPServer:
     """Update an existing MCP server"""
     server = get_mcp_server_by_id(server_id, db_session)
@@ -140,6 +142,8 @@ def update_mcp_server__no_commit(
         server.auth_performer = auth_performer
     if transport is not None:
         server.transport = transport
+    if status is not None:
+        server.status = status
 
     db_session.flush()  # Don't commit yet, let caller decide when to commit
     return server

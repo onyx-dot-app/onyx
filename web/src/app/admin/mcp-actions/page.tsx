@@ -1,22 +1,29 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import PageHeader from "@/refresh-components/headers/PageHeader";
 import SvgActions from "@/icons/actions";
 import { Separator } from "@/components/ui/separator";
 import Actionbar from "@/sections/actions/Actionbar";
 import { MCPServersResponse } from "@/lib/tools/interfaces";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
 import MCPActionsList from "./MCPActionsList";
 import AddMCPServerModal from "./AddMCPServerModal";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { refreshMCPServerTools } from "@/lib/mcpService";
 
 export default function MCPActionsPage() {
   const { popup, setPopup } = usePopup();
   const addServerModal = useCreateModal();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [isFetchingTools, setIsFetchingTools] = useState(false);
+  const [toolsFetchingServerIds, setToolsFetchingServerIds] = useState<
+    string[]
+  >([]);
 
   // Fetch MCP servers
   const {
@@ -28,30 +35,61 @@ export default function MCPActionsPage() {
     errorHandlingFetcher
   );
 
-  // Fetch all MCP tools (includes both enabled and disabled)
-  const {
-    data: toolsData,
-    isLoading: isToolsLoading,
-    mutate: mutateTools,
-  } = useSWR<ToolSnapshot[]>("/api/admin/mcp/tools", errorHandlingFetcher);
+  // Handle OAuth callback - fetch tools when server_id is present
+  useEffect(() => {
+    const serverId = searchParams.get("server_id");
 
-  // Group tools by server ID
-  const toolsByServer = useMemo(() => {
-    if (!toolsData) return {};
+    // Only process if we have a server_id and haven't processed this one yet
+    if (
+      serverId &&
+      !toolsFetchingServerIds.includes(serverId) &&
+      !isFetchingTools
+    ) {
+      setToolsFetchingServerIds([...toolsFetchingServerIds, serverId]);
 
-    return toolsData.reduce(
-      (acc, tool) => {
-        if (tool.mcp_server_id) {
-          acc[tool.mcp_server_id] = [...(acc[tool.mcp_server_id] || []), tool];
+      const fetchToolsAfterOAuth = async () => {
+        setIsFetchingTools(true);
+        try {
+          await fetch(
+            `/api/admin/mcp/server/${serverId}/status?status=CONNECTED`,
+            {
+              method: "PATCH",
+            }
+          );
+
+          await mutateMcpServers();
+
+          // Refresh tools for this server (will be cached by SWR for when user expands)
+          await refreshMCPServerTools(parseInt(serverId));
+
+          setToolsFetchingServerIds((prev) =>
+            prev.filter((id) => id !== serverId)
+          );
+          router.replace("/admin/mcp-actions");
+
+          setPopup({
+            message: "Successfully connected to MCP server and fetched tools",
+            type: "success",
+          });
+        } catch (error) {
+          console.error("Failed to fetch tools after OAuth:", error);
+          setPopup({
+            message: `Failed to fetch tools: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
+            type: "error",
+          });
+        } finally {
+          setIsFetchingTools(false);
         }
-        return acc;
-      },
-      {} as Record<number, ToolSnapshot[]>
-    );
-  }, [toolsData]);
+      };
+
+      fetchToolsAfterOAuth();
+    }
+  }, [searchParams, isFetchingTools, mutateMcpServers, setPopup, router]);
 
   const mcpServers = (mcpData?.mcp_servers || []) as any[];
-  const isLoading = isMcpLoading || isToolsLoading;
+  const isLoading = isMcpLoading;
   const hasActions = mcpServers.length > 0;
 
   if (isLoading) {
@@ -80,15 +118,13 @@ export default function MCPActionsPage() {
       />
       <MCPActionsList
         mcpServers={mcpServers}
-        toolsByServer={toolsByServer}
         mutateMcpServers={mutateMcpServers}
-        mutateTools={mutateTools}
         setPopup={setPopup}
+        toolsFetchingServerIds={toolsFetchingServerIds}
       />
       <addServerModal.Provider>
         <AddMCPServerModal
           mutateMcpServers={mutateMcpServers}
-          mutateTools={mutateTools}
           setPopup={setPopup}
         />
       </addServerModal.Provider>

@@ -26,10 +26,11 @@ import {
   TabsContent,
 } from "@/refresh-components/tabs/tabs";
 import { PerUserAuthConfig } from "./PerUserAuthConfig";
+import { createMCPServer } from "@/lib/tools/edit";
+import { MCPServerWithStatus } from "./types";
 
 interface MCPAuthenticationModalProps {
-  serverId: string;
-  serverName?: string;
+  mcpServer: MCPServerWithStatus | null;
 }
 
 const validationSchema = Yup.object().shape({
@@ -74,17 +75,107 @@ const validationSchema = Yup.object().shape({
 });
 
 export default function MCPAuthenticationModal({
-  serverId,
-  serverName = "MCP Server",
+  mcpServer,
 }: MCPAuthenticationModalProps) {
   const { isOpen, toggle } = useModal();
   const [activeAuthTab, setActiveAuthTab] = useState<"per-user" | "admin">(
     "per-user"
   );
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (values: any) => {
+    if (!mcpServer) return;
+
     console.log("Form values:", values);
-    // handleOAuthConnect will be implemented in the next phase
+    setIsSubmitting(true);
+
+    try {
+      const authType = values.auth_type;
+
+      // Step 1: Save the authentication configuration to the MCP server
+      const serverData = {
+        name: mcpServer.name,
+        description: mcpServer.description || undefined,
+        server_url: mcpServer.server_url,
+        transport: values.transport,
+        auth_type: values.auth_type,
+        auth_performer: values.auth_performer,
+        api_token:
+          authType === MCPAuthenticationType.API_TOKEN &&
+          values.auth_performer === MCPAuthenticationPerformer.ADMIN
+            ? values.api_token
+            : undefined,
+        auth_template:
+          values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+          authType === MCPAuthenticationType.API_TOKEN
+            ? values.auth_template
+            : undefined,
+        admin_credentials:
+          values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+          authType === MCPAuthenticationType.API_TOKEN
+            ? values.user_credentials || {}
+            : undefined,
+        oauth_client_id:
+          authType === MCPAuthenticationType.OAUTH
+            ? values.oauth_client_id
+            : undefined,
+        oauth_client_secret:
+          authType === MCPAuthenticationType.OAUTH
+            ? values.oauth_client_secret
+            : undefined,
+        existing_server_id: mcpServer.id,
+      };
+
+      const { data: serverResult, error: serverError } =
+        await createMCPServer(serverData);
+
+      if (serverError || !serverResult) {
+        throw new Error(serverError || "Failed to save server configuration");
+      }
+
+      // Step 2: Update status to AWAITING_AUTH after successful config save
+      if (authType === MCPAuthenticationType.OAUTH) {
+        await fetch(
+          `/api/admin/mcp/server/${mcpServer.id}/status?status=AWAITING_AUTH`,
+          {
+            method: "PATCH",
+          }
+        );
+      }
+
+      // Step 3: For OAuth, initiate the OAuth flow
+      if (authType === MCPAuthenticationType.OAUTH) {
+        const oauthResponse = await fetch("/api/admin/mcp/oauth/connect", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            server_id: mcpServer.id.toString(),
+            oauth_client_id: values.oauth_client_id,
+            oauth_client_secret: values.oauth_client_secret,
+            return_path: "/admin/mcp-actions/?server_id=" + mcpServer.id,
+            include_resource_param: true,
+          }),
+        });
+
+        if (!oauthResponse.ok) {
+          const error = await oauthResponse.json();
+          throw new Error("Failed to initiate OAuth: " + error.detail);
+        }
+
+        const { oauth_url } = await oauthResponse.json();
+        window.location.href = oauth_url;
+      } else {
+        // For non-OAuth authentication, just close the modal
+        toggle(false);
+      }
+    } catch (error) {
+      console.error("Error saving authentication:", error);
+      throw error;
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -99,7 +190,9 @@ export default function MCPAuthenticationModal({
               </div>
             </div>
             <div className="flex flex-col">
-              <Modal.Title>Authenticate {serverName}</Modal.Title>
+              <Modal.Title>
+                Authenticate {mcpServer?.name || "MCP Server"}
+              </Modal.Title>
               <Modal.Description>
                 Authenticate your connection to start using the MCP server.
               </Modal.Description>
@@ -433,9 +526,9 @@ export default function MCPAuthenticationModal({
                   main
                   primary
                   type="submit"
-                  disabled={!isValid || !dirty}
+                  disabled={!isValid || isSubmitting}
                 >
-                  Save & Connect
+                  {isSubmitting ? "Saving..." : "Save & Connect"}
                 </Button>
               </Modal.Footer>
             </Form>

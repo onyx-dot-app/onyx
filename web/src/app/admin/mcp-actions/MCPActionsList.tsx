@@ -1,7 +1,5 @@
 "use client";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
 import ActionCard from "@/sections/actions/ActionCard";
-import { Tool } from "@/sections/actions/ToolsList";
 import { getMCPServerIcon } from "@/lib/mcpUtils";
 import {
   deleteMCPServer,
@@ -17,31 +15,18 @@ import {
 import { useState } from "react";
 import MCPAuthenticationModal from "./MCPAuthenticationModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { KeyedMutator } from "swr";
 
 export default function MCPActionsList({
   mcpServers,
-  toolsByServer,
   mutateMcpServers,
-  mutateTools,
   setPopup,
+  toolsFetchingServerIds,
 }: MCPActionsListProps) {
   const authModal = useCreateModal();
   const [selectedServer, setSelectedServer] =
     useState<MCPServerWithStatus | null>(null);
-
-  const convertTools = (
-    toolSnapshots: ToolSnapshot[],
-    server: MCPServerWithStatus
-  ): Tool[] => {
-    return toolSnapshots.map((tool) => ({
-      id: tool.id.toString(),
-      icon: getMCPServerIcon(server),
-      name: tool.display_name || tool.name,
-      description: tool.description,
-      isAvailable: true,
-      isEnabled: tool.enabled,
-    }));
-  };
 
   // Determine status based on server status field
   const getStatus = (server: MCPServerWithStatus): MCPActionStatus => {
@@ -77,7 +62,7 @@ export default function MCPActionsList({
         type: "success",
       });
 
-      await Promise.all([mutateMcpServers(), mutateTools()]);
+      await mutateMcpServers();
     } catch (error) {
       console.error("Error deleting server:", error);
       setPopup({
@@ -105,20 +90,25 @@ export default function MCPActionsList({
   const handleToolToggle = async (
     serverId: number,
     toolId: string,
-    enabled: boolean
+    enabled: boolean,
+    mutateServerTools: KeyedMutator<ToolSnapshot[]>
   ) => {
     try {
-      await mutateTools(async (currentTools) => {
-        if (!currentTools) return currentTools;
-
-        return currentTools.map((tool) =>
-          tool.id.toString() === toolId ? { ...tool, enabled: enabled } : tool
-        );
-      }, false);
+      // Optimistically update the UI
+      await mutateServerTools(
+        async (currentTools) => {
+          if (!currentTools) return currentTools;
+          return currentTools.map((tool) =>
+            tool.id.toString() === toolId ? { ...tool, enabled } : tool
+          );
+        },
+        { revalidate: false }
+      );
 
       await updateToolStatus(parseInt(toolId), enabled);
 
-      await mutateTools();
+      // Revalidate to get fresh data from server
+      await mutateServerTools();
 
       setPopup({
         message: `Tool ${enabled ? "enabled" : "disabled"} successfully`,
@@ -127,7 +117,8 @@ export default function MCPActionsList({
     } catch (error) {
       console.error("Error toggling tool:", error);
 
-      await mutateTools();
+      // Revert on error by revalidating
+      await mutateServerTools();
 
       setPopup({
         message:
@@ -137,16 +128,24 @@ export default function MCPActionsList({
     }
   };
 
-  const handleRefreshTools = async (serverId: number) => {
+  const handleRefreshTools = async (
+    serverId: number,
+    mutateServerTools: KeyedMutator<ToolSnapshot[]>
+  ) => {
     try {
+      // Refresh tools for this specific server (discovers from MCP and syncs to DB)
       await refreshMCPServerTools(serverId);
+
+      // Update the local cache with fresh data
+      await mutateServerTools();
+
+      // Also refresh the servers list to update tool counts
+      await mutateMcpServers();
 
       setPopup({
         message: "Tools refreshed successfully",
         type: "success",
       });
-
-      await mutateTools();
     } catch (error) {
       console.error("Error refreshing tools:", error);
       setPopup({
@@ -157,11 +156,13 @@ export default function MCPActionsList({
     }
   };
 
-  const handleDisableAllTools = async (serverId: number) => {
+  const handleDisableAllTools = async (
+    serverId: number,
+    toolIds: number[],
+    mutateServerTools: KeyedMutator<ToolSnapshot[]>
+  ) => {
     try {
-      const serverTools = toolsByServer[serverId] || [];
-
-      if (serverTools.length === 0) {
+      if (toolIds.length === 0) {
         setPopup({
           message: "No tools to disable",
           type: "info",
@@ -169,20 +170,21 @@ export default function MCPActionsList({
         return;
       }
 
-      const toolIds = serverTools.map((tool) => tool.id);
-
-      await mutateTools(
+      // Optimistically update - disable all tools in the UI
+      await mutateServerTools(
         async (currentTools) => {
           if (!currentTools) return currentTools;
-
           return currentTools.map((tool) =>
-            tool.mcp_server_id === serverId ? { ...tool, enabled: false } : tool
+            toolIds.includes(tool.id) ? { ...tool, enabled: false } : tool
           );
         },
-        false // Don't revalidate yet
+        { revalidate: false }
       );
 
       const result = await disableAllServerTools(toolIds);
+
+      // Revalidate to get fresh data from server
+      await mutateServerTools();
 
       setPopup({
         message: `${result.updated_count} tool${
@@ -190,12 +192,11 @@ export default function MCPActionsList({
         } disabled successfully`,
         type: "success",
       });
-
-      await mutateTools();
     } catch (error) {
       console.error("Error disabling all tools:", error);
 
-      await mutateTools();
+      // Revert on error by revalidating
+      await mutateServerTools();
 
       setPopup({
         message:
@@ -210,39 +211,36 @@ export default function MCPActionsList({
   return (
     <div className="flex flex-col gap-4 w-full">
       {mcpServers.map((server) => {
-        const serverTools = toolsByServer[server.id] || [];
-        const tools = convertTools(serverTools, server);
         const status = getStatus(server);
 
         return (
           <ActionCard
             key={server.id}
+            serverId={server.id}
+            server={server}
             title={server.name}
             description={server.description || server.server_url}
             logo={getMCPServerIcon(server)}
             status={status}
-            toolCount={tools.length}
-            tools={tools}
+            toolCount={server.tool_count}
             onDisconnect={() => handleDisconnect(server.id)}
             onManage={() => handleManage(server.id)}
             onEdit={() => handleEdit(server.id)}
             onDelete={() => handleDelete(server.id)}
             onAuthenticate={() => handleAuthenticate(server.id)}
             onReconnect={() => handleReconnect(server.id)}
-            onToolToggle={(toolId, enabled) =>
-              handleToolToggle(server.id, toolId, enabled)
-            }
-            onRefreshTools={() => handleRefreshTools(server.id)}
-            onDisableAllTools={() => handleDisableAllTools(server.id)}
+            onToolToggle={handleToolToggle}
+            onRefreshTools={handleRefreshTools}
+            onDisableAllTools={handleDisableAllTools}
+            isInitialToolsFetching={toolsFetchingServerIds.includes(
+              server.id.toString()
+            )}
           />
         );
       })}
 
       <authModal.Provider>
-        <MCPAuthenticationModal
-          serverName={selectedServer?.name}
-          serverId={selectedServer?.id.toString() ?? ""}
-        />
+        <MCPAuthenticationModal mcpServer={selectedServer} />
       </authModal.Provider>
     </div>
   );
