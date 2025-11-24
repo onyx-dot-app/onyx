@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, memo, useMemo, useState, useEffect } from "react";
+import { useCallback, memo, useMemo, useState } from "react";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import AgentButton from "@/sections/sidebar/AgentButton";
+import useIsMounted from "@/hooks/useIsMounted";
 import { DragEndEvent } from "@dnd-kit/core";
 import {
   DndContext,
@@ -508,12 +509,7 @@ MemoizedAppSidebarInner.displayName = "AppSidebar";
 export default function AppSidebar() {
   const { folded, setFolded } = useAppSidebarContext();
   const { isMobile } = useScreenSize();
-  const [isMounted, setIsMounted] = useState(false);
-
-  // Ensure mobile sidebar starts closed on page load/refresh
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const isMounted = useIsMounted();
 
   if (!isMobile)
     return (
