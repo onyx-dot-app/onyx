@@ -28,8 +28,8 @@ from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.chat.turn.prompts.custom_instruction import build_custom_instructions
 from onyx.chat.turn.save_turn import extract_final_answer_from_packets
 from onyx.chat.turn.save_turn import save_turn
-from onyx.llm.message_types import ChatCompletionMessage
 from onyx.file_store.models import InMemoryChatFile
+from onyx.llm.message_types import ChatCompletionMessage
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
@@ -40,7 +40,6 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.force import filter_tools_for_force_tool_use
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
@@ -126,8 +125,11 @@ def _run_agent_loop(
             tool_choice = None
         else:
             tool_choice = (
-                force_use_tool_to_function_tool_names(force_use_tool, available_tools)
-                if iteration_count == 0 and force_use_tool
+                force_use_tool.tool_name
+                if iteration_count == 0
+                and force_use_tool
+                and force_use_tool.force_use
+                and available_tools
                 else None
             ) or "auto"
         query_result = query(
@@ -215,7 +217,17 @@ def _fast_chat_turn_core(
         research_type=research_type,
         chat_files=latest_query_files or [],
     )
-    with trace("fast_chat_turn"):
+    with trace(
+        "fast_chat_turn",
+        group_id=chat_session_id,
+        metadata={
+            "force_use_tool": (
+                None
+                if force_use_tool is None
+                else force_use_tool.tool_name if force_use_tool.force_use else None
+            )
+        },
+    ):
         _run_agent_loop(
             messages=messages,
             dependencies=dependencies,
