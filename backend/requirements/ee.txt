@@ -8,7 +8,7 @@ aiofiles==25.1.0
     # via aioboto3
 aiohappyeyeballs==2.6.1
     # via aiohttp
-aiohttp==3.12.14
+aiohttp==3.13.2
     # via
     #   aiobotocore
     #   litellm
