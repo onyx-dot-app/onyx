@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { ContentComponentProps } from "./ExpandableContentWrapper";
 import { WarningCircle } from "@phosphor-icons/react";
+import "../spinner.css";
 
 const CsvContent: React.FC<ContentComponentProps> = ({
   fileDescriptor,
@@ -19,12 +20,14 @@ const CsvContent: React.FC<ContentComponentProps> = ({
 }) => {
   const [data, setData] = useState<Record<string, string>[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
+  const [isFetching, setIsFetching] = useState(true);
 
   useEffect(() => {
     fetchCSV(fileDescriptor.id);
   }, [fileDescriptor.id]);
 
   const fetchCSV = async (id: string) => {
+    setIsFetching(true);
     try {
       const response = await fetch(`api/chat/file/${id}`);
       if (!response.ok) {
@@ -68,25 +71,15 @@ const CsvContent: React.FC<ContentComponentProps> = ({
       console.error("Error fetching CSV file:", error);
       setData([]);
       setHeaders([]);
+    } finally {
+      setIsFetching(false);
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isFetching) {
     return (
       <div className="flex items-center justify-center h-[300px]">
-        <div className="animate-pulse flex space-x-4">
-          <div className="rounded-full bg-background-200 h-10 w-10"></div>
-          <div className="w-full flex-1 space-y-4 py-1">
-            <div className="h-2 w-full bg-background-200 rounded"></div>
-            <div className="w-full space-y-3">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="h-2 bg-background-200 rounded col-span-2"></div>
-                <div className="h-2 bg-background-200 rounded col-span-1"></div>
-              </div>
-              <div className="h-2 bg-background-200 rounded"></div>
-            </div>
-          </div>
-        </div>
+        <div className="loader ease-linear rounded-full border-8 border-t-8 border-background-200 h-8 w-8"></div>
       </div>
     );
   }
