@@ -105,7 +105,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile
     command: >
-      /bin/sh -c "if [ \"$(echo ${MCP_SERVER_ENABLED:-false} | tr '[:upper:]' '[:lower:]')\" != \"true\" ]; then
+      /bin/sh -c "if [ \"${MCP_SERVER_ENABLED}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED}\" != \"true\" ]; then
         echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
         exit 0;
       else
@@ -117,7 +117,7 @@ services:
     depends_on:
       - relational_db
       - cache
-    restart: unless-stopped
+    restart: "no"
     environment:
       - POSTGRES_HOST=relational_db
       - REDIS_HOST=cache
