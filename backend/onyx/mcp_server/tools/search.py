@@ -38,28 +38,28 @@ async def _tenant_has_indexed_sources(access_token: AccessToken) -> bool:
 
 
 @mcp_server.tool()
-async def onyx_search_documents(
+async def search_indexed_documents(
     query: str,
     source_types: list[str] | None = None,
     time_cutoff: datetime | None = None,
     limit: int = 10,
 ) -> dict[str, Any]:
     """
-    Search Onyx's indexed knowledge base with optional filters.
+    Search the user's knowledge base indexed in Onyx.
+    Use this tool for information that is not public knowledge and specific to the user,
+    their team, their work, or their organization/company.
 
-    Returns ranked search results with snippets, scores, and metadata.
+    To find a list of available sources, use the `indexed_sources` resource.
+    Returns chunks of text as search results with snippets, scores, and metadata.
 
-    Args:
-        query: Search query string
-        source_types: Filter by source types (e.g., ['confluence', 'github'])
-        time_cutoff: Only return documents updated after this timestamp
-        limit: Maximum results to return (1-50)
-
-    Returns:
-        Dict with:
-        - documents: List of search results with content snippets
-        - total_results: Number of results found
-        - query: The query that was searched
+    Example usage:
+    ```
+    {
+        "query": "What is the latest status of PROJ-1234 and what is the next development item?",
+        "source_types": ["jira", "google_drive", "github"],
+        "limit": 10,
+    }
+    ```
     """
     logger.info(
         f"Onyx MCP Server: document search: query='{query}', sources={source_types}, limit={limit}"
@@ -119,14 +119,15 @@ async def onyx_search_documents(
     result = response.json()
 
     # Return simplified format for MCP clients
+    fields_to_return = [
+        "semantic_identifier",
+        "content",
+        "source_type",
+        "link",
+        "score",
+    ]
     documents = [
-        {
-            "semantic_identifier": doc.get("semantic_identifier"),
-            "content": doc.get("content"),
-            "source_type": doc.get("source_type"),
-            "link": doc.get("link"),
-            "match_score": doc.get("score", 0.0),
-        }
+        {key: doc.get(key) for key in fields_to_return}
         for doc in result.get("top_documents", [])
     ]
 
@@ -139,26 +140,24 @@ async def onyx_search_documents(
 
 
 @mcp_server.tool()
-async def onyx_web_search(
+async def search_web(
     query: str,
     limit: int = 5,
 ) -> dict[str, Any]:
     """
-    Search the public web via Onyx's web search.
+    Search the public internet for general knowledge, current events, and publicly available information.
+    Use this tool for information that is publicly available on the web,
+    such as news, documentation, general facts, or when the user's private knowledge base doesn't contain relevant information.
 
-    Returns snippets only. Use `onyx_open_url` to fetch full content from URLs in these results.
+    Returns web search results with titles, URLs, and snippets (NOT full content). Use `open_urls` to fetch full page content.
 
-    Args:
-        query: Search query for the public web
-        limit: Maximum results per query to return (1-20, default is 5)
-
-    Returns:
-        Dict with:
-        - results: List of search results, each containing:
-          - url: Web page URL
-          - title: Page title
-          - snippet: Brief excerpt (NOT full content)
-        - query: The query that was searched
+    Example usage:
+    ```
+    {
+        "query": "React 19 migration guide to use react compiler",
+        "limit": 5
+    }
+    ```
     """
     logger.info(f"Onyx MCP Server: Web search: query='{query}', limit={limit}")
 
@@ -188,23 +187,24 @@ async def onyx_web_search(
 
 
 @mcp_server.tool()
-async def onyx_open_url(
+async def open_urls(
     urls: list[str],
 ) -> dict[str, Any]:
     """
-    This tool retrieves the complete text content of web pages.
+    Retrieve the complete text content from specific web URLs.
+    Use this tool when you need to access full content from known URLs,
+    such as documentation pages or articles returned by the `search_web` tool.
 
-    Typical workflow:
-    1. Use `onyx_web_search` to find relevant URLs (returns snippets only)
-    2. Select the most promising URLs from search results
-    3. Use THIS TOOL to fetch full page content from those URLs
+    Useful for following up on web search results when snippets do not provide enough information.
 
-    Args:
-        urls: List of URLs to fetch full content from (e.g., URLs from web_search results)
+    Returns the full text content of each URL along with metadata like title and content type.
 
-    Returns:
-        Dict with:
-        - results: List of page content for each URL
+    Example usage:
+    ```
+    {
+        "urls": ["https://react.dev/versions", "https://react.dev/learn/react-compiler","https://react.dev/learn/react-compiler/introduction"]
+    }
+    ```
     """
     logger.info(f"Onyx MCP Server: Open URL: fetching {len(urls)} URLs")
 

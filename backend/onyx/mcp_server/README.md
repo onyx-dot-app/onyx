@@ -11,11 +11,10 @@ All access controls are managed within the main Onyx application.
 
 ### Authentication
 
-Provide an Onyx bearer token in the `Authorization` header. The MCP server forwards
-the token to the main API server `/me` endpoint; the API validates the token and
-applies the correct user and tenant context.
+Provide an Onyx bearer token in the `Authorization` header.
+The MCP server quickly validates and passes through the token on every request.
 
-Depending on usage, the MCP Server may support OAuth in the future.
+Depending on usage, the MCP Server may support OAuth and stdio in the future.
 
 ### Default Configuration
 - **Transport**: HTTP POST (MCP over HTTP)
@@ -49,7 +48,7 @@ The MCP server is built on [FastMCP](https://github.com/jlowin/fastmcp) and runs
 │  API Server     │
 │  Port 8080      │
 │  ├─ /me (auth)  │
-│  ├─ Search API  │
+│  ├─ Search APIs │
 │  └─ ACL checks  │
 └─────────────────┘
 ```
@@ -84,19 +83,19 @@ Most MCP clients support HTTP transport with custom headers. Refer to your clien
 
 The server provides three tools for searching and retrieving information:
 
-1. `onyx_search_documents`
-Search your Onyx knowledge base with semantic search. Supports filtering by source type, time range, and result limits. Returns ranked documents with content snippets, metadata, and match scores.
+1. `search_indexed_documents`
+Search the user's private knowledge base indexed in Onyx. Returns ranked documents with content snippets, scores, and metadata.
 
-2. `onyx_web_search`
-Search the public web via the `/web-search/search-lite` API using your configured provider (Exa or Serper+Firecrawl). Returns URL, title, and snippet for each result. Requires `EXA_API_KEY` or `SERPER_API_KEY` + `FIRECRAWL_API_KEY` to be configured. Use `onyx_open_url` to fetch full content for specific URLs.
+2. `search_web`
+Search the public internet for current events and general knowledge. Returns web search results with titles, URLs, and snippets.
 
-3. `onyx_open_url`
-Fetch and extract full page content from web URLs via `/web-search/open-urls`. Useful for retrieving complete articles after finding them with `onyx_web_search`. Returns the full text content of each fetched page.
+3. `open_urls`
+Retrieve the complete text content from specific web URLs. Useful for fetching full page content after finding relevant URLs via `search_web`.
 
 ### Resources
 
-1. `available_sources`
-Returns a JSON payload enumerating every document source that currently has indexed content in the tenant. The `sources` array is a sorted list of the source enum values (e.g., `"confluence"`, `"github"`). Clients can use it directly to drive filter pickers before calling `onyx_search_documents`.
+1. `indexed_sources`
+Lists all document sources currently indexed in the tenant (e.g., `"confluence"`, `"github"`). Use these values to filter results when calling `search_indexed_documents`.
 
 ## Local Development
 

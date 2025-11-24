@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from datetime import timezone
 from typing import Any
 
 from onyx.mcp_server.api import mcp_server
@@ -15,15 +13,15 @@ logger = setup_logger()
 
 
 @mcp_server.resource(
-    "resource://available_sources",
-    name="available_sources",
+    "resource://indexed_sources",
+    name="indexed_sources",
     description=(
-        "Enumerate document sources that currently have indexed content and can be "
-        "used to filter the onyx_search_documents tool."
+        "Enumerate the user's document sources that are currently indexed in Onyx."
+        "This can be used to discover filters for the `search_indexed_documents` tool."
     ),
     mime_type="application/json",
 )
-async def available_sources_resource() -> dict[str, Any]:
+async def indexed_sources_resource() -> dict[str, Any]:
     """Return the list of indexed source types for search filtering."""
 
     access_token = require_access_token()
@@ -32,14 +30,13 @@ async def available_sources_resource() -> dict[str, Any]:
     if sources is None:
         raise ValueError("Failed to fetch indexed source types")
 
-    source_values = sorted(sources)
+    indexed_sources = sorted(sources)
 
     logger.info(
-        "Onyx MCP Server: available_sources resource returning %s entries",
-        len(source_values),
+        "Onyx MCP Server: indexed_sources resource returning %s entries",
+        len(indexed_sources),
     )
 
     return {
-        "sources": source_values,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "indexed_sources": indexed_sources,
     }
