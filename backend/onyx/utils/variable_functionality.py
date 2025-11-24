@@ -22,7 +22,6 @@ class OnyxVersion:
 
 
 global_version = OnyxVersion()
-global_version.set_ee()
 
 
 def set_is_ee_based_on_env_variable() -> None:
