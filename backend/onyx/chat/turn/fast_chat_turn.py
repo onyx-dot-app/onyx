@@ -140,7 +140,7 @@ def _run_agent_loop(
             tool_choice=tool_choice,
         )
         tool_call_events = _process_query_stream(
-            query_result.stream, chat_session_id, dependencies, ctx
+            query_result.stream, chat_session_id, ctx
         )
 
         agent_turn_messages = [
