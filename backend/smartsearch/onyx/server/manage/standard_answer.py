@@ -3,7 +3,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.standard_answer import (
+from smartsearch.onyx.db.standard_answer import (
     fetch_standard_answer,
     fetch_standard_answer_categories,
     fetch_standard_answer_category,
@@ -14,7 +14,7 @@ from ee.onyx.db.standard_answer import (
     update_standard_answer,
     update_standard_answer_category,
 )
-from ee.onyx.server.manage.models import (
+from smartsearch.onyx.server.manage.models import (
     StandardAnswer,
     StandardAnswerCategory,
     StandardAnswerCategoryCreationRequest,

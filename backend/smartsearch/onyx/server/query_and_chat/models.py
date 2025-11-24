@@ -8,7 +8,7 @@ from pydantic import (
     model_validator,
 )
 
-from ee.onyx.server.manage.models import StandardAnswer
+from smartsearch.onyx.server.manage.models import StandardAnswer
 from onyx.chat.models import (
     CitationInfo,
     PersonaOverrideConfig,

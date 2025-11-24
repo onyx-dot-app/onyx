@@ -9,10 +9,10 @@ from datetime import timezone
 from fastapi_users_db_sqlalchemy import UUID_ID
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.usage_export import get_all_empty_chat_message_entries
-from ee.onyx.db.usage_export import write_usage_report
-from ee.onyx.server.reporting.usage_export_models import UsageReportMetadata
-from ee.onyx.server.reporting.usage_export_models import UserSkeleton
+from smartsearch.onyx.db.usage_export import get_all_empty_chat_message_entries
+from smartsearch.onyx.db.usage_export import write_usage_report
+from smartsearch.onyx.server.reporting.usage_export_models import UsageReportMetadata
+from smartsearch.onyx.server.reporting.usage_export_models import UserSkeleton
 from onyx.configs.constants import FileOrigin
 from onyx.db.users import get_all_users
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE

@@ -4,8 +4,8 @@ from collections.abc import Callable
 
 from fastapi import FastAPI, HTTPException, Request, Response
 
-from ee.onyx.auth.users import decode_anonymous_user_jwt_token
-from ee.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
+from smartsearch.onyx.auth.users import decode_anonymous_user_jwt_token
+from smartsearch.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
 from onyx.auth.api_key import extract_tenant_from_api_key_header
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.engine import is_valid_schema_name

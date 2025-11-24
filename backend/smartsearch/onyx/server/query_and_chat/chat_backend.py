@@ -4,7 +4,7 @@ from typing import cast, Union
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ee.onyx.server.query_and_chat.models import (
+from smartsearch.onyx.server.query_and_chat.models import (
     AgentAnswer,
     AgentSubQuery,
     AgentSubQuestion,

@@ -13,12 +13,12 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.query_history import (
+from smartsearch.onyx.db.query_history import (
     fetch_chat_sessions_eagerly_by_time,
     get_page_of_chat_sessions,
     get_total_filtered_chat_sessions_count,
 )
-from ee.onyx.server.query_history.models import (
+from smartsearch.onyx.server.query_history.models import (
     ChatSessionMinimal,
     ChatSessionSnapshot,
     MessageSnapshot,

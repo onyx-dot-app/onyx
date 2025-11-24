@@ -10,13 +10,13 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.usage_export import (
+from smartsearch.onyx.db.usage_export import (
     get_all_usage_reports,
     get_usage_report_data,
     UsageReportMetadata,
 )
-from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
-from ee.onyx.server.reporting.usage_export_models import GenerateUsageReportParams
+from smartsearch.onyx.server.reporting.usage_export_generation import create_new_usage_report
+from smartsearch.onyx.server.reporting.usage_export_models import GenerateUsageReportParams
 from onyx.auth.users import current_admin_user
 from onyx.db.engine import get_session
 from onyx.db.models import User

@@ -6,16 +6,11 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from ee.onyx.chat.process_message import gather_stream_for_answer_api
-from ee.onyx.onyxbot.slack.handlers.handle_standard_answers import (
-    oneoff_standard_answers,
-)
-from ee.onyx.server.query_and_chat.models import (
+from smartsearch.onyx.chat.process_message import gather_stream_for_answer_api
+from smartsearch.onyx.server.query_and_chat.models import (
     DocumentSearchRequest,
     OneShotQARequest,
     OneShotQAResponse,
-    StandardAnswerRequest,
-    StandardAnswerResponse,
 )
 from onyx.auth.users import current_user
 from onyx.chat.chat_utils import (
@@ -421,47 +416,3 @@ def stream_answer_with_citation(
     streaming_response = StreamingResponse(stream_generator(), media_type="application/json")
 
     return streaming_response
-
-
-@basic_router.get(
-    "/query/standard-answer",
-    summary="Получить стандартные ответы для сообщения",
-    response_model=StandardAnswerResponse,
-)
-def get_standard_answer(
-    request: StandardAnswerRequest,
-    db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_user),
-) -> StandardAnswerResponse:
-    """Возвращает стандартные ответы, соответствующие пользовательскому сообщению.
-
-    Ищет предварительно настроенные стандартные ответы в указанных категориях Slack бота,
-    которые соответствуют тексту сообщения пользователя.
-
-    Args:
-        request: Запрос со сообщением и категориями для поиска
-
-    Returns:
-        Стандартные ответы, соответствующие запросу
-
-    Raises:
-        HTTPException: В случае внутренней ошибки сервера
-    """
-    try:
-        standard_answers = oneoff_standard_answers(
-            message=request.message,
-            slack_bot_categories=request.slack_bot_categories,
-            db_session=db_session,
-        )
-        return StandardAnswerResponse(
-            standard_answers=standard_answers
-        )
-    except Exception as e:
-        logger.error(
-            f"Ошибка в функции get_standard_answer: {str(e)}",
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=500,
-            detail="Произошла внутренняя ошибка сервера",
-        )
