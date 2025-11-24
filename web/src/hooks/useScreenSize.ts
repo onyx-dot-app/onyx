@@ -1,8 +1,8 @@
 "use client";
 
 import { MOBILE_SIDEBAR_BREAKPOINT_PX } from "@/lib/constants";
-import { useState } from "react";
-import useIsMounted from "./useIsMounted";
+import { useState, useCallback } from "react";
+import useIsMounted from "@/hooks/useIsMounted";
 
 export interface ScreenSize {
   height: number;
@@ -16,12 +16,12 @@ export default function useScreenSize(): ScreenSize {
     height: typeof window !== "undefined" ? window.innerHeight : 0,
   }));
 
-  function handleResize() {
+  const handleResize = useCallback(() => {
     setSizes({
       width: window.innerWidth,
       height: window.innerHeight,
     });
-  }
+  }, []);
 
   const isMounted = useIsMounted(() => {
     window.addEventListener("resize", handleResize);
