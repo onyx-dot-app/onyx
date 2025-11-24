@@ -142,7 +142,6 @@ def _create_and_link_tool_calls(
 def save_chat_turn(
     message_text: str,
     reasoning_tokens: str | None,
-    final_search_docs: list[SearchDoc] | None,
     tool_calls: list[ToolCallInfo],
     citation_docs_info: list[CitationDocInfo],
     db_session: Session,
@@ -154,9 +153,9 @@ def save_chat_turn(
     This function:
     1. Updates the ChatMessage with text, reasoning tokens, and token count
     2. Creates SearchDoc entries from ToolCall search_docs (for tool calls that returned documents)
-    3. Creates SearchDoc entries from final_search_docs and links all to ChatMessage
+    3. Collects all unique SearchDocs from all tool calls and links them to ChatMessage
     4. Builds citation mapping from citation_docs_info
-    5. Links SearchDocs to the ChatMessage (all final_search_docs)
+    5. Links all unique SearchDocs from tool calls to the ChatMessage
     6. Creates ToolCall entries and links SearchDocs to them
     7. Builds the citations mapping for the ChatMessage
 
@@ -170,8 +169,6 @@ def save_chat_turn(
     Args:
         message_text: The message content to save
         reasoning_tokens: Optional reasoning tokens for the message
-        all_search_docs: All search docs from all tool calls (not currently used)
-        final_search_docs: Final search docs selected for the response to link to ChatMessage
         tool_calls: List of tool call information to create ToolCall entries (may include search_docs)
         citation_docs_info: List of citation document information for building citations mapping
         db_session: Database session for persistence
@@ -221,28 +218,12 @@ def save_chat_turn(
                 search_doc_ids_for_tool
             )
 
-    # 3. Create SearchDoc entries from final_search_docs and link all to ChatMessage
-    final_search_doc_ids: list[int] = []
-
-    if final_search_docs:
-        for search_doc_py in final_search_docs:
-            # Create the unique key for this SearchDoc version
-            search_doc_key = _create_search_doc_key(search_doc_py)
-
-            # Check if we've already created this exact SearchDoc version (from tool calls)
-            if search_doc_key in search_doc_key_to_id:
-                db_search_doc_id = search_doc_key_to_id[search_doc_key]
-            else:
-                # Create new DB SearchDoc entry for this version
-                db_search_doc = create_db_search_doc(
-                    server_search_doc=search_doc_py,
-                    db_session=db_session,
-                    commit=False,
-                )
-                db_search_doc_id = db_search_doc.id
-                search_doc_key_to_id[search_doc_key] = db_search_doc_id
-
-            final_search_doc_ids.append(db_search_doc_id)
+    # 3. Collect all unique SearchDoc IDs from all tool calls to link to ChatMessage
+    # Use a set to deduplicate by ID (since we've already deduplicated by key above)
+    all_search_doc_ids_set: set[int] = set()
+    for search_doc_ids in tool_call_to_search_doc_ids.values():
+        all_search_doc_ids_set.update(search_doc_ids)
+    final_search_doc_ids: list[int] = list(all_search_doc_ids_set)
 
     # 4. Build citation mapping from citation_docs_info
     citation_number_to_search_doc_id: dict[int, int] = {}
@@ -254,14 +235,14 @@ def save_chat_turn(
         # Create the unique key for this SearchDoc version
         search_doc_key = _create_search_doc_key(search_doc_py)
 
-        # Get the search doc ID (should already exist from processing final_search_docs or tool_calls)
+        # Get the search doc ID (should already exist from processing tool_calls)
         if search_doc_key in search_doc_key_to_id:
             db_search_doc_id = search_doc_key_to_id[search_doc_key]
         else:
-            # This shouldn't happen if citation_docs are a subset of final_search_docs
+            # This shouldn't happen if citation_docs are a subset of tool call search_docs
             # But handle it gracefully by creating the SearchDoc
             logger.warning(
-                f"Citation doc {search_doc_py.document_id} not found in final_search_docs, creating it"
+                f"Citation doc {search_doc_py.document_id} not found in tool call search_docs, creating it"
             )
             db_search_doc = create_db_search_doc(
                 server_search_doc=search_doc_py,
@@ -277,7 +258,7 @@ def save_chat_turn(
                 db_search_doc_id
             )
 
-    # 5. Link all final_search_docs to ChatMessage
+    # 5. Link all unique SearchDocs from tool calls to ChatMessage
     if final_search_doc_ids:
         add_search_docs_to_chat_message(
             chat_message_id=assistant_message.id,

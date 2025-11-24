@@ -61,6 +61,8 @@ class ReasoningDone(BaseObj):
 class AgentResponseStart(BaseObj):
     type: Literal["message_start"] = StreamingType.MESSAGE_START.value
 
+    final_documents: list[SearchDoc] | None = None
+
 
 # The stream of tokens for the final response
 # There is no end packet for this as the stream is over and a final OverallStop packet is emitted

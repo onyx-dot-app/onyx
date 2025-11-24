@@ -359,6 +359,7 @@ def run_llm_step(
     llm: LLM,
     turn_index: int,
     citation_processor: DynamicCitationProcessor,
+    final_documents: list[SearchDoc] | None = None,
 ) -> LlmStepResult:
     llm_msg_history = translate_history_to_llm_format(history)
 
@@ -410,7 +411,9 @@ def run_llm_step(
                 emitter.emit(
                     Packet(
                         turn_index=turn_index,
-                        obj=AgentResponseStart(),
+                        obj=AgentResponseStart(
+                            final_documents=final_documents,
+                        ),
                     )
                 )
                 answer_start = True
@@ -560,7 +563,7 @@ def run_llm_loop(
     available_tokens = llm.config.max_input_tokens
     tool_choice: ToolChoiceOptions = "auto"
     collected_tool_calls: list[ToolCallInfo] = []
-    final_search_docs: list[SearchDoc] | None = None
+    gathered_documents: list[SearchDoc] | None = None
     should_cite_documents: bool = False
     for llm_cycle_count in range(MAX_LLM_CYCLES):
 
@@ -653,6 +656,9 @@ def run_llm_loop(
             llm=llm,
             turn_index=llm_cycle_count,
             citation_processor=citation_processor,
+            # The rich docs representation is passed in so that when yielding the answer, it can also immediately yield the full
+            # set of found documents. This gives us the option to show the final set of documents immediately if desired.
+            final_documents=gathered_documents,
         )
 
         # Run the LLM selected tools, there is some more logic here than a simple execution
@@ -692,8 +698,10 @@ def run_llm_loop(
                 search_docs = None
                 if isinstance(tool_response.rich_response, SearchDocsResponse):
                     search_docs = tool_response.rich_response.search_docs
-                    # Update final_search_docs (set to the last tool call's search docs)
-                    final_search_docs = search_docs
+                    if gathered_documents:
+                        gathered_documents.extend(search_docs)
+                    else:
+                        gathered_documents = search_docs
 
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
@@ -803,7 +811,6 @@ def run_llm_loop(
     save_chat_turn(
         message_text=llm_step_result.answer,
         reasoning_tokens=llm_step_result.reasoning,
-        final_search_docs=final_search_docs,
         citation_docs_info=citation_docs_info,
         tool_calls=collected_tool_calls,
         db_session=db_session,
