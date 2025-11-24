@@ -124,7 +124,7 @@ Resources:
             - "/bin/sh"
             - "-c"
             - >
-              val="${DISABLE_MODEL_SERVER:-false}"; if [ "$val" = "True" ] || [ "$val" = "true" ]; then echo 'Skipping service...';
+              if [ "${DISABLE_MODEL_SERVER}" = "True" ] || [ "${DISABLE_MODEL_SERVER}" = "true" ]; then echo 'Skipping service...';
               exit 0; else exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000; fi
           PortMappings:
             - Name: model-server

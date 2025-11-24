@@ -180,8 +180,7 @@ services:
     #           count: all
     #           capabilities: [gpu]
     command: >
-      /bin/sh -c "val=\"${DISABLE_MODEL_SERVER:-false}\";
-      if [ \"$val\" = \"True\" ] || [ \"$val\" = \"true\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -217,8 +216,7 @@ services:
     #           count: all
     #           capabilities: [gpu]
     command: >
-      /bin/sh -c "val=\"${DISABLE_MODEL_SERVER:-false}\";
-      if [ \"$val\" = \"True\" ] || [ \"$val\" = \"true\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -373,8 +371,7 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command: >
       "
-      val=\"$${CODE_INTERPRETER_BETA_ENABLED:-false}\";
-      if [ \"$val\" = \"True\" ] || [ \"$val\" = \"true\" ]; then
+      if [ \"$${CODE_INTERPRETER_BETA_ENABLED}\" = \"True\" ] || [ \"$${CODE_INTERPRETER_BETA_ENABLED}\" = \"true\" ]; then
         exec bash ./entrypoint.sh code-interpreter-api;
       else
         echo 'Skipping code interpreter';
