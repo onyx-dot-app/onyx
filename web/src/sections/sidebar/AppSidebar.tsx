@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, memo, useMemo, useState } from "react";
+import { useCallback, memo, useMemo, useState, useEffect } from "react";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
@@ -508,6 +508,12 @@ MemoizedAppSidebarInner.displayName = "AppSidebar";
 export default function AppSidebar() {
   const { folded, setFolded } = useAppSidebarContext();
   const { isMobile } = useScreenSize();
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Ensure mobile sidebar starts closed on page load/refresh
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   if (!isMobile)
     return (
@@ -532,15 +538,18 @@ export default function AppSidebar() {
       </div>
 
       {/* Hitbox to close the sidebar if anything outside of it is touched */}
-      <div
-        className={cn(
-          "fixed inset-0 z-40 bg-mask-03 backdrop-blur-03 transition-opacity duration-200",
-          folded
-            ? "opacity-0 pointer-events-none"
-            : "opacity-100 pointer-events-auto"
-        )}
-        onClick={() => setFolded(true)}
-      />
+      {/* Only show overlay after component is mounted to prevent flash on page load */}
+      {isMounted && (
+        <div
+          className={cn(
+            "fixed inset-0 z-40 bg-mask-03 backdrop-blur-03 transition-opacity duration-200",
+            folded
+              ? "opacity-0 pointer-events-none"
+              : "opacity-100 pointer-events-auto"
+          )}
+          onClick={() => setFolded(true)}
+        />
+      )}
     </>
   );
 }
