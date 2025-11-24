@@ -96,6 +96,12 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
+      - name: Create .env file for Docker Compose
+        run: |
+          cat <<EOF > deployment/docker_compose/.env
+          CODE_INTERPRETER_BETA_ENABLED=true
+          EOF
+
       - name: Set up Standard Dependencies
         run: |
           cd deployment/docker_compose
