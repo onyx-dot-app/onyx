@@ -27,16 +27,18 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    # Add index on created_at column
+    # Add composite index on (project_id, created_at DESC)
     op.create_index(
-        "ix_project__user_file_created_at",
+        "ix_project__user_file_project_id_created_at",
         "project__user_file",
-        ["created_at"],
+        ["project_id", sa.text("created_at DESC")],
     )
 
 
 def downgrade() -> None:
-    # Remove index on created_at column
-    op.drop_index("ix_project__user_file_created_at", table_name="project__user_file")
+    # Remove composite index on (project_id, created_at)
+    op.drop_index(
+        "ix_project__user_file_project_id_created_at", table_name="project__user_file"
+    )
     # Remove created_at column from project__user_file table
     op.drop_column("project__user_file", "created_at")

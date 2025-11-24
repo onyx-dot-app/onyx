@@ -3504,7 +3504,15 @@ class Project__UserFile(Base):
         ForeignKey("user_file.id"), primary_key=True
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), index=True
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_project__user_file_project_id_created_at",
+            project_id,
+            created_at.desc(),
+        ),
     )
 
 
