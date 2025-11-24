@@ -1,8 +1,8 @@
 """add_created_at_in_project_userfile
 
-Revision ID: 3e380d25c3c3
-Revises: 1f2a3b4c5d6e
-Create Date: 2025-11-19 14:10:49.515889
+Revision ID: 6436661d5b65
+Revises: c7e9f4a3b2d1
+Create Date: 2025-11-24 11:50:24.536052
 
 """
 
@@ -10,8 +10,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = "3e380d25c3c3"
-down_revision = "1f2a3b4c5d6e"
+revision = "6436661d5b65"
+down_revision = "c7e9f4a3b2d1"
 branch_labels = None
 depends_on = None
 
