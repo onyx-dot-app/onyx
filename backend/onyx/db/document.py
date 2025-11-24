@@ -523,6 +523,16 @@ def update_docs_updated_at__no_commit(
     db_session: Session,
 ) -> None:
     doc_ids = list(ids_to_new_updated_at.keys())
+
+    # Log only when loading large batches
+    if len(doc_ids) > 100:
+        import psutil
+
+        mem_before = psutil.Process().memory_info().rss / (1024 * 1024)
+        logger.warning(
+            f"[MEM] Loading {len(doc_ids)} docs for update, mem: {mem_before:.0f}MB"
+        )
+
     documents_to_update = (
         db_session.query(DbDocument).filter(DbDocument.id.in_(doc_ids)).all()
     )
@@ -535,6 +545,15 @@ def update_docs_last_modified__no_commit(
     document_ids: list[str],
     db_session: Session,
 ) -> None:
+    # Log only when loading large batches
+    if len(document_ids) > 100:
+        import psutil
+
+        mem_before = psutil.Process().memory_info().rss / (1024 * 1024)
+        logger.warning(
+            f"[MEM] Loading {len(document_ids)} docs for last_modified, mem: {mem_before:.0f}MB"
+        )
+
     documents_to_update = (
         db_session.query(DbDocument).filter(DbDocument.id.in_(document_ids)).all()
     )
@@ -549,6 +568,15 @@ def update_docs_chunk_count__no_commit(
     doc_id_to_chunk_count: dict[str, int],
     db_session: Session,
 ) -> None:
+    # Log only when loading large batches
+    if len(document_ids) > 100:
+        import psutil
+
+        mem_before = psutil.Process().memory_info().rss / (1024 * 1024)
+        logger.warning(
+            f"[MEM] Loading {len(document_ids)} docs for chunk_count, mem: {mem_before:.0f}MB"
+        )
+
     documents_to_update = (
         db_session.query(DbDocument).filter(DbDocument.id.in_(document_ids)).all()
     )

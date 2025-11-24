@@ -554,6 +554,11 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     if LOG_ENDPOINT_LATENCY:
         add_latency_logging_middleware(application, logger)
 
+    # Add memory tracking middleware (only logs when memory is high)
+    from onyx.server.middleware.memory_tracking import MemoryTrackingMiddleware
+
+    application.add_middleware(MemoryTrackingMiddleware)
+
     add_onyx_request_id_middleware(application, "API", logger)
 
     # Ensure all routes have auth enabled or are explicitly marked as public
