@@ -2,13 +2,19 @@ from langgraph.graph import END
 from langgraph.graph import START
 from langgraph.graph import StateGraph
 
-from onyx.agents.agent_search.exploration.conditional_edges import completeness_router
+from onyx.agents.agent_search.exploration.conditional_edges import (
+    cs_update_consolidator_router,
+)
 from onyx.agents.agent_search.exploration.conditional_edges import decision_router
 from onyx.agents.agent_search.exploration.enums import DRPath
 from onyx.agents.agent_search.exploration.nodes.dr_a0_clarification import clarifier
 from onyx.agents.agent_search.exploration.nodes.dr_a1_orchestrator import orchestrator
 from onyx.agents.agent_search.exploration.nodes.dr_a2_closer import closer
-from onyx.agents.agent_search.exploration.nodes.dr_a3_logger import logging
+from onyx.agents.agent_search.exploration.nodes.dr_a3a_cs_changes import cs_changes
+from onyx.agents.agent_search.exploration.nodes.dr_a3b_cs_update_consolidator import (
+    cs_update_consolidator,
+)
+from onyx.agents.agent_search.exploration.nodes.dr_a4_logger import logging
 from onyx.agents.agent_search.exploration.states import MainInput
 from onyx.agents.agent_search.exploration.states import MainState
 from onyx.agents.agent_search.exploration.sub_agents.basic_search.dr_basic_search_graph_builder import (
@@ -65,6 +71,8 @@ def exploration_graph_builder() -> StateGraph:
     graph.add_node(DRPath.GENERIC_INTERNAL_TOOL, generic_internal_tool_graph)
 
     graph.add_node(DRPath.CLOSER, closer)
+    graph.add_node("cs_changes", cs_changes)
+    graph.add_node("cs_consolidator", cs_update_consolidator)
     graph.add_node(DRPath.LOGGER, logging)
 
     ### Add edges ###
@@ -82,7 +90,10 @@ def exploration_graph_builder() -> StateGraph:
     graph.add_edge(start_key=DRPath.GENERIC_TOOL, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.GENERIC_INTERNAL_TOOL, end_key=DRPath.ORCHESTRATOR)
 
-    graph.add_conditional_edges(DRPath.CLOSER, completeness_router)
+    graph.add_edge(DRPath.CLOSER, "cs_changes")
+    graph.add_conditional_edges("cs_changes", cs_update_consolidator_router)
+    graph.add_edge(start_key="cs_consolidator", end_key=DRPath.LOGGER)
+
     graph.add_edge(start_key=DRPath.LOGGER, end_key=END)
 
     return graph

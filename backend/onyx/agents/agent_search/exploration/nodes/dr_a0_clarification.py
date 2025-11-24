@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import datetime
 from typing import Any
@@ -205,7 +206,8 @@ def _get_available_tools(
             description="""This tool should be used if the next step is not particularly clear, \
 or if you think you need to think through the original question and the questions and answers \
 you have received so far in order to make a decision about what to do next AMONGST THE TOOLS AVAILABLE TO YOU \
-IN THIS REQUEST! (Note: some tools described earlier may be excluded!).
+IN THIS REQUEST! (Note: some tools described earlier may be excluded!). Note that you can also refer back to \
+information and context from the base knowledge provided in the system prompt.
 If in doubt, use this tool. No action will be taken, just some reasoning will be done.""",
             metadata={},
             cost=0.0,
@@ -219,7 +221,10 @@ If in doubt, use this tool. No action will be taken, just some reasoning will be
             llm_path=DRPath.CLARIFIER.value,
             path=DRPath.CLARIFIER,
             description="""This tool should be used ONLY if you need to have clarification on something IMPORTANT FROM \
-the user. This can pertain to the original question or something you found out during the process so far.""",
+the user in order to address the task. This can pertain to the original question or something you found \
+out during the process so far. Note that you can also refer back to \
+information and context from the base knowledge provided in the system prompt.
+Articulate the questions in a bullet form.""",
             metadata={},
             cost=0.0,
             tool_object=None,
@@ -637,6 +642,12 @@ Note:
 
     next_tool = DRPath.ORCHESTRATOR.value
 
+    length_original_knowledge = len(
+        llm_tokenizer.encode(json.dumps(original_cheat_sheet_context))
+    )
+
+    logger.debug(f"Length of original knowledge: {length_original_knowledge}")
+
     return OrchestrationSetup(
         original_question=original_question,
         chat_history_string=chat_history_string,
@@ -660,7 +671,7 @@ Note:
         uploaded_test_context=uploaded_text_context,
         uploaded_image_context=uploaded_image_context,
         message_history_for_continuation=message_history_for_continuation,
-        cheat_sheet_context=original_cheat_sheet_context,
+        original_cheat_sheet_context=original_cheat_sheet_context,
         use_clarifier=_EXPLORATION_TEST_USE_CALRIFIER,
         use_thinking=_EXPLORATION_TEST_USE_THINKING,
         use_plan=_EXPLORATION_TEST_USE_PLAN,

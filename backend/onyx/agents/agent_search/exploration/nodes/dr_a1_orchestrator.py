@@ -31,15 +31,18 @@ _SEARCH_TOOL = {
     "type": "function",
     "function": {
         "name": "search_tool",
-        "description": "This tool is the search tool whose functionality and details are  \
-described in he system prompt. Use it if you think you have one or  more questions that you believe are \
-suitable for the search tool.",
+        "description": "The search tool's functionality is described in the system prompt. \
+Use it if you think you have one or  more questions that you believe are \
+suitable for the search tool. Use information from the base knowledge provided in the system prompt to \
+make sure the question has the sufficient context to be answered.",
         "parameters": {
             "type": "object",
             "properties": {
                 "request": {
                     "type": "array",
-                    "description": "The list of questions to be asked of the search tool",
+                    "description": "The list of questions to be asked of the search tool. Remember that you can \
+also refer back to information and context from the base knowledge provided in the system prompt in order \
+to inform the question/query, ensuring it has sufficient context.",
                     "items": {
                         "type": "string",
                         "description": "The question to be asked of the search tool",
@@ -82,7 +85,7 @@ information or make checks.",
             "properties": {
                 "request": {
                     "type": "string",
-                    "description": "The request to be made to the thinking tool",
+                    "description": "A brief",
                 },
             },
         },
@@ -95,14 +98,16 @@ _CLARIFIER_TOOL = {
         "name": "clarifier_tool",
         "description": "This tool is used if you need to have clarification on something IMPORTANT from \
 the user. This can pertain to the original question or something you found out during the process so far.",
-    },
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "request": {
-                "type": "string",
-                "description": "The question you would like to ask the user to get clarification.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "request": {
+                    "type": "string",
+                    "description": "The questions you would like to provide to the clarification tool, so that \
+the user can be contacted.",
+                },
             },
+            "required": ["request"],
         },
     },
 }
@@ -147,6 +152,7 @@ def orchestrator(
         raise ValueError("Question is required for orchestrator")
 
     iteration_nr = state.iteration_nr
+    num_search_iterations = state.num_search_iterations
 
     plan_of_record = state.plan_of_record
 
@@ -228,7 +234,12 @@ def orchestrator(
     message_history_for_continuation.append(HumanMessage(content=ORCHESTRATOR_PROMPT))
     new_messages_for_continuation.append(HumanMessage(content=ORCHESTRATOR_PROMPT))
 
-    tools = [_SEARCH_TOOL, _CLOSER_TOOL]
+    tools = [
+        _SEARCH_TOOL,
+    ]
+
+    if num_search_iterations > 0:
+        tools.append(_CLOSER_TOOL)
 
     if (
         _EXPLORATION_TEST_USE_THINKING
@@ -259,6 +270,7 @@ def orchestrator(
                 if tool_call["name"] == "search_tool":
                     query_list = tool_call["args"]["request"]
                     next_tool_name = DRPath.INTERNAL_SEARCH.value
+                    num_search_iterations += 1
                 elif tool_call["name"] == "thinking_tool":
                     reasoning_result = tool_call["args"]["request"]
                     next_tool_name = (
@@ -322,4 +334,5 @@ def orchestrator(
         ],
         message_history_for_continuation=new_messages_for_continuation,
         iteration_responses=in_orchestration_iteration_answers,
+        num_search_iterations=num_search_iterations,
     )

@@ -4,6 +4,7 @@ from langgraph.graph import END
 from langgraph.types import Send
 
 from onyx.agents.agent_search.exploration.enums import DRPath
+from onyx.agents.agent_search.exploration.states import CSUpdateConsolidatorInput
 from onyx.agents.agent_search.exploration.states import MainState
 
 
@@ -61,3 +62,27 @@ def completeness_router(state: MainState) -> DRPath | str:
     if next_path == DRPath.ORCHESTRATOR.value:
         return DRPath.ORCHESTRATOR
     return DRPath.LOGGER
+
+
+def cs_update_consolidator_router(state: MainState) -> list[Send] | DRPath | str:
+
+    knowledge_update_pairs = state.knowledge_update_pairs
+
+    sends: list[Send] = [
+        Send(
+            "cs_consolidator",
+            CSUpdateConsolidatorInput(
+                area=area,
+                update_type=update_type,
+                update_pair=update_pair,
+            ),
+        )
+        for area in ["user", "company", "search_strategy", "reasoning_strategy"]
+        for update_type in knowledge_update_pairs.get(area, {})
+        for update_pair in knowledge_update_pairs.get(area, {}).get(update_type, [])
+    ]
+
+    if not sends:
+        return DRPath.LOGGER
+
+    return sends

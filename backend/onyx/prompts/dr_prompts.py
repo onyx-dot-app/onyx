@@ -45,10 +45,12 @@ Note that the search tool is not well suited for time-ordered questions (e.g., '
 '...last 2 jiras resolved...') and answering aggregation-type questions (e.g., 'how many...') \
 (unless that info is present in the connected documents). If there are better suited tools \
 for answering those questions, use them instead.
-You generally should not need to ask clarification questions about the topics being searched for \
-by the {INTERNAL_SEARCH} tool, as the retrieved documents will likely provide you with more context.
-Each request to the {INTERNAL_SEARCH} tool should largely be written as a SEARCH QUERY, and NOT as a question \
-or an instruction! Also, \
+
+Each request to the {INTERNAL_SEARCH} tool should largely be written as a SEARCH QUERY that has \
+the sufficient context. Note that you can refer to the base knowledge to fill in context that is \
+missing from the question.
+
+Also, \
 The {INTERNAL_SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries.
 """
 

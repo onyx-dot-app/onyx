@@ -4,16 +4,10 @@ from datetime import datetime
 from typing import Any
 from typing import cast
 
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.exploration.dr_experimentation_prompts import (
-    EXTRACTION_SYSTEM_PROMPT,
-)
-from onyx.agents.agent_search.exploration.enums import DRPath
 from onyx.agents.agent_search.exploration.enums import ResearchAnswerPurpose
 from onyx.agents.agent_search.exploration.models import AggregatedDRContext
 from onyx.agents.agent_search.exploration.states import LoggerUpdate
@@ -27,11 +21,9 @@ from onyx.agents.agent_search.exploration.utils import (
 )
 from onyx.agents.agent_search.exploration.utils import parse_plan_to_dict
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_raw
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.context.search.models import InferenceSection
 from onyx.db.chat import create_search_doc_from_inference_section
 from onyx.db.chat import update_db_session_with_messages
@@ -42,7 +34,6 @@ from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.users import fetch_user_by_id
 from onyx.db.users import update_user_cheat_sheet_context
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -222,8 +213,18 @@ def logging(
     # (right now, answers from each step are concatenated onto each other)
     # Also, add missing fields once usage in UI is clear.
 
-    current_step_nr = state.current_step_nr
-    base_cheat_sheet_context = state.cheat_sheet_context or {}
+    state.current_step_nr
+    new_base_knowledge = state.extended_base_knowledge
+    consolidated_knowledge_updates = state.consolidated_updates
+
+    for consolidated_knowledge_update in consolidated_knowledge_updates:
+        area = consolidated_knowledge_update.area
+        update_type = consolidated_knowledge_update.update_type
+        new_base_knowledge[area][
+            update_type
+        ] = consolidated_knowledge_update.consolidated_update
+
+    new_knowledge = new_base_knowledge
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     base_question = state.original_question
@@ -248,60 +249,16 @@ def logging(
     )
     num_tokens = len(llm_tokenizer.encode(final_answer or ""))
 
-    write_custom_event(current_step_nr, OverallStop(), writer)
-
-    # build extraction context
-
-    extracted_facts: list[str] = []
-    for iteration_response in state.iteration_responses:
-        if iteration_response.tool == DRPath.INTERNAL_SEARCH.value:
-            extracted_facts.extend(iteration_response.claims)
-
-    extraction_context = (
-        "Extracted facts: \n  - "
-        + "\n  - ".join(extracted_facts)
-        + f"\n\nProvidede Answer: \n\n{final_answer}"
+    length_original_knowledge = len(
+        llm_tokenizer.encode(json.dumps(state.original_cheat_sheet_context))
     )
+    length_new_knowledge = len(llm_tokenizer.encode(json.dumps(new_knowledge)))
 
-    extraction_system_prompt = SystemMessage(content=EXTRACTION_SYSTEM_PROMPT)
-    extraction_human_prompt = HumanMessage(content=extraction_context)
-    extraction_prompt = [extraction_system_prompt, extraction_human_prompt]
-
-    extraction_response = invoke_llm_raw(
-        llm=graph_config.tooling.primary_llm,
-        prompt=extraction_prompt,
-        # schema=ExtractionResponse,
+    logger.debug(f"Length of original knowledge: {length_original_knowledge}")
+    logger.debug(f"Length of new knowledge: {length_new_knowledge}")
+    logger.debug(
+        f"Length of knowledge increase: {length_new_knowledge - length_original_knowledge}"
     )
-
-    extraction_information = json.loads(extraction_response.content)
-
-    consolidated_updates: dict[str, list[tuple[str, str]]] = {}
-
-    for area in ["user", "company", "search_strategy", "reasoning_strategy"]:
-
-        update_knowledge = extraction_information.get(area, {})
-        base_area_knowledge = base_cheat_sheet_context.get(area, {})
-
-        if area not in base_cheat_sheet_context:
-            base_cheat_sheet_context[area] = {}
-
-        for update_info in update_knowledge:
-            update_type = update_info.get("type", "n/a")
-            change_type = update_info.get("change_type", "n/a")
-            information = update_info.get("information", "n/a")
-
-            if update_type in base_area_knowledge:
-                if change_type == "update":
-                    consolidated_updates[area].append(
-                        (base_area_knowledge.get(update_type, ""), information)
-                    )
-
-                elif change_type == "delete":
-                    del base_cheat_sheet_context.get(area, {})[update_type]
-                elif change_type == "add":
-                    base_cheat_sheet_context.get(area, {})[update_type] = information
-            else:
-                base_cheat_sheet_context[area][update_type] = information
 
     # Log the research agent steps
     save_iteration(
@@ -312,7 +269,7 @@ def logging(
         all_cited_documents,
         is_internet_marker_dict,
         num_tokens,
-        new_cheat_sheet_context=base_cheat_sheet_context,
+        new_cheat_sheet_context=new_knowledge,
     )
 
     return LoggerUpdate(

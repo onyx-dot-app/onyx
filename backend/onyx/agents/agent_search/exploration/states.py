@@ -41,6 +41,24 @@ class OrchestrationUpdate(LoggerUpdate):
         list[SystemMessage | HumanMessage | AIMessage], add
     ] = []
     iteration_responses: Annotated[list[IterationAnswer], add] = []
+    num_search_iterations: int = 0
+
+
+class CSUpdate(BaseModel):
+    extended_base_knowledge: dict[str, Any] = {}
+    knowledge_update_pairs: dict[str, dict[str, list[tuple[str, str]]]] = {}
+
+
+class CSUpdateConsolidatorInput(BaseModel):
+    area: str
+    update_type: str
+    update_pair: tuple[str, str]
+
+
+class CSUpdateConsolidatorUpdate(BaseModel):
+    area: str
+    update_type: str
+    consolidated_update: str
 
 
 class OrchestrationSetup(OrchestrationUpdate):
@@ -59,7 +77,7 @@ class OrchestrationSetup(OrchestrationUpdate):
     message_history_for_continuation: Annotated[
         list[SystemMessage | HumanMessage | AIMessage], add
     ] = []
-    cheat_sheet_context: Dict[str, Any] | None = None
+    original_cheat_sheet_context: Dict[str, Any] | None = None
     use_clarifier: bool = False
     use_thinking: bool = False
     use_plan: bool = False
@@ -88,8 +106,9 @@ class MainState(
     OrchestrationSetup,
     AnswerUpdate,
     FinalUpdate,
+    CSUpdate,
 ):
-    pass
+    consolidated_updates: Annotated[list[CSUpdateConsolidatorUpdate], add] = []
 
 
 ## Graph Output State
