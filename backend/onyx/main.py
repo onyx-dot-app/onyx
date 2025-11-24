@@ -95,10 +95,10 @@ from onyx.server.openai_assistants_api.full_openai_assistants_api import (
     get_full_openai_assistants_api_router,
 )
 from smartsearch.onyx.server.settings.api import (
-    admin_router as settings_admin_router,
+    admin_router as settings_admin_router_,
 )
 from smartsearch.onyx.server.settings.api import (
-    basic_router as settings_router,
+    basic_router as settings_router_,
 )
 
 from smartsearch.onyx.server.reporting.usage_export_api import router as usage_export_router
@@ -377,15 +377,14 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     include_router_with_global_prefix_prepended(application, knowledge_map_router)
 
-    # Enterprise-only global settings
     include_router_with_global_prefix_prepended(
-        application, settings_admin_router
+        application, settings_admin_router_
     )
     # Token rate limit settings
     include_router_with_global_prefix_prepended(
         application, token_rate_limit_settings_router
     )
-    include_router_with_global_prefix_prepended(application, settings_router)
+    include_router_with_global_prefix_prepended(application, settings_router_)
     include_router_with_global_prefix_prepended(application, usage_export_router)
 
     if AUTH_TYPE == AuthType.DISABLED:
