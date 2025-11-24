@@ -299,7 +299,6 @@ def fast_chat_turn(
 def _process_query_stream(
     stream: Iterator[StreamEvent],
     chat_session_id: UUID,
-    dependencies: ChatTurnDependencies,
     ctx: ChatTurnContext,
 ) -> list[ToolCallStreamItem]:
     llm_docs = llm_docs_from_fetched_documents_cache(ctx.fetched_documents_cache)
@@ -315,7 +314,7 @@ def _process_query_stream(
     tool_call_events: list[ToolCallStreamItem] = []
     message_section_open = False
     reasoning_section_open = False
-
+    dependencies = ctx.run_dependencies
     for event in stream:
         connected = is_connected(
             chat_session_id,
