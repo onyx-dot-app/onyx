@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from collections.abc import Awaitable
 from collections.abc import Callable
 from typing import Any
 
+import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import CallToolResult
@@ -24,7 +26,7 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
-MCP_SEARCH_TOOL = "onyx_search_documents"
+MCP_SEARCH_TOOL = "search_indexed_documents"
 STREAMABLE_HTTP_URL = MCP_SERVER_URL.rstrip("/") + "/?transportType=streamable-http"
 
 
@@ -89,7 +91,7 @@ def test_mcp_document_search_flow(reset: None, admin_user: DATestUser) -> None:
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
 
     doc_text = "MCP happy path search document"
-    seeded_doc = DocumentManager.seed_doc_with_content(
+    _ = DocumentManager.seed_doc_with_content(
         cc_pair=cc_pair,
         content=doc_text,
         api_key=api_key,
@@ -112,12 +114,12 @@ def test_mcp_document_search_flow(reset: None, admin_user: DATestUser) -> None:
         )
         return init_result, resources, tools, search_result
 
-    init_result, resources_result, tools_result, search_result = _run_with_mcp_session(
+    _, resources_result, tools_result, search_result = _run_with_mcp_session(
         headers, _full_flow
     )
 
     resource_uris = {str(resource.uri) for resource in resources_result.resources}
-    assert "resource://available_sources" in resource_uris
+    assert "resource://indexed_sources" in resource_uris
 
     tool_names = {tool.name for tool in tools_result.tools}
     assert MCP_SEARCH_TOOL in tool_names
@@ -125,10 +127,13 @@ def test_mcp_document_search_flow(reset: None, admin_user: DATestUser) -> None:
     payload = _extract_tool_payload(search_result)
     assert payload["query"] == doc_text
     assert payload["total_results"] >= 1
-    returned_doc_ids = {doc["document_id"] for doc in payload["documents"]}
-    assert seeded_doc.id in returned_doc_ids
+    assert any(doc_text in (doc.get("content") or "") for doc in payload["documents"])
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="User group permissions are Enterprise-only",
+)
 def test_mcp_search_respects_acl_filters(reset: None, admin_user: DATestUser) -> None:
     user_without_access = UserManager.create(name="mcp-acl-user-a")
     privileged_user = UserManager.create(name="mcp-acl-user-b")
@@ -158,9 +163,10 @@ def test_mcp_search_respects_acl_filters(reset: None, admin_user: DATestUser) ->
     allowed_result = _call_search_tool(privileged_headers, restricted_doc.content)
     allowed_payload = _extract_tool_payload(allowed_result)
     assert allowed_payload["total_results"] >= 1
-    assert restricted_doc.id in {
-        doc["document_id"] for doc in allowed_payload["documents"]
-    }
+    assert any(
+        restricted_doc.content in (doc.get("content") or "")
+        for doc in allowed_payload["documents"]
+    )
 
     blocked_result = _call_search_tool(restricted_headers, restricted_doc.content)
     blocked_payload = _extract_tool_payload(blocked_result)
