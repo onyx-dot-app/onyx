@@ -45,11 +45,6 @@ export default function WelcomeMessage({ liveAssistant }: WelcomeMessageProps) {
             <AgentIcon agent={liveAssistant} />
             <Text headingH2>{liveAssistant.name}</Text>
           </div>
-          {liveAssistant.description && (
-            <Text secondaryBody text03>
-              {liveAssistant.description}
-            </Text>
-          )}
         </div>
       )}
     </div>
