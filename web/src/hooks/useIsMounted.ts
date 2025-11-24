@@ -28,12 +28,12 @@ import { useEffect, useState } from "react";
  * }
  * ```
  */
-export default function useIsMounted(f?: () => void): boolean {
+export default function useIsMounted(f?: React.EffectCallback): boolean {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    f?.();
+    return f?.();
   }, [f]);
 
   return mounted;
