@@ -473,12 +473,19 @@ def _patch_litellm_responses_transformation_handler_so_tool_choice_formatted() -
                     )
                 )
             elif key == "tool_choice" and value is not None:
-                responses_api_request["tool_choice"] = {
-                    "type": "function",
-                    "name": (
-                        value if isinstance(value, str) else value["function"]["name"]
-                    ),
-                }
+                # TODO this needs to be way more sophisticated
+                responses_api_request["tool_choice"] = (
+                    {
+                        "type": "function",
+                        "name": (
+                            value
+                            if isinstance(value, str)
+                            else value["function"]["name"]
+                        ),
+                    }
+                    if isinstance(value, dict)
+                    else value
+                )
             elif key in ResponsesAPIOptionalRequestParams.__annotations__.keys():
                 responses_api_request[key] = value  # type: ignore
             elif key in ("metadata"):
