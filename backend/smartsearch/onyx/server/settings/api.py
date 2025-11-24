@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from smartsearch.onyx.server.settings.models import (
     AnalyticsScriptUpload,
-    EnterpriseSettings,
+    Settings,
 )
 from smartsearch.onyx.server.settings.store import (
     get_logo_filename,
@@ -163,7 +163,7 @@ async def refresh_access_token(
     summary="Обновление настроек системы",
 )
 def put_settings(
-    settings: EnterpriseSettings,
+    settings: Settings,
     _: User | None = Depends(current_admin_user),
 ) -> None:
     """Обновляет настройки системы.
@@ -180,9 +180,9 @@ def put_settings(
 @basic_router.get(
     "/settings",
     summary="Получение настроек системы",
-    response_model=EnterpriseSettings,
+    response_model=Settings,
 )
-def fetch_settings() -> EnterpriseSettings:
+def fetch_settings() -> Settings:
     """Возвращает текущие настройки системы.
 
     Эндпоинт предоставляет доступ к настройкам системы, которые включают
