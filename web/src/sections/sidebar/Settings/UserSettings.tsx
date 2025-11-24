@@ -539,7 +539,7 @@ export default function UserSettings() {
                     onChange={(event) =>
                       updatePersonalizationField("name", event.target.value)
                     }
-                    placeholder="Set how Onyx should refer to you"
+                    placeholder="Set how Dom Engin. should refer to you"
                     className="mt-2"
                   />
                   {personalizationValues.name.length === 0 && (
@@ -566,7 +566,7 @@ export default function UserSettings() {
                   <div>
                     <h3 className="text-lg font-medium">Use memories</h3>
                     <SubLabel>
-                      Allow Onyx to reference stored memories in future chats.
+                      Allow Dom Engin. to reference stored memories in future chats.
                     </SubLabel>
                   </div>
                   <Switch
@@ -596,7 +596,7 @@ export default function UserSettings() {
                         <AutoResizeTextarea
                           key={index}
                           value={memory}
-                          placeholder="Write something Onyx should remember"
+                          placeholder="Write something Dom Engin. should remember"
                           onChange={(value) =>
                             updateMemoryAtIndex(index, value)
                           }
