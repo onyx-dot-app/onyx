@@ -1,7 +1,3 @@
-upstream mcp_server {
-    server ${ONYX_MCP_SERVER_HOST}:8090 fail_timeout=0;
-}
-
 # MCP Server - must come BEFORE /api location
 location /mcp {
     # misc headers
@@ -24,4 +20,3 @@ location /mcp {
     rewrite ^/mcp/?(.*)$ /$1 break;
     proxy_pass http://mcp_server/;
 }
-

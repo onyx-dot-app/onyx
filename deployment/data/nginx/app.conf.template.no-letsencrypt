@@ -38,6 +38,9 @@ upstream web_server {
     server web_server:3000 fail_timeout=0;
 }
 
+# Conditionally include MCP upstream configuration
+include /etc/nginx/conf.d/mcp_upstream.conf.inc;
+
 server {
     listen 80 default_server;
 
@@ -45,8 +48,8 @@ server {
 
     access_log /var/log/nginx/access.log custom_main;
 
-    # Conditionally include MCP server configuration (only if file exists)
-    include /etc/nginx/conf.d/mcp*.conf;
+    # Conditionally include MCP location configuration
+    include /etc/nginx/conf.d/mcp.conf.inc;
 
     # Match both /api/* and /openapi.json in a single rule
     location ~ ^/(api|openapi.json)(/.*)?$ {
