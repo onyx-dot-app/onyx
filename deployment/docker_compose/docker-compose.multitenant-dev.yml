@@ -312,7 +312,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -341,7 +341,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -464,7 +464,7 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command: >
       "
-      if [ \"$$CODE_INTERPRETER_BETA_ENABLED\" = \"true\" ]; then
+      if [ \"$${CODE_INTERPRETER_BETA_ENABLED}\" = \"True\" ] || [ \"$${CODE_INTERPRETER_BETA_ENABLED}\" = \"true\" ]; then
         exec bash ./entrypoint.sh code-interpreter-api;
       else
         echo 'Skipping code interpreter';
