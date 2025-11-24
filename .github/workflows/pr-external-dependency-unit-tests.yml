@@ -126,6 +126,9 @@ jobs:
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         env:
           TEST_DIR: ${{ matrix.test-dir }}
+          S3_ENDPOINT_URL: http://localhost:9004
+          S3_AWS_ACCESS_KEY_ID: minioadmin
+          S3_AWS_SECRET_ACCESS_KEY: minioadmin
         run: |
           py.test \
             --durations=8 \
