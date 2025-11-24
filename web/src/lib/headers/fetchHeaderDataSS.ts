@@ -11,10 +11,12 @@ export interface HeaderData {
 export async function fetchHeaderDataSS(
   chatSessionId?: string
 ): Promise<HeaderData> {
-  const settings = await fetchSettingsSS();
-  const backendChatSession = chatSessionId
-    ? await fetchBackendChatSessionSS(chatSessionId)
-    : null;
+  const [settings, backendChatSession] = await Promise.all([
+    fetchSettingsSS(),
+    chatSessionId
+      ? fetchBackendChatSessionSS(chatSessionId)
+      : Promise.resolve(null),
+  ]);
   const chatSession = backendChatSession
     ? toChatSession(backendChatSession)
     : null;

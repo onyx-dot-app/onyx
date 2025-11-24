@@ -31,18 +31,27 @@ import { PopoverMenu } from "@/components/ui/popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { FOLDED_SIZE } from "@/refresh-components/Logo";
+import SvgSidebar from "@/icons/sidebar";
+import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
+import useScreenSize from "@/hooks/useScreenSize";
 
-interface AppPageProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
+interface AppPageLayoutProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
   settings: CombinedSettings | null;
   chatSession: ChatSession | null;
 }
 
-export function AppPage({
+// AppPageLayout wraps chat pages with the shared header/footer white-labelling chrome.
+// It also provides the "Share Chat" and kebab-menu on the right side of the header (for shareable chat pages).
+//
+// Since this is such a ubiquitous component, it's been moved to its own `layouts` directory.
+export default function AppPageLayout({
   settings,
   chatSession,
   className,
   ...rest
-}: AppPageProps) {
+}: AppPageLayoutProps) {
+  const { isMobile } = useScreenSize();
+  const { setFolded } = useAppSidebarContext();
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
@@ -150,7 +159,7 @@ export function AppPage({
 
   useEffect(() => {
     if (!showMoveOptions) {
-      const popoverItems = [
+      const items = [
         <MenuButton
           key="move"
           icon={SvgFolderIn}
@@ -167,9 +176,9 @@ export function AppPage({
           Delete
         </MenuButton>,
       ];
-      setPopoverItems(popoverItems);
+      setPopoverItems(items);
     } else {
-      const popoverItems = [
+      const items = [
         <PopoverSearchInput
           key="search"
           setShowMoveOptions={setShowMoveOptions}
@@ -185,19 +194,21 @@ export function AppPage({
           </MenuButton>
         )),
       ];
-      setPopoverItems(popoverItems);
+      setPopoverItems(items);
     }
   }, [showMoveOptions, filteredProjects]);
 
   return (
     <>
       {popup}
+
       {showShareModal && chatSession && (
         <ShareChatSessionModal
           chatSession={chatSession}
           onClose={() => setShowShareModal(false)}
         />
       )}
+
       {showMoveCustomAgentModal && (
         <MoveCustomAgentChatModal
           onCancel={resetMoveState}
@@ -214,6 +225,7 @@ export function AppPage({
           }}
         />
       )}
+
       {deleteModalOpen && (
         <ConfirmationModalLayout
           title="Delete Chat"
@@ -231,9 +243,16 @@ export function AppPage({
       )}
 
       <div className="flex flex-col h-full w-full">
-        {(customHeaderContent || !showCenteredInput) && (
+        {(isMobile || customHeaderContent || !showCenteredInput) && (
           <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
-            <div className="flex-1" />
+            <div className="flex-1">
+              <IconButton
+                icon={SvgSidebar}
+                onClick={() => setFolded(false)}
+                className={cn(!isMobile && "invisible")}
+                internal
+              />
+            </div>
             <div className="flex-1 flex flex-col items-center">
               <Text text03>{customHeaderContent}</Text>
             </div>

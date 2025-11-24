@@ -1,6 +1,10 @@
 import SvgCheckCircle from "@/icons/check-circle";
 
-export default function ProgressSteps({ value }: { value: number }) {
+export interface ProgressStepsProps {
+  value: number;
+}
+
+export default function ProgressSteps({ value }: ProgressStepsProps) {
   // Clamp value between 0 and 100
   const progress = Math.min(Math.max(value, 0), 100);
   const isComplete = progress >= 100;

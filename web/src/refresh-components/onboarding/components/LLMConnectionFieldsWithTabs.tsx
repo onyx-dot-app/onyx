@@ -5,7 +5,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/refresh-components/tabs/tabs";
-import { DynamicProviderFields } from "./DynamicProviderFields";
+import DynamicProviderFields from "./DynamicProviderFields";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 
 type ProviderTabConfig = {

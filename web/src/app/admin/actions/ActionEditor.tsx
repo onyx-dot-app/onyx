@@ -17,8 +17,8 @@ import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import debounce from "lodash/debounce";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Link from "next/link";
-import { Separator } from "@/components/ui/separator";
-import { Checkbox } from "@/components/ui/checkbox";
+import Separator from "@/refresh-components/Separator";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { useAuthType } from "@/lib/hooks";
 import { InfoIcon } from "@/components/icons/icons";
 import {

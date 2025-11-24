@@ -12,10 +12,10 @@ import {
 } from "react";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
-import { CheckmarkIcon, GlobeIcon, InfoIcon } from "@/components/icons/icons";
+import { GlobeIcon, InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -624,7 +624,7 @@ export default function Page() {
 
     return (
       <div
-        className={`flex items-center justify-center ${containerSizeClass} p-0.5 shrink-0 overflow-clip`}
+        className={`flex items-center justify-center ${containerSizeClass} px-0.5 py-0 shrink-0 overflow-clip`}
       >
         {logoSrc ? (
           <Image
@@ -674,7 +674,7 @@ export default function Page() {
 
     return (
       <div
-        className={`flex items-center justify-center ${containerSizeClass} p-0.5 shrink-0 overflow-clip`}
+        className={`flex items-center justify-center ${containerSizeClass} px-0.5 py-0 shrink-0 overflow-clip`}
       >
         {logoContent}
       </div>
@@ -1466,10 +1466,10 @@ export default function Page() {
                           : ""
                       }`}
                     >
-                      <div className="flex items-start gap-2 p-2 flex-1">
+                      <div className="flex flex-1 items-start gap-1 px-2 py-1">
                         {renderProviderLogo(logoSrc, label, 16, isHighlighted)}
-                        <div className="flex flex-col gap-1">
-                          <Text headingH3 text05>
+                        <div className="flex flex-col gap-0.5">
+                          <Text mainUiAction text05>
                             {label}
                           </Text>
                           <Text secondaryBody text03>
@@ -1656,13 +1656,13 @@ export default function Page() {
                         : ""
                     }`}
                   >
-                    <div className="flex items-start gap-2 p-2 flex-1">
+                    <div className="flex flex-1 items-start gap-1 px-2 py-1">
                       {renderContentProviderLogo(
                         provider.provider_type,
                         isCurrentCrawler
                       )}
-                      <div className="flex flex-col gap-1">
-                        <Text headingH3 text05>
+                      <div className="flex flex-col gap-0.5">
+                        <Text mainUiAction text05>
                           {label}
                         </Text>
                         <Text secondaryBody text03>

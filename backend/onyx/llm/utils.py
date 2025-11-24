@@ -116,6 +116,7 @@ def litellm_exception_to_error_msg(
     from litellm.exceptions import Timeout
     from litellm.exceptions import ContentPolicyViolationError
     from litellm.exceptions import BudgetExceededError
+    from litellm.exceptions import ServiceUnavailableError
 
     core_exception = _unwrap_nested_exception(e)
     error_msg = str(core_exception)
@@ -168,6 +169,23 @@ def litellm_exception_to_error_msg(
             if upstream_detail
             else f"{provider_name} rate limit exceeded: Please slow down your requests and try again later."
         )
+    elif isinstance(core_exception, ServiceUnavailableError):
+        provider_name = (
+            llm.config.model_provider
+            if llm is not None and llm.config.model_provider
+            else "The LLM provider"
+        )
+        # Check if this is specifically the Bedrock "Too many connections" error
+        if "Too many connections" in error_msg or "BedrockException" in error_msg:
+            error_msg = (
+                f"{provider_name} is experiencing high connection volume and cannot process your request right now. "
+                "This typically happens when there are too many simultaneous requests to the AI model. "
+                "Please wait a moment and try again. If this persists, contact your system administrator "
+                "to review connection limits and retry configurations."
+            )
+        else:
+            # Generic 503 Service Unavailable
+            error_msg = f"{provider_name} service error: {str(core_exception)}"
     elif isinstance(core_exception, ContextWindowExceededError):
         error_msg = (
             "Context window exceeded: Your input is too long for the model to process."
