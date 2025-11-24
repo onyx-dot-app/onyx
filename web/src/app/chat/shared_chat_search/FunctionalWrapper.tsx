@@ -57,7 +57,7 @@ export default function FunctionalWrapper({
   return (
     <>
       {" "}
-      <div className="overscroll-y-contain overflow-y-scroll overscroll-contain left-0 top-0 w-full h-svh">
+      <div className="overscroll-y-contain overflow-y-auto overscroll-contain left-0 top-0 w-full h-svh">
         {content(sidebarVisible, toggle)}
       </div>
     </>

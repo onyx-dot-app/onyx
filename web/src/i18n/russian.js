@@ -1607,6 +1607,7 @@ module.exports = {
   [k.THIS_CONNECTOR_WILL_BE_VISIBLE]: `Этот коннектор будет видим/доступен для групп, выбранных ниже`,
   [k.CURATORS_MUST_SELECT_ONE_OR_MO]: `Кураторы должны выбрать одну или несколько групп, чтобы предоставить доступ к этому коннектору`,
   [k.EXIT_ADMIN]: `Выйти из админки`,
+  [k.EXIT_CURATOR]: `Выйти из панели куратора`,
   [k.ONYX_VERSION]: `Версия SmartSearch:`,
   [k.FORGOT_PASSWORD1]: `Забыли пароль?`,
   [k.MARKDOWN]: `Markdown`,
@@ -2107,7 +2108,9 @@ module.exports = {
   [k.SEARCH_ANYTHING_PLACEHOLDER]: `Поиск чего-либо...`,
   [k.SEARCH_PLACEHOLDER]: `Поиск...`,
   [k.DOCUMENT_SET]: `набор документов`,
-  [k.USERS]: `пользователей`,
+  // Настроечные подписи для падежей используются отдельным ключом,
+  // основной ключ k.USERS уже определён выше как "Пользователи"
+  [k.USERS]: `Пользователи`,
   [k.USERS_CAPITAL]: `Пользователи`,
   [k.TO_DOCUMENT_SET]: `набору документов`,
   [k.OF_DOCUMENT_SETS]: `набора документов`,

@@ -78,11 +78,11 @@ export default function TextView({
     return supportedFormats.some((format) => mimeType.startsWith(format));
   };
 
+  const { document_id, semantic_identifier } = presentingDocument;
+
   const fetchFile = useCallback(async () => {
     setIsLoading(true);
-    const fileId =
-      presentingDocument.document_id.split("__")[1] ||
-      presentingDocument.document_id;
+    const fileId = document_id.split("__")[1] || document_id;
 
     try {
       const response = await fetch(
@@ -95,8 +95,7 @@ export default function TextView({
       const url = window.URL.createObjectURL(blob);
       setFileUrl(url);
 
-      const originalFileName =
-        presentingDocument.semantic_identifier || "document";
+      const originalFileName = semantic_identifier || "document";
       setFileName(originalFileName);
 
       let contentType =
@@ -125,7 +124,7 @@ export default function TextView({
         setIsLoading(false);
       }, 1000);
     }
-  }, [presentingDocument]);
+  }, [document_id, semantic_identifier]);
 
   useEffect(() => {
     fetchFile();

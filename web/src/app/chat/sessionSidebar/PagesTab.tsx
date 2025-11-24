@@ -47,6 +47,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useChatContext } from "@/components/context/ChatContext";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { CHAT_SESSION_ID_KEY } from "@/lib/drag/constants";
 
 interface SortableFolderProps {
   folder: Folder;
@@ -265,7 +266,12 @@ export function PagesTab({
           }}
           onDragStart={(e) => {
             setIsDraggingSessionId(chat.id);
-            e.dataTransfer.setData("text/plain", chat.id);
+            e.dataTransfer.setData(
+              CHAT_SESSION_ID_KEY,
+              chat.id.toString()
+            );
+            // Дополнительно пишем text/plain для обратной совместимости
+            e.dataTransfer.setData("text/plain", chat.id.toString());
           }}
           onDragEnd={() => setIsDraggingSessionId(null)}
         >
