@@ -170,14 +170,20 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-    command: ["python", "-m", "onyx.mcp_server_main"]
+    command: >
+      /bin/sh -c "if [ \"$(echo ${MCP_SERVER_ENABLED:-false} | tr '[:upper:]' '[:lower:]')\" != \"true\" ]; then
+        echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
+        exit 0;
+      else
+        exec python -m onyx.mcp_server_main;
+      fi"
     env_file:
       - path: .env
         required: false
     depends_on:
       - relational_db
       - cache
-    restart: "no"
+    restart: unless-stopped
     environment:
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - REDIS_HOST=${REDIS_HOST:-cache}
