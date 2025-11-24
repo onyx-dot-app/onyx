@@ -54,6 +54,7 @@ from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 from onyx.tools.force import filter_tools_for_force_tool_use
 from onyx.tools.force import ForceUseTool
@@ -147,8 +148,10 @@ def _run_agent_loop(
             tool_choice = None
         else:
             tool_choice = (
-                "required" if force_use_tool and force_use_tool.force_use else "auto"
-            )
+                force_use_tool_to_function_tool_names(force_use_tool, available_tools)
+                if iteration_count == 0 and force_use_tool
+                else None
+            ) or "auto"
         model_settings = replace(dependencies.model_settings, tool_choice=tool_choice)
 
         agent = Agent(
@@ -246,7 +249,6 @@ def _fast_chat_turn_core(
         run_dependencies=dependencies,
         chat_session_id=chat_session_id,
         message_id=message_id,
-        research_type=research_type,
         chat_files=latest_query_files or [],
     )
     with trace("fast_chat_turn"):
