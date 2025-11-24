@@ -18,6 +18,15 @@ echo "Using nginx proxy timeouts - connect: ${NGINX_PROXY_CONNECT_TIMEOUT}s, sen
 
 envsubst '$DOMAIN $SSL_CERT_FILE_NAME $SSL_CERT_KEY_FILE_NAME $ONYX_BACKEND_API_HOST $ONYX_WEB_SERVER_HOST $ONYX_MCP_SERVER_HOST $NGINX_PROXY_CONNECT_TIMEOUT $NGINX_PROXY_SEND_TIMEOUT $NGINX_PROXY_READ_TIMEOUT' < "/etc/nginx/conf.d/$1" > /etc/nginx/conf.d/app.conf
 
+# Conditionally create MCP server configuration
+if [ "$(echo ${MCP_SERVER_ENABLED:-false} | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+  echo "MCP server is enabled, creating MCP configuration..."
+  envsubst '$ONYX_MCP_SERVER_HOST' < "/etc/nginx/conf.d/mcp.conf.template" > /etc/nginx/conf.d/mcp.conf
+else
+  echo "MCP server is disabled, removing MCP configuration..."
+  rm -f /etc/nginx/conf.d/mcp.conf
+fi
+
 # wait for the api_server to be ready
 echo "Waiting for API server to boot up; this may take a minute or two..."
 echo "If this takes more than ~5 minutes, check the logs of the API server container for errors with the following command:"

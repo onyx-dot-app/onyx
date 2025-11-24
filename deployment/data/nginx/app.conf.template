@@ -20,10 +20,6 @@ upstream web_server {
     server ${ONYX_WEB_SERVER_HOST}:3000 fail_timeout=0;
 }
 
-upstream mcp_server {
-    server ${ONYX_MCP_SERVER_HOST}:8090 fail_timeout=0;
-}
-
 server {
     listen 80 default_server;
 
@@ -31,28 +27,8 @@ server {
 
     access_log /var/log/nginx/access.log custom_main;
 
-    # MCP Server - must come BEFORE /api location
-    location /mcp {
-        # misc headers
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Port $server_port;
-        proxy_set_header Host $host;
-
-        # Standard HTTP 1.1
-        proxy_http_version 1.1;
-
-        # Timeouts for MCP requests
-        proxy_connect_timeout 30s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
-
-        proxy_redirect off;
-        rewrite ^/mcp/?(.*)$ /$1 break;
-        proxy_pass http://mcp_server/;
-    }
+    # Conditionally include MCP server configuration (only if file exists)
+    include /etc/nginx/conf.d/mcp*.conf;
 
     # Match both /api/* and /openapi.json in a single rule
     location ~ ^/(api|openapi.json)(/.*)?$ {
