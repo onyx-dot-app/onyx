@@ -26,9 +26,9 @@ def monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search() -> Non
         # Without this patch, the library uses special formatting that breaks our custom tools
         # See: https://platform.openai.com/docs/api-reference/responses/create#responses_create-tool_choice-hosted_tool-type
         if tool_choice == "web_search":
-            return "web_search"
+            return {"type": "function", "name": "web_search"}
         if tool_choice == "image_generation":
-            return "image_generation"
+            return {"type": "function", "name": "image_generation"}
         return orig_func(cls, tool_choice)
 
     OpenAIResponsesConverter.convert_tool_choice = classmethod(  # type: ignore[method-assign, assignment]
