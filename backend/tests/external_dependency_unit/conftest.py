@@ -9,6 +9,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.models import User
 from onyx.db.models import UserRole
+from onyx.file_store.file_store import get_default_file_store
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.full_setup import (
@@ -73,3 +74,10 @@ def create_test_user(db_session: Session, email_prefix: str) -> User:
     db_session.commit()
     db_session.refresh(user)
     return user
+
+
+@pytest.fixture(scope="session")
+def initialize_file_store() -> Generator[None, None, None]:
+    """Initialize the file store for testing"""
+    get_default_file_store().initialize()
+    yield
