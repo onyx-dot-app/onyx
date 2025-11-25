@@ -128,8 +128,6 @@ def _create_mcp_client_function_runner(
     **kwargs: Any,
 ) -> Callable[[], Awaitable[T]]:
     auth_headers = connection_headers or {}
-    # Normalize URL
-    server_url = server_url.rstrip("/")
     # WARNING: httpx.Auth with requires_response_body=True (as in the MCP OAuth
     # provider) forces httpx to fully read the response body. That is incompatible
     # with SSE (infinite stream). Avoid passing auth for SSE; rely on headers.
