@@ -920,6 +920,15 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-sonnet-4-5-20250929": "Claude 4.5 Sonnet",
   "claude-haiku-4-5-20251001": "Claude 4.5 Haiku",
   "claude-opus-4-5-20251101": "Claude 4.5 Opus",
+  "claude-opus-4-1-20250805": "Claude 4.1 Opus",
+  "claude-opus-4-1": "Claude 4.1 Opus",
+  "claude-opus-4-20250514": "Claude 4 Opus",
+  "claude-4-opus-20250514": "Claude 4 Opus",
+  "claude-sonnet-4-5": "Claude 4.5 Sonnet (Latest)",
+  "claude-sonnet-4-20250514": "Claude 4 Sonnet",
+  "claude-4-sonnet-20250514": "Claude 4 Sonnet",
+  "claude-haiku-4-5": "Claude 4.5 Haiku (Latest)",
+  "claude-3-7-sonnet-latest": "Claude 3.7 Sonnet (Latest)",
 
   // Google Models
 
