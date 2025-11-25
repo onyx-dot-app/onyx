@@ -935,6 +935,10 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
         return False
 
 
+def is_anthropic_model(model_name: str, model_provider: str) -> bool:
+    return model_provider == "anthropic" or "claude" in model_name.lower()
+
+
 def model_needs_formatting_reenabled(model_name: str) -> bool:
     # See https://simonwillison.net/tags/markdown/ for context on why this is needed
     # for OpenAI reasoning models to have correct markdown generation
