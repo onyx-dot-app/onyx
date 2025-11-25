@@ -100,12 +100,9 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
   (
     {
       selected,
-
       strikethrough,
       danger,
-
       emphasized,
-
       icon: Icon,
       description,
       className,

@@ -36,10 +36,6 @@ const sizeClasses = {
   medium: ["w-[15.5rem]"],
 };
 
-function SeparatorLine() {
-  return <Separator className="py-0 px-2" />;
-}
-
 export interface PopoverMenuProps {
   // size variants
   small?: boolean;
@@ -92,7 +88,7 @@ export function PopoverMenu({
               <></>
             ) : child === null ? (
               // Render `null`s as separator lines
-              <SeparatorLine />
+              <Separator className="py-0 px-2" />
             ) : (
               child
             )}
@@ -101,7 +97,7 @@ export function PopoverMenu({
       </div>
       {footer && (
         <>
-          <SeparatorLine />
+          <Separator className="py-0 px-2" />
           {footer}
         </>
       )}
