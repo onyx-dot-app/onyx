@@ -225,7 +225,7 @@ def list_tools(
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_user),
 ) -> list[ToolSnapshot]:
-    tools = get_tools(db_session, only_enabled=True)
+    tools = get_tools(db_session, only_enabled=True, exclude_disconnected_mcp=True)
 
     filtered_tools: list[ToolSnapshot] = []
     for tool in tools:

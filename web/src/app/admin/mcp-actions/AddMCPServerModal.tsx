@@ -9,17 +9,24 @@ import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Textarea } from "@/components/ui/textarea";
 import SvgServer from "@/icons/server";
-import { createMCPServer } from "@/lib/mcpService";
-import { MCPServerCreateRequest } from "./types";
+import SvgCheckCircle from "@/icons/check-circle";
+import SvgMoreHorizontal from "@/icons/more-horizontal";
+import { createMCPServer, updateMCPServer } from "@/lib/mcpService";
+import { MCPServerCreateRequest, MCPServerWithStatus } from "./types";
 import { KeyedMutator } from "swr";
 import { MCPServersResponse } from "@/lib/tools/interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { Separator } from "@/components/ui/separator";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgUnplug from "@/icons/unplug";
 
 interface AddMCPServerModalProps {
+  server?: MCPServerWithStatus;
   mutateMcpServers: KeyedMutator<MCPServersResponse>;
   setPopup: (spec: PopupSpec) => void;
+  onDisconnect?: () => void;
+  skipOverlay?: boolean;
 }
 
 const validationSchema = Yup.object().shape({
@@ -31,27 +38,43 @@ const validationSchema = Yup.object().shape({
 });
 
 export default function AddMCPServerModal({
+  server,
   mutateMcpServers,
   setPopup,
+  onDisconnect,
+  skipOverlay = false,
 }: AddMCPServerModalProps) {
   const { isOpen, toggle } = useModal();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Determine if we're in edit mode
+  const isEditMode = !!server;
+
   const initialValues: MCPServerCreateRequest = {
-    name: "",
-    description: "",
-    server_url: "",
+    name: server?.name || "",
+    description: server?.description || "",
+    server_url: server?.server_url || "",
   };
 
   const handleSubmit = async (values: MCPServerCreateRequest) => {
     setIsSubmitting(true);
 
     try {
-      await createMCPServer(values);
-      setPopup({
-        message: "MCP Server created successfully",
-        type: "success",
-      });
+      if (isEditMode && server) {
+        // Update existing server
+        await updateMCPServer(server.id, values);
+        setPopup({
+          message: "MCP Server updated successfully",
+          type: "success",
+        });
+      } else {
+        // Create new server
+        await createMCPServer(values);
+        setPopup({
+          message: "MCP Server created successfully",
+          type: "success",
+        });
+      }
 
       // Refresh the servers list
       await mutateMcpServers();
@@ -59,12 +82,15 @@ export default function AddMCPServerModal({
       // Close modal
       toggle(false);
     } catch (error) {
-      console.error("Error creating MCP server:", error);
+      console.error(
+        `Error ${isEditMode ? "updating" : "creating"} MCP server:`,
+        error
+      );
       setPopup({
         message:
           error instanceof Error
             ? error.message
-            : "Failed to create MCP server",
+            : `Failed to ${isEditMode ? "update" : "create"} MCP server`,
         type: "error",
       });
     } finally {
@@ -74,7 +100,11 @@ export default function AddMCPServerModal({
 
   return (
     <Modal open={isOpen} onOpenChange={toggle}>
-      <Modal.Content tall preventAccidentalClose={false}>
+      <Modal.Content
+        tall
+        preventAccidentalClose={false}
+        skipOverlay={skipOverlay}
+      >
         <Formik
           initialValues={initialValues}
           validationSchema={validationSchema}
@@ -85,10 +115,13 @@ export default function AddMCPServerModal({
               <Modal.Header className="p-4 w-full">
                 <Modal.CloseButton />
                 <Modal.Icon icon={SvgServer} className="mb-1" />
-                <Modal.Title>Add MCP server</Modal.Title>
+                <Modal.Title>
+                  {isEditMode ? "Manage MCP server" : "Add MCP server"}
+                </Modal.Title>
                 <Modal.Description>
-                  Connect MCP (Model Context Protocol) server to add custom
-                  actions.
+                  {isEditMode
+                    ? "Update your MCP server configuration and manage authentication."
+                    : "Connect MCP (Model Context Protocol) server to add custom actions."}
                 </Modal.Description>
               </Modal.Header>
 
@@ -189,6 +222,55 @@ export default function AddMCPServerModal({
                     }}
                   />
                 </FormField>
+
+                {/* Authentication Status Section - Only show in edit mode when authenticated */}
+                {isEditMode && server?.is_authenticated && (
+                  <FormField state="idle">
+                    <div className="flex items-start justify-between w-full">
+                      <div className="flex-1 flex flex-col gap-0 items-start">
+                        <FormField.Label
+                          leftIcon={
+                            <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+                          }
+                        >
+                          Authenticated & Connected
+                        </FormField.Label>
+                        <FormField.Description className="pl-5">
+                          {server.auth_type === "OAUTH"
+                            ? `OAuth connected to ${server.owner}`
+                            : server.auth_type === "API_TOKEN"
+                              ? "API token configured"
+                              : "Connected"}
+                        </FormField.Description>
+                      </div>
+                      <FormField.Control asChild>
+                        <div className="flex gap-2 items-center justify-end">
+                          <IconButton
+                            icon={SvgUnplug}
+                            tertiary
+                            type="button"
+                            tooltip="Disconnect Server"
+                            onClick={() => {
+                              if (onDisconnect) {
+                                onDisconnect();
+                              }
+                            }}
+                          />
+                          <Button
+                            secondary
+                            type="button"
+                            onClick={() => {
+                              // Edit configs functionality - to be added later
+                              console.log("Edit configs clicked");
+                            }}
+                          >
+                            Edit Configs
+                          </Button>
+                        </div>
+                      </FormField.Control>
+                    </div>
+                  </FormField>
+                )}
               </Modal.Body>
 
               <Modal.Footer className="p-4 gap-2">
@@ -201,7 +283,13 @@ export default function AddMCPServerModal({
                   Cancel
                 </Button>
                 <Button primary type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Adding..." : "Add Server"}
+                  {isSubmitting
+                    ? isEditMode
+                      ? "Saving..."
+                      : "Adding..."
+                    : isEditMode
+                      ? "Save Changes"
+                      : "Add Server"}
                 </Button>
               </Modal.Footer>
             </Form>

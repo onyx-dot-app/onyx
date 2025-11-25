@@ -3,7 +3,11 @@ import { KeyedMutator } from "swr";
 import { MCPServersResponse } from "@/lib/tools/interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 
-export type MCPServerStatus = "CREATED" | "AWAITING_AUTH" | "CONNECTED";
+export type MCPServerStatus =
+  | "CREATED"
+  | "AWAITING_AUTH"
+  | "CONNECTED"
+  | "DISCONNECTED";
 export type MCPActionStatus = "connected" | "pending" | "disconnected";
 
 // Extended interface with status field
@@ -27,4 +31,10 @@ export interface MCPServerCreateRequest {
   name: string;
   description?: string;
   server_url: string;
+}
+
+export interface MCPServerUpdateRequest {
+  name?: string;
+  description?: string;
+  server_url?: string;
 }

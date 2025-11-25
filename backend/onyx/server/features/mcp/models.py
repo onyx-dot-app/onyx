@@ -147,6 +147,14 @@ class MCPServerSimpleCreateRequest(BaseModel):
     server_url: str = Field(..., description="URL of the MCP server")
 
 
+class MCPServerSimpleUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, description="Name of the MCP server")
+    description: Optional[str] = Field(
+        None, description="Description of the MCP server"
+    )
+    server_url: Optional[str] = Field(None, description="URL of the MCP server")
+
+
 class MCPToolResponse(BaseModel):
     id: int
     name: str

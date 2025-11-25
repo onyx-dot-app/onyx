@@ -139,6 +139,7 @@ const ModalContent = React.forwardRef<
     tall?: boolean;
     mini?: boolean;
     preventAccidentalClose?: boolean;
+    skipOverlay?: boolean;
   }
 >(
   (
@@ -151,6 +152,7 @@ const ModalContent = React.forwardRef<
       tall,
       mini,
       preventAccidentalClose = true,
+      skipOverlay = false,
       ...props
     },
     ref
@@ -280,7 +282,7 @@ const ModalContent = React.forwardRef<
         value={{ closeButtonRef, hasAttemptedClose, setHasAttemptedClose }}
       >
         <ModalPortal>
-          <ModalOverlay />
+          {!skipOverlay && <ModalOverlay />}
           <DialogPrimitive.Content
             ref={(node) => {
               // Handle forwarded ref

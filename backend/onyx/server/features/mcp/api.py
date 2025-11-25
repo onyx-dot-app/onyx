@@ -67,6 +67,7 @@ from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.server.features.mcp.models import MCPServer
 from onyx.server.features.mcp.models import MCPServerCreateResponse
 from onyx.server.features.mcp.models import MCPServerSimpleCreateRequest
+from onyx.server.features.mcp.models import MCPServerSimpleUpdateRequest
 from onyx.server.features.mcp.models import MCPServersResponse
 from onyx.server.features.mcp.models import MCPServerUpdateResponse
 from onyx.server.features.mcp.models import MCPToolCreateRequest
@@ -1786,6 +1787,37 @@ def create_mcp_server_simple(
         status=mcp_server.status,
         tool_count=0,  # New server, no tools yet
     )
+
+
+@admin_router.patch("/server/{server_id}", response_model=MCPServer)
+def update_mcp_server_simple(
+    server_id: int,
+    request: MCPServerSimpleUpdateRequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_curator_or_admin_user),
+) -> MCPServer:
+    """Update MCP server basic information (name, description, URL)"""
+
+    try:
+        mcp_server = get_mcp_server_by_id(server_id, db_session)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="MCP server not found")
+
+    _ensure_mcp_server_owner_or_admin(mcp_server, user)
+
+    # Update only provided fields
+    updated_server = update_mcp_server__no_commit(
+        server_id=server_id,
+        db_session=db_session,
+        name=request.name,
+        description=request.description,
+        server_url=request.server_url,
+    )
+
+    db_session.commit()
+
+    # Return the updated server in API format
+    return _db_mcp_server_to_api_mcp_server(updated_server, user.email, db_session)
 
 
 @admin_router.delete("/server/{server_id}")

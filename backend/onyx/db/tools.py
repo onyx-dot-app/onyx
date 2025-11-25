@@ -4,11 +4,14 @@ from typing import Type
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.constants import UNSET
 from onyx.db.constants import UnsetType
+from onyx.db.enums import MCPServerStatus
+from onyx.db.models import MCPServer
 from onyx.db.models import Tool
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
@@ -21,10 +24,29 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-def get_tools(db_session: Session, *, only_enabled: bool = False) -> list[Tool]:
+def get_tools(
+    db_session: Session,
+    *,
+    only_enabled: bool = False,
+    exclude_disconnected_mcp: bool = False,
+) -> list[Tool]:
     query = select(Tool)
+
+    if exclude_disconnected_mcp:
+        # Left join with MCPServer to check status
+        # Keep tools that either:
+        # 1. Don't have an MCP server (mcp_server_id IS NULL) OR
+        # 2. Have an MCP server that is NOT disconnected
+        query = query.outerjoin(MCPServer, Tool.mcp_server_id == MCPServer.id).where(
+            or_(
+                Tool.mcp_server_id.is_(None),  # Non-MCP tools
+                MCPServer.status != MCPServerStatus.DISCONNECTED,  # Connected MCP tools
+            )
+        )
+
     if only_enabled:
         query = query.where(Tool.enabled.is_(True))
+
     return list(db_session.scalars(query).all())
 
 

@@ -31,6 +31,7 @@ import { MCPServerWithStatus } from "./types";
 
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServerWithStatus | null;
+  skipOverlay?: boolean;
 }
 
 const validationSchema = Yup.object().shape({
@@ -76,6 +77,7 @@ const validationSchema = Yup.object().shape({
 
 export default function MCPAuthenticationModal({
   mcpServer,
+  skipOverlay = false,
 }: MCPAuthenticationModalProps) {
   const { isOpen, toggle } = useModal();
   const [activeAuthTab, setActiveAuthTab] = useState<"per-user" | "admin">(
@@ -181,7 +183,7 @@ export default function MCPAuthenticationModal({
 
   return (
     <Modal open={isOpen} onOpenChange={toggle}>
-      <Modal.Content tall>
+      <Modal.Content tall skipOverlay={skipOverlay}>
         <Modal.Header className="p-4">
           <Modal.CloseButton />
           <div className="flex flex-col gap-1">

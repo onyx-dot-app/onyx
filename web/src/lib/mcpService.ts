@@ -5,6 +5,7 @@
 import {
   MCPServerWithStatus,
   MCPServerCreateRequest,
+  MCPServerUpdateRequest,
 } from "@/app/admin/mcp-actions/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 
@@ -112,6 +113,29 @@ export async function createMCPServer(
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || "Failed to create MCP server");
+  }
+
+  return await response.json();
+}
+
+/**
+ * Update an existing MCP server
+ */
+export async function updateMCPServer(
+  serverId: number,
+  data: MCPServerUpdateRequest
+): Promise<MCPServerWithStatus> {
+  const response = await fetch(`/api/admin/mcp/server/${serverId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to update MCP server");
   }
 
   return await response.json();

@@ -105,6 +105,7 @@ class MCPServerStatus(str, PyEnum):
     CREATED = "CREATED"  # Server created, needs auth configuration
     AWAITING_AUTH = "AWAITING_AUTH"  # Auth configured, pending user authentication
     CONNECTED = "CONNECTED"  # Fully configured and connected
+    DISCONNECTED = "DISCONNECTED"
 
 
 # Consistent with Celery task statuses
