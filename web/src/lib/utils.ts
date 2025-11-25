@@ -106,10 +106,7 @@ export function isImageExtension(
 }
 
 /**
- * Format bytes to human-readable file size (e.g., "1.5 MB", "256 KB")
- * @param bytes - The number of bytes to format
- * @param decimals - Number of decimal places (default: 2)
- * @returns Formatted file size string
+ * Formats bytes to human-readable file size.
  */
 export function formatBytes(
   bytes: number | undefined,
