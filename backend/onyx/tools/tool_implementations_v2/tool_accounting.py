@@ -82,7 +82,7 @@ def _emit_section_end(run_context: RunContextWrapper[ChatTurnContext]) -> None:
     run_context.context.current_run_step += 1
 
 
-def tool_accounting_deprecated(func: F) -> F:
+def tool_accounting_function(func: F) -> F:
     """
     Decorator for standalone functions (not methods) that adds tool accounting functionality.
 

@@ -83,116 +83,6 @@ class ImageGenerationResponse(BaseModel):
     image_data: str
 
 
-@tool_accounting
-def _image_generation_core(
-    run_context: RunContextWrapper[Any],
-    prompt: str,
-    shape: str,
-    image_generation_tool_instance: "ImageGenerationTool",
-) -> list[GeneratedImage]:
-    """Core image generation logic for run_v2."""
-    index = run_context.context.current_run_step
-    emitter = run_context.context.run_dependencies.emitter
-
-    # Emit start event
-    emitter.emit(
-        Packet(
-            ind=index,
-            obj=ImageGenerationToolStart(type="image_generation_tool_start"),
-        )
-    )
-
-    # Prepare tool arguments
-    tool_args = {"prompt": prompt}
-    if shape != "square":  # Only include shape if it's not the default
-        tool_args["shape"] = shape
-
-    # Run the actual image generation tool with heartbeat handling
-    generated_images: list[GeneratedImage] = []
-    heartbeat_count = 0
-
-    for tool_response in image_generation_tool_instance.run(
-        **tool_args  # type: ignore[arg-type]
-    ):
-        # Check if the session has been cancelled
-        if not is_connected(
-            run_context.context.chat_session_id,
-            run_context.context.run_dependencies.redis_client,
-        ):
-            break
-
-        # Handle heartbeat responses
-        if tool_response.id == IMAGE_GENERATION_HEARTBEAT_ID:
-            # Emit heartbeat event for every iteration
-            emitter.emit(
-                Packet(
-                    ind=index,
-                    obj=ImageGenerationToolHeartbeat(
-                        type="image_generation_tool_heartbeat"
-                    ),
-                )
-            )
-            heartbeat_count += 1
-            logger.debug(f"Image generation heartbeat #{heartbeat_count}")
-            continue
-
-        # Process the tool response to get the generated images
-        if tool_response.id == IMAGE_GENERATION_RESPONSE_ID:
-            image_generation_responses = cast(
-                list[ImageGenerationResponse], tool_response.response
-            )
-            file_ids = save_files(
-                urls=[],
-                base64_files=[img.image_data for img in image_generation_responses],
-            )
-            generated_images = [
-                GeneratedImage(
-                    file_id=file_id,
-                    url=build_frontend_file_url(file_id),
-                    revised_prompt=img.revised_prompt,
-                )
-                for img, file_id in zip(image_generation_responses, file_ids)
-            ]
-            break
-
-    run_context.context.iteration_instructions.append(
-        IterationInstructions(
-            iteration_nr=index,
-            plan="Generating images",
-            purpose="Generating images",
-            reasoning="Generating images",
-        )
-    )
-    run_context.context.global_iteration_responses.append(
-        IterationAnswer(
-            tool=image_generation_tool_instance.name,
-            tool_id=image_generation_tool_instance.id,
-            iteration_nr=run_context.context.current_run_step,
-            parallelization_nr=0,
-            question=prompt,
-            answer="",
-            reasoning="",
-            claims=[],
-            generated_images=generated_images,
-            additional_data={},
-            response_type=None,
-            data=None,
-            file_ids=None,
-            cited_documents={},
-        )
-    )
-    emitter.emit(
-        Packet(
-            ind=index,
-            obj=ImageGenerationToolDelta(
-                type="image_generation_tool_delta", images=generated_images
-            ),
-        )
-    )
-
-    return generated_images
-
-
 class ImageShape(str, Enum):
     SQUARE = "square"
     PORTRAIT = "portrait"
@@ -240,6 +130,113 @@ class ImageGenerationTool(Tool[None]):
     @property
     def display_name(self) -> str:
         return self._DISPLAY_NAME
+
+    @tool_accounting
+    def _image_generation_core(
+        self,
+        run_context: RunContextWrapper[Any],
+        prompt: str,
+        shape: str,
+    ) -> list[GeneratedImage]:
+        """Core image generation logic for run_v2."""
+        index = run_context.context.current_run_step
+        emitter = run_context.context.run_dependencies.emitter
+
+        # Emit start event
+        emitter.emit(
+            Packet(
+                ind=index,
+                obj=ImageGenerationToolStart(type="image_generation_tool_start"),
+            )
+        )
+
+        # Prepare tool arguments
+        tool_args = {"prompt": prompt}
+        if shape != "square":  # Only include shape if it's not the default
+            tool_args["shape"] = shape
+
+        # Run the actual image generation tool with heartbeat handling
+        generated_images: list[GeneratedImage] = []
+        heartbeat_count = 0
+
+        for tool_response in self.run(**tool_args):  # type: ignore[arg-type]
+            # Check if the session has been cancelled
+            if not is_connected(
+                run_context.context.chat_session_id,
+                run_context.context.run_dependencies.redis_client,
+            ):
+                break
+
+            # Handle heartbeat responses
+            if tool_response.id == IMAGE_GENERATION_HEARTBEAT_ID:
+                # Emit heartbeat event for every iteration
+                emitter.emit(
+                    Packet(
+                        ind=index,
+                        obj=ImageGenerationToolHeartbeat(
+                            type="image_generation_tool_heartbeat"
+                        ),
+                    )
+                )
+                heartbeat_count += 1
+                logger.debug(f"Image generation heartbeat #{heartbeat_count}")
+                continue
+
+            # Process the tool response to get the generated images
+            if tool_response.id == IMAGE_GENERATION_RESPONSE_ID:
+                image_generation_responses = cast(
+                    list[ImageGenerationResponse], tool_response.response
+                )
+                file_ids = save_files(
+                    urls=[],
+                    base64_files=[img.image_data for img in image_generation_responses],
+                )
+                generated_images = [
+                    GeneratedImage(
+                        file_id=file_id,
+                        url=build_frontend_file_url(file_id),
+                        revised_prompt=img.revised_prompt,
+                    )
+                    for img, file_id in zip(image_generation_responses, file_ids)
+                ]
+                break
+
+        run_context.context.iteration_instructions.append(
+            IterationInstructions(
+                iteration_nr=index,
+                plan="Generating images",
+                purpose="Generating images",
+                reasoning="Generating images",
+            )
+        )
+        run_context.context.global_iteration_responses.append(
+            IterationAnswer(
+                tool=self.name,
+                tool_id=self.id,
+                iteration_nr=run_context.context.current_run_step,
+                parallelization_nr=0,
+                question=prompt,
+                answer="",
+                reasoning="",
+                claims=[],
+                generated_images=generated_images,
+                additional_data={},
+                response_type=None,
+                data=None,
+                file_ids=None,
+                cited_documents={},
+            )
+        )
+        emitter.emit(
+            Packet(
+                ind=index,
+                obj=ImageGenerationToolDelta(
+                    type="image_generation_tool_delta", images=generated_images
+                ),
+            )
+        )
+
+        return generated_images
 
     @override
     @classmethod
@@ -333,11 +330,10 @@ class ImageGenerationTool(Tool[None]):
         shape = kwargs.get("shape", "square")
 
         # Call the core implementation
-        generated_images = _image_generation_core(
+        generated_images = self._image_generation_core(
             run_context,
             prompt,
             shape,
-            self,
         )
 
         # Return success message (agent stops after this tool anyway)

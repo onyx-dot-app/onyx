@@ -26,7 +26,7 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
 from onyx.tools.tool_implementations.python.code_interpreter_client import FileInput
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations_v2.tool_accounting import (
-    tool_accounting_deprecated,
+    tool_accounting_function,
 )
 from onyx.tools.tool_result_models import LlmPythonExecutionResult
 from onyx.tools.tool_result_models import PythonExecutionFile
@@ -83,7 +83,7 @@ def _combine_outputs(stdout: str, stderr: str) -> str:
         return ""
 
 
-@tool_accounting_deprecated
+@tool_accounting_function
 def _python_execution_core(
     run_context: RunContextWrapper[ChatTurnContext],
     code: str,

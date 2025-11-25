@@ -15,6 +15,7 @@ from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import GeneratedImage
 from onyx.chat.models import PromptConfig
 from onyx.chat.turn.models import ChatTurnContext
+from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -81,6 +82,13 @@ class FakeRunDependencies:
             custom_instructions="",
             datetime_aware=False,
         )
+
+
+class FakeCancelledRedis(FakeRedis):
+    """Fake Redis client that always reports the session as cancelled."""
+
+    def exists(self, key: str) -> bool:  # pragma: no cover - trivial override
+        return True
 
 
 # =============================================================================
@@ -209,9 +217,7 @@ def test_image_generation_tool_run_v2_basic_functionality(
     ]
 
     # Mock the core implementation
-    with patch(
-        "onyx.tools.tool_implementations.images.image_generation_tool._image_generation_core"
-    ) as mock_core:
+    with patch.object(image_generation_tool, "_image_generation_core") as mock_core:
         mock_core.return_value = fake_generated_images
 
         # Act
@@ -226,10 +232,10 @@ def test_image_generation_tool_run_v2_basic_functionality(
     # Verify the core was called with correct parameters
     mock_core.assert_called_once()
     call_args = mock_core.call_args
+    # When patching a bound method, self is bound; first arg is run_context
     assert call_args[0][0] == fake_run_context  # run_context
     assert call_args[0][1] == prompt  # prompt
     assert call_args[0][2] == shape  # shape
-    assert call_args[0][3] == image_generation_tool  # self
 
 
 def test_image_generation_tool_run_v2_missing_prompt(
@@ -262,9 +268,7 @@ def test_image_generation_tool_run_v2_default_shape(
     ]
 
     # Mock the core implementation
-    with patch(
-        "onyx.tools.tool_implementations.images.image_generation_tool._image_generation_core"
-    ) as mock_core:
+    with patch.object(image_generation_tool, "_image_generation_core") as mock_core:
         mock_core.return_value = fake_generated_images
 
         # Act - don't provide shape parameter
@@ -306,9 +310,7 @@ def test_image_generation_tool_run_v2_multiple_images(
     ]
 
     # Mock the core implementation
-    with patch(
-        "onyx.tools.tool_implementations.images.image_generation_tool._image_generation_core"
-    ) as mock_core:
+    with patch.object(multi_image_tool, "_image_generation_core") as mock_core:
         mock_core.return_value = fake_generated_images
 
         # Act
@@ -316,3 +318,43 @@ def test_image_generation_tool_run_v2_multiple_images(
 
     # Assert
     assert "Successfully generated 3 images" in result
+
+
+def test_image_generation_tool_run_v2_handles_cancellation_gracefully(
+    chat_session_id: UUID,
+    message_id: int,
+    fake_db_session: Any,
+    image_generation_tool: ImageGenerationTool,
+) -> None:
+    """Test that run_v2 handles cancellation gracefully without calling external APIs."""
+    from unittest.mock import patch
+
+    # Arrange - create a run context with a Redis client that always reports cancellation
+    cancelled_run_context = create_fake_run_context(
+        chat_session_id=chat_session_id,
+        message_id=message_id,
+        db_session=fake_db_session,
+        redis_client=FakeCancelledRedis(),
+        image_generation_tool=image_generation_tool,
+    )
+
+    prompt = "A test image prompt that should be cancelled"
+
+    # Patch the tool's run method so it does NOT call the real image API.
+    def fake_run(**kwargs: Any) -> Any:
+        # Yield a single fake ToolResponse; it will be ignored because of cancellation.
+        yield ToolResponse(id="ignored", response=None)
+
+    with patch.object(image_generation_tool, "run", side_effect=fake_run) as mock_run:
+        # Act - this should not raise, and should not call external APIs
+        result = image_generation_tool.run_v2(
+            cancelled_run_context,
+            prompt=prompt,
+        )
+
+    # Assert - when cancelled gracefully, the tool should report zero generated images
+    assert isinstance(result, str)
+    assert "Successfully generated 0 images" in result
+
+    # Verify we invoked the patched run exactly once with the expected prompt
+    mock_run.assert_called_once()
