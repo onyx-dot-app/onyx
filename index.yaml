@@ -13,7 +13,7 @@ entries:
       licenses: MIT
     apiVersion: v2
     appVersion: latest
-    created: "2025-11-25T20:40:24.164369072Z"
+    created: "2025-11-25T21:30:47.629836494Z"
     dependencies:
     - alias: postgresql
       condition: postgresql.enabled
@@ -38,7 +38,7 @@ entries:
       repository: https://charts.min.io/
       version: 5.4.0
     description: A Helm chart for Kubernetes
-    digest: 5e0718353c7747b11eb0ab372850eefbda21b7f1488f7f32efa5b6e0a2457739
+    digest: aea42c63d19a1ca2444f6914bff2b5107a59cca88eb38602f2fac431799df9cf
     home: https://www.onyx.app/
     name: onyx
     sources:
@@ -1266,4 +1266,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2025-11-25T20:40:24.148182806Z"
+generated: "2025-11-25T21:30:47.613925709Z"
