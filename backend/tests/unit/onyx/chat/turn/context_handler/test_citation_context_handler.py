@@ -16,11 +16,9 @@ from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.chat.turn.models import FetchedDocumentCacheEntry
 from onyx.llm.message_types import ChatCompletionMessage
-from onyx.tools.tool_implementations_v2.tool_result_models import (
-    LlmInternalSearchResult,
-)
-from onyx.tools.tool_implementations_v2.tool_result_models import LlmOpenUrlResult
-from onyx.tools.tool_implementations_v2.tool_result_models import LlmWebSearchResult
+from onyx.tools.tool_result_models import LlmInternalSearchResult
+from onyx.tools.tool_result_models import LlmOpenUrlResult
+from onyx.tools.tool_result_models import LlmWebSearchResult
 from tests.unit.onyx.chat.turn.utils import create_test_inference_section
 
 # TypeAdapter for parsing tool results after stripping (no discriminator needed)

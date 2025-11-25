@@ -28,15 +28,12 @@ from onyx.file_store.utils import get_default_file_store
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PythonToolDelta
 from onyx.server.query_and_chat.streaming_models import PythonToolStart
-from onyx.tools.tool_implementations.python.python_tool import PythonTool
-from onyx.tools.tool_implementations_v2.code_interpreter_client import (
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
-from onyx.tools.tool_implementations_v2.python import _python_execution_core
-from onyx.tools.tool_implementations_v2.python import python
-from onyx.tools.tool_implementations_v2.tool_result_models import (
-    LlmPythonExecutionResult,
-)
+from onyx.tools.tool_implementations.python.python_tool import _python_execution_core
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_result_models import LlmPythonExecutionResult
 
 
 @pytest.fixture
@@ -453,7 +450,7 @@ def test_python_function_tool_wrapper(
             mock_client_class.return_value = code_interpreter_client
 
             # Call the function tool wrapper
-            result_coro = python.on_invoke_tool(mock_run_context, json.dumps({"code": code}))  # type: ignore
+            result_coro = PythonTool.on_invoke_tool(mock_run_context, json.dumps({"code": code}))  # type: ignore
             result_json: str = asyncio.run(result_coro)  # type: ignore
 
     # Verify result is JSON string

@@ -13,11 +13,9 @@ from pydantic import ValidationError
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.llm.message_types import ChatCompletionMessage
-from onyx.tools.tool_implementations_v2.tool_result_models import (
-    LlmInternalSearchResult,
-)
-from onyx.tools.tool_implementations_v2.tool_result_models import LlmOpenUrlResult
-from onyx.tools.tool_implementations_v2.tool_result_models import LlmWebSearchResult
+from onyx.tools.tool_result_models import LlmInternalSearchResult
+from onyx.tools.tool_result_models import LlmOpenUrlResult
+from onyx.tools.tool_result_models import LlmWebSearchResult
 
 # Create a tagged union type for all tool results
 ToolResult = Annotated[

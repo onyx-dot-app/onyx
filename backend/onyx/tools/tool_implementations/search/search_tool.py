@@ -66,9 +66,7 @@ from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
 from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
-from onyx.tools.tool_implementations_v2.tool_result_models import (
-    LlmInternalSearchResult,
-)
+from onyx.tools.tool_result_models import LlmInternalSearchResult
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 
@@ -126,6 +124,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         bypass_acl: bool = False,
         rerank_settings: RerankingDetails | None = None,
         slack_context: SlackContext | None = None,
+        # just doing this for now since we lack dependency injection
+        search_pipeline_override_for_testing: SearchPipeline | None = None,
     ) -> None:
         self.user = user
         self.persona = persona
@@ -191,6 +191,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
 
         self._id = tool_id
+        self.search_pipeline_override_for_testing = search_pipeline_override_for_testing
 
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
@@ -280,7 +281,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         run_context: RunContextWrapper[Any],
         *args: Any,
         **kwargs: Any,
-    ) -> list[LlmInternalSearchResult]:
+    ) -> str:
         index = run_context.context.current_run_step
         query = kwargs[QUERY_FIELD]
         run_context.context.run_dependencies.emitter.emit(
@@ -539,7 +540,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         if kg_chunk_id_zero_only:
             retrieval_options.filters.kg_chunk_id_zero_only = kg_chunk_id_zero_only
 
-        search_pipeline = SearchPipeline(
+        search_pipeline = self.search_pipeline_override_for_testing or SearchPipeline(
             search_request=SearchRequest(
                 query=query,
                 evaluation_type=(

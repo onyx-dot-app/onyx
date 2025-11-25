@@ -10,18 +10,28 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
+from onyx.agents.agent_search.dr.models import GeneratedImage
+from onyx.agents.agent_search.dr.models import IterationAnswer
+from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.chat.chat_utils import combine_message_chain
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.chat.stop_signal_checker import is_connected
 from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.db.llm import fetch_existing_llm_providers
+from onyx.file_store.utils import build_frontend_file_url
+from onyx.file_store.utils import save_files
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import message_to_string
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.constants import GENERAL_SEP_PAT
+from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
+from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
+from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
+from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import RunContextWrapper
@@ -29,6 +39,7 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.prompt import (
     build_image_generation_user_prompt,
 )
+from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -70,6 +81,116 @@ Follow Up Input:
 class ImageGenerationResponse(BaseModel):
     revised_prompt: str
     image_data: str
+
+
+@tool_accounting
+def _image_generation_core(
+    run_context: RunContextWrapper[Any],
+    prompt: str,
+    shape: str,
+    image_generation_tool_instance: "ImageGenerationTool",
+) -> list[GeneratedImage]:
+    """Core image generation logic for run_v2."""
+    index = run_context.context.current_run_step
+    emitter = run_context.context.run_dependencies.emitter
+
+    # Emit start event
+    emitter.emit(
+        Packet(
+            ind=index,
+            obj=ImageGenerationToolStart(type="image_generation_tool_start"),
+        )
+    )
+
+    # Prepare tool arguments
+    tool_args = {"prompt": prompt}
+    if shape != "square":  # Only include shape if it's not the default
+        tool_args["shape"] = shape
+
+    # Run the actual image generation tool with heartbeat handling
+    generated_images: list[GeneratedImage] = []
+    heartbeat_count = 0
+
+    for tool_response in image_generation_tool_instance.run(
+        **tool_args  # type: ignore[arg-type]
+    ):
+        # Check if the session has been cancelled
+        if not is_connected(
+            run_context.context.chat_session_id,
+            run_context.context.run_dependencies.redis_client,
+        ):
+            break
+
+        # Handle heartbeat responses
+        if tool_response.id == IMAGE_GENERATION_HEARTBEAT_ID:
+            # Emit heartbeat event for every iteration
+            emitter.emit(
+                Packet(
+                    ind=index,
+                    obj=ImageGenerationToolHeartbeat(
+                        type="image_generation_tool_heartbeat"
+                    ),
+                )
+            )
+            heartbeat_count += 1
+            logger.debug(f"Image generation heartbeat #{heartbeat_count}")
+            continue
+
+        # Process the tool response to get the generated images
+        if tool_response.id == IMAGE_GENERATION_RESPONSE_ID:
+            image_generation_responses = cast(
+                list[ImageGenerationResponse], tool_response.response
+            )
+            file_ids = save_files(
+                urls=[],
+                base64_files=[img.image_data for img in image_generation_responses],
+            )
+            generated_images = [
+                GeneratedImage(
+                    file_id=file_id,
+                    url=build_frontend_file_url(file_id),
+                    revised_prompt=img.revised_prompt,
+                )
+                for img, file_id in zip(image_generation_responses, file_ids)
+            ]
+            break
+
+    run_context.context.iteration_instructions.append(
+        IterationInstructions(
+            iteration_nr=index,
+            plan="Generating images",
+            purpose="Generating images",
+            reasoning="Generating images",
+        )
+    )
+    run_context.context.global_iteration_responses.append(
+        IterationAnswer(
+            tool=image_generation_tool_instance.name,
+            tool_id=image_generation_tool_instance.id,
+            iteration_nr=run_context.context.current_run_step,
+            parallelization_nr=0,
+            question=prompt,
+            answer="",
+            reasoning="",
+            claims=[],
+            generated_images=generated_images,
+            additional_data={},
+            response_type=None,
+            data=None,
+            file_ids=None,
+            cited_documents={},
+        )
+    )
+    emitter.emit(
+        Packet(
+            ind=index,
+            obj=ImageGenerationToolDelta(
+                type="image_generation_tool_delta", images=generated_images
+            ),
+        )
+    )
+
+    return generated_images
 
 
 class ImageShape(str, Enum):
@@ -199,8 +320,28 @@ class ImageGenerationTool(Tool[None]):
         run_context: RunContextWrapper[Any],
         *args: Any,
         **kwargs: Any,
-    ) -> Any:
-        raise NotImplementedError("ImageGenerationTool.run_v2 is not implemented.")
+    ) -> str:
+        """Run image generation via the v2 implementation.
+
+        Returns:
+            JSON string containing a success message
+        """
+        prompt = kwargs.get("prompt")
+        if not prompt:
+            raise ValueError("prompt is required for image generation")
+
+        shape = kwargs.get("shape", "square")
+
+        # Call the core implementation
+        generated_images = _image_generation_core(
+            run_context,
+            prompt,
+            shape,
+            self,
+        )
+
+        # Return success message (agent stops after this tool anyway)
+        return f"Successfully generated {len(generated_images)} images"
 
     def build_tool_message_content(
         self, *args: ToolResponse

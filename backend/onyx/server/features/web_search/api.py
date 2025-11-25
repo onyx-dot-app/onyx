@@ -34,12 +34,8 @@ from onyx.server.features.web_search.models import WebSearchToolResponse
 from onyx.server.features.web_search.models import WebSearchWithContentResponse
 from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderView
-from onyx.tools.tool_implementations_v2.tool_result_models import (
-    LlmOpenUrlResult,
-)
-from onyx.tools.tool_implementations_v2.tool_result_models import (
-    LlmWebSearchResult,
-)
+from onyx.tools.tool_result_models import LlmOpenUrlResult
+from onyx.tools.tool_result_models import LlmWebSearchResult
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType

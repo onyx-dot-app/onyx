@@ -25,10 +25,10 @@ from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from onyx.tools.tool_implementations_v2.tool_result_models import LlmOpenUrlResult
-from onyx.tools.tool_implementations_v2.tool_result_models import LlmWebSearchResult
 from onyx.tools.tool_implementations_v2.web import _open_url_core
 from onyx.tools.tool_implementations_v2.web import _web_search_core
+from onyx.tools.tool_result_models import LlmOpenUrlResult
+from onyx.tools.tool_result_models import LlmWebSearchResult
 
 
 class MockTool:
