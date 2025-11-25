@@ -1,6 +1,7 @@
 # editors
 .vscode
 .zed
+.cursor
 
 # macos
 .DS_store
