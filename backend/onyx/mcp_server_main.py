@@ -2,8 +2,8 @@
 
 import uvicorn
 
-from onyx.configs.app_configs import MCP_SERVER_ENABLED
-from onyx.configs.app_configs import MCP_SERVER_PORT
+from onyx.mcp_server.config import MCP_SERVER_ENABLED
+from onyx.mcp_server.config import MCP_SERVER_PORT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

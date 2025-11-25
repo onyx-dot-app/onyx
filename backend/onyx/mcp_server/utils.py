@@ -8,8 +8,8 @@ import httpx
 from fastmcp.server.auth.auth import AccessToken
 from fastmcp.server.dependencies import get_access_token
 
-from onyx.configs.app_configs import APP_API_PREFIX
-from onyx.configs.app_configs import APP_PORT
+from onyx.mcp_server.config import APP_API_PREFIX
+from onyx.mcp_server.config import APP_PORT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
