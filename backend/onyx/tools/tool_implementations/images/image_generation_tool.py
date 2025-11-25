@@ -13,7 +13,6 @@ from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import save_files
-from onyx.llm.utils import build_content_with_imgs
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
@@ -225,6 +224,7 @@ class ImageGenerationTool(Tool[None]):
         completed = threading.Event()
         error_holder: list[Exception | None] = [None]
 
+        # TODO allow the LLM to determine number of images
         def generate_all_images() -> None:
             try:
                 generated_results = cast(
@@ -313,15 +313,13 @@ class ImageGenerationTool(Tool[None]):
         )
 
         # Create llm_facing_response
-        llm_facing_response = build_content_with_imgs(
-            message=json.dumps(
-                [
-                    {
-                        "revised_prompt": img.revised_prompt,
-                    }
-                    for img in image_generation_responses
-                ]
-            ),
+        llm_facing_response = json.dumps(
+            [
+                {
+                    "revised_prompt": img.revised_prompt,
+                }
+                for img in image_generation_responses
+            ]
         )
 
         return ToolResponse(

@@ -68,7 +68,7 @@ def upgrade() -> None:
             sa.text("SELECT id FROM tool WHERE in_code_tool_id = :in_code_tool_id"),
             {"in_code_tool_id": OPEN_URL_TOOL["in_code_tool_id"]},
         ).fetchone()
-        tool_id = result[0]
+        tool_id = result[0]  # type: ignore
 
     # Associate the tool with all existing personas
     # Get all persona IDs

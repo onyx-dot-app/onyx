@@ -2,6 +2,9 @@ import json
 from collections.abc import Callable
 from typing import Any
 
+from backend.onyx.tools.tool_implementations.images.models import (
+    FinalImageGenerationResponse,
+)
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
@@ -732,6 +735,12 @@ def run_llm_loop(
                         gathered_documents.extend(search_docs)
                     else:
                         gathered_documents = search_docs
+
+                # If adding more handlings of rich tool responses, break this out into a function
+                if isinstance(
+                    tool_response.rich_response, FinalImageGenerationResponse
+                ):
+                    pass  # TODO
 
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
