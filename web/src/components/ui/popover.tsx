@@ -31,6 +31,10 @@ const PopoverContent = React.forwardRef<
 ));
 PopoverContent.displayName = PopoverPrimitive.Content.displayName;
 
+function SeparatorHelper() {
+  return <Separator className="py-0 px-2" />;
+}
+
 const sizeClasses = {
   small: ["w-[10rem]"],
   medium: ["w-[15.5rem]"],
@@ -88,7 +92,7 @@ export function PopoverMenu({
               <></>
             ) : child === null ? (
               // Render `null`s as separator lines
-              <Separator className="py-0 px-2" />
+              <SeparatorHelper />
             ) : (
               child
             )}
@@ -97,7 +101,7 @@ export function PopoverMenu({
       </div>
       {footer && (
         <>
-          <Separator className="py-0 px-2" />
+          <SeparatorHelper />
           {footer}
         </>
       )}

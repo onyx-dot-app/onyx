@@ -1,6 +1,6 @@
 "use client";
 
-import * as React from "react";
+import React, { useMemo } from "react";
 import * as SeparatorPrimitive from "@radix-ui/react-separator";
 import { cn } from "@/lib/utils";
 
@@ -34,20 +34,24 @@ function SeparatorInner(
   }: React.ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root>,
   ref: React.ForwardedRef<React.ComponentRef<typeof SeparatorPrimitive.Root>>
 ) {
+  const isHorizontal = useMemo(
+    () => orientation === "horizontal",
+    [orientation]
+  );
+
   return (
-    <SeparatorPrimitive.Root
-      ref={ref}
-      decorative={decorative}
-      orientation={orientation}
-      className={cn(
-        "bg-border-01",
-        orientation === "horizontal"
-          ? "my-4 h-[1px] w-full"
-          : "mx-4 h-full w-[1px]",
-        className
-      )}
-      {...props}
-    />
+    <div className={cn(isHorizontal ? "py-4" : "px-4", className)}>
+      <SeparatorPrimitive.Root
+        ref={ref}
+        decorative={decorative}
+        orientation={orientation}
+        className={cn(
+          "bg-border-01",
+          isHorizontal ? "h-[1px] w-full" : "h-full w-[1px]"
+        )}
+        {...props}
+      />
+    </div>
   );
 }
 
