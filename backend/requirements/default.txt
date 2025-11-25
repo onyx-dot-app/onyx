@@ -18,7 +18,7 @@ fastapi-users-db-sqlalchemy==5.0.0
 fastmcp==2.11.3
 filelock==3.15.4
 google-api-python-client==2.86.0
-google-cloud-aiplatform==1.121.0
+google-genai==1.52.0
 google-auth-httplib2==0.1.0
 google-auth-oauthlib==1.0.0
 # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
