@@ -76,8 +76,12 @@ def create_test_user(db_session: Session, email_prefix: str) -> User:
     return user
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="module")
 def initialize_file_store() -> Generator[None, None, None]:
-    """Initialize the file store for testing"""
+    """Initialize the file store for testing.
+
+    Scoped to module level since file store initialization is idempotent
+    and doesn't need to be reset between tests.
+    """
     get_default_file_store().initialize()
     yield
