@@ -593,6 +593,14 @@ def add_users_to_user_group(
 
     _check_user_group_is_modifiable(db_user_group)
 
+    missing_users = [
+        user_id for user_id in user_ids if fetch_user_by_id(db_session, user_id) is None
+    ]
+    if missing_users:
+        raise ValueError(
+            f"User(s) not found: {', '.join(str(user_id) for user_id in missing_users)}"
+        )
+
     current_user_ids = [user.id for user in db_user_group.users]
     current_user_ids_set = set(current_user_ids)
     new_user_ids = [
@@ -652,6 +660,15 @@ def update_user_group(
         )
 
     if added_user_ids:
+        missing_users = [
+            user_id
+            for user_id in added_user_ids
+            if fetch_user_by_id(db_session, user_id) is None
+        ]
+        if missing_users:
+            raise ValueError(
+                f"User(s) not found: {', '.join(str(user_id) for user_id in missing_users)}"
+            )
         _add_user__user_group_relationships__no_commit(
             db_session=db_session,
             user_group_id=user_group_id,
