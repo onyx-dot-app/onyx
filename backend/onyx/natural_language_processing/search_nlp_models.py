@@ -306,9 +306,13 @@ class CloudEmbedding:
         ]
 
         async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
+            content_requests = [
+                genai_types.Content(parts=[genai_types.Part(text=text)])
+                for text in batch_texts
+            ]
             response = await client.aio.models.embed_content(
                 model=model,
-                contents=batch_texts,
+                contents=content_requests,
                 config=embed_config,
             )
 
@@ -333,7 +337,6 @@ class CloudEmbedding:
             ]
         finally:
             await client.aio.aclose()
-            client.close()
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
