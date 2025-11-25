@@ -5,12 +5,14 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
 from onyx.tools.models import ChatMinimalTextMessage
+from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import SearchToolRunContext
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.logger import setup_logger
@@ -82,13 +84,18 @@ def run_tool_calls(
     message_history: list[ChatMessageSimple],
     memories: list[str] | None,
     user_info: str | None,
-    starting_citation_num: int,
-) -> tuple[list[ToolResponse], int]:  # return also the new starting citation num
+    citation_mapping: dict[int, str],
+) -> tuple[
+    list[ToolResponse], dict[int, str]
+]:  # return also the updated citation mapping
     # Merge tool calls for SearchTool and WebSearchTool
     merged_tool_calls = _merge_tool_calls(tool_calls)
 
     tools_by_name = {tool.name: tool for tool in tools}
     tool_responses: list[ToolResponse] = []
+
+    # Calculate starting citation number from existing mapping
+    starting_citation_num = max(citation_mapping.keys()) + 1 if citation_mapping else 1
 
     # TODO needs to handle parallel tool calls
     for tool_call in merged_tool_calls:
@@ -129,6 +136,17 @@ def run_tool_calls(
                 starting_citation_num=starting_citation_num,
             )
 
+        elif isinstance(tool, OpenURLTool):
+            # Convert citation_mapping (int -> str) to URL mapping (str -> int)
+            # for OpenURLTool to reuse existing citations
+            url_to_citation: dict[str, int] = {
+                url: citation_num for citation_num, url in citation_mapping.items()
+            }
+            override_kwargs = OpenURLToolOverrideKwargs(
+                starting_citation_num=starting_citation_num,
+                citation_mapping=url_to_citation,
+            )
+
         try:
             tool_response = tool.run(
                 run_context=run_context,
@@ -144,13 +162,13 @@ def run_tool_calls(
             )
 
         if isinstance(tool_response.rich_response, SearchDocsResponse):
-            citation_mapping = tool_response.rich_response.citation_mapping
-            starting_citation_num = (
-                max(citation_mapping.keys()) + 1
-                if citation_mapping
-                else starting_citation_num + 1
-            )
+            new_citations = tool_response.rich_response.citation_mapping
+            if new_citations:
+                # Merge new citations into the existing mapping
+                citation_mapping.update(new_citations)
+                # Update starting citation number for next tool
+                starting_citation_num = max(citation_mapping.keys()) + 1
 
         tool_responses.append(tool_response)
 
-    return tool_responses, starting_citation_num
+    return tool_responses, citation_mapping

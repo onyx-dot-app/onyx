@@ -101,6 +101,12 @@ class WebSearchToolOverrideKwargs(BaseModel):
     starting_citation_num: int
 
 
+class OpenURLToolOverrideKwargs(BaseModel):
+    # To know what citation number to start at for constructing the string to the LLM
+    starting_citation_num: int
+    citation_mapping: dict[str, int]
+
+
 # None indicates that the default value should be used
 class SearchToolOverrideKwargs(BaseModel):
     # To know what citation number to start at for constructing the string to the LLM

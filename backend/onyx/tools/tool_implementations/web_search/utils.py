@@ -7,40 +7,43 @@ from onyx.tools.tool_implementations.web_search.models import WebContent
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 
 
-def truncate_search_result_content(content: str, max_chars: int = 10000) -> str:
+def truncate_search_result_content(content: str, max_chars: int = 20000) -> str:
     """Truncate search result content to a maximum number of characters"""
     if len(content) <= max_chars:
         return content
-    return content[:max_chars] + "..."
+    return content[:max_chars] + " [...truncated]"
 
 
-def dummy_inference_section_from_internet_content(
+def inference_section_from_internet_page_scrape(
     result: WebContent,
 ) -> InferenceSection:
     truncated_content = truncate_search_result_content(result.full_content)
+    inference_chunk = InferenceChunk(
+        chunk_id=0,
+        blurb=result.title,
+        content=truncated_content,
+        source_links={0: result.link},
+        section_continuation=False,
+        document_id="INTERNET_SEARCH__DOC_" + result.link,
+        source_type=DocumentSource.WEB,
+        semantic_identifier=result.title,
+        title=result.title,
+        boost=1,
+        recency_bias=1.0,
+        # TODO, this is not a great system for this, and can cause the results to be out of order
+        # when saving and loading from the db, Postgres doesn't maintain the order.
+        score=0,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+        doc_summary="",
+        chunk_context="",
+        updated_at=result.published_date,
+        image_file_id=None,
+    )
     return InferenceSection(
-        center_chunk=InferenceChunk(
-            chunk_id=0,
-            blurb=result.title,
-            content=truncated_content,
-            source_links={0: result.link},
-            section_continuation=False,
-            document_id="INTERNET_SEARCH_DOC_" + result.link,
-            source_type=DocumentSource.WEB,
-            semantic_identifier=result.link,
-            title=result.title,
-            boost=1,
-            recency_bias=1.0,
-            score=1.0,
-            hidden=(not result.scrape_successful),
-            metadata={},
-            match_highlights=[],
-            doc_summary=truncated_content,
-            chunk_context=truncated_content,
-            updated_at=result.published_date,
-            image_file_id=None,
-        ),
-        chunks=[],
+        center_chunk=inference_chunk,
+        chunks=[inference_chunk],
         combined_content=truncated_content,
     )
 
@@ -60,7 +63,8 @@ def inference_section_from_internet_search_result(
         title=result.title,
         boost=1,
         recency_bias=1.0,
-        score=1.0,
+        # TODO, this is not a great system for this, and can cause the results to be out of order
+        score=0,
         hidden=False,
         metadata={},
         match_highlights=[result.snippet],

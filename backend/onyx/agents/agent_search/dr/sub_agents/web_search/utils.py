@@ -18,7 +18,7 @@
 #     return content[:max_chars] + "..."
 
 
-# def dummy_inference_section_from_internet_content(
+# def inference_section_from_internet_page_scrape(
 #     result: WebContent,
 # ) -> InferenceSection:
 #     truncated_content = truncate_search_result_content(result.full_content)

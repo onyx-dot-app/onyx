@@ -42,6 +42,9 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OpenURLTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
@@ -258,6 +261,18 @@ def construct_tools(
                     logger.error(f"Failed to initialize Internet Search Tool: {e}")
                     raise ValueError(
                         "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
+                    )
+
+            # Handle Open URL Tool
+            elif tool_cls.__name__ == OpenURLTool.__name__:
+                try:
+                    tool_dict[db_tool_model.id] = [
+                        OpenURLTool(tool_id=db_tool_model.id, emitter=emitter)
+                    ]
+                except RuntimeError as e:
+                    logger.error(f"Failed to initialize Open URL Tool: {e}")
+                    raise ValueError(
+                        "Open URL tool requires a web content provider, please contact your Onyx admin to get it configured!"
                     )
 
             # Handle KG Tool

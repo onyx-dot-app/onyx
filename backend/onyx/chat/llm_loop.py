@@ -565,7 +565,7 @@ def run_llm_loop(
     collected_tool_calls: list[ToolCallInfo] = []
     gathered_documents: list[SearchDoc] | None = None
     should_cite_documents: bool = False
-    starting_citation_num = 1  # 1 indexed because it's more in line with the prompts
+    citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
     current_tool_call_index = (
         0  # TODO: just use the cycle count after parallel tool calls are supported
@@ -673,7 +673,7 @@ def run_llm_loop(
         tool_calls = llm_step_result.tool_calls or []
         for tool_call in tool_calls:
             # TODO replace the [tool_call] with the list of tool calls once parallel tool calls are supported
-            tool_responses, starting_citation_num = run_tool_calls(
+            tool_responses, citation_mapping = run_tool_calls(
                 tool_calls=[tool_call],
                 tools=final_tools,
                 turn_index=current_tool_call_index,
@@ -681,7 +681,7 @@ def run_llm_loop(
                 message_history=truncated_message_history,
                 memories=memories,
                 user_info=None,  # TODO, this is part of memories right now, might want to separate it out
-                starting_citation_num=starting_citation_num,
+                citation_mapping=citation_mapping,
             )
 
             # Build a mapping of tool names to tool objects for getting tool_id

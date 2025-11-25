@@ -22,7 +22,7 @@ from onyx.tools.tool_implementations.web_search.providers import (
 )
 from onyx.tools.tool_implementations.web_search.providers import get_default_provider
 from onyx.tools.tool_implementations.web_search.utils import (
-    dummy_inference_section_from_internet_content,
+    inference_section_from_internet_page_scrape,
 )
 from onyx.tools.tool_implementations.web_search.utils import (
     inference_section_from_internet_search_result,
@@ -177,11 +177,11 @@ def _open_url_core(
         entry = cache.setdefault(
             doc.link,
             FetchedDocumentCacheEntry(
-                inference_section=dummy_inference_section_from_internet_content(doc),
+                inference_section=inference_section_from_internet_page_scrape(doc),
                 document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
             ),
         )
-        entry.inference_section = dummy_inference_section_from_internet_content(doc)
+        entry.inference_section = inference_section_from_internet_page_scrape(doc)
 
     # Set flag to include citation requirements since we fetched documents
     run_context.context.should_cite_documents = True

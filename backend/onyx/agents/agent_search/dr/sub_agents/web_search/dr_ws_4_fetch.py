@@ -10,7 +10,7 @@
 # from onyx.agents.agent_search.dr.sub_agents.web_search.states import FetchInput
 # from onyx.agents.agent_search.dr.sub_agents.web_search.states import FetchUpdate
 # from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
-#     dummy_inference_section_from_internet_content,
+#     inference_section_from_internet_page_scrape,
 # )
 # from onyx.agents.agent_search.models import GraphConfig
 # from onyx.agents.agent_search.shared_graph_utils.utils import (
@@ -48,7 +48,7 @@
 #     retrieved_docs: list[InferenceSection] = []
 #     try:
 #         retrieved_docs = [
-#             dummy_inference_section_from_internet_content(result)
+#             inference_section_from_internet_page_scrape(result)
 #             for result in provider.contents(state.urls_to_open)
 #         ]
 #     except Exception as e:

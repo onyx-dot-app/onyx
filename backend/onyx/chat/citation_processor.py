@@ -129,14 +129,14 @@ class DynamicCitationProcessor:
         Args:
             citation_mapping: Dictionary mapping citation numbers (1, 2, 3, ...) to SearchDoc objects
         """
-        # Check for duplicate keys and log error if found
+        # Filter out duplicate keys and only add non-duplicates
+        # Reason for this is that OpenURL may have the same citation number as a Web Search result
+        # For those, we should just keep the web search citation and snippet etc.
         duplicate_keys = set(citation_mapping.keys()) & set(self.citation_to_doc.keys())
-        if duplicate_keys:
-            logger.error(
-                f"Duplicate citation keys detected when updating citation mapping: {sorted(duplicate_keys)}. "
-                f"Existing mappings will be overwritten."
-            )
-        self.citation_to_doc.update(citation_mapping)
+        non_duplicate_mapping = {
+            k: v for k, v in citation_mapping.items() if k not in duplicate_keys
+        }
+        self.citation_to_doc.update(non_duplicate_mapping)
 
     def process_token(
         self, token: str | None
