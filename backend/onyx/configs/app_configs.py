@@ -881,12 +881,11 @@ MCP_SERVER_PORT = int(os.environ.get("MCP_SERVER_PORT") or 8090)
 # CORS origins for MCP clients (comma-separated)
 # Local dev: "http://localhost:*"
 # Production: "https://trusted-client.com,https://another-client.com"
-_MCP_SERVER_CORS_ORIGINS = os.environ.get("MCP_SERVER_CORS_ORIGINS", "")
-MCP_SERVER_CORS_ORIGINS = (
-    [origin.strip() for origin in _MCP_SERVER_CORS_ORIGINS.split(",") if origin.strip()]
-    if _MCP_SERVER_CORS_ORIGINS
-    else []
-)
+MCP_SERVER_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("MCP_SERVER_CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 
 POD_NAME = os.environ.get("POD_NAME")
