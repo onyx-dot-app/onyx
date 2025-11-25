@@ -9,47 +9,29 @@ import Link from "next/link";
 
 const buttonClassNames = {
   main: {
-    normal: ["bg-transparent", "hover:bg-background-tint-02"],
-    emphasized: [
-      "data-[selected=true]:bg-action-link-01 bg-transparent",
-      "hover:bg-background-tint-02",
-    ],
+    normal: "line-item-button-main",
+    emphasized: "line-item-button-main-emphasized",
   },
   strikethrough: {
-    normal: ["bg-transparent", "hover:bg-background-tint-02"],
-    emphasized: ["bg-transparent", "hover:bg-background-tint-02"],
+    normal: "line-item-button-strikethrough",
+    emphasized: "line-item-button-strikethrough-emphasized",
   },
   danger: {
-    normal: ["bg-transparent", "hover:bg-background-tint-02"],
-    emphasized: [
-      "data-[selected=true]:bg-status-error-01 bg-transparent",
-      "hover:bg-background-tint-02",
-    ],
+    normal: "line-item-button-danger",
+    emphasized: "line-item-button-danger-emphasized",
   },
 } as const;
 
 const textClassNames = {
-  main: [
-    "group-data-[selected=true]/LineItem:text-action-link-05",
-    "text-text-04",
-  ],
-  strikethrough: ["text-text-02", "line-through", "decoration-2"],
-  danger: [
-    "group-data-[selected=true]/LineItem:text-action-link-05",
-    "text-status-error-05",
-  ],
+  main: "line-item-text-main",
+  strikethrough: "line-item-text-strikethrough",
+  danger: "line-item-text-danger",
 } as const;
 
 const iconClassNames = {
-  main: [
-    "group-data-[selected=true]/LineItem:stroke-action-link-05",
-    "stroke-text-03",
-  ],
-  strikethrough: ["stroke-text-03"],
-  danger: [
-    "group-data-[selected=true]/LineItem:stroke-action-link-05",
-    "stroke-status-error-05",
-  ],
+  main: "line-item-icon-main",
+  strikethrough: "line-item-icon-strikethrough",
+  danger: "line-item-icon-danger",
 } as const;
 
 export interface LineItemProps extends React.HTMLAttributes<HTMLButtonElement> {
