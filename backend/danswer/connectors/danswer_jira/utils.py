@@ -45,7 +45,10 @@ def best_effort_get_field_from_issue(jira_issue: Issue, field: str) -> Any:
         return None
 
 
-def extract_text_from_content(content: dict) -> str:
+def extract_text_from_content(content: dict | None) -> str:
+    if content is None:
+        return ""
+
     texts = []
     if "content" in content:
         for block in content["content"]:
@@ -63,9 +66,9 @@ def get_comment_strs(
     for comment in issue.fields.comment.comments:
         try:
             body_text = (
-                comment.body
+                comment.body or ""
                 if JIRA_API_VERSION == "2"
-                else extract_text_from_content(comment.raw["body"])
+                else extract_text_from_content(comment.raw.get("body"))
             )
 
             if (

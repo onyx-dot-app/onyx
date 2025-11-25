@@ -38,29 +38,20 @@ def _paginate_jql_search(
     max_results: int,
     fields: str | None = None,
 ) -> Iterable[Issue]:
-    start = 0
-    while True:
-        logger.debug(
-            f"Fetching Jira issues with JQL: {jql}, "
-            f"starting at {start}, max results: {max_results}"
-        )
-        issues = jira_client.search_issues(
-            jql_str=jql,
-            startAt=start,
-            maxResults=max_results,
-            fields=fields,
-        )
+    # Use enhanced_search_issues for Jira Cloud (API v3)
+    # It uses search tokens instead of startAt for pagination
+    logger.debug(f"Fetching Jira issues with JQL: {jql}, max results: {max_results}")
+    issues = jira_client.enhanced_search_issues(
+        jql_str=jql,
+        maxResults=max_results,
+        fields=fields or "*all",
+    )
 
-        for issue in issues:
-            if isinstance(issue, Issue):
-                yield issue
-            else:
-                raise Exception(f"Found Jira object not of type Issue: {issue}")
-
-        if len(issues) < max_results:
-            break
-
-        start += max_results
+    for issue in issues:
+        if isinstance(issue, Issue):
+            yield issue
+        else:
+            raise Exception(f"Found Jira object not of type Issue: {issue}")
 
 
 def fetch_jira_issues_batch(
@@ -84,9 +75,9 @@ def fetch_jira_issues_batch(
                 continue
 
         description = (
-            issue.fields.description
+            issue.fields.description or ""
             if JIRA_API_VERSION == "2"
-            else extract_text_from_content(issue.raw["fields"]["description"])
+            else extract_text_from_content(issue.raw["fields"].get("description"))
         )
         comments = get_comment_strs(
             issue=issue,
