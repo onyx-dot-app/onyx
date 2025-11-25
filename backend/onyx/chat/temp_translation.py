@@ -73,9 +73,8 @@ def translate_llm_loop_packets(
             # Old format expects: id (string), content (string), final_documents
             translated_obj = {
                 "type": "message_start",
-                "id": str(message_id),  # Keep message_id for the id field
                 "content": "",  # Initial content is empty
-                "final_documents": None,  # Will be set if available
+                "final_documents": [],  # Will be set if available
             }
 
             # Check if final_documents exists in the object
@@ -420,7 +419,7 @@ def translate_session_packets_to_frontend(
             translated_obj: dict[str, Any] = {
                 "type": "message_start",
                 "content": "",
-                "final_documents": None,
+                "final_documents": [],
             }
 
             if hasattr(obj, "final_documents") and obj.final_documents:

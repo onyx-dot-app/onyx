@@ -361,7 +361,9 @@ def run_llm_step(
     turn_index: int,
     citation_processor: DynamicCitationProcessor,
     final_documents: list[SearchDoc] | None = None,
-) -> LlmStepResult:
+) -> tuple[LlmStepResult, int]:
+    # The second return value is for the turn index because reasoning counts on the frontend as a turn
+    # TODO this is maybe ok but does not align well with the backend logic too well
     llm_msg_history = translate_history_to_llm_format(history)
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
@@ -390,13 +392,13 @@ def run_llm_step(
                         obj=ReasoningStart(),
                     )
                 )
-                emitter.emit(
-                    Packet(
-                        turn_index=turn_index,
-                        obj=ReasoningDelta(reasoning=delta.reasoning_content),
-                    )
+            emitter.emit(
+                Packet(
+                    turn_index=turn_index,
+                    obj=ReasoningDelta(reasoning=delta.reasoning_content),
                 )
-                reasoning_start = True
+            )
+            reasoning_start = True
 
         if delta.content:
             if reasoning_start:
@@ -406,6 +408,7 @@ def run_llm_step(
                         obj=ReasoningDone(),
                     )
                 )
+                turn_index += 1
                 reasoning_start = False
 
             if not answer_start:
@@ -444,6 +447,7 @@ def run_llm_step(
                         obj=ReasoningDone(),
                     )
                 )
+                turn_index += 1
                 reasoning_start = False
 
             for tool_call_delta in delta.tool_calls:
@@ -451,6 +455,16 @@ def run_llm_step(
 
         if finish_reason:
             break
+
+    # Close reasoning block if still open (stream ended with reasoning content)
+    if reasoning_start:
+        emitter.emit(
+            Packet(
+                turn_index=turn_index,
+                obj=ReasoningDone(),
+            )
+        )
+        turn_index += 1
 
     # Flush any remaining content from citation processor
     if citation_processor:
@@ -469,6 +483,9 @@ def run_llm_step(
                         obj=result,
                     )
                 )
+
+    # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
+    # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
 
     # Convert tool calls from map to ToolCallKickoff list
     tool_calls: list[ToolCallKickoff] = []
@@ -496,10 +513,13 @@ def run_llm_step(
                 )
             )
 
-    return LlmStepResult(
-        reasoning=accumulated_reasoning if accumulated_reasoning else None,
-        answer=accumulated_answer if accumulated_answer else None,
-        tool_calls=tool_calls if tool_calls else None,
+    return (
+        LlmStepResult(
+            reasoning=accumulated_reasoning if accumulated_reasoning else None,
+            answer=accumulated_answer if accumulated_answer else None,
+            tool_calls=tool_calls if tool_calls else None,
+        ),
+        turn_index,
     )
 
 
@@ -659,7 +679,7 @@ def run_llm_loop(
 
         # This calls the LLM, passes in the emitter which can collect packets like reasoning, answers, etc.
         # It also pre-processes the tool calls in preparation for running them
-        llm_step_result = run_llm_step(
+        llm_step_result, current_tool_call_index = run_llm_step(
             history=truncated_message_history,
             tool_definitions=[tool.tool_definition() for tool in final_tools],
             tool_choice=tool_choice,
