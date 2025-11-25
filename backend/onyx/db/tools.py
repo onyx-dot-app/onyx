@@ -33,10 +33,13 @@ def get_tools_by_mcp_server_id(
     db_session: Session,
     *,
     only_enabled: bool = False,
+    order_by_id: bool = False,
 ) -> list[Tool]:
     query = select(Tool).where(Tool.mcp_server_id == mcp_server_id)
     if only_enabled:
         query = query.where(Tool.enabled.is_(True))
+    if order_by_id:
+        query = query.order_by(Tool.id)
     return list(db_session.scalars(query).all())
 
 

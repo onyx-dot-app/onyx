@@ -1133,7 +1133,7 @@ def get_mcp_server_tools_snapshots(
         )
 
     # Fetch and return tools from database
-    mcp_tools = get_tools_by_mcp_server_id(server_id, db)
+    mcp_tools = get_tools_by_mcp_server_id(server_id, db, order_by_id=True)
     return [ToolSnapshot.from_model(tool) for tool in mcp_tools]
 
 
