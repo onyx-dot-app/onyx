@@ -5,8 +5,10 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Button from "@/refresh-components/buttons/Button";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/components/user/UserProvider";
+import { useApplicationName } from "@/lib/hooks/useApplicationName";
 
 export default function NonAdminStep() {
+  const applicationName = useApplicationName();
   const inputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const { refreshUser } = useUser();
@@ -22,7 +24,7 @@ export default function NonAdminStep() {
         </div>
         <div>
           <Text text04 mainUiAction>
-            What should Onyx call you?
+            What should {applicationName} call you?
           </Text>
           <Text text03 secondaryBody>
             We will display this name in the app.

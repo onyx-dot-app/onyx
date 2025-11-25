@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
 import { ThemePreference } from "@/lib/types";
+import { useApplicationName } from "@/lib/hooks/useApplicationName";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SubLabel } from "@/components/Field";
 import LLMSelector from "@/components/llm/LLMSelector";
@@ -44,6 +45,7 @@ type SettingsSection =
   | "tokens";
 
 export default function UserSettings() {
+  const applicationName = useApplicationName();
   const {
     refreshUser,
     user,
@@ -541,7 +543,7 @@ export default function UserSettings() {
                     onChange={(event) =>
                       updatePersonalizationField("name", event.target.value)
                     }
-                    placeholder="Set how Onyx should refer to you"
+                    placeholder={`Set how ${applicationName} should refer to you`}
                     className="mt-2"
                   />
                   {personalizationValues.name.length === 0 && (
@@ -568,7 +570,7 @@ export default function UserSettings() {
                   <div>
                     <h3 className="text-lg font-medium">Use memories</h3>
                     <SubLabel>
-                      Allow Onyx to reference stored memories in future chats.
+                      {`Allow ${applicationName} to reference stored memories in future chats.`}
                     </SubLabel>
                   </div>
                   <Switch
@@ -598,7 +600,7 @@ export default function UserSettings() {
                         <InputTextArea
                           key={index}
                           value={memory}
-                          placeholder="Write something Onyx should remember"
+                          placeholder={`Write something ${applicationName} should remember`}
                           onChange={(event) =>
                             updateMemoryAtIndex(index, event.target.value)
                           }

@@ -1,19 +1,26 @@
 "use client";
 
-import React, { useContext } from "react";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import React from "react";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useApplicationName } from "@/lib/hooks/useApplicationName";
 import Text from "@/refresh-components/texts/Text";
 
+const DEFAULT_APPLICATION_DESCRIPTION = "Your open source AI platform for work";
+
 export default function LoginText() {
-  const settings = useContext(SettingsContext);
+  const settings = useSettingsContext();
+  const applicationName = useApplicationName();
+  const applicationDescription =
+    settings.enterpriseSettings?.application_description ||
+    DEFAULT_APPLICATION_DESCRIPTION;
+
   return (
     <div className="w-full flex flex-col ">
       <Text headingH2 text05>
-        Welcome to{" "}
-        {(settings && settings?.enterpriseSettings?.application_name) || "Onyx"}
+        Welcome to {applicationName}
       </Text>
       <Text text03 mainUiMuted>
-        Your open source AI platform for work
+        {applicationDescription}
       </Text>
     </div>
   );

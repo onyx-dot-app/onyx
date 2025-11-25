@@ -14,6 +14,7 @@ import LLMConnectionModal, {
 import { cn } from "@/lib/utils";
 import SvgCheckCircle from "@/icons/check-circle";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useApplicationName } from "@/lib/hooks/useApplicationName";
 
 type LLMStepProps = {
   state: OnboardingState;
@@ -90,6 +91,7 @@ const LLMStepInner = ({
   llmDescriptors,
   disabled,
 }: LLMStepProps) => {
+  const applicationName = useApplicationName();
   const isLoading = !llmDescriptors || llmDescriptors.length === 0;
 
   const [llmConnectionModalProps, setLlmConnectionModalProps] =
@@ -117,7 +119,8 @@ const LLMStepInner = ({
                 Connect your LLM models
               </Text>
               <Text text03 secondaryBody>
-                Onyx supports both self-hosted models and popular providers.
+                {applicationName} supports both self-hosted models and popular
+                providers.
               </Text>
             </div>
           </div>

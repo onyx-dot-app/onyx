@@ -4,8 +4,11 @@ import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import Button from "@/refresh-components/buttons/Button";
 
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { useApplicationName } from "@/lib/hooks/useApplicationName";
 
 const Page = () => {
+  const applicationName = useApplicationName();
+
   return (
     <AuthFlowContainer>
       <div className="flex flex-col space-y-6 max-w-md mx-auto">
@@ -44,7 +47,7 @@ const Page = () => {
           {NEXT_PUBLIC_CLOUD_ENABLED && (
             <span className="block mt-1 text-blue-600">
               If you continue to experience problems please reach out to the
-              Onyx team at{" "}
+              {applicationName} team at{" "}
               <a href="mailto:support@onyx.app" className="text-blue-600">
                 support@onyx.app
               </a>

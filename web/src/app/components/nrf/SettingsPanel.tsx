@@ -6,6 +6,7 @@ import {
   darkExtensionImages,
   lightExtensionImages,
 } from "@/lib/extension/constants";
+import { useApplicationName } from "@/lib/hooks/useApplicationName";
 
 const SidebarSwitch = ({
   checked,
@@ -59,6 +60,7 @@ export const SettingsPanel = ({
   toggleSettings: () => void;
   handleUseOnyxToggle: (checked: boolean) => void;
 }) => {
+  const applicationName = useApplicationName();
   const {
     theme,
     setTheme,
@@ -109,7 +111,7 @@ export const SettingsPanel = ({
         <SidebarSwitch
           checked={useOnyxAsNewTab}
           onCheckedChange={handleUseOnyxToggle}
-          label="Use Onyx as new tab page"
+          label={`Use ${applicationName} as new tab page`}
         />
 
         <SidebarSwitch
