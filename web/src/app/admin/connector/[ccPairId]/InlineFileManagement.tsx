@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import {
   updateConnectorFiles,
   type ConnectorFileInfo,
@@ -26,20 +26,11 @@ import SvgCheck from "@/icons/check";
 import SvgX from "@/icons/x";
 import SvgPlusCircle from "@/icons/plus-circle";
 import { formatBytes } from "@/lib/utils";
+import { timestampToReadableDate } from "@/lib/dateUtils";
 
 interface InlineFileManagementProps {
   connectorId: number;
   onRefresh: () => void;
-}
-
-function formatDate(dateString: string | undefined): string {
-  if (!dateString) return "Unknown";
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString() + " " + date.toLocaleTimeString();
-  } catch {
-    return "Unknown";
-  }
 }
 
 export function InlineFileManagement({
@@ -287,7 +278,9 @@ export function InlineFileManagement({
                           isMarkedForRemoval ? "line-through opacity-60" : ""
                         }
                       >
-                        {formatDate(file.upload_date)}
+                        {file.upload_date
+                          ? timestampToReadableDate(file.upload_date)
+                          : "-"}
                       </TableCell>
                       {isEditing && <TableCell></TableCell>}
                     </TableRow>
