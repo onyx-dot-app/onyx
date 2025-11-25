@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table";
 import { ContentComponentProps } from "./ExpandableContentWrapper";
 import { WarningCircle } from "@phosphor-icons/react";
-import "../spinner.css";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 const CsvContent: React.FC<ContentComponentProps> = ({
   fileDescriptor,
@@ -79,7 +79,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
   if (isLoading || isFetching) {
     return (
       <div className="flex items-center justify-center h-[300px]">
-        <div className="loader ease-linear rounded-full border-8 border-t-8 border-background-200 h-8 w-8"></div>
+        <SimpleLoader />
       </div>
     );
   }
