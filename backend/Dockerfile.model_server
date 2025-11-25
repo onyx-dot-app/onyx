@@ -20,7 +20,7 @@ RUN uv pip install --system --no-cache-dir --upgrade \
         -r /tmp/requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 
-RUN apt-get remove -y --allow-remove-essential perl-base && \ 
+RUN apt-get remove -y --allow-remove-essential perl-base && \
     apt-get autoremove -y
 
 # Pre-downloading models for setups with limited egress

@@ -53,7 +53,7 @@ export async function generateMetadata(): Promise<Metadata> {
     enterpriseSettings = await (await fetchEnterpriseSettingsSS()).json();
     logoLocation =
       enterpriseSettings && enterpriseSettings.use_custom_logo
-        ? "/api/enterprise-settings/logo"
+        ? "/api/settings/logo"
         : buildClientUrl("/smartsearch.ico");
   }
 
