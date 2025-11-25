@@ -26,6 +26,8 @@ from litellm.litellm_core_utils.prompt_templates.common_utils import (
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.llms.ollama.chat.transformation import OllamaChatConfig
 from litellm.llms.ollama.common_utils import OllamaError
+from litellm.llms.openai.chat.gpt_5_transformation import OpenAIGPT5Config
+from litellm.llms.openai.chat.gpt_transformation import OpenAIGPTConfig
 from litellm.types.llms.ollama import OllamaChatCompletionMessage
 from litellm.types.llms.ollama import OllamaToolCall
 from litellm.types.llms.ollama import OllamaToolCallFunction
@@ -552,6 +554,46 @@ def _patch_litellm_responses_transformation_handler_so_tool_choice_formatted() -
     LiteLLMResponsesTransformationHandler.transform_request = _patched_transform_request  # type: ignore[method-assign]
 
 
+def _patch_litellm_openai_gpt5_coonfig_allow_tool_choice_for_responses_bridge() -> None:
+    if (
+        getattr(
+            OpenAIGPT5Config.get_supported_openai_params,
+            "__name__",
+            "",
+        )
+        == "_patched_get_supported_openai_params"
+    ):
+        return
+
+    def _patched_get_supported_openai_params(self, model: str) -> list:
+        # Call the parent class method directly (can't use super() in monkey patches)
+        base_gpt_series_params = OpenAIGPTConfig.get_supported_openai_params(
+            self, model=model
+        )
+        gpt_5_only_params = ["reasoning_effort"]
+        base_gpt_series_params.extend(gpt_5_only_params)
+
+        non_supported_params = [
+            "logprobs",
+            "top_p",
+            "presence_penalty",
+            "frequency_penalty",
+            "top_logprobs",
+            "stop",
+        ]
+
+        return [
+            param
+            for param in base_gpt_series_params
+            if param not in non_supported_params
+        ]
+
+    _patched_get_supported_openai_params.__name__ = (
+        "_patched_get_supported_openai_params"
+    )
+    OpenAIGPT5Config.get_supported_openai_params = _patched_get_supported_openai_params  # type: ignore[method-assign]
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -561,11 +603,13 @@ def apply_monkey_patches() -> None:
     - Patching OllamaChatCompletionResponseIterator.chunk_parser for streaming content
     - Patching OpenAiResponsesToChatCompletionStreamIterator.chunk_parser for OpenAI Responses API
     - Patching LiteLLMResponsesTransformationHandler.transform_request for tool choice formatting
+    - Patching OpenAIGPT5Config.get_supported_openai_params for tool choice support for responses bridge
     """
     _patch_ollama_transform_request_so_tool_calls_streamed()
     _patch_ollama_chunk_parser_so_reasoning_streamed()
     _patch_openai_responses_chunk_parser_so_reasoning_streamed()
     _patch_litellm_responses_transformation_handler_so_tool_choice_formatted()
+    _patch_litellm_openai_gpt5_coonfig_allow_tool_choice_for_responses_bridge()
 
 
 def _extract_reasoning_content(message: dict) -> Tuple[Optional[str], Optional[str]]:
