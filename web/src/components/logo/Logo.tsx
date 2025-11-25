@@ -49,7 +49,7 @@ export function Logo({
     >
       {/* TODO: figure out how to use Next Image here */}
       <img
-        src="/api/settings/logo"
+        src="/api/smartsearch-settings/logo"
         alt="Logo"
         style={{ objectFit: "contain", height, width }}
       />

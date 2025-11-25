@@ -35,7 +35,7 @@ export function CustomAnalyticsUpdateForm() {
           e.preventDefault();
 
           const response = await fetch(
-            "/api/admin/settings/custom-analytics-script",
+            "/api/admin/smartsearch-settings/custom-analytics-script",
             {
               method: "PUT",
               headers: {

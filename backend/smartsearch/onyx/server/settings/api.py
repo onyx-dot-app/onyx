@@ -79,7 +79,7 @@ class RefreshTokenData(BaseModel):
 
 
 @basic_router.post(
-    "/settings/refresh-token",
+    "/smartsearch-settings/refresh-token",
     summary="Обновление access token с помощью refresh token",
 )
 async def refresh_access_token(
@@ -159,7 +159,7 @@ async def refresh_access_token(
 
 
 @admin_router.put(
-    "/admin/settings",
+    "/admin/smartsearch-settings",
     summary="Обновление настроек системы",
 )
 def put_settings(
@@ -178,7 +178,7 @@ def put_settings(
 
 
 @basic_router.get(
-    "/settings",
+    "/smartsearch-settings",
     summary="Получение настроек системы",
     response_model=Settings,
 )
@@ -195,7 +195,7 @@ def fetch_settings() -> Settings:
 
 
 @admin_router.put(
-    "/admin/settings/logo",
+    "/admin/smartsearch-settings/logo",
     summary = "Загрузка логотипа для оформления системы",
 )
 def put_logo(
@@ -286,7 +286,7 @@ def get_logotype_file(db_session: Session) -> Response:
 
 
 @basic_router.get(
-    "/settings/logotype",
+    "/smartsearch-settings/logotype",
     summary="Получение текстового логотипа системы",
 )
 def fetch_logotype(db_session: Session = Depends(get_session)) -> Response:
@@ -299,7 +299,7 @@ def fetch_logotype(db_session: Session = Depends(get_session)) -> Response:
 
 
 @basic_router.get(
-    "/settings/logo",
+    "/smartsearch-settings/logo",
     summary="Получение логотипа системы",
 )
 def fetch_logo(
@@ -324,7 +324,7 @@ def fetch_logo(
 
 
 @admin_router.put(
-    "/admin/settings/custom-analytics-script",
+    "/admin/smartsearch-settings/custom-analytics-script",
     summary="Загрузка кастомного аналитического скрипта",
 )
 def upload_custom_analytics_script(
@@ -349,7 +349,7 @@ def upload_custom_analytics_script(
 
 
 @basic_router.get(
-    "/settings/custom-analytics-script",
+    "/smartsearch-settings/custom-analytics-script",
     summary="Получение кастомного аналитического скрипта",
 )
 def fetch_custom_analytics_script() -> str | None:
