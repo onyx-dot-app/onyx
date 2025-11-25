@@ -306,12 +306,7 @@ class CloudEmbedding:
         ]
 
         async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
-            content_requests: list[
-                genai_types.Content
-                | genai_types.Part
-                | str
-                | list[str | genai_types.Part | genai_types.Image | genai_types.File]
-            ] = [
+            content_requests: list[Any] = [
                 genai_types.Content(parts=[genai_types.Part(text=text)])
                 for text in batch_texts
             ]
