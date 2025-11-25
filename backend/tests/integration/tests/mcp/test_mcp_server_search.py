@@ -92,12 +92,12 @@ def _call_search_tool(
 
 def _auth_headers(user: DATestUser, name: str) -> dict[str, str]:
     """Create authorization headers with a PAT token."""
-    token_data = PATManager.create(
+    pat = PATManager.create(
         name=name,
         expiration_days=7,
         user_performing_action=user,
     )
-    return {"Authorization": f"Bearer {token_data['token']}"}
+    return {"Authorization": f"Bearer {pat.token}"}
 
 
 def _seed_document_and_wait_for_indexing(

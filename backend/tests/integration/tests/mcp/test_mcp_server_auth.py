@@ -36,12 +36,12 @@ def test_mcp_server_auth_invalid_token(reset: None) -> None:
 
 def test_mcp_server_auth_valid_token(reset: None, admin_user: DATestUser) -> None:
     """Test MCP server accepts requests with a valid bearer token."""
-    token_data = PATManager.create(
+    pat = PATManager.create(
         name="Test MCP Token",
         expiration_days=7,
         user_performing_action=admin_user,
     )
-    access_token = token_data["token"]
+    access_token = pat.token
 
     # Test connection with MCP protocol request
     response = requests.post(
