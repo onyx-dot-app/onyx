@@ -96,7 +96,7 @@ export default function MCPLineItem({
       icon={getServerIcon()}
       onClick={handleClick}
       strikethrough={allToolsDisabled}
-      forced={isActive}
+      selected={isActive}
       rightChildren={
         <div className="flex flex-row items-center gap-1">
           {isAuthenticated &&

@@ -492,7 +492,7 @@ export default function AgentsPage() {
                         <LineItem
                           key={creator.id}
                           icon={icon}
-                          forced={isSelected}
+                          selected={isSelected}
                           emphasized
                           onClick={() => {
                             setSelectedCreatorIds((prev) => {
@@ -569,7 +569,7 @@ export default function AgentsPage() {
                           <LineItem
                             key={action.id}
                             icon={icon}
-                            forced={isSelected}
+                            selected={isSelected}
                             emphasized
                             onClick={() => {
                               setSelectedActionIds((prev) => {
@@ -599,7 +599,7 @@ export default function AgentsPage() {
                           <LineItem
                             key={groupKey}
                             icon={SvgActions}
-                            forced={isSelected}
+                            selected={isSelected}
                             emphasized
                             onClick={() => {
                               setSelectedMcpServerIds((prev) => {
