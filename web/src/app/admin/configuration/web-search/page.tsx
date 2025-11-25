@@ -33,7 +33,7 @@ import RawModal from "@/refresh-components/RawModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgX from "@/icons/x";
 
-type WebSearchProviderType = "google_pse" | "serper" | "exa";
+type WebSearchProviderType = "google_pse" | "serper" | "exa" | "you_com";
 type WebContentProviderType = "firecrawl" | "onyx_web_crawler" | (string & {});
 
 interface WebSearchProviderView {
@@ -61,6 +61,7 @@ const SEARCH_PROVIDER_LABEL: Record<WebSearchProviderType, string> = {
   google_pse: "Google PSE",
   serper: "Serper",
   exa: "Exa",
+  you_com: "You.com",
 };
 
 const CONTENT_PROVIDER_LABEL: Record<string, string> = {
@@ -92,6 +93,7 @@ const CONTENT_PROVIDER_ORDER: WebContentProviderType[] = [
 ];
 
 const SEARCH_PROVIDER_ORDER: WebSearchProviderType[] = [
+  "you_com",
   "exa",
   "serper",
   "google_pse",
@@ -101,6 +103,12 @@ const SEARCH_PROVIDER_DETAILS: Record<
   WebSearchProviderType,
   { subtitle: string; helper: string; logoSrc?: string; apiKeyUrl: string }
 > = {
+  you_com: {
+    subtitle: "You.com",
+    helper: "Connect to You.com to set up web search.",
+    logoSrc: "/You.svg",
+    apiKeyUrl: "https://api.you.com/",
+  },
   exa: {
     subtitle: "Exa.ai",
     helper: "Connect to Exa to set up web search.",
@@ -866,7 +874,9 @@ export default function Page() {
           ? "from PSE"
           : selectedProviderType === "serper"
             ? "from Serper"
-            : "from Exa"}{" "}
+            : selectedProviderType === "you_com"
+              ? "from You.com"
+              : "from Exa"}{" "}
         to access your search engine.
       </>
     );
@@ -1484,7 +1494,8 @@ export default function Page() {
                               typeof providerType === "string" &&
                               (providerType === "google_pse" ||
                                 providerType === "serper" ||
-                                providerType === "exa")
+                                providerType === "exa" ||
+                                providerType === "you_com")
                             ) {
                               setSelectedProviderType(
                                 providerType as WebSearchProviderType

@@ -18,6 +18,9 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.clients.onyx_web_crawler_
 from onyx.agents.agent_search.dr.sub_agents.web_search.clients.serper_client import (
     SerperClient,
 )
+from onyx.agents.agent_search.dr.sub_agents.web_search.clients.you_client import (
+    YouClient,
+)
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     WebContentProvider,
 )
@@ -64,6 +67,8 @@ def build_search_provider_from_config(
         return ExaClient(api_key=api_key)
     if provider_type_enum == WebSearchProviderType.SERPER:
         return SerperClient(api_key=api_key)
+    if provider_type_enum == WebSearchProviderType.YOU_COM:
+        return YouClient(api_key=api_key)
     if provider_type_enum == WebSearchProviderType.GOOGLE_PSE:
         search_engine_id = (
             config.get("search_engine_id")
