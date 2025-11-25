@@ -100,6 +100,8 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
 
     """Actual execution of the tool"""
 
+    # run_V2 should be what's used moving forwards.
+    # run is only there to support deep research.
     @abc.abstractmethod
     def run_v2(
         self,
