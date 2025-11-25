@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import AgentCard from "@/refresh-components/AgentCard";
 import { useUser } from "@/components/user/UserProvider";
 import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/assistants/checkOwnership";
@@ -492,7 +492,8 @@ export default function AgentsPage() {
                         <LineItem
                           key={creator.id}
                           icon={icon}
-                          heavyForced={isSelected}
+                          forced={isSelected}
+                          emphasized
                           onClick={() => {
                             setSelectedCreatorIds((prev) => {
                               const newSet = new Set(prev);
@@ -568,7 +569,8 @@ export default function AgentsPage() {
                           <LineItem
                             key={action.id}
                             icon={icon}
-                            heavyForced={isSelected}
+                            forced={isSelected}
+                            emphasized
                             onClick={() => {
                               setSelectedActionIds((prev) => {
                                 const newSet = new Set(prev);
@@ -597,7 +599,8 @@ export default function AgentsPage() {
                           <LineItem
                             key={groupKey}
                             icon={SvgActions}
-                            heavyForced={isSelected}
+                            forced={isSelected}
+                            emphasized
                             onClick={() => {
                               setSelectedMcpServerIds((prev) => {
                                 const newSet = new Set(prev);
