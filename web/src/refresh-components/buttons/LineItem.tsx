@@ -7,28 +7,48 @@ import { SvgProps } from "@/icons";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Link from "next/link";
 
-const buttonClassNames = (heavyForced?: boolean) =>
-  heavyForced
-    ? ["bg-action-link-01", "hover:bg-background-tint-02"]
-    : ["bg-transparent", "hover:bg-background-tint-02"];
+type Variant = keyof typeof buttonClassNames;
+
+const buttonClassNames = {
+  main: {
+    normal: ["bg-transparent", "hover:bg-background-tint-02"],
+    emphasized: ["bg-action-link-01", "hover:bg-background-tint-02"],
+  },
+  forced: {
+    normal: ["bg-action-link-01", "hover:bg-background-tint-02"],
+    emphasized: ["bg-action-link-01", "hover:bg-background-tint-02"],
+  },
+  strikethrough: {
+    normal: ["bg-transparent", "hover:bg-background-tint-02"],
+    emphasized: ["bg-transparent", "hover:bg-background-tint-02"],
+  },
+  danger: {
+    normal: ["bg-transparent", "hover:bg-background-tint-02"],
+    emphasized: ["bg-status-error-01", "hover:bg-background-tint-02"],
+  },
+};
 
 const textClassNames = {
   main: ["text-text-04"],
   forced: ["text-action-link-05"],
-  strikeThrough: ["text-text-02", "line-through decoration-2"],
-  danger: [],
+  strikethrough: ["text-text-02", "line-through", "decoration-2"],
+  danger: ["text-status-error-05"],
 };
 
-const iconClassNames = (forced?: boolean) =>
-  forced ? ["stroke-action-link-05"] : ["stroke-text-03"];
+const iconClassNames = {
+  main: ["stroke-text-03"],
+  forced: ["stroke-action-link-05"],
+  strikethrough: ["stroke-text-03"],
+  danger: ["stroke-status-error-05"],
+};
 
 export interface LineItemProps extends React.HTMLAttributes<HTMLButtonElement> {
-  // Button variants
+  // Button variants (mutually exclusive)
   forced?: boolean;
-  heavyForced?: boolean;
   strikethrough?: boolean;
   danger?: boolean;
 
+  // Modifier
   emphasized?: boolean;
 
   icon?: React.FunctionComponent<SvgProps>;
@@ -39,9 +59,9 @@ export interface LineItemProps extends React.HTMLAttributes<HTMLButtonElement> {
 
 export default function LineItem({
   forced,
-  heavyForced,
   strikethrough,
   danger,
+
   emphasized,
 
   icon: Icon,
@@ -52,17 +72,22 @@ export default function LineItem({
   href,
   ...props
 }: LineItemProps) {
-  const variant = strikethrough
-    ? "strikeThrough"
-    : forced || heavyForced
-      ? "forced"
-      : "main";
+  // Determine variant (mutually exclusive, with priority order)
+  const variant: Variant = forced
+    ? "forced"
+    : strikethrough
+      ? "strikethrough"
+      : danger
+        ? "danger"
+        : "main";
+
+  const emphasisKey = emphasized ? "emphasized" : "normal";
 
   const content = (
     <button
       className={cn(
         "flex flex-col w-full justify-center items-start p-2 rounded-08 group/LineItem",
-        buttonClassNames(heavyForced),
+        buttonClassNames[variant][emphasisKey],
         className
       )}
       type="button"
@@ -70,12 +95,9 @@ export default function LineItem({
     >
       <div className="flex flex-row items-center justify-start w-full gap-2">
         {Icon && (
-          <div className="h-[1rem] min-w-[1rem] bg-red">
+          <div className="h-[1rem] min-w-[1rem]">
             <Icon
-              className={cn(
-                "h-[1rem] w-[1rem]",
-                iconClassNames(forced || heavyForced)
-              )}
+              className={cn("h-[1rem] w-[1rem]", iconClassNames[variant])}
             />
           </div>
         )}

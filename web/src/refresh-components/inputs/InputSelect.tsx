@@ -366,12 +366,13 @@ const InputSelectItem = React.forwardRef<
       </span>
 
       <LineItem
-        {...props}
         icon={icon}
-        heavyForced={isSelected}
+        forced={isSelected}
+        emphasized={isSelected}
         description={description}
         onClick={noProp((event) => event.preventDefault())}
         className={cn("w-full", props.className)}
+        {...props}
       >
         {children}
       </LineItem>
