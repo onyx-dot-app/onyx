@@ -6,7 +6,7 @@ import {
   useProjectsContext,
 } from "@/app/chat/projects/ProjectsContext";
 import { useDroppable } from "@dnd-kit/core";
-import MenuButton from "@/refresh-components/buttons/MenuButton";
+import LineItem from "@/refresh-components/buttons/LineItem";
 import SvgFolder from "@/icons/folder";
 import SvgEdit from "@/icons/edit";
 import {
@@ -90,22 +90,22 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   }
 
   const popoverItems = [
-    <MenuButton
+    <LineItem
       key="rename-project"
       icon={SvgEdit}
       onClick={noProp(() => setIsEditing(true))}
     >
       Rename Project
-    </MenuButton>,
+    </LineItem>,
     null,
-    <MenuButton
+    <LineItem
       key="delete-project"
       icon={SvgTrash}
       onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
       danger
     >
       Delete Project
-    </MenuButton>,
+    </LineItem>,
   ];
 
   return (

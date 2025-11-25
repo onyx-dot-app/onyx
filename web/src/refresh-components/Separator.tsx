@@ -35,19 +35,20 @@ function SeparatorInner(
   ref: React.ForwardedRef<React.ComponentRef<typeof SeparatorPrimitive.Root>>
 ) {
   return (
-    <SeparatorPrimitive.Root
-      ref={ref}
-      decorative={decorative}
-      orientation={orientation}
-      className={cn(
-        "shrink-0",
-        orientation === "horizontal"
-          ? "border-t my-4 h-[1px] w-full"
-          : "border-l mx-4 h-full w-[1px]",
-        className
-      )}
-      {...props}
-    />
+    <div
+      className={cn(orientation === "horizontal" ? "py-4" : "px-4", className)}
+    >
+      <SeparatorPrimitive.Root
+        ref={ref}
+        decorative={decorative}
+        orientation={orientation}
+        className={cn(
+          "bg-border-01",
+          orientation === "horizontal" ? "h-[1px] w-full" : "h-full w-[1px]"
+        )}
+        {...props}
+      />
+    </div>
   );
 }
 

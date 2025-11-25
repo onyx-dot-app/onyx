@@ -16,6 +16,7 @@ const textClassNames = {
   main: ["text-text-04"],
   forced: ["text-action-link-05"],
   strikeThrough: ["text-text-02", "line-through decoration-2"],
+  danger: [],
 };
 
 const iconClassNames = (forced?: boolean) =>
@@ -26,10 +27,12 @@ export interface LineItemProps extends React.HTMLAttributes<HTMLButtonElement> {
   forced?: boolean;
   heavyForced?: boolean;
   strikethrough?: boolean;
+  danger?: boolean;
+
+  emphasized?: boolean;
 
   icon?: React.FunctionComponent<SvgProps>;
   description?: string;
-  children?: string;
   rightChildren?: React.ReactNode;
   href?: string;
 }
@@ -38,6 +41,8 @@ export default function LineItem({
   forced,
   heavyForced,
   strikethrough,
+  danger,
+  emphasized,
 
   icon: Icon,
   description,
