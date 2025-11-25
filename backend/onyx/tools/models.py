@@ -17,9 +17,6 @@ from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 
-# from onyx.tools.tool_implementations.web_search.models import WebContentResponse
-# from onyx.tools.tool_implementations.web_search.models import WebSearchResultsResponse
-
 
 class CustomToolUserFileSnapshot(BaseModel):
     file_ids: list[str]  # References to saved images or CSVs
@@ -37,14 +34,13 @@ class ToolResponse(BaseModel):
     rich_response: (
         # This comes from image generation, image needs to be saved and the packet about it's location needs to be emitted
         FinalImageGenerationResponse
-        # This comes from internal search, search docs need to be saved, no need to be emitted, already emitted by the tool
+        # This comes from internal search / web search, search docs need to be saved, already emitted by the tool
         | SearchDocsResponse
-        # This comes from web search, search results need to be saved
-        # | WebSearchResultsResponse
-        # This comes from open url, web content needs to be saved
+        # This comes from open url, web content needs to be saved, maybe this can be consolidated too
         # | WebContentResponse
         # This comes from custom tools, tool result needs to be saved
         | CustomToolCallSummary
+        | None  # If nothing needs to be persisted outside of the string value passed to the LLM
     )
     # This is the final string that needs to be wrapped in a tool call response message and concatenated to the history
     llm_facing_response: str
@@ -98,6 +94,11 @@ class SearchQueryInfo(BaseModel):
     predicted_search: SearchType | None
     final_filters: IndexFilters
     recency_bias_multiplier: float
+
+
+class WebSearchToolOverrideKwargs(BaseModel):
+    # To know what citation number to start at for constructing the string to the LLM
+    starting_citation_num: int
 
 
 # None indicates that the default value should be used

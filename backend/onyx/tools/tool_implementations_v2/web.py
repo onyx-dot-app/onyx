@@ -25,7 +25,7 @@ from onyx.tools.tool_implementations.web_search.utils import (
     dummy_inference_section_from_internet_content,
 )
 from onyx.tools.tool_implementations.web_search.utils import (
-    dummy_inference_section_from_internet_search_result,
+    inference_section_from_internet_search_result,
 )
 from onyx.tools.tool_implementations.web_search.utils import (
     truncate_search_result_content,
@@ -78,7 +78,7 @@ def _web_search_core(
             all_hits.extend(hits)
 
     inference_sections = [
-        dummy_inference_section_from_internet_search_result(r) for r in all_hits
+        inference_section_from_internet_search_result(r) for r in all_hits
     ]
 
     saved_search_docs = convert_inference_sections_to_search_docs(
@@ -108,9 +108,7 @@ def _web_search_core(
         if r.link not in run_context.context.fetched_documents_cache:
             run_context.context.fetched_documents_cache[r.link] = (
                 FetchedDocumentCacheEntry(
-                    inference_section=dummy_inference_section_from_internet_search_result(
-                        r
-                    ),
+                    inference_section=inference_section_from_internet_search_result(r),
                     document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
                 )
             )

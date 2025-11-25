@@ -35,36 +35,16 @@ logger = setup_logger()
 
 
 def build_search_provider_from_config(
-    *,
     provider_type: WebSearchProviderType,
-    api_key: str | None,
+    api_key: str,
     config: dict[str, str] | None,
-    provider_name: str = "web_search_provider",
-) -> WebSearchProvider | None:
-    provider_type_value = provider_type.value
-    try:
-        provider_type_enum = WebSearchProviderType(provider_type_value)
-    except ValueError:
-        logger.error(
-            f"Unknown web search provider type '{provider_type_value}'. "
-            "Skipping provider initialization."
-        )
-        return None
-
-    # All web search providers require an API key
-    if not api_key:
-        raise ValueError(
-            f"Web search provider '{provider_name}' is missing an API key."
-        )
-    assert api_key is not None
-
-    config = config or {}
-
-    if provider_type_enum == WebSearchProviderType.EXA:
+) -> WebSearchProvider:
+    if provider_type == WebSearchProviderType.EXA:
         return ExaClient(api_key=api_key)
-    if provider_type_enum == WebSearchProviderType.SERPER:
+    if provider_type == WebSearchProviderType.SERPER:
         return SerperClient(api_key=api_key)
-    if provider_type_enum == WebSearchProviderType.GOOGLE_PSE:
+    if provider_type == WebSearchProviderType.GOOGLE_PSE:
+        config = config or {}
         search_engine_id = (
             config.get("search_engine_id")
             or config.get("cx")
@@ -74,31 +54,13 @@ def build_search_provider_from_config(
             raise ValueError(
                 "Google PSE provider requires a search engine id (cx) in addition to the API key."
             )
-        assert search_engine_id is not None
-        try:
-            num_results = int(config.get("num_results", 10))
-        except (TypeError, ValueError):
-            raise ValueError(
-                "Invalid value for Google PSE 'num_results'; expected integer."
-            )
-        try:
-            timeout_seconds = int(config.get("timeout_seconds", 10))
-        except (TypeError, ValueError):
-            raise ValueError(
-                "Invalid value for Google PSE 'timeout_seconds'; expected integer."
-            )
+
         return GooglePSEClient(
             api_key=api_key,
             search_engine_id=search_engine_id,
-            num_results=num_results,
-            timeout_seconds=timeout_seconds,
+            num_results=int(config.get("num_results")) or 10,
+            timeout_seconds=int(config.get("timeout_seconds")) or 10,
         )
-
-    logger.error(
-        f"Unhandled web search provider type '{provider_type_value}'. "
-        "Skipping provider initialization."
-    )
-    return None
 
 
 def _build_search_provider(provider_model: Any) -> WebSearchProvider | None:

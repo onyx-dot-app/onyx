@@ -129,6 +129,13 @@ class DynamicCitationProcessor:
         Args:
             citation_mapping: Dictionary mapping citation numbers (1, 2, 3, ...) to SearchDoc objects
         """
+        # Check for duplicate keys and log error if found
+        duplicate_keys = set(citation_mapping.keys()) & set(self.citation_to_doc.keys())
+        if duplicate_keys:
+            logger.error(
+                f"Duplicate citation keys detected when updating citation mapping: {sorted(duplicate_keys)}. "
+                f"Existing mappings will be overwritten."
+            )
         self.citation_to_doc.update(citation_mapping)
 
     def process_token(

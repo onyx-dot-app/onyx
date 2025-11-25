@@ -12,7 +12,7 @@ from onyx.utils.url import normalize_url
 class WebSearchResult(BaseModel):
     title: str
     link: str
-    snippet: str | None = None
+    snippet: str
     author: str | None = None
     published_date: datetime | None = None
 

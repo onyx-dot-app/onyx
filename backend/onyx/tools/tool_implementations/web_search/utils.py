@@ -45,33 +45,35 @@ def dummy_inference_section_from_internet_content(
     )
 
 
-def dummy_inference_section_from_internet_search_result(
+def inference_section_from_internet_search_result(
     result: WebSearchResult,
 ) -> InferenceSection:
+    chunk = InferenceChunk(
+        chunk_id=0,
+        blurb=result.snippet,
+        content=result.snippet,
+        source_links={0: result.link},
+        section_continuation=False,
+        document_id="INTERNET_SEARCH_DOC_" + result.link,
+        source_type=DocumentSource.WEB,
+        semantic_identifier=result.title,
+        title=result.title,
+        boost=1,
+        recency_bias=1.0,
+        score=1.0,
+        hidden=False,
+        metadata={},
+        match_highlights=[result.snippet],
+        doc_summary="",
+        chunk_context="",
+        updated_at=result.published_date,
+        image_file_id=None,
+    )
+
     return InferenceSection(
-        center_chunk=InferenceChunk(
-            chunk_id=0,
-            blurb=result.title,
-            content="",
-            source_links={0: result.link},
-            section_continuation=False,
-            document_id="INTERNET_SEARCH_DOC_" + result.link,
-            source_type=DocumentSource.WEB,
-            semantic_identifier=result.link,
-            title=result.title,
-            boost=1,
-            recency_bias=1.0,
-            score=1.0,
-            hidden=False,
-            metadata={},
-            match_highlights=[],
-            doc_summary="",
-            chunk_context="",
-            updated_at=result.published_date,
-            image_file_id=None,
-        ),
-        chunks=[],
-        combined_content="",
+        center_chunk=chunk,
+        chunks=[chunk],
+        combined_content=result.snippet,
     )
 
 
