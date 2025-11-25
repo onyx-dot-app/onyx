@@ -11,7 +11,7 @@ All access controls are managed within the main Onyx application.
 
 ### Authentication
 
-Provide an Onyx Personal Access Token or API Token in the `Authorization` header as a Bearer token.
+Provide an Onyx Personal Access Token or API Key in the `Authorization` header as a Bearer token.
 The MCP server quickly validates and passes through the token on every request.
 
 Depending on usage, the MCP Server may support OAuth and stdio in the future.

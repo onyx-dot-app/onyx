@@ -23,7 +23,7 @@ logger = setup_logger()
 async def search_indexed_documents(
     query: str,
     source_types: list[str] | None = None,
-    time_cutoff: datetime | None = None,
+    time_cutoff: str | None = None,
     limit: int = 10,
 ) -> dict[str, Any]:
     """
@@ -39,6 +39,7 @@ async def search_indexed_documents(
     {
         "query": "What is the latest status of PROJ-1234 and what is the next development item?",
         "source_types": ["jira", "google_drive", "github"],
+        "time_cutoff": "2025-11-24T00:00:00Z",
         "limit": 10,
     }
     ```
@@ -46,6 +47,19 @@ async def search_indexed_documents(
     logger.info(
         f"Onyx MCP Server: document search: query='{query}', sources={source_types}, limit={limit}"
     )
+
+    # Parse time_cutoff string to datetime if provided
+    time_cutoff_dt: datetime | None = None
+    if time_cutoff:
+        try:
+            time_cutoff_dt = datetime.fromisoformat(time_cutoff.replace("Z", "+00:00"))
+        except ValueError as e:
+            logger.warning(
+                f"Onyx MCP Server: Invalid time_cutoff format '{time_cutoff}': {e}. "
+                "Continuing without time filter."
+            )
+            # Continue with no time_cutoff instead of returning an error
+            time_cutoff_dt = None
 
     # Initialize source_type_enums early to avoid UnboundLocalError
     source_type_enums: list[DocumentSource] | None = None
@@ -99,7 +113,7 @@ async def search_indexed_documents(
         retrieval_options=RetrievalDetails(
             filters=IndexFilters(
                 source_type=source_type_enums,
-                time_cutoff=time_cutoff,
+                time_cutoff=time_cutoff_dt,
                 access_control_list=None,  # Server handles ACL using the access token
             ),
             enable_auto_detect_filters=False,
@@ -112,7 +126,7 @@ async def search_indexed_documents(
     # Call the API server
     response = await get_http_client().post(
         f"{get_api_server_url()}/query/document-search",
-        json=search_request.model_dump(),
+        json=search_request.model_dump(mode="json"),
         headers={"Authorization": f"Bearer {access_token.token}"},
     )
     response.raise_for_status()
