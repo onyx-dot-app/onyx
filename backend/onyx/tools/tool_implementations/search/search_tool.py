@@ -6,6 +6,7 @@ from typing import Any
 from typing import cast
 from typing import TypeVar
 
+from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.models import IterationAnswer
@@ -401,7 +402,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             run_context.context.should_cite_documents or bool(pruned_sections)
         )
 
-        return search_results_for_query
+        adapter = TypeAdapter(list[LlmInternalSearchResult])
+        return adapter.dump_json(search_results_for_query).decode()
 
     def _build_response_for_specified_sections(
         self, query: str
