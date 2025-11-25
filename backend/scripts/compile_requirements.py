@@ -6,10 +6,15 @@ import os
 import pathlib
 import shlex
 import subprocess
+import sys
 import typing
 from contextlib import contextmanager
 
-from lib import logger as _logger
+# Add backend/ to the PYTHONPATH
+if __name__ == "__main__":
+    sys.path.append(str(pathlib.Path(__file__).parent.parent))
+
+from scripts.lib import logger as _logger
 
 
 logger = _logger.getLogger()
