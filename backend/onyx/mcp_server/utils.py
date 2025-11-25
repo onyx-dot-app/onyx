@@ -67,38 +67,38 @@ async def shutdown_http_client() -> None:
         _http_client = None
 
 
-async def fetch_indexed_source_types(
+async def get_indexed_sources(
     access_token: AccessToken,
 ) -> list[str]:
     """
-    Fetch indexed document source types for the current user/tenant.
+    Fetch indexed document sources for the current user/tenant.
 
     Returns:
-        List of indexed source type strings. Empty list if no sources are indexed.
+        List of indexed source strings. Empty list if no sources are indexed.
     """
     headers = {"Authorization": f"Bearer {access_token.token}"}
     try:
         response = await get_http_client().get(
-            f"{get_api_server_url()}/manage/indexed-source-types",
+            f"{get_api_server_url()}/manage/indexed-sources",
             headers=headers,
         )
         response.raise_for_status()
         payload = response.json()
-        source_types = payload.get("source_types", [])
-        if not isinstance(source_types, list):
-            raise ValueError("Unexpected response shape for indexed source types")
-        return [str(source_type) for source_type in source_types]
+        sources = payload.get("sources", [])
+        if not isinstance(sources, list):
+            raise ValueError("Unexpected response shape for indexed sources")
+        return [str(source) for source in sources]
     except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
         # Re-raise known exception types (httpx errors and validation errors)
         logger.error(
-            "Onyx MCP Server: Failed to fetch indexed source types",
+            "Onyx MCP Server: Failed to fetch indexed sources",
             exc_info=True,
         )
         raise
     except Exception as exc:
         # Wrap unexpected exceptions
         logger.error(
-            "Onyx MCP Server: Unexpected error fetching indexed source types",
+            "Onyx MCP Server: Unexpected error fetching indexed sources",
             exc_info=True,
         )
-        raise RuntimeError(f"Failed to fetch indexed source types: {exc}") from exc
+        raise RuntimeError(f"Failed to fetch indexed sources: {exc}") from exc

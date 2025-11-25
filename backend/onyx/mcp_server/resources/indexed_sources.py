@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from onyx.mcp_server.api import mcp_server
-from onyx.mcp_server.utils import fetch_indexed_source_types
+from onyx.mcp_server.utils import get_indexed_sources
 from onyx.mcp_server.utils import require_access_token
 from onyx.utils.logger import setup_logger
 
@@ -26,14 +26,13 @@ async def indexed_sources_resource() -> dict[str, Any]:
 
     access_token = require_access_token()
 
-    sources = await fetch_indexed_source_types(access_token)
-    indexed_sources = sorted(sources)
+    sources = await get_indexed_sources(access_token)
 
     logger.info(
         "Onyx MCP Server: indexed_sources resource returning %s entries",
-        len(indexed_sources),
+        len(sources),
     )
 
     return {
-        "indexed_sources": indexed_sources,
+        "indexed_sources": sorted(sources),
     }
