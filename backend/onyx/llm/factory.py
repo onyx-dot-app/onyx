@@ -27,6 +27,8 @@ from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
+from onyx.llm.llm_provider_options import GOOGLE_GENAI_PROVIDER_ALIASES
+from onyx.llm.llm_provider_options import LEGACY_VERTEX_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OPENROUTER_PROVIDER_NAME
@@ -474,10 +476,15 @@ def _get_llm_model_and_settings(
 
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
+    litellm_provider = (
+        LEGACY_VERTEX_PROVIDER_NAME
+        if provider in GOOGLE_GENAI_PROVIDER_ALIASES
+        else provider
+    )
 
     # Configure timeout following the same pattern as DefaultMultiLLM
     if timeout is None:
-        if model_is_reasoning_model(model, provider):
+        if model_is_reasoning_model(model, litellm_provider):
             timeout = QA_TIMEOUT * 10  # Reasoning models are slow
         else:
             timeout = QA_TIMEOUT
@@ -500,7 +507,7 @@ def _get_llm_model_and_settings(
     if custom_config:
         for k, v in custom_config.items():
             os.environ[k] = v
-    if custom_config and provider == "vertex_ai":
+    if custom_config and provider in GOOGLE_GENAI_PROVIDER_ALIASES:
         for k, v in custom_config.items():
             if k == VERTEX_CREDENTIALS_FILE_KWARG:
                 model_kwargs[k] = v
@@ -560,7 +567,7 @@ def _get_llm_model_and_settings(
 
         # Create LitellmModel instance to handle all other models that
         # don't use the responses API
-        model_name = f"{provider}/{deployment_name or model}"
+        model_name = f"{litellm_provider}/{deployment_name or model}"
         litellm_model = LitellmModel(
             model=model_name,
             # NOTE: have to pass in None instead of empty string for these
@@ -572,7 +579,9 @@ def _get_llm_model_and_settings(
     # Create ModelSettings with the provided configuration
     model_settings = ModelSettings(
         temperature=(
-            temperature if not model_is_reasoning_model(model, provider) else 1.0
+            temperature
+            if not model_is_reasoning_model(model, litellm_provider)
+            else 1.0
         ),
         extra_headers=extra_headers if extra_headers else None,
         extra_args=model_kwargs,

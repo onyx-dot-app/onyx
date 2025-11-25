@@ -39,6 +39,7 @@ export const getProviderIcon = (
     llama: MetaIcon,
     ollama_chat: OllamaIcon,
     gemini: GeminiIcon,
+    google_genai: GeminiIcon,
     deepseek: DeepseekIcon,
     claude: AnthropicIcon,
     anthropic: AnthropicIcon,

@@ -6,6 +6,7 @@ export enum LLMProviderName {
   OLLAMA_CHAT = "ollama_chat",
   AZURE = "azure",
   OPENROUTER = "openrouter",
+  GOOGLE_GENAI = "google_genai",
   VERTEX_AI = "vertex_ai",
   BEDROCK = "bedrock",
 }

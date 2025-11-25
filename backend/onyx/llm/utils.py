@@ -71,6 +71,10 @@ CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
     for model_name in _TWELVE_LABS_PEGASUS_MODEL_NAMES
 }
 
+# Keep Google Gen AI (Gemini) provider aliases together for DB lookups and litellm compatibility.
+# Mirrors GOOGLE_GENAI_PROVIDER_ALIASES in onyx.llm.llm_provider_options.
+_GOOGLE_GENAI_PROVIDER_ALIASES = {"google_genai", "vertex_ai"}
+
 
 def _unwrap_nested_exception(error: Exception) -> Exception:
     """
@@ -705,6 +709,11 @@ def get_llm_max_tokens(
     model_provider: str,
 ) -> int:
     """Best effort attempt to get the max tokens for the LLM"""
+    provider_for_litellm = (
+        "vertex_ai"
+        if model_provider in _GOOGLE_GENAI_PROVIDER_ALIASES
+        else model_provider
+    )
     if GEN_AI_MAX_TOKENS:
         # This is an override, so always return this
         logger.info(f"Using override GEN_AI_MAX_TOKENS: {GEN_AI_MAX_TOKENS}")
@@ -713,12 +722,12 @@ def get_llm_max_tokens(
     try:
         model_obj = find_model_obj(
             model_map,
-            model_provider,
+            provider_for_litellm,
             model_name,
         )
         if not model_obj:
             raise RuntimeError(
-                f"No litellm entry found for {model_provider}/{model_name}"
+                f"No litellm entry found for {provider_for_litellm}/{model_name}"
             )
 
         if "max_input_tokens" in model_obj:
@@ -744,8 +753,13 @@ def get_llm_max_output_tokens(
     model_provider: str,
 ) -> int:
     """Best effort attempt to get the max output tokens for the LLM"""
+    provider_for_litellm = (
+        "vertex_ai"
+        if model_provider in _GOOGLE_GENAI_PROVIDER_ALIASES
+        else model_provider
+    )
     try:
-        model_obj = model_map.get(f"{model_provider}/{model_name}")
+        model_obj = model_map.get(f"{provider_for_litellm}/{model_name}")
         if not model_obj:
             model_obj = model_map[model_name]
         else:
@@ -819,6 +833,11 @@ def get_max_input_tokens_from_llm_provider(
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
     # First, try to read an explicit configuration from the model_configuration table
+    providers_to_query: set[str] = (
+        _GOOGLE_GENAI_PROVIDER_ALIASES
+        if model_provider in _GOOGLE_GENAI_PROVIDER_ALIASES
+        else {model_provider}
+    )
     try:
         with get_session_with_current_tenant() as db_session:
             model_config = db_session.scalar(
@@ -829,7 +848,7 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
                 )
                 .where(
                     ModelConfiguration.name == model_name,
-                    LLMProvider.provider == model_provider,
+                    LLMProvider.provider.in_(providers_to_query),
                 )
             )
             if model_config and model_config.supports_image_input is not None:
@@ -840,7 +859,12 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
         )
 
     # Fallback to looking up the model in the litellm model_cost dict
-    return litellm_thinks_model_supports_image_input(model_name, model_provider)
+    provider_for_litellm = (
+        "vertex_ai"
+        if model_provider in _GOOGLE_GENAI_PROVIDER_ALIASES
+        else model_provider
+    )
+    return litellm_thinks_model_supports_image_input(model_name, provider_for_litellm)
 
 
 def litellm_thinks_model_supports_image_input(
@@ -869,11 +893,16 @@ def litellm_thinks_model_supports_image_input(
 def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
     import litellm
 
+    provider_for_litellm = (
+        "vertex_ai"
+        if model_provider in _GOOGLE_GENAI_PROVIDER_ALIASES
+        else model_provider
+    )
     model_map = get_model_map()
     try:
         model_obj = find_model_obj(
             model_map,
-            model_provider,
+            provider_for_litellm,
             model_name,
         )
         if model_obj and "supports_reasoning" in model_obj:

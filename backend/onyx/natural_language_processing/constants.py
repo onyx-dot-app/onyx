@@ -13,7 +13,7 @@ from shared_configs.enums import EmbedTextType
 DEFAULT_OPENAI_MODEL = "text-embedding-3-small"
 DEFAULT_COHERE_MODEL = "embed-english-light-v3.0"
 DEFAULT_VOYAGE_MODEL = "voyage-large-2-instruct"
-DEFAULT_VERTEX_MODEL = "text-embedding-005"
+DEFAULT_GEMINI_MODEL = "text-embedding-005"
 
 
 class EmbeddingModelTextType:

@@ -36,8 +36,8 @@ from onyx.connectors.models import ConnectorStopSignal
 from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.natural_language_processing.constants import DEFAULT_COHERE_MODEL
+from onyx.natural_language_processing.constants import DEFAULT_GEMINI_MODEL
 from onyx.natural_language_processing.constants import DEFAULT_OPENAI_MODEL
-from onyx.natural_language_processing.constants import DEFAULT_VERTEX_MODEL
 from onyx.natural_language_processing.constants import DEFAULT_VOYAGE_MODEL
 from onyx.natural_language_processing.constants import EmbeddingModelTextType
 from onyx.natural_language_processing.exceptions import CohereBillingLimitError
@@ -47,6 +47,7 @@ from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.utils.logger import setup_logger
 from onyx.utils.search_nlp_models_utils import pass_aws_key
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
+from shared_configs.configs import GOOGLE_GENAI_EMBEDDING_LOCAL_BATCH_SIZE
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.configs import INDEXING_ONLY
@@ -54,7 +55,6 @@ from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.configs import OPENAI_EMBEDDING_TIMEOUT
 from shared_configs.configs import SKIP_WARM_UP
-from shared_configs.configs import VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
@@ -263,7 +263,7 @@ class CloudEmbedding:
         embeddings = [embedding["embedding"] for embedding in response.data]
         return embeddings
 
-    async def _embed_vertex(
+    async def _embed_gemini(
         self,
         texts: list[str],
         model: str | None,
@@ -274,7 +274,7 @@ class CloudEmbedding:
         from google.genai import types as genai_types  # type: ignore[import-untyped]
 
         if not model:
-            model = DEFAULT_VERTEX_MODEL
+            model = DEFAULT_GEMINI_MODEL
 
         service_account_info = json.loads(self.api_key)
         credentials = service_account.Credentials.from_service_account_info(
@@ -301,8 +301,8 @@ class CloudEmbedding:
         )
 
         batches = [
-            texts[i : i + VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE]
-            for i in range(0, len(texts), VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
+            texts[i : i + GOOGLE_GENAI_EMBEDDING_LOCAL_BATCH_SIZE]
+            for i in range(0, len(texts), GOOGLE_GENAI_EMBEDDING_LOCAL_BATCH_SIZE)
         ]
 
         async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
@@ -389,7 +389,7 @@ class CloudEmbedding:
             elif self.provider == EmbeddingProvider.VOYAGE:
                 return await self._embed_voyage(texts, model_name, embedding_type)
             elif self.provider == EmbeddingProvider.GOOGLE:
-                return await self._embed_vertex(
+                return await self._embed_gemini(
                     texts, model_name, embedding_type, reduced_dimension
                 )
             else:
