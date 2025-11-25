@@ -14,12 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install Helm CLI
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # ratchet:azure/setup-helm@v4
         with:
           version: v3.12.1
 
@@ -43,7 +44,7 @@ jobs:
           done
 
       - name: Publish Helm charts to gh-pages
-        uses: stefanprodan/helm-gh-pages@v1.7.0
+        uses: stefanprodan/helm-gh-pages@0ad2bb377311d61ac04ad9eb6f252fb68e207260 # ratchet:stefanprodan/helm-gh-pages@v1.7.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           charts_dir: deployment/helm/charts

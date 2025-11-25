@@ -47,7 +47,7 @@ const AddUserFormRenderer = ({
     {touched.emails && errors.emails && (
       <div className="text-error text-sm">{errors.emails}</div>
     )}
-    <Button disabled={isSubmitting} className="self-end">
+    <Button type="submit" disabled={isSubmitting} className="self-end">
       Add
     </Button>
   </Form>

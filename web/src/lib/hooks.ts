@@ -39,6 +39,8 @@ import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
+import { useLLMProviders } from "./hooks/useLLMProviders";
+import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -349,7 +351,7 @@ export function useFilters(): FilterManager {
   );
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
 
-  const getFilterString = useCallback(() => {
+  function getFilterString() {
     const params = new URLSearchParams();
 
     if (timeRange) {
@@ -380,14 +382,14 @@ export function useFilters(): FilterManager {
 
     const queryString = params.toString();
     return queryString ? `&${queryString}` : "";
-  }, [timeRange, selectedSources, selectedDocumentSets, selectedTags]);
+  }
 
-  const clearFilters = useCallback(() => {
+  function clearFilters() {
     setTimeRange(null);
     setSelectedSources([]);
     setSelectedDocumentSets([]);
     setSelectedTags([]);
-  }, []);
+  }
 
   function buildFiltersFromQueryString(
     filterString: string,
@@ -492,6 +494,9 @@ export interface LlmManager {
   updateImageFilesPresent: (present: boolean) => void;
   liveAssistant: MinimalPersonaSnapshot | null;
   maxTemperature: number;
+  llmProviders: LLMProviderDescriptor[] | undefined;
+  isLoadingProviders: boolean;
+  hasAnyProvider: boolean;
 }
 
 // Things to test
@@ -536,11 +541,25 @@ providing appropriate defaults for new conversations based on the available tool
 */
 
 export function useLlmManager(
-  llmProviders: LLMProviderDescriptor[],
   currentChatSession?: ChatSession,
   liveAssistant?: MinimalPersonaSnapshot
 ): LlmManager {
   const { user } = useUser();
+
+  // Get all user-accessible providers from ChatContext (loaded server-side)
+  // This includes public + all restricted providers user can access via groups
+  const { llmProviders: allUserProviders } = useChatContext();
+  // Fetch persona-specific providers to enforce RBAC restrictions per assistant
+  // Only fetch if we have an assistant selected
+  const personaId =
+    liveAssistant?.id !== undefined ? liveAssistant.id : undefined;
+  const {
+    llmProviders: personaProviders,
+    isLoading: isLoadingPersonaProviders,
+  } = useLLMProviders(personaId);
+
+  const llmProviders =
+    personaProviders !== undefined ? personaProviders : allUserProviders;
 
   const [userHasManuallyOverriddenLLM, setUserHasManuallyOverriddenLLM] =
     useState(false);
@@ -553,6 +572,12 @@ export function useLlmManager(
 
   const llmUpdate = () => {
     /* Should be called when the live assistant or current chat session changes */
+
+    // Don't update if providers haven't loaded yet (undefined/null)
+    // Empty arrays are valid (user has no provider access for this assistant)
+    if (llmProviders === undefined || llmProviders === null) {
+      return;
+    }
 
     // separate function so we can `return` to break out
     const _llmUpdate = () => {
@@ -595,9 +620,15 @@ export function useLlmManager(
     setChatSession(currentChatSession || null);
   };
 
-  const getValidLlmDescriptor = (
+  function getValidLlmDescriptor(
     modelName: string | null | undefined
-  ): LlmDescriptor => {
+  ): LlmDescriptor {
+    // Return early if providers haven't loaded yet (undefined/null)
+    // Empty arrays are valid (user has no provider access for this assistant)
+    if (llmProviders === undefined || llmProviders === null) {
+      return { name: "", provider: "", modelName: "" };
+    }
+
     if (modelName) {
       const model = parseLlmDescriptor(modelName);
       if (!(model.modelName && model.modelName.length > 0)) {
@@ -626,7 +657,7 @@ export function useLlmManager(
       }
     }
     return { name: "", provider: "", modelName: "" };
-  };
+  }
 
   const [imageFilesPresent, setImageFilesPresent] = useState(false);
 
@@ -721,6 +752,9 @@ export function useLlmManager(
     }
   };
 
+  // Track if any provider exists from ChatContext (for onboarding checks)
+  const hasAnyProvider = (allUserProviders?.length ?? 0) > 0;
+
   return {
     updateModelOverrideBasedOnChatSession,
     currentLlm,
@@ -731,6 +765,9 @@ export function useLlmManager(
     updateImageFilesPresent,
     liveAssistant: liveAssistant ?? null,
     maxTemperature,
+    llmProviders,
+    isLoadingProviders: personaId !== undefined && isLoadingPersonaProviders,
+    hasAnyProvider,
   };
 }
 
@@ -882,6 +919,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-3-7-sonnet-202502019": "Claude 3.7 Sonnet",
   "claude-sonnet-4-5-20250929": "Claude 4.5 Sonnet",
   "claude-haiku-4-5-20251001": "Claude 4.5 Haiku",
+  "claude-opus-4-5-20251101": "Claude 4.5 Opus",
 
   // Google Models
 
@@ -973,6 +1011,20 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "us.anthropic.claude-sonnet-4-20250514-v1:0": "Claude 4 Sonnet (US)",
   "us.anthropic.claude-sonnet-4-5-20250929-v1:0": "Claude 4.5 Sonnet (US)",
   "us.anthropic.claude-haiku-4-5-20251001-v1:0": "Claude 4.5 Haiku (US)",
+  "us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0":
+    "Claude 4.5 Sonnet (US Gov)",
+  "us-gov.anthropic.claude-sonnet-4-20250514-v1:0": "Claude 4 Sonnet (US Gov)",
+  "us-gov.anthropic.claude-haiku-4-5-20251001-v1:0":
+    "Claude 4.5 Haiku (US Gov)",
+  "us-gov.anthropic.claude-3-5-haiku-20241022-v1:0":
+    "Claude 3.5 Haiku (US Gov)",
+  "us-gov.anthropic.claude-3-5-sonnet-20241022-v2:0":
+    "Claude 3.5 Sonnet v2 (US Gov)",
+  "us-gov.anthropic.claude-3-7-sonnet-20250219-v1:0":
+    "Claude 3.7 Sonnet (US Gov)",
+  "us-gov.anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku (US Gov)",
+  "us-gov.anthropic.claude-opus-4-1-20250805-v1:0": "Claude Opus 4.1 (US Gov)",
+  "us-gov.anthropic.claude-opus-4-20250514-v1:0": "Claude Opus 4 (US Gov)",
   "us.deepseek.r1-v1:0": "DeepSeek R1 (US)",
   "us.meta.llama3-1-405b-instruct-v1:0": "Llama 3.1 405B (US)",
   "us.meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B (US)",

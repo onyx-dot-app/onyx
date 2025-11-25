@@ -3,8 +3,7 @@
 import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { useAppRouter } from "@/hooks/appNavigation";
 import SvgPin from "@/icons/pin";
 import { cn, noProp } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
@@ -13,6 +12,8 @@ import { getAgentIcon } from "@/sections/sidebar/utils";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import SvgX from "@/icons/x";
+import useAppFocus from "@/hooks/useAppFocus";
+import useIsMounted from "@/hooks/useIsMounted";
 
 interface SortableItemProps {
   id: number;
@@ -20,8 +21,13 @@ interface SortableItemProps {
 }
 
 function SortableItem({ id, children }: SortableItemProps) {
+  const isMounted = useIsMounted();
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useSortable({ id });
+
+  if (!isMounted) {
+    return <div className="flex items-center group">{children}</div>;
+  }
 
   return (
     <div
@@ -45,7 +51,7 @@ interface AgentButtonProps {
 
 function AgentButtonInner({ agent }: AgentButtonProps) {
   const route = useAppRouter();
-  const params = useAppParams();
+  const activeSidebarTab = useAppFocus();
   const { pinnedAgents, togglePinnedAgent } = useAgentsContext();
   const pinned = pinnedAgents.some(
     (pinnedAgent) => pinnedAgent.id === agent.id
@@ -58,7 +64,11 @@ function AgentButtonInner({ agent }: AgentButtonProps) {
           key={agent.id}
           leftIcon={getAgentIcon(agent)}
           onClick={() => route({ agentId: agent.id })}
-          active={params(SEARCH_PARAM_NAMES.PERSONA_ID) === String(agent.id)}
+          active={
+            typeof activeSidebarTab === "object" &&
+            activeSidebarTab.type === "agent" &&
+            activeSidebarTab.id === String(agent.id)
+          }
           rightChildren={
             <IconButton
               icon={pinned ? SvgX : SvgPin}

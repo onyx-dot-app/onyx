@@ -18,8 +18,8 @@ export async function createAssistant(page: Page, params: AssistantParams) {
   }
 
   // Open Assistants modal/list
-  await page.getByRole("button", { name: "Explore Assistants" }).click();
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByTestId("AppSidebar/more-agents").click();
+  await page.getByTestId("AgentsPage/new-agent-button").click();
 
   // Fill required fields
   await page.getByTestId("name").fill(name);
@@ -83,30 +83,25 @@ export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
 
-  // Find the Image Generation tool toggle
+  // Find the Image Generation tool checkbox
   // The tool display name is "Image Generation" based on the description in the code
-  const imageGenSection = page
-    .locator("div")
-    .filter({ hasText: /^Image Generation/ })
-    .first();
-
-  // Find the switch within this section
-  const switchElement = imageGenSection.locator('button[role="switch"]');
+  // Note: The UI changed from switches to checkboxes
+  const checkboxElement = page.getByLabel("image-generation-checkbox").first();
 
   // Check if it's already enabled
-  const isEnabled = await switchElement.getAttribute("data-state");
+  const isEnabled = Boolean(await checkboxElement.getAttribute("aria-checked"));
 
-  if (isEnabled !== "checked") {
+  if (!isEnabled) {
     // If not enabled, click to enable it
-    await switchElement.click();
+    await checkboxElement.click();
 
     // Wait for the toggle to complete
     await page.waitForTimeout(1000);
 
     // Verify it's now enabled
-    const newState = await switchElement.getAttribute("data-state");
-    if (newState !== "checked") {
-      throw new Error("Failed to enable Image Generation tool");
-    }
+    const newState = Boolean(
+      await checkboxElement.getAttribute("aria-checked")
+    );
+    if (!newState) throw new Error("Failed to enable Image Generation tool");
   }
 }

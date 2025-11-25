@@ -87,10 +87,10 @@ export function ChatDocumentDisplay({
     document.updated_at || Object.keys(document.metadata).length > 0;
 
   return (
-    <button
+    <div
       onClick={() => openDocument(document, setPresentingDocument)}
       className={cn(
-        "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00",
+        "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00 cursor-pointer",
         isSelected && "bg-action-link-02"
       )}
     >
@@ -119,6 +119,6 @@ export function ChatDocumentDisplay({
       <Text className="line-clamp-2 text-left" secondaryBody text03>
         {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
       </Text>
-    </button>
+    </div>
   );
 }

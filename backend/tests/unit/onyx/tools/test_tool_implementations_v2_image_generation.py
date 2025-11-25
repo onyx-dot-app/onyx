@@ -6,7 +6,6 @@ from uuid import uuid4
 import pytest
 from agents import RunContextWrapper
 
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import GeneratedImage
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
@@ -94,7 +93,6 @@ def create_test_run_context(
         run_dependencies=run_dependencies,  # type: ignore[arg-type]
         chat_session_id=uuid4(),
         message_id=1,
-        research_type=ResearchType.THOUGHTFUL,
     )
 
     # Create the run context wrapper
@@ -128,13 +126,11 @@ def test_image_generation_core_basic_functionality(
             id="image_generation_response",
             response=[
                 ImageGenerationResponse(
-                    url="https://example.com/image1.jpg",
-                    image_data=None,
+                    image_data="base64_image_data_1",
                     revised_prompt="Revised: test image prompt",
                 ),
                 ImageGenerationResponse(
-                    url=None,
-                    image_data="base64_image_data",
+                    image_data="base64_image_data_2",
                     revised_prompt="Revised: test image prompt 2",
                 ),
             ],
@@ -194,12 +190,12 @@ def test_image_generation_core_basic_functionality(
 
     # Verify save_files was called correctly
     mock_save_files.assert_called_once_with(
-        urls=["https://example.com/image1.jpg"],
-        base64_files=["base64_image_data"],
+        urls=[],
+        base64_files=["base64_image_data_1", "base64_image_data_2"],
     )
 
-    # Verify build_frontend_file_url was called for the second image
-    mock_build_frontend_file_url.assert_called_with("file_id_2")
+    # Verify build_frontend_file_url was called for both images
+    assert mock_build_frontend_file_url.call_count == 2
 
 
 def test_image_generation_core_exception_handling() -> None:
@@ -249,8 +245,7 @@ def test_image_generation_core_different_shapes(
             id="image_generation_response",
             response=[
                 ImageGenerationResponse(
-                    url="https://example.com/image1.jpg",
-                    image_data=None,
+                    image_data="base64_image_data",
                     revised_prompt="Revised: test image prompt",
                 ),
             ],
@@ -336,8 +331,7 @@ def test_image_generation_core_handles_cancellation_gracefully(
             id="image_generation_response",
             response=[
                 ImageGenerationResponse(
-                    url="https://example.com/image1.jpg",
-                    image_data=None,
+                    image_data="base64_image_data",
                     revised_prompt="Revised: test image prompt",
                 ),
             ],

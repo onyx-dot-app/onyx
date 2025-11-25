@@ -1,6 +1,6 @@
 # Copy this file to .env in the .vscode folder
 # Fill in the <REPLACE THIS> values as needed, it is recommended to set the GEN_AI_API_KEY value to avoid having to set up an LLM in the UI
-# Also check out danswer/backend/scripts/restart_containers.sh for a script to restart the containers which Danswer relies on outside of VSCode/Cursor processes
+# Also check out onyx/backend/scripts/restart_containers.sh for a script to restart the containers which Onyx relies on outside of VSCode/Cursor processes
 
 # For local dev, often user Authentication is not needed
 AUTH_TYPE=disabled
@@ -37,8 +37,8 @@ OPENAI_API_KEY=<REPLACE THIS>
 GEN_AI_MODEL_VERSION=gpt-4o
 FAST_GEN_AI_MODEL_VERSION=gpt-4o
 
-# For Danswer Slack Bot, overrides the UI values so no need to set this up via UI every time
-# Only needed if using DanswerBot
+# For Onyx Slack Bot, overrides the UI values so no need to set this up via UI every time
+# Only needed if using OnyxBot
 #ONYX_BOT_SLACK_APP_TOKEN=<REPLACE THIS>
 #ONYX_BOT_SLACK_BOT_TOKEN=<REPLACE THIS>
 
@@ -76,3 +76,8 @@ LANGSMITH_TRACING="true"
 LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
 LANGSMITH_API_KEY=<REPLACE_THIS>
 LANGSMITH_PROJECT=<REPLACE_THIS>
+
+# Local Confluence OAuth testing
+# OAUTH_CONFLUENCE_CLOUD_CLIENT_ID=<REPLACE_THIS>
+# OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET=<REPLACE_THIS>
+# NEXT_PUBLIC_TEST_ENV=True

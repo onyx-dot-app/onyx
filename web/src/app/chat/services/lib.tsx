@@ -695,9 +695,9 @@ export function useScrollonStream({
   enableAutoScroll,
 }: {
   chatState: ChatState;
-  scrollableDivRef: RefObject<HTMLDivElement>;
+  scrollableDivRef: RefObject<HTMLDivElement | null>;
   scrollDist: MutableRefObject<number>;
-  endDivRef: RefObject<HTMLDivElement>;
+  endDivRef: RefObject<HTMLDivElement | null>;
   debounceNumber: number;
   mobile?: boolean;
   enableAutoScroll?: boolean;

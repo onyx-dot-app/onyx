@@ -40,10 +40,18 @@ from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.features.tool.models import should_expose_tool_to_fe
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
+
+DEFAULT_BEHAVIOR_PERSONA_ID = 0
+
+
+def get_default_behavior_persona(db_session: Session) -> Persona | None:
+    stmt = select(Persona).where(Persona.id == DEFAULT_BEHAVIOR_PERSONA_ID)
+    return db_session.scalars(stmt).first()
 
 
 class PersonaLoadType(Enum):
@@ -936,10 +944,35 @@ def update_default_assistant_configuration(
             tool = db_session.query(Tool).filter(Tool.id == tool_id).one_or_none()
             if not tool:
                 raise ValueError(f"Tool with ID {tool_id} not found")
-            if tool.in_code_tool_id is None:
-                raise ValueError(f"Tool with ID {tool_id} is not a built-in tool")
+
+            if not should_expose_tool_to_fe(tool):
+                raise ValueError(f"Tool with ID {tool_id} cannot be assigned")
+
+            if not tool.enabled:
+                raise ValueError(
+                    f"Enable tool {tool.display_name or tool.name} before assigning it"
+                )
 
             persona.tools.append(tool)
 
     db_session.commit()
     return persona
+
+
+def user_can_access_persona(
+    db_session: Session, persona_id: int, user: User | None, get_editable: bool = False
+) -> bool:
+    """Check if a user has access to a specific persona.
+
+    Args:
+        db_session: Database session
+        persona_id: ID of the persona to check
+        user: User to check access for
+        get_editable: If True, check for edit access; if False, check for view access
+
+    Returns:
+        True if user can access the persona, False otherwise
+    """
+    stmt = select(Persona).where(Persona.id == persona_id, Persona.deleted.is_(False))
+    stmt = _add_user_filters(stmt, user, get_editable=get_editable)
+    return db_session.scalar(stmt) is not None

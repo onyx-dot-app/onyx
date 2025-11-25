@@ -13,9 +13,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout main Onyx repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install git-filter-repo
         run: |

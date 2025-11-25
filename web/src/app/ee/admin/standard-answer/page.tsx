@@ -6,7 +6,7 @@ import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import {
   Table,
   TableHead,
@@ -18,7 +18,7 @@ import {
 import Link from "next/link";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 import { MagnifyingGlass } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useState, JSX } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { deleteStandardAnswer } from "./lib";

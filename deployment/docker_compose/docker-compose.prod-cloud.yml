@@ -99,6 +99,45 @@ services:
         max-size: "50m"
         max-file: "6"
 
+  mcp_server:
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: >
+      /bin/sh -c "if [ \"${MCP_SERVER_ENABLED}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED}\" != \"true\" ]; then
+        echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
+        exit 0;
+      else
+        exec python -m onyx.mcp_server_main;
+      fi"
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      - relational_db
+      - cache
+    restart: "no"
+    environment:
+      - POSTGRES_HOST=relational_db
+      - REDIS_HOST=cache
+      # MCP Server Configuration
+      - MCP_SERVER_ENABLED=${MCP_SERVER_ENABLED:-false}
+      - MCP_SERVER_PORT=${MCP_SERVER_PORT:-8090}
+      - MCP_SERVER_CORS_ORIGINS=${MCP_SERVER_CORS_ORIGINS:-}
+      - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
+      - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
+      - API_SERVER_PORT=${API_SERVER_PORT:-8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    volumes:
+      - mcp_server_logs:/var/log/onyx
+
   relational_db:
     image: postgres:15.2-alpine
     shm_size: 1g
@@ -122,7 +161,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -148,7 +187,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -172,7 +211,7 @@ services:
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
-    image: vespaengine/vespa:8.526.15
+    image: vespaengine/vespa:8.609.39
     restart: unless-stopped
     environment:
       - VESPA_SKIP_UPGRADE_CHECK=true
@@ -188,7 +227,7 @@ services:
         max-file: "6"
 
   nginx:
-    image: nginx:1.23.4-alpine
+    image: nginx:1.25.5-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
@@ -264,6 +303,9 @@ services:
     # docker silently mounts /data even without an explicit volume mount, which enables
     # persistence. explicitly setting save and appendonly forces ephemeral behavior.
     command: redis-server --save "" --appendonly no
+    # Use tmpfs to prevent creation of anonymous volumes for /data
+    tmpfs:
+      - /data
 
 volumes:
   db_volume:
@@ -272,3 +314,4 @@ volumes:
   # Created by the container itself
   model_cache_huggingface:
   indexing_huggingface_model_cache:
+  mcp_server_logs:

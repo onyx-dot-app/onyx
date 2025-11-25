@@ -21,6 +21,7 @@ from onyx.configs.agent_configs import TF_DR_TIMEOUT_SHORT
 from onyx.context.search.models import InferenceSection
 from onyx.prompts.dr_prompts import INTERNAL_SEARCH_PROMPTS
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import normalize_url
 
 
 logger = setup_logger()
@@ -38,12 +39,17 @@ def is_summarize(
     node_start_time = datetime.now()
 
     # build branch iterations from fetch inputs
+    # Normalize URLs to handle mismatches from query parameters (e.g., ?activeTab=explore)
     url_to_raw_document: dict[str, InferenceSection] = {}
     for raw_document in state.raw_documents:
-        url_to_raw_document[raw_document.center_chunk.semantic_identifier] = (
-            raw_document
-        )
-    urls = state.branch_questions_to_urls[state.branch_question]
+        normalized_url = normalize_url(raw_document.center_chunk.semantic_identifier)
+        url_to_raw_document[normalized_url] = raw_document
+
+    # Normalize the URLs from branch_questions_to_urls as well
+    urls = [
+        normalize_url(url)
+        for url in state.branch_questions_to_urls[state.branch_question]
+    ]
     current_iteration = state.iteration_nr
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     research_type = graph_config.behavior.research_type

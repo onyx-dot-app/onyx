@@ -6,7 +6,7 @@ import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { ChatSession } from "@/app/chat/interfaces";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import SvgTrash from "@/icons/trash";
 import SvgShare from "@/icons/share";
 import SvgEdit from "@/icons/edit";
@@ -18,16 +18,17 @@ import {
   PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useAppParams, useAppRouter } from "@/hooks/appNavigation";
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { useAppRouter } from "@/hooks/appNavigation";
 import {
   Project,
   removeChatSessionFromProject,
+  createProject as createProjectService,
 } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import SvgFolderIn from "@/icons/folder-in";
 import SvgFolder from "@/icons/folder";
 import SvgChevronLeft from "@/icons/chevron-left";
+import SvgFolderPlus from "@/icons/folder-plus";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
@@ -37,17 +38,16 @@ import MenuButton from "@/refresh-components/buttons/MenuButton";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import {
-  DRAG_TYPES,
-  DEFAULT_PERSONA_ID,
-  LOCAL_STORAGE_KEYS,
-} from "@/sections/sidebar/constants";
+import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import {
   shouldShowMoveModal,
   showErrorNotification,
   handleMoveOperation,
 } from "@/sections/sidebar/sidebarUtils";
-import ButtonRenaming from "@/sections/sidebar/ButtonRenaming";
+import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
+import Truncated from "@/refresh-components/texts/Truncated";
+import Text from "@/refresh-components/texts/Text";
+import useAppFocus from "@/hooks/useAppFocus";
 
 // (no local constants; use shared constants/imports)
 
@@ -112,7 +112,14 @@ function ChatButtonInner({
   draggable = false,
 }: ChatButtonProps) {
   const route = useAppRouter();
-  const params = useAppParams();
+  const activeSidebarTab = useAppFocus();
+  const active = useMemo(
+    () =>
+      typeof activeSidebarTab === "object" &&
+      activeSidebarTab.type === "chat" &&
+      activeSidebarTab.id === chatSession.id,
+    [activeSidebarTab, chatSession.id]
+  );
   const [mounted, setMounted] = useState(false);
   const [displayName, setDisplayName] = useState(
     chatSession.name || UNNAMED_CHAT
@@ -130,6 +137,7 @@ function ChatButtonInner({
     projects,
     fetchProjects,
     currentProjectId,
+    createProject,
   } = useProjectsContext();
   const { popup, setPopup } = usePopup();
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -138,6 +146,9 @@ function ChatButtonInner({
   >(null);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
+  const [navigateAfterMoveProjectId, setNavigateAfterMoveProjectId] = useState<
+    number | null
+  >(null);
 
   // Drag and drop setup for chat sessions
   const dragId = `${DRAG_TYPES.CHAT}-${chatSession.id}`;
@@ -234,23 +245,45 @@ function ChatButtonInner({
       ];
       setPopoverItems(popoverItems);
     } else {
+      const availableProjects = filteredProjects.filter(
+        (candidateProject) => candidateProject.id !== project?.id
+      );
+
       const popoverItems = [
         <PopoverSearchInput
           key="search"
           setShowMoveOptions={setShowMoveOptions}
           onSearch={setSearchTerm}
         />,
-        ...filteredProjects
-          .filter((candidateProject) => candidateProject.id !== project?.id)
-          .map((targetProject) => (
-            <MenuButton
-              key={targetProject.id}
-              icon={SvgFolder}
-              onClick={noProp(() => handleChatMove(targetProject))}
-            >
-              {targetProject.name}
-            </MenuButton>
-          )),
+        ...availableProjects.map((targetProject) => (
+          <MenuButton
+            key={targetProject.id}
+            icon={SvgFolder}
+            onClick={noProp(() => handleChatMove(targetProject))}
+          >
+            {targetProject.name}
+          </MenuButton>
+        )),
+        // Show "Create New Project" option when no projects match the search
+        ...(availableProjects.length === 0 && searchTerm.trim() !== ""
+          ? [
+              null,
+              <MenuButton
+                key="create-new"
+                icon={SvgFolderPlus}
+                onClick={noProp(() =>
+                  handleCreateProjectAndMove(searchTerm.trim())
+                )}
+              >
+                <Text text03 mainUiMuted className="-mr-1">
+                  Create
+                </Text>
+                <Truncated text03 mainUiAction>
+                  {searchTerm.trim()}
+                </Truncated>
+              </MenuButton>,
+            ]
+          : []),
       ];
       setPopoverItems(popoverItems);
     }
@@ -263,6 +296,8 @@ function ChatButtonInner({
     refreshCurrentProjectDetails,
     project,
     chatSession.id,
+    searchTerm,
+    createProject,
   ]);
 
   async function handleRename(newName: string) {
@@ -280,7 +315,7 @@ function ChatButtonInner({
         await refreshCurrentProjectDetails();
 
         // Only route if the deleted chat is the currently opened chat session
-        if (params(SEARCH_PARAM_NAMES.CHAT_ID) == chatSession.id) {
+        if (active) {
           route({ projectId: project.id });
         }
       }
@@ -338,6 +373,42 @@ function ChatButtonInner({
     }
   }
 
+  async function handleCreateProjectAndMove(projectName: string) {
+    try {
+      // Create the new project using the service directly (without navigation)
+      const newProject = await createProjectService(projectName);
+
+      // Refresh projects list to include the new project
+      await fetchProjects();
+
+      // Mark that we want to navigate to this project after moving
+      setNavigateAfterMoveProjectId(newProject.id);
+
+      // Check if we should show the move modal for custom agents
+      if (shouldShowMoveModal(chatSession)) {
+        setPendingMoveProjectId(newProject.id);
+        setShowMoveCustomAgentModal(true);
+        setShowMoveOptions(false);
+        setSearchTerm("");
+        return;
+      }
+
+      // Move the chat to the newly created project
+      await performMove(newProject.id);
+
+      // Navigate to the new project to see the chat
+      route({ projectId: newProject.id });
+      setNavigateAfterMoveProjectId(null);
+    } catch (error) {
+      console.error("Failed to create project and move chat:", error);
+      showErrorNotification(
+        setPopup,
+        "Failed to create project. Please try again."
+      );
+      setNavigateAfterMoveProjectId(null);
+    }
+  }
+
   const rightMenu = (
     <>
       <PopoverTrigger asChild onClick={noProp()}>
@@ -348,12 +419,12 @@ function ChatButtonInner({
               !popoverOpen && "hidden",
               !renaming && "group-hover/SidebarTab:flex"
             )}
-            active={popoverOpen}
+            transient={popoverOpen}
             internal
           />
         </div>
       </PopoverTrigger>
-      <PopoverContent side="right" align="end">
+      <PopoverContent side="right" align="start">
         <PopoverMenu>{popoverItems}</PopoverMenu>
       </PopoverContent>
     </>
@@ -363,13 +434,16 @@ function ChatButtonInner({
     <Popover
       onOpenChange={(state) => {
         setPopoverOpen(state);
-        if (!state) setShowMoveOptions(false);
+        if (!state) {
+          setShowMoveOptions(false);
+          setSearchTerm("");
+        }
       }}
     >
       <PopoverAnchor>
         <SidebarTab
           onClick={() => route({ chatSessionId: chatSession.id })}
-          active={params(SEARCH_PARAM_NAMES.CHAT_ID) === chatSession.id}
+          active={active}
           rightChildren={rightMenu}
           focused={renaming}
         >
@@ -392,7 +466,7 @@ function ChatButtonInner({
       {popup}
 
       {deleteConfirmationModalOpen && (
-        <ConfirmationModal
+        <ConfirmationModalLayout
           title="Delete Chat"
           icon={SvgTrash}
           onClose={() => setDeleteConfirmationModalOpen(false)}
@@ -410,7 +484,7 @@ function ChatButtonInner({
         >
           Are you sure you want to delete this chat? This action cannot be
           undone.
-        </ConfirmationModal>
+        </ConfirmationModalLayout>
       )}
 
       {showMoveCustomAgentModal && (
@@ -418,6 +492,7 @@ function ChatButtonInner({
           onCancel={() => {
             setShowMoveCustomAgentModal(false);
             setPendingMoveProjectId(null);
+            setNavigateAfterMoveProjectId(null);
           }}
           onConfirm={async (doNotShowAgain: boolean) => {
             if (doNotShowAgain && typeof window !== "undefined") {
@@ -427,10 +502,16 @@ function ChatButtonInner({
               );
             }
             const target = pendingMoveProjectId;
+            const shouldNavigate = navigateAfterMoveProjectId;
             setShowMoveCustomAgentModal(false);
             setPendingMoveProjectId(null);
             if (target != null) {
               await performMove(target);
+              // Navigate if this was triggered by creating a new project
+              if (shouldNavigate != null) {
+                route({ projectId: shouldNavigate });
+                setNavigateAfterMoveProjectId(null);
+              }
             }
           }}
         />

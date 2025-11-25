@@ -1,59 +1,80 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { SvgProps } from "@/icons";
 
-const variantClasses = (active?: boolean) =>
+const variantClasses = (transient?: boolean) =>
   ({
-    defaulted: {
+    main: {
       primary: {
         enabled: [
-          active ? "bg-theme-primary-06" : "bg-theme-primary-05",
+          "bg-theme-primary-05",
           "hover:bg-theme-primary-04",
+          transient && "bg-theme-primary-04",
+          "active:bg-theme-primary-06",
         ],
         disabled: ["bg-background-neutral-04"],
       },
       secondary: {
         enabled: [
-          active ? "bg-background-tint-00" : "bg-background-tint-01",
+          "bg-background-tint-01",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
           "border",
         ],
-        disabled: ["bg-background-tint-00", "border"],
+        disabled: ["bg-background-neutral-03", "border"],
       },
       tertiary: {
         enabled: [
-          active && "bg-background-tint-00",
+          "bg-transparent",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
         ],
-        disabled: [],
+        disabled: ["bg-transparent"],
       },
       internal: {
         enabled: [
-          active && "bg-background-tint-00",
+          "bg-transparent",
           "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
         ],
-        disabled: [],
+        disabled: ["bg-transparent"],
       },
     },
     action: {
       primary: {
         enabled: [
-          active ? "bg-action-link-06" : "bg-action-link-05",
+          "bg-action-link-05",
           "hover:bg-action-link-04",
+          transient && "bg-action-link-04",
+          "active:bg-action-link-06",
         ],
         disabled: ["bg-action-link-02"],
       },
       secondary: {
-        enabled: [],
-        disabled: [],
+        enabled: [
+          "bg-background-tint-01",
+          "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
+          "border",
+        ],
+        disabled: ["bg-background-neutral-02", "border"],
       },
       tertiary: {
-        enabled: [],
-        disabled: [],
+        enabled: [
+          "bg-transparent",
+          "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-transparent"],
       },
       internal: {
         enabled: [],
@@ -63,18 +84,31 @@ const variantClasses = (active?: boolean) =>
     danger: {
       primary: {
         enabled: [
-          active ? "bg-action-danger-06" : "bg-action-danger-05",
+          "bg-action-danger-05",
           "hover:bg-action-danger-04",
+          transient && "bg-action-danger-04",
+          "active:bg-action-danger-06",
         ],
         disabled: ["bg-action-danger-02"],
       },
       secondary: {
-        enabled: [],
-        disabled: [],
+        enabled: [
+          "bg-background-tint-01",
+          "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
+          "border",
+        ],
+        disabled: ["bg-background-neutral-02", "border"],
       },
       tertiary: {
-        enabled: [],
-        disabled: [],
+        enabled: [
+          "bg-transparent",
+          "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-transparent"],
       },
       internal: {
         enabled: [],
@@ -83,31 +117,37 @@ const variantClasses = (active?: boolean) =>
     },
   }) as const;
 
-const textClasses = (active?: boolean) =>
+const textClasses = (transient?: boolean) =>
   ({
-    defaulted: {
+    main: {
       primary: {
         enabled: ["text-text-inverted-05"],
         disabled: ["text-text-inverted-04"],
       },
       secondary: {
         enabled: [
-          active ? "text-text-05" : "text-text-03",
+          "text-text-03",
           "group-hover/Button:text-text-04",
+          transient && "text-text-04",
+          "group-active/Button:text-text-05",
         ],
         disabled: ["text-text-01"],
       },
       tertiary: {
         enabled: [
-          active ? "text-text-05" : "text-text-03",
+          "text-text-03",
           "group-hover/Button:text-text-04",
+          transient && "text-text-04",
+          "group-active/Button:text-text-05",
         ],
         disabled: ["text-text-01"],
       },
       internal: {
         enabled: [
-          active ? "text-text-05" : "text-text-03",
+          "text-text-03",
           "group-hover/Button:text-text-04",
+          transient && "text-text-04",
+          "group-active/Button:text-text-05",
         ],
         disabled: ["text-text-01"],
       },
@@ -115,15 +155,15 @@ const textClasses = (active?: boolean) =>
     action: {
       primary: {
         enabled: ["text-text-light-05"],
-        disabled: ["text-text-light-05"],
+        disabled: ["text-text-01"],
       },
       secondary: {
-        enabled: [],
-        disabled: [],
+        enabled: ["text-action-text-link-05"],
+        disabled: ["text-action-link-03"],
       },
       tertiary: {
-        enabled: [],
-        disabled: [],
+        enabled: ["text-action-text-link-05"],
+        disabled: ["text-action-link-03"],
       },
       internal: {
         enabled: [],
@@ -133,15 +173,15 @@ const textClasses = (active?: boolean) =>
     danger: {
       primary: {
         enabled: ["text-text-light-05"],
-        disabled: ["text-text-light-05"],
+        disabled: ["text-text-01"],
       },
       secondary: {
-        enabled: [],
-        disabled: [],
+        enabled: ["text-action-text-danger-05"],
+        disabled: ["text-action-danger-03"],
       },
       tertiary: {
-        enabled: [],
-        disabled: [],
+        enabled: ["text-action-text-danger-05"],
+        disabled: ["text-action-danger-03"],
       },
       internal: {
         enabled: [],
@@ -150,31 +190,37 @@ const textClasses = (active?: boolean) =>
     },
   }) as const;
 
-const iconClasses = (active?: boolean) =>
+const iconClasses = (transient?: boolean) =>
   ({
-    defaulted: {
+    main: {
       primary: {
         enabled: ["stroke-text-inverted-05"],
         disabled: ["stroke-text-inverted-04"],
       },
       secondary: {
         enabled: [
-          active ? "stroke-text-05" : "stroke-text-03",
+          "stroke-text-03",
           "group-hover/Button:stroke-text-04",
+          transient && "stroke-text-04",
+          "group-active/Button:stroke-text-05",
         ],
         disabled: ["stroke-text-01"],
       },
       tertiary: {
         enabled: [
-          active ? "stroke-text-05" : "stroke-text-03",
+          "stroke-text-03",
           "group-hover/Button:stroke-text-04",
+          transient && "stroke-text-04",
+          "group-active/Button:stroke-text-05",
         ],
         disabled: ["stroke-text-01"],
       },
       internal: {
         enabled: [
-          active ? "stroke-text-05" : "stroke-text-03",
+          "stroke-text-03",
           "group-hover/Button:stroke-text-04",
+          transient && "stroke-text-04",
+          "group-active/Button:stroke-text-05",
         ],
         disabled: ["stroke-text-01"],
       },
@@ -182,15 +228,15 @@ const iconClasses = (active?: boolean) =>
     action: {
       primary: {
         enabled: ["stroke-text-light-05"],
-        disabled: ["stroke-text-light-05"],
+        disabled: ["stroke-text-01"],
       },
       secondary: {
-        enabled: [],
-        disabled: [],
+        enabled: ["stroke-action-text-link-05"],
+        disabled: ["stroke-action-link-03"],
       },
       tertiary: {
-        enabled: [],
-        disabled: [],
+        enabled: ["stroke-action-text-link-05"],
+        disabled: ["stroke-action-link-03"],
       },
       internal: {
         enabled: [],
@@ -200,15 +246,15 @@ const iconClasses = (active?: boolean) =>
     danger: {
       primary: {
         enabled: ["stroke-text-light-05"],
-        disabled: ["stroke-text-light-05"],
+        disabled: ["stroke-text-01"],
       },
       secondary: {
-        enabled: [],
-        disabled: [],
+        enabled: ["stroke-action-text-danger-05"],
+        disabled: ["stroke-action-danger-03"],
       },
       tertiary: {
-        enabled: [],
-        disabled: [],
+        enabled: ["stroke-action-text-danger-05"],
+        disabled: ["stroke-action-danger-03"],
       },
       internal: {
         enabled: [],
@@ -220,7 +266,7 @@ const iconClasses = (active?: boolean) =>
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   // Button variants:
-  defaulted?: boolean;
+  main?: boolean;
   action?: boolean;
   danger?: boolean;
 
@@ -232,20 +278,17 @@ export interface ButtonProps
 
   // Button states:
   disabled?: boolean;
-  active?: boolean;
+  transient?: boolean;
 
   // Icons:
   leftIcon?: React.FunctionComponent<SvgProps>;
   rightIcon?: React.FunctionComponent<SvgProps>;
 
-  includeLeftSpacer?: boolean;
-  includeRightSpacer?: boolean;
-
   href?: string;
 }
 
 export default function Button({
-  defaulted,
+  main,
   action,
   danger,
 
@@ -255,13 +298,10 @@ export default function Button({
   internal,
 
   disabled,
-  active,
+  transient,
 
   leftIcon: LeftIcon,
   rightIcon: RightIcon,
-
-  includeLeftSpacer = true,
-  includeRightSpacer = true,
 
   href,
   children,
@@ -273,14 +313,13 @@ export default function Button({
       "The left and right icons cannot be both specified at the same time"
     );
 
-  const variant = defaulted
-    ? "defaulted"
+  const variant = main
+    ? "main"
     : action
       ? "action"
       : danger
         ? "danger"
-        : "defaulted";
-
+        : "main";
   const subvariant = primary
     ? "primary"
     : secondary
@@ -290,61 +329,55 @@ export default function Button({
         : internal
           ? "internal"
           : "primary";
-
   const abled = disabled ? "disabled" : "enabled";
 
-  const spacer = <div className="w-[0.1rem]" />;
+  const buttonClass = useMemo(
+    () => variantClasses(transient)[variant][subvariant][abled],
+    [transient, variant, subvariant, abled]
+  );
+  const iconClass = useMemo(
+    () => iconClasses(transient)[variant][subvariant][abled],
+    [transient, variant, subvariant, abled]
+  );
 
   const content = (
     <button
       className={cn(
-        "p-2 h-fit rounded-12 group/Button w-fit flex flex-row items-center justify-center gap-1",
-        variantClasses(active)[variant][subvariant][abled],
+        "p-2 h-fit rounded-12 group/Button w-fit flex flex-row items-center justify-center gap-1.5",
+        buttonClass,
         className
       )}
       disabled={disabled}
+      type="button"
       {...props}
     >
-      {LeftIcon ? (
+      {LeftIcon && (
         <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
-          <LeftIcon
-            className={cn(
-              "w-[1rem] h-[1rem]",
-              iconClasses(active)[variant][subvariant][abled]
-            )}
-          />
+          <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
         </div>
-      ) : includeLeftSpacer ? (
-        spacer
-      ) : null}
-      {typeof children === "string" ? (
-        <Text
-          className={cn(
-            "whitespace-nowrap",
-            textClasses(active)[variant][subvariant][abled]
-          )}
-        >
-          {children}
-        </Text>
-      ) : (
-        children
       )}
-      {RightIcon ? (
-        <div className="w-[1rem] h-[1rem]">
-          <RightIcon
+      <div className={cn(LeftIcon && "pr-1", RightIcon && "pl-1")}>
+        {typeof children === "string" ? (
+          <Text
             className={cn(
-              "w-[1rem] h-[1rem]",
-              iconClasses(active)[variant][subvariant][abled]
+              "whitespace-nowrap",
+              textClasses(transient)[variant][subvariant][abled]
             )}
-          />
+          >
+            {children}
+          </Text>
+        ) : (
+          children
+        )}
+      </div>
+      {RightIcon && (
+        <div className="w-[1rem] h-[1rem]">
+          <RightIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
         </div>
-      ) : includeRightSpacer ? (
-        spacer
-      ) : null}
+      )}
     </button>
   );
 
   if (!href) return content;
-
   return <Link href={href}>{content}</Link>;
 }

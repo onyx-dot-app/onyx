@@ -43,6 +43,7 @@ class AuthTypeResponse(BaseModel):
     # users to have verified emails
     requires_verification: bool
     anonymous_user_enabled: bool | None = None
+    password_min_length: int
 
 
 class UserSpecificAssistantPreference(BaseModel):

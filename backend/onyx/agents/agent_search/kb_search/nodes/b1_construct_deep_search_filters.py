@@ -94,7 +94,7 @@ def construct_deep_search_filters(
     try:
         llm_response = run_with_timeout(
             KG_FILTER_CONSTRUCTION_TIMEOUT,
-            llm.invoke,
+            llm.invoke_langchain,
             prompt=msg,
             timeout_override=15,
             max_tokens=1400,

@@ -14,10 +14,10 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     trim_prompt_piece,
 )
-from onyx.configs.constants import DocumentSource
 from onyx.prompts.agents.dc_prompts import DC_OBJECT_NO_BASE_DATA_EXTRACTION_PROMPT
 from onyx.prompts.agents.dc_prompts import DC_OBJECT_SEPARATOR
 from onyx.prompts.agents.dc_prompts import DC_OBJECT_WITH_BASE_DATA_EXTRACTION_PROMPT
+from onyx.secondary_llm_flows.source_filter import strings_to_document_sources
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -61,10 +61,12 @@ def search_objects(
         if agent_1_independent_sources_str is None:
             raise ValueError("Agent 1 Independent Research Sources not found")
 
-        document_sources = [
-            DocumentSource(x.strip().lower())
-            for x in agent_1_independent_sources_str.split(DC_OBJECT_SEPARATOR)
-        ]
+        document_sources = strings_to_document_sources(
+            [
+                x.strip().lower()
+                for x in agent_1_independent_sources_str.split(DC_OBJECT_SEPARATOR)
+            ]
+        )
 
         agent_1_output_objective = extract_section(
             agent_1_instructions, "Output Objective:"
@@ -119,7 +121,7 @@ def search_objects(
     try:
         llm_response = run_with_timeout(
             30,
-            primary_llm.invoke,
+            primary_llm.invoke_langchain,
             prompt=msg,
             timeout_override=30,
             max_tokens=300,

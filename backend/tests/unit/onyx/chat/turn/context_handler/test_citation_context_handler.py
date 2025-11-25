@@ -2,7 +2,11 @@
 
 import json
 from collections.abc import Sequence
+from typing import Union
 from uuid import uuid4
+
+from pydantic import TypeAdapter
+from pydantic import ValidationError
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.agents.agent_sdk.message_types import FunctionCallMessage
@@ -10,31 +14,58 @@ from onyx.agents.agent_sdk.message_types import FunctionCallOutputMessage
 from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
-from onyx.chat.models import LlmDoc
 from onyx.chat.turn.context_handler.citation import (
     assign_citation_numbers_recent_tool_calls,
 )
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
+from onyx.chat.turn.models import FetchedDocumentCacheEntry
+from onyx.tools.tool_implementations_v2.tool_result_models import (
+    LlmInternalSearchResult,
+)
+from onyx.tools.tool_implementations_v2.tool_result_models import LlmOpenUrlResult
+from onyx.tools.tool_implementations_v2.tool_result_models import LlmWebSearchResult
+from tests.unit.onyx.chat.turn.utils import create_test_inference_section
+
+# TypeAdapter for parsing tool results after stripping (no discriminator needed)
+_stripped_tool_result_adapter = TypeAdapter(
+    list[Union[LlmInternalSearchResult, LlmWebSearchResult, LlmOpenUrlResult]]
+)
 
 
-def _create_test_document(document_id: str, document_citation_number: int) -> dict:
-    """Helper to create a test document with minimal boilerplate."""
-    return {
-        "document_id": document_id,
-        "content": "test content",
-        "blurb": "test blurb",
-        "semantic_identifier": "test_semantic_id",
-        "source_type": "linear",
-        "metadata": {"a": "b"},
-        "updated_at": "2025-08-07T01:01:52Z",
-        "link": "https://test.link",
-        "source_links": {"0": "https://test.link"},
-        "match_highlights": ["test content"],
-        "document_citation_number": document_citation_number,
-    }
+def _create_test_document(
+    unique_identifier_to_strip_away: str, document_citation_number: int
+) -> dict:
+    return LlmInternalSearchResult(
+        unique_identifier_to_strip_away=unique_identifier_to_strip_away,
+        document_citation_number=document_citation_number,
+        title="test title",
+        excerpt="test excerpt",
+        metadata={"a": "b"},
+    ).model_dump()
+
+
+def _create_test_open_url_document(
+    unique_identifier_to_strip_away: str, document_citation_number: int
+) -> dict:
+    return LlmOpenUrlResult(
+        unique_identifier_to_strip_away=unique_identifier_to_strip_away,
+        document_citation_number=document_citation_number,
+        content="test content",
+    ).model_dump()
+
+
+def _create_test_web_search_document(
+    unique_identifier_to_strip_away: str, document_citation_number: int
+) -> dict:
+    return LlmWebSearchResult(
+        unique_identifier_to_strip_away=unique_identifier_to_strip_away,
+        document_citation_number=document_citation_number,
+        title="test title",
+        snippet="test snippet",
+        url="https://test.url",
+    ).model_dump()
 
 
 def _create_dummy_function_call() -> FunctionCallMessage:
@@ -47,16 +78,52 @@ def _create_dummy_function_call() -> FunctionCallMessage:
     )
 
 
-def _parse_llm_docs_from_messages(messages: Sequence[AgentSDKMessage]) -> list[LlmDoc]:
-    tool_message_outputs: list[str] = []
+def _parse_tool_call_result_from_messages(
+    messages: Sequence[AgentSDKMessage],
+) -> list[LlmInternalSearchResult | LlmOpenUrlResult | LlmWebSearchResult]:
+    """Parse LLM documents from messages after citation processing.
+
+    Note: After citation processing, 'type' and 'unique_identifier_to_strip_away'
+    fields are stripped from the documents that were newly processed. Documents from
+    previous tool calls may still have these fields.
+    """
+    results: list[LlmInternalSearchResult | LlmOpenUrlResult | LlmWebSearchResult] = []
+
     for msg in messages:
         if msg.get("type") == "function_call_output":
-            # Type narrow to FunctionCallOutputMessage
             func_output_msg: FunctionCallOutputMessage = msg  # type: ignore[assignment]
-            tool_message_outputs.append(func_output_msg["output"])
-    return [
-        LlmDoc(**doc) for output in tool_message_outputs for doc in json.loads(output)
-    ]
+            output = func_output_msg["output"]
+            try:
+                docs = json.loads(output)
+                for doc in docs:
+                    if (
+                        doc.get(
+                            "document_citation_number",
+                            DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                        )
+                        != DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+                    ):
+                        assert "type" not in json.dumps(
+                            doc
+                        ), "type should not be in processed documents"
+                        assert "unique_identifier_to_strip_away" not in json.dumps(
+                            doc
+                        ), "unique_identifier_to_strip_away should not be in processed documents"
+            except (json.JSONDecodeError, AssertionError):
+                raise
+            except Exception:
+                pass
+
+            # Parse using pydantic with non-discriminated union
+            # For documents where fields are stripped, pydantic will try each type
+            try:
+                parsed_results = _stripped_tool_result_adapter.validate_json(output)
+                results.extend(parsed_results)
+            except ValidationError:
+                # If parsing fails, skip this tool call output
+                pass
+
+    return results
 
 
 def test_assign_citation_numbers_basic(
@@ -79,8 +146,12 @@ def test_assign_citation_numbers_basic(
         FunctionCallOutputMessage(
             output=json.dumps(
                 [
-                    _create_test_document("first", -1),
-                    _create_test_document("second", -1),
+                    _create_test_document(
+                        "first", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+                    ),
+                    _create_test_document(
+                        "second", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+                    ),
                 ]
             ),
             call_id="call",
@@ -90,17 +161,23 @@ def test_assign_citation_numbers_basic(
     context = ChatTurnContext(
         chat_session_id=uuid4(),
         message_id=1,
-        research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
+        fetched_documents_cache={
+            "first": FetchedDocumentCacheEntry(
+                inference_section=create_test_inference_section(),
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            ),
+            "second": FetchedDocumentCacheEntry(
+                inference_section=create_test_inference_section(),
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            ),
+        },
     )
     result = assign_citation_numbers_recent_tool_calls(messages, context)
-    assert result.num_docs_cited == 2
+    assert result.new_docs_cited == 2
     assert result.num_tool_calls_cited == 1
 
-    message_llm_docs = _parse_llm_docs_from_messages(result.updated_messages)
-
-    # Verify citation numbers were assigned correctly
-    assert len(result.new_llm_docs) == 2  # all two documents were cited
+    message_llm_docs = _parse_tool_call_result_from_messages(result.updated_messages)
     assert len(message_llm_docs) == 2
     assert message_llm_docs[0].document_citation_number == 1
     assert message_llm_docs[1].document_citation_number == 2
@@ -132,13 +209,13 @@ def test_assign_citation_numbers_no_relevant_tool_calls(
     context = ChatTurnContext(
         chat_session_id=uuid4(),
         message_id=1,
-        research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
     )
     result = assign_citation_numbers_recent_tool_calls(messages, context)
-    assert result.num_docs_cited == 0
+    assert result.new_docs_cited == 0
     assert result.num_tool_calls_cited == 0
-    assert len(result.new_llm_docs) == 0
+    message_llm_docs = _parse_tool_call_result_from_messages(result.updated_messages)
+    assert len(message_llm_docs) == 0
 
 
 def test_assign_citation_numbers_previous_tool_calls(
@@ -161,8 +238,12 @@ def test_assign_citation_numbers_previous_tool_calls(
         FunctionCallOutputMessage(
             output=json.dumps(
                 [
-                    _create_test_document("first", -1),
-                    _create_test_document("second", -1),
+                    _create_test_document(
+                        "first", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+                    ),
+                    _create_test_document(
+                        "second", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+                    ),
                 ]
             ),
             call_id="call_1",
@@ -178,7 +259,9 @@ def test_assign_citation_numbers_previous_tool_calls(
         ),
         _create_dummy_function_call(),
         FunctionCallOutputMessage(
-            output=json.dumps([_create_test_document("third", -1)]),
+            output=json.dumps(
+                [_create_test_document("third", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE)]
+            ),
             call_id="call_2",
             type="function_call_output",
         ),
@@ -186,20 +269,31 @@ def test_assign_citation_numbers_previous_tool_calls(
     context = ChatTurnContext(
         chat_session_id=uuid4(),
         message_id=1,
-        research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
         documents_processed_by_citation_context_handler=2,
         tool_calls_processed_by_citation_context_handler=1,
+        fetched_documents_cache={
+            "first": FetchedDocumentCacheEntry(
+                inference_section=create_test_inference_section(),
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            ),
+            "second": FetchedDocumentCacheEntry(
+                inference_section=create_test_inference_section(),
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            ),
+            "third": FetchedDocumentCacheEntry(
+                inference_section=create_test_inference_section(),
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            ),
+        },
     )
     result = assign_citation_numbers_recent_tool_calls(messages, context)
-    assert len(result.new_llm_docs) == 1  # only one new document was cited
     assert result.num_tool_calls_cited == 1
-    assert result.num_docs_cited == 1
-    message_llm_docs = _parse_llm_docs_from_messages(result.updated_messages)
-
-    # Verify citation numbers were assigned correctly
+    assert result.new_docs_cited == 1
+    message_llm_docs = _parse_tool_call_result_from_messages(result.updated_messages)
     assert len(message_llm_docs) == 3
-    # these two should be unchanged
+    # In practice, these shouldn't be empty, but we want to make sure we're not interacting
+    # with these previous tool call results
     assert (
         message_llm_docs[0].document_citation_number
         == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
@@ -208,7 +302,6 @@ def test_assign_citation_numbers_previous_tool_calls(
         message_llm_docs[1].document_citation_number
         == DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
     )
-    # this one should be assigned
     assert message_llm_docs[2].document_citation_number == 3
 
 
@@ -232,8 +325,12 @@ def test_assign_citation_numbers_parallel_tool_calls(
         FunctionCallOutputMessage(
             output=json.dumps(
                 [
-                    _create_test_document("a", -1),
-                    _create_test_document("b", -1),
+                    _create_test_web_search_document(
+                        "a", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+                    ),
+                    _create_test_open_url_document(
+                        "b", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
+                    ),
                 ]
             ),
             call_id="call_1",
@@ -241,7 +338,9 @@ def test_assign_citation_numbers_parallel_tool_calls(
         ),
         _create_dummy_function_call(),
         FunctionCallOutputMessage(
-            output=json.dumps([_create_test_document("e", -1)]),
+            output=json.dumps(
+                [_create_test_document("e", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE)]
+            ),
             call_id="call_2",
             type="function_call_output",
         ),
@@ -249,21 +348,101 @@ def test_assign_citation_numbers_parallel_tool_calls(
     context = ChatTurnContext(
         chat_session_id=uuid4(),
         message_id=1,
-        research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
         documents_processed_by_citation_context_handler=0,
         tool_calls_processed_by_citation_context_handler=0,
+        fetched_documents_cache={
+            "a": FetchedDocumentCacheEntry(
+                inference_section=create_test_inference_section(),
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            ),
+            "b": FetchedDocumentCacheEntry(
+                inference_section=create_test_inference_section(),
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            ),
+            "e": FetchedDocumentCacheEntry(
+                inference_section=create_test_inference_section(),
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            ),
+        },
     )
     result = assign_citation_numbers_recent_tool_calls(messages, context)
-    assert result.num_docs_cited == 3
+    assert result.new_docs_cited == 3
     assert result.num_tool_calls_cited == 2
     # Find the tool message and check citation numbers
-    message_llm_docs = _parse_llm_docs_from_messages(result.updated_messages)
+    # Pass None to parse all document types (mixed types in parallel tool calls)
+    message_llm_docs = _parse_tool_call_result_from_messages(result.updated_messages)
 
-    # Verify citation numbers were assigned correctly
-    assert len(result.new_llm_docs) == 3  # all three documents were cited
     assert len(message_llm_docs) == 3
-    # these two should be unchanged
     assert message_llm_docs[0].document_citation_number == 1
     assert message_llm_docs[1].document_citation_number == 2
     assert message_llm_docs[2].document_citation_number == 3
+
+
+def test_assign_reused_citation_numbers(
+    chat_turn_dependencies: ChatTurnDependencies,
+) -> None:
+    unique_identifier_to_strip_away = "b"
+    cached_web_search_document = _create_test_web_search_document(
+        unique_identifier_to_strip_away, 1
+    )
+    # already processed so these fields should have been stripped away
+    del cached_web_search_document["unique_identifier_to_strip_away"]
+    del cached_web_search_document["type"]
+    messages: list[AgentSDKMessage] = [
+        SystemMessage(
+            role="system",
+            content=[
+                InputTextContent(text="\nYou are an assistant.", type="input_text")
+            ],
+        ),
+        UserMessage(
+            role="user",
+            content=[
+                InputTextContent(text="search internally for cheese", type="input_text")
+            ],
+        ),
+        _create_dummy_function_call(),
+        FunctionCallOutputMessage(
+            output=json.dumps(
+                [
+                    cached_web_search_document,
+                ]
+            ),
+            call_id="call_1",
+            type="function_call_output",
+        ),
+        _create_dummy_function_call(),
+        FunctionCallOutputMessage(
+            output=json.dumps(
+                [
+                    _create_test_open_url_document(
+                        unique_identifier_to_strip_away,
+                        DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                    )
+                ]
+            ),
+            call_id="call_2",
+            type="function_call_output",
+        ),
+    ]
+    context = ChatTurnContext(
+        chat_session_id=uuid4(),
+        message_id=1,
+        run_dependencies=chat_turn_dependencies,
+        documents_processed_by_citation_context_handler=1,
+        tool_calls_processed_by_citation_context_handler=1,
+        fetched_documents_cache={
+            unique_identifier_to_strip_away: FetchedDocumentCacheEntry(
+                inference_section=create_test_inference_section(),
+                document_citation_number=1,
+            ),
+        },
+    )
+    result = assign_citation_numbers_recent_tool_calls(messages, context)
+    assert result.new_docs_cited == 0
+    message_llm_docs = _parse_tool_call_result_from_messages(result.updated_messages)
+    assert len(message_llm_docs) == 2
+    assert message_llm_docs[0].document_citation_number == 1
+    # Reuse document citation number from cached web search document
+    assert message_llm_docs[1].document_citation_number == 1

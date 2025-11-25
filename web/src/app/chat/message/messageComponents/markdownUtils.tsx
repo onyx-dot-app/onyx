@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, JSX } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -82,14 +82,26 @@ export const useMarkdownComponents = (
       b: ({ node, className, children }: any) => {
         return <span className={className}>{children}</span>;
       },
-      ul: ({ node, className, children }: any) => {
-        return <ul className={`text-text-05 ${className}`}>{children}</ul>;
+      ul: ({ node, className, children, ...props }: any) => {
+        return (
+          <ul className={className} {...props}>
+            {children}
+          </ul>
+        );
       },
-      ol: ({ node, className, children }: any) => {
-        return <ol className={`text-text-05 ${className}`}>{children}</ol>;
+      ol: ({ node, className, children, ...props }: any) => {
+        return (
+          <ol className={className} {...props}>
+            {children}
+          </ol>
+        );
       },
-      li: ({ node, className, children }: any) => {
-        return <li className={className}>{children}</li>;
+      li: ({ node, className, children, ...props }: any) => {
+        return (
+          <li className={className} {...props}>
+            {children}
+          </li>
+        );
       },
       code: ({ node, className, children }: any) => {
         const codeText = extractCodeText(node, processedContent, children);

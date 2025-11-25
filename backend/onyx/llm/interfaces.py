@@ -1,22 +1,30 @@
 import abc
 from collections.abc import Iterator
+from collections.abc import Sequence
 from typing import Literal
+from typing import Union
 
 from braintrust import traced
-from langchain.schema.language_model import LanguageModelInput
+from langchain.schema.language_model import (
+    LanguageModelInput as LangChainLanguageModelInput,
+)
 from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 
+from onyx.agents.agent_framework.models import ModelResponseStream
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_INDIVIDUAL_MODEL_TOKENS
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
+from onyx.llm.message_types import ChatCompletionMessage
+from onyx.llm.model_response import ModelResponse
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
-ToolChoiceOptions = Literal["required"] | Literal["auto"] | Literal["none"]
+STANDARD_TOOL_CHOICE_OPTIONS = ("required", "auto", "none")
+ToolChoiceOptions = Union[Literal["required", "auto", "none"], str]
+LanguageModelInput = Union[Sequence[ChatCompletionMessage], str]
 
 
 class LLMConfig(BaseModel):
@@ -33,7 +41,7 @@ class LLMConfig(BaseModel):
     model_config = {"protected_namespaces": ()}
 
 
-def log_prompt(prompt: LanguageModelInput) -> None:
+def log_prompt(prompt: LangChainLanguageModelInput) -> None:
     if isinstance(prompt, list):
         for ind, msg in enumerate(prompt):
             if isinstance(msg, AIMessageChunk):
@@ -81,7 +89,7 @@ class LLM(abc.ABC):
     def log_model_configs(self) -> None:
         raise NotImplementedError
 
-    def _precall(self, prompt: LanguageModelInput) -> None:
+    def _precall(self, prompt: LangChainLanguageModelInput) -> None:
         if DISABLE_GENERATIVE_AI:
             raise Exception("Generative AI is disabled")
         if LOG_ONYX_MODEL_INTERACTIONS:
@@ -96,11 +104,30 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+    ) -> "ModelResponse":
+        return self._invoke_implementation(
+            prompt,
+            tools,
+            tool_choice,
+            structured_response_format,
+            timeout_override,
+            max_tokens,
+        )
+
+    @traced(name="invoke llm", type="llm")
+    def invoke_langchain(
+        self,
+        prompt: LangChainLanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> BaseMessage:
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
         # implementation
-        return self._invoke_implementation(
+        return self._invoke_implementation_langchain(
             prompt,
             tools,
             tool_choice,
@@ -118,6 +145,30 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+    ) -> "ModelResponse":
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _stream_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> Iterator[ModelResponseStream]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _invoke_implementation_langchain(
+        self,
+        prompt: LangChainLanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> BaseMessage:
         raise NotImplementedError
 
@@ -129,11 +180,29 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+    ) -> Iterator[ModelResponseStream]:
+        return self._stream_implementation(
+            prompt,
+            tools,
+            tool_choice,
+            structured_response_format,
+            timeout_override,
+            max_tokens,
+        )
+
+    def stream_langchain(
+        self,
+        prompt: LangChainLanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> Iterator[BaseMessage]:
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
         # implementation
-        messages = self._stream_implementation(
+        messages = self._stream_implementation_langchain(
             prompt,
             tools,
             tool_choice,
@@ -152,9 +221,9 @@ class LLM(abc.ABC):
             logger.debug(f"Model Tokens: {tokens}")
 
     @abc.abstractmethod
-    def _stream_implementation(
+    def _stream_implementation_langchain(
         self,
-        prompt: LanguageModelInput,
+        prompt: LangChainLanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,

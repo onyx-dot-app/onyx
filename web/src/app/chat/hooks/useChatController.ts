@@ -73,7 +73,6 @@ import {
 } from "../services/streamingModels";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
-import { CategorizedFiles, UserFileStatus } from "../projects/projectsService";
 import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "../services/fileUtils";
 
@@ -139,7 +138,7 @@ export function useChatController({
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useAppParams();
-  const { refreshChatSessions, llmProviders } = useChatContext();
+  const { refreshChatSessions } = useChatContext();
   const { agentPreferences: assistantPreferences, forcedToolIds } =
     useAgentsContext();
   const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
@@ -289,15 +288,15 @@ export function useChatController({
 
   const upsertToCompleteMessageTree = ({
     messages,
-    completeMessageTreeOverride,
     chatSessionId,
+    completeMessageTreeOverride,
     makeLatestChildMessage = false,
   }: {
     messages: Message[];
+    chatSessionId: string;
     // if calling this function repeatedly with short delay, stay may not update in time
     // and result in weird behavipr
     completeMessageTreeOverride?: MessageTreeState | null;
-    chatSessionId?: string;
     oldIds?: number[] | null;
     makeLatestChildMessage?: boolean;
   }) => {
@@ -314,13 +313,9 @@ export function useChatController({
       makeLatestChildMessage
     );
 
-    const sessionId = chatSessionId || getCurrentSessionId();
-    updateSessionMessageTree(sessionId, newCompleteMessageTree);
+    updateSessionMessageTree(chatSessionId, newCompleteMessageTree);
 
-    return {
-      sessionId,
-      messageTree: newCompleteMessageTree,
-    };
+    return newCompleteMessageTree;
   };
 
   const stopGenerating = useCallback(async () => {
@@ -329,11 +324,11 @@ export function useChatController({
 
     // Check if the current message uses agent search (any non-null research type)
     const isDeepResearch = lastMessage?.researchType === ResearchType.Deep;
-    const isSimpleAgentFrameworkEnabled =
-      posthog.isFeatureEnabled("simple-agent-framework") ?? false;
+    const isSimpleAgentFrameworkDisabled =
+      posthog.isFeatureEnabled("disable-simple-agent-framework") ?? false;
 
-    // Always call the backend stop endpoint if feature flag is enabled
-    if (isSimpleAgentFrameworkEnabled) {
+    // Always call the backend stop endpoint unless feature flag is enabled to disable it
+    if (!isSimpleAgentFrameworkDisabled) {
       try {
         await stopChatSession(currentSession);
       } catch (error) {
@@ -342,8 +337,8 @@ export function useChatController({
       }
     }
 
-    // Only do the subsequent cleanup if the message was agent search or feature flag is not enabled
-    if (isDeepResearch || !isSimpleAgentFrameworkEnabled) {
+    // Only do the subsequent cleanup if the message was agent search or feature flag is enabled to disable it
+    if (isDeepResearch || isSimpleAgentFrameworkDisabled) {
       abortSession(currentSession);
 
       if (
@@ -624,13 +619,12 @@ export function useChatController({
       const messagesToUpsert = regenerationRequest
         ? [initialAssistantNode] // Only upsert the new assistant for regeneration
         : [initialUserNode, initialAssistantNode]; // Upsert both for normal/edit flow
-      const newMessageDetails = upsertToCompleteMessageTree({
+      currentMessageTreeLocal = upsertToCompleteMessageTree({
         messages: messagesToUpsert,
         completeMessageTreeOverride: currentMessageTreeLocal,
         chatSessionId: frozenSessionId,
       });
       resetInputBar();
-      currentMessageTreeLocal = newMessageDetails.messageTree;
 
       let answer = "";
 
@@ -827,7 +821,7 @@ export function useChatController({
             parentMessage =
               parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
 
-            const newMessageDetails = upsertToCompleteMessageTree({
+            currentMessageTreeLocal = upsertToCompleteMessageTree({
               messages: [
                 {
                   ...initialUserNode,
@@ -855,13 +849,12 @@ export function useChatController({
               completeMessageTreeOverride: currentMessageTreeLocal,
               chatSessionId: frozenSessionId!,
             });
-            currentMessageTreeLocal = newMessageDetails.messageTree;
           }
         }
       } catch (e: any) {
         console.log("Error:", e);
         const errorMsg = e.message;
-        const newMessageDetails = upsertToCompleteMessageTree({
+        currentMessageTreeLocal = upsertToCompleteMessageTree({
           messages: [
             {
               nodeId: initialUserNode.nodeId,
@@ -888,8 +881,8 @@ export function useChatController({
             },
           ],
           completeMessageTreeOverride: currentMessageTreeLocal,
+          chatSessionId: frozenSessionId,
         });
-        currentMessageTreeLocal = newMessageDetails.messageTree;
       }
 
       resetRegenerationState(frozenSessionId);
@@ -921,7 +914,6 @@ export function useChatController({
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,
-      llmProviders,
       // Ensure latest forced tools are used when submitting
       forcedToolIds,
       // Keep tool preference-derived values fresh
@@ -933,11 +925,14 @@ export function useChatController({
   const handleMessageSpecificFileUpload = useCallback(
     async (acceptedFiles: File[]) => {
       const [_, llmModel] = getFinalLLM(
-        llmProviders,
+        llmManager.llmProviders || [],
         liveAssistant || null,
         llmManager.currentLlm
       );
-      const llmAcceptsImages = modelSupportsImageInput(llmProviders, llmModel);
+      const llmAcceptsImages = modelSupportsImageInput(
+        llmManager.llmProviders || [],
+        llmModel
+      );
 
       const imageFiles = acceptedFiles.filter((file) =>
         file.type.startsWith("image/")
@@ -952,11 +947,15 @@ export function useChatController({
         return;
       }
       updateChatStateAction(getCurrentSessionId(), "uploading");
-      const uploadedMessageFiles = await beginUpload(Array.from(acceptedFiles));
+      const uploadedMessageFiles = await beginUpload(
+        Array.from(acceptedFiles),
+        null,
+        setPopup
+      );
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [llmProviders, liveAssistant, llmManager, forcedToolIds]
+    [liveAssistant, llmManager, forcedToolIds]
   );
 
   useEffect(() => {

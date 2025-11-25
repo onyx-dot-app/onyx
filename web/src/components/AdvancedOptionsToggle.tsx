@@ -1,4 +1,3 @@
-import React from "react";
 import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
 import SvgChevronRight from "@/icons/chevron-right";
@@ -16,7 +15,6 @@ export function AdvancedOptionsToggle({
 }: AdvancedOptionsToggleProps) {
   return (
     <Button
-      type="button"
       internal
       leftIcon={({ className }) => (
         <SvgChevronRight

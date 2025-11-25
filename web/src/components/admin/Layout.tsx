@@ -9,7 +9,11 @@ import { AnnouncementBanner } from "../header/AnnouncementBanner";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { ChatProvider } from "../../refresh-components/contexts/ChatContext";
 
-export async function Layout({ children }: { children: React.ReactNode }) {
+export interface LayoutProps {
+  children: React.ReactNode;
+}
+
+export default async function Layout({ children }: LayoutProps) {
   // Check authentication and admin role
   const authResult = await requireAdminAuth();
 
@@ -17,8 +21,6 @@ export async function Layout({ children }: { children: React.ReactNode }) {
   if (authResult.redirect) {
     return redirect(authResult.redirect);
   }
-
-  const { user } = authResult;
 
   // Fetch chat data (will verify auth again - defense in depth)
   const data = await fetchChatData({});
@@ -39,13 +41,13 @@ export async function Layout({ children }: { children: React.ReactNode }) {
     inputPrompts,
     proSearchToggled,
     availableTools,
-    projects,
   } = data;
 
   return (
     <ChatProvider
       inputPrompts={inputPrompts}
       chatSessions={chatSessions}
+      llmProviders={llmProviders}
       proSearchToggled={proSearchToggled}
       sidebarInitiallyVisible={sidebarInitiallyVisible}
       availableSources={availableSources}
@@ -55,14 +57,12 @@ export async function Layout({ children }: { children: React.ReactNode }) {
       tags={tags}
       availableDocumentSets={documentSets}
       availableTags={tags}
-      llmProviders={llmProviders}
       shouldShowWelcomeModal={shouldShowWelcomeModal}
       defaultAssistantId={defaultAssistantId}
     >
       <ClientLayout
         enableEnterprise={SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED}
         enableCloud={NEXT_PUBLIC_CLOUD_ENABLED}
-        user={user}
       >
         <AnnouncementBanner />
         {children}

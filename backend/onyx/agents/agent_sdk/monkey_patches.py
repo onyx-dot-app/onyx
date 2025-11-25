@@ -5,7 +5,8 @@ from agents.models.openai_responses import Converter as OpenAIResponsesConverter
 
 # TODO: I am very sad that I have to monkey patch this :(
 # Basically, OpenAI agents sdk doesn't convert the tool choice correctly
-# when they have a built-in tool in their framework, like they do for web_search.
+# when they have a built-in tool in their framework, like they do for web_search
+# and image_generation.
 # Going to open up a thread with OpenAI agents team to see what they recommend
 # or what we can fix.
 # A discussion is warranted, but we likely want to just write our own LitellmModel for
@@ -21,8 +22,13 @@ def monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search() -> Non
     orig_func = OpenAIResponsesConverter.convert_tool_choice.__func__  # type: ignore[attr-defined]
 
     def _patched_convert_tool_choice(cls: type, tool_choice: Any) -> Any:
+        # Handle OpenAI hosted tools that we have custom implementations for
+        # Without this patch, the library uses special formatting that breaks our custom tools
+        # See: https://platform.openai.com/docs/api-reference/responses/create#responses_create-tool_choice-hosted_tool-type
         if tool_choice == "web_search":
             return {"type": "function", "name": "web_search"}
+        if tool_choice == "image_generation":
+            return {"type": "function", "name": "image_generation"}
         return orig_func(cls, tool_choice)
 
     OpenAIResponsesConverter.convert_tool_choice = classmethod(  # type: ignore[method-assign, assignment]

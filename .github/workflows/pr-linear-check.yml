@@ -1,8 +1,14 @@
 name: Ensure PR references Linear
+concurrency:
+  group: Ensure-PR-references-Linear-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
 
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
 
 jobs:
   linear-check:

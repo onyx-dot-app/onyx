@@ -6,7 +6,7 @@ from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
-from onyx.chat.models import LlmDoc
+from onyx.chat.turn.models import FetchedDocumentCacheEntry
 from onyx.chat.turn.save_turn import save_turn
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -134,48 +134,21 @@ def test_save_turn_with_single_citation(
         source_link="https://example.com/doc3",
     )
 
-    # Create ordered fetched documents (with citation numbers assigned)
-    ordered_fetched_documents = [
-        LlmDoc(
-            document_id="doc1",
-            content="This is the first document with important information.",
-            blurb="This is the first document...",
-            semantic_identifier="doc1_0",
-            source_type=DocumentSource.WEB,
-            metadata={},
-            updated_at=None,
-            link="https://example.com/doc1",
-            source_links={0: "https://example.com/doc1"},
-            match_highlights=[],
-            document_citation_number=1,  # This document gets citation number 1
+    # Create fetched documents cache with citation numbers
+    fetched_documents_cache = {
+        "doc1": FetchedDocumentCacheEntry(
+            inference_section=inference_section_1,
+            document_citation_number=1,
         ),
-        LlmDoc(
-            document_id="doc2",
-            content="This is the second document with other information.",
-            blurb="This is the second document...",
-            semantic_identifier="doc2_0",
-            source_type=DocumentSource.WEB,
-            metadata={},
-            updated_at=None,
-            link="https://example.com/doc2",
-            source_links={0: "https://example.com/doc2"},
-            match_highlights=[],
+        "doc2": FetchedDocumentCacheEntry(
+            inference_section=inference_section_2,
             document_citation_number=2,
         ),
-        LlmDoc(
-            document_id="doc3",
-            content="This is the third document with more information.",
-            blurb="This is the third document...",
-            semantic_identifier="doc3_0",
-            source_type=DocumentSource.WEB,
-            metadata={},
-            updated_at=None,
-            link="https://example.com/doc3",
-            source_links={0: "https://example.com/doc3"},
-            match_highlights=[],
+        "doc3": FetchedDocumentCacheEntry(
+            inference_section=inference_section_3,
             document_citation_number=3,
         ),
-    ]
+    }
 
     # Create final answer with only citation [[1]](url)
     final_answer = "Based on the research, here's what I found [[1]](https://example.com/doc1). This is the answer."
@@ -213,12 +186,7 @@ def test_save_turn_with_single_citation(
         chat_session_id=chat_session.id,
         research_type=ResearchType.FAST,
         final_answer=final_answer,
-        unordered_fetched_inference_sections=[
-            inference_section_1,
-            inference_section_2,
-            inference_section_3,
-        ],
-        ordered_fetched_documents=ordered_fetched_documents,
+        fetched_documents_cache=fetched_documents_cache,
         iteration_instructions=iteration_instructions,
         global_iteration_responses=global_iteration_responses,
         model_name="gpt-4o",

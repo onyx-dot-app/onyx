@@ -43,6 +43,7 @@ def test_soft_delete_chat_session(
     )
 
     # Verify that the message was processed successfully
+    assert response.error is None, "Chat response should not have an error"
     assert len(response.full_message) > 0, "Chat response should not be empty"
 
     # Verify that the chat session can be retrieved before deletion
@@ -96,6 +97,7 @@ def test_hard_delete_chat_session(
     )
 
     # Verify that the message was processed successfully
+    assert response.error is None, "Chat response should not have an error"
     assert len(response.full_message) > 0, "Chat response should not be empty"
 
     # Verify that the chat session can be retrieved before deletion
@@ -157,6 +159,7 @@ def test_soft_delete_with_agentic_search(
     )
 
     # Verify that the message was processed successfully
+    assert response.error is None, "Chat response should not have an error"
     assert (
         len(response.full_message) > 0 or len(response.used_tools) > 0
     ), "Chat response should not be empty"
@@ -207,6 +210,7 @@ def test_hard_delete_with_agentic_search(
     )
 
     # Verify that the message was processed successfully
+    assert response.error is None, "Chat response should not have an error"
     assert len(response.full_message) > 0, "Chat response should not be empty"
 
     # Test hard deletion

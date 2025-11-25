@@ -113,59 +113,59 @@ Use queries in this priority order (most accessible first):
 
 ```typescript
 // Buttons
-screen.getByRole("button", { name: /submit/i })
-screen.getByRole("button", { name: /cancel/i })
+screen.getByRole("button", { name: /submit/i });
+screen.getByRole("button", { name: /cancel/i });
 
 // Text inputs
-screen.getByRole("textbox", { name: /email/i })
+screen.getByRole("textbox", { name: /email/i });
 
 // Checkboxes
-screen.getByRole("checkbox", { name: /remember me/i })
+screen.getByRole("checkbox", { name: /remember me/i });
 
 // Links
-screen.getByRole("link", { name: /learn more/i })
+screen.getByRole("link", { name: /learn more/i });
 
 // Headings
-screen.getByRole("heading", { name: /welcome/i })
+screen.getByRole("heading", { name: /welcome/i });
 ```
 
 #### 2. Label Queries
 
 ```typescript
 // For form inputs with labels
-screen.getByLabelText(/password/i)
-screen.getByLabelText(/email address/i)
+screen.getByLabelText(/password/i);
+screen.getByLabelText(/email address/i);
 ```
 
 #### 3. Placeholder Queries
 
 ```typescript
 // When no label exists
-screen.getByPlaceholderText(/enter email/i)
+screen.getByPlaceholderText(/enter email/i);
 ```
 
 #### 4. Text Queries
 
 ```typescript
 // For non-interactive text
-screen.getByText(/welcome back/i)
-screen.getByText(/error occurred/i)
+screen.getByText(/welcome back/i);
+screen.getByText(/error occurred/i);
 ```
 
 #### Query Variants
 
 ```typescript
 // getBy - Throws error if not found (immediate)
-screen.getByRole("button")
+screen.getByRole("button");
 
 // queryBy - Returns null if not found (checking absence)
-expect(screen.queryByText(/error/i)).not.toBeInTheDocument()
+expect(screen.queryByText(/error/i)).not.toBeInTheDocument();
 
 // findBy - Returns promise, waits for element (async)
-expect(await screen.findByText(/success/i)).toBeInTheDocument()
+expect(await screen.findByText(/success/i)).toBeInTheDocument();
 
 // getAllBy - Returns array of all matches
-const inputs = screen.getAllByRole("textbox")
+const inputs = screen.getAllByRole("textbox");
 ```
 
 ### Query Selectors: The Wrong Way
@@ -174,13 +174,13 @@ const inputs = screen.getAllByRole("textbox")
 
 ```typescript
 // DON'T query by test IDs
-screen.getByTestId("submit-button")
+screen.getByTestId("submit-button");
 
 // DON'T query by class names
-container.querySelector(".submit-btn")
+container.querySelector(".submit-btn");
 
 // DON'T query by element types
-container.querySelector("button")
+container.querySelector("button");
 ```
 
 ## User Interactions
@@ -204,10 +204,7 @@ await user.type(input, "new value");
 await user.click(screen.getByRole("checkbox"));
 
 // Select from dropdown
-await user.selectOptions(
-  screen.getByRole("combobox"),
-  "option-value"
-);
+await user.selectOptions(screen.getByRole("combobox"), "option-value");
 
 // Upload file
 const file = new File(["content"], "test.txt", { type: "text/plain" });
@@ -658,6 +655,7 @@ test("clears validation on valid input", async () => {
 ### What to Test
 
 **✅ Test user-visible behavior:**
+
 - Forms can be filled and submitted
 - Buttons trigger expected actions
 - Success/error messages appear
@@ -666,12 +664,14 @@ test("clears validation on valid input", async () => {
 - Validation errors show and clear appropriately
 
 **✅ Test integration points:**
+
 - API calls are made with correct parameters
 - Responses are handled properly
 - Error states are handled
 - Loading states appear
 
 **❌ Don't test implementation details:**
+
 - Internal state values
 - Component lifecycle methods
 - CSS class names
@@ -683,14 +683,14 @@ Write test names that describe user behavior:
 
 ```typescript
 // ✅ Good - Describes what user can do
-test("user can create new prompt", async () => {})
-test("shows error when API call fails", async () => {})
-test("filters items by search term", async () => {})
+test("user can create new prompt", async () => {});
+test("shows error when API call fails", async () => {});
+test("filters items by search term", async () => {});
 
 // ❌ Bad - Implementation-focused
-test("handleSubmit is called", async () => {})
-test("state updates correctly", async () => {})
-test("renders without crashing", async () => {})
+test("handleSubmit is called", async () => {});
+test("state updates correctly", async () => {});
+test("renders without crashing", async () => {});
 ```
 
 ### Minimal Mocking
@@ -699,10 +699,10 @@ Only mock external dependencies:
 
 ```typescript
 // ✅ Mock external APIs
-jest.spyOn(global, "fetch")
+jest.spyOn(global, "fetch");
 
 // ✅ Mock Next.js router
-jest.mock("next/navigation")
+jest.mock("next/navigation");
 
 // ✅ Mock problematic packages
 // (configured in tests/setup/__mocks__)
@@ -746,20 +746,22 @@ expect(await screen.findByText("Success")).toBeInTheDocument();
 
 ```typescript
 // ❌ Too broad
-screen.getByRole("button")
+screen.getByRole("button");
 
 // ✅ Specific
-screen.getByRole("button", { name: /submit/i })
+screen.getByRole("button", { name: /submit/i });
 ```
 
 ### Test Times Out
 
 **Causes**:
+
 1. Async operation never completes
 2. Waiting for element that never appears
 3. Missing mock for API call
 
 **Solutions**:
+
 ```typescript
 // Check fetch is mocked
 expect(fetchSpy).toHaveBeenCalled()
@@ -775,6 +777,7 @@ render(<Component />)
 ## Examples
 
 See comprehensive test examples:
+
 - `src/app/auth/login/EmailPasswordForm.test.tsx` - Login/signup workflows, validation
 - `src/app/chat/input-prompts/InputPrompts.test.tsx` - CRUD operations, conditional rendering
 - `src/app/admin/configuration/llm/CustomLLMProviderUpdateForm.test.tsx` - Complex forms, multi-step workflows
@@ -782,6 +785,7 @@ See comprehensive test examples:
 ## Built-in Mocks
 
 Only essential mocks in `tests/setup/__mocks__/`:
+
 - `UserProvider` - Removes auth requirement for tests
 - `react-markdown` / `remark-gfm` - ESM compatibility
 

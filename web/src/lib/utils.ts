@@ -131,3 +131,22 @@ export function formatBytes(
     sizes[unitIndex]
   );
 }
+
+/**
+ * Checks if a filename represents an image file based on its extension.
+ */
+export function isImageFile(fileName: string | null | undefined): boolean {
+  if (!fileName) return false;
+  const lowerFileName = String(fileName).toLowerCase();
+  return IMAGE_EXTENSIONS.some((ext) => lowerFileName.endsWith(`.${ext}`));
+}
+
+/**
+ * Checks if a collection of files contains any non-image files.
+ * Useful for determining whether image previews should be compact.
+ */
+export function hasNonImageFiles(
+  files: Array<{ name?: string | null }>
+): boolean {
+  return files.some((file) => !isImageFile(file.name));
+}

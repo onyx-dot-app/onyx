@@ -1,6 +1,6 @@
 import { ActionsTable } from "./ActionTable";
 import { ToolSnapshot, MCPServersResponse } from "@/lib/tools/interfaces";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import Title from "@/components/ui/title";
 import { fetchSS } from "@/lib/utilsSS";
@@ -9,12 +9,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { ToolIcon } from "@/components/icons/icons";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FiHelpCircle } from "react-icons/fi";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 export default async function Page() {
   // Fetch both tools and MCP servers
@@ -76,21 +71,9 @@ export default async function Page() {
           <CreateButton href="/admin/actions/edit-mcp">
             From MCP server
           </CreateButton>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <FiHelpCircle className="h-4 w-4 cursor-help" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <Text inverted>
-                  MCP (Model Context Protocol) servers provide structured ways
-                  for AI models to interact with external systems and data
-                  sources. They offer a standardized interface for tools and
-                  resources.
-                </Text>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <SimpleTooltip tooltip="MCP (Model Context Protocol) servers provide structured ways for AI models to interact with external systems and data sources. They offer a standardized interface for tools and resources.">
+            <FiHelpCircle className="h-4 w-4 cursor-help" />
+          </SimpleTooltip>
         </div>
 
         <Separator />

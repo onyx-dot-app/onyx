@@ -98,6 +98,7 @@ interface ProjectsContextType {
   ) => Promise<ProjectFile[]>;
   allRecentFiles: ProjectFile[];
   allCurrentProjectFiles: ProjectFile[];
+  isLoadingProjectDetails: boolean;
   setCurrentMessageFiles: Dispatch<SetStateAction<ProjectFile[]>>;
   upsertInstructions: (instructions: string) => Promise<void>;
   fetchProjects: () => Promise<Project[]>;
@@ -154,6 +155,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   const [allCurrentProjectFiles, setAllCurrentProjectFiles] = useState<
     ProjectFile[]
   >([]);
+  const [isLoadingProjectDetails, setIsLoadingProjectDetails] = useState(false);
   const projectToUploadFilesMapRef = useRef<Map<number, ProjectFile[]>>(
     new Map()
   );
@@ -174,15 +176,20 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   // Load full details for current project
   const refreshCurrentProjectDetails = useCallback(async () => {
     if (currentProjectId) {
-      const details = await svcGetProjectDetails(currentProjectId);
-      await fetchProjects();
-      setCurrentProjectDetails(details);
-      setAllCurrentProjectFiles(details.files || []);
-      if (projectToUploadFilesMapRef.current.has(currentProjectId)) {
-        setAllCurrentProjectFiles((prev) => [
-          ...prev,
-          ...(projectToUploadFilesMapRef.current.get(currentProjectId) || []),
-        ]);
+      setIsLoadingProjectDetails(true);
+      try {
+        const details = await svcGetProjectDetails(currentProjectId);
+        await fetchProjects();
+        setCurrentProjectDetails(details);
+        setAllCurrentProjectFiles(details.files || []);
+        if (projectToUploadFilesMapRef.current.has(currentProjectId)) {
+          setAllCurrentProjectFiles((prev) => [
+            ...prev,
+            ...(projectToUploadFilesMapRef.current.get(currentProjectId) || []),
+          ]);
+        }
+      } finally {
+        setIsLoadingProjectDetails(false);
       }
     }
   }, [
@@ -301,6 +308,36 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     return tempIdMap;
   };
 
+  const removeOptimisticFilesByTempIds = useCallback(
+    (optimisticTempIds: Set<string>, projectId?: number | null) => {
+      // Remove from recent optimistic list
+      setAllRecentFiles((prev) =>
+        prev.filter((f) => !f.temp_id || !optimisticTempIds.has(f.temp_id))
+      );
+
+      // Remove from current message files if present
+      setCurrentMessageFiles((prev) =>
+        prev.filter((f) => !f.temp_id || !optimisticTempIds.has(f.temp_id))
+      );
+
+      // Remove from project optimistic list
+      if (projectId) {
+        setAllCurrentProjectFiles((prev) =>
+          prev.filter((f) => !f.temp_id || !optimisticTempIds.has(f.temp_id))
+        );
+
+        // Clear the tracked optimistic files for this project
+        let projectIdToFiles: ProjectFile[] =
+          projectToUploadFilesMapRef.current.get(projectId) || [];
+        projectIdToFiles = projectIdToFiles.filter(
+          (f: ProjectFile) => !f.temp_id || !optimisticTempIds.has(f.temp_id)
+        );
+        projectToUploadFilesMapRef.current.set(projectId, projectIdToFiles);
+      }
+    },
+    [projectToUploadFilesMapRef]
+  );
+
   const beginUpload = useCallback(
     async (
       files: File[],
@@ -360,10 +397,18 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
           if (unsupported.length > 0 || nonAccepted.length > 0) {
             const detailsParts: string[] = [];
             if (unsupported.length > 0) {
-              detailsParts.push(`Unsupported: ${unsupported.join(", ")}`);
+              detailsParts.push(
+                `Unsupported file types: ${unsupported.join(", ")}`
+              );
             }
             if (nonAccepted.length > 0) {
-              detailsParts.push(`Not accepted: ${nonAccepted.join(", ")}`);
+              const noun = nonAccepted.length === 1 ? "File" : "Files";
+              const verb = nonAccepted.length === 1 ? "exceeds" : "exceed";
+              detailsParts.push(
+                `${noun} ${verb} the 100k token limit: ${nonAccepted.join(
+                  ", "
+                )}`
+              );
             }
             setPopup?.({
               type: "warning",
@@ -383,6 +428,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
                   .map((f) => f.temp_id as string)
               )
             );
+            removeOptimisticFilesByTempIds(new Set(failedTempIds), projectId);
             if (failedTempIds.length > 0) {
               onFailure?.(failedTempIds);
             }
@@ -404,26 +450,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
               .filter((id): id is string => Boolean(id))
           );
 
-          // Remove from recent optimistic list
-          setAllRecentFiles((prev) =>
-            prev.filter((f) => !f.temp_id || !optimisticTempIds.has(f.temp_id))
-          );
-
-          // Remove from current message files if present
-          setCurrentMessageFiles((prev) =>
-            prev.filter((f) => !f.temp_id || !optimisticTempIds.has(f.temp_id))
-          );
-
-          // Remove from project optimistic list
-          if (projectId) {
-            setAllCurrentProjectFiles((prev) =>
-              prev.filter(
-                (f) => !f.temp_id || !optimisticTempIds.has(f.temp_id)
-              )
-            );
-            // Clear the tracked optimistic files for this project
-            projectToUploadFilesMapRef.current.delete(projectId);
-          }
+          removeOptimisticFilesByTempIds(optimisticTempIds, projectId);
 
           setPopup?.({
             type: "error",
@@ -440,7 +467,12 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
         });
       return optimisticFiles;
     },
-    [currentProjectId, refreshCurrentProjectDetails, refreshRecentFiles]
+    [
+      currentProjectId,
+      refreshCurrentProjectDetails,
+      refreshRecentFiles,
+      removeOptimisticFilesByTempIds,
+    ]
   );
 
   const uploadFiles = useCallback(
@@ -506,6 +538,12 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       })
     );
   }, [recentFiles]);
+
+  // Clear project details when switching projects to show skeleton
+  useEffect(() => {
+    setCurrentProjectDetails(null);
+    setAllCurrentProjectFiles([]);
+  }, [currentProjectId]);
 
   useEffect(() => {
     if (currentProjectId) {
@@ -672,6 +710,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       currentMessageFiles,
       allRecentFiles,
       allCurrentProjectFiles,
+      isLoadingProjectDetails,
       beginUpload,
       setCurrentMessageFiles,
       upsertInstructions,
@@ -744,6 +783,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       currentMessageFiles,
       allRecentFiles,
       allCurrentProjectFiles,
+      isLoadingProjectDetails,
       beginUpload,
       setCurrentMessageFiles,
       upsertInstructions,

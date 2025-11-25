@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 export default function GeneratingImageDisplay({ isCompleted = false }) {
   const [progress, setProgress] = useState(0);
   const progressRef = useRef(0);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(Date.now());
 
   useEffect(() => {

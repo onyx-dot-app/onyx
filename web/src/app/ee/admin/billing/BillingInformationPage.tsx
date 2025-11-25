@@ -16,9 +16,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import Button from "@/refresh-components/buttons/Button";
-import { CreditCard, ArrowFatUp } from "@phosphor-icons/react";
+import { CreditCard } from "@phosphor-icons/react";
 import { SubscriptionSummary } from "./SubscriptionSummary";
 import { BillingAlerts } from "./BillingAlerts";
+import { ClipboardIcon } from "@/components/icons/icons";
 
 export default function BillingInformationPage() {
   const router = useRouter();
@@ -114,8 +115,11 @@ export default function BillingInformationPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={handleManageSubscription} className="w-full">
-            <ArrowFatUp className="mr-2" size={16} />
+          <Button
+            onClick={handleManageSubscription}
+            className="w-full"
+            leftIcon={ClipboardIcon}
+          >
             Manage Subscription
           </Button>
         </CardContent>

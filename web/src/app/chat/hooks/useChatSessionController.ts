@@ -42,12 +42,12 @@ interface UseChatSessionControllerProps {
   ) => void;
 
   // Refs
-  chatSessionIdRef: React.MutableRefObject<string | null>;
-  loadedIdSessionRef: React.MutableRefObject<string | null>;
-  textAreaRef: React.RefObject<HTMLTextAreaElement>;
-  scrollInitialized: React.MutableRefObject<boolean>;
-  isInitialLoad: React.MutableRefObject<boolean>;
-  submitOnLoadPerformed: React.MutableRefObject<boolean>;
+  chatSessionIdRef: React.RefObject<string | null>;
+  loadedIdSessionRef: React.RefObject<string | null>;
+  textAreaRef: React.RefObject<HTMLTextAreaElement | null>;
+  scrollInitialized: React.RefObject<boolean>;
+  isInitialLoad: React.RefObject<boolean>;
+  submitOnLoadPerformed: React.RefObject<boolean>;
 
   // State
   hasPerformedInitialScroll: boolean;
@@ -98,6 +98,9 @@ export function useChatSessionController({
   const setCurrentSession = useChatSessionStore(
     (state) => state.setCurrentSession
   );
+  const initializeSession = useChatSessionStore(
+    (state) => state.initializeSession
+  );
   const updateHasPerformedInitialScroll = useChatSessionStore(
     (state) => state.updateHasPerformedInitialScroll
   );
@@ -112,6 +115,7 @@ export function useChatSessionController({
       state.sessions.get(state.currentSessionId || "")?.chatState || "input"
   );
   const currentChatHistory = useCurrentMessageHistory();
+  const chatSessions = useChatSessionStore((state) => state.sessions);
   const { setForcedToolIds } = useAgentsContext();
 
   // Fetch chat messages for the chat session
@@ -187,6 +191,9 @@ export function useChatSessionController({
 
       // Ensure the current session is set to the actual session ID from the response
       setCurrentSession(chatSession.chat_session_id);
+
+      // Initialize session data including personaId
+      initializeSession(chatSession.chat_session_id, chatSession);
 
       const newMessageMap = processRawChatHistory(
         chatSession.messages,
@@ -307,7 +314,22 @@ export function useChatSessionController({
       !searchParams?.get(SEARCH_PARAM_NAMES.SKIP_RELOAD) ||
       currentChatHistory.length === 0
     ) {
-      initialSessionFetch();
+      const existingChatSession = existingChatSessionId
+        ? chatSessions.get(existingChatSessionId)
+        : null;
+
+      if (
+        !existingChatSession?.chatState ||
+        existingChatSession.chatState === "input"
+      ) {
+        initialSessionFetch();
+      } else {
+        // no need to fetch if the chat session is currently streaming (it would be )
+        // out of date).
+        // this means that the user kicked off a message, switched to a different
+        // chat, and then switched back.
+        setCurrentSession(existingChatSessionId);
+      }
     } else {
       // Remove SKIP_RELOAD param without triggering a page reload
       const currentSearchParams = new URLSearchParams(searchParams?.toString());

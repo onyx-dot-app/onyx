@@ -1,5 +1,15 @@
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 
+export enum LLMProviderName {
+  OPENAI = "openai",
+  ANTHROPIC = "anthropic",
+  OLLAMA_CHAT = "ollama_chat",
+  AZURE = "azure",
+  OPENROUTER = "openrouter",
+  VERTEX_AI = "vertex_ai",
+  BEDROCK = "bedrock",
+}
+
 export interface CustomConfigOption {
   label: string;
   value: string;
@@ -29,6 +39,7 @@ export interface ModelConfiguration {
 export interface WellKnownLLMProviderDescriptor {
   name: string;
   display_name: string;
+  title: string;
 
   deployment_name_required: boolean;
   api_key_required: boolean;
@@ -62,6 +73,7 @@ export interface LLMProvider {
   fast_default_model_name: string | null;
   is_public: boolean;
   groups: number[];
+  personas: number[];
   deployment_name: string | null;
   default_vision_model: string | null;
   is_default_vision_provider: boolean | null;
@@ -86,6 +98,7 @@ export interface LLMProviderDescriptor {
   is_default_provider: boolean | null;
   is_public: boolean;
   groups: number[];
+  personas: number[];
   model_configurations: ModelConfiguration[];
 }
 

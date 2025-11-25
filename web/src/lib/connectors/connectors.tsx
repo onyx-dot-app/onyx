@@ -245,6 +245,45 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  testrail: {
+    description: "Configure TestRail connector",
+    values: [
+      {
+        type: "text",
+        label: "Project IDs",
+        name: "project_ids",
+        optional: true,
+        description:
+          "Comma-separated list of TestRail project IDs to index (e.g., 1 or 1,2,3). Leave empty to index all projects.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        label: "Cases Page Size",
+        name: "cases_page_size",
+        optional: true,
+        description:
+          "Number of test cases to fetch per page from the TestRail API (default: 250)",
+      },
+      {
+        type: "number",
+        label: "Max Pages",
+        name: "max_pages",
+        optional: true,
+        description:
+          "Maximum number of pages to fetch to prevent infinite loops (default: 10000)",
+      },
+      {
+        type: "number",
+        label: "Skip Document Character Limit",
+        name: "skip_doc_absolute_chars",
+        optional: true,
+        description:
+          "Skip indexing test cases that exceed this character limit (default: 200000)",
+      },
+    ],
+  },
   gitlab: {
     description: "Configure GitLab connector",
     values: [
@@ -467,10 +506,19 @@ export const connectorConfigs: Record<
         optional: true,
         default: "",
         isTextArea: true,
+        visibleCondition: (values, currentCredential) =>
+          !currentCredential?.credential_json?.google_tokens,
+      },
+      {
+        type: "checkbox",
+        label: "Hide domain link-only files?",
+        description:
+          "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access.",
+        name: "exclude_domain_link_only",
+        optional: true,
+        default: false,
       },
     ],
-    advancedValuesVisibleCondition: (values, currentCredential) =>
-      !currentCredential?.credential_json?.google_tokens,
   },
   gmail: {
     description: "Configure Gmail connector",
@@ -1546,6 +1594,29 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     advanced_values: [],
   },
 };
+type ConnectorField = ConnectionConfiguration["values"][number];
+
+const buildInitialValuesForFields = (
+  fields: ConnectorField[]
+): Record<string, any> =>
+  fields.reduce(
+    (acc, field) => {
+      if (field.type === "select") {
+        acc[field.name] = null;
+      } else if (field.type === "list") {
+        acc[field.name] = field.default || [];
+      } else if (field.type === "multiselect") {
+        acc[field.name] = field.default || [];
+      } else if (field.type === "checkbox") {
+        acc[field.name] = field.default ?? false;
+      } else if (field.default !== undefined) {
+        acc[field.name] = field.default;
+      }
+      return acc;
+    },
+    {} as Record<string, any>
+  );
+
 export function createConnectorInitialValues(
   connector: ConfigurableSources
 ): Record<string, any> & AccessTypeGroupSelectorFormType {
@@ -1555,23 +1626,8 @@ export function createConnectorInitialValues(
     name: "",
     groups: [],
     access_type: "public",
-    ...configuration.values.reduce(
-      (acc, field) => {
-        if (field.type === "select") {
-          acc[field.name] = null;
-        } else if (field.type === "list") {
-          acc[field.name] = field.default || [];
-        } else if (field.type === "multiselect") {
-          acc[field.name] = field.default || [];
-        } else if (field.type === "checkbox") {
-          acc[field.name] = field.default || false;
-        } else if (field.default !== undefined) {
-          acc[field.name] = field.default;
-        }
-        return acc;
-      },
-      {} as { [record: string]: any }
-    ),
+    ...buildInitialValuesForFields(configuration.values),
+    ...buildInitialValuesForFields(configuration.advanced_values),
   };
 }
 

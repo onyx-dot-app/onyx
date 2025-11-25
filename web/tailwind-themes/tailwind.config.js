@@ -1,18 +1,10 @@
+const plugin = require("tailwindcss/plugin");
+
 /** @type {import('tailwindcss').Config} */
 
 module.exports = {
   darkMode: "class",
-  content: [
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-
-    // Or if using `src` directory:
-    "./src/**/*.{js,ts,jsx,tsx,mdx}",
-
-    // tremor
-    "./node_modules/@tremor/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./src/**/*.{js,jsx,ts,tsx}", "./lib/opal/**/*.{js,jsx,ts,tsx}"],
   theme: {
     transparent: "transparent",
     current: "currentColor",
@@ -211,24 +203,6 @@ module.exports = {
         border: "var(--border-01)",
         text: "var(--text-04)",
       },
-      boxShadow: {
-        "01": "0px 2px 8px 0px var(--shadow-01)",
-        "02": "0px 2px 8px 0px var(--shadow-02)",
-        "03": "0px 2px 8px 0px var(--shadow-03)",
-
-        // light
-        "tremor-input": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
-        "tremor-card":
-          "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
-        "tremor-dropdown":
-          "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-        // dark
-        "dark-tremor-input": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
-        "dark-tremor-card":
-          "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
-        "dark-tremor-dropdown":
-          "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-      },
       borderRadius: {
         "02": "var(--border-radius-02)",
         "04": "var(--border-radius-04)",
@@ -240,10 +214,6 @@ module.exports = {
       fontSize: {
         "2xs": "0.625rem",
         "code-sm": "small",
-        "tremor-label": ["0.75rem"],
-        "tremor-default": ["0.875rem", { lineHeight: "1.25rem" }],
-        "tremor-title": ["1.125rem", { lineHeight: "1.75rem" }],
-        "tremor-metric": ["1.875rem", { lineHeight: "2.25rem" }],
       },
       fontWeight: {
         description: "375",
@@ -325,5 +295,8 @@ module.exports = {
     require("@tailwindcss/typography"),
     require("@headlessui/tailwindcss"),
     require("tailwindcss-animate"),
+    plugin(({ addVariant }) => {
+      addVariant("focus-within-nonactive", "&:focus-within:not(:active)");
+    }),
   ],
 };

@@ -10,6 +10,7 @@ from uuid import UUID
 
 from agents import Model
 from agents import ModelSettings
+from agents.models.openai_responses import OpenAIResponsesModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
@@ -18,7 +19,7 @@ from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
 from onyx.chat.chat_utils import process_kg_commands
-from onyx.chat.memories import make_memories_callback
+from onyx.chat.memories import get_memories
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ChatBasicResponse
@@ -34,7 +35,7 @@ from onyx.chat.models import UserKnowledgeFilePacket
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import (
-    default_build_system_message_for_default_assistant_v2,
+    default_build_system_message_v2,
 )
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.chat.turn import fast_chat_turn
@@ -77,9 +78,10 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.projects import get_project_instructions
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.user_file import get_file_ids_by_user_file_ids
 from onyx.document_index.factory import get_default_document_index
 from onyx.feature_flags.factory import get_default_feature_flag_provider
-from onyx.feature_flags.feature_flags_keys import SIMPLE_AGENT_FRAMEWORK
+from onyx.feature_flags.feature_flags_keys import DISABLE_SIMPLE_AGENT_FRAMEWORK
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import build_frontend_file_url
@@ -113,6 +115,7 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
+from onyx.tools.utils import compute_all_tool_tokens
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -419,10 +422,10 @@ def stream_chat_message_objects(
             raise RuntimeError(
                 "Must specify a set of documents for chat or specify search options"
             )
-
         try:
             llm, fast_llm = get_llms_for_persona(
                 persona=persona,
+                user=user,
                 llm_override=new_msg_req.llm_override or chat_session.llm_override,
                 additional_headers=litellm_additional_headers,
                 long_term_logger=long_term_logger,
@@ -517,28 +520,35 @@ def stream_chat_message_objects(
         files = load_all_chat_files(history_msgs, new_msg_req.file_descriptors)
         req_file_ids = [f["id"] for f in new_msg_req.file_descriptors]
         latest_query_files = [file for file in files if file.file_id in req_file_ids]
-        user_file_ids: list[UUID] = []
+        current_message_user_file_ids: list[UUID] = []
+        persona_user_file_ids: list[UUID] = []
 
         if persona.user_files:
             for uf in persona.user_files:
-                user_file_ids.append(uf.id)
+                persona_user_file_ids.append(uf.id)
 
         if new_msg_req.current_message_files:
             for fd in new_msg_req.current_message_files:
                 uid = fd.get("user_file_id")
-                if uid is not None:
-                    user_file_id = UUID(uid)
-                    user_file_ids.append(user_file_id)
+                if not uid:
+                    continue
+                try:
+                    current_message_user_file_ids.append(UUID(uid))
+                except (TypeError, ValueError, AttributeError):
+                    logger.warning(
+                        "Skipping invalid user_file_id from current_message_files: %s",
+                        uid,
+                    )
 
         # Load in user files into memory and create search tool override kwargs if needed
         # if we have enough tokens, we don't need to use search
         # we can just pass them into the prompt directly
         (
             in_memory_user_files,
-            user_file_models,
             search_tool_override_kwargs_for_user_files,
         ) = parse_user_files(
-            user_file_ids=user_file_ids or [],
+            persona_user_file_ids=persona_user_file_ids,
+            current_message_user_file_ids=current_message_user_file_ids,
             project_id=chat_session.project_id,
             db_session=db_session,
             persona=persona,
@@ -559,15 +569,20 @@ def stream_chat_message_objects(
                 ]
             )
 
-        # we don't want to attach project files to the user message
+        current_message_file_ids = []
+        if current_message_user_file_ids:
+            current_message_file_ids = get_file_ids_by_user_file_ids(
+                current_message_user_file_ids, db_session
+            )
+
+        # we don't want to attach project files and assistant files to the user message
         if user_message:
             attach_files_to_chat_message(
                 chat_message=user_message,
                 files=[
                     new_file.to_file_descriptor()
                     for new_file in latest_query_files
-                    if project_file_ids is not None
-                    and (new_file.file_id not in project_file_ids)
+                    if (new_file.file_id in current_message_file_ids)
                 ],
                 db_session=db_session,
                 commit=False,
@@ -647,10 +662,11 @@ def stream_chat_message_objects(
         prompt_override = new_msg_req.prompt_override or chat_session.prompt_override
         if new_msg_req.persona_override_config:
             prompt_config = PromptConfig(
-                system_prompt=new_msg_req.persona_override_config.prompts[
+                default_behavior_system_prompt=new_msg_req.persona_override_config.prompts[
                     0
                 ].system_prompt,
-                task_prompt=new_msg_req.persona_override_config.prompts[0].task_prompt,
+                custom_instructions=None,
+                reminder=new_msg_req.persona_override_config.prompts[0].task_prompt,
                 datetime_aware=new_msg_req.persona_override_config.prompts[
                     0
                 ].datetime_aware,
@@ -659,10 +675,11 @@ def stream_chat_message_objects(
             # Apply prompt override on top of persona-embedded prompt
             prompt_config = PromptConfig.from_model(
                 persona,
+                db_session=db_session,
                 prompt_override=prompt_override,
             )
         else:
-            prompt_config = PromptConfig.from_model(persona)
+            prompt_config = PromptConfig.from_model(persona, db_session=db_session)
 
         # Retrieve project-specific instructions if this chat session is associated with a project.
         project_instructions: str | None = (
@@ -717,9 +734,7 @@ def stream_chat_message_objects(
                 answer_style_config=answer_style_config,
                 document_pruning_config=document_pruning_config,
             ),
-            image_generation_tool_config=ImageGenerationToolConfig(
-                additional_headers=litellm_additional_headers,
-            ),
+            image_generation_tool_config=ImageGenerationToolConfig(),
             custom_tool_config=CustomToolConfig(
                 chat_session_id=chat_session_id,
                 message_id=user_message.id if user_message else None,
@@ -743,37 +758,35 @@ def stream_chat_message_objects(
         ]
 
         if not search_tool_override_kwargs_for_user_files and in_memory_user_files:
+            # we only want to send the user files attached to the current message
             yield UserKnowledgeFilePacket(
                 user_files=[
                     FileDescriptor(
                         id=str(file.file_id), type=file.file_type, name=file.filename
                     )
                     for file in in_memory_user_files
-                    if project_file_ids is not None
-                    and (file.file_id not in project_file_ids)
+                    if (file.file_id in current_message_file_ids)
                 ]
             )
         feature_flag_provider = get_default_feature_flag_provider()
-        simple_agent_framework_enabled = (
+        simple_agent_framework_disabled = (
             feature_flag_provider.feature_enabled_for_user_tenant(
-                flag_key=SIMPLE_AGENT_FRAMEWORK,
+                flag_key=DISABLE_SIMPLE_AGENT_FRAMEWORK,
                 user=user,
                 tenant_id=tenant_id,
             )
-            and not new_msg_req.use_agentic_search
+            or new_msg_req.use_agentic_search
         )
         prompt_user_message = default_build_user_message(
             user_query=final_msg.message,
             prompt_config=prompt_config,
             files=latest_query_files,
         )
-        mem_callback = make_memories_callback(user, db_session)
+        memories = get_memories(user, db_session)
         system_message = (
-            default_build_system_message_for_default_assistant_v2(
-                prompt_config, llm.config, mem_callback, tools
-            )
-            if simple_agent_framework_enabled and persona.is_default_persona
-            else default_build_system_message(prompt_config, llm.config, mem_callback)
+            default_build_system_message_v2(prompt_config, llm.config, memories, tools)
+            if not simple_agent_framework_disabled and persona.is_default_persona
+            else default_build_system_message(prompt_config, llm.config, memories)
         )
         prompt_builder = AnswerPromptBuilder(
             user_message=prompt_user_message,
@@ -800,6 +813,7 @@ def stream_chat_message_objects(
                 or get_main_llm_from_tuple(
                     get_llms_for_persona(
                         persona=persona,
+                        user=user,
                         llm_override=(
                             new_msg_req.llm_override or chat_session.llm_override
                         ),
@@ -819,7 +833,7 @@ def stream_chat_message_objects(
             skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
             project_instructions=project_instructions,
         )
-        if simple_agent_framework_enabled:
+        if not simple_agent_framework_disabled:
             llm_model, model_settings = get_llm_model_and_settings_for_persona(
                 persona=persona,
                 llm_override=(new_msg_req.llm_override or chat_session.llm_override),
@@ -836,6 +850,7 @@ def stream_chat_message_objects(
                 prompt_config,
                 llm_model,
                 model_settings,
+                user,
             )
         else:
             from onyx.chat.packet_proccessing import process_streamed_packets
@@ -880,6 +895,40 @@ def stream_chat_message_objects(
 
 
 # TODO: Refactor this to live somewhere else
+def _reserve_prompt_tokens_for_agent_overhead(
+    prompt_builder: AnswerPromptBuilder,
+    primary_llm: LLM,
+    tools: list[Tool],
+    prompt_config: PromptConfig,
+) -> None:
+    try:
+        tokenizer = get_tokenizer(
+            provider_type=primary_llm.config.model_provider,
+            model_name=primary_llm.config.model_name,
+        )
+    except Exception:
+        logger.exception("Failed to initialize tokenizer for agent token budgeting.")
+        return
+
+    reserved_tokens = 0
+
+    if tools:
+        try:
+            reserved_tokens += compute_all_tool_tokens(tools, tokenizer)
+        except Exception:
+            logger.exception("Failed to compute tool token budget.")
+
+    custom_instructions = prompt_config.custom_instructions
+    if custom_instructions:
+        custom_instruction_text = f"Custom Instructions: {custom_instructions}"
+        reserved_tokens += len(tokenizer.encode(custom_instruction_text))
+
+    if reserved_tokens <= 0:
+        return
+
+    prompt_builder.max_tokens = max(0, prompt_builder.max_tokens - reserved_tokens)
+
+
 def _fast_message_stream(
     answer: Answer,
     tools: list[Tool],
@@ -890,9 +939,18 @@ def _fast_message_stream(
     prompt_config: PromptConfig,
     llm_model: Model,
     model_settings: ModelSettings,
+    user_or_none: User | None,
 ) -> Generator[Packet, None, None]:
+    # TODO: clean up this jank
+    is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
+    prompt_builder = answer.graph_inputs.prompt_builder
+    primary_llm = answer.graph_tooling.primary_llm
+    if prompt_builder and primary_llm:
+        _reserve_prompt_tokens_for_agent_overhead(
+            prompt_builder, primary_llm, tools, prompt_config
+        )
     messages = base_messages_to_agent_sdk_msgs(
-        answer.graph_inputs.prompt_builder.build()
+        answer.graph_inputs.prompt_builder.build(), is_responses_api=is_responses_api
     )
     emitter = get_default_emitter()
     return fast_chat_turn.fast_chat_turn(
@@ -906,12 +964,15 @@ def _fast_message_stream(
             db_session=db_session,
             redis_client=redis_client,
             emitter=emitter,
+            user_or_none=user_or_none,
+            prompt_config=prompt_config,
         ),
         chat_session_id=chat_session_id,
         message_id=reserved_message_id,
         research_type=answer.graph_config.behavior.research_type,
         prompt_config=prompt_config,
         force_use_tool=answer.graph_tooling.force_use_tool,
+        latest_query_files=answer.graph_inputs.files,
     )
 
 

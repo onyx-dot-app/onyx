@@ -5,7 +5,7 @@ import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useState, useEffect, useCallback } from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
-import { CustomCheckbox } from "@/components/CustomCheckbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { updateHiddenStatus } from "../lib";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { getErrorMsg } from "@/lib/fetchUtils";
@@ -20,6 +20,7 @@ import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
+import { ThreeDotsLoader } from "@/components/Loading";
 
 const DocumentDisplay = ({
   document,
@@ -89,7 +90,7 @@ const DocumentDisplay = ({
             )}
           </div>
           <div className="ml-1 my-auto">
-            <CustomCheckbox checked={!document.hidden} />
+            <Checkbox checked={!document.hidden} />
           </div>
         </div>
       </div>
@@ -120,22 +121,28 @@ export function Explorer({
   const [query, setQuery] = useState(initialSearchValue || "");
   const [timeoutId, setTimeoutId] = useState<number | null>(null);
   const [results, setResults] = useState<OnyxDocument[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const filterManager = useFilters();
 
   const onSearch = useCallback(
     async (query: string) => {
-      const filters = buildFilters(
-        filterManager.selectedSources,
-        filterManager.selectedDocumentSets,
-        filterManager.timeRange,
-        filterManager.selectedTags
-      );
-      const results = await adminSearch(query, filters);
-      if (results.ok) {
-        setResults((await results.json()).documents);
+      setIsLoading(true);
+      try {
+        const filters = buildFilters(
+          filterManager.selectedSources,
+          filterManager.selectedDocumentSets,
+          filterManager.timeRange,
+          filterManager.selectedTags
+        );
+        const results = await adminSearch(query, filters);
+        if (results.ok) {
+          setResults((await results.json()).documents);
+        }
+      } finally {
+        setTimeoutId(null);
+        setIsLoading(false);
       }
-      setTimeoutId(null);
     },
     [
       filterManager.selectedDocumentSets,
@@ -149,17 +156,12 @@ export function Explorer({
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
     }
+    router.replace(
+      `/admin/documents/explorer?query=${encodeURIComponent(query)}`
+    );
 
-    if (query && query.trim() !== "") {
-      router.replace(
-        `/admin/documents/explorer?query=${encodeURIComponent(query)}`
-      );
-
-      const newTimeoutId = window.setTimeout(() => onSearch(query), 300);
-      setTimeoutId(newTimeoutId);
-    } else {
-      setResults([]);
-    }
+    const newTimeoutId = window.setTimeout(() => onSearch(query), 300);
+    setTimeoutId(newTimeoutId);
   }, [
     query,
     filterManager.selectedDocumentSets,
@@ -215,12 +217,7 @@ export function Explorer({
           })}
         </div>
       )}
-      {!query && (
-        <Text className="">
-          Search for a document above to modify its boost or hide it from
-          searches.
-        </Text>
-      )}
+      {isLoading && <ThreeDotsLoader />}
     </div>
   );
 }

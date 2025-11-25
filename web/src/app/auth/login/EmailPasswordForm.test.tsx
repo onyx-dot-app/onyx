@@ -50,7 +50,7 @@ describe("Email/Password Login Workflow", () => {
     await user.type(passwordInput, "password123");
 
     // User submits the form
-    const loginButton = screen.getByRole("button", { name: /log in/i });
+    const loginButton = screen.getByRole("button", { name: /sign in/i });
     await user.click(loginButton);
 
     // After successful login, user should be redirected to /chat
@@ -96,13 +96,13 @@ describe("Email/Password Login Workflow", () => {
     await user.type(passwordInput, "wrongpassword");
 
     // User submits
-    const loginButton = screen.getByRole("button", { name: /log in/i });
+    const loginButton = screen.getByRole("button", { name: /sign in/i });
     await user.click(loginButton);
 
-    // Verify error message is displayed
+    // Verify field-level error message is displayed (not the toast)
     await waitFor(() => {
       expect(
-        screen.getByText(/invalid email or password/i)
+        screen.getByText(/^Invalid email or password$/i)
       ).toBeInTheDocument();
     });
   });
@@ -148,7 +148,9 @@ describe("Email/Password Signup Workflow", () => {
     await user.type(passwordInput, "securepassword123");
 
     // User submits the signup form
-    const signupButton = screen.getByRole("button", { name: /sign up/i });
+    const signupButton = screen.getByRole("button", {
+      name: /create account/i,
+    });
     await user.click(signupButton);
 
     // Verify signup API was called
@@ -212,13 +214,17 @@ describe("Email/Password Signup Workflow", () => {
     await user.type(passwordInput, "password123");
 
     // User submits
-    const signupButton = screen.getByRole("button", { name: /sign up/i });
+    const signupButton = screen.getByRole("button", {
+      name: /create account/i,
+    });
     await user.click(signupButton);
 
-    // Verify error message is displayed
+    // Verify field-level error message is displayed (not the toast)
     await waitFor(() => {
       expect(
-        screen.getByText(/an account already exists with the specified email/i)
+        screen.getByText(
+          /^An account already exists with the specified email\.$/i
+        )
       ).toBeInTheDocument();
     });
   });
@@ -243,13 +249,15 @@ describe("Email/Password Signup Workflow", () => {
     await user.type(passwordInput, "password123");
 
     // User submits
-    const signupButton = screen.getByRole("button", { name: /sign up/i });
+    const signupButton = screen.getByRole("button", {
+      name: /create account/i,
+    });
     await user.click(signupButton);
 
-    // Verify rate limit message is displayed
+    // Verify field-level rate limit message is displayed (not the toast)
     await waitFor(() => {
       expect(
-        screen.getByText(/too many requests\. please try again later/i)
+        screen.getByText(/^Too many requests\. Please try again later\.$/i)
       ).toBeInTheDocument();
     });
   });

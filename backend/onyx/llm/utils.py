@@ -1,9 +1,11 @@
 import copy
 import io
 import json
+import re
 from collections.abc import Callable
 from collections.abc import Iterator
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
@@ -51,6 +53,47 @@ logger = setup_logger()
 MAX_CONTEXT_TOKENS = 100
 ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
+_TWELVE_LABS_PEGASUS_MODEL_NAMES = [
+    "us.twelvelabs.pegasus-1-2-v1:0",
+    "us.twelvelabs.pegasus-1-2-v1",
+    "twelvelabs/us.twelvelabs.pegasus-1-2-v1:0",
+    "twelvelabs/us.twelvelabs.pegasus-1-2-v1",
+]
+_TWELVE_LABS_PEGASUS_OUTPUT_TOKENS = max(512, GEN_AI_MODEL_FALLBACK_MAX_TOKENS // 4)
+CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
+    model_name: {
+        "max_input_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+        "max_output_tokens": _TWELVE_LABS_PEGASUS_OUTPUT_TOKENS,
+        "max_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+        "supports_reasoning": False,
+        "supports_vision": False,
+    }
+    for model_name in _TWELVE_LABS_PEGASUS_MODEL_NAMES
+}
+
+
+def _unwrap_nested_exception(error: Exception) -> Exception:
+    """
+    Traverse common exception wrappers to surface the underlying LiteLLM error.
+    """
+    visited: set[int] = set()
+    current = error
+    for _ in range(100):
+        visited.add(id(current))
+        candidate: Exception | None = None
+        cause = getattr(current, "__cause__", None)
+        if isinstance(cause, Exception):
+            candidate = cause
+        elif (
+            hasattr(current, "args")
+            and len(getattr(current, "args")) == 1
+            and isinstance(current.args[0], Exception)
+        ):
+            candidate = current.args[0]
+        if candidate is None or id(candidate) in visited:
+            break
+        current = candidate
+    return current
 
 
 def litellm_exception_to_error_msg(
@@ -73,32 +116,77 @@ def litellm_exception_to_error_msg(
     from litellm.exceptions import Timeout
     from litellm.exceptions import ContentPolicyViolationError
     from litellm.exceptions import BudgetExceededError
+    from litellm.exceptions import ServiceUnavailableError
 
-    error_msg = str(e)
+    core_exception = _unwrap_nested_exception(e)
+    error_msg = str(core_exception)
 
     if custom_error_msg_mappings:
         for error_msg_pattern, custom_error_msg in custom_error_msg_mappings.items():
             if error_msg_pattern in error_msg:
                 return custom_error_msg
 
-    if isinstance(e, BadRequestError):
+    if isinstance(core_exception, BadRequestError):
         error_msg = "Bad request: The server couldn't process your request. Please check your input."
-    elif isinstance(e, AuthenticationError):
+    elif isinstance(core_exception, AuthenticationError):
         error_msg = "Authentication failed: Please check your API key and credentials."
-    elif isinstance(e, PermissionDeniedError):
+    elif isinstance(core_exception, PermissionDeniedError):
         error_msg = (
             "Permission denied: You don't have the necessary permissions for this operation."
             "Ensure you have access to this model."
         )
-    elif isinstance(e, NotFoundError):
+    elif isinstance(core_exception, NotFoundError):
         error_msg = "Resource not found: The requested resource doesn't exist."
-    elif isinstance(e, UnprocessableEntityError):
+    elif isinstance(core_exception, UnprocessableEntityError):
         error_msg = "Unprocessable entity: The server couldn't process your request due to semantic errors."
-    elif isinstance(e, RateLimitError):
-        error_msg = (
-            "Rate limit exceeded: Please slow down your requests and try again later."
+    elif isinstance(core_exception, RateLimitError):
+        provider_name = (
+            llm.config.model_provider
+            if llm is not None and llm.config.model_provider
+            else "The LLM provider"
         )
-    elif isinstance(e, ContextWindowExceededError):
+        upstream_detail: str | None = None
+        message_attr = getattr(core_exception, "message", None)
+        if message_attr:
+            upstream_detail = str(message_attr)
+        elif hasattr(core_exception, "api_error"):
+            api_error = core_exception.api_error  # type: ignore[attr-defined]
+            if isinstance(api_error, dict):
+                upstream_detail = (
+                    api_error.get("message")
+                    or api_error.get("detail")
+                    or api_error.get("error")
+                )
+        if not upstream_detail:
+            upstream_detail = str(core_exception)
+        upstream_detail = str(upstream_detail).strip()
+        if ":" in upstream_detail and upstream_detail.lower().startswith(
+            "ratelimiterror"
+        ):
+            upstream_detail = upstream_detail.split(":", 1)[1].strip()
+        error_msg = (
+            f"{provider_name} rate limit: {upstream_detail}"
+            if upstream_detail
+            else f"{provider_name} rate limit exceeded: Please slow down your requests and try again later."
+        )
+    elif isinstance(core_exception, ServiceUnavailableError):
+        provider_name = (
+            llm.config.model_provider
+            if llm is not None and llm.config.model_provider
+            else "The LLM provider"
+        )
+        # Check if this is specifically the Bedrock "Too many connections" error
+        if "Too many connections" in error_msg or "BedrockException" in error_msg:
+            error_msg = (
+                f"{provider_name} is experiencing high connection volume and cannot process your request right now. "
+                "This typically happens when there are too many simultaneous requests to the AI model. "
+                "Please wait a moment and try again. If this persists, contact your system administrator "
+                "to review connection limits and retry configurations."
+            )
+        else:
+            # Generic 503 Service Unavailable
+            error_msg = f"{provider_name} service error: {str(core_exception)}"
+    elif isinstance(core_exception, ContextWindowExceededError):
         error_msg = (
             "Context window exceeded: Your input is too long for the model to process."
         )
@@ -113,18 +201,21 @@ def litellm_exception_to_error_msg(
                 logger.warning(
                     "Unable to get maximum input token for LiteLLM excpetion handling"
                 )
-    elif isinstance(e, ContentPolicyViolationError):
+    elif isinstance(core_exception, ContentPolicyViolationError):
         error_msg = "Content policy violation: Your request violates the content policy. Please revise your input."
-    elif isinstance(e, APIConnectionError):
+    elif isinstance(core_exception, APIConnectionError):
         error_msg = "API connection error: Failed to connect to the API. Please check your internet connection."
-    elif isinstance(e, BudgetExceededError):
+    elif isinstance(core_exception, BudgetExceededError):
         error_msg = (
             "Budget exceeded: You've exceeded your allocated budget for API usage."
         )
-    elif isinstance(e, Timeout):
+    elif isinstance(core_exception, Timeout):
         error_msg = "Request timed out: The operation took too long to complete. Please try again."
-    elif isinstance(e, APIError):
-        error_msg = f"API error: An error occurred while communicating with the API. Details: {str(e)}"
+    elif isinstance(core_exception, APIError):
+        error_msg = (
+            "API error: An error occurred while communicating with the API. "
+            f"Details: {str(core_exception)}"
+        )
     elif not fallback_to_error_msg:
         error_msg = "An unexpected error occurred while processing your request. Please try again later."
     return error_msg
@@ -135,8 +226,6 @@ def _build_content(
     files: list[InMemoryChatFile] | None = None,
 ) -> str:
     """Applies all non-image files."""
-    from onyx.file_processing.extract_file_text import read_pdf_file
-
     if not files:
         return message
 
@@ -147,24 +236,85 @@ def _build_content(
 
     final_message_with_files = "FILES:\n\n"
     for file in text_files:
-        try:
-            file_content = file.content.decode("utf-8")
-        except UnicodeDecodeError:
-            # Try to decode as binary
-            try:
-                file_content, _, _ = read_pdf_file(io.BytesIO(file.content))
-            except Exception:
-                file_content = f"[Binary file content - {file.file_type} format]"
-                logger.exception(
-                    f"Could not decode binary file content for file type: {file.file_type}"
-                )
-                # logger.warning(f"Could not decode binary file content for file type: {file.file_type}")
+        file_content = _decode_text_file_content(file)
         file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""
         final_message_with_files += (
             f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
         )
 
     return final_message_with_files + message
+
+
+def _decode_text_file_content(file: InMemoryChatFile) -> str:
+    try:
+        return file.content.decode("utf-8")
+    except UnicodeDecodeError:
+        return _extract_non_utf8_text_file(file)
+
+
+def _extract_non_utf8_text_file(file: InMemoryChatFile) -> str:
+    """
+    Attempt to extract text from binary uploads (e.g., PDFs) while avoiding
+    unnecessary parsing for unsupported binaries.
+    """
+    from onyx.file_processing.extract_file_text import (
+        ACCEPTED_DOCUMENT_FILE_EXTENSIONS,
+        ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS,
+        extract_file_text,
+    )
+
+    candidate_extension = _infer_extension(file)
+    supported_extensions = set(
+        ACCEPTED_DOCUMENT_FILE_EXTENSIONS + ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS
+    )
+
+    if candidate_extension and candidate_extension in supported_extensions:
+        try:
+            extracted_text = extract_file_text(
+                io.BytesIO(file.content),
+                file.filename or str(file.file_id),
+                break_on_unprocessable=False,
+                extension=candidate_extension,
+            )
+            if extracted_text:
+                return extracted_text
+        except Exception:
+            logger.exception(
+                "Could not extract text content for file %s",
+                file.filename or file.file_id,
+            )
+
+    return _binary_file_placeholder(file)
+
+
+def _infer_extension(file: InMemoryChatFile) -> str | None:
+    """
+    Infer the most likely extension to drive downstream parsers.
+    Falls back to known file types and PDF magic bytes when necessary.
+    """
+    raw_bytes = file.content
+    if raw_bytes.startswith(b"%PDF") or raw_bytes.startswith(b"\xef\xbb\xbf%PDF"):
+        return ".pdf"
+
+    if file.filename:
+        extension = Path(file.filename).suffix.lower()
+        if extension:
+            return extension
+
+    if file.file_type == ChatFileType.CSV:
+        return ".csv"
+
+    if file.file_type == ChatFileType.PLAIN_TEXT:
+        return ".txt"
+
+    return None
+
+
+def _binary_file_placeholder(file: InMemoryChatFile) -> str:
+    image_type = get_image_type_from_bytes(file.content)
+    if image_type:
+        return f"[Binary image content ({image_type}) omitted]"
+    return f"[Binary file content - {file.file_type} format]"
 
 
 def build_content_with_imgs(
@@ -372,7 +522,7 @@ def test_llm(llm: LLM) -> str | None:
     error_msg = None
     for _ in range(2):
         try:
-            llm.invoke("Do not respond")
+            llm.invoke_langchain("Do not respond")
             return None
         except Exception as e:
             error_msg = str(e)
@@ -406,12 +556,17 @@ def get_model_map() -> dict:
             ):
                 starting_map[truncated_key] = potential_truncated_value
 
-    # NOTE: we could add additional models here in the future,
-    # but for now there is no point. Ollama allows the user to
-    # to specify their desired max context window, and it's
+    for model_name, model_metadata in CUSTOM_LITELLM_MODEL_OVERRIDES.items():
+        if model_name in starting_map:
+            continue
+        starting_map[model_name] = copy.deepcopy(model_metadata)
+
+    # NOTE: outside of the explicit CUSTOM_LITELLM_MODEL_OVERRIDES,
+    # we avoid hard-coding additional models here. Ollama, for example,
+    # allows the user to specify their desired max context window, and it's
     # unlikely to be standard across users even for the same model
-    # (it heavily depends on their hardware). For now, we'll just
-    # rely on GEN_AI_MODEL_FALLBACK_MAX_TOKENS to cover this.
+    # (it heavily depends on their hardware). For those cases, we rely on
+    # GEN_AI_MODEL_FALLBACK_MAX_TOKENS to cover this.
     # for model_name in [
     #     "llama3.2",
     #     "llama3.2:1b",
@@ -663,7 +818,6 @@ def get_max_input_tokens_from_llm_provider(
 
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
-
     # First, try to read an explicit configuration from the model_configuration table
     try:
         with get_session_with_current_tenant() as db_session:
@@ -686,6 +840,15 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
         )
 
     # Fallback to looking up the model in the litellm model_cost dict
+    return litellm_thinks_model_supports_image_input(model_name, model_provider)
+
+
+def litellm_thinks_model_supports_image_input(
+    model_name: str, model_provider: str
+) -> bool:
+    """Generally should call `model_supports_image_input` unless you already know that
+    `model_supports_image_input` from the DB is not set OR you need to avoid the performance
+    hit of querying the DB."""
     try:
         model_obj = find_model_obj(get_model_map(), model_provider, model_name)
         if not model_obj:
@@ -694,7 +857,8 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
                 "this model may or may not support image input."
             )
             return False
-        return model_obj.get("supports_vision", False)
+        # The or False here is because sometimes the dict contains the key but the value is None
+        return model_obj.get("supports_vision", False) or False
     except Exception:
         logger.exception(
             f"Failed to get model object for {model_provider}/{model_name}"
@@ -735,3 +899,58 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
             f"Failed to get model object for {model_provider}/{model_name}"
         )
         return False
+
+
+def is_true_openai_model(model_provider: str, model_name: str) -> bool:
+    """
+    Determines if a model is a true OpenAI model or just using OpenAI-compatible API.
+
+    LiteLLM uses the "openai" provider for any OpenAI-compatible server (e.g. vLLM, LiteLLM proxy),
+    but this function checks if the model is actually from OpenAI's model registry.
+    """
+
+    # NOTE: not using the OPENAI_PROVIDER_NAME constant here due to circular import issues
+    if model_provider != "openai":
+        return False
+
+    try:
+        model_map = get_model_map()
+        # Check if any model exists in litellm's registry with openai prefix
+        # If it's registered as "openai/model-name", it's a real OpenAI model
+        if f"openai/{model_name}" in model_map:
+            return True
+
+        if (
+            model_name in model_map
+            and model_map[model_name].get("litellm_provider") == "openai"
+        ):
+            return True
+
+        return False
+
+    except Exception:
+        logger.exception(
+            f"Failed to determine if {model_provider}/{model_name} is a true OpenAI model"
+        )
+        return False
+
+
+def model_needs_formatting_reenabled(model_name: str) -> bool:
+    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
+    # for OpenAI reasoning models to have correct markdown generation
+
+    # Models that need formatting re-enabled
+    model_names = ["gpt-5.1", "gpt-5", "o3", "o1"]
+
+    # Pattern matches if any of these model names appear with word boundaries
+    # Word boundaries include: start/end of string, space, hyphen, or forward slash
+    pattern = (
+        r"(?:^|[\s\-/])("
+        + "|".join(re.escape(name) for name in model_names)
+        + r")(?:$|[\s\-/])"
+    )
+
+    if re.search(pattern, model_name):
+        return True
+
+    return False

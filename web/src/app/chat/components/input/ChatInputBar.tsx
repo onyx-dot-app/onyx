@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { FiPlus } from "react-icons/fi";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import LLMPopover from "@/refresh-components/LLMPopover";
+import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
@@ -17,11 +17,11 @@ import { ChatState } from "@/app/chat/interfaces";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { CalendarIcon, XIcon } from "lucide-react";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
-import { truncateString, cn } from "@/lib/utils";
+import { truncateString, cn, hasNonImageFiles } from "@/lib/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { FileCard } from "@/app/chat/components/projects/ProjectContextPanel";
+import { FileCard } from "./FileCard";
 import {
   ProjectFile,
   UserFileStatus,
@@ -31,7 +31,7 @@ import SvgHourglass from "@/icons/hourglass";
 import SvgArrowUp from "@/icons/arrow-up";
 import SvgStop from "@/icons/stop";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import { ActionToggle } from "@/app/chat/components/input/ActionManagement";
+import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import SvgPlusCircle from "@/icons/plus-circle";
 import {
@@ -97,12 +97,13 @@ export interface ChatInputBarProps {
 
   toggleDocumentSidebar: () => void;
   handleFileUpload: (files: File[]) => void;
-  textAreaRef: React.RefObject<HTMLTextAreaElement>;
+  textAreaRef: React.RefObject<HTMLTextAreaElement | null>;
   filterManager: FilterManager;
   retrievalEnabled: boolean;
   deepResearchEnabled: boolean;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
+  disabled: boolean;
 }
 
 function ChatInputBarInner({
@@ -127,15 +128,21 @@ function ChatInputBarInner({
   deepResearchEnabled,
   toggleDeepResearch,
   setPresentingDocument,
+  disabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
-
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
   const currentIndexingFiles = useMemo(() => {
     return currentMessageFiles.filter(
       (file) => file.status === UserFileStatus.PROCESSING
+    );
+  }, [currentMessageFiles]);
+
+  const hasUploadingFiles = useMemo(() => {
+    return currentMessageFiles.some(
+      (file) => file.status === UserFileStatus.UPLOADING
     );
   }, [currentMessageFiles]);
 
@@ -295,6 +302,11 @@ function ChatInputBarInner({
     availableContextTokens,
   ]);
 
+  // Detect if there are any non-image files to determine if images should be compact
+  const shouldCompactImages = useMemo(() => {
+    return hasNonImageFiles(currentMessageFiles);
+  }, [currentMessageFiles]);
+
   // Check if the assistant has search tools available (internal search or web search)
   // AND if deep research is globally enabled in admin settings
   const showDeepResearch = useMemo(() => {
@@ -345,7 +357,14 @@ function ChatInputBarInner({
   };
 
   return (
-    <div id="onyx-chat-input" className="max-w-full w-[50rem]">
+    <div
+      id="onyx-chat-input"
+      className={cn(
+        "max-w-full w-[50rem]",
+        disabled && "opacity-50 cursor-not-allowed pointer-events-none"
+      )}
+      aria-disabled={disabled}
+    >
       {showPrompts && user?.preferences?.shortcut_enabled && (
         <div className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full">
           <div className="rounded-lg overflow-y-auto max-h-[200px] py-1.5 bg-background-neutral-01 border border-border-01 shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
@@ -398,6 +417,7 @@ function ChatInputBarInner({
                 removeFile={handleRemoveMessageFile}
                 hideProcessingState={hideProcessingState}
                 onFileClick={handleFileClick}
+                compactImages={shouldCompactImages}
               />
             ))}
           </div>
@@ -415,7 +435,7 @@ function ChatInputBarInner({
             "bg-transparent",
             "resize-none",
             "placeholder:text-text-03",
-            "whitespace-normal",
+            "whitespace-pre-wrap",
             "break-word",
             "overscroll-contain",
             "overflow-y-auto",
@@ -423,7 +443,7 @@ function ChatInputBarInner({
             "pb-2",
             "pt-3"
           )}
-          autoFocus
+          autoFocus={!disabled}
           style={{ scrollbarWidth: "thin" }}
           role="textarea"
           aria-multiline
@@ -450,6 +470,7 @@ function ChatInputBarInner({
             }
           }}
           suppressContentEditableWarning={true}
+          disabled={disabled}
         />
 
         {(selectedDocuments.length > 0 ||
@@ -502,7 +523,7 @@ function ChatInputBarInner({
         )}
 
         <div className="flex justify-between items-center w-full p-1">
-          <div className="flex flex-row items-center gap-1">
+          <div className="flex flex-row items-center">
             <FilePickerPopover
               onFileClick={handleFileClick}
               onPickRecent={(file: ProjectFile) => {
@@ -528,25 +549,29 @@ function ChatInputBarInner({
                   icon={SvgPlusCircle}
                   tooltip="Attach Files"
                   tertiary
-                  active={open}
+                  transient={open}
+                  disabled={disabled}
                 />
               )}
               selectedFileIds={currentMessageFiles.map((f) => f.id)}
             />
             {selectedAssistant.tools.length > 0 && (
-              <ActionToggle
+              <ActionsPopover
                 selectedAssistant={selectedAssistant}
                 filterManager={filterManager}
                 availableSources={memoizedAvailableSources}
+                disabled={disabled}
               />
             )}
             {showDeepResearch && (
               <SelectButton
                 leftIcon={SvgHourglass}
-                active={deepResearchEnabled}
                 onClick={toggleDeepResearch}
-                folded
+                engaged={deepResearchEnabled}
                 action
+                folded
+                disabled={disabled}
+                className={disabled ? "bg-transparent" : ""}
               >
                 Deep Research
               </SelectButton>
@@ -569,8 +594,10 @@ function ChatInputBarInner({
                         prev.filter((id) => id !== toolId)
                       );
                     }}
+                    engaged
                     action
-                    active
+                    disabled={disabled}
+                    className={disabled ? "bg-transparent" : ""}
                   >
                     {tool.display_name}
                   </SelectButton>
@@ -583,12 +610,15 @@ function ChatInputBarInner({
               <LLMPopover
                 llmManager={llmManager}
                 requiresImageGeneration={false}
+                disabled={disabled}
               />
             </div>
             <IconButton
               id="onyx-chat-input-send-button"
               icon={chatState === "input" ? SvgArrowUp : SvgStop}
-              disabled={chatState === "input" && !message}
+              disabled={
+                (chatState === "input" && !message) || hasUploadingFiles
+              }
               onClick={() => {
                 if (chatState == "streaming") {
                   stopGenerating();
@@ -603,7 +633,6 @@ function ChatInputBarInner({
     </div>
   );
 }
-
 const ChatInputBar = React.memo(ChatInputBarInner);
 ChatInputBar.displayName = "ChatInputBar";
 

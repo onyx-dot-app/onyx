@@ -16,6 +16,7 @@ from onyx.background.celery.tasks.kg_processing.kg_indexing import (
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import ThreadMessage
+from onyx.chat.turn.models import FetchedDocumentCacheEntry
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
@@ -119,6 +120,28 @@ def llm_doc_from_inference_section(inference_section: InferenceSection) -> LlmDo
         source_links=inference_section.center_chunk.source_links,
         match_highlights=inference_section.center_chunk.match_highlights,
     )
+
+
+def llm_docs_from_fetched_documents_cache(
+    fetched_documents_cache: dict[str, "FetchedDocumentCacheEntry"],
+) -> list[LlmDoc]:
+    """Convert FetchedDocumentCacheEntry objects to LlmDoc objects.
+
+    This ensures that citation numbers are properly transferred from the cache
+    entries to the LlmDoc objects, which is critical for proper citation rendering.
+
+    Args:
+        fetched_documents_cache: Dictionary mapping document IDs to FetchedDocumentCacheEntry
+
+    Returns:
+        List of LlmDoc objects with properly set document_citation_number
+    """
+    llm_docs = []
+    for cache_value in fetched_documents_cache.values():
+        llm_doc = llm_doc_from_inference_section(cache_value.inference_section)
+        llm_doc.document_citation_number = cache_value.document_citation_number
+        llm_docs.append(llm_doc)
+    return llm_docs
 
 
 def saved_search_docs_from_llm_docs(

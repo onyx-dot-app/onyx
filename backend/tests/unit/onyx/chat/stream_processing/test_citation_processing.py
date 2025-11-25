@@ -517,6 +517,36 @@ def process_text(
             "Text [[2]]()[[4]]() padding [[1]](https://0.com)[[2]]()[[4]]() padding [[2]]()[[4]]()",
             ["doc_1", "doc_3", "doc_0"],
         ),
+        (
+            "Unicode bracket citation 【3】",
+            ["Growth! 【", "3", "】", "."],
+            "Growth! [[2]]().",
+            ["doc_1"],
+        ),
+        (
+            "Unicode bracket citation at start",
+            ["【1】", " Citation at the beginning."],
+            "[[1]](https://0.com) Citation at the beginning.",
+            ["doc_0"],
+        ),
+        (
+            "Multiple unicode bracket citations",
+            ["Test 【", "1", "】", " and 【", "3", "】", " end."],
+            "Test [[1]](https://0.com) and [[2]]() end.",
+            ["doc_0", "doc_1"],
+        ),
+        (
+            "Double unicode bracket citation 【【1】】",
+            ["Test 【【1】】", " citation."],
+            "Test 【【1】】 citation.",
+            ["doc_0"],
+        ),
+        (
+            "Mixed ASCII and unicode brackets",
+            ["ASCII [1] and unicode 【", "3", "】", " together."],
+            "ASCII [[1]](https://0.com) and unicode [[2]]() together.",
+            ["doc_0", "doc_1"],
+        ),
     ],
 )
 def test_citation_extraction(

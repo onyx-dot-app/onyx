@@ -1,6 +1,7 @@
 """Strongly typed message structures for Agent SDK messages."""
 
 from typing import Literal
+from typing import NotRequired
 
 from typing_extensions import TypedDict
 
@@ -51,7 +52,9 @@ class UserMessage(TypedDict):
 
 class AssistantMessageWithContent(TypedDict):
     role: Literal["assistant"]
-    content: list[OutputTextContent]  # Assistant messages use output text
+    content: list[
+        InputTextContent | OutputTextContent
+    ]  # Assistant messages use output_text for responses API compatibility
 
 
 class AssistantMessageWithToolCalls(TypedDict):
@@ -63,8 +66,8 @@ class AssistantMessageDuringAgentRun(TypedDict):
     role: Literal["assistant"]
     id: str
     content: (
-        list[OutputTextContent] | list[ToolCall]
-    )  # Assistant runtime messages use output text
+        list[InputTextContent | OutputTextContent] | list[ToolCall]
+    )  # Assistant runtime messages receive output_text from agents SDK for responses API compatibility
     status: Literal["completed", "failed", "in_progress"]
     type: Literal["message"]
 
@@ -79,7 +82,7 @@ class FunctionCallMessage(TypedDict):
     """Agent SDK function call message format."""
 
     type: Literal["function_call"]
-    id: str
+    id: NotRequired[str]
     call_id: str
     name: str
     arguments: str
@@ -93,6 +96,21 @@ class FunctionCallOutputMessage(TypedDict):
     output: str
 
 
+class SummaryText(TypedDict):
+    """Summary text item in reasoning messages."""
+
+    text: str
+    type: Literal["summary_text"]
+
+
+class ReasoningMessage(TypedDict):
+    """Agent SDK reasoning message format."""
+
+    id: str
+    type: Literal["reasoning"]
+    summary: list[SummaryText]
+
+
 # Union type for all Agent SDK messages
 AgentSDKMessage = (
     SystemMessage
@@ -103,4 +121,5 @@ AgentSDKMessage = (
     | ToolMessage
     | FunctionCallMessage
     | FunctionCallOutputMessage
+    | ReasoningMessage
 )

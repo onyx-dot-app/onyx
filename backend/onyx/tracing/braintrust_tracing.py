@@ -1,11 +1,12 @@
 import os
+import re
 from typing import Any
 
 import braintrust
 from agents import set_trace_processors
 from braintrust.wrappers.openai import BraintrustTracingProcessor
-from braintrust_langchain import set_global_handler
-from braintrust_langchain.callbacks import BraintrustCallbackHandler
+from braintrust_langchain import set_global_handler  # type: ignore[import-untyped]
+from braintrust_langchain.callbacks import BraintrustCallbackHandler  # type: ignore[import-untyped]
 
 from onyx.configs.app_configs import BRAINTRUST_API_KEY
 from onyx.configs.app_configs import BRAINTRUST_PROJECT
@@ -23,12 +24,15 @@ def _truncate_str(s: str) -> str:
 
 
 def _mask(data: Any) -> Any:
-    """Mask data if it exceeds the maximum length threshold or contains private_key."""
+    """Mask data if it exceeds the maximum length threshold or contains sensitive information."""
     # Handle dictionaries recursively
     if isinstance(data, dict):
         masked_dict = {}
         for key, value in data.items():
-            if isinstance(key, str) and "private_key" in key.lower():
+            # Mask private keys and authorization headers
+            if isinstance(key, str) and (
+                "private_key" in key.lower() or "authorization" in key.lower()
+            ):
                 masked_dict[key] = "***REDACTED***"
             else:
                 masked_dict[key] = _mask(value)
@@ -40,10 +44,20 @@ def _mask(data: Any) -> Any:
 
     # Handle strings
     if isinstance(data, str):
-        # Mask the value if the key was "private_key" (handled in dict above)
-        # Also check for private_key patterns in the string content
+        # Mask private_key patterns
         if "private_key" in data.lower():
             return "***REDACTED***"
+
+        # Mask Authorization: Bearer tokens
+        # Pattern matches "Authorization: Bearer <token>" or "authorization: bearer <token>"
+        if re.search(r"authorization:\s*bearer\s+\S+", data, re.IGNORECASE):
+            data = re.sub(
+                r"(authorization:\s*bearer\s+)\S+",
+                r"\1***REDACTED***",
+                data,
+                flags=re.IGNORECASE,
+            )
+
         if len(data) <= MASKING_LENGTH:
             return data
         return _truncate_str(data)
@@ -66,7 +80,11 @@ def setup_braintrust_if_creds_available() -> None:
         api_key=BRAINTRUST_API_KEY,
     )
     braintrust.set_masking_function(_mask)
+    set_trace_processors([BraintrustTracingProcessor(braintrust_logger)])
+    _setup_legacy_langchain_tracing()
+    logger.notice("Braintrust tracing initialized")
+
+
+def _setup_legacy_langchain_tracing() -> None:
     handler = BraintrustCallbackHandler()
     set_global_handler(handler)
-    set_trace_processors([BraintrustTracingProcessor(braintrust_logger)])
-    logger.notice("Braintrust tracing initialized")

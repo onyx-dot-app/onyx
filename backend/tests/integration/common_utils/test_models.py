@@ -106,6 +106,7 @@ class DATestLLMProvider(BaseModel):
     default_model_name: str
     is_public: bool
     groups: list[int]
+    personas: list[int]
     api_base: str | None = None
     api_version: str | None = None
 
@@ -152,6 +153,7 @@ class DATestChatMessage(BaseModel):
     message: str
     research_answer_purpose: ResearchAnswerPurpose | None = None
     message_type: MessageType | None = None
+    files: list | None = None
 
 
 class DATestChatSession(BaseModel):
@@ -185,15 +187,20 @@ class ToolResult(BaseModel):
     images: list[GeneratedImage] = Field(default_factory=list)
 
 
+class ErrorResponse(BaseModel):
+    error: str
+    stack_trace: str
+
+
 class StreamedResponse(BaseModel):
-    full_message: str = ""
-    top_documents: list[SavedSearchDoc] | None = None
-    used_tools: list[ToolResult] = Field(default_factory=list)
-    research_answer_purpose: ResearchAnswerPurpose | None = None
-    assistant_message_id: int | None = None
+    full_message: str
+    assistant_message_id: int
+    top_documents: list[SavedSearchDoc]
+    used_tools: list[ToolResult]
+    error: ErrorResponse | None = None
 
     # Track heartbeat packets for image generation and other tools
-    heartbeat_packets: list[dict[str, Any]] = Field(default_factory=list)
+    heartbeat_packets: list[dict[str, Any]]
 
 
 class DATestGatingType(str, Enum):

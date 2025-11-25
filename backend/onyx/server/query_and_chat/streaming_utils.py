@@ -18,7 +18,7 @@ from onyx.db.chat import translate_db_search_doc_to_server_search_doc
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tool_by_id
 from onyx.feature_flags.factory import get_default_feature_flag_provider
-from onyx.feature_flags.feature_flags_keys import SIMPLE_AGENT_FRAMEWORK
+from onyx.feature_flags.feature_flags_keys import DISABLE_SIMPLE_AGENT_FRAMEWORK
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
@@ -32,6 +32,8 @@ from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import PythonToolDelta
+from onyx.server.query_and_chat.streaming_models import PythonToolStart
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
@@ -43,10 +45,14 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
+
+logger = setup_logger()
 
 _CANNOT_SHOW_STEP_RESULTS_STR = "[Cannot display step results]"
 
@@ -209,7 +215,35 @@ def create_custom_tool_packets(
         ),
     )
 
-    packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+    packets.append(Packet(ind=step_nr, obj=SectionEnd()))
+
+    return packets
+
+
+def create_python_tool_packets(
+    stdout: str,
+    stderr: str,
+    file_ids: list[str],
+    code: str,
+    step_nr: int,
+) -> list[Packet]:
+    """Create packets for Python tool execution replay."""
+    packets: list[Packet] = []
+
+    packets.append(Packet(ind=step_nr, obj=PythonToolStart(code=code)))
+
+    packets.append(
+        Packet(
+            ind=step_nr,
+            obj=PythonToolDelta(
+                stdout=stdout,
+                stderr=stderr,
+                file_ids=file_ids,
+            ),
+        ),
+    )
+
+    packets.append(Packet(ind=step_nr, obj=SectionEnd()))
 
     return packets
 
@@ -220,7 +254,7 @@ def create_fetch_packets(
     packets: list[Packet] = []
     for fetch in fetches:
         packets.append(Packet(ind=step_nr, obj=FetchToolStart(documents=fetch)))
-        packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+        packets.append(Packet(ind=step_nr, obj=SectionEnd()))
         step_nr += 1
     return packets
 
@@ -383,6 +417,9 @@ def translate_db_message_to_packets_simple(
 
                 elif len(sub_steps) == 0:
                     # no sub steps, no tool calls. But iteration can have reasoning or purpose
+                    logger.warning(
+                        "translate_db_message_to_packets_simple: Skipping iteration with no sub_steps"
+                    )
                     continue
 
                 else:
@@ -391,6 +428,9 @@ def translate_db_message_to_packets_simple(
                         raise ValueError("Tool ID is required")
                     tool = get_tool_by_id(tool_id, db_session)
                     tool_name = tool.name
+                    logger.debug(
+                        f"translate_db_message_to_packets_simple: Processing tool {tool_name} (tool_id={tool_id})"
+                    )
 
                     if tool_name in [SearchTool.__name__, KnowledgeGraphTool.__name__]:
                         cited_docs = cast(list[SavedSearchDoc], cited_docs)
@@ -419,6 +459,28 @@ def translate_db_message_to_packets_simple(
                             )
                         step_nr += 1
 
+                    elif tool_name == PythonTool.__name__:
+                        # Reconstruct Python tool packets from stored data
+                        stdout = ""
+                        stderr = ""
+                        code = ""
+                        if sub_step.additional_data:
+                            additional_data = cast(dict, sub_step.additional_data)
+                            stdout = cast(str, additional_data.get("stdout", ""))
+                            stderr = cast(str, additional_data.get("stderr", ""))
+                            code = cast(str, additional_data.get("code", ""))
+
+                        packet_list.extend(
+                            create_python_tool_packets(
+                                stdout=stdout,
+                                stderr=stderr,
+                                file_ids=sub_step.file_ids or [],
+                                code=code,
+                                step_nr=step_nr,
+                            )
+                        )
+                        step_nr += 1
+
                     else:
                         packet_list.extend(
                             create_custom_tool_packets(
@@ -426,6 +488,7 @@ def translate_db_message_to_packets_simple(
                                 response_type="text",
                                 step_nr=step_nr,
                                 data=sub_step.sub_answer,
+                                file_ids=sub_step.file_ids,
                             )
                         )
                         step_nr += 1
@@ -473,16 +536,20 @@ def translate_db_message_to_packets(
     db_session: Session,
     start_step_nr: int = 1,
 ) -> EndStepPacketList:
-    use_simple_translation = False
+    use_simple_translation = True
     if chat_message.research_type and chat_message.research_type != ResearchType.DEEP:
         feature_flag_provider = get_default_feature_flag_provider()
         tenant_id = get_current_tenant_id()
         user = chat_message.chat_session.user
-        use_simple_translation = feature_flag_provider.feature_enabled_for_user_tenant(
-            flag_key=SIMPLE_AGENT_FRAMEWORK,
-            user=user,
-            tenant_id=tenant_id,
+        use_simple_translation = (
+            not feature_flag_provider.feature_enabled_for_user_tenant(
+                flag_key=DISABLE_SIMPLE_AGENT_FRAMEWORK,
+                user=user,
+                tenant_id=tenant_id,
+            )
         )
+    else:
+        use_simple_translation = False
 
     if use_simple_translation:
         return translate_db_message_to_packets_simple(

@@ -67,9 +67,22 @@
     margin-bottom: 0.5em;
   }
 
+  .prose ol {
+    list-style-type: decimal;
+    padding-left: 1.5rem;
+    margin-left: 0;
+  }
+
+  .prose ul {
+    list-style-type: disc;
+    padding-left: 1.5rem;
+    margin-left: 0;
+  }
+
   .prose li {
     margin-top: 0.25em;
     margin-bottom: 0.25em;
+    display: list-item;
   }
 
   .prose hr {
@@ -100,6 +113,39 @@
     /* IE and Edge */
     scrollbar-width: none;
     /* Firefox */
+  }
+
+  /* SHADOWS */
+  .shadow-00 {
+    box-shadow: 0px 0px 2px 1px var(--shadow-01);
+  }
+  .shadow-01 {
+    box-shadow:
+      0px 2px 12px 0px var(--shadow-02),
+      0px 0px 4px 1px var(--shadow-02);
+  }
+  .shadow-02 {
+    box-shadow:
+      0px 2px 24px 0px var(--shadow-03),
+      0px 0px 12px 1px var(--shadow-03);
+  }
+  .focus-shadow {
+    box-shadow: 0px 0px 0px 2px var(--background-tint-04);
+  }
+
+  /* DEBUGGING UTILITIES
+  If you ever want to highlight a component for debugging purposes, just type in `className="dbg-red ..."`, and a red box should appear around it.
+  This helps with placing things properly on the screen and seeing how they look during active development.
+  */
+
+  .dbg-red {
+    border: 1px solid red;
+  }
+  .dbg-blue {
+    border: 1px solid blue;
+  }
+  .dbg-green {
+    border: 1px solid green;
   }
 }
 
@@ -480,22 +526,4 @@ textarea {
 
 .container {
   margin-bottom: 1rem;
-}
-
-/* DEBUGGING UTILITIES
-
-If you ever want to highlight a component for debugging purposes, just type in `className="dbg-red ..."`, and a red box should appear around it.
-This helps with placing things properly on the screen and seeing how they look during active development.
-*/
-
-.dbg-red {
-  border: 1px solid red;
-}
-
-.dbg-blue {
-  border: 1px solid blue;
-}
-
-.dbg-green {
-  border: 1px solid green;
 }

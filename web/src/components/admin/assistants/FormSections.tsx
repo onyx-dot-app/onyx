@@ -4,6 +4,7 @@ import React, { memo } from "react";
 import { FastField, useFormikContext } from "formik";
 import { TextFormField } from "@/components/Field";
 import { FiChevronRight, FiChevronDown } from "react-icons/fi";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 
 const MAX_DESCRIPTION_LENGTH = 600;
 import { useState, useEffect } from "react";
@@ -125,12 +126,17 @@ export const MCPServerSection = memo(function MCPServerSection({
         : "indeterminate";
 
   return (
-    <div className="border rounded-lg p-4 space-y-3 dark:border-gray-700">
+    <div
+      className="border rounded-lg p-4 space-y-3 dark:border-gray-700"
+      data-testid={`mcp-server-section-${serverId}`}
+    >
       <div className="flex items-center space-x-3">
         <button
           type="button"
           onClick={() => onToggleCollapse(serverId)}
           className="flex-shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+          data-testid={`mcp-server-toggle-${serverId}`}
+          aria-expanded={!isCollapsed}
         >
           {isCollapsed ? (
             <FiChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
@@ -138,14 +144,11 @@ export const MCPServerSection = memo(function MCPServerSection({
             <FiChevronDown className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           )}
         </button>
-        <input
-          type="checkbox"
+        <Checkbox
           checked={checkboxState === true}
-          ref={(el) => {
-            if (el) el.indeterminate = checkboxState === "indeterminate";
-          }}
-          onChange={onToggleServerTools}
-          className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
+          indeterminate={checkboxState === "indeterminate"}
+          onCheckedChange={onToggleServerTools}
+          aria-label="mcp-server-select-all-tools-checkbox"
         />
         <div className="flex-grow">
           <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
@@ -167,14 +170,15 @@ export const MCPServerSection = memo(function MCPServerSection({
             >
               {({ field, form }: any) => (
                 <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={field.value || false}
-                    onChange={(e) => {
-                      form.setFieldValue(field.name, e.target.checked);
-                    }}
-                    className="w-4 h-4"
-                  />
+                  <div className="pt-0.5">
+                    <Checkbox
+                      checked={field.value || false}
+                      onCheckedChange={(checked) => {
+                        form.setFieldValue(field.name, checked);
+                      }}
+                      aria-label={`mcp-server-tool-checkbox-${tool.display_name}`}
+                    />
+                  </div>
                   <div>
                     <div className="text-sm font-medium">
                       {tool.display_name}

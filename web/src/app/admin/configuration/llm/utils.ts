@@ -1,3 +1,4 @@
+import { JSX } from "react";
 import {
   AnthropicIcon,
   AmazonIcon,
@@ -36,7 +37,7 @@ export const getProviderIcon = (
     mistral: MistralIcon,
     ministral: MistralIcon,
     llama: MetaIcon,
-    ollama: OllamaIcon,
+    ollama_chat: OllamaIcon,
     gemini: GeminiIcon,
     deepseek: DeepseekIcon,
     claude: AnthropicIcon,
@@ -109,7 +110,7 @@ export const dynamicProviderConfigs: Record<
     successMessage: (count: number) =>
       `Successfully fetched ${count} models for the selected region (including cross-region inference models).`,
   },
-  ollama: {
+  ollama_chat: {
     endpoint: "/api/admin/llm/ollama/available-models",
     isDisabled: (values) => !values.api_base,
     disabledReason: "API Base is required to fetch Ollama models",

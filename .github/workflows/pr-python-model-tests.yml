@@ -10,7 +10,10 @@ on:
         description: 'Branch to run the workflow on'
         required: false
         default: 'main'
-        
+
+permissions:
+  contents: read
+
 env:
   # Bedrock
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -28,17 +31,19 @@ env:
 jobs:
   model-check:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=8cpu-linux-x64,"run-id=${{ github.run_id }}"]
+    runs-on: [runs-on,runner=8cpu-linux-x64,"run-id=${{ github.run_id }}-model-check"]
 
     env:
       PYTHONPATH: ./backend
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -53,9 +58,9 @@ jobs:
         run: |
           docker pull onyxdotapp/onyx-model-server:latest
           docker tag onyxdotapp/onyx-model-server:latest onyxdotapp/onyx-model-server:test
-          
+
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # ratchet:actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -90,15 +95,15 @@ jobs:
           while true; do
             current_time=$(date +%s)
             elapsed_time=$((current_time - start_time))
-            
+
             if [ $elapsed_time -ge $timeout ]; then
               echo "Timeout reached. Service did not become ready in 5 minutes."
               exit 1
             fi
-            
+
             # Use curl with error handling to ignore specific exit code 56
             response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9000/api/health || echo "curl_error")
-            
+
             if [ "$response" = "200" ]; then
               echo "Service is ready!"
               break
@@ -107,11 +112,11 @@ jobs:
             else
               echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
             fi
-            
+
             sleep 5
           done
           echo "Finished waiting for service."
-          
+
       - name: Run Tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
@@ -122,12 +127,14 @@ jobs:
         if: failure() && github.event_name == 'schedule'
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data '{"text":"Scheduled Model Tests failed! Check the run at: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            --data "{\"text\":\"Scheduled Model Tests failed! Check the run at: https://github.com/${REPO}/actions/runs/${RUN_ID}\"}" \
             $SLACK_WEBHOOK
-            
+
       - name: Dump all-container logs (optional)
         if: always()
         run: |
@@ -136,14 +143,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         with:
           name: docker-all-logs
           path: ${{ github.workspace }}/docker-compose.log
-          
-      - name: Stop Docker containers
-        if: always()
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.model-server-test.yml down -v
-          

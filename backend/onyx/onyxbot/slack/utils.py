@@ -160,7 +160,7 @@ def rephrase_slack_message(msg: str) -> str:
         return msg
     messages = _get_rephrase_message()
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-    model_output = message_to_string(llm.invoke(filled_llm_prompt))
+    model_output = message_to_string(llm.invoke_langchain(filled_llm_prompt))
     logger.debug(model_output)
 
     return model_output

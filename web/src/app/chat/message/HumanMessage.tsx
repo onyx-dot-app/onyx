@@ -10,10 +10,9 @@ import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import SvgEdit from "@/icons/edit";
 import Button from "@/refresh-components/buttons/Button";
-import SvgCopy from "@/icons/copy";
-import { copyAll } from "@/app/chat/message/copyingUtils";
 import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
 
 interface FileDisplayProps {
@@ -263,11 +262,9 @@ export default function HumanMessage({
                       !isEditing &&
                       (!files || files.length === 0) ? (
                         <div className="flex flex-row items-center justify-center gap-1">
-                          <IconButton
-                            icon={SvgCopy}
+                          <CopyIconButton
+                            getCopyText={() => content}
                             tertiary
-                            tooltip="Copy"
-                            onClick={() => copyAll(content)}
                             data-testid="HumanMessage/copy-button"
                           />
                           <IconButton

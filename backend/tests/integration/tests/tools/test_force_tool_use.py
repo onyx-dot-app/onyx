@@ -37,6 +37,8 @@ def test_force_tool_use(
         forced_tool_ids=[image_generation_tool_id],
     )
 
+    assert analyzed_response.error is None, "Chat response should not have an error"
+
     image_generation_tool_used = any(
         tool.tool_name == ToolName.IMAGE_GENERATION
         for tool in analyzed_response.used_tools

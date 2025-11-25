@@ -10,6 +10,7 @@ from typing import TypedDict
 
 from langchain_core.messages import BaseMessage
 from langgraph.types import StreamWriter
+from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.shared_graph_utils.models import BaseMessage_Content
 from onyx.agents.agent_search.shared_graph_utils.models import (
@@ -134,18 +135,24 @@ def format_entity_term_extraction(
 
 def get_persona_agent_prompt_expressions(
     persona: Persona | None,
+    db_session: Session,
 ) -> PersonaPromptExpressions:
     if persona is None:
         return PersonaPromptExpressions(
             contextualized_prompt=ASSISTANT_SYSTEM_PROMPT_DEFAULT, base_prompt=""
         )
 
-    # Prompts are now embedded directly on the Persona model
-    prompt_config = PromptConfig.from_model(persona)
+    # Pull custom instructions if they exist for backwards compatibility
+    prompt_config = PromptConfig.from_model(persona, db_session=db_session)
+    system_prompt = (
+        prompt_config.custom_instructions
+        or prompt_config.default_behavior_system_prompt
+    )
+
     datetime_aware_system_prompt = handle_onyx_date_awareness(
-        prompt_str=prompt_config.system_prompt,
+        prompt_str=system_prompt,
         prompt_config=prompt_config,
-        add_additional_info_if_no_tag=persona.datetime_aware,
+        add_additional_info_if_no_tag=bool(persona and persona.datetime_aware),
     )
 
     return PersonaPromptExpressions(
@@ -268,7 +275,7 @@ def summarize_history(
     try:
         history_response = run_with_timeout(
             AGENT_TIMEOUT_LLM_HISTORY_SUMMARY_GENERATION,
-            llm.invoke,
+            llm.invoke_langchain,
             history_context_prompt,
             timeout_override=AGENT_TIMEOUT_CONNECT_LLM_HISTORY_SUMMARY_GENERATION,
             max_tokens=AGENT_MAX_TOKENS_HISTORY_SUMMARY,

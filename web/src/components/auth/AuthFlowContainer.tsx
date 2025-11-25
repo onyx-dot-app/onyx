@@ -12,33 +12,33 @@ export default function AuthFlowContainer({
 }) {
   return (
     <div className="p-4 flex flex-col items-center justify-center min-h-screen bg-background">
-      <div className="w-full max-w-md pt-8 pb-6 px-8 mx-4 gap-y-4 flex items-center flex-col rounded-xl shadow-lg border gap-y-2 bg-background-tint-02">
-        <OnyxIcon size={70} className="text-theme-primary-05" />
-        <div className="mt-4 w-full">{children}</div>
+      <div className="w-full max-w-md flex items-start flex-col bg-background-tint-00 rounded-16 shadow-lg shadow-02 p-6">
+        <OnyxIcon size={44} className="text-theme-primary-05" />
+        <div className="w-full mt-3">{children}</div>
       </div>
       {authState === "login" && (
-        <div className="text-sm mt-4 text-center w-full text-text-04 font-medium mx-auto">
+        <div className="text-sm mt-6 text-center w-full text-text-03 mainUiBody mx-auto">
           {footerContent ?? (
             <>
-              Don&apos;t have an account?{" "}
+              New to Onyx?{" "}
               <Link
                 href="/auth/signup"
-                className="text-action-link-05 underline transition-colors duration-200"
+                className="text-text-05 mainUiAction underline transition-colors duration-200"
               >
-                Create one
+                Create an Account
               </Link>
             </>
           )}
         </div>
       )}
       {authState === "signup" && (
-        <div className="text-sm mt-4 text-center w-full text-text-04 font-medium mx-auto">
+        <div className="text-sm mt-6 text-center w-full text-text-03 mainUiBody mx-auto">
           Already have an account?{" "}
           <Link
             href="/auth/login"
-            className="text-action-link-05 underline transition-colors duration-200"
+            className="text-text-05 mainUiAction underline transition-colors duration-200"
           >
-            Log In
+            Sign In
           </Link>
         </div>
       )}

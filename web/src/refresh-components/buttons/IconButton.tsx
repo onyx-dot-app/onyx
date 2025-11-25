@@ -1,106 +1,249 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { SvgProps } from "@/icons";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import Text from "@/refresh-components/texts/Text";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
-const buttonClasses = (active: boolean | undefined) =>
+const buttonClasses = (transient: boolean | undefined) =>
   ({
-    primary: {
-      main: [
-        active ? "bg-theme-primary-06" : "bg-theme-primary-05",
-        "hover:bg-theme-primary-04",
-      ],
-      disabled: ["bg-background-neutral-04"],
+    main: {
+      primary: {
+        enabled: [
+          "bg-theme-primary-05",
+          "hover:bg-theme-primary-04",
+          transient && "bg-theme-primary-04",
+          "active:bg-theme-primary-06",
+        ],
+        disabled: ["bg-background-neutral-04"],
+      },
+      secondary: {
+        enabled: [
+          "bg-background-tint-02",
+          "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-background-neutral-03"],
+      },
+      tertiary: {
+        enabled: [
+          "bg-transparent",
+          "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-transparent"],
+      },
+      internal: {
+        enabled: [
+          "bg-transparent",
+          "hover:bg-background-tint-00",
+          transient && "bg-background-tint-00",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-transparent"],
+      },
     },
-    secondary: {
-      main: [
-        active ? "bg-background-tint-00" : "bg-background-tint-02",
-        "hover:bg-background-tint-02",
-        "border",
-      ],
-      disabled: ["bg-background-neutral-03"],
-    },
-    // NOTE: active here does not mean "activated/visted" state
-    // @duo will specify visited colors, and then TODO can be addressed
-    // TODO: bg-background-tint-02 should be changed backed to tint-00
-    tertiary: {
-      main: [
-        active ? "bg-background-tint-02" : "bg-transparent",
-        "hover:bg-background-tint-02",
-      ],
-      disabled: ["bg-background-neutral-02"],
+    action: {
+      primary: {
+        enabled: [
+          "bg-action-link-05",
+          "hover:bg-action-link-04",
+          transient && "bg-action-link-04",
+          "active:bg-action-link-06",
+        ],
+        disabled: ["bg-action-link-02"],
+      },
+      secondary: {
+        enabled: [
+          "bg-background-tint-02",
+          "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-background-neutral-02"],
+      },
+      tertiary: {
+        enabled: [
+          "bg-transparent",
+          "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-background-neutral-02"],
+      },
+      internal: {
+        enabled: [
+          "bg-transparent",
+          "hover:bg-background-tint-00",
+          transient && "bg-background-tint-00",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-transparent"],
+      },
     },
     danger: {
-      main: [
-        active ? "bg-action-danger-06" : "bg-action-danger-05",
-        "hover:bg-action-danger-04",
-      ],
-      disabled: ["bg-action-danger-02"],
-    },
-    internal: {
-      main: [
-        active ? "bg-background-tint-00" : "bg-transparent",
-        "hover:bg-background-tint-00",
-      ],
-      disabled: ["bg-transparent"],
+      primary: {
+        enabled: [
+          "bg-action-danger-05",
+          "hover:bg-action-danger-04",
+          transient && "bg-action-danger-04",
+          "active:bg-action-danger-06",
+        ],
+        disabled: ["bg-action-danger-02"],
+      },
+      secondary: {
+        enabled: [
+          "bg-background-tint-02",
+          "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-background-neutral-02"],
+      },
+      tertiary: {
+        enabled: [
+          "bg-transparent",
+          "hover:bg-background-tint-02",
+          transient && "bg-background-tint-02",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-background-neutral-02"],
+      },
+      internal: {
+        enabled: [
+          "bg-transparent",
+          "hover:bg-background-tint-00",
+          transient && "bg-background-tint-00",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-transparent"],
+      },
     },
   }) as const;
 
-const iconClasses = (active: boolean | undefined) =>
+const iconClasses = (transient: boolean | undefined) =>
   ({
-    primary: {
-      main: ["stroke-text-inverted-05"],
-      disabled: ["stroke-text-inverted-05"],
+    main: {
+      primary: {
+        enabled: ["stroke-text-inverted-05"],
+        disabled: ["stroke-text-inverted-05"],
+      },
+      secondary: {
+        enabled: [
+          "stroke-text-03",
+          "group-hover/IconButton:stroke-text-04",
+          transient && "stroke-text-04",
+          "group-active/IconButton:stroke-text-05",
+        ],
+        disabled: ["stroke-text-01"],
+      },
+      tertiary: {
+        enabled: [
+          "stroke-text-03",
+          "group-hover/IconButton:stroke-text-04",
+          transient && "stroke-text-04",
+          "group-active/IconButton:stroke-text-05",
+        ],
+        disabled: ["stroke-text-01"],
+      },
+      internal: {
+        enabled: [
+          "stroke-text-02",
+          "group-hover/IconButton:stroke-text-04",
+          transient && "stroke-text-04",
+          "group-active/IconButton:stroke-text-05",
+        ],
+        disabled: ["stroke-text-01"],
+      },
     },
-    secondary: {
-      main: [
-        active ? "stroke-text-05" : "stroke-text-03",
-        "group-hover/IconButton:stroke-text-04",
-      ],
-      disabled: ["stroke-text-01"],
-    },
-    tertiary: {
-      main: [
-        active ? "!stroke-text-05" : "stroke-text-03",
-        "group-hover/IconButton:stroke-text-04",
-      ],
-      disabled: ["stroke-text-01"],
+    action: {
+      primary: {
+        enabled: ["stroke-text-light-05"],
+        disabled: ["stroke-text-01"],
+      },
+      secondary: {
+        enabled: [
+          "stroke-action-link-05",
+          "group-hover/IconButton:stroke-action-link-05",
+          transient && "stroke-action-link-05",
+          "group-active/IconButton:stroke-action-link-06",
+        ],
+        disabled: ["stroke-action-link-02"],
+      },
+      tertiary: {
+        enabled: [
+          "stroke-action-link-05",
+          "group-hover/IconButton:stroke-action-link-05",
+          transient && "stroke-action-link-05",
+          "group-active/IconButton:stroke-action-link-06",
+        ],
+        disabled: ["stroke-action-link-02"],
+      },
+      internal: {
+        enabled: [
+          "stroke-action-link-05",
+          "group-hover/IconButton:stroke-action-link-05",
+          transient && "stroke-action-link-05",
+          "group-active/IconButton:stroke-action-link-06",
+        ],
+        disabled: ["stroke-action-link-02"],
+      },
     },
     danger: {
-      main: ["stroke-text-light-05"],
-      disabled: ["stroke-text-light-05"],
-    },
-    internal: {
-      main: [
-        active ? "!stroke-text-05" : "stroke-text-02",
-        "group-hover/IconButton:stroke-text-04",
-      ],
-      disabled: ["stroke-text-01"],
+      primary: {
+        enabled: ["stroke-text-light-05"],
+        disabled: ["stroke-text-01"],
+      },
+      secondary: {
+        enabled: [
+          "stroke-action-danger-05",
+          "group-hover/IconButton:stroke-action-danger-05",
+          transient && "stroke-action-danger-05",
+          "group-active/IconButton:stroke-action-danger-06",
+        ],
+        disabled: ["stroke-action-danger-02"],
+      },
+      tertiary: {
+        enabled: [
+          "stroke-action-danger-05",
+          "group-hover/IconButton:stroke-action-danger-05",
+          transient && "stroke-action-danger-05",
+          "group-active/IconButton:stroke-action-danger-06",
+        ],
+        disabled: ["stroke-action-danger-02"],
+      },
+      internal: {
+        enabled: [
+          "stroke-action-danger-05",
+          "group-hover/IconButton:stroke-action-danger-05",
+          transient && "stroke-action-danger-05",
+          "group-active/IconButton:stroke-action-danger-06",
+        ],
+        disabled: ["stroke-action-danger-02"],
+      },
     },
   }) as const;
 
 export interface IconButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  // Button states:
-  active?: boolean;
-  disabled?: boolean;
+  // Top level button variants
+  main?: boolean;
+  action?: boolean;
+  danger?: boolean;
 
-  // Button variant:
+  // Button sub-variants
   primary?: boolean;
   secondary?: boolean;
   tertiary?: boolean;
   internal?: boolean;
-  danger?: boolean;
 
-  // Button properties:
+  // Button states
+  transient?: boolean;
+  disabled?: boolean;
+
+  // Button properties
   onHover?: (isHovering: boolean) => void;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
   icon: React.FunctionComponent<SvgProps>;
@@ -108,14 +251,17 @@ export interface IconButtonProps
 }
 
 export default function IconButton({
-  active,
-  disabled,
+  main,
+  action,
+  danger,
 
   primary,
   secondary,
   tertiary,
   internal,
-  danger,
+
+  transient,
+  disabled,
 
   onHover,
   onClick,
@@ -125,7 +271,14 @@ export default function IconButton({
 
   ...props
 }: IconButtonProps) {
-  const variant = primary
+  const variant = main
+    ? "main"
+    : action
+      ? "action"
+      : danger
+        ? "danger"
+        : "main";
+  const subvariant = primary
     ? "primary"
     : secondary
       ? "secondary"
@@ -133,10 +286,17 @@ export default function IconButton({
         ? "tertiary"
         : internal
           ? "internal"
-          : danger
-            ? "danger"
-            : "primary";
-  const state = disabled ? "disabled" : "main";
+          : "primary";
+  const abled = disabled ? "disabled" : "enabled";
+
+  const buttonClass = useMemo(
+    () => buttonClasses(transient)[variant][subvariant][abled],
+    [transient, variant, subvariant, abled]
+  );
+  const iconClass = useMemo(
+    () => iconClasses(transient)[variant][subvariant][abled],
+    [transient, variant, subvariant, abled]
+  );
 
   const buttonElement = (
     <button
@@ -145,7 +305,7 @@ export default function IconButton({
         internal ? "p-1" : "p-2",
         disabled && "cursor-not-allowed",
         internal ? "rounded-08" : "rounded-12",
-        buttonClasses(active)[variant][state],
+        buttonClass,
         className
       )}
       onClick={disabled ? undefined : onClick}
@@ -160,22 +320,15 @@ export default function IconButton({
       disabled={disabled}
       {...props}
     >
-      <Icon
-        className={cn("h-[1rem] w-[1rem]", iconClasses(active)[variant][state])}
-      />
+      <Icon className={cn("h-[1rem] w-[1rem]", iconClass)} />
     </button>
   );
 
   if (!tooltip) return buttonElement;
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>{buttonElement}</TooltipTrigger>
-        <TooltipContent side="top">
-          <Text inverted>{tooltip}</Text>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <SimpleTooltip side="top" tooltip={tooltip}>
+      {buttonElement}
+    </SimpleTooltip>
   );
 }

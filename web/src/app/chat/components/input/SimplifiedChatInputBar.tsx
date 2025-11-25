@@ -20,7 +20,7 @@ interface ChatInputBarProps {
   files: FileDescriptor[];
   setFiles: (files: FileDescriptor[]) => void;
   handleFileUpload: (files: File[]) => void;
-  textAreaRef: React.RefObject<HTMLTextAreaElement>;
+  textAreaRef: React.RefObject<HTMLTextAreaElement | null>;
   filterManager?: FilterManager;
   existingSources: string[];
   availableDocumentSets: { name: string }[];
@@ -155,7 +155,7 @@ export function SimplifiedChatInputBar({
                     ? "overflow-y-auto mt-2"
                     : ""
                 }
-                whitespace-normal
+                whitespace-pre-wrap
                 break-word
                 overscroll-contain
                 outline-none

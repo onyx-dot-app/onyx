@@ -1,5 +1,6 @@
 "use client";
 
+import { JSX } from "react";
 import Image from "next/image";
 import { StaticImageData } from "next/image";
 
@@ -97,6 +98,7 @@ import xenforoIcon from "../../../public/Xenforo.svg";
 import zAIIcon from "../../../public/Z_AI.png";
 import zendeskIcon from "../../../public/Zendesk.svg";
 import zulipIcon from "../../../public/Zulip.png";
+import testrailSVG from "../../../public/Testrail.svg";
 
 import gitlabIcon from "../../../public/Gitlab.png";
 import gmailIcon from "../../../public/Gmail.png";
@@ -133,18 +135,21 @@ export const LogoIcon = ({
 );
 
 // Helper to create simple icon components from react-icon libraries
-const createIcon = (
+export function createIcon(
   IconComponent: React.ComponentType<{ size?: number; className?: string }>
-) => {
-  const IconWrapper = ({
+) {
+  function IconWrapper({
     size = 16,
     className = defaultTailwindCSS,
-  }: IconProps) => <IconComponent size={size} className={className} />;
+  }: IconProps) {
+    return <IconComponent size={size} className={className} />;
+  }
+
   IconWrapper.displayName = `Icon(${
     IconComponent.displayName || IconComponent.name || "Component"
   })`;
   return IconWrapper;
-};
+}
 
 /**
  * Creates a logo icon component that automatically supports dark mode adaptations.
@@ -2876,7 +2881,7 @@ export const HighspotIcon = createLogoIcon(highspotIcon);
 export const HubSpotIcon = createLogoIcon(hubSpotIcon);
 export const JiraIcon = createLogoIcon(jiraSVG);
 export const KimiIcon = createLogoIcon(kimiIcon);
-export const LinearIcon = createLogoIcon(linearIcon, { monochromatic: true });
+export const LinearIcon = createLogoIcon(linearIcon);
 export const LiteLLMIcon = createLogoIcon(litellmIcon);
 export const LoopioIcon = createLogoIcon(loopioIcon, { monochromatic: true });
 export const MediaWikiIcon = createLogoIcon(mediawikiIcon);
@@ -2889,6 +2894,7 @@ export const NomicIcon = createLogoIcon(nomicSVG);
 export const NotionIcon = createLogoIcon(notionIcon, { monochromatic: true });
 export const OCIStorageIcon = createLogoIcon(OCIStorageSVG);
 export const OllamaIcon = createLogoIcon(ollamaIcon);
+export const TestRailIcon = createLogoIcon(testrailSVG);
 export const OpenAIISVG = ({
   size = 16,
   className = defaultTailwindCSS,

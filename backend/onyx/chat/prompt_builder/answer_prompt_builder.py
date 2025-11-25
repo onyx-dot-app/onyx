@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from collections.abc import Sequence
 from typing import cast
 
 from langchain_core.messages import BaseMessage
@@ -12,16 +13,15 @@ from onyx.chat.prompt_builder.citations_prompt import compute_max_llm_input_toke
 from onyx.chat.prompt_builder.utils import translate_history_to_basemessages
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import check_message_tokens
 from onyx.llm.utils import message_to_prompt_and_imgs
+from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.llm.utils import model_supports_image_input
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
 from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
-from onyx.prompts.chat_prompts import CUSTOM_INSTRUCTIONS_PROMPT
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
 from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_PROMPT
 from onyx.prompts.chat_prompts import TOOL_PERSISTENCE_PROMPT
@@ -37,38 +37,21 @@ from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 
 
-# TODO: We can provide do smoother templating than all these sequential
-# function calls
-def default_build_system_message_for_default_assistant_v2(
+def default_build_system_message_v2(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
-    memories_callback: Callable[[], list[str]] | None = None,
-    tools: list[Tool] | None = None,
+    memories: list[str] | None = None,
+    tools: Sequence[Tool] | None = None,
+    should_cite_documents: bool = False,
 ) -> SystemMessage:
-    # Check if we should include custom instructions (before date processing)
-    custom_instructions = prompt_config.system_prompt.strip()
-    clean_custom_instructions = "".join(custom_instructions.split())
-    clean_default_system_prompt = "".join(DEFAULT_SYSTEM_PROMPT.split())
-    should_include_custom_instructions = (
-        clean_custom_instructions
-        and clean_custom_instructions != clean_default_system_prompt
+    system_prompt = (
+        prompt_config.default_behavior_system_prompt or DEFAULT_SYSTEM_PROMPT
     )
 
-    # Start with base prompt
-    system_prompt = DEFAULT_SYSTEM_PROMPT + "\n" + LONG_CONVERSATION_REMINDER_PROMPT
-
-    # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
-    # for o-series markdown generation
-    if (
-        llm_config.model_provider == OPENAI_PROVIDER_NAME
-        and llm_config.model_name.startswith("o")
-    ):
+    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
+    # for OpenAI reasoning models to have correct markdown generation
+    if model_needs_formatting_reenabled(llm_config.model_name):
         system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
-
-    if should_include_custom_instructions:
-        system_prompt += "\n\n## Custom Instructions\n"
-        system_prompt += CUSTOM_INSTRUCTIONS_PROMPT
-        system_prompt += custom_instructions
 
     tag_handled_prompt = handle_onyx_date_awareness(
         system_prompt,
@@ -78,23 +61,40 @@ def default_build_system_message_for_default_assistant_v2(
 
     tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
 
-    if memories_callback:
-        tag_handled_prompt = handle_memories(tag_handled_prompt, memories_callback)
+    if memories:
+        tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
 
-    # Add Tools section if tools are provided
     if tools:
         tag_handled_prompt += "\n\n# Tools\n"
         tag_handled_prompt += TOOL_PERSISTENCE_PROMPT
 
+        has_web_search = any(type(tool).__name__ == "WebSearchTool" for tool in tools)
+        has_internal_search = any(type(tool).__name__ == "SearchTool" for tool in tools)
+
+        if has_web_search or has_internal_search:
+            from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
+
+            tag_handled_prompt += "\n" + TOOL_DESCRIPTION_SEARCH_GUIDANCE + "\n"
+
+        if has_internal_search:
+            from onyx.prompts.chat_prompts import INTERNAL_SEARCH_GUIDANCE
+
+            tag_handled_prompt += "\n" + INTERNAL_SEARCH_GUIDANCE + "\n"
+
+        if has_internal_search and has_web_search:
+            from onyx.prompts.chat_prompts import (
+                INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE,
+            )
+
+            tag_handled_prompt += "\n" + INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE + "\n"
+
         for tool in tools:
             if type(tool).__name__ == "WebSearchTool":
-                # Import at runtime to avoid circular dependency
                 from onyx.tools.tool_implementations_v2.web import (
                     WEB_SEARCH_LONG_DESCRIPTION,
                     OPEN_URL_LONG_DESCRIPTION,
                 )
 
-                # Special handling for WebSearchTool - expand to web_search and open_url
                 tag_handled_prompt += "\n## web_search\n"
                 tag_handled_prompt += WEB_SEARCH_LONG_DESCRIPTION
                 tag_handled_prompt += "\n\n## open_url\n"
@@ -109,22 +109,33 @@ def default_build_system_message_for_default_assistant_v2(
                     )
                     tag_handled_prompt += tool.description
 
+    tag_handled_prompt += "\n# Reminders"
+    if should_cite_documents:
+        from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
+
+        tag_handled_prompt += "\n\n" + REQUIRE_CITATION_STATEMENT
+
+    tag_handled_prompt += "\n\n" + LONG_CONVERSATION_REMINDER_PROMPT
+
     return SystemMessage(content=tag_handled_prompt)
 
 
 def default_build_system_message(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
-    memories_callback: Callable[[], list[str]] | None = None,
+    memories: list[str] | None = None,
 ) -> SystemMessage | None:
-    system_prompt = prompt_config.system_prompt.strip()
-    # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
-    # for o-series markdown generation
-    if (
-        llm_config.model_provider == OPENAI_PROVIDER_NAME
-        and llm_config.model_name.startswith("o")
-    ):
+    # Build system prompt from default behavior and custom instructions
+    # for backwards compatibility
+    system_prompt = (
+        prompt_config.custom_instructions
+        or prompt_config.default_behavior_system_prompt
+    )
+    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
+    # for OpenAI reasoning models to have correct markdown generation
+    if model_needs_formatting_reenabled(llm_config.model_name):
         system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
+
     tag_handled_prompt = handle_onyx_date_awareness(
         system_prompt,
         prompt_config,
@@ -136,8 +147,8 @@ def default_build_system_message(
 
     tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
 
-    if memories_callback:
-        tag_handled_prompt = handle_memories(tag_handled_prompt, memories_callback)
+    if memories:
+        tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
 
     return SystemMessage(content=tag_handled_prompt)
 
@@ -157,10 +168,10 @@ def default_build_user_message(
     user_prompt = (
         CHAT_USER_CONTEXT_FREE_PROMPT.format(
             history_block=history_block,
-            task_prompt=prompt_config.task_prompt,
+            task_prompt=prompt_config.reminder,
             user_query=user_query,
         )
-        if prompt_config.task_prompt
+        if prompt_config.reminder
         else user_query
     )
 

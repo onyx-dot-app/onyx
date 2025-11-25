@@ -1,3 +1,5 @@
+import { JSX } from "react";
+
 /**
  * Utility functions to handle thinking tokens in AI messages
  */

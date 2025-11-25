@@ -2,7 +2,6 @@
 
 import { AuthTypeMetadata } from "@/lib/userSS";
 import LoginText from "@/app/auth/login/LoginText";
-import Link from "next/link";
 import SignInButton from "@/app/auth/login/SignInButton";
 import EmailPasswordForm from "./EmailPasswordForm";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
@@ -44,35 +43,34 @@ export default function LoginPage({
       {authTypeMetadata?.authType === "cloud" && (
         <div className="w-full justify-center flex flex-col gap-6">
           <LoginText />
-          <EmailPasswordForm shouldVerify={true} nextUrl={nextUrl} />
-          {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
-            <Link href="/auth/forgot-password">
-              <Button>Reset Password</Button>
-            </Link>
-          )}
           {authUrl && authTypeMetadata && (
             <>
-              <div className="flex flex-row items-center w-full gap-2">
-                <div className="flex-1 border-t border-text-04" />
-                <Text>or</Text>
-                <div className="flex-1 border-t border-text-04" />
-              </div>
-
               <SignInButton
                 authorizeUrl={authUrl}
                 authType={authTypeMetadata?.authType}
               />
+              <div className="flex flex-row items-center w-full gap-2">
+                <div className="flex-1 border-t border-text-01" />
+                <Text text03 mainUiMuted>
+                  or
+                </Text>
+                <div className="flex-1 border-t border-text-01" />
+              </div>
             </>
+          )}
+          <EmailPasswordForm shouldVerify={true} nextUrl={nextUrl} />
+          {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
+            <Button href="/auth/forgot-password">Reset Password</Button>
           )}
         </div>
       )}
 
       {authTypeMetadata?.authType === "basic" && (
-        <>
+        <div className="flex flex-col w-full gap-6">
           <LoginText />
+
           <EmailPasswordForm nextUrl={nextUrl} />
-          <div className="flex flex-col gap-y-2 items-center"></div>
-        </>
+        </div>
       )}
 
       {!hidePageRedirect && (

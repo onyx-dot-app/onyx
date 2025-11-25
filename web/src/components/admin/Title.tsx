@@ -1,6 +1,7 @@
 "use client";
+import { JSX } from "react";
 import { HealthCheckBanner } from "../health/healthcheck";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 
 export function AdminPageTitle({
   icon,

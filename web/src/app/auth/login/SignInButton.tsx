@@ -1,8 +1,9 @@
+"use client";
+
 import Button from "@/refresh-components/buttons/Button";
-import Text from "@/refresh-components/texts/Text";
 import { AuthType } from "@/lib/constants";
-import Link from "next/link";
-import { FaGoogle } from "react-icons/fa";
+import { FcGoogle } from "react-icons/fc";
+import { SvgProps } from "@/icons";
 
 interface SignInButtonProps {
   authorizeUrl: string;
@@ -14,14 +15,11 @@ export default function SignInButton({
   authType,
 }: SignInButtonProps) {
   let button: React.ReactNode;
+  let icon: React.FunctionComponent<SvgProps> | undefined;
 
   if (authType === "google_oauth" || authType === "cloud") {
-    button = (
-      <div className="flex flex-row items-center justify-center w-full gap-2">
-        <FaGoogle className="text-text-inverted-04" />
-        <Text inverted>Continue with Google</Text>
-      </div>
-    );
+    button = "Continue with Google";
+    icon = FcGoogle;
   } else if (authType === "oidc") {
     button = "Continue with OIDC SSO";
   } else if (authType === "saml") {
@@ -36,8 +34,13 @@ export default function SignInButton({
   }
 
   return (
-    <Link href={finalAuthorizeUrl}>
-      <Button className="!w-full">{button}</Button>
-    </Link>
+    <Button
+      secondary={authType === "google_oauth" || authType === "cloud"}
+      className="!w-full"
+      leftIcon={icon}
+      href={finalAuthorizeUrl}
+    >
+      {button}
+    </Button>
   );
 }

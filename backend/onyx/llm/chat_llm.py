@@ -9,7 +9,9 @@ from typing import TYPE_CHECKING
 from typing import Union
 
 from httpx import RemoteProtocolError
-from langchain.schema.language_model import LanguageModelInput
+from langchain.schema.language_model import (
+    LanguageModelInput as LangChainLanguageModelInput,
+)
 from langchain_core.messages import AIMessage
 from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
@@ -34,25 +36,35 @@ from onyx.configs.model_configs import (
 )
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
+from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import STANDARD_TOOL_CHOICE_OPTIONS
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
+from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
+from onyx.llm.model_response import ModelResponse
+from onyx.llm.model_response import ModelResponseStream
+from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
+from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
 if TYPE_CHECKING:
-    from litellm import ModelResponse, CustomStreamWrapper, Message
+    from litellm import CustomStreamWrapper, Message
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
+
+LegacyPromptDict = Sequence[str | list[str] | dict[str, Any] | tuple[str, str]]
 
 
 class LLMTimeoutError(Exception):
@@ -227,23 +239,42 @@ def _convert_delta_to_message_chunk(
 
 
 def _prompt_to_dict(
-    prompt: LanguageModelInput,
-) -> Sequence[str | list[str] | dict[str, Any] | tuple[str, str]]:
+    prompt: LanguageModelInput | LangChainLanguageModelInput,
+) -> LegacyPromptDict:
     # NOTE: this must go first, since it is also a Sequence
     if isinstance(prompt, str):
         return [_convert_message_to_dict(HumanMessage(content=prompt))]
 
     if isinstance(prompt, (list, Sequence)):
-        return [
-            _convert_message_to_dict(msg) if isinstance(msg, BaseMessage) else msg
-            for msg in prompt
-        ]
+        normalized_prompt: list[str | list[str] | dict[str, Any] | tuple[str, str]] = []
+        for msg in prompt:
+            if isinstance(msg, BaseMessage):
+                normalized_prompt.append(_convert_message_to_dict(msg))
+            elif isinstance(msg, dict):
+                normalized_prompt.append(dict(msg))
+            else:
+                normalized_prompt.append(msg)
+        return normalized_prompt
+
+    if isinstance(prompt, BaseMessage):
+        return [_convert_message_to_dict(prompt)]
 
     if isinstance(prompt, PromptValue):
         return [_convert_message_to_dict(message) for message in prompt.to_messages()]
 
+    raise TypeError(f"Unsupported prompt type: {type(prompt)}")
 
-class DefaultMultiLLM(LLM):
+
+def _prompt_as_json(
+    prompt: LanguageModelInput | LangChainLanguageModelInput,
+    *,
+    is_legacy_langchain: bool,
+) -> JSON_ro:
+    prompt_payload = _prompt_to_dict(prompt) if is_legacy_langchain else prompt
+    return cast(JSON_ro, prompt_payload)
+
+
+class LitellmLLM(LLM):
     """Uses Litellm library to allow easy configuration to use a multitude of LLMs
     See https://python.langchain.com/docs/integrations/chat/litellm"""
 
@@ -312,7 +343,9 @@ class DefaultMultiLLM(LLM):
                     os.environ[k] = v
                 else:
                     os.environ.pop(k, None)
-
+        # This is needed for Ollama to do proper function calling
+        if model_provider == OLLAMA_PROVIDER_NAME and api_base is not None:
+            os.environ["OLLAMA_API_BASE"] = api_base
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
         if extra_body:
@@ -341,70 +374,127 @@ class DefaultMultiLLM(LLM):
     def log_model_configs(self) -> None:
         logger.debug(f"Config: {self._safe_model_config()}")
 
-    def _record_call(self, prompt: LanguageModelInput) -> None:
-        if self._long_term_logger:
-            self._long_term_logger.record(
-                {"prompt": _prompt_to_dict(prompt), "model": self._safe_model_config()},
-                category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
-            )
-
-    def _record_result(
-        self, prompt: LanguageModelInput, model_output: BaseMessage
+    def _record_call(
+        self,
+        prompt: LanguageModelInput | LangChainLanguageModelInput,
+        is_legacy_langchain: bool = False,
     ) -> None:
         if self._long_term_logger:
+            prompt_json = _prompt_as_json(
+                prompt, is_legacy_langchain=is_legacy_langchain
+            )
             self._long_term_logger.record(
                 {
-                    "prompt": _prompt_to_dict(prompt),
-                    "content": model_output.content,
-                    "tool_calls": (
-                        model_output.tool_calls
-                        if hasattr(model_output, "tool_calls")
-                        else []
-                    ),
-                    "model": self._safe_model_config(),
+                    "prompt": prompt_json,
+                    "model": cast(JSON_ro, self._safe_model_config()),
                 },
                 category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
             )
 
-    def _record_error(self, prompt: LanguageModelInput, error: Exception) -> None:
+    def _record_result(
+        self,
+        prompt: LanguageModelInput | LangChainLanguageModelInput,
+        model_output: BaseMessage,
+        is_legacy_langchain: bool,
+    ) -> None:
         if self._long_term_logger:
+            prompt_json = _prompt_as_json(
+                prompt, is_legacy_langchain=is_legacy_langchain
+            )
+            tool_calls = (
+                model_output.tool_calls if hasattr(model_output, "tool_calls") else []
+            )
             self._long_term_logger.record(
                 {
-                    "prompt": _prompt_to_dict(prompt),
+                    "prompt": prompt_json,
+                    "content": model_output.content,
+                    "tool_calls": cast(JSON_ro, tool_calls),
+                    "model": cast(JSON_ro, self._safe_model_config()),
+                },
+                category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
+            )
+
+    def _record_error(
+        self,
+        prompt: LanguageModelInput | LangChainLanguageModelInput,
+        error: Exception,
+        is_legacy_langchain: bool,
+    ) -> None:
+        if self._long_term_logger:
+            prompt_json = _prompt_as_json(
+                prompt, is_legacy_langchain=is_legacy_langchain
+            )
+            self._long_term_logger.record(
+                {
+                    "prompt": prompt_json,
                     "error": str(error),
                     "traceback": "".join(
                         traceback.format_exception(
                             type(error), error, error.__traceback__
                         )
                     ),
-                    "model": self._safe_model_config(),
+                    "model": cast(JSON_ro, self._safe_model_config()),
                 },
                 category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
             )
 
     def _completion(
         self,
-        prompt: LanguageModelInput,
+        prompt: LanguageModelInput | LangChainLanguageModelInput,
         tools: list[dict] | None,
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
+        parallel_tool_calls: bool,
+        reasoning_effort: str | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        is_legacy_langchain: bool = False,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
-        processed_prompt = _prompt_to_dict(prompt)
-        self._record_call(processed_prompt)
+        processed_prompt: LegacyPromptDict | LanguageModelInput
+        if is_legacy_langchain:
+            processed_prompt = _prompt_to_dict(prompt)
+        else:
+            processed_prompt = cast(LanguageModelInput, prompt)
+
+        # Record the original prompt (not the processed one) for logging
+        original_prompt = prompt
+        self._record_call(original_prompt, is_legacy_langchain)
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
+
+        tool_choice_formatted: dict[str, Any] | str | None
+        if not tools:
+            tool_choice_formatted = None
+        elif tool_choice and tool_choice not in STANDARD_TOOL_CHOICE_OPTIONS:
+            tool_choice_formatted = {
+                "type": "function",
+                "function": {"name": tool_choice},
+            }
+        else:
+            tool_choice_formatted = tool_choice
+
+        is_reasoning = model_is_reasoning_model(
+            self.config.model_name, self.config.model_provider
+        )
+
+        # Needed to get reasoning tokens from the model
+        if not is_legacy_langchain and (
+            is_true_openai_model(self.config.model_provider, self.config.model_name)
+            or self.config.model_provider == AZURE_PROVIDER_NAME
+        ):
+            model_provider = f"{self.config.model_provider}/responses"
+        else:
+            model_provider = self.config.model_provider
 
         try:
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice
                 # model="openai/gpt-4",
-                model=f"{self.config.model_provider}/{self.config.deployment_name or self.config.model_name}",
+                model=f"{model_provider}/{self.config.deployment_name or self.config.model_name}",
                 # NOTE: have to pass in None instead of empty string for these
                 # otherwise litellm can have some issues with bedrock
                 api_key=self._api_key or None,
@@ -414,21 +504,18 @@ class DefaultMultiLLM(LLM):
                 # actual input
                 messages=processed_prompt,
                 tools=tools,
-                tool_choice=tool_choice if tools else None,
+                tool_choice=tool_choice_formatted,
                 # streaming choice
                 stream=stream,
                 # model params
-                temperature=(
-                    1
-                    if self.config.model_name in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
-                    else self._temperature
-                ),
+                temperature=(1 if is_reasoning else self._temperature),
                 timeout=timeout_override or self._timeout,
+                **({"stream_options": {"include_usage": True}} if stream else {}),
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
                 # or else OpenAI throws an error
                 **(
-                    {"parallel_tool_calls": False}
+                    {"parallel_tool_calls": parallel_tool_calls}
                     if tools
                     and self.config.model_name
                     not in [
@@ -441,17 +528,17 @@ class DefaultMultiLLM(LLM):
                         "o3-mini-2025-01-31",
                     ]
                     else {}
-                ),  # TODO: remove once LITELLM has patched
+                ),
                 **(
-                    {"reasoning_effort": "minimal"}
-                    if self.config.model_name
-                    in [
-                        "gpt-5",
-                        "gpt-5-mini",
-                        "gpt-5-nano",
-                    ]
+                    {"thinking": {"type": "enabled", "budget_tokens": 10000}}
+                    if reasoning_effort and is_reasoning
                     else {}
-                ),  # TODO: remove once LITELLM has better support/we change API
+                ),
+                **(
+                    {"reasoning_effort": reasoning_effort}
+                    if reasoning_effort and is_reasoning
+                    else {}
+                ),
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format
@@ -462,7 +549,7 @@ class DefaultMultiLLM(LLM):
             )
         except Exception as e:
 
-            self._record_error(processed_prompt, e)
+            self._record_error(original_prompt, e, is_legacy_langchain)
             # for break pointing
             if isinstance(e, Timeout):
                 raise LLMTimeoutError(e)
@@ -492,9 +579,9 @@ class DefaultMultiLLM(LLM):
             max_input_tokens=self._max_input_tokens,
         )
 
-    def _invoke_implementation(
+    def _invoke_implementation_langchain(
         self,
-        prompt: LanguageModelInput,
+        prompt: LangChainLanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
@@ -509,6 +596,7 @@ class DefaultMultiLLM(LLM):
         response = cast(
             ModelResponse,
             self._completion(
+                is_legacy_langchain=True,
                 prompt=prompt,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -516,20 +604,21 @@ class DefaultMultiLLM(LLM):
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
+                parallel_tool_calls=False,
             ),
         )
         choice = response.choices[0]
         if hasattr(choice, "message"):
             output = _convert_litellm_message_to_langchain_message(choice.message)
             if output:
-                self._record_result(prompt, output)
+                self._record_result(prompt, output, is_legacy_langchain=True)
             return output
         else:
             raise ValueError("Unexpected response choice type")
 
-    def _stream_implementation(
+    def _stream_implementation_langchain(
         self,
-        prompt: LanguageModelInput,
+        prompt: LangChainLanguageModelInput,
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
@@ -542,7 +631,7 @@ class DefaultMultiLLM(LLM):
             self.log_model_configs()
 
         if DISABLE_LITELLM_STREAMING:
-            yield self.invoke(
+            yield self.invoke_langchain(
                 prompt,
                 tools,
                 tool_choice,
@@ -556,6 +645,7 @@ class DefaultMultiLLM(LLM):
         response = cast(
             CustomStreamWrapper,
             self._completion(
+                is_legacy_langchain=True,
                 prompt=prompt,
                 tools=tools,
                 tool_choice=tool_choice,
@@ -563,6 +653,8 @@ class DefaultMultiLLM(LLM):
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
+                parallel_tool_calls=False,
+                reasoning_effort="minimal",
             ),
         )
         try:
@@ -590,7 +682,7 @@ class DefaultMultiLLM(LLM):
             )
 
         if output:
-            self._record_result(prompt, output)
+            self._record_result(prompt, output, is_legacy_langchain=True)
 
         if LOG_ONYX_MODEL_INTERACTIONS and output:
             content = output.content or ""
@@ -613,3 +705,71 @@ class DefaultMultiLLM(LLM):
                 logger.debug(f"Raw Model Output:\n{log_msg}")
             else:
                 logger.debug(f"Raw Model Output:\n{content}")
+
+    def _invoke_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: str | None = "medium",
+    ) -> ModelResponse:
+        from litellm import ModelResponse as LiteLLMModelResponse
+
+        from onyx.llm.model_response import from_litellm_model_response
+
+        if LOG_ONYX_MODEL_INTERACTIONS:
+            self.log_model_configs()
+
+        response = cast(
+            LiteLLMModelResponse,
+            self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=False,
+                structured_response_format=structured_response_format,
+                timeout_override=timeout_override,
+                max_tokens=max_tokens,
+                parallel_tool_calls=True,
+                reasoning_effort=reasoning_effort,
+            ),
+        )
+
+        return from_litellm_model_response(response)
+
+    def _stream_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: str | None = "medium",
+    ) -> Iterator[ModelResponseStream]:
+        from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
+        from onyx.llm.model_response import from_litellm_model_response_stream
+
+        if LOG_ONYX_MODEL_INTERACTIONS:
+            self.log_model_configs()
+
+        response = cast(
+            LiteLLMCustomStreamWrapper,
+            self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=True,
+                structured_response_format=structured_response_format,
+                timeout_override=timeout_override,
+                max_tokens=max_tokens,
+                parallel_tool_calls=True,
+                reasoning_effort=reasoning_effort,
+            ),
+        )
+
+        for chunk in response:
+            yield from_litellm_model_response_stream(chunk)

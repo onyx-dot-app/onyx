@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
+  JSX,
 } from "react";
 import { ChevronDownIcon, PlusIcon } from "./icons/icons";
 import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";
@@ -16,7 +17,7 @@ export interface Option<T> {
   name: string;
   value: T;
   description?: string;
-  icon?: React.FC<{ size?: number; className?: string }>;
+  icon?: (props: { size?: number; className?: string }) => JSX.Element;
   // Domain-specific flag: when false, render as disabled (used by AccessTypeForm)
   disabled?: boolean;
   disabledReason?: string;
@@ -65,7 +66,7 @@ export function SearchMultiSelectDropdown({
 }: {
   options: StringOrNumberOption[];
   onSelect: (selected: StringOrNumberOption) => void;
-  itemComponent?: FC<{ option: StringOrNumberOption }>;
+  itemComponent?: (props: { option: StringOrNumberOption }) => JSX.Element;
   onCreate?: (name: string) => void;
   onDelete?: (name: string) => void;
   onSearchTermChange?: (term: string) => void;
@@ -305,7 +306,7 @@ export function DefaultDropdownElement({
   disabledReason,
 }: {
   name: string | JSX.Element;
-  icon?: React.FC<{ size?: number; className?: string }>;
+  icon?: (props: { size?: number; className?: string }) => JSX.Element;
   description?: string;
   onSelect?: () => void;
   isSelected?: boolean;

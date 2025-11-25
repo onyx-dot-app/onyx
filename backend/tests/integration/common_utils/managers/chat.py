@@ -1,6 +1,8 @@
 import json
 from typing import Any
 from typing import cast
+from typing import Literal
+from typing import TypedDict
 from uuid import UUID
 
 import requests
@@ -18,9 +20,40 @@ from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestChatMessage
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import ErrorResponse
 from tests.integration.common_utils.test_models import StreamedResponse
 from tests.integration.common_utils.test_models import ToolName
 from tests.integration.common_utils.test_models import ToolResult
+
+
+class StreamPacketObj(TypedDict, total=False):
+    """Base structure for streaming packet objects."""
+
+    type: Literal[
+        "message_start",
+        "message_delta",
+        "internal_search_tool_start",
+        "internal_search_tool_delta",
+        "image_generation_tool_start",
+        "image_generation_tool_heartbeat",
+        "image_generation_tool_delta",
+    ]
+    content: str
+    final_documents: list[dict[str, Any]]
+    is_internet_search: bool
+    images: list[dict[str, Any]]
+    queries: list[str]
+    documents: list[dict[str, Any]]
+
+
+class StreamPacketData(TypedDict, total=False):
+    """Structure for streaming response packets."""
+
+    reserved_assistant_message_id: int
+    error: str
+    stack_trace: str
+    obj: StreamPacketObj
+    ind: int
 
 
 class ChatSessionManager:
@@ -55,6 +88,7 @@ class ChatSessionManager:
         parent_message_id: int | None = None,
         user_performing_action: DATestUser | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
+        current_message_files: list[FileDescriptor] | None = None,
         search_doc_ids: list[int] | None = None,
         retrieval_options: RetrievalDetails | None = None,
         query_override: str | None = None,
@@ -72,6 +106,7 @@ class ChatSessionManager:
             parent_message_id=parent_message_id,
             message=message,
             file_descriptors=file_descriptors or [],
+            current_message_files=current_message_files or [],
             search_doc_ids=search_doc_ids or [],
             retrieval_options=retrieval_options,
             rerank_settings=None,  # Can be added if needed
@@ -125,86 +160,82 @@ class ChatSessionManager:
     @staticmethod
     def analyze_response(response: Response) -> StreamedResponse:
         response_data = cast(
-            list[dict[str, Any]],
+            list[StreamPacketData],
             [
                 json.loads(line.decode("utf-8"))
                 for line in response.iter_lines()
                 if line
             ],
         )
-
-        analyzed = StreamedResponse()
-
         ind_to_tool_use: dict[int, ToolResult] = {}
-
+        top_documents: list[SavedSearchDoc] = []
+        heartbeat_packets: list[StreamPacketData] = []
+        full_message = ""
+        assistant_message_id: int | None = None
+        error = None
         for data in response_data:
-            if not (data_obj := data.get("obj")):
-                continue
-
-            if not (packet_type := data_obj.get("type")):
-                continue
-
-            if packet_type == "message_start":
-                final_docs = data_obj.get("final_documents")
-                if isinstance(final_docs, list):
-                    analyzed.top_documents = [
-                        SavedSearchDoc(**doc) for doc in final_docs
-                    ]
-                else:
-                    analyzed.top_documents = None
-                analyzed.full_message = data_obj.get("content", "")
-                continue
-
-            if packet_type == "message_delta":
-                analyzed.full_message += data_obj["content"]
-                continue
-
-            if not (ind := data.get("ind")):
-                continue
-
-            if packet_type == "internal_search_tool_start":
-                tool_name = (
-                    ToolName.INTERNET_SEARCH
-                    if data_obj.get("is_internet_search", False)
-                    else ToolName.INTERNAL_SEARCH
+            if reserved_id := data.get("reserved_assistant_message_id"):
+                assistant_message_id = reserved_id
+            elif data.get("error"):
+                error = ErrorResponse(
+                    error=str(data["error"]),
+                    stack_trace=str(data["stack_trace"]),
                 )
-                ind_to_tool_use[ind] = ToolResult(
-                    tool_name=tool_name,
-                )
-                continue
+            elif (
+                (data_obj := data.get("obj"))
+                and (packet_type := data_obj.get("type"))
+                and (ind := data.get("ind")) is not None
+            ):
+                if packet_type == "message_start":
+                    final_docs = data_obj.get("final_documents")
+                    if isinstance(final_docs, list):
+                        top_documents = [SavedSearchDoc(**doc) for doc in final_docs]
+                    full_message += data_obj.get("content", "")
+                elif packet_type == "message_delta":
+                    full_message += data_obj["content"]
+                elif packet_type == "internal_search_tool_start":
+                    tool_name = (
+                        ToolName.INTERNET_SEARCH
+                        if data_obj.get("is_internet_search", False)
+                        else ToolName.INTERNAL_SEARCH
+                    )
+                    ind_to_tool_use[ind] = ToolResult(
+                        tool_name=tool_name,
+                    )
+                elif packet_type == "image_generation_tool_start":
+                    ind_to_tool_use[ind] = ToolResult(
+                        tool_name=ToolName.IMAGE_GENERATION,
+                    )
+                elif packet_type == "image_generation_tool_heartbeat":
+                    # Track heartbeat packets for debugging/testing
+                    heartbeat_packets.append(data)
+                elif packet_type == "image_generation_tool_delta":
+                    from tests.integration.common_utils.test_models import (
+                        GeneratedImage,
+                    )
 
-            if packet_type == "image_generation_tool_start":
-                ind_to_tool_use[ind] = ToolResult(
-                    tool_name=ToolName.IMAGE_GENERATION,
-                )
-                continue
+                    images = data_obj.get("images", [])
+                    ind_to_tool_use[ind].images.extend(
+                        [GeneratedImage(**img) for img in images]
+                    )
+                elif packet_type == "internal_search_tool_delta":
+                    ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
 
-            if packet_type == "image_generation_tool_heartbeat":
-                # Track heartbeat packets for debugging/testing
-                analyzed.heartbeat_packets.append(data)
-                continue
-
-            if packet_type == "image_generation_tool_delta":
-                from tests.integration.common_utils.test_models import GeneratedImage
-
-                images = data_obj.get("images", [])
-                ind_to_tool_use[ind].images.extend(
-                    [GeneratedImage(**img) for img in images]
-                )
-                continue
-
-            if packet_type == "internal_search_tool_delta":
-                ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
-
-                documents = data_obj.get("documents", [])
-                ind_to_tool_use[ind].documents.extend(
-                    [SavedSearchDoc(**doc) for doc in documents]
-                )
-                continue
-
-        analyzed.used_tools = list(ind_to_tool_use.values())
-
-        return analyzed
+                    documents = data_obj.get("documents", [])
+                    ind_to_tool_use[ind].documents.extend(
+                        [SavedSearchDoc(**doc) for doc in documents]
+                    )
+        # If there's an error, assistant_message_id might not be present
+        if not assistant_message_id and not error:
+            raise ValueError("Assistant message id not found")
+        return StreamedResponse(
+            full_message=full_message,
+            assistant_message_id=assistant_message_id or -1,  # Use -1 for error cases
+            top_documents=top_documents,
+            used_tools=list(ind_to_tool_use.values()),
+            heartbeat_packets=[dict(packet) for packet in heartbeat_packets],
+            error=error,
+        )
 
     @staticmethod
     def get_chat_history(
@@ -229,6 +260,7 @@ class ChatSessionManager:
                 message=msg["message"],
                 research_answer_purpose=msg.get("research_answer_purpose"),
                 message_type=msg.get("message_type"),
+                files=msg.get("files"),
             )
             for msg in response.json()["messages"]
         ]

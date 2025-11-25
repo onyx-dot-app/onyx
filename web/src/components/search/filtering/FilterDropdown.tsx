@@ -1,3 +1,4 @@
+import { JSX } from "react";
 import { FiCheck, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../../Dropdown";
 

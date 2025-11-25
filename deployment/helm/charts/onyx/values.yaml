@@ -37,7 +37,7 @@ vespa:
   replicaCount: 1
   image:
     repository: vespa
-    tag: "8.526.15"
+    tag: "8.609.39"
   podAnnotations: {}
   podLabels:
     app: vespa
@@ -94,7 +94,7 @@ inferenceCapability:
   resources:
     requests:
       cpu: 2000m
-      memory: 6Gi
+      memory: 3Gi
     limits:
       cpu: 4000m
       memory: 10Gi
@@ -103,6 +103,8 @@ inferenceCapability:
     privileged: true
     runAsUser: 0
   nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 indexCapability:
   service:
@@ -127,16 +129,18 @@ indexCapability:
   limitConcurrency: 10
   resources:
     requests:
-      cpu: 2000m
-      memory: 6Gi
-    limits:
       cpu: 4000m
-      memory: 10Gi
+      memory: 3Gi
+    limits:
+      cpu: 6000m
+      memory: 6Gi
   podSecurityContext: {}
   securityContext:
     privileged: true
     runAsUser: 0
   nodeSelector: {}
+  tolerations: []
+  affinity: {}
 config:
   envConfigMapName: env-configmap
 
@@ -307,11 +311,11 @@ api:
 
   resources:
     requests:
-      cpu: 1000m
+      cpu: 500m
       memory: 1Gi
     limits:
-      cpu: 2000m
-      memory: 2Gi
+      cpu: 1000m
+      memory: 3Gi
 
   autoscaling:
     enabled: false
@@ -349,6 +353,7 @@ api:
 
   nodeSelector: {}
   tolerations: []
+  affinity: {}
 
 
 ######################################################################
@@ -396,8 +401,8 @@ celery_beat:
     app: celery-beat
   resources:
     requests:
-      cpu: 1000m
-      memory: 1Gi
+      cpu: 500m
+      memory: 512Mi
     limits:
       cpu: 1000m
       memory: 1Gi
@@ -431,11 +436,11 @@ celery_worker_heavy:
     app: celery-worker-heavy
   resources:
     requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
       cpu: 1000m
       memory: 2Gi
-    limits:
-      cpu: 2500m
-      memory: 5Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
@@ -467,7 +472,7 @@ celery_worker_docprocessing:
   resources:
     requests:
       cpu: 500m
-      memory: 4Gi
+      memory: 2Gi
     limits:
       cpu: 1000m
       memory: 12Gi
@@ -501,8 +506,8 @@ celery_worker_light:
     app: celery-worker-light
   resources:
     requests:
-      cpu: 1000m
-      memory: 1Gi
+      cpu: 250m
+      memory: 512Mi
     limits:
       cpu: 2000m
       memory: 4Gi
@@ -537,9 +542,9 @@ celery_worker_monitoring:
   resources:
     requests:
       cpu: 500m
-      memory: 1Gi
+      memory: 512Mi
     limits:
-      cpu: 2000m
+      cpu: 1000m
       memory: 4Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
@@ -571,11 +576,11 @@ celery_worker_primary:
     app: celery-worker-primary
   resources:
     requests:
-      cpu: 1000m
-      memory: 8Gi
+      cpu: 500m
+      memory: 2Gi
     limits:
-      cpu: 2000m
-      memory: 16Gi
+      cpu: 1000m
+      memory: 4Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
@@ -606,11 +611,11 @@ celery_worker_user_files_indexing:
     app: celery-worker-user-files-indexing
   resources:
     requests:
-      cpu: 2000m
-      memory: 6Gi
+      cpu: 500m
+      memory: 512Mi
     limits:
-      cpu: 4000m
-      memory: 12Gi
+      cpu: 2000m
+      memory: 2Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
@@ -641,11 +646,11 @@ celery_worker_user_file_processing:
     app: celery-worker-user-file-processing
   resources:
     requests:
-      cpu: 2000m
-      memory: 6Gi
+      cpu: 500m
+      memory: 512Mi
     limits:
-      cpu: 4000m
-      memory: 12Gi
+      cpu: 2000m
+      memory: 2Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
@@ -671,11 +676,13 @@ slackbot:
   resources:
     requests:
       cpu: "500m"
-      memory: "500Mi"
+      memory: "512Mi"
     limits:
       cpu: "1000m"
       memory: "2000Mi"
   nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 celery_worker_docfetching:
   replicaCount: 1
@@ -702,9 +709,9 @@ celery_worker_docfetching:
   resources:
     requests:
       cpu: 500m
-      memory: 8Gi
+      memory: 2Gi
     limits:
-      cpu: 2000m
+      cpu: 1000m
       memory: 16Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
@@ -768,6 +775,9 @@ minio:
   consoleService:
     type: ClusterIP
     port: 9001
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 ingress:
   enabled: false
@@ -840,12 +850,10 @@ auth:
     secretKeys:
       OAUTH_CLIENT_ID: "oauth_client_id"
       OAUTH_CLIENT_SECRET: "oauth_client_secret"
-      OAUTH_COOKIE_SECRET: "oauth_cookie_secret"
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
     values:
       oauth_client_id: ""
       oauth_client_secret: ""
-      oauth_cookie_secret: ""
   smtp:
     # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
     enabled: false
@@ -859,6 +867,21 @@ auth:
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
     values:
       smtp_pass: ""
+  dbreadonly:
+    # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
+    enabled: false
+    # -- Overwrite the default secret name, ignored if existingSecret is defined
+    secretName: 'onyx-dbreadonly'
+    # -- Use a secret specified elsewhere
+    existingSecret: ""
+    # -- This defines the env var to secret map, key is always upper-cased as an env var
+    secretKeys:
+      DB_READONLY_USER: db_readonly_user
+      DB_READONLY_PASSWORD: db_readonly_password
+    # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
+    values:
+      db_readonly_user: ""
+      db_readonly_password: ""
 
 configMap:
   # Change this for production uses unless Onyx is only accessible behind VPN
@@ -896,9 +919,6 @@ configMap:
   MULTILINGUAL_QUERY_EXPANSION: ""
   LANGUAGE_HINT: ""
   LANGUAGE_CHAT_NAMING_HINT: ""
-  # Internet Search Tool
-  BING_API_KEY: ""
-  EXA_API_KEY: ""
   # Don't change the NLP models unless you know what you're doing
   EMBEDDING_BATCH_SIZE: ""
   DOCUMENT_ENCODER_MODEL: ""
@@ -943,3 +963,9 @@ configMap:
   DOMAIN: "localhost"
   # Chat Configs
   HARD_DELETE_CHATS: ""
+  # User File Upload Configuration
+  # Skip the token count threshold check (100,000 tokens) for uploaded files
+  # For self-hosted: set to true to skip for all users
+  SKIP_USERFILE_THRESHOLD: ""
+  # For multi-tenant: comma-separated list of tenant IDs to skip threshold
+  SKIP_USERFILE_THRESHOLD_TENANT_IDS: ""

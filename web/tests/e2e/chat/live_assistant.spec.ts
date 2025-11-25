@@ -1,7 +1,6 @@
-import { test, expect } from "@chromatic-com/playwright";
+import { test } from "@chromatic-com/playwright";
 import { loginAsRandomUser } from "../utils/auth";
 import {
-  navigateToAssistantInHistorySidebar,
   sendMessage,
   startNewChat,
   verifyAssistantIsChosen,
@@ -32,7 +31,7 @@ test("Chat workflow", async ({ page }) => {
 
   // Test creation of a new assistant
   await page.getByTestId("AppSidebar/more-agents").click();
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByTestId("AgentsPage/new-agent-button").click();
   await page.getByTestId("name").click();
   await page.getByTestId("name").fill("Test Assistant");
   await page.getByTestId("description").click();

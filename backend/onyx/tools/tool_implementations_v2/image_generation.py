@@ -84,17 +84,13 @@ def _image_generation_core(
                 list[ImageGenerationResponse], tool_response.response
             )
             file_ids = save_files(
-                urls=[img.url for img in image_generation_responses if img.url],
-                base64_files=[
-                    img.image_data
-                    for img in image_generation_responses
-                    if img.image_data
-                ],
+                urls=[],
+                base64_files=[img.image_data for img in image_generation_responses],
             )
             generated_images = [
                 GeneratedImage(
                     file_id=file_id,
-                    url=img.url if img.url else build_frontend_file_url(file_id),
+                    url=build_frontend_file_url(file_id),
                     revised_prompt=img.revised_prompt,
                 )
                 for img, file_id in zip(image_generation_responses, file_ids)

@@ -16,6 +16,7 @@ import httpx
 import requests
 import voyageai  # type: ignore
 from cohere import AsyncClient as CohereAsyncClient
+from cohere.core.api_error import ApiError
 from google.oauth2 import service_account  # type: ignore
 from httpx import HTTPError
 from requests import JSONDecodeError
@@ -38,9 +39,8 @@ from onyx.natural_language_processing.constants import DEFAULT_OPENAI_MODEL
 from onyx.natural_language_processing.constants import DEFAULT_VERTEX_MODEL
 from onyx.natural_language_processing.constants import DEFAULT_VOYAGE_MODEL
 from onyx.natural_language_processing.constants import EmbeddingModelTextType
-from onyx.natural_language_processing.exceptions import (
-    ModelServerRateLimitError,
-)
+from onyx.natural_language_processing.exceptions import CohereBillingLimitError
+from onyx.natural_language_processing.exceptions import ModelServerRateLimitError
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.utils.logger import setup_logger
@@ -429,7 +429,20 @@ async def cohere_rerank_api(
     query: str, docs: list[str], model_name: str, api_key: str
 ) -> list[float]:
     cohere_client = CohereAsyncClient(api_key=api_key)
-    response = await cohere_client.rerank(query=query, documents=docs, model=model_name)
+    try:
+        response = await cohere_client.rerank(
+            query=query, documents=docs, model=model_name
+        )
+    except ApiError as err:
+        if err.status_code == 402:
+            logger.warning(
+                "Cohere rerank request rejected due to billing cap. "
+                "Falling back to retrieval ordering until billing resets."
+            )
+            raise CohereBillingLimitError(
+                "Cohere billing limit reached for reranking"
+            ) from err
+        raise
     results = response.results
     sorted_results = sorted(results, key=lambda item: item.index)
     return [result.relevance_score for result in sorted_results]

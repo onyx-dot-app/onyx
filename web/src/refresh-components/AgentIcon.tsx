@@ -1,14 +1,9 @@
-import React from "react";
+import React, { JSX } from "react";
 import crypto from "crypto";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { ArtAsistantIcon, OnyxIcon } from "@/components/icons/icons";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
@@ -98,48 +93,41 @@ export default function AgentIcon({ agent, size = 24 }: AgentIconProps) {
     agent.id === 0 && settings?.enterpriseSettings?.use_custom_logo === true;
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="text-text-04">
-            {agent.id === -3 ? (
-              <ArtAsistantIcon size={size} />
-            ) : agent.id === 0 ? (
-              shouldUseWhitelabelLogo ? (
-                <img
-                  alt="Logo"
-                  src="/api/enterprise-settings/logo"
-                  loading="lazy"
-                  className={cn(
-                    "rounded-full object-cover object-center transition-opacity duration-300"
-                  )}
-                  width={size}
-                  height={size}
-                  style={{ objectFit: "contain" }}
-                />
-              ) : (
-                <OnyxIcon size={size} />
-              )
-            ) : agent.uploaded_image_id ? (
-              <img
-                alt={agent.name}
-                src={buildImgUrl(agent.uploaded_image_id)}
-                loading="lazy"
-                className={cn(
-                  "rounded-full object-cover object-center transition-opacity duration-300"
-                )}
-                width={size}
-                height={size}
-              />
-            ) : (
-              generateIdenticon((agent.icon_shape || 0).toString(), size)
+    <SimpleTooltip tooltip={agent.description} side="top">
+      <div className="text-text-04">
+        {agent.id === -3 ? (
+          <ArtAsistantIcon size={size} />
+        ) : agent.id === 0 ? (
+          shouldUseWhitelabelLogo ? (
+            <img
+              alt="Logo"
+              src="/api/enterprise-settings/logo"
+              loading="lazy"
+              className={cn(
+                "rounded-full object-cover object-center transition-opacity duration-300"
+              )}
+              width={size}
+              height={size}
+              style={{ objectFit: "contain" }}
+            />
+          ) : (
+            <OnyxIcon size={size} />
+          )
+        ) : agent.uploaded_image_id ? (
+          <img
+            alt={agent.name}
+            src={buildImgUrl(agent.uploaded_image_id)}
+            loading="lazy"
+            className={cn(
+              "rounded-full object-cover object-center transition-opacity duration-300"
             )}
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <Text inverted>{agent.description}</Text>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+            width={size}
+            height={size}
+          />
+        ) : (
+          generateIdenticon((agent.icon_shape || 0).toString(), size)
+        )}
+      </div>
+    </SimpleTooltip>
   );
 }

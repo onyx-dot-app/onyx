@@ -22,6 +22,7 @@ import {
   EmbeddingPrecision,
   RerankingDetails,
   SavedSearchSettings,
+  SwitchoverType,
 } from "../interfaces";
 import RerankingDetailsForm from "../RerankingFormPage";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
@@ -37,19 +38,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import SvgArrowLeft from "@/icons/arrow-left";
 import SvgArrowRight from "@/icons/arrow-right";
-
-enum ReindexType {
-  REINDEX = "reindex",
-  INSTANT = "instant",
-}
 
 export default function EmbeddingForm() {
   const { formStep, nextFormStep, prevFormStep } = useEmbeddingFormContext();
@@ -78,8 +69,8 @@ export default function EmbeddingForm() {
     rerank_api_url: null,
   });
 
-  const [reindexType, setReindexType] = useState<ReindexType>(
-    ReindexType.REINDEX
+  const [switchoverType, setSwitchoverType] = useState<SwitchoverType>(
+    SwitchoverType.REINDEX
   );
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -212,7 +203,7 @@ export default function EmbeddingForm() {
       advancedEmbeddingDetails,
       rerankingDetails,
       selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null,
-      reindexType === ReindexType.REINDEX
+      switchoverType
     );
 
     const response = await updateSearchSettings(searchSettings);
@@ -225,7 +216,13 @@ export default function EmbeddingForm() {
       });
       return false;
     }
-  }, [selectedProvider, advancedEmbeddingDetails, rerankingDetails, setPopup]);
+  }, [
+    selectedProvider,
+    advancedEmbeddingDetails,
+    rerankingDetails,
+    switchoverType,
+    setPopup,
+  ]);
 
   const handleValidationChange = useCallback(
     (isValid: boolean, errors: Record<string, string>) => {
@@ -260,7 +257,7 @@ export default function EmbeddingForm() {
           <div className="flex items-center h-fit">
             <Button
               onClick={() => {
-                if (reindexType == ReindexType.INSTANT) {
+                if (switchoverType == SwitchoverType.INSTANT) {
                   setShowInstantSwitchConfirm(true);
                 } else {
                   handleReIndex();
@@ -271,9 +268,11 @@ export default function EmbeddingForm() {
               action
               className="rounded-r-none w-32 h-full"
             >
-              {reindexType == ReindexType.REINDEX
+              {switchoverType == SwitchoverType.REINDEX
                 ? "Re-index"
-                : "Instant Switch"}
+                : switchoverType == SwitchoverType.ACTIVE_ONLY
+                  ? "Active Only"
+                  : "Instant Switch"}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -288,43 +287,34 @@ export default function EmbeddingForm() {
               <DropdownMenuContent>
                 <DropdownMenuItem
                   onClick={() => {
-                    setReindexType(ReindexType.REINDEX);
+                    setSwitchoverType(SwitchoverType.REINDEX);
                   }}
                 >
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger className="w-full text-left">
-                        (Recommended) Re-index
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>
-                          Re-runs all connectors in the background before
-                          switching over. Takes longer but ensures no
-                          degredation of search during the switch.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <SimpleTooltip tooltip="Re-runs all connectors in the background before switching over. Takes longer but ensures no degredation of search during the switch.">
+                    <span className="w-full text-left">
+                      (Recommended) Re-index
+                    </span>
+                  </SimpleTooltip>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
-                    setReindexType(ReindexType.INSTANT);
+                    setSwitchoverType(SwitchoverType.ACTIVE_ONLY);
                   }}
                 >
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger className="w-full text-left">
-                        Instant Switch
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>
-                          Immediately switches to new settings without
-                          re-indexing. Searches will be degraded until the
-                          re-indexing is complete.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <SimpleTooltip tooltip="Re-runs only active (non-paused) connectors in the background before switching over. Paused connectors won't block the switchover.">
+                    <span className="w-full text-left">
+                      Active Connectors Only
+                    </span>
+                  </SimpleTooltip>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSwitchoverType(SwitchoverType.INSTANT);
+                  }}
+                >
+                  <SimpleTooltip tooltip="Immediately switches to new settings without re-indexing. Searches will be degraded until the re-indexing is complete.">
+                    <span className="w-full text-left">Instant Switch</span>
+                  </SimpleTooltip>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -427,7 +417,7 @@ export default function EmbeddingForm() {
     };
     ReIndexingButtonComponent.displayName = "ReIndexingButton";
     return ReIndexingButtonComponent;
-  }, [needsReIndex, reindexType, isOverallFormValid, combinedFormErrors]);
+  }, [needsReIndex, switchoverType, isOverallFormValid, combinedFormErrors]);
 
   if (!selectedProvider) {
     return <ThreeDotsLoader />;
@@ -462,7 +452,7 @@ export default function EmbeddingForm() {
         selectedProvider.provider_type
           ?.toLowerCase()
           .split(" ")[0] as EmbeddingProvider | null,
-        reindexType === ReindexType.REINDEX
+        switchoverType
       );
     } else {
       // This is a locally hosted model
@@ -471,7 +461,7 @@ export default function EmbeddingForm() {
         advancedEmbeddingDetails,
         rerankingDetails,
         null,
-        reindexType === ReindexType.REINDEX
+        switchoverType
       );
     }
 
