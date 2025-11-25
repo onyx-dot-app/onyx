@@ -5,10 +5,10 @@
 
 .line-item-button-main-emphasized {
   @apply bg-transparent hover:bg-background-tint-02;
-}
 
-.line-item-button-main-emphasized[data-selected="true"] {
-  @apply bg-action-link-01;
+  &[data-selected="true"] {
+    @apply bg-action-link-01;
+  }
 }
 
 .line-item-button-strikethrough {
@@ -25,19 +25,19 @@
 
 .line-item-button-danger-emphasized {
   @apply bg-transparent hover:bg-background-tint-02;
-}
 
-.line-item-button-danger-emphasized[data-selected="true"] {
-  @apply bg-status-error-01;
+  &[data-selected="true"] {
+    @apply bg-status-error-01;
+  }
 }
 
 /* LineItem Text Variants */
 .line-item-text-main {
   @apply text-text-04;
-}
 
-.group\/LineItem[data-selected="true"] .line-item-text-main {
-  @apply text-action-link-05;
+  .group\/LineItem[data-selected="true"] & {
+    @apply text-action-link-05;
+  }
 }
 
 .line-item-text-strikethrough {
@@ -48,17 +48,13 @@
   @apply text-status-error-05;
 }
 
-.group\/LineItem[data-selected="true"] .line-item-text-danger {
-  @apply text-action-link-05;
-}
-
 /* LineItem Icon Variants */
 .line-item-icon-main {
   @apply stroke-text-03;
-}
 
-.group\/LineItem[data-selected="true"] .line-item-icon-main {
-  @apply stroke-action-link-05;
+  .group\/LineItem[data-selected="true"] & {
+    @apply stroke-action-link-05;
+  }
 }
 
 .line-item-icon-strikethrough {
@@ -67,8 +63,4 @@
 
 .line-item-icon-danger {
   @apply stroke-status-error-05;
-}
-
-.group\/LineItem[data-selected="true"] .line-item-icon-danger {
-  @apply stroke-action-link-05;
 }
