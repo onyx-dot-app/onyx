@@ -306,6 +306,47 @@ services:
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
       - NEXT_PUBLIC_CUSTOM_REFRESH_URL=${NEXT_PUBLIC_CUSTOM_REFRESH_URL:-}
 
+  mcp_server:
+    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: >
+      /bin/sh -c "if [ \"${MCP_SERVER_ENABLED}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED}\" != \"true\" ]; then
+        echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
+        exit 0;
+      else
+        exec python -m onyx.mcp_server_main;
+      fi"
+    ports:
+      - "8090:8090"
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      - relational_db
+      - cache
+    restart: "no"
+    environment:
+      - POSTGRES_HOST=relational_db
+      - REDIS_HOST=cache
+      # MCP Server Configuration
+      - MCP_SERVER_ENABLED=${MCP_SERVER_ENABLED:-false}
+      - MCP_SERVER_PORT=${MCP_SERVER_PORT:-8090}
+      - MCP_SERVER_CORS_ORIGINS=${MCP_SERVER_CORS_ORIGINS:-}
+      - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
+      - API_SERVER_HOST=api_server
+      - API_SERVER_PORT=8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    volumes:
+      - mcp_server_logs:/var/log/onyx
+
   inference_model_server:
     image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
     build:
@@ -491,3 +532,4 @@ volumes:
 
   model_cache_huggingface:
   indexing_huggingface_model_cache:
+  mcp_server_logs:

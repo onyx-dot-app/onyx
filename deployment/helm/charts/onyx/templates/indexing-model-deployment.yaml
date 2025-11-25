@@ -5,6 +5,9 @@ metadata:
   name: {{ include "onyx.fullname" . }}-indexing-model
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.indexCapability.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   replicas: {{ .Values.indexCapability.replicaCount }}
   selector:
@@ -22,6 +25,9 @@ spec:
       {{- end }}
       labels:
         {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.indexCapability.deploymentLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .Values.indexCapability.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

@@ -8,7 +8,6 @@ from uuid import uuid4
 import pytest
 from agents import RunContextWrapper
 
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import WebContent
@@ -110,7 +109,6 @@ def create_test_run_context(
     context = ChatTurnContext(
         chat_session_id=uuid4(),
         message_id=1,
-        research_type=ResearchType.THOUGHTFUL,
         current_run_step=current_run_step,
         iteration_instructions=iteration_instructions or [],
         global_iteration_responses=global_iteration_responses or [],

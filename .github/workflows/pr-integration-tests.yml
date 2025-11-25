@@ -221,6 +221,7 @@ jobs:
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           INTEGRATION_TESTS_MODE=true \
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001 \
+          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
@@ -229,43 +230,56 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
+            mcp_server \
             background \
             -d
         id: start_docker
 
-      - name: Wait for service to be ready
+      - name: Wait for services to be ready
         run: |
           echo "Starting wait-for-service script..."
 
-          docker logs -f onyx-api_server-1 &
+          wait_for_service() {
+            local url=$1
+            local label=$2
+            local timeout=${3:-300}  # default 5 minutes
+            local start_time
+            start_time=$(date +%s)
 
-          start_time=$(date +%s)
-          timeout=300  # 5 minutes in seconds
+            while true; do
+              local current_time
+              current_time=$(date +%s)
+              local elapsed_time=$((current_time - start_time))
 
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
+              if [ $elapsed_time -ge $timeout ]; then
+                echo "Timeout reached. ${label} did not become ready in $timeout seconds."
+                exit 1
+              fi
 
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. Service did not become ready in 5 minutes."
-              exit 1
-            fi
+              local response
+              response=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "curl_error")
 
-            # Use curl with error handling to ignore specific exit code 56
-            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
+              if [ "$response" = "200" ]; then
+                echo "${label} is ready!"
+                break
+              elif [ "$response" = "curl_error" ]; then
+                echo "Curl encountered an error while checking ${label}. Retrying in 5 seconds..."
+              else
+                echo "${label} not ready yet (HTTP status $response). Retrying in 5 seconds..."
+              fi
 
-            if [ "$response" = "200" ]; then
-              echo "Service is ready!"
-              break
-            elif [ "$response" = "curl_error" ]; then
-              echo "Curl encountered an error, possibly exit code 56. Continuing to retry..."
-            else
-              echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
-            fi
+              sleep 5
+            done
+          }
 
-            sleep 5
-          done
-          echo "Finished waiting for service."
+          wait_for_service "http://localhost:8080/health" "API server"
+          test_dir="${{ matrix.test-dir.path }}"
+          if [ "$test_dir" = "tests/mcp" ]; then
+            wait_for_service "http://localhost:8090/health" "MCP server"
+          else
+            echo "Skipping MCP server wait for non-MCP suite: $test_dir"
+          fi
+          echo "Finished waiting for services."
 
       - name: Start Mock Services
         run: |
@@ -294,6 +308,8 @@ jobs:
               -e VESPA_HOST=index \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
+              -e MCP_SERVER_HOST=mcp_server \
+              -e MCP_SERVER_PORT=8090 \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e EXA_API_KEY=${EXA_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
@@ -374,6 +390,7 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           DEV_MODE=true \
+          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.multitenant-dev.yml up \
             relational_db \
             index \
@@ -382,6 +399,7 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
+            mcp_server \
             background \
             -d
         id: start_docker_multi_tenant
@@ -430,6 +448,8 @@ jobs:
             -e VESPA_HOST=index \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
+            -e MCP_SERVER_HOST=mcp_server \
+            -e MCP_SERVER_PORT=8090 \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
             -e EXA_API_KEY=${EXA_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
