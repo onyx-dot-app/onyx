@@ -338,9 +338,6 @@ export default function ChatPage({
 
   // handle re-sizing of the text area
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    handleInputResize();
-  }, [message]);
 
   // Add refs needed by useChatSessionController
   const chatSessionIdRef = useRef<string | null>(existingChatSessionId);
@@ -604,14 +601,17 @@ export default function ChatPage({
     );
   }, []);
 
-  const handleChatInputSubmit = useCallback(() => {
-    onSubmit({
-      message: message,
-      currentMessageFiles: currentMessageFiles,
-      useAgentSearch: deepResearchEnabled,
-    });
-    setShowOnboarding(false);
-  }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
+  const handleChatInputSubmit = useCallback(
+    (inputMessage: string) => {
+      onSubmit({
+        message: inputMessage,
+        currentMessageFiles: currentMessageFiles,
+        useAgentSearch: deepResearchEnabled,
+      });
+      setShowOnboarding(false);
+    },
+    [message, onSubmit, currentMessageFiles, deepResearchEnabled]
+  );
 
   // Memoized callbacks for DocumentResults
   const handleMobileDocumentSidebarClose = useCallback(() => {
@@ -922,6 +922,7 @@ export default function ChatPage({
                               setMessage={setMessage}
                               stopGenerating={stopGenerating}
                               onSubmit={handleChatInputSubmit}
+                              handleInputResize={handleInputResize}
                               chatState={currentChatState}
                               currentSessionFileTokenCount={
                                 existingChatSessionId

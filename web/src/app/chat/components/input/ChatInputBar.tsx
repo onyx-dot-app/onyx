@@ -1,4 +1,5 @@
 import React, {
+  use,
   useCallback,
   useContext,
   useEffect,
@@ -86,7 +87,7 @@ export interface ChatInputBarProps {
   message: string;
   setMessage: (message: string) => void;
   stopGenerating: () => void;
-  onSubmit: () => void;
+  onSubmit: (message: string) => void;
   llmManager: LlmManager;
   chatState: ChatState;
   currentSessionFileTokenCount: number;
@@ -104,9 +105,11 @@ export interface ChatInputBarProps {
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
   disabled: boolean;
+  handleInputResize: () => void;
 }
 
 function ChatInputBarInner({
+  handleInputResize,
   retrievalEnabled,
   removeDocs,
   toggleDocumentSidebar,
@@ -133,6 +136,11 @@ function ChatInputBarInner({
   const { user } = useUser();
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
+  const [textAreaValue, setTextAreaValue] = useState(message);
+
+  useEffect(() => {
+    handleInputResize();
+  }, [textAreaValue]);
 
   const currentIndexingFiles = useMemo(() => {
     return currentMessageFiles.filter(
@@ -181,7 +189,7 @@ function ChatInputBarInner({
         MAX_INPUT_HEIGHT
       )}px`;
     }
-  }, [message, textAreaRef]);
+  }, [textAreaValue, textAreaRef]);
 
   const handlePaste = (event: React.ClipboardEvent) => {
     const items = event.clipboardData?.items;
@@ -230,6 +238,7 @@ function ChatInputBarInner({
 
   const updateInputPrompt = (prompt: InputPrompt) => {
     hidePrompts();
+    setTextAreaValue(`${prompt.content}`);
     setMessage(`${prompt.content}`);
   };
 
@@ -252,23 +261,23 @@ function ChatInputBarInner({
   const handleInputChange = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       const text = event.target.value;
-      setMessage(text);
+      setTextAreaValue(text);
       handlePromptInput(text);
     },
-    [setMessage, handlePromptInput]
+    [setTextAreaValue, handlePromptInput]
   );
 
   const startFilterSlash = useMemo(() => {
-    if (message !== undefined) {
-      const message_segments = message
-        .slice(message.lastIndexOf("/") + 1)
+    if (textAreaValue !== undefined) {
+      const message_segments = textAreaValue
+        .slice(textAreaValue.lastIndexOf("/") + 1)
         .split(/\s/);
       if (message_segments[0]) {
         return message_segments[0].toLowerCase();
       }
     }
     return "";
-  }, [message]);
+  }, [textAreaValue]);
 
   const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
@@ -455,7 +464,7 @@ function ChatInputBarInner({
                 } help you today`
               : `How can ${selectedAssistant.name} help you today`
           }
-          value={message}
+          value={textAreaValue}
           onKeyDown={(event) => {
             if (
               event.key === "Enter" &&
@@ -464,8 +473,9 @@ function ChatInputBarInner({
               !(event.nativeEvent as any).isComposing
             ) {
               event.preventDefault();
-              if (message) {
-                onSubmit();
+              if (textAreaValue) {
+                onSubmit(textAreaValue);
+                setTextAreaValue("");
               }
             }
           }}
@@ -617,13 +627,14 @@ function ChatInputBarInner({
               id="onyx-chat-input-send-button"
               icon={chatState === "input" ? SvgArrowUp : SvgStop}
               disabled={
-                (chatState === "input" && !message) || hasUploadingFiles
+                (chatState === "input" && !textAreaValue) || hasUploadingFiles
               }
               onClick={() => {
                 if (chatState == "streaming") {
                   stopGenerating();
-                } else if (message) {
-                  onSubmit();
+                } else if (textAreaValue) {
+                  onSubmit(textAreaValue.trim());
+                  setTextAreaValue("");
                 }
               }}
             />
