@@ -12,7 +12,7 @@ dask==2023.8.1
 ddtrace==3.10.0
 discord.py==2.4.0
 distributed==2023.8.1
-fastapi==0.116.1
+fastapi==0.120.2
 fastapi-users==14.0.1
 fastapi-users-db-sqlalchemy==5.0.0
 fastmcp==2.13.0
@@ -79,7 +79,6 @@ rfc3986==1.5.0
 simple-salesforce==1.12.6
 slack-sdk==3.20.2
 SQLAlchemy[mypy]==2.0.15
-starlette==0.47.2
 supervisor==4.2.5
 RapidFuzz==3.13.0
 tiktoken==0.7.0
