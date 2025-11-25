@@ -34,10 +34,7 @@ function SeparatorInner(
   }: React.ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root>,
   ref: React.ForwardedRef<React.ComponentRef<typeof SeparatorPrimitive.Root>>
 ) {
-  const isHorizontal = useMemo(
-    () => orientation === "horizontal",
-    [orientation]
-  );
+  const isHorizontal = orientation === "horizontal";
 
   return (
     <div className={cn(isHorizontal ? "py-4" : "px-4", className)}>
