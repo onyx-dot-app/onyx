@@ -176,8 +176,8 @@ export default function TextView({
             </Button>
           </div>
         </DialogHeader>
-        <div className="mt-0 rounded-b-lg flex-1 overflow-hidden">
-          <div className="flex items-center justify-center w-full h-full">
+        <div className="mt-0 rounded-b-lg flex-1 overflow-auto">
+          <div className="flex items-start justify-start w-full h-full">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary"></div>
@@ -187,23 +187,26 @@ export default function TextView({
               </div>
             ) : (
               <div
-                className="w-full h-full transform origin-center transition-transform duration-300 ease-in-out"
-                style={{ transform: `scale(${zoom / 100})` }}
+                className="inline-block transition-all duration-300 ease-in-out"
+                style={{
+                  width: `${zoom}%`,
+                  minWidth: `${zoom}%`,
+                }}
               >
                 {isImageFormat(fileType) ? (
                   <img
                     src={fileUrl}
                     alt={fileName}
-                    className="w-full h-full object-contain object-center"
+                    className="w-full h-auto object-contain object-center"
                   />
                 ) : isSupportedIframeFormat(fileType) ? (
                   <iframe
                     src={`${fileUrl}#toolbar=0`}
-                    className="w-full h-full border-none"
+                    className="w-full h-[70vh] border-none"
                     title={t(k.VIEW_FILES)}
                   />
                 ) : isMarkdownFormat(fileType) ? (
-                  <div className="w-full h-full p-6 overflow-y-scroll overflow-x-hidden">
+                  <div className="w-full h-full p-6 overflow-auto">
                     <MinimalMarkdown
                       content={fileContent}
                       className="w-full pb-4 h-full text-lg break-words"
