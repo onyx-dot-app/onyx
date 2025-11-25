@@ -11,7 +11,7 @@ All access controls are managed within the main Onyx application.
 
 ### Authentication
 
-Provide an Onyx bearer token in the `Authorization` header.
+Provide an Onyx Personal Access Token or API Token in the `Authorization` header as a Bearer token.
 The MCP server quickly validates and passes through the token on every request.
 
 Depending on usage, the MCP Server may support OAuth and stdio in the future.
@@ -101,7 +101,7 @@ Lists all document sources currently indexed in the tenant (e.g., `"confluence"`
 
 ### Running the MCP Server
 
-The MCP Server automatically launches with the `Run All Onyx Services` task.
+The MCP Server automatically launches with the `Run All Onyx Services` task from the default launch.json.
 
 You can also independently launch the Server via the vscode debugger.
 
