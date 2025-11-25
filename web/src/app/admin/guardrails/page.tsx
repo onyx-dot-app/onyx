@@ -29,6 +29,7 @@ import { FiEdit2, FiTrash } from "react-icons/fi";
 import { deleteApiKey } from "./lib";
 
 type Validator = {
+  config: any;
   id: number;
   owner?: { id?: string; email?: string } | null;
   name: string;
@@ -97,7 +98,7 @@ function Main() {
                 <TableCell className="max-w-20 break-words">{v.id}</TableCell>
                 <TableCell className="max-w-64 break-words">{v.name}</TableCell>
                 <TableCell className="max-w-96 break-words">
-                  {v.description || ""}
+                  {v.config?.user_description || ""}
                 </TableCell>
                 <TableCell className="max-w-64 break-words">
                   {v.owner?.email || ""}

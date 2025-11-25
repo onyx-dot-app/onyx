@@ -285,7 +285,7 @@ const AssistantCard: React.FC<{
               <p className="flex flex-wrap items-center text-neutral-800 dark:text-neutral-200 text-xs opacity-50">
                 {persona.owner?.email || persona.builtin_persona ? (
                   <>
-                    <span className="truncate">
+                    <span className="truncate max-w-3xs">
                       {t(k.BY)} {persona.owner?.email || t(k.ONYX)}
                     </span>
 

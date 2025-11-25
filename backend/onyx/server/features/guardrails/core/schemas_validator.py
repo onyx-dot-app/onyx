@@ -39,7 +39,12 @@ class ValidatorCreate(BaseModel):
     )
     config: dict[str, Any] = Field(
         description="Настройки валидатора в формате JSON",
-        examples=[{"pii_entities": ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD"]}],
+        examples=[
+            {
+                "pii_entities": ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD"],
+                "user_description": "Пользовательское описание валидатора"
+            }
+        ],
     )
     include_llm: bool = Field(
         default=False,
@@ -71,7 +76,12 @@ class ValidatorUpdate(BaseModel):
     )
     config: dict[str, Any] = Field(
         description="Настройки валидатора в формате JSON",
-        examples=[{"pii_entities": ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD"]}],
+        examples=[
+            {
+                "pii_entities": ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD"],
+                "user_description": "Пользовательское описание валидатора"
+            }
+        ],
     )
     llm_provider_id: int | None = Field(
         default=None,
@@ -99,7 +109,12 @@ class ValidatorResponse(BaseModel):
     validator_type: ValidatorType
     config: Any = Field(
         description="Настройки валидатора в формате JSON",
-        examples=[{"pii_entities": ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD"]}],
+        examples=[
+            {
+                "pii_entities": ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD"],
+                "user_description": "Пользовательское описание валидатора"
+            }
+        ],
     )
 
     include_llm: bool = Field(

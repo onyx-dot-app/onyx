@@ -120,23 +120,6 @@ server {
 }
 
 server {
-    listen 81;
-    listen [::]:81;
-    server_name ${DOMAIN};
-    proxy_connect_timeout 200;
-    proxy_send_timeout 200;
-    proxy_read_timeout 200;
-    location / {
-        proxy_pass http://flowise:3003;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-
-server {
     listen 444 ssl;
     listen [::]:444 ssl;
     server_name ${DOMAIN};

@@ -15,6 +15,7 @@ import { createApiKey, updateApiKey } from "./lib";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import Text from "@/components/ui/text";
 import { APIKey } from "./types";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -164,7 +165,7 @@ export const OnyxApiKeyForm = ({
           }}
         >
           {({ isSubmitting, values, setFieldValue }) => (
-            <Form className="w-full overflow-auto">
+            <Form className="w-full overflow-auto p-2">
               <SelectorFormField
                 name="template"
                 label={t(k.VALIDATOR_TEMPLATE_LABEL)}
@@ -227,19 +228,17 @@ export const OnyxApiKeyForm = ({
                   }
                 }}
               />
+              {(() => {
+                const tpl = Array.isArray(templates)
+                  ? templates.find((t) => String(t?.id) === values.template)
+                  : undefined;
+                return tpl ? <Text>{tpl?.description}</Text> : null;
+              })()}
 
               <TextFormField
                 name="name"
                 label={t(k.VALIDATOR_NAME_LABEL)}
                 autoCompleteDisabled={true}
-              />
-
-              <TextFormField
-                maxWidth="max-w-lg"
-                name="description"
-                label={t(k.VALIDATOR_DESCRIPTION_LABEL)}
-                placeholder={t(k.VALIDATOR_DESCRIPTION_PLACEHOLDER)}
-                className="[&_input]:placeholder:text-text-muted/50"
               />
 
               {/* LLM Provider Selection */}
@@ -257,32 +256,28 @@ export const OnyxApiKeyForm = ({
 
                 console.log("llmProviders", llmProviders);
 
-                if (
-                  !includeLlmRaw ||
-                  !Array.isArray(llmProviders) ||
-                  llmProviders.length === 0
-                ) {
+                if (!includeLlmRaw) {
                   return null;
                 }
 
-                const llmOptions = llmProviders.map((provider) => ({
+                const llmOptions = llmProviders?.map((provider) => ({
                   value: String(provider.id),
                   name: provider.name,
                 }));
 
-                const selectedProvider = llmProviders.find(
+                const selectedProvider = llmProviders?.find(
                   (p) => String(p.id) === String(values.llm_provider_id)
                 );
 
                 return (
-                  <div className="flex flex-col gap-2 p-2">
+                  <div className="flex flex-col gap-2">
                     <label className="text-sm font-medium text-text-700">
                       LLM Provider
                     </label>
                     <SelectorFormField
                       name="llm_provider_id"
                       label=""
-                      options={llmOptions}
+                      options={llmOptions || []}
                       defaultValue=""
                       onSelect={(selected) => {
                         setFieldValue("llm_provider_id", selected);
@@ -440,15 +435,16 @@ export const OnyxApiKeyForm = ({
                   </div>
                 );
               })()}
-
-              <Button
-                type="submit"
-                size="sm"
-                variant="submit"
-                disabled={isSubmitting}
-              >
-                {isUpdate ? t(k.UPDATE_BUTTON) : t(k.CREATE_BUTTON)}
-              </Button>
+              <div>
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="submit"
+                  disabled={isSubmitting}
+                >
+                  {isUpdate ? t(k.UPDATE_BUTTON) : t(k.CREATE_BUTTON)}
+                </Button>
+              </div>
             </Form>
           )}
         </Formik>

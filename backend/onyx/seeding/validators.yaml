@@ -4,6 +4,9 @@ validators:
     description: "Обнаружение и маскирование персональных данных при запросе от пользователя, а также демаскирование данных после ответа от LLM"
     validator_type: "DETECT_PII"
     config:
+      - type: "text"
+        name: "user_description"
+        label: "Описание валидатора"
       - type: "multiselect"
         name: "pii_entities"
         label: "Типы персональных данных для маскирования"
@@ -29,6 +32,9 @@ validators:
     description: "Обнаружение и маскирование запретных слов в ответе от LLM"
     validator_type: "BAN_LIST"
     config:
+      - type: "text"
+        name: "user_description"
+        label: "Описание валидатора"
       - type: "tags"
         name: "banned_words"
         label: "Список запретных слов для маскирования"
@@ -38,6 +44,9 @@ validators:
     description: "Обнаружение и блокировка ответа, содержащего запретные темы"
     validator_type: "SENSITIVE_TOPIC"
     config:
+      - type: "text"
+        name: "user_description"
+        label: "Описание валидатора"
       - type: "tags"
         name: "sensitive_topics"
         label: "Список запретных тем"
@@ -50,6 +59,9 @@ validators:
     description: "Анализирует и корректирует стиль текста ответа от LLM согласно заданным требованиям"
     validator_type: "TEXT_STYLE"
     config:
+      - type: "text"
+        name: "user_description"
+        label: "Описание валидатора"
       - type: "tags"
         name: "text_styles"
         label: "Список стилей общения"
