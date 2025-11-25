@@ -89,7 +89,7 @@ Upgrade specific packages:
 
 ```bash
 # Edit version in pyproject.toml, then:
-uv lock
+./backend/scripts/compile_requirements.py
 ```
 
 **Review changes carefully before committing!**
