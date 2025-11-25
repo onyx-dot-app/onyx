@@ -4,13 +4,17 @@ const getApiVersionParam = (url: URL): string => {
     return directApiVersion.trim();
   }
 
-  for (const [key, value] of url.searchParams.entries()) {
-    if (key.toLowerCase() === "api-version" && value?.trim()) {
-      return value.trim();
+  let normalized: string | null = null;
+  url.searchParams.forEach((value, key) => {
+    if (normalized) {
+      return;
     }
-  }
+    if (key.toLowerCase() === "api-version" && value?.trim()) {
+      normalized = value.trim();
+    }
+  });
 
-  return "";
+  return normalized ?? "";
 };
 
 const getDeploymentNameParam = (url: URL): string => {
