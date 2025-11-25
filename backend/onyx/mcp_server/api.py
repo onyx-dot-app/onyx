@@ -11,6 +11,9 @@ from fastapi.responses import Response
 from fastmcp import FastMCP
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.base import RequestResponseEndpoint
+from starlette.types import Receive
+from starlette.types import Scope
+from starlette.types import Send
 
 from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
 from onyx.mcp_server.auth import OnyxTokenVerifier
@@ -39,7 +42,9 @@ def create_mcp_fastapi_app() -> FastAPI:
     """Create FastAPI app wrapping MCP server with auth and shared client lifecycle."""
     mcp_asgi_app = mcp_server.http_app(path="/")
 
-    async def _ensure_streamable_accept_header(scope, receive, send):
+    async def _ensure_streamable_accept_header(
+        scope: Scope, receive: Receive, send: Send
+    ) -> None:
         """Ensure Accept header includes types required by FastMCP streamable HTTP."""
         if scope.get("type") == "http":
             headers = MutableHeaders(scope=scope)
