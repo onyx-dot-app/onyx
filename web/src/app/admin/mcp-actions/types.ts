@@ -1,7 +1,4 @@
-import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
-import { KeyedMutator } from "swr";
-import { MCPServersResponse } from "@/lib/tools/interfaces";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { MCPServer } from "@/lib/tools/interfaces";
 
 export type MCPServerStatus =
   | "CREATED"
@@ -18,13 +15,6 @@ export interface MCPServerWithStatus
   auth_type: string | null;
   auth_performer: string | null;
   tool_count: number;
-}
-
-export interface MCPActionsListProps {
-  mcpServers: MCPServerWithStatus[];
-  mutateMcpServers: KeyedMutator<MCPServersResponse>;
-  setPopup: (spec: PopupSpec) => void;
-  toolsFetchingServerIds: string[];
 }
 
 export interface MCPServerCreateRequest {

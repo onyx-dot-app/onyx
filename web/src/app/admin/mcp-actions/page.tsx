@@ -2,38 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import useSWR from "swr";
 import PageHeader from "@/refresh-components/headers/PageHeader";
 import SvgActions from "@/icons/actions";
 import { Separator } from "@/components/ui/separator";
 import Actionbar from "@/sections/actions/Actionbar";
-import { MCPServersResponse } from "@/lib/tools/interfaces";
 import MCPActionsList from "./MCPActionsList";
 import AddMCPServerModal from "./AddMCPServerModal";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { usePopup } from "@/components/admin/connectors/Popup";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { refreshMCPServerTools } from "@/lib/mcpService";
+import { MCPActionsProvider, useMCPActions } from "./MCPActionsContext";
 
-export default function MCPActionsPage() {
-  const { popup, setPopup } = usePopup();
-  const addServerModal = useCreateModal();
+function MCPActionsPageContent() {
+  const {
+    mcpServers,
+    isLoading,
+    popup,
+    setPopup,
+    mutateMcpServers,
+    toolsFetchingServerIds,
+    setToolsFetchingServerIds,
+    manageServerModal,
+    setServerToManage,
+  } = useMCPActions();
   const searchParams = useSearchParams();
   const router = useRouter();
   const [isFetchingTools, setIsFetchingTools] = useState(false);
-  const [toolsFetchingServerIds, setToolsFetchingServerIds] = useState<
-    string[]
-  >([]);
-
-  // Fetch MCP servers
-  const {
-    data: mcpData,
-    isLoading: isMcpLoading,
-    mutate: mutateMcpServers,
-  } = useSWR<MCPServersResponse>(
-    "/api/admin/mcp/servers",
-    errorHandlingFetcher
-  );
 
   // Handle OAuth callback - fetch tools when server_id is present
   useEffect(() => {
@@ -61,9 +53,6 @@ export default function MCPActionsPage() {
 
           // Refresh tools for this server (will be cached by SWR for when user expands)
           await refreshMCPServerTools(parseInt(serverId));
-
-          router.replace("/admin/mcp-actions");
-
           setPopup({
             message: "Successfully connected to MCP server and fetched tools",
             type: "success",
@@ -77,6 +66,7 @@ export default function MCPActionsPage() {
             type: "error",
           });
         } finally {
+          router.replace("/admin/mcp-actions");
           setToolsFetchingServerIds((prev) =>
             prev.filter((id) => id !== serverId)
           );
@@ -86,10 +76,16 @@ export default function MCPActionsPage() {
 
       fetchToolsAfterOAuth();
     }
-  }, [searchParams, isFetchingTools, mutateMcpServers, setPopup, router]);
+  }, [
+    searchParams,
+    isFetchingTools,
+    mutateMcpServers,
+    setPopup,
+    router,
+    toolsFetchingServerIds,
+    setToolsFetchingServerIds,
+  ]);
 
-  const mcpServers = (mcpData?.mcp_servers || []) as any[];
-  const isLoading = isMcpLoading;
   const hasActions = mcpServers.length > 0;
 
   if (isLoading) {
@@ -113,21 +109,24 @@ export default function MCPActionsPage() {
       <Separator className="my-0 border border-border-01 mb-6" />
       <Actionbar
         hasActions={hasActions}
-        onAddMCPServer={() => addServerModal.toggle(true)}
+        onAddMCPServer={() => {
+          setServerToManage(null); // Clear any selected server when creating new
+          manageServerModal.toggle(true);
+        }}
         buttonText="Add MCP Server"
       />
-      <MCPActionsList
-        mcpServers={mcpServers}
-        mutateMcpServers={mutateMcpServers}
-        setPopup={setPopup}
-        toolsFetchingServerIds={toolsFetchingServerIds}
-      />
-      <addServerModal.Provider>
-        <AddMCPServerModal
-          mutateMcpServers={mutateMcpServers}
-          setPopup={setPopup}
-        />
-      </addServerModal.Provider>
+      <MCPActionsList />
+      <manageServerModal.Provider>
+        <AddMCPServerModal skipOverlay />
+      </manageServerModal.Provider>
     </div>
+  );
+}
+
+export default function MCPActionsPage() {
+  return (
+    <MCPActionsProvider>
+      <MCPActionsPageContent />
+    </MCPActionsProvider>
   );
 }

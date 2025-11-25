@@ -10,22 +10,15 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Textarea } from "@/components/ui/textarea";
 import SvgServer from "@/icons/server";
 import SvgCheckCircle from "@/icons/check-circle";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { createMCPServer, updateMCPServer } from "@/lib/mcpService";
 import { MCPServerCreateRequest, MCPServerWithStatus } from "./types";
-import { KeyedMutator } from "swr";
-import { MCPServersResponse } from "@/lib/tools/interfaces";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { Separator } from "@/components/ui/separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgUnplug from "@/icons/unplug";
+import { useMCPActions } from "./MCPActionsContext";
 
 interface AddMCPServerModalProps {
-  server?: MCPServerWithStatus;
-  mutateMcpServers: KeyedMutator<MCPServersResponse>;
-  setPopup: (spec: PopupSpec) => void;
-  onDisconnect?: () => void;
   skipOverlay?: boolean;
 }
 
@@ -38,14 +31,32 @@ const validationSchema = Yup.object().shape({
 });
 
 export default function AddMCPServerModal({
-  server,
-  mutateMcpServers,
-  setPopup,
-  onDisconnect,
   skipOverlay = false,
 }: AddMCPServerModalProps) {
   const { isOpen, toggle } = useModal();
+  const {
+    mutateMcpServers,
+    setPopup,
+    serverToManage,
+    disconnectModal,
+    manageServerModal,
+    setServerToDisconnect,
+    setServerToManage,
+    onServerCreated,
+  } = useMCPActions();
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Use serverToManage from context
+  const server = serverToManage;
+
+  // Handler for disconnect button
+  const handleDisconnectClick = () => {
+    if (serverToManage) {
+      setServerToDisconnect(serverToManage);
+      manageServerModal.toggle(false);
+      disconnectModal.toggle(true);
+    }
+  };
 
   // Determine if we're in edit mode
   const isEditMode = !!server;
@@ -67,20 +78,25 @@ export default function AddMCPServerModal({
           message: "MCP Server updated successfully",
           type: "success",
         });
+        await mutateMcpServers();
       } else {
         // Create new server
-        await createMCPServer(values);
+        const createdServer = await createMCPServer(values);
+
         setPopup({
           message: "MCP Server created successfully",
           type: "success",
         });
+
+        await mutateMcpServers();
+
+        if (onServerCreated) {
+          onServerCreated(createdServer);
+        }
       }
-
-      // Refresh the servers list
-      await mutateMcpServers();
-
-      // Close modal
+      // Close modal and clear server state
       toggle(false);
+      setServerToManage(null);
     } catch (error) {
       console.error(
         `Error ${isEditMode ? "updating" : "creating"} MCP server:`,
@@ -98,8 +114,16 @@ export default function AddMCPServerModal({
     }
   };
 
+  // Handle modal close to clear server state
+  const handleModalClose = (open: boolean) => {
+    toggle(open);
+    if (!open) {
+      setServerToManage(null);
+    }
+  };
+
   return (
-    <Modal open={isOpen} onOpenChange={toggle}>
+    <Modal open={isOpen} onOpenChange={handleModalClose}>
       <Modal.Content
         tall
         preventAccidentalClose={false}
@@ -250,11 +274,7 @@ export default function AddMCPServerModal({
                             tertiary
                             type="button"
                             tooltip="Disconnect Server"
-                            onClick={() => {
-                              if (onDisconnect) {
-                                onDisconnect();
-                              }
-                            }}
+                            onClick={handleDisconnectClick}
                           />
                           <Button
                             secondary
@@ -277,7 +297,7 @@ export default function AddMCPServerModal({
                 <Button
                   secondary
                   type="button"
-                  onClick={() => toggle(false)}
+                  onClick={() => handleModalClose(false)}
                   disabled={isSubmitting}
                 >
                   Cancel
