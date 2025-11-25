@@ -124,33 +124,43 @@ async def search_indexed_documents(
     )
 
     # Call the API server
-    response = await get_http_client().post(
-        f"{get_api_server_url()}/query/document-search",
-        json=search_request.model_dump(mode="json"),
-        headers={"Authorization": f"Bearer {access_token.token}"},
-    )
-    response.raise_for_status()
-    result = response.json()
+    try:
+        response = await get_http_client().post(
+            f"{get_api_server_url()}/query/document-search",
+            json=search_request.model_dump(mode="json"),
+            headers={"Authorization": f"Bearer {access_token.token}"},
+        )
+        response.raise_for_status()
+        result = response.json()
 
-    # Return simplified format for MCP clients
-    fields_to_return = [
-        "semantic_identifier",
-        "content",
-        "source_type",
-        "link",
-        "score",
-    ]
-    documents = [
-        {key: doc.get(key) for key in fields_to_return}
-        for doc in result.get("top_documents", [])
-    ]
+        # Return simplified format for MCP clients
+        fields_to_return = [
+            "semantic_identifier",
+            "content",
+            "source_type",
+            "link",
+            "score",
+        ]
+        documents = [
+            {key: doc.get(key) for key in fields_to_return}
+            for doc in result.get("top_documents", [])
+        ]
 
-    logger.info(f"Onyx MCP Server: Internal search returned {len(documents)} results")
-    return {
-        "documents": documents,
-        "total_results": len(documents),
-        "query": query,
-    }
+        logger.info(
+            f"Onyx MCP Server: Internal search returned {len(documents)} results"
+        )
+        return {
+            "documents": documents,
+            "total_results": len(documents),
+            "query": query,
+        }
+    except Exception as e:
+        logger.error(f"Onyx MCP Server: Document search error: {e}", exc_info=True)
+        return {
+            "error": f"Document search failed: {str(e)}",
+            "documents": [],
+            "query": query,
+        }
 
 
 @mcp_server.tool()
