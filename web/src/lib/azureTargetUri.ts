@@ -21,7 +21,14 @@ const getDeploymentNameParam = (url: URL): string => {
 const isResponsesPath = (url: URL): boolean =>
   /\/openai\/responses/i.test(url.pathname);
 
-export const parseAzureTargetUri = (rawUri: string) => {
+export const parseAzureTargetUri = (
+  rawUri: string
+): {
+  url: URL;
+  apiVersion: string;
+  deploymentName: string;
+  isResponsesPath: boolean;
+} => {
   const url = new URL(rawUri);
   return {
     url,
