@@ -167,7 +167,8 @@ export default function MCPAuthenticationModal({
         const { oauth_url } = await oauthResponse.json();
         window.location.href = oauth_url;
       } else {
-        // For non-OAuth authentication, just close the modal
+        // For non-OAuth authentication, redirect to the page with server_id
+        window.location.href = `/admin/mcp-actions/?server_id=${mcpServer.id}`;
         toggle(false);
       }
     } catch (error) {

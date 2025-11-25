@@ -62,9 +62,6 @@ export default function MCPActionsPage() {
           // Refresh tools for this server (will be cached by SWR for when user expands)
           await refreshMCPServerTools(parseInt(serverId));
 
-          setToolsFetchingServerIds((prev) =>
-            prev.filter((id) => id !== serverId)
-          );
           router.replace("/admin/mcp-actions");
 
           setPopup({
@@ -80,6 +77,9 @@ export default function MCPActionsPage() {
             type: "error",
           });
         } finally {
+          setToolsFetchingServerIds((prev) =>
+            prev.filter((id) => id !== serverId)
+          );
           setIsFetchingTools(false);
         }
       };
