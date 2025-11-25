@@ -51,6 +51,7 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
@@ -552,7 +553,11 @@ def run_llm_loop(
     initialize_litellm()
 
     stopping_tools_names: list[str] = [ImageGenerationTool.NAME]
-    citeable_tools_names: list[str] = [SearchTool.NAME, WebSearchTool.NAME]
+    citeable_tools_names: list[str] = [
+        SearchTool.NAME,
+        WebSearchTool.NAME,
+        OpenURLTool.NAME,
+    ]
 
     # Initialize citation processor for handling citations dynamically
     citation_processor = DynamicCitationProcessor()
@@ -677,7 +682,6 @@ def run_llm_loop(
                 tool_calls=[tool_call],
                 tools=final_tools,
                 turn_index=current_tool_call_index,
-                emitter=emitter,
                 message_history=truncated_message_history,
                 memories=memories,
                 user_info=None,  # TODO, this is part of memories right now, might want to separate it out

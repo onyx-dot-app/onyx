@@ -228,7 +228,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         )
 
         # Emit documents to the client
-        # TODO The query packet can be the only one emitted
+        # TODO The query packet can be the first (maybe only one) emitted
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,

@@ -1,13 +1,11 @@
 from collections import defaultdict
 
-from onyx.chat.infra import Emitter
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import SearchToolOverrideKwargs
-from onyx.tools.models import SearchToolRunContext
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
@@ -80,7 +78,6 @@ def run_tool_calls(
     tools: list[Tool],
     turn_index: int,
     # The stuff below is needed for the different individual built-in tools
-    emitter: Emitter,
     message_history: list[ChatMessageSimple],
     memories: list[str] | None,
     user_info: str | None,
@@ -104,7 +101,6 @@ def run_tool_calls(
         # Emit the tool start packet before running the tool
         tool.emit_start(turn_index=turn_index)
 
-        run_context = SearchToolRunContext(emitter=emitter)
         override_kwargs = None
 
         if isinstance(tool, SearchTool):
@@ -149,7 +145,6 @@ def run_tool_calls(
 
         try:
             tool_response = tool.run(
-                run_context=run_context,
                 turn_index=turn_index,
                 override_kwargs=override_kwargs,
                 **tool_call.tool_args,

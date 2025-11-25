@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
 from typing import cast
 
 from agents import ImageGenerationTool
 from agents import WebSearchTool
 from sqlalchemy.orm import Session
 
-from onyx.chat.temp_translation import translate_session_packets_to_frontend
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
@@ -24,6 +22,7 @@ from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import OpenUrl
+from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
@@ -31,6 +30,7 @@ from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import setup_logger
 
@@ -44,18 +44,20 @@ def create_message_packets(
 ) -> list[Packet]:
     packets: list[Packet] = []
 
-    sorted_final_documents = sorted(
-        final_documents, key=lambda x: (x.score or 0.0), reverse=True
-    )
-    final_search_documents = [
-        SearchDoc(**doc.model_dump()) for doc in sorted_final_documents
-    ]
+    final_search_docs: list[SearchDoc] | None = None
+    if final_documents:
+        sorted_final_documents = sorted(
+            final_documents, key=lambda x: (x.score or 0.0), reverse=True
+        )
+        final_search_docs = [
+            SearchDoc(**doc.model_dump()) for doc in sorted_final_documents
+        ]
 
     packets.append(
         Packet(
             turn_index=turn_index,
             obj=AgentResponseStart(
-                final_documents=final_search_documents,
+                final_documents=final_search_docs,
             ),
         )
     )
@@ -182,7 +184,7 @@ def create_fetch_packets(
         packets.append(
             Packet(
                 turn_index=turn_index,
-                obj=OpenUrl(documents=fetch),
+                obj=OpenUrl(documents=[SearchDoc(**doc.model_dump()) for doc in fetch]),
             )
         )
         packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
@@ -290,7 +292,12 @@ def translate_assistant_message_to_packets(
                             )
                         )
 
-                    # TODO need to support OpenURL here
+                    elif tool.in_code_tool_id == OpenURLTool.__name__:
+                        fetch_docs: list[SavedSearchDoc] = [
+                            translate_db_search_doc_to_server_search_doc(doc)
+                            for doc in tool_call.search_docs
+                        ]
+                        packet_list.extend(create_fetch_packets([fetch_docs], turn_num))
 
                     elif tool.in_code_tool_id == ImageGenerationTool.__name__:
                         # TODO
@@ -373,26 +380,7 @@ def translate_assistant_message_to_packets(
                 final_turn_index + 1 if chat_message.message else max_tool_turn + 1
             )
 
+    # Add overall stop packet at the end
+    packet_list.append(Packet(turn_index=final_turn_index, obj=OverallStop()))
+
     return packet_list
-
-
-def translate_assistant_message_to_frontend_packets(
-    chat_message: ChatMessage,
-    db_session: Session,
-) -> list[dict[str, Any]]:
-    """
-    Translates an assistant message to frontend-expected packet format.
-
-    This is a convenience wrapper that:
-    1. Calls translate_assistant_message_to_packets to get new-format packets
-    2. Translates those packets to old frontend format using translate_session_packets_to_frontend
-
-    Args:
-        chat_message: The ChatMessage to translate
-        db_session: Database session for lookups
-
-    Returns:
-        List of packet dictionaries in old frontend format (with 'ind' and 'obj' keys)
-    """
-    packets = translate_assistant_message_to_packets(chat_message, db_session)
-    return translate_session_packets_to_frontend(packets, chat_message.id)

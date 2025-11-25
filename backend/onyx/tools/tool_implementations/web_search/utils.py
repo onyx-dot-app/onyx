@@ -35,7 +35,7 @@ def inference_section_from_internet_page_scrape(
         score=0,
         hidden=False,
         metadata={},
-        match_highlights=[],
+        match_highlights=[truncated_content],
         doc_summary="",
         chunk_context="",
         updated_at=result.published_date,
