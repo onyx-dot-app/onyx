@@ -318,14 +318,16 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
 /**
  * Modal Header Component
  *
- * Container for header content with optional bottom shadow.
- * Use with Modal.Icon, Modal.Title, Modal.Description, and custom children.
+ * Container for header content with optional bottom shadow. All header visuals
+ * (icon, title, description, close button) are now controlled via this single
+ * component using props, so no additional subcomponents are required.
  *
  * @example
  * ```tsx
  * <Modal.Header icon={SvgWarning} title="Confirm Action" description="Are you sure?" withBottomShadow />
  *
  * // With custom content
+ * // Children render below the provided title/description stack.
  * <Modal.Header icon={SvgFile} title="Select Files" withBottomShadow>
  *   <InputTypeIn placeholder="Search..." />
  * </Modal.Header>
