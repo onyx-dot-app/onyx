@@ -384,7 +384,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
         )}
         {...props}
       >
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-1">
           <div className="flex flex-row items-center justify-between">
             <Icon className={"w-[1.5rem] h-[1.5rem] stroke-text-04"} />
             <div ref={closeButtonRef as React.RefObject<HTMLDivElement>}>
