@@ -90,8 +90,6 @@ jobs:
       - runner=4cpu-linux-x64
       - run-id=${{ github.run_id }}-web-amd64
       - extras=ecr-cache
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
@@ -102,41 +100,23 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+      - name: Build and push
+        uses: ./.github/actions/docker-build-platform
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          flavor: |
-            latest=false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Build and push AMD64
-        id: build
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
-        with:
+          platform: linux/amd64
           context: ./web
-          file: ./web/Dockerfile
-          platforms: linux/amd64
-          labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          dockerfile: ./web/Dockerfile
+          registry-image: ${{ env.REGISTRY_IMAGE }}
+          ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
+          cache-name: web
+          artifact-name: web
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             NODE_OPTIONS=--max-old-space-size=8192
-          cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-amd64
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-amd64,mode=max
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          is-dry-run: ${{ env.IS_DRY_RUN }}
 
   build-web-arm64:
     needs: determine-builds
@@ -146,8 +126,6 @@ jobs:
       - runner=4cpu-linux-arm64
       - run-id=${{ github.run_id }}-web-arm64
       - extras=ecr-cache
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
@@ -158,41 +136,23 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+      - name: Build and push
+        uses: ./.github/actions/docker-build-platform
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          flavor: |
-            latest=false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Build and push ARM64
-        id: build
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
-        with:
+          platform: linux/arm64
           context: ./web
-          file: ./web/Dockerfile
-          platforms: linux/arm64
-          labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          dockerfile: ./web/Dockerfile
+          registry-image: ${{ env.REGISTRY_IMAGE }}
+          ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
+          cache-name: web
+          artifact-name: web
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             NODE_OPTIONS=--max-old-space-size=8192
-          cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-arm64
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-arm64,mode=max
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          is-dry-run: ${{ env.IS_DRY_RUN }}
 
   merge-web:
     needs:
@@ -209,39 +169,25 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+      - name: Checkout
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          persist-credentials: false
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+      - name: Merge and push manifest
+        uses: ./.github/actions/docker-merge-manifest
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          flavor: |
-            latest=false
+          registry-image: ${{ env.REGISTRY_IMAGE }}
+          ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
+          artifact-name: web
           tags: |
-            type=raw,value=${{ github.event_name == 'workflow_dispatch' && format('web-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
-            type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-stable == 'true' && 'latest' || '' }}
-            type=raw,value=${{ github.event_name != 'workflow_dispatch' && env.EDGE_TAG == 'true' && 'edge' || '' }}
-            type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
-
-      - name: Create and push manifest
-        env:
-          IMAGE_REPO: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          AMD64_DIGEST: ${{ needs.build-web-amd64.outputs.digest }}
-          ARM64_DIGEST: ${{ needs.build-web-arm64.outputs.digest }}
-          META_TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
-          docker buildx imagetools create \
-            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
-            $IMAGES
+            type=raw,value=${{ env.IS_DRY_RUN == 'true' && format('web-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
+            type=raw,value=${{ env.IS_DRY_RUN != 'true' && needs.determine-builds.outputs.is-stable == 'true' && 'latest' || '' }}
+            type=raw,value=${{ env.IS_DRY_RUN != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
+            type=raw,value=${{ env.IS_DRY_RUN != 'true' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          is-dry-run: ${{ env.IS_DRY_RUN }}
 
   build-web-cloud-amd64:
     needs: determine-builds
@@ -251,8 +197,6 @@ jobs:
       - runner=4cpu-linux-x64
       - run-id=${{ github.run_id }}-web-cloud-amd64
       - extras=ecr-cache
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
     steps:
@@ -263,32 +207,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+      - name: Build and push
+        uses: ./.github/actions/docker-build-platform
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          flavor: |
-            latest=false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Build and push AMD64
-        id: build
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
-        with:
+          platform: linux/amd64
           context: ./web
-          file: ./web/Dockerfile
-          platforms: linux/amd64
-          labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          dockerfile: ./web/Dockerfile
+          registry-image: ${{ env.REGISTRY_IMAGE }}
+          ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
+          cache-name: cloudweb
+          artifact-name: web-cloud
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
@@ -300,12 +228,10 @@ jobs:
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
             NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=true
             NODE_OPTIONS=--max-old-space-size=8192
-          cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64,mode=max
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          is-dry-run: ${{ env.IS_DRY_RUN }}
 
   build-web-cloud-arm64:
     needs: determine-builds
@@ -315,8 +241,6 @@ jobs:
       - runner=4cpu-linux-arm64
       - run-id=${{ github.run_id }}-web-cloud-arm64
       - extras=ecr-cache
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
     steps:
@@ -327,32 +251,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+      - name: Build and push
+        uses: ./.github/actions/docker-build-platform
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          flavor: |
-            latest=false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Build and push ARM64
-        id: build
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
-        with:
+          platform: linux/arm64
           context: ./web
-          file: ./web/Dockerfile
-          platforms: linux/arm64
-          labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          dockerfile: ./web/Dockerfile
+          registry-image: ${{ env.REGISTRY_IMAGE }}
+          ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
+          cache-name: cloudweb
+          artifact-name: web-cloud
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
@@ -364,12 +272,10 @@ jobs:
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
             NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=true
             NODE_OPTIONS=--max-old-space-size=8192
-          cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-arm64
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-arm64,mode=max
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          is-dry-run: ${{ env.IS_DRY_RUN }}
 
   merge-web-cloud:
     needs:
@@ -386,36 +292,22 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+      - name: Checkout
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          persist-credentials: false
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+      - name: Merge and push manifest
+        uses: ./.github/actions/docker-merge-manifest
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          flavor: |
-            latest=false
+          registry-image: ${{ env.REGISTRY_IMAGE }}
+          ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
+          artifact-name: web-cloud
           tags: |
-            type=raw,value=${{ github.event_name == 'workflow_dispatch' && format('web-cloud-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
-
-      - name: Create and push manifest
-        env:
-          IMAGE_REPO: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          AMD64_DIGEST: ${{ needs.build-web-cloud-amd64.outputs.digest }}
-          ARM64_DIGEST: ${{ needs.build-web-cloud-arm64.outputs.digest }}
-          META_TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
-          docker buildx imagetools create \
-            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
-            $IMAGES
+            type=raw,value=${{ env.IS_DRY_RUN == 'true' && format('web-cloud-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          is-dry-run: ${{ env.IS_DRY_RUN }}
 
   build-backend-amd64:
     needs: determine-builds
@@ -425,52 +317,32 @@ jobs:
       - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-backend-amd64
       - extras=ecr-cache
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+      - name: Build and push
+        uses: ./.github/actions/docker-build-platform
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          flavor: |
-            latest=false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Build and push AMD64
-        id: build
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
-        with:
+          platform: linux/amd64
           context: ./backend
-          file: ./backend/Dockerfile
-          platforms: linux/amd64
-          labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          dockerfile: ./backend/Dockerfile
+          registry-image: ${{ env.REGISTRY_IMAGE }}
+          ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
+          cache-name: backend
+          artifact-name: backend
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-          cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64,mode=max
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          is-dry-run: ${{ env.IS_DRY_RUN }}
 
   build-backend-arm64:
     needs: determine-builds
@@ -480,52 +352,32 @@ jobs:
       - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-backend-arm64
       - extras=ecr-cache
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+      - name: Build and push
+        uses: ./.github/actions/docker-build-platform
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          flavor: |
-            latest=false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Build and push ARM64
-        id: build
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
-        with:
+          platform: linux/arm64
           context: ./backend
-          file: ./backend/Dockerfile
-          platforms: linux/arm64
-          labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          dockerfile: ./backend/Dockerfile
+          registry-image: ${{ env.REGISTRY_IMAGE }}
+          ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
+          cache-name: backend
+          artifact-name: backend
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-          cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-arm64
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-arm64,mode=max
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          is-dry-run: ${{ env.IS_DRY_RUN }}
 
   merge-backend:
     needs:
@@ -542,39 +394,25 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+      - name: Checkout
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          persist-credentials: false
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+      - name: Merge and push manifest
+        uses: ./.github/actions/docker-merge-manifest
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          flavor: |
-            latest=false
+          registry-image: ${{ env.REGISTRY_IMAGE }}
+          ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
+          artifact-name: backend
           tags: |
-            type=raw,value=${{ github.event_name == 'workflow_dispatch' && format('backend-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
-            type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
-            type=raw,value=${{ github.event_name != 'workflow_dispatch' && env.EDGE_TAG == 'true' && 'edge' || '' }}
-            type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
-
-      - name: Create and push manifest
-        env:
-          IMAGE_REPO: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          AMD64_DIGEST: ${{ needs.build-backend-amd64.outputs.digest }}
-          ARM64_DIGEST: ${{ needs.build-backend-arm64.outputs.digest }}
-          META_TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
-          docker buildx imagetools create \
-            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
-            $IMAGES
+            type=raw,value=${{ env.IS_DRY_RUN == 'true' && format('backend-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
+            type=raw,value=${{ env.IS_DRY_RUN != 'true' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
+            type=raw,value=${{ env.IS_DRY_RUN != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
+            type=raw,value=${{ env.IS_DRY_RUN != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          is-dry-run: ${{ env.IS_DRY_RUN }}
 
   build-model-server-amd64:
     needs: determine-builds
@@ -590,71 +428,28 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
-      - name: Prepare
-        run: |
-          platform=linux/amd64
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
-
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+      - name: Build and push
+        uses: ./.github/actions/docker-build-platform
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          flavor: |
-            latest=false
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # ratchet:docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-        with:
-          buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Build and push AMD64
-        id: build
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
-        env:
-          DEBUG: ${{ vars.DOCKER_DEBUG == 'true' && 1 || 0 }}
-        with:
+          platform: linux/amd64
           context: ./backend
-          file: ./backend/Dockerfile.model_server
-          platforms: linux/amd64
-          labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          dockerfile: ./backend/Dockerfile.model_server
+          registry-image: ${{ env.REGISTRY_IMAGE }}
+          ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
+          cache-name: model-server
+          artifact-name: model-server
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-          cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64,mode=max
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
-
-      - name: Export digest
-        run: |
-          mkdir -p ${{ runner.temp }}/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "${{ runner.temp }}/digests/${digest#sha256:}"
-
-      - name: Upload digest
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
-        with:
-          name: digests-model-server-${{ env.PLATFORM_PAIR }}
-          path: ${{ runner.temp }}/digests/*
-          if-no-files-found: error
-          retention-days: 1
+          buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          is-dry-run: ${{ env.IS_DRY_RUN }}
 
   build-model-server-arm64:
     needs: determine-builds
@@ -670,71 +465,28 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
-      - name: Prepare
-        run: |
-          platform=linux/arm64
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
-
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+      - name: Build and push
+        uses: ./.github/actions/docker-build-platform
         with:
-          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          flavor: |
-            latest=false
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # ratchet:docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-        with:
-          buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Build and push ARM64
-        id: build
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
-        env:
-          DEBUG: ${{ vars.DOCKER_DEBUG == 'true' && 1 || 0 }}
-        with:
+          platform: linux/arm64
           context: ./backend
-          file: ./backend/Dockerfile.model_server
-          platforms: linux/arm64
-          labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          dockerfile: ./backend/Dockerfile.model_server
+          registry-image: ${{ env.REGISTRY_IMAGE }}
+          ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
+          cache-name: model-server
+          artifact-name: model-server
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-          cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,mode=max
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
-
-      - name: Export digest
-        run: |
-          mkdir -p ${{ runner.temp }}/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "${{ runner.temp }}/digests/${digest#sha256:}"
-
-      - name: Upload digest
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
-        with:
-          name: digests-model-server-${{ env.PLATFORM_PAIR }}
-          path: ${{ runner.temp }}/digests/*
-          if-no-files-found: error
-          retention-days: 1
+          buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          is-dry-run: ${{ env.IS_DRY_RUN }}
 
   merge-model-server:
     needs:
@@ -751,46 +503,25 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
-      - name: Download digests
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
+      - name: Checkout
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
-          path: ${{ runner.temp }}/digests
-          pattern: digests-model-server-*
-          merge-multiple: true
+          persist-credentials: false
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+      - name: Merge and push manifest
+        uses: ./.github/actions/docker-merge-manifest
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
-        with:
-          images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-          flavor: |
-            latest=false
+          registry-image: ${{ env.REGISTRY_IMAGE }}
+          ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
+          artifact-name: model-server
           tags: |
-            type=raw,value=${{ github.event_name == 'workflow_dispatch' && format('model-server-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
-            type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
-            type=raw,value=${{ github.event_name != 'workflow_dispatch' && env.EDGE_TAG == 'true' && 'edge' || '' }}
-            type=raw,value=${{ github.event_name != 'workflow_dispatch' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
-
-      - name: Create manifest list and push
-        working-directory: ${{ runner.temp }}/digests
-        env:
-          IMAGE_REPO: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
-        run: |
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf "${IMAGE_REPO}@sha256:%s " *)
-
-      - name: Inspect image
-        run: |
-          docker buildx imagetools inspect ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+            type=raw,value=${{ env.IS_DRY_RUN == 'true' && format('model-server-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
+            type=raw,value=${{ env.IS_DRY_RUN != 'true' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
+            type=raw,value=${{ env.IS_DRY_RUN != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
+            type=raw,value=${{ env.IS_DRY_RUN != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          is-dry-run: ${{ env.IS_DRY_RUN }}
 
   trivy-scan-web:
     needs:
