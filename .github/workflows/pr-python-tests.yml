@@ -41,8 +41,6 @@ jobs:
         requirements: |
           backend/requirements/default.txt
           backend/requirements/dev.txt
-          backend/requirements/model_server.txt
-          backend/requirements/ee.txt
 
     - name: Run Tests
       shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
