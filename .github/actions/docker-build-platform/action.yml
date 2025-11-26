@@ -50,11 +50,12 @@ runs:
     - name: Prepare
       id: prepare
       shell: bash
+      env:
+        PLATFORM: ${{ inputs.platform }}
       run: |
-        platform="${{ inputs.platform }}"
-        echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+        echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
         # Extract arch suffix (amd64 or arm64)
-        echo "ARCH_SUFFIX=${platform#linux/}" >> $GITHUB_ENV
+        echo "ARCH_SUFFIX=${PLATFORM#linux/}" >> "$GITHUB_OUTPUT"
 
     - name: Docker meta
       id: meta
@@ -82,6 +83,7 @@ runs:
       id: build
       uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
       with:
+        # zizmor: ignore[template-injection] context is set by our workflow to trusted paths
         context: ${{ inputs.context }}
         file: ${{ inputs.dockerfile }}
         platforms: ${{ inputs.platform }}
@@ -90,23 +92,24 @@ runs:
         build-args: ${{ inputs.build-args }}
         cache-from: |
           type=registry,ref=${{ inputs.registry-image }}:latest
-          type=registry,ref=${{ inputs.ecr-cache-registry }}:${{ inputs.cache-name }}-cache-${{ env.ARCH_SUFFIX }}
-        cache-to: type=registry,ref=${{ inputs.ecr-cache-registry }}:${{ inputs.cache-name }}-cache-${{ env.ARCH_SUFFIX }},mode=max
+          type=registry,ref=${{ inputs.ecr-cache-registry }}:${{ inputs.cache-name }}-cache-${{ steps.prepare.outputs.ARCH_SUFFIX }}
+        cache-to: type=registry,ref=${{ inputs.ecr-cache-registry }}:${{ inputs.cache-name }}-cache-${{ steps.prepare.outputs.ARCH_SUFFIX }},mode=max
         outputs: type=image,push-by-digest=true,name-canonical=true,push=true
         no-cache: ${{ inputs.no-cache == 'true' }}
 
     - name: Export digest
       shell: bash
+      env:
+        DIGEST: ${{ steps.build.outputs.digest }}
+        RUNNER_TEMP: ${{ runner.temp }}
       run: |
-        mkdir -p ${{ runner.temp }}/digests
-        digest="${{ steps.build.outputs.digest }}"
-        touch "${{ runner.temp }}/digests/${digest#sha256:}"
+        mkdir -p "${RUNNER_TEMP}/digests"
+        touch "${RUNNER_TEMP}/digests/${DIGEST#sha256:}"
 
     - name: Upload digest
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
       with:
-        name: digests-${{ inputs.artifact-name }}-${{ env.PLATFORM_PAIR }}
+        name: digests-${{ inputs.artifact-name }}-${{ steps.prepare.outputs.PLATFORM_PAIR }}
         path: ${{ runner.temp }}/digests/*
         if-no-files-found: error
         retention-days: 1
-

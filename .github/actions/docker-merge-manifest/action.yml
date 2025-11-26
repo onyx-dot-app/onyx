@@ -62,6 +62,8 @@ runs:
 
     - name: Inspect image
       shell: bash
+      env:
+        IMAGE_REPO: ${{ inputs.is-dry-run == 'true' && inputs.ecr-cache-registry || inputs.registry-image }}
+        VERSION: ${{ steps.meta.outputs.version }}
       run: |
-        docker buildx imagetools inspect ${{ inputs.is-dry-run == 'true' && inputs.ecr-cache-registry || inputs.registry-image }}:${{ steps.meta.outputs.version }}
-
+        docker buildx imagetools inspect "${IMAGE_REPO}:${VERSION}"
