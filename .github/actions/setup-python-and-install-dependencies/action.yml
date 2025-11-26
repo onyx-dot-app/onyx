@@ -60,13 +60,13 @@ runs:
       env:
         REQUIREMENTS: ${{ inputs.requirements }}
       run: |
-        # Build the uv pip install command with each requirement file
-        cmd="uv pip install"
+        # Build the uv pip install command with each requirement file as array elements
+        cmd=("uv" "pip" "install")
         while IFS= read -r req; do
           # Skip empty lines
           if [ -n "$req" ]; then
-            cmd="$cmd -r $req"
+            cmd+=("-r" "$req")
           fi
         done <<< "$REQUIREMENTS"
-        echo "Running: $cmd"
-        eval "$cmd"
+        echo "Running: ${cmd[*]}"
+        "${cmd[@]}"
