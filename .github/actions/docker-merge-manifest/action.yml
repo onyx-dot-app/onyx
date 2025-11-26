@@ -7,8 +7,8 @@ inputs:
   ecr-cache-registry:
     description: "ECR cache registry for runs-on"
     required: true
-  artifact-name:
-    description: "Artifact name prefix to download (e.g., backend, web)"
+  name:
+    description: "Name prefix for artifacts to download (e.g., backend, web)"
     required: true
   tags:
     description: "Metadata tags configuration (passed to metadata-action)"
@@ -30,7 +30,7 @@ runs:
       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
       with:
         path: ${{ runner.temp }}/digests
-        pattern: digests-${{ inputs.artifact-name }}-*
+        pattern: digests-${{ inputs.name }}-*
         merge-multiple: true
 
     - name: Set up Docker Buildx

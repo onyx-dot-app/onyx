@@ -16,11 +16,8 @@ inputs:
   ecr-cache-registry:
     description: "ECR cache registry for runs-on"
     required: true
-  cache-name:
-    description: "Cache name prefix (e.g., backend, web, model-server)"
-    required: true
-  artifact-name:
-    description: "Artifact name prefix for digest upload (e.g., backend, web)"
+  name:
+    description: "Name prefix for cache and artifact (e.g., backend, web, model-server)"
     required: true
   build-args:
     description: "Build arguments (newline-separated KEY=VALUE pairs)"
@@ -92,8 +89,8 @@ runs:
         build-args: ${{ inputs.build-args }}
         cache-from: |
           type=registry,ref=${{ inputs.registry-image }}:latest
-          type=registry,ref=${{ inputs.ecr-cache-registry }}:${{ inputs.cache-name }}-cache-${{ steps.prepare.outputs.ARCH_SUFFIX }}
-        cache-to: type=registry,ref=${{ inputs.ecr-cache-registry }}:${{ inputs.cache-name }}-cache-${{ steps.prepare.outputs.ARCH_SUFFIX }},mode=max
+          type=registry,ref=${{ inputs.ecr-cache-registry }}:${{ inputs.name }}-cache-${{ steps.prepare.outputs.ARCH_SUFFIX }}
+        cache-to: type=registry,ref=${{ inputs.ecr-cache-registry }}:${{ inputs.name }}-cache-${{ steps.prepare.outputs.ARCH_SUFFIX }},mode=max
         outputs: type=image,push-by-digest=true,name-canonical=true,push=true
         no-cache: ${{ inputs.no-cache == 'true' }}
 
@@ -109,7 +106,7 @@ runs:
     - name: Upload digest
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
       with:
-        name: digests-${{ inputs.artifact-name }}-${{ steps.prepare.outputs.PLATFORM_PAIR }}
+        name: digests-${{ inputs.name }}-${{ steps.prepare.outputs.PLATFORM_PAIR }}
         path: ${{ runner.temp }}/digests/*
         if-no-files-found: error
         retention-days: 1

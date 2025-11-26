@@ -108,8 +108,7 @@ jobs:
           dockerfile: ./web/Dockerfile
           registry-image: ${{ env.REGISTRY_IMAGE }}
           ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
-          cache-name: web
-          artifact-name: web
+          name: web
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             NODE_OPTIONS=--max-old-space-size=8192
@@ -144,8 +143,7 @@ jobs:
           dockerfile: ./web/Dockerfile
           registry-image: ${{ env.REGISTRY_IMAGE }}
           ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
-          cache-name: web
-          artifact-name: web
+          name: web
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             NODE_OPTIONS=--max-old-space-size=8192
@@ -179,7 +177,7 @@ jobs:
         with:
           registry-image: ${{ env.REGISTRY_IMAGE }}
           ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
-          artifact-name: web
+          name: web
           tags: |
             type=raw,value=${{ env.IS_DRY_RUN == 'true' && format('web-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
             type=raw,value=${{ env.IS_DRY_RUN != 'true' && needs.determine-builds.outputs.is-stable == 'true' && 'latest' || '' }}
@@ -215,8 +213,7 @@ jobs:
           dockerfile: ./web/Dockerfile
           registry-image: ${{ env.REGISTRY_IMAGE }}
           ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
-          cache-name: cloudweb
-          artifact-name: web-cloud
+          name: web-cloud
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
@@ -259,8 +256,7 @@ jobs:
           dockerfile: ./web/Dockerfile
           registry-image: ${{ env.REGISTRY_IMAGE }}
           ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
-          cache-name: cloudweb
-          artifact-name: web-cloud
+          name: web-cloud
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
@@ -302,7 +298,7 @@ jobs:
         with:
           registry-image: ${{ env.REGISTRY_IMAGE }}
           ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
-          artifact-name: web-cloud
+          name: web-cloud
           tags: |
             type=raw,value=${{ env.IS_DRY_RUN == 'true' && format('web-cloud-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
           docker-username: ${{ secrets.DOCKER_USERNAME }}
@@ -335,8 +331,7 @@ jobs:
           dockerfile: ./backend/Dockerfile
           registry-image: ${{ env.REGISTRY_IMAGE }}
           ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
-          cache-name: backend
-          artifact-name: backend
+          name: backend
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
@@ -370,8 +365,7 @@ jobs:
           dockerfile: ./backend/Dockerfile
           registry-image: ${{ env.REGISTRY_IMAGE }}
           ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
-          cache-name: backend
-          artifact-name: backend
+          name: backend
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
@@ -404,7 +398,7 @@ jobs:
         with:
           registry-image: ${{ env.REGISTRY_IMAGE }}
           ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
-          artifact-name: backend
+          name: backend
           tags: |
             type=raw,value=${{ env.IS_DRY_RUN == 'true' && format('backend-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
             type=raw,value=${{ env.IS_DRY_RUN != 'true' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
@@ -441,8 +435,7 @@ jobs:
           dockerfile: ./backend/Dockerfile.model_server
           registry-image: ${{ env.REGISTRY_IMAGE }}
           ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
-          cache-name: model-server
-          artifact-name: model-server
+          name: model-server
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
@@ -478,8 +471,7 @@ jobs:
           dockerfile: ./backend/Dockerfile.model_server
           registry-image: ${{ env.REGISTRY_IMAGE }}
           ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
-          cache-name: model-server
-          artifact-name: model-server
+          name: model-server
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
@@ -513,7 +505,7 @@ jobs:
         with:
           registry-image: ${{ env.REGISTRY_IMAGE }}
           ecr-cache-registry: ${{ env.RUNS_ON_ECR_CACHE }}
-          artifact-name: model-server
+          name: model-server
           tags: |
             type=raw,value=${{ env.IS_DRY_RUN == 'true' && format('model-server-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
             type=raw,value=${{ env.IS_DRY_RUN != 'true' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
