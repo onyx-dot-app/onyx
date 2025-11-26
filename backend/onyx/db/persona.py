@@ -643,7 +643,7 @@ def _get_persona_snapshot_ids_paginated(
         db_session: Database session for executing queries.
         page_num: Zero-indexed page number (e.g., 0 for the first page).
         page_size: Number of items per page.
-        get_editable: If True, only returnss personas the user can edit.
+        get_editable: If True, only returns personas the user can edit.
         include_default: If True, includes builtin/default personas.
         include_slack_bot_personas: If True, includes Slack bot personas.
         include_deleted: If True, includes deleted personas.
