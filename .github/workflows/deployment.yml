@@ -642,6 +642,37 @@ jobs:
           echo "=== Full build metadata ==="
           cat /tmp/build-metadata.json | jq .
 
+      - name: Debug Docker Hub API on failure
+        if: failure()
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+          TARGET_IMAGE: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+        run: |
+          echo "=== Authenticating with Docker Hub ==="
+          TOKEN=$(curl -s -H "Content-Type: application/json" \
+            -X POST -d "{\"username\": \"${DOCKER_USERNAME}\", \"password\": \"${DOCKER_TOKEN}\"}" \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+
+          # Extract org and repo from image name
+          ORG=$(echo "${TARGET_IMAGE}" | cut -d'/' -f1)
+          REPO=$(echo "${TARGET_IMAGE}" | cut -d'/' -f2)
+
+          echo "=== Repository Info for ${ORG}/${REPO} ==="
+          curl -s -H "Authorization: JWT ${TOKEN}" \
+            "https://hub.docker.com/v2/repositories/${ORG}/${REPO}/" | jq .
+
+          echo "=== Recent Tags ==="
+          curl -s -H "Authorization: JWT ${TOKEN}" \
+            "https://hub.docker.com/v2/repositories/${ORG}/${REPO}/tags/?page_size=10" | jq .
+
+          echo "=== Check for rate limiting ==="
+          curl -s -I "https://registry-1.docker.io/v2/" 2>&1 | grep -i ratelimit || echo "No rate limit headers found"
+
+          echo "=== Docker Hub User Info ==="
+          curl -s -H "Authorization: JWT ${TOKEN}" \
+            "https://hub.docker.com/v2/user/" | jq '{username, is_admin, date_joined}'
+
   build-model-server-arm64:
     needs: determine-builds
     if: needs.determine-builds.outputs.build-model-server == 'true'
@@ -707,6 +738,37 @@ jobs:
           # Debug: show full metadata
           echo "=== Full build metadata ==="
           cat /tmp/build-metadata.json | jq .
+
+      - name: Debug Docker Hub API on failure
+        if: failure()
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+          TARGET_IMAGE: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+        run: |
+          echo "=== Authenticating with Docker Hub ==="
+          TOKEN=$(curl -s -H "Content-Type: application/json" \
+            -X POST -d "{\"username\": \"${DOCKER_USERNAME}\", \"password\": \"${DOCKER_TOKEN}\"}" \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+
+          # Extract org and repo from image name
+          ORG=$(echo "${TARGET_IMAGE}" | cut -d'/' -f1)
+          REPO=$(echo "${TARGET_IMAGE}" | cut -d'/' -f2)
+
+          echo "=== Repository Info for ${ORG}/${REPO} ==="
+          curl -s -H "Authorization: JWT ${TOKEN}" \
+            "https://hub.docker.com/v2/repositories/${ORG}/${REPO}/" | jq .
+
+          echo "=== Recent Tags ==="
+          curl -s -H "Authorization: JWT ${TOKEN}" \
+            "https://hub.docker.com/v2/repositories/${ORG}/${REPO}/tags/?page_size=10" | jq .
+
+          echo "=== Check for rate limiting ==="
+          curl -s -I "https://registry-1.docker.io/v2/" 2>&1 | grep -i ratelimit || echo "No rate limit headers found"
+
+          echo "=== Docker Hub User Info ==="
+          curl -s -H "Authorization: JWT ${TOKEN}" \
+            "https://hub.docker.com/v2/user/" | jq '{username, is_admin, date_joined}'
 
   merge-model-server:
     needs:
