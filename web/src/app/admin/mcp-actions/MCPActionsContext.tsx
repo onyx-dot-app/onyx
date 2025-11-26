@@ -45,12 +45,14 @@ interface MCPActionsContextValue {
   selectedServer: MCPServerWithStatus | null;
   serverToDisconnect: MCPServerWithStatus | null;
   serverToManage: MCPServerWithStatus | null;
+  serverToExpand: number | null;
   setServerToDisconnect: React.Dispatch<
     React.SetStateAction<MCPServerWithStatus | null>
   >;
   setServerToManage: React.Dispatch<
     React.SetStateAction<MCPServerWithStatus | null>
   >;
+  setServerToExpand: React.Dispatch<React.SetStateAction<number | null>>;
 
   // Operations
   handleAuthenticate: (serverId: number) => void;
@@ -105,6 +107,7 @@ export function MCPActionsProvider({
     useState<MCPServerWithStatus | null>(null);
   const [serverToManage, setServerToManage] =
     useState<MCPServerWithStatus | null>(null);
+  const [serverToExpand, setServerToExpand] = useState<number | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showSharedOverlay, setShowSharedOverlay] = useState(false);
   const [fetchingToolsServerIds, setFetchingToolsServerIds] = useState<
@@ -118,7 +121,8 @@ export function MCPActionsProvider({
     mutate: mutateMcpServers,
   } = useSWR<MCPServersResponse>(
     "/api/admin/mcp/servers",
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    { refreshInterval: 10000 }
   );
 
   const mcpServers = useMemo(
@@ -454,8 +458,10 @@ export function MCPActionsProvider({
       selectedServer,
       serverToDisconnect,
       serverToManage,
+      serverToExpand,
       setServerToDisconnect,
       setServerToManage,
+      setServerToExpand,
 
       // Operations
       handleAuthenticate,
@@ -490,6 +496,7 @@ export function MCPActionsProvider({
       selectedServer,
       serverToDisconnect,
       serverToManage,
+      serverToExpand,
       showSharedOverlay,
       isDisconnecting,
       handleAuthenticate,

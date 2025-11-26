@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -86,10 +88,69 @@ export default function MCPAuthenticationModal({
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const { data: fullServer } = useSWR<MCPServerWithStatus>(
+    mcpServer ? `/api/admin/mcp/servers/${mcpServer.id}` : null,
+    errorHandlingFetcher
+  );
+
+  // Set the initial active tab based on the server configuration
+  useEffect(() => {
+    if (fullServer) {
+      if (
+        fullServer.auth_performer === MCPAuthenticationPerformer.ADMIN ||
+        fullServer.auth_type === MCPAuthenticationType.NONE
+      ) {
+        setActiveAuthTab("admin");
+      } else {
+        setActiveAuthTab("per-user");
+      }
+    }
+  }, [fullServer]);
+
+  const initialValues = useMemo(() => {
+    if (!fullServer) {
+      return {
+        transport: MCPTransportType.STREAMABLE_HTTP,
+        auth_type: MCPAuthenticationType.OAUTH,
+        auth_performer: MCPAuthenticationPerformer.PER_USER,
+        api_token: "",
+        auth_template: {
+          headers: { Authorization: "Bearer {api_key}" },
+          required_fields: ["api_key"],
+        },
+        user_credentials: {},
+        oauth_client_id: "",
+        oauth_client_secret: "",
+      };
+    }
+
+    return {
+      transport:
+        (fullServer.transport as MCPTransportType) ||
+        MCPTransportType.STREAMABLE_HTTP,
+      auth_type:
+        (fullServer.auth_type as MCPAuthenticationType) ||
+        MCPAuthenticationType.OAUTH,
+      auth_performer:
+        (fullServer.auth_performer as MCPAuthenticationPerformer) ||
+        MCPAuthenticationPerformer.PER_USER,
+      // Admin API Token
+      api_token: fullServer.admin_credentials?.api_key || "",
+      // OAuth Credentials
+      oauth_client_id: fullServer.admin_credentials?.client_id || "",
+      oauth_client_secret: fullServer.admin_credentials?.client_secret || "",
+      // Auth Template
+      auth_template: fullServer.auth_template || {
+        headers: { Authorization: "Bearer {api_key}" },
+        required_fields: ["api_key"],
+      },
+      // User Credentials (substitutions)
+      user_credentials: fullServer.user_credentials || {},
+    };
+  }, [fullServer]);
+
   const handleSubmit = async (values: any) => {
     if (!mcpServer) return;
-
-    console.log("Form values:", values);
     setIsSubmitting(true);
 
     try {
@@ -200,21 +261,10 @@ export default function MCPAuthenticationModal({
         </Modal.Header>
 
         <Formik
-          initialValues={{
-            transport: MCPTransportType.STREAMABLE_HTTP,
-            auth_type: MCPAuthenticationType.OAUTH,
-            auth_performer: MCPAuthenticationPerformer.PER_USER,
-            api_token: "",
-            auth_template: {
-              headers: { Authorization: "Bearer {api_key}" },
-              required_fields: ["api_key"],
-            },
-            user_credentials: {},
-            oauth_client_id: "",
-            oauth_client_secret: "",
-          }}
+          initialValues={initialValues}
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
+          enableReinitialize
         >
           {({
             values,

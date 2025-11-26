@@ -56,6 +56,9 @@ export interface MCPServer {
   auth_performer: MCPAuthenticationPerformer;
   is_authenticated: boolean;
   user_authenticated?: boolean | null;
+  auth_template?: any;
+  admin_credentials?: Record<string, string>;
+  user_credentials?: Record<string, string>;
 }
 
 export interface MCPServersResponse {

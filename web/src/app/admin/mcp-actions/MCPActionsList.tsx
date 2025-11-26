@@ -13,6 +13,7 @@ export default function MCPActionsList() {
     disconnectModal,
     selectedServer,
     serverToDisconnect,
+    serverToExpand,
     isDisconnecting,
     showSharedOverlay,
     handleDisconnect,
@@ -68,6 +69,7 @@ export default function MCPActionsList() {
               logo={getMCPServerIcon(server)}
               status={status}
               toolCount={server.tool_count}
+              initialExpanded={server.id === serverToExpand}
               onDisconnect={() => handleDisconnect(server.id)}
               onManage={() => handleManage(server.id)}
               onEdit={() => handleEdit(server.id)}

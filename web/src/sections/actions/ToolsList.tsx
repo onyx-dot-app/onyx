@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import ToolItem from "./ToolItem";
@@ -21,6 +21,7 @@ interface ToolsListProps {
   onToolToggle?: (toolId: string, enabled: boolean) => void;
   className?: string;
   isFetching?: boolean;
+  onRetry?: () => void;
 }
 
 const ToolsList: React.FC<ToolsListProps> = ({
@@ -29,7 +30,17 @@ const ToolsList: React.FC<ToolsListProps> = ({
   onToolToggle,
   className,
   isFetching,
+  onRetry,
 }) => {
+  const hasRetried = useRef(false);
+
+  useEffect(() => {
+    if (!isFetching && tools.length === 0 && !hasRetried.current && onRetry) {
+      hasRetried.current = true;
+      onRetry();
+    }
+  }, [isFetching, tools.length, onRetry]);
+
   return (
     <div
       className={cn(

@@ -43,6 +43,7 @@ export default function AddMCPServerModal({
     setServerToDisconnect,
     setServerToManage,
     onServerCreated,
+    handleAuthenticate,
   } = useMCPActions();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -280,8 +281,9 @@ export default function AddMCPServerModal({
                             secondary
                             type="button"
                             onClick={() => {
-                              // Edit configs functionality - to be added later
-                              console.log("Edit configs clicked");
+                              // Close this modal and open the auth modal for this server
+                              toggle(false);
+                              handleAuthenticate(server.id);
                             }}
                           >
                             Edit Configs

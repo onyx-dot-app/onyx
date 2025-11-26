@@ -26,6 +26,9 @@ export interface ActionCardProps {
   // Status
   status?: MCPActionStatus;
 
+  // Initial expanded state
+  initialExpanded?: boolean;
+
   // Tool count (only for connected state)
   toolCount?: number;
 
@@ -66,6 +69,7 @@ export default function ActionCard({
   description,
   logo,
   status = "connected",
+  initialExpanded = false,
   toolCount,
   onDisconnect,
   onManage,
@@ -78,8 +82,15 @@ export default function ActionCard({
   onDisableAllTools,
   className,
 }: ActionCardProps) {
-  const [isToolsExpanded, setIsToolsExpanded] = useState(false);
+  const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Update expanded state when initialExpanded changes
+  React.useEffect(() => {
+    if (initialExpanded) {
+      setIsToolsExpanded(true);
+    }
+  }, [initialExpanded]);
 
   // Lazy load tools only when expanded
   const { tools, isLoading, mutate } = useServerTools({
@@ -189,7 +200,8 @@ export default function ActionCard({
             onToolToggle={(toolId, enabled) =>
               onToolToggle?.(serverId, toolId, enabled, mutate)
             }
-            isFetching={isLoading}
+            isFetching={server.status === "FETCHING_TOOLS"}
+            onRetry={() => mutate()}
           />
         </div>
       )}

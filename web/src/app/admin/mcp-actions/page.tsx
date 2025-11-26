@@ -21,6 +21,7 @@ function MCPActionsPageContent() {
     mutateMcpServers,
     manageServerModal,
     setServerToManage,
+    setServerToExpand,
   } = useMCPActions();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -44,6 +45,9 @@ function MCPActionsPageContent() {
           await mutateMcpServers();
 
           router.replace("/admin/mcp-actions");
+
+          // Automatically expand the tools for this server
+          setServerToExpand(serverIdInt);
 
           await refreshMCPServerTools(serverIdInt);
 
@@ -73,6 +77,7 @@ function MCPActionsPageContent() {
     fetchingToolsServerIds,
     mutateMcpServers,
     setPopup,
+    setServerToExpand,
   ]);
 
   const hasActions = mcpServers.length > 0;
