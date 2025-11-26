@@ -81,7 +81,7 @@ def _convert_sections_to_llm_string_with_citations(
             updated_at_str = chunk.updated_at.isoformat()
 
         result: dict[str, Any] = {
-            "citation_id": citation_id,
+            "document": citation_id,
             "title": chunk.semantic_identifier,
         }
         if updated_at_str is not None:

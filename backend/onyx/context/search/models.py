@@ -18,6 +18,7 @@ from onyx.db.models import Persona
 from onyx.db.models import SearchSettings
 from onyx.indexing.models import BaseChunk
 from onyx.indexing.models import IndexingSetting
+from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import Embedding
 
@@ -480,7 +481,7 @@ class SavedSearchDoc(SearchDoc):
         return cls(
             # db_doc_id can be a filler value since these docs are not saved to the database.
             db_doc_id=0,
-            document_id="INTERNET_SEARCH_DOC_" + url,
+            document_id=WEB_SEARCH_PREFIX + url,
             chunk_ind=0,
             semantic_identifier=url,
             link=url,

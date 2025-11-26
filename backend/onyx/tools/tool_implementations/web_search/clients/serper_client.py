@@ -20,16 +20,18 @@ SERPER_CONTENTS_URL = "https://scrape.serper.dev"
 
 
 class SerperClient(WebSearchProvider, WebContentProvider):
-    def __init__(self, api_key: str) -> None:
+    def __init__(self, api_key: str, num_results: int = 10) -> None:
         self.headers = {
             "X-API-KEY": api_key,
             "Content-Type": "application/json",
         }
+        self._num_results = num_results
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def search(self, query: str) -> list[WebSearchResult]:
         payload = {
             "q": query,
+            "num": self._num_results,
         }
 
         response = requests.post(

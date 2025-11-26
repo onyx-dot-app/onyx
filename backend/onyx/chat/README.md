@@ -45,12 +45,12 @@ rather than a user message.
 Here are some documents provided for context, they may not all be relevant:
 {
     documents: [
-        {"citation_id": 1, "title": "Hello", "contents": "Foo", "metadata": "status closed"}
-        {"citation_id": 2, "title": "World", "contents": "Bar"}
+        {"document": 1, "title": "Hello", "contents": "Foo", "metadata": "status closed"}
+        {"document": 2, "title": "World", "contents": "Bar"}
     ]
 }
 ```
-Documents are represented with citation_id so that the LLM can easily cite them with a single number. The tool returns have to be richer to be able to
+Documents are represented with document so that the LLM can easily cite them with a single number. The tool returns have to be richer to be able to
 translate this into links and other UI elements. What the LLM sees is far simpler to reduce noise/hallucinations.
 
 Note that documents included in a single turn should be collapsed into a single user message.

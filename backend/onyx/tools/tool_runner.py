@@ -101,7 +101,12 @@ def run_tool_calls(
         # Emit the tool start packet before running the tool
         tool.emit_start(turn_index=turn_index)
 
-        override_kwargs = None
+        override_kwargs: (
+            SearchToolOverrideKwargs
+            | WebSearchToolOverrideKwargs
+            | OpenURLToolOverrideKwargs
+            | None
+        ) = None
 
         if isinstance(tool, SearchTool):
             minimal_history = [

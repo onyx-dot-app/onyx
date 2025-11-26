@@ -17,8 +17,9 @@ from onyx.utils.retry_wrapper import retry_builder
 
 # TODO can probably break this up
 class ExaClient(WebSearchProvider, WebContentProvider):
-    def __init__(self, api_key: str) -> None:
+    def __init__(self, api_key: str, num_results: int = 10) -> None:
         self.exa = Exa(api_key=api_key)
+        self._num_results = num_results
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def search(self, query: str) -> list[WebSearchResult]:
@@ -29,7 +30,7 @@ class ExaClient(WebSearchProvider, WebContentProvider):
                 num_sentences=2,
                 highlights_per_url=1,
             ),
-            num_results=10,
+            num_results=self._num_results,
         )
 
         return [

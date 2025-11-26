@@ -4,6 +4,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.tools.tool_implementations.open_url.models import WebContent
+from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 
 
@@ -24,7 +25,7 @@ def inference_section_from_internet_page_scrape(
         content=truncated_content,
         source_links={0: result.link},
         section_continuation=False,
-        document_id="INTERNET_SEARCH__DOC_" + result.link,
+        document_id=WEB_SEARCH_PREFIX + result.link,
         source_type=DocumentSource.WEB,
         semantic_identifier=result.title,
         title=result.title,
@@ -57,7 +58,7 @@ def inference_section_from_internet_search_result(
         content=result.snippet,
         source_links={0: result.link},
         section_continuation=False,
-        document_id="INTERNET_SEARCH_DOC_" + result.link,
+        document_id=WEB_SEARCH_PREFIX + result.link,
         source_type=DocumentSource.WEB,
         semantic_identifier=result.title,
         title=result.title,
@@ -82,12 +83,12 @@ def inference_section_from_internet_search_result(
 
 
 def llm_doc_from_web_content(web_content: WebContent) -> LlmDoc:
-    """Create an LlmDoc from WebContent with the INTERNET_SEARCH_DOC_ prefix"""
+    """Create an LlmDoc from WebContent with the WEB_SEARCH_PREFIX prefix"""
     return LlmDoc(
         # TODO: Is this what we want to do for document_id? We're kind of overloading it since it
         # should ideally correspond to a document in the database. But I guess if you're calling this
         # function you know it won't be in the database.
-        document_id="INTERNET_SEARCH_DOC_" + web_content.link,
+        document_id=WEB_SEARCH_PREFIX + web_content.link,
         content=truncate_search_result_content(web_content.full_content),
         blurb=web_content.link,
         semantic_identifier=web_content.link,

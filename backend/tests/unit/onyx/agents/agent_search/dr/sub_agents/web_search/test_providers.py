@@ -12,6 +12,5 @@ def test_build_content_provider_returns_onyx_crawler() -> None:
         provider_type=WebContentProviderType.ONYX_WEB_CRAWLER,
         api_key=None,
         config={"timeout_seconds": "20"},
-        provider_name="Built-in",
     )
     assert isinstance(provider, OnyxWebCrawler)

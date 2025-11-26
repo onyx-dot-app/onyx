@@ -18,9 +18,8 @@ from onyx.tools.tool_implementations.web_search.clients.google_pse_client import
 from onyx.tools.tool_implementations.web_search.clients.serper_client import (
     SerperClient,
 )
-from onyx.tools.tool_implementations.web_search.models import (
-    WebSearchProvider,
-)
+from onyx.tools.tool_implementations.web_search.models import DEFAULT_MAX_RESULTS
+from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
@@ -33,12 +32,14 @@ def build_search_provider_from_config(
     api_key: str,
     config: dict[str, str] | None,
 ) -> WebSearchProvider:
+    config = config or {}
+    num_results = int(config.get("num_results") or DEFAULT_MAX_RESULTS)
+
     if provider_type == WebSearchProviderType.EXA:
-        return ExaClient(api_key=api_key)
+        return ExaClient(api_key=api_key, num_results=num_results)
     if provider_type == WebSearchProviderType.SERPER:
-        return SerperClient(api_key=api_key)
+        return SerperClient(api_key=api_key, num_results=num_results)
     if provider_type == WebSearchProviderType.GOOGLE_PSE:
-        config = config or {}
         search_engine_id = (
             config.get("search_engine_id")
             or config.get("cx")
@@ -52,8 +53,8 @@ def build_search_provider_from_config(
         return GooglePSEClient(
             api_key=api_key,
             search_engine_id=search_engine_id,
-            num_results=int(config.get("num_results")) or 10,
-            timeout_seconds=int(config.get("timeout_seconds")) or 10,
+            num_results=num_results,
+            timeout_seconds=int(config.get("timeout_seconds") or 10),
         )
 
 
@@ -71,7 +72,6 @@ def build_content_provider_from_config(
     provider_type: WebContentProviderType,
     api_key: str | None,
     config: dict[str, str] | None,
-    provider_name: str = "web_content_provider",
 ) -> WebContentProvider | None:
     provider_type_value = provider_type.value
     try:

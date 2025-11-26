@@ -208,7 +208,7 @@ def _create_project_files_message(
     for idx, file_text in enumerate(project_files.project_file_texts, start=1):
         documents_list.append(
             {
-                "citation_id": idx,
+                "document": idx,
                 "contents": file_text,
             }
         )
@@ -358,6 +358,106 @@ def translate_history_to_llm_format(
     return messages
 
 
+def _format_message_history_for_logging(
+    message_history: LanguageModelInput,
+) -> str:
+    """Format message history for logging, with special handling for tool calls.
+
+    Tool calls are formatted as JSON with 4-space indentation for readability.
+    """
+    formatted_lines = []
+
+    separator = "================================================"
+
+    # Handle string input
+    if isinstance(message_history, str):
+        formatted_lines.append("Message [string]:")
+        formatted_lines.append(separator)
+        formatted_lines.append(f"{message_history}")
+        return "\n".join(formatted_lines)
+
+    # Handle sequence of messages
+    for i, msg in enumerate(message_history):
+        # Type guard: ensure msg is a dict-like object (TypedDict)
+        if not isinstance(msg, dict):
+            formatted_lines.append(f"Message {i + 1} [unknown]:")
+            formatted_lines.append(separator)
+            formatted_lines.append(f"{msg}")
+            if i < len(message_history) - 1:
+                formatted_lines.append(separator)
+            continue
+
+        role = msg.get("role", "unknown")
+        formatted_lines.append(f"Message {i + 1} [{role}]:")
+        formatted_lines.append(separator)
+
+        if role == "system":
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                formatted_lines.append(f"{content}")
+
+        elif role == "user":
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                formatted_lines.append(f"{content}")
+            elif isinstance(content, list):
+                # Handle multimodal content (text + images)
+                for part in content:
+                    if isinstance(part, dict):
+                        part_type = part.get("type")
+                        if part_type == "text":
+                            text = part.get("text", "")
+                            if isinstance(text, str):
+                                formatted_lines.append(f"{text}")
+                        elif part_type == "image_url":
+                            image_url_dict = part.get("image_url")
+                            if isinstance(image_url_dict, dict):
+                                url = image_url_dict.get("url", "")
+                                if isinstance(url, str):
+                                    formatted_lines.append(f"[Image: {url[:50]}...]")
+
+        elif role == "assistant":
+            content = msg.get("content")
+            if content and isinstance(content, str):
+                formatted_lines.append(f"{content}")
+
+            tool_calls = msg.get("tool_calls")
+            if tool_calls and isinstance(tool_calls, list):
+                formatted_lines.append("Tool calls:")
+                for tool_call in tool_calls:
+                    if isinstance(tool_call, dict):
+                        tool_call_dict: dict[str, Any] = {}
+                        tool_call_id = tool_call.get("id")
+                        tool_call_type = tool_call.get("type")
+                        function_dict = tool_call.get("function")
+
+                        if tool_call_id:
+                            tool_call_dict["id"] = tool_call_id
+                        if tool_call_type:
+                            tool_call_dict["type"] = tool_call_type
+                        if isinstance(function_dict, dict):
+                            tool_call_dict["function"] = {
+                                "name": function_dict.get("name", ""),
+                                "arguments": function_dict.get("arguments", ""),
+                            }
+
+                        tool_call_json = json.dumps(tool_call_dict, indent=4)
+                        formatted_lines.append(tool_call_json)
+
+        elif role == "tool":
+            content = msg.get("content", "")
+            tool_call_id = msg.get("tool_call_id", "")
+            if isinstance(content, str) and isinstance(tool_call_id, str):
+                formatted_lines.append(f"Tool call ID: {tool_call_id}")
+                formatted_lines.append(f"Response: {content}")
+
+        # Add separator before next message (or at end)
+        if i < len(message_history) - 1:
+            formatted_lines.append(separator)
+
+    return "\n".join(formatted_lines)
+
+
 def run_llm_step(
     history: list[ChatMessageSimple],
     tool_definitions: list[dict],
@@ -371,6 +471,11 @@ def run_llm_step(
     # The second return value is for the turn index because reasoning counts on the frontend as a turn
     # TODO this is maybe ok but does not align well with the backend logic too well
     llm_msg_history = translate_history_to_llm_format(history)
+
+    # Uncomment the line below to log the entire message history to the console
+    logger.info(
+        f"Message history:\n{_format_message_history_for_logging(llm_msg_history)}"
+    )
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
     reasoning_start = False

@@ -7,6 +7,13 @@ from pydantic import field_validator
 
 from onyx.utils.url import normalize_url
 
+# Fairly loose number but assuming LLMs can easily handle this amount of context
+# Approximately 2 pages of google search results
+# This is the cap for both when the tool is running a single search and when running multiple queries in parallel
+DEFAULT_MAX_RESULTS = 20
+
+WEB_SEARCH_PREFIX = "WEB_SEARCH_DOC_"
+
 
 class WebSearchResult(BaseModel):
     title: str

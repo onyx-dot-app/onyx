@@ -16,9 +16,10 @@ from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
 from onyx.tools.tool import Tool
-from onyx.tools.tool_implementations.search.search_tool import (
-    _convert_inference_sections_to_llm_string,
+from onyx.tools.tool_implementations.utils import (
+    convert_inference_sections_to_llm_string,
 )
+from onyx.tools.tool_implementations.web_search.models import DEFAULT_MAX_RESULTS
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
@@ -33,9 +34,6 @@ from shared_configs.enums import WebSearchProviderType
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
-# Fairly loose number but assuming LLMs can easily handle this amount of context
-# Approximately 2 pages of google search results
-DEFAULT_MAX_RESULTS = 20
 
 
 class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
@@ -55,6 +53,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             provider_type = WebSearchProviderType(provider_model.provider_type)
             api_key = provider_model.api_key
             config = provider_model.config
+
+        # TODO - This should just be enforced at the DB level
+        if api_key is None:
+            raise RuntimeError("No API key configured for web search provider.")
 
         self._provider = build_search_provider_from_config(
             provider_type=provider_type,
@@ -160,22 +162,28 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         all_search_results: list[WebSearchResult] = []
 
         if valid_results:
-            # Find the maximum length to know how many rounds we need
-            max_length = max(len(results) for results in valid_results)
-
             # Track seen (title, url) pairs to avoid duplicates
             seen = set()
+            # Track current index for each result set
+            indices = [0] * len(valid_results)
 
-            # Round-robin interweaving: take one from each result set in turn
-            for i in range(max_length):
-                for results in valid_results:
-                    if i < len(results):
-                        result = results[i]
-                        # Check if we've already seen this title and URL combination
+            # Round-robin interweaving: cycle through result sets and increment indices
+            while len(all_search_results) < DEFAULT_MAX_RESULTS:
+                added_any = False
+                for idx, results in enumerate(valid_results):
+                    if len(all_search_results) >= DEFAULT_MAX_RESULTS:
+                        break
+                    if indices[idx] < len(results):
+                        result = results[indices[idx]]
                         key = (result.title, result.link)
                         if key not in seen:
                             seen.add(key)
                             all_search_results.append(result)
+                            added_any = True
+                        indices[idx] += 1
+                # Stop if no more results to add
+                if not added_any:
+                    break
 
         if not all_search_results:
             raise RuntimeError("No search results found.")
@@ -200,10 +208,12 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         )
 
         # Format for LLM
-        docs_str, citation_mapping = _convert_inference_sections_to_llm_string(
+        docs_str, citation_mapping = convert_inference_sections_to_llm_string(
             top_sections=inference_sections,
             citation_start=override_kwargs.starting_citation_num,
             limit=None,  # Already truncated
+            include_source_type=False,
+            include_link=True,
         )
 
         return ToolResponse(
