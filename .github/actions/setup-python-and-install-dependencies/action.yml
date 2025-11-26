@@ -42,4 +42,5 @@ runs:
         uv pip install \
           -r backend/requirements/default.txt \
           -r backend/requirements/dev.txt \
+          -r backend/requirements/model_server.txt \
           -r backend/requirements/ee.txt
