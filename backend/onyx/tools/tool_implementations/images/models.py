@@ -2,6 +2,8 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
+
 
 class ImageGenerationResponse(BaseModel):
     revised_prompt: str
@@ -15,4 +17,4 @@ class ImageShape(str, Enum):
 
 
 class FinalImageGenerationResponse(BaseModel):
-    images: list[ImageGenerationResponse]
+    generated_images: list[GeneratedImage]

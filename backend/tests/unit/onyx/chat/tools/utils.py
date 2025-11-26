@@ -1,5 +1,4 @@
-from backend.onyx.chat.infra import get_default_emitter
-
+from onyx.chat.infra import get_default_emitter
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 

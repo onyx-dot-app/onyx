@@ -23,9 +23,7 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
-from onyx.tools.tool_implementations.images.models import (
-    ImageGenerationResponse,
-)
+from onyx.tools.tool_implementations.images.models import ImageGenerationResponse
 from onyx.tools.tool_implementations.images.models import ImageShape
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -290,7 +288,7 @@ class ImageGenerationTool(Tool[None]):
             urls=[],
             base64_files=[img.image_data for img in image_generation_responses],
         )
-        generated_images = [
+        generated_images_metadata = [
             GeneratedImage(
                 file_id=file_id,
                 url=build_frontend_file_url(file_id),
@@ -304,12 +302,12 @@ class ImageGenerationTool(Tool[None]):
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                obj=ImageGenerationFinal(images=generated_images),
+                obj=ImageGenerationFinal(images=generated_images_metadata),
             )
         )
 
         final_image_generation_response = FinalImageGenerationResponse(
-            images=image_generation_responses
+            generated_images=generated_images_metadata
         )
 
         # Create llm_facing_response
@@ -318,7 +316,7 @@ class ImageGenerationTool(Tool[None]):
                 {
                     "revised_prompt": img.revised_prompt,
                 }
-                for img in image_generation_responses
+                for img in generated_images_metadata
             ]
         )
 

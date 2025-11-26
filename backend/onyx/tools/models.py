@@ -15,6 +15,7 @@ from onyx.context.search.enums import SearchType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 
 
@@ -153,6 +154,7 @@ class ToolCallInfo(BaseModel):
     tool_call_arguments: dict[str, Any]
     tool_call_response: str
     search_docs: list[SearchDoc] | None = None
+    generated_images: list[GeneratedImage] | None = None
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

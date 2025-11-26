@@ -2265,6 +2265,10 @@ class ToolCall(Base):
     # Only the top level tools (the ones with a parent_chat_message_id) have token counts that are counted
     # towards the session total.
     tool_call_tokens: Mapped[int] = mapped_column(Integer())
+    # For image generation tool - stores GeneratedImage objects for replay
+    generated_images: Mapped[list[dict] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
 
     # Relationships
     chat_session: Mapped[ChatSession] = relationship("ChatSession")

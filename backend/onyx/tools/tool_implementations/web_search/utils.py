@@ -3,7 +3,7 @@ from onyx.chat.models import LlmDoc
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
-from onyx.tools.tool_implementations.web_search.models import WebContent
+from onyx.tools.tool_implementations.open_url.models import WebContent
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 
 

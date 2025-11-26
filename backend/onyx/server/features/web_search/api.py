@@ -16,15 +16,11 @@ from onyx.server.features.web_search.models import WebSearchToolResponse
 from onyx.server.features.web_search.models import WebSearchWithContentResponse
 from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderView
-from onyx.tools.tool_implementations.web_search.clients.onyx_web_crawler_client import (
-    OnyxWebCrawlerClient,
+from onyx.tools.tool_implementations.open_url.models import WebContentProvider
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    OnyxWebCrawler,
 )
-from onyx.tools.tool_implementations.web_search.models import (
-    WebContentProvider,
-)
-from onyx.tools.tool_implementations.web_search.models import (
-    WebSearchProvider,
-)
+from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
 from onyx.tools.tool_implementations.web_search.providers import (
     build_content_provider_from_config,
 )
@@ -92,10 +88,10 @@ def _get_active_content_provider(
 
     if provider_model is None:
         # Default to the built-in crawler if nothing is configured. Always available.
-        # NOTE: the OnyxWebCrawlerClient is not stored in the content provider table,
+        # NOTE: the OnyxWebCrawler is not stored in the content provider table,
         # so we need to return it directly.
 
-        return None, OnyxWebCrawlerClient()
+        return None, OnyxWebCrawler()
 
     try:
         provider_type = WebContentProviderType(provider_model.provider_type)

@@ -292,6 +292,21 @@ def upgrade() -> None:
             ),
         )
 
+    # Add generated_images column for image generation tool replay (if not exists)
+    result = conn.execute(
+        sa.text(
+            """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'tool_call' AND column_name = 'generated_images'
+    """
+        )
+    )
+    if not result.fetchone():
+        op.add_column(
+            "tool_call",
+            sa.Column("generated_images", postgresql.JSONB(), nullable=True),
+        )
+
     # Drop tool_name column (if exists)
     result = conn.execute(
         sa.text(
@@ -359,6 +374,7 @@ def downgrade() -> None:
     op.add_column("tool_call", sa.Column("tool_name", sa.String(), nullable=False))
     op.drop_column("tool_call", "tool_id")
     op.drop_column("tool_call", "tool_call_tokens")
+    op.drop_column("tool_call", "generated_images")
     # Change tool_call_response back to JSONB before renaming
     op.execute(
         sa.text(

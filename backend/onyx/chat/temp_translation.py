@@ -80,7 +80,7 @@ def translate_llm_loop_packets(
             # Check if final_documents exists in the object
             if hasattr(obj, "final_documents") and obj.final_documents:
                 translated_obj["final_documents"] = [
-                    doc.model_dump() if hasattr(doc, "model_dump") else doc
+                    doc.model_dump() if hasattr(doc, "model_dump") else dict(doc)
                     for doc in obj.final_documents
                 ]
 

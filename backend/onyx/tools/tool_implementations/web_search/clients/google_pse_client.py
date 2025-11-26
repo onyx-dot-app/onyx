@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
 import requests
 
-from onyx.tools.tool_implementations.web_search.models import WebContent
 from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
 )
@@ -121,18 +119,3 @@ class GooglePSEClient(WebSearchProvider):
             )
 
         return results
-
-    def contents(self, urls: Sequence[str]) -> list[WebContent]:
-        logger.warning(
-            "Google PSE does not support content fetching; returning empty results."
-        )
-        return [
-            WebContent(
-                title="",
-                link=url,
-                full_content="",
-                published_date=None,
-                scrape_successful=False,
-            )
-            for url in urls
-        ]

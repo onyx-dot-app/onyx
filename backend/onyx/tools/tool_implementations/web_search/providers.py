@@ -3,26 +3,20 @@ from typing import Any
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_content_provider
 from onyx.db.web_search import fetch_active_web_search_provider
+from onyx.tools.tool_implementations.open_url.firecrawl import FIRECRAWL_SCRAPE_URL
+from onyx.tools.tool_implementations.open_url.firecrawl import FirecrawlClient
+from onyx.tools.tool_implementations.open_url.models import (
+    WebContentProvider,
+)
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
 from onyx.tools.tool_implementations.web_search.clients.exa_client import (
     ExaClient,
-)
-from onyx.tools.tool_implementations.web_search.clients.firecrawl_client import (
-    FIRECRAWL_SCRAPE_URL,
-)
-from onyx.tools.tool_implementations.web_search.clients.firecrawl_client import (
-    FirecrawlClient,
 )
 from onyx.tools.tool_implementations.web_search.clients.google_pse_client import (
     GooglePSEClient,
 )
-from onyx.tools.tool_implementations.web_search.clients.onyx_web_crawler_client import (
-    OnyxWebCrawlerClient,
-)
 from onyx.tools.tool_implementations.web_search.clients.serper_client import (
     SerperClient,
-)
-from onyx.tools.tool_implementations.web_search.models import (
-    WebContentProvider,
 )
 from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
@@ -98,7 +92,7 @@ def build_content_provider_from_config(
             raise ValueError(
                 "Invalid value for Onyx Web Crawler 'timeout_seconds'; expected integer."
             )
-        return OnyxWebCrawlerClient(timeout_seconds=timeout_seconds)
+        return OnyxWebCrawler(timeout_seconds=timeout_seconds)
 
     if provider_type_enum == WebContentProviderType.FIRECRAWL:
         if not api_key:
@@ -155,7 +149,7 @@ def get_default_content_provider() -> WebContentProvider | None:
 
     # Fall back to built-in Onyx crawler when nothing is configured.
     try:
-        return OnyxWebCrawlerClient()
+        return OnyxWebCrawler()
     except Exception as exc:  # pragma: no cover - defensive
         logger.error(f"Failed to initialize default Onyx crawler: {exc}")
         return None

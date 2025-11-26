@@ -179,6 +179,7 @@ def create_tool_call_no_commit(
     *,
     parent_tool_call_id: int | None = None,
     reasoning_tokens: str | None = None,
+    generated_images: list[dict] | None = None,
     add_only: bool = True,
 ) -> ToolCall:
     """
@@ -196,6 +197,7 @@ def create_tool_call_no_commit(
         db_session: The database session
         parent_tool_call_id: Optional parent tool call ID (for nested tool calls)
         reasoning_tokens: Optional reasoning tokens
+        generated_images: Optional list of generated image metadata for replay
         commit: If True, commit the transaction; if False, flush only
 
     Returns:
@@ -212,6 +214,7 @@ def create_tool_call_no_commit(
         tool_call_arguments=tool_call_arguments,
         tool_call_response=tool_call_response,
         tool_call_tokens=tool_call_tokens,
+        generated_images=generated_images,
     )
 
     db_session.add(tool_call)

@@ -1,3 +1,4 @@
+from abc import ABC
 from abc import abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
@@ -8,12 +9,12 @@ from pydantic import field_validator
 from onyx.utils.url import normalize_url
 
 
-class WebSearchResult(BaseModel):
+class WebContent(BaseModel):
     title: str
     link: str
-    snippet: str
-    author: str | None = None
+    full_content: str
     published_date: datetime | None = None
+    scrape_successful: bool = True
 
     @field_validator("link")
     @classmethod
@@ -21,7 +22,7 @@ class WebSearchResult(BaseModel):
         return normalize_url(v)
 
 
-class WebSearchProvider:
+class WebContentProvider(ABC):
     @abstractmethod
-    def search(self, query: str) -> Sequence[WebSearchResult]:
+    def contents(self, urls: Sequence[str]) -> list[WebContent]:
         pass

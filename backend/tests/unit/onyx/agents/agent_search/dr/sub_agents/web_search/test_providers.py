@@ -1,5 +1,5 @@
 from onyx.agents.agent_search.dr.sub_agents.web_search.clients.onyx_web_crawler_client import (
-    OnyxWebCrawlerClient,
+    OnyxWebCrawler,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
     build_content_provider_from_config,
@@ -14,4 +14,4 @@ def test_build_content_provider_returns_onyx_crawler() -> None:
         config={"timeout_seconds": "20"},
         provider_name="Built-in",
     )
-    assert isinstance(provider, OnyxWebCrawlerClient)
+    assert isinstance(provider, OnyxWebCrawler)

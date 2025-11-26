@@ -2,9 +2,6 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from backend.onyx.tools.tool_implementations.images.models import (
-    FinalImageGenerationResponse,
-)
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
@@ -50,9 +47,13 @@ from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
+from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
+)
+from onyx.tools.tool_implementations.images.models import (
+    FinalImageGenerationResponse,
 )
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -593,6 +594,7 @@ def run_llm_loop(
     collected_tool_calls: list[ToolCallInfo] = []
     gathered_documents: list[SearchDoc] | None = None
     should_cite_documents: bool = False
+    ran_image_gen: bool = False
     citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
     current_tool_call_index = (
@@ -607,7 +609,7 @@ def run_llm_loop(
                 raise ValueError(f"Tool {force_use_tool_name} not found in tools")
             tool_choice = "required"
             force_use_tool_name = None
-        elif llm_cycle_count == MAX_LLM_CYCLES - 1:
+        elif llm_cycle_count == MAX_LLM_CYCLES - 1 or ran_image_gen:
             # Last cycle, no tools allowed, just answer!
             tool_choice = "none"
             final_tools = []
@@ -661,6 +663,16 @@ def run_llm_loop(
             ),
             include_citation_reminder=should_cite_documents,
         )
+
+        if ran_image_gen:
+            # Some models are trained to give back images to the user for some similar tool
+            # This is to prevent it generating things like:
+            # [Cute Cat](attachment://a_cute_cat_sitting_playfully.png)
+            reminder_message_text = (
+                "Very briefly describe the images generated."
+                + "Do not include any links or attachments."
+            )
+
         reminder_msg = (
             ChatMessageSimple(
                 message=reminder_message_text,
@@ -697,7 +709,7 @@ def run_llm_loop(
 
         # Run the LLM selected tools, there is some more logic here than a simple execution
         # each tool might have custom logic here
-        tool_responses = []
+        tool_responses: list[ToolResponse] = []
         tool_calls = llm_step_result.tool_calls or []
         for tool_call in tool_calls:
             # TODO replace the [tool_call] with the list of tool calls once parallel tool calls are supported
@@ -736,11 +748,12 @@ def run_llm_loop(
                     else:
                         gathered_documents = search_docs
 
-                # If adding more handlings of rich tool responses, break this out into a function
+                # Extract generated_images if this is an image generation tool response
+                generated_images = None
                 if isinstance(
                     tool_response.rich_response, FinalImageGenerationResponse
                 ):
-                    pass  # TODO
+                    generated_images = tool_response.rich_response.generated_images
 
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
@@ -752,6 +765,7 @@ def run_llm_loop(
                     tool_call_arguments=tool_call.tool_args,
                     tool_call_response=tool_response.llm_facing_response,
                     search_docs=search_docs,
+                    generated_images=generated_images,
                 )
                 collected_tool_calls.append(tool_call_info)
 
@@ -813,23 +827,22 @@ def run_llm_loop(
 
             current_tool_call_index += 1
 
-        # After the LLM call has happened, we may be done. If no tools, then it has answered
-        # certain tools also do not allow further actions
-        if (
-            not llm_step_result.tool_calls
-            or len(llm_step_result.tool_calls) == 0
-            or any(
-                tool.tool_name in stopping_tools_names
-                for tool in llm_step_result.tool_calls
-            )
-        ):
+        # If no tool calls, then it must have answered, wrap up
+        if not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0:
             break
+
+        # Certain tools do not allow further actions, force the LLM wrap up on the next cycle
+        if any(
+            tool.tool_name in stopping_tools_names
+            for tool in llm_step_result.tool_calls
+        ):
+            ran_image_gen = True
 
         if llm_step_result.tool_calls and any(
             tool.tool_name in citeable_tools_names
             for tool in llm_step_result.tool_calls
         ):
-            # As long as 1 tool with citeable documents is called, we ask the LLM to try to cite
+            # As long as 1 tool with citeable documents is called at any point, we ask the LLM to try to cite
             should_cite_documents = True
 
     if not llm_step_result or not llm_step_result.answer:

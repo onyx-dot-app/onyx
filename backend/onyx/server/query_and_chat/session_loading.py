@@ -300,8 +300,14 @@ def translate_assistant_message_to_packets(
                         packet_list.extend(create_fetch_packets([fetch_docs], turn_num))
 
                     elif tool.in_code_tool_id == ImageGenerationTool.__name__:
-                        # TODO
-                        pass
+                        if tool_call.generated_images:
+                            images = [
+                                GeneratedImage(**img)
+                                for img in tool_call.generated_images
+                            ]
+                            packet_list.extend(
+                                create_image_generation_packets(images, turn_num)
+                            )
 
                     else:
                         # Custom tool or unknown tool

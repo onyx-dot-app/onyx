@@ -78,6 +78,11 @@ def _create_and_link_tool_calls(
             db_session=db_session,
             parent_tool_call_id=None,  # Will be updated after flush
             reasoning_tokens=tool_call_info.reasoning_tokens,
+            generated_images=(
+                [img.model_dump() for img in tool_call_info.generated_images]
+                if tool_call_info.generated_images
+                else None
+            ),
             add_only=True,
         )
 

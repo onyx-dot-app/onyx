@@ -6,10 +6,10 @@ import requests
 
 from onyx.file_processing.html_utils import ParsedHTML
 from onyx.file_processing.html_utils import web_html_cleanup
-from onyx.tools.tool_implementations.web_search.models import (
+from onyx.tools.tool_implementations.open_url.models import (
     WebContent,
 )
-from onyx.tools.tool_implementations.web_search.models import (
+from onyx.tools.tool_implementations.open_url.models import (
     WebContentProvider,
 )
 from onyx.utils.logger import setup_logger
@@ -20,7 +20,7 @@ DEFAULT_TIMEOUT_SECONDS = 15
 DEFAULT_USER_AGENT = "OnyxWebCrawler/1.0 (+https://www.onyx.app)"
 
 
-class OnyxWebCrawlerClient(WebContentProvider):
+class OnyxWebCrawler(WebContentProvider):
     """
     Lightweight built-in crawler that fetches HTML directly and extracts readable text.
     Acts as the default content provider when no external crawler (e.g. Firecrawl) is

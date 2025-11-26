@@ -5,9 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.tools.tool_implementations.web_search.models import (
-    WebContent,
-)
+from onyx.tools.tool_implementations.open_url.models import WebContent
+from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
 )
@@ -20,7 +19,7 @@ SERPER_SEARCH_URL = "https://google.serper.dev/search"
 SERPER_CONTENTS_URL = "https://scrape.serper.dev"
 
 
-class SerperClient(WebSearchProvider):
+class SerperClient(WebSearchProvider, WebContentProvider):
     def __init__(self, api_key: str) -> None:
         self.headers = {
             "X-API-KEY": api_key,

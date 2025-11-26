@@ -20,7 +20,7 @@
 # DEFAULT_USER_AGENT = "OnyxWebCrawler/1.0 (+https://www.onyx.app)"
 
 
-# class OnyxWebCrawlerClient(WebContentProvider):
+# class OnyxWebCrawler(WebContentProvider):
 #     """
 #     Lightweight built-in crawler that fetches HTML directly and extracts readable text.
 #     Acts as the default content provider when no external crawler (e.g. Firecrawl) is

@@ -307,7 +307,7 @@ def query(
                     with function_span(tool.name) as span_fn:
                         span_fn.span_data.input = arguments
                         try:
-                            output = tool.run_v2(run_context, **arguments)
+                            output = tool.run_v2(run_context, **arguments)  # type: ignore[attr-defined]
                             tool_outputs[call_id] = _serialize_tool_output(output)
                             span_fn.span_data.output = output
                         except Exception as e:
