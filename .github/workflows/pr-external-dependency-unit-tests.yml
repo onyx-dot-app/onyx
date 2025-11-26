@@ -87,6 +87,7 @@ jobs:
           requirements: |
             backend/requirements/default.txt
             backend/requirements/dev.txt
+            backend/requirements/ee.txt
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
