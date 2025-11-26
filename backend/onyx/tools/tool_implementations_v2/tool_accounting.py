@@ -33,14 +33,17 @@ def tool_accounting(func: F) -> F:
 
     @functools.wraps(func)
     def wrapper(
-        run_context: RunContextWrapper[ChatTurnContext], *args: Any, **kwargs: Any
+        selfobj: Any,
+        run_context: RunContextWrapper[ChatTurnContext],
+        *args: Any,
+        **kwargs: Any
     ) -> Any:
         # Increment current_run_step at the beginning
         run_context.context.current_run_step += 1
 
         try:
-            # Call the original function
-            result = func(run_context, *args, **kwargs)
+            # Call the original function (pass selfobj for class methods)
+            result = func(selfobj, run_context, *args, **kwargs)
 
             # If it's a coroutine, we need to handle it differently
             if inspect.iscoroutine(result):
@@ -77,3 +80,56 @@ def _emit_section_end(run_context: RunContextWrapper[ChatTurnContext]) -> None:
         )
     )
     run_context.context.current_run_step += 1
+
+
+def tool_accounting_function(func: F) -> F:
+    """
+    Decorator for standalone functions (not methods) that adds tool accounting functionality.
+
+    Use this for standalone functions like _internal_search_core.
+    Use tool_accounting for class methods.
+
+    This decorator:
+    1. Increments the current_run_step index at the beginning
+    2. Emits a section end packet and increments current_run_step at the end
+    3. Ensures the cleanup happens even if an exception occurs
+
+    Args:
+        func: The function to decorate. Must take a RunContextWrapper[ChatTurnContext] as first argument.
+
+    Returns:
+        The decorated function with tool accounting functionality.
+    """
+
+    @functools.wraps(func)
+    def wrapper(
+        run_context: RunContextWrapper[ChatTurnContext], *args: Any, **kwargs: Any
+    ) -> Any:
+        # Increment current_run_step at the beginning
+        run_context.context.current_run_step += 1
+
+        try:
+            # Call the original function
+            result = func(run_context, *args, **kwargs)
+
+            # If it's a coroutine, we need to handle it differently
+            if inspect.iscoroutine(result):
+                # For async functions, we need to return a coroutine that handles the cleanup
+                async def async_wrapper() -> Any:
+                    try:
+                        return await result
+                    finally:
+                        _emit_section_end(run_context)
+
+                return async_wrapper()
+            else:
+                # For sync functions, emit cleanup immediately
+                _emit_section_end(run_context)
+                return result
+
+        except Exception:
+            # Always emit cleanup even if an exception occurred
+            _emit_section_end(run_context)
+            raise
+
+    return cast(F, wrapper)

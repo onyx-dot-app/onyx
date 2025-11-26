@@ -54,6 +54,7 @@ from onyx.tools.tool_implementations.python.python_tool import (
     PythonTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.open_url_tool import OpenUrlTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
@@ -287,7 +288,8 @@ def construct_tools(
 
                 try:
                     tool_dict[db_tool_model.id] = [
-                        WebSearchTool(tool_id=db_tool_model.id)
+                        WebSearchTool(tool_id=db_tool_model.id),
+                        OpenUrlTool(tool_id=db_tool_model.id),
                     ]
                 except ValueError as e:
                     logger.error(f"Failed to initialize Internet Search Tool: {e}")

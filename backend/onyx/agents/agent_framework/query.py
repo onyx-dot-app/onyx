@@ -1,4 +1,5 @@
 import json
+import traceback
 from collections.abc import Callable
 from collections.abc import Iterator
 from collections.abc import Sequence
@@ -312,11 +313,15 @@ def query(
                             _error_tracing.attach_error_to_current_span(
                                 SpanError(
                                     message="Error running tool",
-                                    data={"tool_name": tool.name, "error": str(e)},
+                                    data={
+                                        "tool_name": tool.name,
+                                        "error": str(e),
+                                        "stack_trace": traceback.format_exc(),
+                                    },
                                 )
                             )
                             # Treat the error as the tool output so the framework can continue
-                            error_output = f"Error: {str(e)}"
+                            error_output = tool.failure_error_function(e)
                             tool_outputs[call_id] = error_output
                             output = error_output
 
@@ -328,8 +333,17 @@ def query(
                         ),
                     )
                 else:
-                    not_found_output = f"Tool {name} not found"
-                    tool_outputs[call_id] = _serialize_tool_output(not_found_output)
+                    with function_span(f"tool_not_found_{name}") as span_fn:
+                        not_found_output = {
+                            "error": True,
+                            "error_type": "TOOL_NOT FOUND",
+                            "message": f"The tool {name} does not exist or is not registered.",
+                            "available_tools": [tool.name for tool in tools],
+                        }
+                        tool_outputs[call_id] = _serialize_tool_output(not_found_output)
+                        span_fn.span_data.input = arguments_str
+                        span_fn.span_data.output = not_found_output
+
                     yield RunItemStreamEvent(
                         type="tool_call_output",
                         details=ToolCallOutputStreamItem(

@@ -100,6 +100,8 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
 
     """Actual execution of the tool"""
 
+    # run_V2 should be what's used moving forwards.
+    # run is only there to support deep research.
     @abc.abstractmethod
     def run_v2(
         self,
@@ -108,6 +110,15 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
         **kwargs: Any,
     ) -> Any:
         raise NotImplementedError
+
+    def failure_error_function(self, error: Exception) -> str:
+        """
+        This function defines what is returned to the LLM when the tool fails.
+        By default, it returns a generic error message.
+        Subclasses may override to provide a more specific error message, or re-raise the error
+        for a hard error in the framework.
+        """
+        return f"Error: {str(error)}"
 
     @abc.abstractmethod
     def run(

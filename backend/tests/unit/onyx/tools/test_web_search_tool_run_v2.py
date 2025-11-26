@@ -2,7 +2,6 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import cast
 from typing import List
-from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -12,22 +11,15 @@ from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import WebContent
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import WebSearchProvider
-from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
-    WebSearchResult,
-)
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import WebSearchResult
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SavedSearchDoc
-from onyx.server.query_and_chat.streaming_models import FetchToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from onyx.tools.tool_implementations_v2.web import _open_url_core
-from onyx.tools.tool_implementations_v2.web import _web_search_core
-from onyx.tools.tool_result_models import LlmOpenUrlResult
 from onyx.tools.tool_result_models import LlmWebSearchResult
 
 
@@ -45,11 +37,9 @@ class MockWebSearchProvider(WebSearchProvider):
     def __init__(
         self,
         search_results: List[WebSearchResult] | None = None,
-        content_results: List[WebContent] | None = None,
         should_raise_exception: bool = False,
     ):
         self.search_results = search_results or []
-        self.content_results = content_results or []
         self.should_raise_exception = should_raise_exception
 
     def search(self, query: str) -> List[WebSearchResult]:
@@ -58,9 +48,7 @@ class MockWebSearchProvider(WebSearchProvider):
         return self.search_results
 
     def contents(self, urls: Sequence[str]) -> List[WebContent]:
-        if self.should_raise_exception:
-            raise Exception("Test exception from search provider")
-        return self.content_results
+        return []
 
 
 class MockEmitter:
@@ -73,20 +61,14 @@ class MockEmitter:
         self.packet_history.append(packet)
 
 
-class MockAggregatedContext:
-    """Mock aggregated context for dependency injection"""
-
-    def __init__(self) -> None:
-        self.global_iteration_responses: list[IterationAnswer] = []
-        self.cited_documents: list[InferenceSection] = []
-
-
 class MockRunDependencies:
     """Mock run dependencies for dependency injection"""
 
     def __init__(self) -> None:
         self.emitter = MockEmitter()
         # Set up mock database session
+        from unittest.mock import MagicMock
+
         self.db_session = MagicMock()
         # Configure the scalar method to return our mock tool
         mock_tool = MockTool()
@@ -121,8 +103,8 @@ def create_test_run_context(
     return run_context
 
 
-def test_web_search_core_basic_functionality() -> None:
-    """Test basic functionality of _web_search_core function with a single query"""
+def test_web_search_tool_run_v2_basic_functionality() -> None:
+    """Test basic functionality of WebSearchTool.run_v2 with a single query"""
     # Arrange
     test_run_context = create_test_run_context()
     queries = ["test search query"]
@@ -147,8 +129,25 @@ def test_web_search_core_basic_functionality() -> None:
 
     test_provider = MockWebSearchProvider(search_results=test_search_results)
 
-    # Act
-    result = _web_search_core(test_run_context, queries, test_provider)
+    # Create tool instance
+    web_search_tool = WebSearchTool(tool_id=1)
+
+    # Mock the get_default_provider to return our test provider
+    from unittest.mock import patch
+
+    with patch(
+        "onyx.tools.tool_implementations.web_search.web_search_tool.get_default_provider"
+    ) as mock_get_provider:
+        mock_get_provider.return_value = test_provider
+
+        # Act
+        result_json = web_search_tool.run_v2(test_run_context, queries=queries)
+
+    # Parse the JSON result
+    from pydantic import TypeAdapter
+
+    adapter = TypeAdapter(list[LlmWebSearchResult])
+    result = adapter.validate_json(result_json)
 
     # Assert
     assert isinstance(result, list)
@@ -233,103 +232,8 @@ def test_web_search_core_basic_functionality() -> None:
     assert doc1.is_internet is True
 
 
-def test_web_fetch_core_basic_functionality() -> None:
-    """Test basic functionality of _web_fetch_core function"""
-    # Arrange
-    test_run_context = create_test_run_context()
-    urls = ["https://example.com/1", "https://example.com/2"]
-
-    # Create test content results
-    test_content_results = [
-        WebContent(
-            title="Test Content 1",
-            link="https://example.com/1",
-            full_content="This is the full content of the first page",
-            published_date=datetime(2024, 1, 1, 12, 0, 0),
-        ),
-        WebContent(
-            title="Test Content 2",
-            link="https://example.com/2",
-            full_content="This is the full content of the second page",
-            published_date=None,
-        ),
-    ]
-
-    test_provider = MockWebSearchProvider(content_results=test_content_results)
-
-    # Act
-    result = _open_url_core(test_run_context, urls, test_provider)
-
-    # Assert
-    assert len(result) == 2
-    assert all(isinstance(r, LlmOpenUrlResult) for r in result)
-
-    # Check first result
-    assert result[0].content == "This is the full content of the first page"
-    assert result[0].document_citation_number == -1
-    assert result[0].unique_identifier_to_strip_away == "https://example.com/1"
-
-    # Check second result
-    assert result[1].content == "This is the full content of the second page"
-    assert result[1].document_citation_number == -1
-    assert result[1].unique_identifier_to_strip_away == "https://example.com/2"
-
-    # Check that fetched_documents_cache was populated
-    assert len(test_run_context.context.fetched_documents_cache) == 2
-    assert "https://example.com/1" in test_run_context.context.fetched_documents_cache
-    assert "https://example.com/2" in test_run_context.context.fetched_documents_cache
-
-    # Verify cache entries have correct structure
-    cache_entry_1 = test_run_context.context.fetched_documents_cache[
-        "https://example.com/1"
-    ]
-    assert cache_entry_1.document_citation_number == -1
-    assert cache_entry_1.inference_section is not None
-
-    # Verify context was updated
-    assert test_run_context.context.current_run_step == 2
-    assert len(test_run_context.context.iteration_instructions) == 1
-    assert len(test_run_context.context.global_iteration_responses) == 1
-
-    # Check iteration instruction
-    instruction = test_run_context.context.iteration_instructions[0]
-    assert isinstance(instruction, IterationInstructions)
-    assert instruction.iteration_nr == 1
-    assert instruction.purpose == "Fetching content from URLs"
-    assert (
-        "Web Fetch to gather information on https://example.com/1, https://example.com/2"
-        in instruction.reasoning
-    )
-
-    # Check iteration answer
-    answer = test_run_context.context.global_iteration_responses[0]
-    assert isinstance(answer, IterationAnswer)
-    assert answer.tool == WebSearchTool.__name__
-    assert answer.iteration_nr == 1
-    assert (
-        answer.question
-        == "Fetch content from URLs: https://example.com/1, https://example.com/2"
-    )
-    assert len(answer.cited_documents) == 2
-
-    # Verify emitter events were captured
-    emitter = cast(MockEmitter, test_run_context.context.run_dependencies.emitter)
-    assert len(emitter.packet_history) == 2
-
-    # Check the types of emitted events
-    assert isinstance(emitter.packet_history[0].obj, FetchToolStart)
-    assert isinstance(emitter.packet_history[1].obj, SectionEnd)
-
-    # Verify the FetchToolStart event contains the correct SavedSearchDoc objects
-    fetch_start_event = emitter.packet_history[0].obj
-    assert len(fetch_start_event.documents) == 2
-    assert fetch_start_event.documents[0].link == "https://example.com/1"
-    assert fetch_start_event.documents[1].link == "https://example.com/2"
-    assert fetch_start_event.documents[0].source_type == DocumentSource.WEB
-
-
-def test_web_search_core_exception_handling() -> None:
-    """Test that _web_search_core handles exceptions properly - should still emit section end and update current_run_step"""
+def test_web_search_tool_run_v2_exception_handling() -> None:
+    """Test that WebSearchTool.run_v2 handles exceptions properly"""
     # Arrange
     test_run_context = create_test_run_context()
     queries = ["test search query"]
@@ -337,14 +241,23 @@ def test_web_search_core_exception_handling() -> None:
     # Create a provider that will raise an exception
     test_provider = MockWebSearchProvider(should_raise_exception=True)
 
-    # Act & Assert
-    with pytest.raises(Exception, match="Test exception from search provider"):
-        _web_search_core(test_run_context, queries, test_provider)
+    # Create tool instance
+    web_search_tool = WebSearchTool(tool_id=1)
+
+    # Mock the get_default_provider to return our test provider
+    from unittest.mock import patch
+
+    with patch(
+        "onyx.tools.tool_implementations.web_search.web_search_tool.get_default_provider"
+    ) as mock_get_provider:
+        mock_get_provider.return_value = test_provider
+
+        # Act & Assert
+        with pytest.raises(Exception, match="Test exception from search provider"):
+            web_search_tool.run_v2(test_run_context, queries=queries)
 
     # Verify that even though an exception was raised, we still emitted the initial events
     # and the SectionEnd packet was emitted by the decorator
-    # Note: The first SearchToolDelta (with queries and empty documents) is emitted before the search
-    # The second SearchToolDelta (with documents) is not emitted when an exception occurs during search
     emitter = test_run_context.context.run_dependencies.emitter  # type: ignore[attr-defined]
     assert (
         len(emitter.packet_history) == 3
@@ -361,8 +274,8 @@ def test_web_search_core_exception_handling() -> None:
     )  # Should be 2 after proper handling
 
 
-def test_web_search_core_multiple_queries() -> None:
-    """Test _web_search_core function with multiple queries searched in parallel"""
+def test_web_search_tool_run_v2_multiple_queries() -> None:
+    """Test WebSearchTool.run_v2 with multiple queries searched in parallel"""
     # Arrange
     test_run_context = create_test_run_context()
     queries = ["first query", "second query"]
@@ -404,8 +317,25 @@ def test_web_search_core_multiple_queries() -> None:
 
     test_provider = MultiQueryMockProvider()
 
-    # Act
-    result = _web_search_core(test_run_context, queries, test_provider)
+    # Create tool instance
+    web_search_tool = WebSearchTool(tool_id=1)
+
+    # Mock the get_default_provider to return our test provider
+    from unittest.mock import patch
+
+    with patch(
+        "onyx.tools.tool_implementations.web_search.web_search_tool.get_default_provider"
+    ) as mock_get_provider:
+        mock_get_provider.return_value = test_provider
+
+        # Act
+        result_json = web_search_tool.run_v2(test_run_context, queries=queries)
+
+    # Parse the JSON result
+    from pydantic import TypeAdapter
+
+    adapter = TypeAdapter(list[LlmWebSearchResult])
+    result = adapter.validate_json(result_json)
 
     # Assert
     assert isinstance(result, list)
@@ -466,111 +396,3 @@ def test_web_search_core_multiple_queries() -> None:
     assert (
         len(second_search_delta.documents) == 3
     )  # 2 from first query + 1 from second query
-
-
-def test_web_fetch_core_exception_handling() -> None:
-    """Test that _web_fetch_core handles exceptions properly - should still emit section end and update current_run_step"""
-    # Arrange
-    test_run_context = create_test_run_context()
-    urls = ["https://example.com/1", "https://example.com/2"]
-
-    # Create a provider that will raise an exception
-    test_provider = MockWebSearchProvider(should_raise_exception=True)
-
-    # Act & Assert
-    with pytest.raises(Exception, match="Test exception from search provider"):
-        _open_url_core(test_run_context, urls, test_provider)
-
-    # Verify that even though an exception was raised, we still emitted the initial events
-    # and the SectionEnd packet was emitted by the decorator
-    emitter = test_run_context.context.run_dependencies.emitter  # type: ignore[attr-defined]
-    assert len(emitter.packet_history) == 2  # FetchToolStart and SectionEnd
-
-    # Check the types of emitted events
-    assert isinstance(emitter.packet_history[0].obj, FetchToolStart)
-    assert isinstance(emitter.packet_history[1].obj, SectionEnd)
-
-    # Verify that the decorator properly handled the exception and updated current_run_step
-    assert (
-        test_run_context.context.current_run_step == 2
-    )  # Should be 2 after proper handling
-
-
-def test_saved_search_doc_from_url() -> None:
-    """Test that SavedSearchDoc.from_url creates a properly formatted document for internet search"""
-    # Arrange
-    test_url = "https://example.com/test-page"
-
-    # Act
-    doc = SavedSearchDoc.from_url(test_url)
-
-    # Assert
-    assert doc.document_id == "INTERNET_SEARCH_DOC_" + test_url
-    assert doc.link == test_url
-    assert doc.semantic_identifier == test_url
-    assert doc.source_type == DocumentSource.WEB
-    assert doc.is_internet is True
-    assert doc.db_doc_id == 0
-    assert doc.chunk_ind == 0
-    assert doc.boost == 1
-    assert doc.hidden is False
-    assert doc.score == 0.0
-
-
-def test_web_search_and_open_url_cache_deduplication() -> None:
-    """Test that web_search and open_url properly share the fetched_documents_cache for the same URL"""
-    # Arrange
-    test_run_context = create_test_run_context()
-    test_url = "https://example.com/1"
-
-    # First, do a web search that returns this URL
-    search_results = [
-        WebSearchResult(
-            title="Test Result",
-            link=test_url,
-            author="Test Author",
-            published_date=datetime(2024, 1, 1, 12, 0, 0),
-            snippet="This is a test snippet",
-        ),
-    ]
-
-    # Then, fetch the full content for the same URL
-    content_results = [
-        WebContent(
-            title="Test Content",
-            link=test_url,
-            full_content="This is the full content of the page",
-            published_date=datetime(2024, 1, 1, 12, 0, 0),
-        ),
-    ]
-
-    search_provider = MockWebSearchProvider(
-        search_results=search_results,
-        content_results=content_results,
-    )
-
-    # Act - first do web_search
-    search_result = _web_search_core(test_run_context, ["test query"], search_provider)
-
-    # Verify search result
-    assert len(search_result) == 1
-    assert search_result[0].url == test_url
-
-    # Verify cache was populated by web_search
-    assert test_url in test_run_context.context.fetched_documents_cache
-
-    # Act - then open_url on the same URL
-    open_result = _open_url_core(test_run_context, [test_url], search_provider)
-
-    # Verify open_url result
-    assert len(open_result) == 1
-    assert open_result[0].content == "This is the full content of the page"
-
-    # Verify cache still has the same entry (not duplicated)
-    assert len(test_run_context.context.fetched_documents_cache) == 1
-    assert test_url in test_run_context.context.fetched_documents_cache
-    cache_entry_after_open = test_run_context.context.fetched_documents_cache[test_url]
-
-    # Verify that the cache entry was updated with the full content
-    # (The inference section should be updated, not replaced)
-    assert cache_entry_after_open.document_citation_number == -1

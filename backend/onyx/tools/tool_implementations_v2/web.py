@@ -40,13 +40,15 @@ from onyx.server.query_and_chat.streaming_models import SavedSearchDoc
 from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
-from onyx.tools.tool_implementations_v2.tool_result_models import LlmOpenUrlResult
-from onyx.tools.tool_implementations_v2.tool_result_models import LlmWebSearchResult
+from onyx.tools.tool_implementations_v2.tool_accounting import (
+    tool_accounting_function,
+)
+from onyx.tools.tool_result_models import LlmOpenUrlResult
+from onyx.tools.tool_result_models import LlmWebSearchResult
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 
 
-@tool_accounting
+@tool_accounting_function
 def _web_search_core(
     run_context: RunContextWrapper[ChatTurnContext],
     queries: list[str],
@@ -192,7 +194,7 @@ changing or evolving.
 """
 
 
-@tool_accounting
+@tool_accounting_function
 def _open_url_core(
     run_context: RunContextWrapper[ChatTurnContext],
     urls: Sequence[str],

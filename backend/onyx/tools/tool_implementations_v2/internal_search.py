@@ -23,15 +23,15 @@ from onyx.tools.tool_implementations.search.search_tool import (
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
-from onyx.tools.tool_implementations_v2.tool_result_models import (
-    LlmInternalSearchResult,
+from onyx.tools.tool_implementations_v2.tool_accounting import (
+    tool_accounting_function,
 )
+from onyx.tools.tool_result_models import LlmInternalSearchResult
 from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 
 
-@tool_accounting
+@tool_accounting_function
 def _internal_search_core(
     run_context: RunContextWrapper[ChatTurnContext],
     queries: list[str],

@@ -13,12 +13,12 @@ from onyx.chat.turn.models import ChatTurnContext
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.built_in_tools_v2 import BUILT_IN_TOOL_MAP_V2
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
-from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
 
 # Type alias for tools that need custom handling
 CustomOrMcpTool = Union[CustomTool, MCPTool]
@@ -29,7 +29,6 @@ def is_custom_or_mcp_tool(tool: Tool) -> bool:
     return isinstance(tool, CustomTool) or isinstance(tool, MCPTool)
 
 
-@tool_accounting
 async def _tool_run_wrapper(
     run_context: RunContextWrapper[ChatTurnContext], tool: Tool, json_string: str
 ) -> list[Any]:
@@ -37,7 +36,11 @@ async def _tool_run_wrapper(
     Wrapper function to adapt Tool.run() to FunctionTool.on_invoke_tool() signature.
     """
     args = json.loads(json_string) if json_string else {}
+
+    # Manually handle tool accounting (increment step)
+    run_context.context.current_run_step += 1
     index = run_context.context.current_run_step
+
     run_context.context.run_dependencies.emitter.emit(
         Packet(
             ind=index,
@@ -95,6 +98,16 @@ async def _tool_run_wrapper(
                 ),
             )
         )
+
+    # Emit section end and increment step (manually handle tool accounting cleanup)
+    run_context.context.run_dependencies.emitter.emit(
+        Packet(
+            ind=index,
+            obj=SectionEnd(type="section_end"),
+        )
+    )
+    run_context.context.current_run_step += 1
+
     return results
 
 
