@@ -15,10 +15,10 @@ distributed==2023.8.1
 fastapi==0.116.1
 fastapi-users==14.0.1
 fastapi-users-db-sqlalchemy==5.0.0
-fastmcp==2.11.3
+fastmcp==2.13.0
 filelock==3.15.4
 google-api-python-client==2.86.0
-google-cloud-aiplatform==1.121.0
+google-genai==1.52.0
 google-auth-httplib2==0.1.0
 google-auth-oauthlib==1.0.0
 # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
@@ -44,7 +44,7 @@ litellm==1.79.0
 lxml==5.3.0
 Mako==1.2.4
 markitdown[pdf, docx, pptx, xlsx, xls]==0.1.2
-mcp[cli]==1.12.4
+mcp[cli]==1.19.0
 msal==1.28.0
 nltk==3.9.1
 Office365-REST-Python-Client==2.5.9
@@ -53,7 +53,7 @@ openai==2.6.1
 openpyxl==3.0.10
 passlib==1.7.4
 playwright==1.55.0
-psutil==5.9.5
+psutil==7.1.3
 psycopg2-binary==2.9.9
 puremagic==1.28
 pyairtable==3.0.1

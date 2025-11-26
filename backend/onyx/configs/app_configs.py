@@ -754,8 +754,6 @@ BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or
 # Langfuse API credentials - if provided, Langfuse tracing will be enabled
 LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
-# Langfuse host URL (defaults to cloud instance)
-LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or "https://cloud.langfuse.com"
 
 TOKEN_BUDGET_GLOBALLY_ENABLED = (
     os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"
@@ -871,6 +869,21 @@ _API_KEY_HASH_ROUNDS_RAW = os.environ.get("API_KEY_HASH_ROUNDS")
 API_KEY_HASH_ROUNDS = (
     int(_API_KEY_HASH_ROUNDS_RAW) if _API_KEY_HASH_ROUNDS_RAW else None
 )
+
+#####
+# MCP Server Configs
+#####
+MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
+MCP_SERVER_PORT = int(os.environ.get("MCP_SERVER_PORT") or 8090)
+
+# CORS origins for MCP clients (comma-separated)
+# Local dev: "http://localhost:*"
+# Production: "https://trusted-client.com,https://another-client.com"
+MCP_SERVER_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("MCP_SERVER_CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 
 POD_NAME = os.environ.get("POD_NAME")

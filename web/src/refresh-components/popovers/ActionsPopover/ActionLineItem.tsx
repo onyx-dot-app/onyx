@@ -58,7 +58,7 @@ export default function ActionLineItem({
             if (onToggle && disabled) onToggle();
             onForceToggle();
           }}
-          forced={isForced}
+          selected={isForced}
           strikethrough={disabled}
           icon={Icon}
           rightChildren={

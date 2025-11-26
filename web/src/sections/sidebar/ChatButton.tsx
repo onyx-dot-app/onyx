@@ -34,7 +34,6 @@ import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import MenuButton from "@/refresh-components/buttons/MenuButton";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -48,6 +47,7 @@ import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Text from "@/refresh-components/texts/Text";
 import useAppFocus from "@/hooks/useAppFocus";
+import LineItem from "@/refresh-components/buttons/LineItem";
 
 // (no local constants; use shared constants/imports)
 
@@ -203,45 +203,45 @@ function ChatButtonInner({
   useEffect(() => {
     if (!showMoveOptions) {
       const popoverItems = [
-        <MenuButton
+        <LineItem
           key="share"
           icon={SvgShare}
           onClick={noProp(() => setShowShareModal(true))}
         >
           Share
-        </MenuButton>,
-        <MenuButton
+        </LineItem>,
+        <LineItem
           key="rename"
           icon={SvgEdit}
           onClick={noProp(() => setRenaming(true))}
         >
           Rename
-        </MenuButton>,
-        <MenuButton
+        </LineItem>,
+        <LineItem
           key="move"
           icon={SvgFolderIn}
           onClick={noProp(() => setShowMoveOptions(true))}
         >
           Move to Project
-        </MenuButton>,
+        </LineItem>,
         project && (
-          <MenuButton
+          <LineItem
             key="remove"
             icon={SvgFolder}
             onClick={noProp(() => handleRemoveFromProject())}
           >
             {`Remove from ${project.name}`}
-          </MenuButton>
+          </LineItem>
         ),
         null,
-        <MenuButton
+        <LineItem
           key="delete"
           icon={SvgTrash}
-          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
           danger
+          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
         >
           Delete
-        </MenuButton>,
+        </LineItem>,
       ];
       setPopoverItems(popoverItems);
     } else {
@@ -256,19 +256,19 @@ function ChatButtonInner({
           onSearch={setSearchTerm}
         />,
         ...availableProjects.map((targetProject) => (
-          <MenuButton
+          <LineItem
             key={targetProject.id}
             icon={SvgFolder}
             onClick={noProp(() => handleChatMove(targetProject))}
           >
             {targetProject.name}
-          </MenuButton>
+          </LineItem>
         )),
         // Show "Create New Project" option when no projects match the search
         ...(availableProjects.length === 0 && searchTerm.trim() !== ""
           ? [
               null,
-              <MenuButton
+              <LineItem
                 key="create-new"
                 icon={SvgFolderPlus}
                 onClick={noProp(() =>
@@ -281,7 +281,7 @@ function ChatButtonInner({
                 <Truncated text03 mainUiAction>
                   {searchTerm.trim()}
                 </Truncated>
-              </MenuButton>,
+              </LineItem>,
             ]
           : []),
       ];
