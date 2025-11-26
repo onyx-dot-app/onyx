@@ -91,7 +91,7 @@ class ImageShape(str, Enum):
 
 # override_kwargs is not supported for image generation tools
 class ImageGenerationTool(Tool[None]):
-    _NAME = "run_image_generation"
+    _NAME = "image_generation"
     _DESCRIPTION = (
         "NEVER use generate_image unless the user specifically requests an image."
     )
@@ -136,7 +136,7 @@ class ImageGenerationTool(Tool[None]):
         self,
         run_context: RunContextWrapper[Any],
         prompt: str,
-        shape: str,
+        shape: ImageShape | None = None,
     ) -> list[GeneratedImage]:
         """Core image generation logic for run_v2."""
         index = run_context.context.current_run_step
@@ -152,8 +152,10 @@ class ImageGenerationTool(Tool[None]):
 
         # Prepare tool arguments
         tool_args = {"prompt": prompt}
-        if shape != "square":  # Only include shape if it's not the default
-            tool_args["shape"] = shape
+        if (
+            shape and shape != ImageShape.SQUARE
+        ):  # Only include shape if it's not the default
+            tool_args["shape"] = str(shape)
 
         # Run the actual image generation tool with heartbeat handling
         generated_images: list[GeneratedImage] = []
@@ -312,23 +314,22 @@ class ImageGenerationTool(Tool[None]):
 
         return None
 
+    # Since image generation is a stopping tool, we need to re-raise the error
+    # in the agent loop since the loop can't recover if the tool fails.
+    def failure_error_function(self, error: Exception) -> None:
+        raise error
+
     def run_v2(
         self,
         run_context: RunContextWrapper[Any],
-        *args: Any,
-        **kwargs: Any,
+        prompt: str,
+        shape: ImageShape | None = None,
     ) -> str:
         """Run image generation via the v2 implementation.
 
         Returns:
             JSON string containing a success message
         """
-        prompt = kwargs.get("prompt")
-        if not prompt:
-            raise ValueError("prompt is required for image generation")
-
-        shape = kwargs.get("shape", "square")
-
         # Call the core implementation
         generated_images = self._image_generation_core(
             run_context,

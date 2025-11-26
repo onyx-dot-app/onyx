@@ -44,7 +44,7 @@ from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 logger = setup_logger()
 
 # TODO: Align on separation of Tools and SubAgents. Right now, we're only keeping this around for backwards compatibility.
-QUERY_FIELD = "query"
+QUERY_FIELD = "queries"
 _GENERIC_ERROR_MESSAGE = "WebSearchTool should only be used by the Deep Research Agent, not via tool calling."
 _OPEN_URL_GENERIC_ERROR_MESSAGE = (
     "OpenUrlTool should only be used by the Deep Research Agent, not via tool calling."
@@ -52,7 +52,7 @@ _OPEN_URL_GENERIC_ERROR_MESSAGE = (
 
 
 class WebSearchTool(Tool[None]):
-    _NAME = "run_web_search"
+    _NAME = "web_search"
     _DESCRIPTION = "Search the web for information."
     _DISPLAY_NAME = "Web Search"
 
@@ -93,7 +93,8 @@ class WebSearchTool(Tool[None]):
                     "type": "object",
                     "properties": {
                         QUERY_FIELD: {
-                            "type": "string",
+                            "type": "array",
+                            "items": {"type": "string"},
                             "description": "What to search for",
                         },
                     },
@@ -241,14 +242,8 @@ class WebSearchTool(Tool[None]):
     def run_v2(
         self,
         run_context: RunContextWrapper[Any],
-        *args: Any,
-        **kwargs: Any,
+        queries: list[str],
     ) -> str:
-        """Run web search using the v2 implementation"""
-        queries = kwargs.get("queries", [])
-        if not queries:
-            raise ValueError("queries parameter is required")
-
         search_provider = get_default_provider()
         if search_provider is None:
             raise ValueError("No search provider found")

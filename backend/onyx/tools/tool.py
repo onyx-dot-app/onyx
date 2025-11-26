@@ -111,6 +111,15 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
     ) -> Any:
         raise NotImplementedError
 
+    def failure_error_function(self, error: Exception) -> str:
+        """
+        This function defines what is returned to the LLM when the tool fails.
+        By default, it returns a generic error message.
+        Subclasses may override to provide a more specific error message, or re-raise the error
+        for a hard error in the framework.
+        """
+        return f"Error: {str(error)}"
+
     @abc.abstractmethod
     def run(
         self, override_kwargs: OVERRIDE_T | None = None, **llm_kwargs: Any

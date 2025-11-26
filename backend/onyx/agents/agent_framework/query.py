@@ -1,4 +1,5 @@
 import json
+import traceback
 from collections.abc import Callable
 from collections.abc import Iterator
 from collections.abc import Sequence
@@ -312,11 +313,15 @@ def query(
                             _error_tracing.attach_error_to_current_span(
                                 SpanError(
                                     message="Error running tool",
-                                    data={"tool_name": tool.name, "error": str(e)},
+                                    data={
+                                        "tool_name": tool.name,
+                                        "error": str(e),
+                                        "stack_trace": traceback.format_exc(),
+                                    },
                                 )
                             )
                             # Treat the error as the tool output so the framework can continue
-                            error_output = f"Error: {str(e)}"
+                            error_output = tool.failure_error_function(e)
                             tool_outputs[call_id] = error_output
                             output = error_output
 

@@ -49,9 +49,7 @@ _OPEN_URL_GENERIC_ERROR_MESSAGE = (
 
 class OpenUrlTool(Tool[None]):
     _NAME = "open_url"
-    _DESCRIPTION = (
-        "Fetch and extract full content from web pages. Never call this tool."
-    )
+    _DESCRIPTION = "Fetch and extract full content from web pages."
     _DISPLAY_NAME = "Open URL"
 
     def __init__(self, tool_id: int) -> None:

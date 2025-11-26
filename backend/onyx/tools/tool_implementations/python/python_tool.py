@@ -311,7 +311,7 @@ class PythonTool(Tool[None]):
     """
 
     _NAME = "python"
-    _DESCRIPTION = "Execute Python code in a secure, isolated environment. Never call this tool directly."
+    _DESCRIPTION = "Execute Python code in a secure, isolated environment."
     # in the UI, call it `Code Interpreter` since this is a well known term for this tool
     _DISPLAY_NAME = "Code Interpreter"
 
