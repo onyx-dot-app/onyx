@@ -7,8 +7,11 @@ from onyx.db.llm import fetch_existing_llm_providers_for_user
 from onyx.db.persona import get_personas_for_user
 from onyx.db.telegram import get_user_by_telegram_user_id, \
     edit_user_telegram_settings_persona, edit_user_telegram_settings_model, get_user_telegram_settings
+from onyx.utils.logger import setup_logger
 from telegram.keyboard.settings import MENU_BUTTONS_TXT, settings_constructor_for_personas, settings_constructor_for_llm_providers
 from telegram.utils.database import with_session
+
+logger = setup_logger()
 
 
 def handler(bot: AsyncTeleBot):
@@ -52,14 +55,8 @@ def handler(bot: AsyncTeleBot):
         current_persona_id = user_settings.persona_id if user_settings else None
         
         keyboard = settings_constructor_for_personas(personas, current_persona_id=current_persona_id)
-        
-        # Формируем сообщение с текущим ассистентом
-        if current_persona_id:
-            current_persona = next((p for p in personas if p.id == current_persona_id), None)
-            msg = f"Выберите ассистента\n\nТекущий ассистент: {current_persona.name}"
-        else:
-            msg = "Выберите Ассистента:"
 
+        msg = "Выберите ассистента"
         await bot.send_message(chat_id=message.from_user.id, text=msg, reply_markup=keyboard)
 
     @bot.callback_query_handler(
@@ -68,19 +65,30 @@ def handler(bot: AsyncTeleBot):
     )
     @with_session
     async def change_persona(call: CallbackQuery, session: Session, state: StateContext):
-        # Парсим callback_data: persona_{id}_{prompt_id}_{name}
-        parts = call.data.split("_", 3)  # Разбиваем максимум на 3 части, чтобы имя осталось целым
-        persona_id = int(parts[1])
-        prompt_id = int(parts[2])
-        persona_name = parts[3] if len(parts) > 3 else f"id={persona_id}"
+        persona_id = int(call.data.split("_")[1])
+        prompt_id = int(call.data.split("_")[2])
 
         edit_user_telegram_settings_persona(call.from_user.id, persona_id, prompt_id, session)
+
+        # Редактируем существующее сообщение с новой клавиатурой
+        try:
+            user_by_token = get_user_by_telegram_user_id(call.from_user.id, session)
+            personas = get_personas_for_user(user_by_token, session, get_editable=False)
+            keyboard = settings_constructor_for_personas(personas, current_persona_id=persona_id)
+
+            await bot.edit_message_reply_markup(
+                chat_id=call.from_user.id,
+                message_id=call.message.message_id,
+                reply_markup=keyboard
+            )
+        except Exception as e:
+            logger.error("Ошибка при редактировании клавиатуры со списком ассистентов: %s", str(e))
 
         # Очищаем состояние чата, чтобы следующее сообщение создало новую сессию
         await state.delete()
         await bot.answer_callback_query(call.id)
 
-        msg = f"Вы успешно переключились на другого ассистента!\n\nТекущий ассистент: {persona_name}"
+        msg = f"Вы успешно переключились на другого ассистента!"
         await bot.send_message(call.from_user.id, msg)
 
     @bot.callback_query_handler(
@@ -95,6 +103,20 @@ def handler(bot: AsyncTeleBot):
         }
 
         edit_user_telegram_settings_model(call.from_user.id, model, session)
+
+        # Редактируем существующее сообщение с новой клавиатурой
+        try:
+            user_by_token = get_user_by_telegram_user_id(call.from_user.id, session)
+            llm_providers = fetch_existing_llm_providers_for_user(session, user_by_token)
+            keyboard = settings_constructor_for_llm_providers(llm_providers, current_model=model)
+
+            await bot.edit_message_reply_markup(
+                chat_id=call.from_user.id,
+                message_id=call.message.message_id,
+                reply_markup=keyboard
+            )
+        except Exception as e:
+            logger.error("Ошибка при редактировании клавиатуры со списком LLM-моделей: %s", str(e))
 
         await bot.answer_callback_query(call.id)
         msg = f"Вы успешно сменили LLM-модель!\n\nТекущая LLM-модель: {model['model_version']}"

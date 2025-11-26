@@ -25,7 +25,7 @@ def settings_constructor_for_personas(
         
         button = types.InlineKeyboardButton(
             text=button_text,
-            callback_data=f"persona_{persona.id}_{persona.prompts[0].id}_{persona.name}",
+            callback_data=f"persona_{persona.id}_{persona.prompts[0].id}",
         )
         keyboard.add(button)
 
