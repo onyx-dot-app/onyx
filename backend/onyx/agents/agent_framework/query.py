@@ -333,8 +333,12 @@ def query(
                         ),
                     )
                 else:
-                    not_found_output = f"Tool {name} not found"
-                    tool_outputs[call_id] = _serialize_tool_output(not_found_output)
+                    with function_span(f"tool_not_found_{name}") as span_fn:
+                        not_found_output = f"Tool {name} not found"
+                        tool_outputs[call_id] = _serialize_tool_output(not_found_output)
+                        span_fn.span_data.input = arguments_str
+                        span_fn.span_data.output = not_found_output
+
                     yield RunItemStreamEvent(
                         type="tool_call_output",
                         details=ToolCallOutputStreamItem(

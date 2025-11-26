@@ -121,16 +121,13 @@ def _run_agent_loop(
         ctx.current_input_tokens = _extract_tokens_from_messages(current_messages)
 
         if not available_tools:
-            tool_choice = None
+            tool_choice = "none"
         else:
             tool_choice = (
                 force_use_tool.tool_name
-                if iteration_count == 0
-                and force_use_tool
-                and force_use_tool.force_use
-                and available_tools
-                else None
-            ) or "auto"
+                if iteration_count == 0 and force_use_tool and force_use_tool.force_use
+                else "auto"
+            )
         query_result = query(
             llm_with_default_settings=dependencies.llm,
             messages=current_messages,
