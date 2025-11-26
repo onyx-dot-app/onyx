@@ -378,22 +378,24 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
       <div
         ref={ref}
         className={cn(
-          "relative z-10 flex flex-col gap-2 p-4",
+          "relative z-10 flex flex-col gap-4 p-4",
           withBottomShadow && "shadow-01",
           className
         )}
         {...props}
       >
-        <div className="flex flex-row items-center justify-between">
-          <Icon className={"w-[1.5rem] h-[1.5rem] stroke-text-04"} />
-          <IconButton icon={SvgX} internal onClick={onClose} />
+        <div className="flex flex-col">
+          <div className="flex flex-row items-center justify-between">
+            <Icon className={"w-[1.5rem] h-[1.5rem] stroke-text-04"} />
+            <IconButton icon={SvgX} internal onClick={onClose} />
+          </div>
+          <Text headingH3>{title}</Text>
+          {description && (
+            <Text secondaryBody text03>
+              {description}
+            </Text>
+          )}
         </div>
-        <Text headingH3>{title}</Text>
-        {description && (
-          <Text secondaryBody text03>
-            {description}
-          </Text>
-        )}
         {children}
       </div>
     );
