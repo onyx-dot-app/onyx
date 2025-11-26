@@ -40,29 +40,56 @@ def manage_sync_streaming(
     graph_input: GraphInput,
 ) -> Iterable[StreamEvent]:
     message_id = config.persistence.message_id if config.persistence else None
+    logger.info("manage_sync_streaming start thread_id=%s", message_id)
     callbacks: list[CallbackHandler] = []
+    langfuse_client: Langfuse | None = None
+    langfuse_trace = None
+    langfuse_host = (
+        os.environ.get("LANGFUSE_HOST")
+        or os.environ.get("LANGFUSE_BASE_URL")
+        or "https://cloud.langfuse.com"
+    )
     if LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY:
-        langfuse_host = (
-            os.environ.get("LANGFUSE_HOST")
-            or os.environ.get("LANGFUSE_BASE_URL")
-            or "https://cloud.langfuse.com"
-        )
         try:
-            client = Langfuse(
+            langfuse_client = Langfuse(
                 public_key=LANGFUSE_PUBLIC_KEY,
                 secret_key=LANGFUSE_SECRET_KEY,
                 host=langfuse_host,
             )
+            trace_id = str(message_id) if message_id is not None else None
             try:
-                callbacks.append(CallbackHandler(langfuse_client=client))  # type: ignore[arg-type]
+                langfuse_trace = langfuse_client.trace(
+                    id=trace_id,
+                    name="agent-search",
+                    input=getattr(graph_input, "question", None)
+                    or getattr(graph_input, "log_messages", None),
+                    metadata={"thread_id": message_id},
+                )
+                logger.info(
+                    "Langfuse trace created thread_id=%s trace_id=%s host=%s",
+                    message_id,
+                    trace_id,
+                    langfuse_host,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to create Langfuse trace thread_id=%s: %s",
+                    message_id,
+                    exc,
+                )
+            try:
+                callbacks.append(
+                    CallbackHandler(langfuse_client=langfuse_client)
+                )  # type: ignore[arg-type]
             except TypeError:
                 callbacks.append(
                     CallbackHandler()
                 )  # pragma: no cover - fallback for older signature
             logger.info(
-                "Langfuse callback enabled for thread_id=%s host=%s",
+                "Langfuse callback enabled for thread_id=%s host=%s callback_class=%s",
                 message_id,
                 langfuse_host,
+                callbacks[-1].__class__.__name__,
             )
         except Exception as exc:  # pragma: no cover - defensive guard
             logger.warning(
@@ -72,15 +99,49 @@ def manage_sync_streaming(
             )
     else:
         logger.info("Langfuse callback disabled; missing credentials")
-    for event in compiled_graph.stream(
-        stream_mode="custom",
-        input=graph_input,
-        config={
-            "metadata": {"config": config, "thread_id": str(message_id)},
-            "callbacks": callbacks,  # type: ignore
-        },
-    ):
-        yield cast(CustomStreamEvent, event)
+    if not callbacks:
+        logger.debug(
+            "No Langfuse callbacks attached for thread_id=%s; callbacks list empty",
+            message_id,
+        )
+    events_emitted = 0
+    try:
+        for event in compiled_graph.stream(
+            stream_mode="custom",
+            input=graph_input,
+            config={
+                "metadata": {"config": config, "thread_id": str(message_id)},
+                "callbacks": callbacks,  # type: ignore
+            },
+        ):
+            events_emitted += 1
+            yield cast(CustomStreamEvent, event)
+    finally:
+        logger.info(
+            "manage_sync_streaming end thread_id=%s events=%s callbacks=%s trace_created=%s",
+            message_id,
+            events_emitted,
+            bool(callbacks),
+            bool(langfuse_trace),
+        )
+        if langfuse_trace:
+            try:
+                langfuse_trace.update(output="completed")
+            except Exception as exc:
+                logger.warning(
+                    "Failed to update Langfuse trace thread_id=%s: %s",
+                    message_id,
+                    exc,
+                )
+        if langfuse_client:
+            try:
+                langfuse_client.flush()
+            except Exception as exc:
+                logger.warning(
+                    "Failed to flush Langfuse client thread_id=%s: %s",
+                    message_id,
+                    exc,
+                )
 
 
 def run_graph(

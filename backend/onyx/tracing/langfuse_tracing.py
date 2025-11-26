@@ -20,11 +20,16 @@ def setup_langfuse_if_creds_available() -> None:
     from openinference.instrumentation.openai_agents import OpenAIAgentsInstrumentor
 
     OpenAIAgentsInstrumentor().instrument()
-    logger.info(
-        "Langfuse tracing enabled with host=%s",
+    langfuse_host = (
         os.environ.get("LANGFUSE_HOST")
         or os.environ.get("LANGFUSE_BASE_URL")
-        or "https://cloud.langfuse.com",
+        or "https://cloud.langfuse.com"
+    )
+    logger.info(
+        "Langfuse tracing enabled with host=%s pk_present=%s sk_present=%s",
+        langfuse_host,
+        bool(LANGFUSE_PUBLIC_KEY),
+        bool(LANGFUSE_SECRET_KEY),
     )
     # TODO: this is how the tracing processor will look once we migrate over to new framework
     # config = TraceConfig()
