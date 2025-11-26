@@ -1,6 +1,6 @@
 "use client";
 
-import * as React from "react";
+import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
 import { SvgProps } from "@/icons";
@@ -352,148 +352,54 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * ```
  */
 interface ModalHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+  icon: React.FunctionComponent<SvgProps>;
+  title: string;
+  description?: string;
+  onClose?: () => void;
   withBottomShadow?: boolean;
 }
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
-  ({ withBottomShadow = false, className, children, ...props }, ref) => {
+  (
+    {
+      withBottomShadow = false,
+      icon: Icon,
+      title,
+      description,
+      onClose,
+      className,
+      children,
+      ...props
+    },
+    ref
+  ) => {
+    const { closeButtonRef } = useModalContext();
+
     return (
       <div
         ref={ref}
         className={cn(
-          "relative z-10",
+          "relative z-10 flex flex-col gap-2 p-4",
           withBottomShadow && "shadow-01",
           className
         )}
         {...props}
       >
+        <div className="flex flex-row items-center justify-between">
+          <Icon className={"w-[1.5rem] h-[1.5rem] stroke-text-04"} />
+          <IconButton icon={SvgX} internal onClick={onClose} />
+        </div>
+        <Text headingH3>{title}</Text>
+        {description && (
+          <Text secondaryBody text03>
+            {description}
+          </Text>
+        )}
         {children}
       </div>
     );
   }
 );
 ModalHeader.displayName = "ModalHeader";
-
-/**
- * Modal Icon Component
- *
- * Icon component for modal header.
- *
- * @example
- * ```tsx
- * <Modal.Icon icon={SvgWarning} />
- * <Modal.Icon icon={SvgFile} className="w-8 h-8 stroke-blue-500" />
- * ```
- */
-interface ModalIconProps extends React.HTMLAttributes<HTMLDivElement> {
-  icon: React.FunctionComponent<SvgProps>;
-}
-const ModalIcon = React.forwardRef<HTMLDivElement, ModalIconProps>(
-  ({ icon: Icon, className, ...props }, ref) => {
-    return (
-      <div ref={ref} {...props}>
-        <Icon
-          className={cn("w-[1.5rem] h-[1.5rem] stroke-text-04", className)}
-        />
-      </div>
-    );
-  }
-);
-ModalIcon.displayName = "ModalIcon";
-
-/**
- * Modal Close Button Component
- *
- * Absolutely positioned close button. Place inside Modal.Header.
- *
- * @example
- * ```tsx
- * <Modal.Content>
- *   <Modal.Header>
- *     <Modal.CloseButton />
- *   </Modal.Header>
- *   ...
- * </Modal.Content>
- *
- * // Custom positioning
- * <Modal.CloseButton className="top-2 right-2" />
- * ```
- */
-interface ModalCloseButtonProps extends React.HTMLAttributes<HTMLDivElement> {
-  onClose?: () => void;
-}
-const ModalCloseButton = React.forwardRef<
-  HTMLDivElement,
-  ModalCloseButtonProps
->(({ onClose, className, ...props }, ref) => {
-  const { closeButtonRef } = useModalContext();
-
-  return (
-    <div
-      ref={ref}
-      className={cn("absolute top-4 right-4 z-20", className)}
-      {...props}
-    >
-      <div
-        ref={closeButtonRef as React.RefObject<HTMLDivElement>}
-        tabIndex={-1}
-        className="rounded-12 !outline-none !border-[3px] !border-transparent focus:!border-action-link-05 transition-colors duration-200"
-      >
-        <ModalClose asChild>
-          <IconButton icon={SvgX} internal onClick={onClose} />
-        </ModalClose>
-      </div>
-    </div>
-  );
-});
-ModalCloseButton.displayName = "ModalCloseButton";
-
-/**
- * Modal Title Component
- *
- * Title wrapper with default styling. Fully customizable via className.
- * Uses Radix Dialog.Title for accessibility.
- *
- * @example
- * ```tsx
- * <Modal.Title>Confirm Action</Modal.Title>
- * <Modal.Title className="text-4xl font-bold">Custom Styled Title</Modal.Title>
- * ```
- */
-const ModalTitle = React.forwardRef<
-  React.ComponentRef<typeof DialogPrimitive.Title>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
->(({ className, children, ...props }, ref) => (
-  <DialogPrimitive.Title ref={ref} asChild {...props}>
-    <Text headingH3 className={cn("w-full text-left", className)}>
-      {children}
-    </Text>
-  </DialogPrimitive.Title>
-));
-ModalTitle.displayName = DialogPrimitive.Title.displayName;
-
-/**
- * Modal Description Component
- *
- * Description wrapper with default styling. Fully customizable via className.
- * Uses Radix Dialog.Description for accessibility.
- *
- * @example
- * ```tsx
- * <Modal.Description>Are you sure you want to continue?</Modal.Description>
- * <Modal.Description className="text-lg">Custom styled description</Modal.Description>
- * ```
- */
-const ModalDescription = React.forwardRef<
-  React.ComponentRef<typeof DialogPrimitive.Description>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
->(({ className, children, ...props }, ref) => (
-  <DialogPrimitive.Description ref={ref} asChild {...props}>
-    <Text secondaryBody text03 className={className}>
-      {children}
-    </Text>
-  </DialogPrimitive.Description>
-));
-ModalDescription.displayName = DialogPrimitive.Description.displayName;
 
 /**
  * Modal Body Component
@@ -569,10 +475,6 @@ export default Object.assign(ModalRoot, {
   Overlay: ModalOverlay,
   Content: ModalContent,
   Header: ModalHeader,
-  Icon: ModalIcon,
-  CloseButton: ModalCloseButton,
-  Title: ModalTitle,
-  Description: ModalDescription,
   Body: ModalBody,
   Footer: ModalFooter,
 });
