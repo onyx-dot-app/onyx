@@ -140,3 +140,23 @@ export async function updateMCPServer(
 
   return await response.json();
 }
+
+/**
+ * Update the status of an MCP server
+ */
+export async function updateMCPServerStatus(
+  serverId: number,
+  status: string
+): Promise<void> {
+  const response = await fetch(
+    `/api/admin/mcp/server/${serverId}/status?status=${status}`,
+    {
+      method: "PATCH",
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to update MCP server status");
+  }
+}

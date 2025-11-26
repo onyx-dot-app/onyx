@@ -1,1 +1,5 @@
-export type MCPActionStatus = "connected" | "pending" | "disconnected";
+export type MCPActionStatus =
+  | "connected"
+  | "pending"
+  | "disconnected"
+  | "fetching";

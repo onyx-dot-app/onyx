@@ -28,6 +28,7 @@ import {
 import { PerUserAuthConfig } from "./PerUserAuthConfig";
 import { createMCPServer } from "@/lib/tools/edit";
 import { MCPServerWithStatus } from "./types";
+import { updateMCPServerStatus } from "@/lib/mcpService";
 
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServerWithStatus | null;
@@ -137,12 +138,7 @@ export default function MCPAuthenticationModal({
 
       // Step 2: Update status to AWAITING_AUTH after successful config save
       if (authType === MCPAuthenticationType.OAUTH) {
-        await fetch(
-          `/api/admin/mcp/server/${mcpServer.id}/status?status=AWAITING_AUTH`,
-          {
-            method: "PATCH",
-          }
-        );
+        await updateMCPServerStatus(mcpServer.id, "AWAITING_AUTH");
       }
 
       // Step 3: For OAuth, initiate the OAuth flow
@@ -156,7 +152,7 @@ export default function MCPAuthenticationModal({
             server_id: mcpServer.id.toString(),
             oauth_client_id: values.oauth_client_id,
             oauth_client_secret: values.oauth_client_secret,
-            return_path: "/admin/mcp-actions/?server_id=" + mcpServer.id,
+            return_path: `/admin/mcp-actions/?server_id=${mcpServer.id}&trigger_fetch=true`,
             include_resource_param: true,
           }),
         });
@@ -169,8 +165,8 @@ export default function MCPAuthenticationModal({
         const { oauth_url } = await oauthResponse.json();
         window.location.href = oauth_url;
       } else {
-        // For non-OAuth authentication, redirect to the page with server_id
-        window.location.href = `/admin/mcp-actions/?server_id=${mcpServer.id}`;
+        // For non-OAuth authentication, redirect to the page with server_id and trigger_fetch
+        window.location.href = `/admin/mcp-actions/?server_id=${mcpServer.id}&trigger_fetch=true`;
         toggle(false);
       }
     } catch (error) {

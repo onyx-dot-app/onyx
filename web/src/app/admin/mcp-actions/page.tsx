@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import PageHeader from "@/refresh-components/headers/PageHeader";
 import SvgActions from "@/icons/actions";
@@ -8,82 +8,71 @@ import { Separator } from "@/components/ui/separator";
 import Actionbar from "@/sections/actions/Actionbar";
 import MCPActionsList from "./MCPActionsList";
 import AddMCPServerModal from "./AddMCPServerModal";
-import { refreshMCPServerTools } from "@/lib/mcpService";
+import { refreshMCPServerTools, updateMCPServerStatus } from "@/lib/mcpService";
 import { MCPActionsProvider, useMCPActions } from "./MCPActionsContext";
 
 function MCPActionsPageContent() {
   const {
     mcpServers,
     isLoading,
+    fetchingToolsServerIds,
     popup,
     setPopup,
     mutateMcpServers,
-    toolsFetchingServerIds,
-    setToolsFetchingServerIds,
     manageServerModal,
     setServerToManage,
   } = useMCPActions();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [isFetchingTools, setIsFetchingTools] = useState(false);
 
-  // Handle OAuth callback - fetch tools when server_id is present
   useEffect(() => {
     const serverId = searchParams.get("server_id");
+    const triggerFetch = searchParams.get("trigger_fetch");
 
-    // Only process if we have a server_id and haven't processed this one yet
+    // Only process if we have a server_id and trigger_fetch flag
     if (
       serverId &&
-      !toolsFetchingServerIds.includes(serverId) &&
-      !isFetchingTools
+      triggerFetch === "true" &&
+      !fetchingToolsServerIds.includes(parseInt(serverId))
     ) {
-      setToolsFetchingServerIds([...toolsFetchingServerIds, serverId]);
+      const serverIdInt = parseInt(serverId);
 
-      const fetchToolsAfterOAuth = async () => {
-        setIsFetchingTools(true);
+      const handleFetchingTools = async () => {
         try {
-          await fetch(
-            `/api/admin/mcp/server/${serverId}/status?status=CONNECTED`,
-            {
-              method: "PATCH",
-            }
-          );
+          await updateMCPServerStatus(serverIdInt, "FETCHING_TOOLS");
 
           await mutateMcpServers();
 
-          // Refresh tools for this server (will be cached by SWR for when user expands)
-          await refreshMCPServerTools(parseInt(serverId));
+          router.replace("/admin/mcp-actions");
+
+          await refreshMCPServerTools(serverIdInt);
+
           setPopup({
-            message: "Successfully connected to MCP server and fetched tools",
+            message: "Successfully connected and fetched tools",
             type: "success",
           });
+
+          await mutateMcpServers();
         } catch (error) {
-          console.error("Failed to fetch tools after OAuth:", error);
+          console.error("Failed to fetch tools:", error);
           setPopup({
             message: `Failed to fetch tools: ${
               error instanceof Error ? error.message : "Unknown error"
             }`,
             type: "error",
           });
-        } finally {
-          router.replace("/admin/mcp-actions");
-          setToolsFetchingServerIds((prev) =>
-            prev.filter((id) => id !== serverId)
-          );
-          setIsFetchingTools(false);
+          await mutateMcpServers();
         }
       };
 
-      fetchToolsAfterOAuth();
+      handleFetchingTools();
     }
   }, [
     searchParams,
-    isFetchingTools,
+    router,
+    fetchingToolsServerIds,
     mutateMcpServers,
     setPopup,
-    router,
-    toolsFetchingServerIds,
-    setToolsFetchingServerIds,
   ]);
 
   const hasActions = mcpServers.length > 0;

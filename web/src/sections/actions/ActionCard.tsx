@@ -56,9 +56,6 @@ export interface ActionCardProps {
 
   // Optional styling
   className?: string;
-
-  // Whether the tools are still being fetched
-  isInitialToolsFetching?: boolean;
 }
 
 // Main Component
@@ -79,7 +76,6 @@ export default function ActionCard({
   onToolToggle,
   onRefreshTools,
   onDisableAllTools,
-  isInitialToolsFetching,
   className,
 }: ActionCardProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
@@ -93,7 +89,6 @@ export default function ActionCard({
   });
 
   const isConnected = status === "connected";
-  const isPending = status === "pending";
   const isDisconnected = status === "disconnected";
 
   // Filter tools based on search query
@@ -194,7 +189,7 @@ export default function ActionCard({
             onToolToggle={(toolId, enabled) =>
               onToolToggle?.(serverId, toolId, enabled, mutate)
             }
-            isInitialToolsFetching={isInitialToolsFetching || isLoading}
+            isFetching={isLoading}
           />
         </div>
       )}

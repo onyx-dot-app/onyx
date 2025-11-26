@@ -20,7 +20,7 @@ interface ToolsListProps {
   searchQuery?: string;
   onToolToggle?: (toolId: string, enabled: boolean) => void;
   className?: string;
-  isInitialToolsFetching?: boolean;
+  isFetching?: boolean;
 }
 
 const ToolsList: React.FC<ToolsListProps> = ({
@@ -28,7 +28,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
   searchQuery,
   onToolToggle,
   className,
-  isInitialToolsFetching,
+  isFetching,
 }) => {
   return (
     <div
@@ -37,7 +37,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
         className
       )}
     >
-      {isInitialToolsFetching ? (
+      {isFetching ? (
         // Show 5 skeleton items while loading
         <>
           {[...Array(5)].map((_, index) => (

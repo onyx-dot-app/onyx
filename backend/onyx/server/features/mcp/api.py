@@ -1127,6 +1127,14 @@ def get_mcp_server_tools_snapshots(
     if source == "mcp":
         # Discover tools from MCP server and sync to DB
         _list_mcp_tools_by_id(server_id, db, True, user)
+
+        # Successfully discovered tools, update status to CONNECTED
+        update_mcp_server__no_commit(
+            server_id=server_id,
+            db_session=db,
+            status=MCPServerStatus.CONNECTED,
+        )
+        db.commit()
     elif source != "db":
         raise HTTPException(
             status_code=400,

@@ -15,7 +15,6 @@ export default function MCPActionsList() {
     serverToDisconnect,
     isDisconnecting,
     showSharedOverlay,
-    toolsFetchingServerIds,
     handleDisconnect,
     handleManage,
     handleEdit,
@@ -38,6 +37,8 @@ export default function MCPActionsList() {
       server.status === "CREATED"
     ) {
       return "pending";
+    } else if (server.status === "FETCHING_TOOLS") {
+      return "fetching";
     }
     return "disconnected";
   };
@@ -76,9 +77,6 @@ export default function MCPActionsList() {
               onToolToggle={handleToolToggle}
               onRefreshTools={handleRefreshTools}
               onDisableAllTools={handleDisableAllTools}
-              isInitialToolsFetching={toolsFetchingServerIds.includes(
-                server.id.toString()
-              )}
             />
           );
         })}

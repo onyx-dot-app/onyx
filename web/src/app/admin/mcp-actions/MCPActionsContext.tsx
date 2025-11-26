@@ -12,35 +12,34 @@ import useSWR, { KeyedMutator } from "swr";
 import { MCPServersResponse, ToolSnapshot } from "@/lib/tools/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { usePopup, PopupSpec } from "@/components/admin/connectors/Popup";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import {
+  useCreateModal,
+  ModalCreationInterface,
+} from "@/refresh-components/contexts/ModalContext";
 import {
   deleteMCPServer,
   refreshMCPServerTools,
   updateToolStatus,
   disableAllServerTools,
+  updateMCPServerStatus,
 } from "@/lib/mcpService";
 import { MCPServerWithStatus } from "./types";
-
-interface ModalControls {
-  isOpen: boolean;
-  toggle: (open: boolean) => void;
-  Provider: React.FC<{ children: React.ReactNode }>;
-}
 
 interface MCPActionsContextValue {
   // Data
   mcpServers: MCPServerWithStatus[];
   mutateMcpServers: KeyedMutator<MCPServersResponse>;
   isLoading: boolean;
+  fetchingToolsServerIds: number[];
 
   // Notifications
   popup: React.ReactElement | null;
   setPopup: (spec: PopupSpec) => void;
 
   // Modal states
-  authModal: ModalControls;
-  disconnectModal: ModalControls;
-  manageServerModal: ModalControls;
+  authModal: ModalCreationInterface;
+  disconnectModal: ModalCreationInterface;
+  manageServerModal: ModalCreationInterface;
 
   // Selected servers
   selectedServer: MCPServerWithStatus | null;
@@ -83,8 +82,6 @@ interface MCPActionsContextValue {
   // Other state
   showSharedOverlay: boolean;
   isDisconnecting: boolean;
-  toolsFetchingServerIds: string[];
-  setToolsFetchingServerIds: React.Dispatch<React.SetStateAction<string[]>>;
   onServerCreated: (server: MCPServerWithStatus) => void;
 }
 
@@ -110,8 +107,8 @@ export function MCPActionsProvider({
     useState<MCPServerWithStatus | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showSharedOverlay, setShowSharedOverlay] = useState(false);
-  const [toolsFetchingServerIds, setToolsFetchingServerIds] = useState<
-    string[]
+  const [fetchingToolsServerIds, setFetchingToolsServerIds] = useState<
+    number[]
   >([]);
 
   // Fetch MCP servers
@@ -129,6 +126,15 @@ export function MCPActionsProvider({
     [mcpData?.mcp_servers]
   );
   const isLoading = isMcpLoading;
+
+  useEffect(() => {
+    if (mcpServers) {
+      const fetchingIds = mcpServers
+        .filter((server) => server.status === "FETCHING_TOOLS")
+        .map((server) => server.id);
+      setFetchingToolsServerIds(fetchingIds);
+    }
+  }, [mcpServers]);
 
   // Track if any modal is open to manage the shared overlay
   useEffect(() => {
@@ -153,16 +159,7 @@ export function MCPActionsProvider({
 
     setIsDisconnecting(true);
     try {
-      const response = await fetch(
-        `/api/admin/mcp/server/${serverToDisconnect.id}/status?status=DISCONNECTED`,
-        {
-          method: "PATCH",
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to disconnect MCP server");
-      }
+      await updateMCPServerStatus(serverToDisconnect.id, "DISCONNECTED");
 
       setPopup({
         message: "MCP Server disconnected successfully",
@@ -276,16 +273,7 @@ export function MCPActionsProvider({
   const handleReconnect = useCallback(
     async (serverId: number) => {
       try {
-        const response = await fetch(
-          `/api/admin/mcp/server/${serverId}/status?status=CONNECTED`,
-          {
-            method: "PATCH",
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to reconnect MCP server");
-        }
+        await updateMCPServerStatus(serverId, "CONNECTED");
 
         setPopup({
           message: "MCP Server reconnected successfully",
@@ -452,7 +440,7 @@ export function MCPActionsProvider({
       mcpServers,
       mutateMcpServers,
       isLoading,
-
+      fetchingToolsServerIds,
       // Notifications
       popup,
       setPopup,
@@ -487,14 +475,13 @@ export function MCPActionsProvider({
       // Other state
       showSharedOverlay,
       isDisconnecting,
-      toolsFetchingServerIds,
-      setToolsFetchingServerIds,
       onServerCreated,
     }),
     [
       mcpServers,
       mutateMcpServers,
       isLoading,
+      fetchingToolsServerIds,
       popup,
       setPopup,
       authModal,
@@ -505,7 +492,6 @@ export function MCPActionsProvider({
       serverToManage,
       showSharedOverlay,
       isDisconnecting,
-      toolsFetchingServerIds,
       handleAuthenticate,
       handleDisconnect,
       handleDelete,

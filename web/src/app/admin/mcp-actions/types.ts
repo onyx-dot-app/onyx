@@ -3,9 +3,15 @@ import { MCPServer } from "@/lib/tools/interfaces";
 export type MCPServerStatus =
   | "CREATED"
   | "AWAITING_AUTH"
+  | "FETCHING_TOOLS"
   | "CONNECTED"
   | "DISCONNECTED";
-export type MCPActionStatus = "connected" | "pending" | "disconnected";
+
+export type MCPActionStatus =
+  | "connected"
+  | "pending"
+  | "disconnected"
+  | "fetching";
 
 // Extended interface with status field
 export interface MCPServerWithStatus

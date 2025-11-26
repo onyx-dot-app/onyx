@@ -9,6 +9,7 @@ import Button from "@/refresh-components/buttons/Button";
 import SvgPlug from "@/icons/plug";
 import SvgArrowExchange from "@/icons/arrow-exchange";
 import SvgChevronDown from "@/icons/chevron-down";
+import SvgLoader from "@/icons/loader";
 
 interface MCPActionsProps {
   status: MCPActionStatus;
@@ -37,10 +38,12 @@ const MCPActions: React.FC<MCPActionsProps> = React.memo(
     onToggleTools,
   }) => {
     const showViewToolsButton =
-      status === "connected" && !isToolsExpanded && onToggleTools;
+      (status === "connected" || status === "fetching") &&
+      !isToolsExpanded &&
+      onToggleTools;
 
     // Connected state
-    if (status === "connected") {
+    if (status === "connected" || status === "fetching") {
       return (
         <div className="flex flex-col gap-1 items-end">
           <div className="flex items-center">
@@ -73,7 +76,9 @@ const MCPActions: React.FC<MCPActionsProps> = React.memo(
               aria-label={`View tools for ${serverName}`}
               className="mr-0.5"
             >
-              {`View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
+              {status === "fetching"
+                ? "Fetching tools..."
+                : `View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
             </Button>
           )}
         </div>
