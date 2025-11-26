@@ -121,7 +121,6 @@ server {
 
 server {
     listen 444 ssl;
-    listen [::]:444 ssl;
     server_name ${DOMAIN};
     client_max_body_size 5G;    # Maximum upload size
     proxy_connect_timeout 200;
