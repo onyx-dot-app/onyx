@@ -1,5 +1,9 @@
 name: "Setup Python and Install Dependencies"
 description: "Sets up Python with uv and installs deps"
+inputs:
+  requirements:
+    description: "Newline-separated list of requirement files to install (relative to repo root)"
+    required: true
 runs:
   using: "composite"
   steps:
@@ -38,9 +42,16 @@ runs:
 
     - name: Install Python dependencies with uv
       shell: bash
+      env:
+        REQUIREMENTS: ${{ inputs.requirements }}
       run: |
-        uv pip install \
-          -r backend/requirements/default.txt \
-          -r backend/requirements/dev.txt \
-          -r backend/requirements/model_server.txt \
-          -r backend/requirements/ee.txt
+        # Build the uv pip install command with each requirement file
+        cmd="uv pip install"
+        while IFS= read -r req; do
+          # Skip empty lines
+          if [ -n "$req" ]; then
+            cmd="$cmd -r $req"
+          fi
+        done <<< "$REQUIREMENTS"
+        echo "Running: $cmd"
+        eval "$cmd"
