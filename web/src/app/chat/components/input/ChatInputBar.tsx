@@ -10,7 +10,8 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useInputPrompts } from "@/lib/hooks/useInputPrompts";
+import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { DocumentIcon2, FileIcon } from "@/components/icons/icons";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/chat/interfaces";
@@ -208,14 +209,15 @@ function ChatInputBarInner({
     [setCurrentMessageFiles]
   );
 
-  const { inputPrompts, ccPairs } = useChatContext();
+  const { inputPrompts } = useInputPrompts();
+  const { ccPairs } = useCCPairs();
   const { data: federatedConnectorsData } = useFederatedConnectors();
   const [showPrompts, setShowPrompts] = useState(false);
 
   // Memoize availableSources to prevent unnecessary re-renders
   const memoizedAvailableSources = useMemo(
     () => [
-      ...ccPairs.map((ccPair) => ccPair.source),
+      ...(ccPairs ?? []).map((ccPair) => ccPair.source),
       ...(federatedConnectorsData?.map((connector) => connector.source) || []),
     ],
     [ccPairs, federatedConnectorsData]

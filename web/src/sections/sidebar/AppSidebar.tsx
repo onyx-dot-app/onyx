@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, memo, useMemo, useState } from "react";
+import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
@@ -31,7 +32,9 @@ import SvgEditBig from "@/icons/edit-big";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import { useProjects } from "@/lib/hooks/useProjects";
+import { useAgents, usePinnedAgents } from "@/lib/hooks/useAgents";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import SvgFolderPlus from "@/icons/folder-plus";
@@ -61,6 +64,7 @@ import SvgSettings from "@/icons/settings";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
+import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -126,14 +130,90 @@ interface AppSidebarInnerProps {
   onFoldClick: () => void;
 }
 
+// Helper to persist pinned agents to the server
+async function pinAgentsToServer(pinnedAgentIds: number[]) {
+  const response = await fetch(`/api/user/pinned-assistants`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ordered_assistant_ids: pinnedAgentIds,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to update pinned assistants");
+  }
+}
+
 function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
   const route = useAppRouter();
-  const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
-  const { chatSessions, refreshChatSessions } = useChatContext();
+  const searchParams = useSearchParams();
   const combinedSettings = useSettingsContext();
-  const { refreshCurrentProjectDetails, fetchProjects, currentProjectId } =
-    useProjectsContext();
   const { popup, setPopup } = usePopup();
+
+  // Use SWR hooks for data fetching
+  const { chatSessions, refreshChatSessions } = useChatSessions();
+  const { projects, refreshProjects } = useProjects();
+  const { agents } = useAgents();
+  const { pinnedAgentIds, refresh: refreshPinnedAgents } = usePinnedAgents();
+
+  // Still need some context for stateful operations
+  const { refreshCurrentProjectDetails, currentProjectId } =
+    useProjectsContext();
+  const {
+    forcedToolIds,
+    setForcedToolIds,
+    agentPreferences,
+    setSpecificAgentPreferences,
+  } = useAgentsContext();
+
+  // Local state for pinned agents (allows optimistic updates)
+  const [localPinnedAgents, setLocalPinnedAgents] = useState<
+    MinimalPersonaSnapshot[]
+  >([]);
+  const isInitialMount = useRef(true);
+
+  // Derive pinned agents from agents list and pinnedAgentIds
+  useEffect(() => {
+    if (agents.length > 0) {
+      const pinned = pinnedAgentIds
+        .map((id) => agents.find((agent) => agent.id === id))
+        .filter((agent): agent is MinimalPersonaSnapshot => !!agent);
+      // If no pinned agents, use default personas
+      const finalPinned =
+        pinned.length > 0
+          ? pinned
+          : agents.filter(
+              (agent) => agent.is_default_persona && agent.id !== 0
+            );
+      setLocalPinnedAgents(finalPinned);
+    }
+  }, [agents, pinnedAgentIds]);
+
+  // Derive current agent from URL params
+  const currentAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+  const currentAgentId = currentAgentIdRaw ? parseInt(currentAgentIdRaw) : null;
+  const currentAgent = useMemo(
+    () =>
+      currentAgentId
+        ? agents.find((agent) => agent.id === currentAgentId) || null
+        : null,
+    [agents, currentAgentId]
+  );
+
+  // Persist pinned agents when local state changes (after initial mount)
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (localPinnedAgents.length > 0) {
+      pinAgentsToServer(localPinnedAgents.map((agent) => agent.id)).then(() => {
+        refreshPinnedAgents();
+      });
+    }
+  }, [localPinnedAgents, refreshPinnedAgents]);
 
   // State for custom agent modal
   const [pendingMoveChatSession, setPendingMoveChatSession] =
@@ -143,11 +223,10 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
   >(null);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
-  const { projects } = useProjectsContext();
 
   const [visibleAgents, currentAgentIsPinned] = useMemo(
-    () => buildVisibleAgents(pinnedAgents, currentAgent),
-    [pinnedAgents, currentAgent]
+    () => buildVisibleAgents(localPinnedAgents, currentAgent),
+    [localPinnedAgents, currentAgent]
   );
   const visibleAgentIds = useMemo(
     () => visibleAgents.map((agent) => agent.id),
@@ -172,7 +251,7 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
       if (!over) return;
       if (active.id === over.id) return;
 
-      setPinnedAgents((prev) => {
+      setLocalPinnedAgents((prev) => {
         const activeIndex = visibleAgentIds.findIndex(
           (agentId) => agentId === active.id
         );
@@ -197,7 +276,7 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
     [
       visibleAgentIds,
       visibleAgents,
-      setPinnedAgents,
+      setLocalPinnedAgents,
       currentAgent,
       currentAgentIsPinned,
     ]
@@ -215,14 +294,14 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
           targetProjectId,
           refreshChatSessions,
           refreshCurrentProjectDetails,
-          fetchProjects,
+          fetchProjects: refreshProjects,
           currentProjectId,
         },
         setPopup
       );
       const projectRefreshPromise = currentProjectId
         ? refreshCurrentProjectDetails()
-        : fetchProjects();
+        : refreshProjects();
       await Promise.all([refreshChatSessions(), projectRefreshPromise]);
     } catch (error) {
       console.error("Failed to move chat:", error);
@@ -297,7 +376,7 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
             await removeChatSessionFromProject(chatSession.id);
             const projectRefreshPromise = currentProjectId
               ? refreshCurrentProjectDetails()
-              : fetchProjects();
+              : refreshProjects();
             await Promise.all([refreshChatSessions(), projectRefreshPromise]);
           } catch (error) {
             console.error("Failed to remove chat from project:", error);
@@ -309,7 +388,7 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
       currentProjectId,
       refreshChatSessions,
       refreshCurrentProjectDetails,
-      fetchProjects,
+      refreshProjects,
       setPopup,
     ]
   );

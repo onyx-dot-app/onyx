@@ -23,13 +23,16 @@ import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
 import ChatInputBar from "@/app/chat/components/input/ChatInputBar";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import { useTags } from "@/lib/hooks/useTags";
+import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
+import { useAgents } from "@/lib/hooks/useAgents";
 import { ChatPopup } from "@/app/chat/components/ChatPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import TextView from "@/components/chat/TextView";
 import { Modal } from "@/components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
@@ -110,8 +113,11 @@ export default function ChatPage({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { chatSessions, ccPairs, tags, documentSets, refreshChatSessions } =
-    useChatContext();
+  // Use SWR hooks for data fetching
+  const { chatSessions, refreshChatSessions } = useChatSessions();
+  const { ccPairs } = useCCPairs();
+  const { tags } = useTags();
+  const { documentSets } = useDocumentSets();
 
   const {
     currentMessageFiles,
@@ -133,7 +139,7 @@ export default function ChatPage({
 
   const isInitialLoad = useRef(true);
 
-  const { agents: availableAssistants } = useAgentsContext();
+  const { agents: availableAssistants } = useAgents();
 
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
@@ -215,7 +221,7 @@ export default function ChatPage({
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
   const availableSources: ValidSources[] = useMemo(() => {
-    return ccPairs.map((ccPair) => ccPair.source);
+    return (ccPairs ?? []).map((ccPair) => ccPair.source);
   }, [ccPairs]);
 
   const sources: SourceMetadata[] = useMemo(() => {
