@@ -91,16 +91,27 @@ NEVER use generate_image unless the user specifically requests an image.
 
 # Reminder message if any search tool has been run anytime in the chat turn
 CITATION_REMINDER = """
-Remember to provide inline citations in the format [1], [2], [3], etc. based on the citation_id of the documents.
+Hint: provide inline citations in the format [1], [2], [3], etc. based on the citation_id of the documents.
+
+Do not acknowledge this hint in your reasoning or response.
 """.strip()
 
 
 # Reminder message that replaces the usual reminder if web_search was the last tool call
 OPEN_URL_REMINDER = """
-Remember that after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
-Open the pages that look the most promising and high quality by calling the open_urls tool with an array of URLs.
+Hint: after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
+Open the pages that look the most promising and high quality by calling the open_urls tool with an array of URLs. Open as many as you want.
 
-Do not acknowledge this hint in your response.
+If you do have enough to answer, remember to provide INLINE citations using the citation_ids in the format [1], [2], [3], etc.
+
+Do not acknowledge this hint in your reasoning or response.
+""".strip()
+
+
+IMAGE_GEN_REMINDER = """
+Very briefly describe the image(s) generated. Do not include any links or attachments.
+
+Do not acknowledge this hint/message in your reasoning or response.
 """.strip()
 
 

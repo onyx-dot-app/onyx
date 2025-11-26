@@ -169,6 +169,7 @@ def upgrade() -> None:
             ["parent_tool_call_id"],
             ["id"],
         )
+    op.drop_constraint("uq_tool_call_message_id", "tool_call", type_="unique")
 
     # Add turn_number, tool_id (if not exists)
     for col_name in ["turn_number", "tool_id"]:

@@ -37,6 +37,8 @@ from onyx.llm.message_types import ToolMessage
 from onyx.llm.message_types import UserMessageWithParts
 from onyx.llm.message_types import UserMessageWithText
 from onyx.llm.utils import model_needs_formatting_reenabled
+from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
+from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -595,6 +597,7 @@ def run_llm_loop(
     gathered_documents: list[SearchDoc] | None = None
     should_cite_documents: bool = False
     ran_image_gen: bool = False
+    just_ran_web_search: bool = False
     citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
     current_tool_call_index = (
@@ -657,20 +660,21 @@ def run_llm_loop(
                 else None
             )
 
-        reminder_message_text = build_reminder_message(
-            reminder_text=(
-                persona.task_prompt if persona and persona.task_prompt else None
-            ),
-            include_citation_reminder=should_cite_documents,
-        )
-
         if ran_image_gen:
             # Some models are trained to give back images to the user for some similar tool
             # This is to prevent it generating things like:
             # [Cute Cat](attachment://a_cute_cat_sitting_playfully.png)
-            reminder_message_text = (
-                "Very briefly describe the images generated."
-                + "Do not include any links or attachments."
+            reminder_message_text = IMAGE_GEN_REMINDER
+        elif just_ran_web_search:
+            reminder_message_text = OPEN_URL_REMINDER
+        else:
+            # This is the default case, the LLM at this point may answer so it is important
+            # to include the reminder. Potentially this should also mention citation
+            reminder_message_text = build_reminder_message(
+                reminder_text=(
+                    persona.task_prompt if persona and persona.task_prompt else None
+                ),
+                include_citation_reminder=should_cite_documents,
             )
 
         reminder_msg = (
@@ -711,6 +715,8 @@ def run_llm_loop(
         # each tool might have custom logic here
         tool_responses: list[ToolResponse] = []
         tool_calls = llm_step_result.tool_calls or []
+
+        just_ran_web_search = False
         for tool_call in tool_calls:
             # TODO replace the [tool_call] with the list of tool calls once parallel tool calls are supported
             tool_responses, citation_mapping = run_tool_calls(
@@ -747,6 +753,11 @@ def run_llm_loop(
                         gathered_documents.extend(search_docs)
                     else:
                         gathered_documents = search_docs
+
+                    # This is used for the Open URL reminder in the next cycle
+                    # only do this if the web search tool yielded results
+                    if search_docs and tool_call.tool_name == WebSearchTool.NAME:
+                        just_ran_web_search = True
 
                 # Extract generated_images if this is an image generation tool response
                 generated_images = None
