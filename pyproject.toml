@@ -116,7 +116,7 @@ backend = [
     "zulip==0.8.2",
     "hubspot-api-client==8.1.0",
     "asana==5.0.8",
-    "dropbox==11.36.2",
+    "dropbox==12.0.2",
     "shapely==2.0.6",
     "stripe==10.12.0",
     "urllib3==2.5.0",
