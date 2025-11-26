@@ -34,7 +34,10 @@ def manage_sync_streaming(
     message_id = config.persistence.message_id if config.persistence else None
     callbacks: list[CallbackHandler] = []
     if LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY:
+        logger.info("Langfuse callback enabled for thread_id=%s", message_id)
         callbacks.append(CallbackHandler())
+    else:
+        logger.info("Langfuse callback disabled; missing credentials")
     for event in compiled_graph.stream(
         stream_mode="custom",
         input=graph_input,
