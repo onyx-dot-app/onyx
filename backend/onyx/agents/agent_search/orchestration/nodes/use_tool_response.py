@@ -70,7 +70,7 @@ def basic_use_tool_response(
     new_tool_call_chunk = AIMessageChunk(content="")
     if not agent_config.behavior.skip_gen_ai_answer_generation:
         try:
-            timeout_override = 60
+            timeout_override = 180
 
             stream = llm.stream(
                 prompt=new_prompt_builder.build(),
