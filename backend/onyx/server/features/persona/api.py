@@ -45,6 +45,8 @@ from onyx.secondary_llm_flows.starter_message_creation import (
     generate_starter_messages,
 )
 from onyx.server.documents.models import PaginatedReturn
+from onyx.server.features.persona.constants import ADMIN_AGENTS_RESOURCE
+from onyx.server.features.persona.constants import AGENTS_RESOURCE
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import GenerateStarterMessageRequest
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
@@ -81,6 +83,11 @@ def _validate_user_knowledge_enabled(
 
 admin_router = APIRouter(prefix="/admin/persona")
 basic_router = APIRouter(prefix="/persona")
+
+# NOTE: Users know this functionality as "agents", so we want to start moving
+# nomenclature of these REST resources to match that.
+admin_agents_router = APIRouter(prefix=ADMIN_AGENTS_RESOURCE)
+agents_router = APIRouter(prefix=AGENTS_RESOURCE)
 
 
 class IsVisibleRequest(BaseModel):
@@ -175,8 +182,8 @@ def list_personas_admin(
     )
 
 
-@admin_router.get("/paginated")
-def list_personas_admin_paginated(
+@admin_agents_router.get("")
+def get_agents_admin_paginated(
     page_num: int = Query(0, ge=0, description="Page number (0-indexed)."),
     page_size: int = Query(10, ge=1, le=1000, description="Items per page."),
     user: User | None = Depends(current_curator_or_admin_user),
@@ -188,12 +195,12 @@ def list_personas_admin_paginated(
         False, description="If true, only returns editable personas."
     ),
 ) -> PaginatedReturn[PersonaSnapshot]:
-    """Paginated endpoint for listing personas (admin view).
+    """Paginated endpoint for listing agents (formerly personas) (admin view).
 
     Returns items for the requested page plus total count.
-    Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC).
+    Agents are ordered by display_priority (ASC, nulls last) then by ID (ASC).
     """
-    personas = get_persona_snapshots_paginated(
+    agents = get_persona_snapshots_paginated(
         user=user,
         db_session=db_session,
         page_num=page_num,
@@ -210,7 +217,7 @@ def list_personas_admin_paginated(
     )
 
     return PaginatedReturn(
-        items=personas,
+        items=agents,
         total_items=total_count,
     )
 
@@ -416,8 +423,8 @@ def list_personas(
     return personas
 
 
-@basic_router.get("/paginated")
-def list_personas_paginated(
+@agents_router.get("")
+def get_agents_paginated(
     page_num: int = Query(0, ge=0, description="Page number (0-indexed)."),
     page_size: int = Query(10, ge=1, le=1000, description="Items per page."),
     user: User | None = Depends(current_chat_accessible_user),
@@ -429,7 +436,7 @@ def list_personas_paginated(
         False, description="If true, only returns editable personas."
     ),
 ) -> PaginatedReturn[MinimalPersonaSnapshot]:
-    """Paginated endpoint for listing personas available to the user.
+    """Paginated endpoint for listing agents available to the user.
 
     Returns items for the requested page plus total count.
     Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC).
@@ -437,7 +444,7 @@ def list_personas_paginated(
     NOTE: persona_ids filter is not supported with pagination. Use the
     non-paginated endpoint if filtering by specific IDs is needed.
     """
-    personas = get_minimal_persona_snapshots_paginated(
+    agents = get_minimal_persona_snapshots_paginated(
         user=user,
         db_session=db_session,
         page_num=page_num,
@@ -454,7 +461,7 @@ def list_personas_paginated(
     )
 
     return PaginatedReturn(
-        items=personas,
+        items=agents,
         total_items=total_count,
     )
 
