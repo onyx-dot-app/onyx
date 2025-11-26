@@ -13,11 +13,26 @@ runs:
       # with:
       #   enable-cache: true
 
+    - name: Compute requirements hash
+      id: req-hash
+      shell: bash
+      env:
+        REQUIREMENTS: ${{ inputs.requirements }}
+      run: |
+        # Hash the contents of the specified requirement files
+        hash=""
+        while IFS= read -r req; do
+          if [ -n "$req" ] && [ -f "$req" ]; then
+            hash="$hash$(sha256sum "$req")"
+          fi
+        done <<< "$REQUIREMENTS"
+        echo "hash=$(echo "$hash" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
     - name: Cache uv cache directory
       uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
       with:
         path: ~/.cache/uv
-        key: ${{ runner.os }}-uv-${{ hashFiles('backend/requirements/*.txt', 'backend/pyproject.toml') }}
+        key: ${{ runner.os }}-uv-${{ steps.req-hash.outputs.hash }}
         restore-keys: |
           ${{ runner.os }}-uv-
 
