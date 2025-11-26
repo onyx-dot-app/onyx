@@ -16,6 +16,7 @@ permissions:
 jobs:
   validate-requirements:
     runs-on: ubuntu-slim
+    timeout-minutes: 45
     steps:
       - name: Checkout code
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
@@ -36,6 +37,7 @@ jobs:
     # Note: Mypy seems quite optimized for x64 compared to arm64.
     # Similarly, mypy is single-threaded and incremental, so 2cpu is sufficient.
     runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}-mypy-check", "extras=s3-cache"]
+    timeout-minutes: 45
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
