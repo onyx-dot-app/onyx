@@ -334,7 +334,12 @@ def query(
                     )
                 else:
                     with function_span(f"tool_not_found_{name}") as span_fn:
-                        not_found_output = f"Tool {name} not found"
+                        not_found_output = {
+                            "error": True,
+                            "error_type": "TOOL_NOT FOUND",
+                            "message": f"The tool {name} does not exist or is not registered.",
+                            "available_tools": [tool.name for tool in tools],
+                        }
                         tool_outputs[call_id] = _serialize_tool_output(not_found_output)
                         span_fn.span_data.input = arguments_str
                         span_fn.span_data.output = not_found_output
