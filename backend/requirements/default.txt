@@ -779,7 +779,7 @@ pynacl==1.6.1
     # via pygithub
 pyparsing==3.2.5
     # via httplib2
-pypdf==6.1.3
+pypdf==6.4.0
     # via unstructured-client
 pyperclip==1.11.0
     # via fastmcp
