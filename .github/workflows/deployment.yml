@@ -18,6 +18,7 @@ jobs:
   determine-builds:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
+    timeout-minutes: 90
     outputs:
       build-web: ${{ steps.check.outputs.build-web }}
       build-web-cloud: ${{ steps.check.outputs.build-web-cloud }}
@@ -90,6 +91,7 @@ jobs:
       - runner=4cpu-linux-x64
       - run-id=${{ github.run_id }}-web-amd64
       - extras=ecr-cache
+    timeout-minutes: 90
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
@@ -147,6 +149,7 @@ jobs:
       - runner=4cpu-linux-arm64
       - run-id=${{ github.run_id }}-web-arm64
       - extras=ecr-cache
+    timeout-minutes: 90
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
@@ -206,6 +209,7 @@ jobs:
       - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-merge-web
       - extras=ecr-cache
+    timeout-minutes: 90
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
@@ -253,6 +257,7 @@ jobs:
       - runner=4cpu-linux-x64
       - run-id=${{ github.run_id }}-web-cloud-amd64
       - extras=ecr-cache
+    timeout-minutes: 90
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
@@ -318,6 +323,7 @@ jobs:
       - runner=4cpu-linux-arm64
       - run-id=${{ github.run_id }}-web-cloud-arm64
       - extras=ecr-cache
+    timeout-minutes: 90
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
@@ -385,6 +391,7 @@ jobs:
       - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-merge-web-cloud
       - extras=ecr-cache
+    timeout-minutes: 90
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
     steps:
@@ -429,6 +436,7 @@ jobs:
       - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-backend-amd64
       - extras=ecr-cache
+    timeout-minutes: 90
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
@@ -485,6 +493,7 @@ jobs:
       - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-backend-arm64
       - extras=ecr-cache
+    timeout-minutes: 90
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
@@ -543,6 +552,7 @@ jobs:
       - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-merge-backend
       - extras=ecr-cache
+    timeout-minutes: 90
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
     steps:
@@ -591,6 +601,7 @@ jobs:
       - run-id=${{ github.run_id }}-model-server-amd64
       - volume=40gb
       - extras=ecr-cache
+    timeout-minutes: 90
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
@@ -654,6 +665,7 @@ jobs:
       - run-id=${{ github.run_id }}-model-server-arm64
       - volume=40gb
       - extras=ecr-cache
+    timeout-minutes: 90
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
@@ -718,6 +730,7 @@ jobs:
       - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-merge-model-server
       - extras=ecr-cache
+    timeout-minutes: 90
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
     steps:
@@ -767,6 +780,7 @@ jobs:
       - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-trivy-scan-web
       - extras=ecr-cache
+    timeout-minutes: 90
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
@@ -806,6 +820,7 @@ jobs:
       - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-trivy-scan-web-cloud
       - extras=ecr-cache
+    timeout-minutes: 90
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
     steps:
@@ -845,6 +860,7 @@ jobs:
       - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-trivy-scan-backend
       - extras=ecr-cache
+    timeout-minutes: 90
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
     steps:
@@ -891,6 +907,7 @@ jobs:
       - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-trivy-scan-model-server
       - extras=ecr-cache
+    timeout-minutes: 90
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
     steps:
@@ -937,6 +954,7 @@ jobs:
     if: always() && (needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure') && github.event_name != 'workflow_dispatch'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6

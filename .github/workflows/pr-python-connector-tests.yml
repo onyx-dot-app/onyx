@@ -126,6 +126,7 @@ jobs:
   connectors-check:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-connectors-check", "extras=s3-cache"]
+    timeout-minutes: 45
 
     env:
       PYTHONPATH: ./backend
