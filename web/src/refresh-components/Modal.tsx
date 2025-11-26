@@ -387,7 +387,11 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
         <div className="flex flex-col">
           <div className="flex flex-row items-center justify-between">
             <Icon className={"w-[1.5rem] h-[1.5rem] stroke-text-04"} />
-            <IconButton icon={SvgX} internal onClick={onClose} />
+            <div ref={closeButtonRef as React.RefObject<HTMLDivElement>}>
+              <ModalClose asChild>
+                <IconButton icon={SvgX} internal onClick={onClose} />
+              </ModalClose>
+            </div>
           </div>
           <Text headingH3>{title}</Text>
           {description && (
@@ -472,9 +476,6 @@ const ModalFooter = React.forwardRef<HTMLDivElement, ModalFooterProps>(
 ModalFooter.displayName = "ModalFooter";
 
 export default Object.assign(ModalRoot, {
-  Portal: ModalPortal,
-  Close: ModalClose,
-  Overlay: ModalOverlay,
   Content: ModalContent,
   Header: ModalHeader,
   Body: ModalBody,
