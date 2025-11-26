@@ -25,7 +25,7 @@ dependencies = [
     "voyageai==0.2.3",
 ]
 
-[dependency-groups]
+[project.optional-dependencies]
 # Main backend application dependencies
 backend = [
     "aiohttp==3.12.14",
@@ -189,7 +189,9 @@ ee = [
 ]
 
 [tool.uv]
-default-groups = "all"
+
+[tool.uv.workspace]
+members = ["backend"]
 
 [tool.setuptools.packages.find]
 where = ["backend"]
