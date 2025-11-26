@@ -19,7 +19,8 @@ const getApiVersionParam = (url: URL): string => {
 
 const getDeploymentNameParam = (url: URL): string => {
   const match = url.pathname.match(/\/openai\/deployments\/([^/]+)/i);
-  return match?.[1] ?? "";
+  const deployment = match?.[1] ?? "";
+  return deployment ? deployment.toLowerCase() : "";
 };
 
 const isResponsesPath = (url: URL): boolean =>
