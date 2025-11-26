@@ -90,15 +90,15 @@ def main() -> int:
         if args.check:
             _assert_up_to_date("uv.lock")
 
-        for group, output in [
-            ("backend", "default"),
-            ("dev", "dev"),
-            ("ee", "ee"),
-            ("model_server", "model_server"),
+        for arg, output in [
+            ("--extra backend", "default"),
+            ("--group dev", "dev"),
+            ("--extra ee", "ee"),
+            ("--extra model_server", "model_server"),
         ]:
             output_filename = f"backend/requirements/{output}.txt"
             _exec(
-                f"uv export --no-emit-project --no-default-groups --no-hashes --group {group} -o {output_filename}"
+                f"uv export --no-emit-project --no-default-groups --no-hashes {arg} -o {output_filename}"
             )
             if args.check:
                 _assert_up_to_date(output_filename)

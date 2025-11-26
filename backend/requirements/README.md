@@ -49,10 +49,10 @@ curl -LsSf https://astral.py/uv/install.sh | sh
 
 1. Edit `pyproject.toml`
 2. Add/update/remove dependencies in the appropriate section:
+   - `[dependency-groups]` for dev tools
    - `[project.dependencies]` for **shared** dependencies (used by both backend and model_server)
    - `[project.optional-dependencies.backend]` for backend-only dependencies
    - `[project.optional-dependencies.model_server]` for model_server-only dependencies (ML packages)
-   - `[project.optional-dependencies.dev]` for dev tools
    - `[project.optional-dependencies.ee]` for EE features
 3. Regenerate lock file and requirements (see below)
 
@@ -62,7 +62,7 @@ curl -LsSf https://astral.py/uv/install.sh | sh
 ./backend/scripts/compile_requirements.py
 ```
 
-This resolves all dependencies (core + all groups) together into a single `uv.lock` file, ensuring all versions are compatible.
+This resolves all dependencies (core + all extras) together into a single `uv.lock` file, ensuring all versions are compatible.
 
 ### 4. Installing Dependencies
 
@@ -74,16 +74,16 @@ branches or pulling new changes.
 uv sync
 
 # For backend production (shared + backend dependencies)
-uv sync --group backend
+uv sync --extra backend
 
 # For backend development (shared + backend + dev tools)
-uv sync --group backend --group dev
+uv sync --extra backend --group dev
 
 # For backend with EE (shared + backend + ee)
-uv sync --group backend --group ee
+uv sync --extra backend --group ee
 
 # For model server (shared + model_server, NO backend deps!)
-uv sync --group model_server
+uv sync --extra model_server
 ```
 
 ### 5. Upgrading Dependencies
