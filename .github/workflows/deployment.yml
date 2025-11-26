@@ -439,7 +439,6 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
-          buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
           docker-username: ${{ secrets.DOCKER_USERNAME }}
           docker-password: ${{ secrets.DOCKER_TOKEN }}
           is-dry-run: ${{ env.IS_DRY_RUN }}
@@ -475,7 +474,6 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
-          buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
           docker-username: ${{ secrets.DOCKER_USERNAME }}
           docker-password: ${{ secrets.DOCKER_TOKEN }}
           is-dry-run: ${{ env.IS_DRY_RUN }}

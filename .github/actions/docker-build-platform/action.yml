@@ -27,10 +27,6 @@ inputs:
     description: "Disable Docker cache"
     required: false
     default: "false"
-  buildkitd-flags:
-    description: "Additional buildkitd flags"
-    required: false
-    default: ""
   docker-username:
     description: "Docker Hub username"
     required: true
@@ -67,8 +63,6 @@ runs:
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
-      with:
-        buildkitd-flags: ${{ inputs.buildkitd-flags }}
 
     - name: Login to Docker Hub
       uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
