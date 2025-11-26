@@ -25,20 +25,6 @@ import SvgX from "@/icons/x";
 const ModalRoot = DialogPrimitive.Root;
 
 /**
- * Modal Portal Component
- *
- * Wrapper around Radix Dialog.Portal for rendering modal in a portal.
- */
-const ModalPortal = DialogPrimitive.Portal;
-
-/**
- * Modal Close Component
- *
- * Wrapper around Radix Dialog.Close for close triggers.
- */
-const ModalClose = DialogPrimitive.Close;
-
-/**
  * Modal Overlay Component
  *
  * Backdrop overlay that appears behind the modal.
@@ -281,7 +267,7 @@ const ModalContent = React.forwardRef<
       <ModalContext.Provider
         value={{ closeButtonRef, hasAttemptedClose, setHasAttemptedClose }}
       >
-        <ModalPortal>
+        <DialogPrimitive.Portal>
           <ModalOverlay />
           <DialogPrimitive.Content
             ref={(node) => {
@@ -322,7 +308,7 @@ const ModalContent = React.forwardRef<
           >
             {children}
           </DialogPrimitive.Content>
-        </ModalPortal>
+        </DialogPrimitive.Portal>
       </ModalContext.Provider>
     );
   }
@@ -337,16 +323,10 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  *
  * @example
  * ```tsx
- * <Modal.Header className="p-4" withBottomShadow>
- *   <Modal.Icon icon={SvgWarning} />
- *   <Modal.Title>Confirm Action</Modal.Title>
- *   <Modal.Description>Are you sure?</Modal.Description>
- * </Modal.Header>
+ * <Modal.Header icon={SvgWarning} title="Confirm Action" description="Are you sure?" withBottomShadow />
  *
  * // With custom content
- * <Modal.Header className="bg-background-tint-01 p-6" withBottomShadow>
- *   <Modal.Icon icon={SvgFile} />
- *   <Modal.Title>Select Files</Modal.Title>
+ * <Modal.Header icon={SvgFile} title="Select Files" withBottomShadow>
  *   <InputTypeIn placeholder="Search..." />
  * </Modal.Header>
  * ```
@@ -388,16 +368,20 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
           <div className="flex flex-row items-center justify-between">
             <Icon className={"w-[1.5rem] h-[1.5rem] stroke-text-04"} />
             <div ref={closeButtonRef as React.RefObject<HTMLDivElement>}>
-              <ModalClose asChild>
+              <DialogPrimitive.Close asChild>
                 <IconButton icon={SvgX} internal onClick={onClose} />
-              </ModalClose>
+              </DialogPrimitive.Close>
             </div>
           </div>
-          <Text headingH3>{title}</Text>
+          <DialogPrimitive.Title>
+            <Text headingH3>{title}</Text>
+          </DialogPrimitive.Title>
           {description && (
-            <Text secondaryBody text03>
-              {description}
-            </Text>
+            <DialogPrimitive.Description>
+              <Text secondaryBody text03>
+                {description}
+              </Text>
+            </DialogPrimitive.Description>
           )}
         </div>
         {children}
