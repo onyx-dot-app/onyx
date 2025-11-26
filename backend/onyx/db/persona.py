@@ -412,6 +412,268 @@ def get_persona_snapshots_for_user(
     return [PersonaSnapshot.from_model(persona) for persona in results]
 
 
+def get_persona_count_for_user(
+    user: User | None,
+    db_session: Session,
+    get_editable: bool = True,
+    include_default: bool = True,
+    include_slack_bot_personas: bool = False,
+    include_deleted: bool = False,
+) -> int:
+    """Counts the total number of personas accessible to the user.
+
+    Args:
+        user: The user to filter personas for. If None and auth is disabled,
+            assumes the user is an admin. Otherwise, if None shows only public
+            personas.
+        db_session: Database session for executing queries.
+        get_editable: If True, only returns personas the user can edit.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        Total count of personas matching the filters and user permissions.
+    """
+    stmt = _build_persona_base_query(
+        user=user,
+        get_editable=get_editable,
+        include_default=include_default,
+        include_slack_bot_personas=include_slack_bot_personas,
+        include_deleted=include_deleted,
+    )
+    # Convert to count query.
+    count_stmt = stmt.with_only_columns(func.count(func.distinct(Persona.id))).order_by(
+        None
+    )
+    return db_session.scalar(count_stmt) or 0
+
+
+def get_minimal_persona_snapshots_paginated(
+    user: User | None,
+    db_session: Session,
+    page_num: int,
+    page_size: int,
+    get_editable: bool = True,
+    include_default: bool = True,
+    include_slack_bot_personas: bool = False,
+    include_deleted: bool = False,
+) -> list[MinimalPersonaSnapshot]:
+    """Gets a single page of minimal persona snapshots with ordering.
+
+    Uses a two-step subquery pattern to correctly handle DISTINCT + pagination:
+    1. Fetch ordered, paginated persona IDs with all filters applied
+    2. Fetch full persona objects for those IDs with eager loading
+
+    Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC)
+    to match the frontend personaComparator() logic.
+
+    Args:
+        user: The user to filter personas for. If None and auth is disabled,
+            assumes the user is an admin. Otherwise, if None shows only public
+            personas.
+        db_session: Database session for executing queries.
+        page_num: Zero-indexed page number (e.g., 0 for the first page).
+        page_size: Number of items per page.
+        get_editable: If True, only returns personas the user can edit.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        List of MinimalPersonaSnapshot objects for the requested page, ordered
+        by display_priority (nulls last) then ID.
+    """
+    persona_ids = _get_persona_snapshot_ids_paginated(
+        user=user,
+        db_session=db_session,
+        page_num=page_num,
+        page_size=page_size,
+        get_editable=get_editable,
+        include_default=include_default,
+        include_slack_bot_personas=include_slack_bot_personas,
+        include_deleted=include_deleted,
+    )
+
+    if not persona_ids:
+        return []
+
+    # Fetch full objects by IDs with eager loading to prevent unnecessary
+    # queries in the list comprehension below.
+    stmt = select(Persona).where(Persona.id.in_(persona_ids))
+    stmt = stmt.options(
+        selectinload(Persona.tools),
+        selectinload(Persona.labels),
+        selectinload(Persona.document_sets),
+        selectinload(Persona.user),
+    )
+    # Re-apply ordering to preserve order from id subquery.
+    stmt = stmt.order_by(
+        Persona.display_priority.asc().nullslast(),
+        Persona.id.asc(),
+    )
+
+    results = db_session.scalars(stmt).all()
+    return [MinimalPersonaSnapshot.from_model(persona) for persona in results]
+
+
+def get_persona_snapshots_paginated(
+    user: User | None,
+    db_session: Session,
+    page_num: int,
+    page_size: int,
+    get_editable: bool = True,
+    include_default: bool = True,
+    include_slack_bot_personas: bool = False,
+    include_deleted: bool = False,
+) -> list[PersonaSnapshot]:
+    """Gets a single page of persona snapshots (admin view) with ordering.
+
+    Uses a two-step subquery pattern to correctly handle DISTINCT + pagination:
+    1. Fetch ordered, paginated persona IDs with all filters applied
+    2. Fetch full persona objects for those IDs with eager loading
+
+    Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC)
+    to match the frontend personaComparator() logic.
+
+    This function returns PersonaSnapshot objects which contain more detailed
+    information than MinimalPersonaSnapshot, used for admin views.
+
+    Args:
+        user: The user to filter personas for. If None and auth is disabled,
+            assumes the user is an admin. Otherwise, if None shows only public
+            personas.
+        db_session: Database session for executing queries.
+        page_num: Zero-indexed page number (e.g., 0 for the first page).
+        page_size: Number of items per page.
+        get_editable: If True, only returns personas the user can edit.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        List of PersonaSnapshot objects for the requested page, ordered by
+        display_priority (nulls last) then ID.
+    """
+    persona_ids = _get_persona_snapshot_ids_paginated(
+        user=user,
+        db_session=db_session,
+        page_num=page_num,
+        page_size=page_size,
+        get_editable=get_editable,
+        include_default=include_default,
+        include_slack_bot_personas=include_slack_bot_personas,
+        include_deleted=include_deleted,
+    )
+
+    if not persona_ids:
+        return []
+
+    # Fetch full objects by IDs with eager loading to prevent unnecessary
+    # queries in the list comprehension below.
+    stmt = select(Persona).where(Persona.id.in_(persona_ids))
+    stmt = stmt.options(
+        selectinload(Persona.tools),
+        selectinload(Persona.labels),
+        selectinload(Persona.document_sets),
+        selectinload(Persona.user),
+        selectinload(Persona.user_files),
+        selectinload(Persona.users),
+        selectinload(Persona.groups),
+    )
+
+    # Re-apply ordering to preserve order from id subquery.
+    stmt = stmt.order_by(
+        Persona.display_priority.asc().nullslast(),
+        Persona.id.asc(),
+    )
+
+    results = db_session.scalars(stmt).all()
+    return [PersonaSnapshot.from_model(persona) for persona in results]
+
+
+def _build_persona_base_query(
+    user: User | None,
+    get_editable: bool = True,
+    include_default: bool = True,
+    include_slack_bot_personas: bool = False,
+    include_deleted: bool = False,
+) -> Select[tuple[Persona]]:
+    """Builds a base persona query with all filters applied.
+
+    This helper constructs the filtered query that can then be customized
+    for counting, pagination, or full retrieval.
+
+    Args:
+        user: The user to filter personas for. If None and auth is disabled,
+            assumes the user is an admin. Otherwise, if None shows only public
+            personas.
+        get_editable: If True, only returns personas the user can edit.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        SQLAlchemy Select statement with all filters applied.
+    """
+    stmt = select(Persona)
+    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = _build_persona_filters(
+        stmt, include_default, include_slack_bot_personas, include_deleted
+    )
+    return stmt
+
+
+def _get_persona_snapshot_ids_paginated(
+    user: User | None,
+    db_session: Session,
+    page_num: int,
+    page_size: int,
+    get_editable: bool = True,
+    include_default: bool = True,
+    include_slack_bot_personas: bool = False,
+    include_deleted: bool = False,
+) -> list[int]:
+    """Gets paginated persona IDs with ordering.
+
+    Args:
+        user: The user to filter personas for. If None and auth is disabled,
+            assumes the user is an admin. Otherwise, if None shows only public
+            personas.
+        db_session: Database session for executing queries.
+        page_num: Zero-indexed page number (e.g., 0 for the first page).
+        page_size: Number of items per page.
+        get_editable: If True, only returnss personas the user can edit.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        List of persona IDs for the requested page, ordered by display_priority
+        (nulls last) then ID.
+    """
+    stmt = _build_persona_base_query(
+        user=user,
+        get_editable=get_editable,
+        include_default=include_default,
+        include_slack_bot_personas=include_slack_bot_personas,
+        include_deleted=include_deleted,
+    )
+    # Convert to selecting IDs and display_priority (needed for ORDER BY).
+    # PostgreSQL requires all ORDER BY columns to appear in SELECT when using
+    # DISTINCT.
+    id_prio_stmt = stmt.with_only_columns(Persona.id, Persona.display_priority)
+    # Apply ordering (matches frontend personaComparator).
+    id_prio_stmt = id_prio_stmt.order_by(
+        Persona.display_priority.asc().nullslast(),
+        Persona.id.asc(),
+    )
+    # Apply pagination.
+    id_prio_stmt = id_prio_stmt.offset(page_num * page_size).limit(page_size)
+    # Execute subquery to get IDs (extract first column only).
+    return [row[0] for row in db_session.execute(id_prio_stmt).all()]
+
+
 def get_raw_personas_for_user(
     user: User | None,
     db_session: Session,
