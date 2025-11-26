@@ -1,13 +1,12 @@
 """Custom instruction context handler for adding custom instructions to agent messages."""
 
-from onyx.agents.agent_sdk.message_types import InputTextContent
-from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.chat.models import PromptConfig
+from onyx.llm.message_types import ChatCompletionMessage
 
 
 def build_custom_instructions(
     prompt_config: PromptConfig,
-) -> list[UserMessage]:
+) -> list[ChatCompletionMessage]:
     """Add custom instructions as a user message if present in prompt_config.
 
     This function adds a user message containing custom instructions before
@@ -28,13 +27,9 @@ def build_custom_instructions(
         f"Custom Instructions: {prompt_config.custom_instructions}"
     )
 
-    text_content: InputTextContent = {
-        "type": "input_text",
-        "text": custom_instruction_text,
-    }
-    custom_instruction_message: UserMessage = {
-        "role": "user",
-        "content": [text_content],
-    }
-
-    return [custom_instruction_message]
+    return [
+        {
+            "role": "user",
+            "content": custom_instruction_text,
+        }
+    ]

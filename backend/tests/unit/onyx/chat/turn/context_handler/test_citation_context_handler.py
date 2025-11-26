@@ -8,12 +8,6 @@ from uuid import uuid4
 from pydantic import TypeAdapter
 from pydantic import ValidationError
 
-from onyx.agents.agent_sdk.message_types import AgentSDKMessage
-from onyx.agents.agent_sdk.message_types import FunctionCallMessage
-from onyx.agents.agent_sdk.message_types import FunctionCallOutputMessage
-from onyx.agents.agent_sdk.message_types import InputTextContent
-from onyx.agents.agent_sdk.message_types import SystemMessage
-from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.turn.context_handler.citation import (
     assign_citation_numbers_recent_tool_calls,
@@ -21,11 +15,10 @@ from onyx.chat.turn.context_handler.citation import (
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.chat.turn.models import FetchedDocumentCacheEntry
-from onyx.tools.tool_implementations_v2.tool_result_models import (
-    LlmInternalSearchResult,
-)
-from onyx.tools.tool_implementations_v2.tool_result_models import LlmOpenUrlResult
-from onyx.tools.tool_implementations_v2.tool_result_models import LlmWebSearchResult
+from onyx.llm.message_types import ChatCompletionMessage
+from onyx.tools.tool_result_models import LlmInternalSearchResult
+from onyx.tools.tool_result_models import LlmOpenUrlResult
+from onyx.tools.tool_result_models import LlmWebSearchResult
 from tests.unit.onyx.chat.turn.utils import create_test_inference_section
 
 # TypeAdapter for parsing tool results after stripping (no discriminator needed)
@@ -68,18 +61,25 @@ def _create_test_web_search_document(
     ).model_dump()
 
 
-def _create_dummy_function_call() -> FunctionCallMessage:
-    return FunctionCallMessage(
-        arguments='{"queries":["cheese"]}',
-        name="internal_search",
-        call_id="call",
-        type="function_call",
-        id="__fake_id__",
-    )
+def _create_dummy_function_call() -> ChatCompletionMessage:
+    return {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call",
+                "type": "function",
+                "function": {
+                    "name": "internal_search",
+                    "arguments": '{"queries":["cheese"]}',
+                },
+            }
+        ],
+    }
 
 
 def _parse_tool_call_result_from_messages(
-    messages: Sequence[AgentSDKMessage],
+    messages: Sequence[ChatCompletionMessage],
 ) -> list[LlmInternalSearchResult | LlmOpenUrlResult | LlmWebSearchResult]:
     """Parse LLM documents from messages after citation processing.
 
@@ -90,9 +90,8 @@ def _parse_tool_call_result_from_messages(
     results: list[LlmInternalSearchResult | LlmOpenUrlResult | LlmWebSearchResult] = []
 
     for msg in messages:
-        if msg.get("type") == "function_call_output":
-            func_output_msg: FunctionCallOutputMessage = msg  # type: ignore[assignment]
-            output = func_output_msg["output"]
+        if msg.get("role") == "tool":
+            output = str(msg.get("content") or "")
             try:
                 docs = json.loads(output)
                 for doc in docs:
@@ -114,13 +113,10 @@ def _parse_tool_call_result_from_messages(
             except Exception:
                 pass
 
-            # Parse using pydantic with non-discriminated union
-            # For documents where fields are stripped, pydantic will try each type
             try:
                 parsed_results = _stripped_tool_result_adapter.validate_json(output)
                 results.extend(parsed_results)
             except ValidationError:
-                # If parsing fails, skip this tool call output
                 pass
 
     return results
@@ -129,22 +125,13 @@ def _parse_tool_call_result_from_messages(
 def test_assign_citation_numbers_basic(
     chat_turn_dependencies: ChatTurnDependencies,
 ) -> None:
-    messages: list[AgentSDKMessage] = [
-        SystemMessage(
-            role="system",
-            content=[
-                InputTextContent(text="\nYou are an assistant.", type="input_text")
-            ],
-        ),
-        UserMessage(
-            role="user",
-            content=[
-                InputTextContent(text="search internally for cheese", type="input_text")
-            ],
-        ),
+    messages: list[ChatCompletionMessage] = [
+        {"role": "system", "content": "\nYou are an assistant."},
+        {"role": "user", "content": "search internally for cheese"},
         _create_dummy_function_call(),
-        FunctionCallOutputMessage(
-            output=json.dumps(
+        {
+            "role": "tool",
+            "content": json.dumps(
                 [
                     _create_test_document(
                         "first", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
@@ -154,9 +141,8 @@ def test_assign_citation_numbers_basic(
                     ),
                 ]
             ),
-            call_id="call",
-            type="function_call_output",
-        ),
+            "tool_call_id": "call",
+        },
     ]
     context = ChatTurnContext(
         chat_session_id=uuid4(),
@@ -186,25 +172,15 @@ def test_assign_citation_numbers_basic(
 def test_assign_citation_numbers_no_relevant_tool_calls(
     chat_turn_dependencies: ChatTurnDependencies,
 ) -> None:
-    messages: list[AgentSDKMessage] = [
-        SystemMessage(
-            role="system",
-            content=[
-                InputTextContent(text="\nYou are an assistant.", type="input_text")
-            ],
-        ),
-        UserMessage(
-            role="user",
-            content=[
-                InputTextContent(text="search internally for cheese", type="input_text")
-            ],
-        ),
+    messages: list[ChatCompletionMessage] = [
+        {"role": "system", "content": "\nYou are an assistant."},
+        {"role": "user", "content": "search internally for cheese"},
         _create_dummy_function_call(),
-        FunctionCallOutputMessage(
-            output=json.dumps([{"document_id": "x"}]),
-            call_id="call",
-            type="function_call_output",
-        ),
+        {
+            "role": "tool",
+            "content": json.dumps([{"document_id": "x"}]),
+            "tool_call_id": "call",
+        },
     ]
     context = ChatTurnContext(
         chat_session_id=uuid4(),
@@ -221,22 +197,13 @@ def test_assign_citation_numbers_no_relevant_tool_calls(
 def test_assign_citation_numbers_previous_tool_calls(
     chat_turn_dependencies: ChatTurnDependencies,
 ) -> None:
-    messages: list[AgentSDKMessage] = [
-        SystemMessage(
-            role="system",
-            content=[
-                InputTextContent(text="\nYou are an assistant.", type="input_text")
-            ],
-        ),
-        UserMessage(
-            role="user",
-            content=[
-                InputTextContent(text="search internally for cheese", type="input_text")
-            ],
-        ),
+    messages: list[ChatCompletionMessage] = [
+        {"role": "system", "content": "\nYou are an assistant."},
+        {"role": "user", "content": "search internally for cheese"},
         _create_dummy_function_call(),
-        FunctionCallOutputMessage(
-            output=json.dumps(
+        {
+            "role": "tool",
+            "content": json.dumps(
                 [
                     _create_test_document(
                         "first", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
@@ -246,25 +213,17 @@ def test_assign_citation_numbers_previous_tool_calls(
                     ),
                 ]
             ),
-            call_id="call_1",
-            type="function_call_output",
-        ),
-        UserMessage(
-            role="user",
-            content=[
-                InputTextContent(
-                    text="search internally for cheese again", type="input_text"
-                )
-            ],
-        ),
+            "tool_call_id": "call_1",
+        },
+        {"role": "user", "content": "search internally for cheese again"},
         _create_dummy_function_call(),
-        FunctionCallOutputMessage(
-            output=json.dumps(
+        {
+            "role": "tool",
+            "content": json.dumps(
                 [_create_test_document("third", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE)]
             ),
-            call_id="call_2",
-            type="function_call_output",
-        ),
+            "tool_call_id": "call_2",
+        },
     ]
     context = ChatTurnContext(
         chat_session_id=uuid4(),
@@ -308,22 +267,13 @@ def test_assign_citation_numbers_previous_tool_calls(
 def test_assign_citation_numbers_parallel_tool_calls(
     chat_turn_dependencies: ChatTurnDependencies,
 ) -> None:
-    messages: list[AgentSDKMessage] = [
-        SystemMessage(
-            role="system",
-            content=[
-                InputTextContent(text="\nYou are an assistant.", type="input_text")
-            ],
-        ),
-        UserMessage(
-            role="user",
-            content=[
-                InputTextContent(text="search internally for cheese", type="input_text")
-            ],
-        ),
+    messages: list[ChatCompletionMessage] = [
+        {"role": "system", "content": "\nYou are an assistant."},
+        {"role": "user", "content": "search internally for cheese"},
         _create_dummy_function_call(),
-        FunctionCallOutputMessage(
-            output=json.dumps(
+        {
+            "role": "tool",
+            "content": json.dumps(
                 [
                     _create_test_web_search_document(
                         "a", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
@@ -333,17 +283,16 @@ def test_assign_citation_numbers_parallel_tool_calls(
                     ),
                 ]
             ),
-            call_id="call_1",
-            type="function_call_output",
-        ),
+            "tool_call_id": "call_1",
+        },
         _create_dummy_function_call(),
-        FunctionCallOutputMessage(
-            output=json.dumps(
+        {
+            "role": "tool",
+            "content": json.dumps(
                 [_create_test_document("e", DOCUMENT_CITATION_NUMBER_EMPTY_VALUE)]
             ),
-            call_id="call_2",
-            type="function_call_output",
-        ),
+            "tool_call_id": "call_2",
+        },
     ]
     context = ChatTurnContext(
         chat_session_id=uuid4(),
@@ -389,32 +338,19 @@ def test_assign_reused_citation_numbers(
     # already processed so these fields should have been stripped away
     del cached_web_search_document["unique_identifier_to_strip_away"]
     del cached_web_search_document["type"]
-    messages: list[AgentSDKMessage] = [
-        SystemMessage(
-            role="system",
-            content=[
-                InputTextContent(text="\nYou are an assistant.", type="input_text")
-            ],
-        ),
-        UserMessage(
-            role="user",
-            content=[
-                InputTextContent(text="search internally for cheese", type="input_text")
-            ],
-        ),
+    messages: list[ChatCompletionMessage] = [
+        {"role": "system", "content": "\nYou are an assistant."},
+        {"role": "user", "content": "search internally for cheese"},
         _create_dummy_function_call(),
-        FunctionCallOutputMessage(
-            output=json.dumps(
-                [
-                    cached_web_search_document,
-                ]
-            ),
-            call_id="call_1",
-            type="function_call_output",
-        ),
+        {
+            "role": "tool",
+            "content": json.dumps([cached_web_search_document]),
+            "tool_call_id": "call_1",
+        },
         _create_dummy_function_call(),
-        FunctionCallOutputMessage(
-            output=json.dumps(
+        {
+            "role": "tool",
+            "content": json.dumps(
                 [
                     _create_test_open_url_document(
                         unique_identifier_to_strip_away,
@@ -422,9 +358,8 @@ def test_assign_reused_citation_numbers(
                     )
                 ]
             ),
-            call_id="call_2",
-            type="function_call_output",
-        ),
+            "tool_call_id": "call_2",
+        },
     ]
     context = ChatTurnContext(
         chat_session_id=uuid4(),
