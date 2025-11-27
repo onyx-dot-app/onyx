@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { pinAgents } from "../assistants/orderAssistants";
+import { useUser } from "@/components/user/UserProvider";
 
 export function useAgents() {
   const { data, error, mutate } = useSWR<MinimalPersonaSnapshot[]>(
@@ -23,20 +24,13 @@ export function useAgents() {
 }
 
 export function usePinnedAgents() {
-  const { data, error, mutate } = useSWR<number[]>(
-    "/api/user/pinned-assistants",
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 60000,
-    }
-  );
+  // Pinned assistants come from the user context (fetched server-side via /me)
+  // There is no GET endpoint for /api/user/pinned-assistants, only PATCH
+  const { user, refreshUser } = useUser();
 
   return {
-    pinnedAgentIds: data ?? [],
-    isLoading: !error && !data,
-    error,
-    refresh: mutate,
+    pinnedAgentIds: user?.preferences?.pinned_assistants ?? [],
+    refresh: refreshUser,
   };
 }
 
@@ -46,11 +40,7 @@ export function usePinnedAgents() {
  */
 export function usePinnedAgentsWithDetails() {
   const { agents, isLoading: isLoadingAgents } = useAgents();
-  const {
-    pinnedAgentIds,
-    isLoading: isLoadingPinned,
-    refresh,
-  } = usePinnedAgents();
+  const { pinnedAgentIds } = usePinnedAgents();
 
   // Local state for optimistic updates during drag-and-drop
   const [localPinnedAgents, setLocalPinnedAgents] = useState<
@@ -86,13 +76,13 @@ export function usePinnedAgentsWithDetails() {
       return;
     }
     if (localPinnedAgents.length > 0) {
-      pinAgents(localPinnedAgents.map((a) => a.id)).then(() => refresh());
+      pinAgents(localPinnedAgents.map((a) => a.id));
     }
-  }, [localPinnedAgents, refresh]);
+  }, [localPinnedAgents]);
 
   return {
     pinnedAgents: localPinnedAgents,
     setPinnedAgents: setLocalPinnedAgents,
-    isLoading: isLoadingAgents || isLoadingPinned,
+    isLoading: isLoadingAgents,
   };
 }
