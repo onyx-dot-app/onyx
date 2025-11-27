@@ -7,6 +7,7 @@ from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.configs.constants import MessageType
+from onyx.file_store.models import ChatFileType
 
 
 def create_message(
@@ -31,8 +32,9 @@ def create_project_files(
     project_image_files = [
         ChatLoadedFile(
             file_id=f"image_{i}",
-            file_name=f"image_{i}.png",
-            file_type="image/png",
+            content=b"",
+            file_type=ChatFileType.IMAGE,
+            filename=f"image_{i}.png",
             content_text=None,
             token_count=50,
         )
@@ -49,7 +51,7 @@ def create_project_files(
 class TestConstructMessageHistory:
     """Tests for the construct_message_history function."""
 
-    def test_basic_no_truncation(self):
+    def test_basic_no_truncation(self) -> None:
         """Test basic functionality when all messages fit within token budget."""
         system_prompt = create_message(
             "You are a helpful assistant", MessageType.SYSTEM, 10
@@ -77,7 +79,7 @@ class TestConstructMessageHistory:
         assert result[2] == assistant_msg1
         assert result[3] == user_msg2
 
-    def test_with_custom_agent_prompt(self):
+    def test_with_custom_agent_prompt(self) -> None:
         """Test that custom agent prompt is inserted before the last user message."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First message", MessageType.USER, 5)
@@ -105,7 +107,7 @@ class TestConstructMessageHistory:
         assert result[3] == custom_agent  # Before last user message
         assert result[4] == user_msg2
 
-    def test_with_project_files(self):
+    def test_with_project_files(self) -> None:
         """Test that project files are inserted before the last user message."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First message", MessageType.USER, 5)
@@ -133,7 +135,7 @@ class TestConstructMessageHistory:
         assert "documents" in result[2].message  # Should contain JSON structure
         assert result[3] == user_msg2
 
-    def test_with_reminder_message(self):
+    def test_with_reminder_message(self) -> None:
         """Test that reminder message is added at the very end."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg = create_message("Hello", MessageType.USER, 5)
@@ -157,7 +159,7 @@ class TestConstructMessageHistory:
         assert result[1] == user_msg
         assert result[2] == reminder  # At the end
 
-    def test_tool_calls_after_last_user_message(self):
+    def test_tool_calls_after_last_user_message(self) -> None:
         """Test that tool calls and responses after last user message are preserved."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First message", MessageType.USER, 5)
@@ -195,7 +197,7 @@ class TestConstructMessageHistory:
         assert result[4] == tool_call
         assert result[5] == tool_response
 
-    def test_custom_agent_and_project_before_last_user_with_tools_after(self):
+    def test_custom_agent_and_project_before_last_user_with_tools_after(self) -> None:
         """Test correct ordering with custom agent, project files, and tool calls."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First", MessageType.USER, 5)
@@ -225,7 +227,7 @@ class TestConstructMessageHistory:
         assert result[4] == user_msg2  # Last user message
         assert result[5] == tool_call  # After last user message
 
-    def test_project_images_attached_to_last_user_message(self):
+    def test_project_images_attached_to_last_user_message(self) -> None:
         """Test that project images are attached to the last user message."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First", MessageType.USER, 5)
@@ -251,15 +253,16 @@ class TestConstructMessageHistory:
         assert last_message.image_files[0].file_id == "image_0"
         assert last_message.image_files[1].file_id == "image_1"
 
-    def test_project_images_preserve_existing_images(self):
+    def test_project_images_preserve_existing_images(self) -> None:
         """Test that project images are appended to existing images on the user message."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
 
         # Create a user message with existing images
         existing_image = ChatLoadedFile(
             file_id="existing_image",
-            file_name="existing.png",
-            file_type="image/png",
+            content=b"",
+            file_type=ChatFileType.IMAGE,
+            filename="existing.png",
             content_text=None,
             token_count=50,
         )
@@ -289,7 +292,7 @@ class TestConstructMessageHistory:
         assert last_message.image_files[0].file_id == "existing_image"
         assert last_message.image_files[1].file_id == "image_0"
 
-    def test_truncation_from_top(self):
+    def test_truncation_from_top(self) -> None:
         """Test that history is truncated from the top when token budget is exceeded."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First", MessageType.USER, 20)
@@ -325,7 +328,7 @@ class TestConstructMessageHistory:
         assert result[2] == assistant_msg2
         assert result[3] == user_msg3
 
-    def test_truncation_preserves_last_user_and_messages_after(self):
+    def test_truncation_preserves_last_user_and_messages_after(self) -> None:
         """Test that truncation preserves the last user message and everything after it."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First", MessageType.USER, 30)
@@ -357,13 +360,13 @@ class TestConstructMessageHistory:
         assert result[2] == tool_call
         assert result[3] == tool_response
 
-    def test_empty_history(self):
+    def test_empty_history(self) -> None:
         """Test handling of empty chat history."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         custom_agent = create_message("Custom", MessageType.USER, 10)
         reminder = create_message("Reminder", MessageType.USER, 10)
 
-        simple_chat_history = []
+        simple_chat_history: list[ChatMessageSimple] = []
         project_files = create_project_files(num_files=1, tokens_per_file=50)
 
         result = construct_message_history(
@@ -382,7 +385,7 @@ class TestConstructMessageHistory:
         assert result[2].message_type == MessageType.USER  # Project files
         assert result[3] == reminder
 
-    def test_no_user_message_raises_error(self):
+    def test_no_user_message_raises_error(self) -> None:
         """Test that an error is raised when there's no user message in history."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         assistant_msg = create_message("Response", MessageType.ASSISTANT, 5)
@@ -401,7 +404,7 @@ class TestConstructMessageHistory:
                 available_tokens=1000,
             )
 
-    def test_not_enough_tokens_for_required_elements(self):
+    def test_not_enough_tokens_for_required_elements(self) -> None:
         """Test error when there aren't enough tokens for required elements."""
         system_prompt = create_message("System", MessageType.SYSTEM, 50)
         user_msg = create_message("Message", MessageType.USER, 50)
@@ -422,7 +425,7 @@ class TestConstructMessageHistory:
                 available_tokens=200,
             )
 
-    def test_not_enough_tokens_for_last_user_and_messages_after(self):
+    def test_not_enough_tokens_for_last_user_and_messages_after(self) -> None:
         """Test error when last user message and messages after don't fit."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First", MessageType.USER, 10)
@@ -447,7 +450,7 @@ class TestConstructMessageHistory:
                 available_tokens=50,
             )
 
-    def test_complex_scenario_all_elements(self):
+    def test_complex_scenario_all_elements(self) -> None:
         """Test a complex scenario with all elements combined."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First", MessageType.USER, 10)
@@ -499,7 +502,7 @@ class TestConstructMessageHistory:
         assert result[9] == tool_response  # After last user
         assert result[10] == reminder  # At the very end
 
-    def test_project_files_json_format(self):
+    def test_project_files_json_format(self) -> None:
         """Test that project files are formatted correctly as JSON."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg = create_message("Hello", MessageType.USER, 5)

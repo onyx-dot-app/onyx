@@ -71,7 +71,7 @@ def translate_llm_loop_packets(
         # Translate AgentResponseStart (message_start)
         if isinstance(obj, AgentResponseStart):
             # Old format expects: id (string), content (string), final_documents
-            translated_obj = {
+            translated_obj: dict[str, Any] = {
                 "type": "message_start",
                 "content": "",  # Initial content is empty
                 "final_documents": [],  # Will be set if available

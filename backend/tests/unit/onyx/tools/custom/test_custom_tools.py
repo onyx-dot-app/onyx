@@ -106,6 +106,7 @@ class TestCustomTool(unittest.TestCase):
             result.rich_response,
             "Expected rich_response to be set",
         )
+        assert isinstance(result.rich_response, CustomToolCallSummary)
         self.assertEqual(
             result.rich_response.tool_name,
             "getAssistant",
@@ -141,6 +142,7 @@ class TestCustomTool(unittest.TestCase):
             result.rich_response,
             "Expected rich_response to be set",
         )
+        assert isinstance(result.rich_response, CustomToolCallSummary)
         self.assertEqual(
             result.rich_response.tool_name,
             "createAssistant",
@@ -239,6 +241,7 @@ class TestCustomTool(unittest.TestCase):
         )
 
         # Extract the final result from the rich_response
+        assert isinstance(mock_response.rich_response, CustomToolCallSummary)
         final_result = mock_response.rich_response.tool_result
         self.assertEqual(
             final_result,

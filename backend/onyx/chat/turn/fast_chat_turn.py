@@ -11,7 +11,6 @@ from agents import ToolCallItem
 from agents.tracing import trace
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
-from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.agents.agent_sdk.monkey_patches import (
@@ -19,7 +18,6 @@ from onyx.agents.agent_sdk.monkey_patches import (
 )
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
 from onyx.chat.chat_utils import llm_docs_from_fetched_documents_cache
-from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.memories import get_memories
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import (
@@ -120,7 +118,7 @@ def _run_agent_loop(
         # TODO: The system is rather prompt-cache efficient except for rebuilding the system prompt.
         # The biggest offender is when we hit max iterations and then all the tool calls cannot
         # be cached anymore since the system message will be differ in that it will have no tools.
-        langchain_system_message = default_build_system_message_v2(
+        default_build_system_message_v2(
             dependencies.prompt_config,
             dependencies.llm.config,
             memories,
@@ -129,11 +127,7 @@ def _run_agent_loop(
         )
         new_system_prompt = SystemMessage(
             role="system",
-            content=[
-                InputTextContent(
-                    type="input_text", text=str(langchain_system_message.content)
-                )
-            ],
+            content=[],
         )
         custom_instructions = build_custom_instructions(prompt_config)
         previous_messages = (
@@ -483,18 +477,6 @@ def _default_packet_translation(
             needs_start = False
             if needs_start:
                 ctx.current_run_step += 1
-                llm_docs_for_message_start = llm_docs_from_fetched_documents_cache(
-                    ctx.fetched_documents_cache
-                )
-                retrieved_search_docs = saved_search_docs_from_llm_docs(
-                    llm_docs_for_message_start
-                )
-                packets.append(
-                    Packet(
-                        turn_index=ctx.message_id,
-                        obj=AgentResponseStart(final_documents=retrieved_search_docs),
-                    )
-                )
 
             if obj is not None:
                 packets.append(

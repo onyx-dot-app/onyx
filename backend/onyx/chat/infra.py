@@ -15,6 +15,7 @@ class Emitter:
 
     def __init__(self, bus: Queue):
         self.bus = bus
+        # TODO this can be removed, nothing should need to use this
         self.packet_history: list[Packet] = []
 
     def emit(self, packet: Packet) -> None:

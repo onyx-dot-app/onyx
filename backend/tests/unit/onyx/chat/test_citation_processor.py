@@ -769,7 +769,7 @@ def test_citation_inside_code_block_not_processed(
     processor = DynamicCitationProcessor()
     processor.update_citation_mapping({1: mock_search_docs[1]})
 
-    tokens = [
+    tokens: list[str | None] = [
         "Here's code:\n```\n",
         "def example():\n    print('[1]')\n",
         "```\n",
@@ -787,7 +787,7 @@ def test_code_block_plaintext_added(mock_search_docs: dict[int, SearchDoc]) -> N
     """Test that code blocks with ``` followed by \\n get 'plaintext' added."""
     processor = DynamicCitationProcessor()
 
-    tokens = ["Code:\n```\n", "def test():\n    pass\n", "```\n"]
+    tokens: list[str | None] = ["Code:\n```\n", "def test():\n    pass\n", "```\n"]
     output, _ = process_tokens(processor, tokens)
 
     assert "```plaintext" in output
@@ -800,7 +800,7 @@ def test_citation_outside_code_block_processed(
     processor = DynamicCitationProcessor()
     processor.update_citation_mapping({1: mock_search_docs[1]})
 
-    tokens = [
+    tokens: list[str | None] = [
         "Text [",
         "1",
         "] before code.\n```\n",
@@ -826,7 +826,7 @@ def test_multiple_code_blocks(mock_search_docs: dict[int, SearchDoc]) -> None:
     processor = DynamicCitationProcessor()
     processor.update_citation_mapping({1: mock_search_docs[1]})
 
-    tokens = [
+    tokens: list[str | None] = [
         "First block:\n```\n",
         "code1\n",
         "```\n",
@@ -1128,7 +1128,7 @@ def test_complex_text_mixed_citations_code_blocks(
         {1: mock_search_docs[1], 2: mock_search_docs[2], 3: mock_search_docs[3]}
     )
 
-    tokens = [
+    tokens: list[str | None] = [
         "Here's some text [",
         "1",
         "] with a citation.\n",
@@ -1159,7 +1159,7 @@ def test_real_world_citation_patterns(mock_search_docs: dict[int, SearchDoc]) ->
     )
 
     # Simulate a realistic LLM response
-    tokens = [
+    tokens: list[str | None] = [
         "According to recent research [",
         "1",
         "], the findings suggest that ",

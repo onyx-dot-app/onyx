@@ -39,7 +39,7 @@ def unified_event_stream(
                 turn_func(messages, dependencies, *args, **kwargs)
             except Exception as e:
                 dependencies.emitter.emit(
-                    Packet(ind=0, obj=PacketException(type="error", exception=e))
+                    Packet(turn_index=0, obj=PacketException(type="error", exception=e))
                 )
 
         thread = run_in_background(run_with_exception_capture)

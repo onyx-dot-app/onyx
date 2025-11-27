@@ -521,7 +521,7 @@ class SavedSearchDocWithContent(SavedSearchDoc):
 
 
 class RetrievalDocs(BaseModel):
-    top_documents: list[SavedSearchDoc]
+    top_documents: list[SearchDoc]
 
 
 class SearchResponse(RetrievalDocs):
