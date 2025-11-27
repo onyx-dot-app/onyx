@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
+import { useCallback, memo, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
@@ -34,7 +34,7 @@ import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import { useChatSessions } from "@/lib/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
-import { useAgents, usePinnedAgents } from "@/lib/hooks/useAgents";
+import { useAgents, usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import SvgFolderPlus from "@/icons/folder-plus";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
@@ -64,7 +64,6 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
-import { pinAgentsToServer } from "./utils";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -149,10 +148,10 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
   } = useProjects();
   const { agents, isLoading: isLoadingAgents } = useAgents();
   const {
-    pinnedAgentIds,
-    refresh: refreshPinnedAgents,
+    pinnedAgents,
+    setPinnedAgents,
     isLoading: isLoadingPinnedAgents,
-  } = usePinnedAgents();
+  } = usePinnedAgentsWithDetails();
 
   // Wait for ALL dynamic data before showing any sections
   const isLoadingDynamicContent =
@@ -165,29 +164,6 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
   const { refreshCurrentProjectDetails, currentProjectId } =
     useProjectsContext();
 
-  // Local state for pinned agents (allows optimistic updates)
-  const [localPinnedAgents, setLocalPinnedAgents] = useState<
-    MinimalPersonaSnapshot[]
-  >([]);
-  const isInitialMount = useRef(true);
-
-  // Derive pinned agents from agents list and pinnedAgentIds
-  useEffect(() => {
-    if (agents.length > 0) {
-      const pinned = pinnedAgentIds
-        .map((id) => agents.find((agent) => agent.id === id))
-        .filter((agent): agent is MinimalPersonaSnapshot => !!agent);
-      // If no pinned agents, use default personas
-      const finalPinned =
-        pinned.length > 0
-          ? pinned
-          : agents.filter(
-              (agent) => agent.is_default_persona && agent.id !== 0
-            );
-      setLocalPinnedAgents(finalPinned);
-    }
-  }, [agents, pinnedAgentIds]);
-
   // Derive current agent from URL params
   const currentAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
   const currentAgentId = currentAgentIdRaw ? parseInt(currentAgentIdRaw) : null;
@@ -199,19 +175,6 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
     [agents, currentAgentId]
   );
 
-  // Persist pinned agents when local state changes (after initial mount)
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    if (localPinnedAgents.length > 0) {
-      pinAgentsToServer(localPinnedAgents.map((agent) => agent.id)).then(() => {
-        refreshPinnedAgents();
-      });
-    }
-  }, [localPinnedAgents, refreshPinnedAgents]);
-
   // State for custom agent modal
   const [pendingMoveChatSession, setPendingMoveChatSession] =
     useState<ChatSession | null>(null);
@@ -222,8 +185,8 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
     useState(false);
 
   const [visibleAgents, currentAgentIsPinned] = useMemo(
-    () => buildVisibleAgents(localPinnedAgents, currentAgent),
-    [localPinnedAgents, currentAgent]
+    () => buildVisibleAgents(pinnedAgents, currentAgent),
+    [pinnedAgents, currentAgent]
   );
   const visibleAgentIds = useMemo(
     () => visibleAgents.map((agent) => agent.id),
@@ -248,7 +211,7 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
       if (!over) return;
       if (active.id === over.id) return;
 
-      setLocalPinnedAgents((prev) => {
+      setPinnedAgents((prev) => {
         const activeIndex = visibleAgentIds.findIndex(
           (agentId) => agentId === active.id
         );
@@ -273,7 +236,7 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
     [
       visibleAgentIds,
       visibleAgents,
-      setLocalPinnedAgents,
+      setPinnedAgents,
       currentAgent,
       currentAgentIsPinned,
     ]
