@@ -42,7 +42,7 @@ from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_message
 from onyx.db.chat import get_chat_session_by_id
@@ -622,10 +622,11 @@ def stream_chat_message_objects(
         )
 
         # Translate packets to frontend-expected format
+        # this doesn't use the correct backend packet types and is a temporary fix
         yield from translate_llm_loop_packets(
             packet_stream=llm_loop_packets,
             message_id=assistant_response.id,
-        )
+        )  # type: ignore
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")
@@ -749,7 +750,7 @@ def gather_stream(
     citations: list[CitationInfo] = []
     error_msg: str | None = None
     message_id: int | None = None
-    top_documents: list[SavedSearchDoc] = []
+    top_documents: list[SearchDoc] = []
 
     for packet in packets:
         if isinstance(packet, Packet):

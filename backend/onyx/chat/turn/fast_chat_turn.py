@@ -22,7 +22,6 @@ from onyx.chat.chat_utils import llm_docs_from_fetched_documents_cache
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.memories import get_memories
 from onyx.chat.models import PromptConfig
-from onyx.chat.packet_sniffing import has_had_message_start
 from onyx.chat.prompt_builder.answer_prompt_builder import (
     default_build_system_message_v2,
 )
@@ -481,7 +480,7 @@ def _default_packet_translation(
             else:
                 obj = AgentResponseDelta(content=ev.data.delta)
 
-            needs_start = has_had_message_start(packet_history, ctx.current_run_step)
+            needs_start = False
             if needs_start:
                 ctx.current_run_step += 1
                 llm_docs_for_message_start = llm_docs_from_fetched_documents_cache(

@@ -12,6 +12,7 @@ from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.message_types import SystemMessage
 from onyx.llm.message_types import UserMessage
+from onyx.llm.message_types import UserMessageWithText
 from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
 from onyx.prompts.chat_prompts import CITATION_REMINDER
@@ -360,7 +361,7 @@ def default_build_user_message(
     # tag_handled_prompt = handle_onyx_date_awareness(
     #     user_prompt, prompt_config.datetime_aware
     # )
-    user_msg = UserMessage(content="N/A")
+    user_msg = UserMessageWithText(role="user", content="N/A")
     return user_msg
 
 

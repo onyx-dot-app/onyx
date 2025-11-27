@@ -624,6 +624,18 @@ def run_llm_step(
                 )
             )
 
+    # Uncomment the lines below to log the LLM call results
+    logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
+    logger.debug(f"Accumulated answer: {accumulated_answer}")
+    if tool_calls:
+        tool_calls_str = "\n".join(
+            f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"
+            for tc in tool_calls
+        )
+        logger.debug(f"Tool calls:\n{tool_calls_str}")
+    else:
+        logger.debug("Tool calls: []")
+
     return (
         LlmStepResult(
             reasoning=accumulated_reasoning if accumulated_reasoning else None,
@@ -765,6 +777,7 @@ def run_llm_loop(
                 else None
             )
 
+        reminder_message_text: str | None
         if ran_image_gen:
             # Some models are trained to give back images to the user for some similar tool
             # This is to prevent it generating things like:
