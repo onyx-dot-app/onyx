@@ -2,7 +2,9 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400&display=swap");
 
 @import "css/colors.css";
+@import "css/inputs.css";
 @import "css/line-item.css";
+@import "css/switch.css";
 
 @tailwind base;
 @tailwind components;
@@ -129,9 +131,6 @@
     box-shadow:
       0px 2px 24px 0px var(--shadow-03),
       0px 0px 12px 1px var(--shadow-03);
-  }
-  .focus-shadow {
-    box-shadow: 0px 0px 0px 2px var(--background-tint-04);
   }
 
   /* DEBUGGING UTILITIES
