@@ -476,13 +476,13 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
 
       <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
         <SidebarBody footer={settingsButton} actionButton={newSessionButton}>
-          {/* Show nothing below top buttons until ALL data is ready */}
-          {isLoadingDynamicContent ? null : folded ? (
+          {/* When folded, show icons immediately without waiting for data */}
+          {folded ? (
             <>
               {moreAgentsButton}
               {newProjectButton}
             </>
-          ) : (
+          ) : isLoadingDynamicContent ? null : (
             <>
               {/* Agents */}
               <DndContext

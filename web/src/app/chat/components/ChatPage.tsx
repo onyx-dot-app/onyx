@@ -435,8 +435,17 @@ export default function ChatPage({
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
-  const { showCenteredInput, loadingError, messageHistory } =
-    useChatPageLayout();
+  const {
+    showCenteredInput: showCenteredInputRaw,
+    loadingError,
+    messageHistory,
+  } = useChatPageLayout();
+
+  // When loading an existing chat session, always show input at bottom
+  // to prevent layout shift from centered → bottom position
+  const showCenteredInput = existingChatSessionId
+    ? false
+    : showCenteredInputRaw;
 
   const clientScrollToBottom = useCallback(
     (fast?: boolean) => {

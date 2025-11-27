@@ -216,7 +216,10 @@ function ChatInputBarInner({
 
   // Bottom controls are hidden until all data is loaded
   const controlsLoading =
-    ccPairsLoading || federatedLoading || !selectedAssistant;
+    ccPairsLoading ||
+    federatedLoading ||
+    !selectedAssistant ||
+    llmManager.isLoadingProviders;
   const [showPrompts, setShowPrompts] = useState(false);
 
   // Memoize availableSources to prevent unnecessary re-renders
@@ -523,13 +526,9 @@ function ChatInputBarInner({
           </div>
         )}
 
-        <div
-          className={cn(
-            "flex justify-between items-center w-full p-1 min-h-[40px]",
-            controlsLoading && "invisible"
-          )}
-        >
+        <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
           <div className="flex flex-row items-center">
+            {/* (+) button - always visible */}
             <FilePickerPopover
               onFileClick={handleFileClick}
               onPickRecent={(file: ProjectFile) => {
@@ -561,65 +560,80 @@ function ChatInputBarInner({
               )}
               selectedFileIds={currentMessageFiles.map((f) => f.id)}
             />
-            {selectedAssistant && selectedAssistant.tools.length > 0 && (
-              <ActionsPopover
-                selectedAssistant={selectedAssistant}
-                filterManager={filterManager}
-                availableSources={memoizedAvailableSources}
-                disabled={disabled}
-              />
-            )}
-            {showDeepResearch && (
-              <SelectButton
-                leftIcon={SvgHourglass}
-                onClick={toggleDeepResearch}
-                engaged={deepResearchEnabled}
-                action
-                folded
-                disabled={disabled}
-                className={disabled ? "bg-transparent" : ""}
-              >
-                Deep Research
-              </SelectButton>
-            )}
 
-            {selectedAssistant &&
-              forcedToolIds.length > 0 &&
-              forcedToolIds.map((toolId) => {
-                const tool = selectedAssistant.tools.find(
-                  (tool) => tool.id === toolId
-                );
-                if (!tool) {
-                  return null;
-                }
-                return (
-                  <SelectButton
-                    key={toolId}
-                    leftIcon={getIconForAction(tool)}
-                    onClick={() => {
-                      setForcedToolIds((prev) =>
-                        prev.filter((id) => id !== toolId)
-                      );
-                    }}
-                    engaged
-                    action
-                    disabled={disabled}
-                    className={disabled ? "bg-transparent" : ""}
-                  >
-                    {tool.display_name}
-                  </SelectButton>
-                );
-              })}
+            {/* Controls that load in when data is ready */}
+            <div
+              className={cn(
+                "flex flex-row items-center",
+                controlsLoading && "invisible"
+              )}
+            >
+              {selectedAssistant && selectedAssistant.tools.length > 0 && (
+                <ActionsPopover
+                  selectedAssistant={selectedAssistant}
+                  filterManager={filterManager}
+                  availableSources={memoizedAvailableSources}
+                  disabled={disabled}
+                />
+              )}
+              {showDeepResearch && (
+                <SelectButton
+                  leftIcon={SvgHourglass}
+                  onClick={toggleDeepResearch}
+                  engaged={deepResearchEnabled}
+                  action
+                  folded
+                  disabled={disabled}
+                  className={disabled ? "bg-transparent" : ""}
+                >
+                  Deep Research
+                </SelectButton>
+              )}
+
+              {selectedAssistant &&
+                forcedToolIds.length > 0 &&
+                forcedToolIds.map((toolId) => {
+                  const tool = selectedAssistant.tools.find(
+                    (tool) => tool.id === toolId
+                  );
+                  if (!tool) {
+                    return null;
+                  }
+                  return (
+                    <SelectButton
+                      key={toolId}
+                      leftIcon={getIconForAction(tool)}
+                      onClick={() => {
+                        setForcedToolIds((prev) =>
+                          prev.filter((id) => id !== toolId)
+                        );
+                      }}
+                      engaged
+                      action
+                      disabled={disabled}
+                      className={disabled ? "bg-transparent" : ""}
+                    >
+                      {tool.display_name}
+                    </SelectButton>
+                  );
+                })}
+            </div>
           </div>
 
           <div className="flex flex-row items-center gap-1">
-            <div data-testid="ChatInputBar/llm-popover-trigger">
+            {/* LLM popover - loads when ready */}
+            <div
+              data-testid="ChatInputBar/llm-popover-trigger"
+              className={cn(controlsLoading && "invisible")}
+            >
               <LLMPopover
                 llmManager={llmManager}
                 requiresImageGeneration={false}
                 disabled={disabled}
               />
             </div>
+
+            {/* Submit button - always visible */}
             <IconButton
               id="onyx-chat-input-send-button"
               icon={chatState === "input" ? SvgArrowUp : SvgStop}
