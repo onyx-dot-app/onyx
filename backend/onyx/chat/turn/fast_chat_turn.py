@@ -191,8 +191,8 @@ def _run_agent_loop(
             prompt_config,
             ctx.should_cite_documents,
             last_iteration_included_web_search,
-            model_provider=dependencies.llm.config.model_provider if dependencies.llm.config else None,
-            model_name=dependencies.llm.config.model_name if dependencies.llm.config else None,
+            model_provider=dependencies.llm.config.model_provider,
+            model_name=dependencies.llm.config.model_name,
         )
 
         # 3. Assign citation numbers to tool call outputs
