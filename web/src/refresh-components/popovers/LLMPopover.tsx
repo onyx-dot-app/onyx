@@ -17,6 +17,7 @@ import SelectButton from "@/refresh-components/buttons/SelectButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+
 export interface LLMPopoverProps {
   llmManager: LlmManager;
   requiresImageGeneration?: boolean;
@@ -28,7 +29,6 @@ export interface LLMPopoverProps {
 
 export default function LLMPopover({
   llmManager,
-  requiresImageGeneration,
   folded,
   onSelect,
   currentModelName,

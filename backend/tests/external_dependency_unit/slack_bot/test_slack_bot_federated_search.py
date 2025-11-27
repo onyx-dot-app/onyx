@@ -17,6 +17,7 @@ from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.federated.slack_search import fetch_and_cache_channel_metadata
 from onyx.db.models import DocumentSet
 from onyx.db.models import FederatedConnector
+from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import LLMProvider
 from onyx.db.models import Persona
 from onyx.db.models import Persona__DocumentSet
@@ -242,6 +243,17 @@ class TestSlackBotFederatedSearch:
             credentials={"workspace_url": "https://test.slack.com"},
         )
         db_session.add(federated_connector)
+        db_session.flush()
+
+        # Associate the federated connector with the persona's document sets
+        # This is required for Slack federated search to be enabled
+        for doc_set in persona.document_sets:
+            federated_doc_set_mapping = FederatedConnector__DocumentSet(
+                federated_connector_id=federated_connector.id,
+                document_set_id=doc_set.id,
+                entities={},  # Empty entities for test
+            )
+            db_session.add(federated_doc_set_mapping)
         db_session.flush()
 
         unique_id = str(uuid4())[:8]

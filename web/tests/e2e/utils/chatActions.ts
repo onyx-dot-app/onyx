@@ -52,17 +52,24 @@ export async function verifyCurrentModel(page: Page, modelName: string) {
   expect(text).toContain(modelName);
 }
 
-// Start of Selection
 export async function switchModel(page: Page, modelName: string) {
   await page.getByTestId("ChatInputBar/llm-popover-trigger").click();
-  // Target the LineItem (now a <div>) inside the popover content specifically
-  // LineItem changed from <button> to <div> to fix hydration errors
-  await page
+
+  // Wait for the popover to open
+  await page.waitForSelector('[role="dialog"]', { state: "visible" });
+
+  // LineItem is a <button> element inside the popover
+  // Find the button that contains the model name
+  const modelButton = page
     .locator('[role="dialog"]')
-    .locator("div.cursor-pointer")
+    .locator("button")
     .filter({ hasText: new RegExp(`${modelName}$`, "i") })
-    .first()
-    .click();
+    .first();
+
+  await modelButton.click();
+
+  // Wait for the popover to close
+  await page.waitForSelector('[role="dialog"]', { state: "hidden" });
 }
 
 export async function startNewChat(page: Page) {

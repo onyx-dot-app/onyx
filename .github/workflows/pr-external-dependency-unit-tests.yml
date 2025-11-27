@@ -12,12 +12,14 @@ permissions:
   contents: read
 
 env:
-  # AWS
-  S3_AWS_ACCESS_KEY_ID: ${{ secrets.S3_AWS_ACCESS_KEY_ID }}
-  S3_AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_AWS_SECRET_ACCESS_KEY }}
+  # AWS credentials for S3-specific test
+  S3_AWS_ACCESS_KEY_ID_FOR_TEST: ${{ secrets.S3_AWS_ACCESS_KEY_ID }}
+  S3_AWS_SECRET_ACCESS_KEY_FOR_TEST: ${{ secrets.S3_AWS_SECRET_ACCESS_KEY }}
 
   # MinIO
   S3_ENDPOINT_URL: "http://localhost:9004"
+  S3_AWS_ACCESS_KEY_ID: "minioadmin"
+  S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
 
   # Confluence
   CONFLUENCE_TEST_SPACE_URL: ${{ vars.CONFLUENCE_TEST_SPACE_URL }}
@@ -31,15 +33,20 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
+  # Code Interpreter
+  # TODO: debug why this is failing and enable
+  CODE_INTERPRETER_BASE_URL: http://localhost:8000
+
 jobs:
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
+    timeout-minutes: 45
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -58,6 +65,7 @@ jobs:
       - runner=2cpu-linux-arm64
       - ${{ format('run-id={0}-external-dependency-unit-tests-job-{1}', github.run_id, strategy['job-index']) }}
       - extras=s3-cache
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -71,12 +79,17 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Setup Python and Install Dependencies
         uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
+            backend/requirements/ee.txt
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
@@ -90,10 +103,24 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
+      - name: Create .env file for Docker Compose
+        run: |
+          cat <<EOF > deployment/docker_compose/.env
+          CODE_INTERPRETER_BETA_ENABLED=true
+          EOF
+
       - name: Set up Standard Dependencies
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d minio relational_db cache index
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.dev.yml \
+            up -d \
+            minio \
+            relational_db \
+            cache \
+            index \
+            code-interpreter
 
       - name: Run migrations
         run: |
@@ -113,3 +140,30 @@ jobs:
             -xv \
             --ff \
             backend/tests/external_dependency_unit/${TEST_DIR}
+
+      - name: Collect Docker logs on failure
+        if: failure()
+        run: |
+          mkdir -p docker-logs
+          cd deployment/docker_compose
+
+          # Get list of running containers
+          containers=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q)
+
+          # Collect logs from each container
+          for container in $containers; do
+            container_name=$(docker inspect --format='{{.Name}}' $container | sed 's/^\///')
+            echo "Collecting logs from $container_name..."
+            docker logs $container > ../../docker-logs/${container_name}.log 2>&1
+          done
+
+          cd ../..
+          echo "Docker logs collected in docker-logs directory"
+
+      - name: Upload Docker logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-logs-${{ matrix.test-dir }}
+          path: docker-logs/
+          retention-days: 7

@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Callout } from "@/components/ui/callout";
 import Text from "@/components/ui/text";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import Button from "@/refresh-components/buttons/Button";
 import { Label } from "@/components/Field";
 import {

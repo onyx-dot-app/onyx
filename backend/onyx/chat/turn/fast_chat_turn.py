@@ -42,6 +42,7 @@ from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.chat.turn.prompts.custom_instruction import build_custom_instructions
 from onyx.chat.turn.save_turn import extract_final_answer_from_packets
 from onyx.chat.turn.save_turn import save_turn
+from onyx.file_store.models import InMemoryChatFile
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
@@ -53,6 +54,7 @@ from onyx.server.query_and_chat.streaming_models import PacketObj
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
 from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 from onyx.tools.force import filter_tools_for_force_tool_use
 from onyx.tools.force import ForceUseTool
@@ -146,8 +148,10 @@ def _run_agent_loop(
             tool_choice = None
         else:
             tool_choice = (
-                "required" if force_use_tool and force_use_tool.force_use else "auto"
-            )
+                force_use_tool_to_function_tool_names(force_use_tool, available_tools)
+                if iteration_count == 0 and force_use_tool
+                else None
+            ) or "auto"
         model_settings = replace(dependencies.model_settings, tool_choice=tool_choice)
 
         agent = Agent(
@@ -223,6 +227,7 @@ def _fast_chat_turn_core(
     force_use_tool: ForceUseTool | None = None,
     # Dependency injectable argument for testing
     starter_context: ChatTurnContext | None = None,
+    latest_query_files: list[InMemoryChatFile] | None = None,
 ) -> None:
     """Core fast chat turn logic that allows overriding global_iteration_responses for testing.
 
@@ -244,7 +249,7 @@ def _fast_chat_turn_core(
         run_dependencies=dependencies,
         chat_session_id=chat_session_id,
         message_id=message_id,
-        research_type=research_type,
+        chat_files=latest_query_files or [],
     )
     with trace("fast_chat_turn"):
         _run_agent_loop(
@@ -301,6 +306,7 @@ def fast_chat_turn(
     research_type: ResearchType,
     prompt_config: PromptConfig,
     force_use_tool: ForceUseTool | None = None,
+    latest_query_files: list[InMemoryChatFile] | None = None,
 ) -> None:
     """Main fast chat turn function that calls the core logic with default parameters."""
     _fast_chat_turn_core(
@@ -311,6 +317,7 @@ def fast_chat_turn(
         research_type,
         prompt_config,
         force_use_tool=force_use_tool,
+        latest_query_files=latest_query_files,
     )
 
 

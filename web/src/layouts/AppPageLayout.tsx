@@ -11,7 +11,7 @@ import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionM
 import { useChatPageLayout } from "@/app/chat/stores/useChatSessionStore";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
-import MenuButton from "@/refresh-components/buttons/MenuButton";
+import LineItem from "@/refresh-components/buttons/LineItem";
 import SvgFolderIn from "@/icons/folder-in";
 import SvgTrash from "@/icons/trash";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -31,8 +31,12 @@ import { PopoverMenu } from "@/components/ui/popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { FOLDED_SIZE } from "@/refresh-components/Logo";
+import SvgSidebar from "@/icons/sidebar";
+import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
+import useScreenSize from "@/hooks/useScreenSize";
 
-interface AppPageLayoutProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
+export interface AppPageLayoutProps
+  extends React.HtmlHTMLAttributes<HTMLDivElement> {
   settings: CombinedSettings | null;
   chatSession: ChatSession | null;
 }
@@ -47,6 +51,8 @@ export default function AppPageLayout({
   className,
   ...rest
 }: AppPageLayoutProps) {
+  const { isMobile } = useScreenSize();
+  const { setFolded } = useAppSidebarContext();
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
@@ -155,21 +161,21 @@ export default function AppPageLayout({
   useEffect(() => {
     if (!showMoveOptions) {
       const items = [
-        <MenuButton
+        <LineItem
           key="move"
           icon={SvgFolderIn}
           onClick={noProp(() => setShowMoveOptions(true))}
         >
           Move to Project
-        </MenuButton>,
-        <MenuButton
+        </LineItem>,
+        <LineItem
           key="delete"
           icon={SvgTrash}
           onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
           danger
         >
           Delete
-        </MenuButton>,
+        </LineItem>,
       ];
       setPopoverItems(items);
     } else {
@@ -180,13 +186,13 @@ export default function AppPageLayout({
           onSearch={setSearchTerm}
         />,
         ...filteredProjects.map((project) => (
-          <MenuButton
+          <LineItem
             key={project.id}
             icon={SvgFolderIn}
             onClick={noProp(() => handleMoveClick(project.id))}
           >
             {project.name}
-          </MenuButton>
+          </LineItem>
         )),
       ];
       setPopoverItems(items);
@@ -196,12 +202,14 @@ export default function AppPageLayout({
   return (
     <>
       {popup}
+
       {showShareModal && chatSession && (
         <ShareChatSessionModal
           chatSession={chatSession}
           onClose={() => setShowShareModal(false)}
         />
       )}
+
       {showMoveCustomAgentModal && (
         <MoveCustomAgentChatModal
           onCancel={resetMoveState}
@@ -218,6 +226,7 @@ export default function AppPageLayout({
           }}
         />
       )}
+
       {deleteModalOpen && (
         <ConfirmationModalLayout
           title="Delete Chat"
@@ -235,9 +244,16 @@ export default function AppPageLayout({
       )}
 
       <div className="flex flex-col h-full w-full">
-        {(customHeaderContent || !showCenteredInput) && (
+        {(isMobile || customHeaderContent || !showCenteredInput) && (
           <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
-            <div className="flex-1" />
+            <div className="flex-1">
+              <IconButton
+                icon={SvgSidebar}
+                onClick={() => setFolded(false)}
+                className={cn(!isMobile && "invisible")}
+                internal
+              />
+            </div>
             <div className="flex-1 flex flex-col items-center">
               <Text text03>{customHeaderContent}</Text>
             </div>

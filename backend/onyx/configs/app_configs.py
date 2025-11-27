@@ -581,6 +581,12 @@ EXPERIMENTAL_CHECKPOINTING_ENABLED = (
     os.environ.get("EXPERIMENTAL_CHECKPOINTING_ENABLED", "").lower() == "true"
 )
 
+
+# TestRail specific configs
+TESTRAIL_BASE_URL = os.environ.get("TESTRAIL_BASE_URL", "")
+TESTRAIL_USERNAME = os.environ.get("TESTRAIL_USERNAME", "")
+TESTRAIL_API_KEY = os.environ.get("TESTRAIL_API_KEY", "")
+
 LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE = (
     os.environ.get("LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE", "").lower()
     == "true"
@@ -687,6 +693,16 @@ MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 #####
 # Tool Configs
 #####
+# Code Interpreter Service Configuration
+CODE_INTERPRETER_BASE_URL = os.environ.get("CODE_INTERPRETER_BASE_URL")
+
+CODE_INTERPRETER_DEFAULT_TIMEOUT_MS = int(
+    os.environ.get("CODE_INTERPRETER_DEFAULT_TIMEOUT_MS") or 60_000
+)
+
+CODE_INTERPRETER_MAX_OUTPUT_LENGTH = int(
+    os.environ.get("CODE_INTERPRETER_MAX_OUTPUT_LENGTH") or 50_000
+)
 
 
 #####
@@ -738,8 +754,6 @@ BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or
 # Langfuse API credentials - if provided, Langfuse tracing will be enabled
 LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
-# Langfuse host URL (defaults to cloud instance)
-LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or "https://cloud.langfuse.com"
 
 TOKEN_BUDGET_GLOBALLY_ENABLED = (
     os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"
@@ -855,6 +869,21 @@ _API_KEY_HASH_ROUNDS_RAW = os.environ.get("API_KEY_HASH_ROUNDS")
 API_KEY_HASH_ROUNDS = (
     int(_API_KEY_HASH_ROUNDS_RAW) if _API_KEY_HASH_ROUNDS_RAW else None
 )
+
+#####
+# MCP Server Configs
+#####
+MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
+MCP_SERVER_PORT = int(os.environ.get("MCP_SERVER_PORT") or 8090)
+
+# CORS origins for MCP clients (comma-separated)
+# Local dev: "http://localhost:*"
+# Production: "https://trusted-client.com,https://another-client.com"
+MCP_SERVER_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("MCP_SERVER_CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 
 POD_NAME = os.environ.get("POD_NAME")

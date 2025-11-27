@@ -13,10 +13,13 @@ def test_create_slack_channel_persona_reuses_existing_persona() -> None:
     fake_tool = MagicMock()
     fake_tool.id = 7
 
-    with patch(
-        "onyx.db.slack_channel_config.get_builtin_tool",
-        return_value=fake_tool,
-    ), patch("onyx.db.slack_channel_config.upsert_persona") as mock_upsert:
+    with (
+        patch(
+            "onyx.db.slack_channel_config.get_builtin_tool",
+            return_value=fake_tool,
+        ),
+        patch("onyx.db.slack_channel_config.upsert_persona") as mock_upsert,
+    ):
         mock_upsert.return_value = MagicMock()
 
         create_slack_channel_persona(

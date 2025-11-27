@@ -17,13 +17,13 @@ from pydantic import BaseModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.chat.models import PromptConfig
 from onyx.chat.turn.infra.emitter import Emitter
 from onyx.context.search.models import InferenceSection
 from onyx.db.models import User
+from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.tool import Tool
@@ -66,7 +66,6 @@ class ChatTurnContext:
 
     chat_session_id: UUID
     message_id: int
-    research_type: ResearchType
     run_dependencies: ChatTurnDependencies
     current_run_step: int = 0
     iteration_instructions: list[IterationInstructions] = dataclasses.field(
@@ -87,6 +86,10 @@ class ChatTurnContext:
     # not be emitted to the frontend (e.g. out of order packets)
     # TODO: remove this once Agents SDK fixes the bug with Anthropic reasoning
     current_output_index: int | None = None
+
+    # Files uploaded by the user in the chat
+    chat_files: list[InMemoryChatFile] = dataclasses.field(default_factory=list)
+
     # Token count of all current input context (system, history, user message, agent turns, etc.)
     # Updated dynamically as the conversation progresses through tool calls
     current_input_tokens: int = 0

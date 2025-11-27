@@ -43,6 +43,29 @@ def get_federated_retrieval_functions(
     if slack_context:
         logger.info("Slack context detected, checking for Slack bot setup...")
 
+        # If document_set_names is specified, check if any Slack federated connector
+        # is associated with those document sets before enabling Slack federated search
+        if document_set_names:
+            slack_federated_mappings = (
+                get_federated_connector_document_set_mappings_by_document_set_names(
+                    db_session, document_set_names
+                )
+            )
+            # Check if any of the mappings are for a Slack federated connector
+            has_slack_federated_connector = any(
+                mapping.federated_connector.source
+                == FederatedConnectorSource.FEDERATED_SLACK
+                for mapping in slack_federated_mappings
+                if mapping.federated_connector is not None
+            )
+            if not has_slack_federated_connector:
+                logger.info(
+                    f"Skipping Slack federated search: document sets {document_set_names} "
+                    "are not associated with any Slack federated connector"
+                )
+                # Return empty list - no Slack federated search for this context
+                return []
+
         try:
             slack_bots = fetch_slack_bots(db_session)
             logger.info(f"Found {len(slack_bots)} Slack bots")

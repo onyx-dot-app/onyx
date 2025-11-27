@@ -506,9 +506,15 @@ async def _connect_oauth(
     # Step 1: make unauthenticated request and parse returned www authenticate header
     # Ensure we have a trailing slash for the MCP endpoint
 
+    if mcp_server.transport is None:
+        raise HTTPException(
+            status_code=400,
+            detail="MCP server transport is not configured",
+        )
+
     # always make a http request for the initial probe
     transport = mcp_server.transport if is_connected else MCPTransport.STREAMABLE_HTTP
-    probe_url = mcp_server.server_url.rstrip("/") + "/"
+    probe_url = mcp_server.server_url
     logger.info(f"Probing OAuth server at: {probe_url}")
 
     oauth_auth = make_oauth_provider(
@@ -803,8 +809,7 @@ def save_user_credentials(
                 for k, v in config_data["headers"].items():
                     config_data["headers"][k] = v.replace(f"{{{key}}}", value)
 
-        # Normalize URL to include trailing slash to avoid redirect/slow path handling
-        server_url = mcp_server.server_url.rstrip("/") + "/"
+        server_url = mcp_server.server_url
         is_valid, test_message = test_mcp_server_credentials(
             server_url,
             config_data["headers"],
@@ -978,7 +983,7 @@ def _db_mcp_server_to_api_mcp_server(
             )
 
     is_authenticated: bool = (
-        db_server.auth_type == MCPAuthenticationType.NONE.value
+        db_server.auth_type == MCPAuthenticationType.NONE
         or (
             auth_performer == MCPAuthenticationPerformer.ADMIN
             and db_server.auth_type != MCPAuthenticationType.OAUTH
@@ -1259,12 +1264,19 @@ def _list_mcp_tools_by_id(
 
     t1 = time.time()
     logger.info(f"Discovering tools for MCP server: {mcp_server.name}: {t1}")
-    # Normalize URL to include trailing slash to avoid redirect/slow path handling
-    server_url = mcp_server.server_url.rstrip("/") + "/"
+    server_url = mcp_server.server_url
+
+    if mcp_server.transport is None:
+        raise HTTPException(
+            status_code=400,
+            detail="MCP server transport is not configured",
+        )
+    transport: MCPTransport = mcp_server.transport
+
     discovered_tools = discover_mcp_tools(
         server_url,
         connection_config.config.get("headers", {}) if connection_config else {},
-        transport=mcp_server.transport,
+        transport=transport,
         auth=auth,
     )
     logger.info(
@@ -1707,16 +1719,22 @@ def upsert_mcp_server_with_tools(
             f"{action_verb} MCP server '{request.name}' with ID {mcp_server.id}"
         )
 
+        if mcp_server.auth_type is None:
+            raise HTTPException(
+                status_code=500, detail="MCP server auth_type not configured"
+            )
+        auth_type_str = mcp_server.auth_type.value
+
         return MCPServerCreateResponse(
             server_id=mcp_server.id,
             server_name=mcp_server.name,
             server_url=mcp_server.server_url,
-            auth_type=mcp_server.auth_type,
+            auth_type=auth_type_str,
             auth_performer=(
                 request.auth_performer.value if request.auth_performer else None
             ),
             is_authenticated=(
-                mcp_server.auth_type == MCPAuthenticationType.NONE.value
+                mcp_server.auth_type == MCPAuthenticationType.NONE
                 or request.auth_performer == MCPAuthenticationPerformer.ADMIN
             ),
         )
@@ -1777,6 +1795,12 @@ def create_mcp_server_simple(
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Must be logged in as a curator or admin to create MCP server",
+        )
+
     mcp_server = create_mcp_server__no_commit(
         owner_email=user.email,
         name=request.name,
@@ -1802,6 +1826,9 @@ def create_mcp_server_simple(
         is_authenticated=False,  # Not authenticated yet
         status=mcp_server.status,
         tool_count=0,  # New server, no tools yet
+        auth_template=None,
+        user_credentials=None,
+        admin_credentials=None,
     )
 
 
@@ -1813,6 +1840,12 @@ def update_mcp_server_simple(
     user: User | None = Depends(current_curator_or_admin_user),
 ) -> MCPServer:
     """Update MCP server basic information (name, description, URL)"""
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Must be logged in as a curator or admin to update MCP server",
+        )
 
     try:
         mcp_server = get_mcp_server_by_id(server_id, db_session)

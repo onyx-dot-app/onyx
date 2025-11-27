@@ -29,6 +29,18 @@ This means the flow is:
 """
 
 
+class DATestPAT(BaseModel):
+    """Personal Access Token model for testing."""
+
+    id: int
+    name: str
+    token: str | None = None  # Raw token - only present on initial creation
+    token_display: str
+    created_at: str
+    expires_at: str | None = None
+    last_used_at: str | None = None
+
+
 class DATestAPIKey(BaseModel):
     api_key_id: int
     api_key_display: str

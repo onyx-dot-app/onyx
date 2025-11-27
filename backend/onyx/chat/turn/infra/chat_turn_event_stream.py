@@ -32,7 +32,7 @@ def unified_event_stream(
         messages: List[Dict[str, Any]],
         dependencies: ChatTurnDependencies,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Generator[Packet, None]:
         def run_with_exception_capture() -> None:
             try:

@@ -29,7 +29,6 @@ from openai.types.responses.response_usage import InputTokensDetails
 from openai.types.responses.response_usage import OutputTokensDetails
 from openai.types.responses.response_usage import ResponseUsage
 
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.turn.infra.emitter import get_default_emitter
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
@@ -811,7 +810,6 @@ def chat_turn_context(
     chat_turn_dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     message_id: int,
-    research_type: ResearchType,
 ) -> ChatTurnContext:
     """Fixture providing a ChatTurnContext with filler arguments for testing."""
     from onyx.chat.turn.models import ChatTurnContext
@@ -819,6 +817,5 @@ def chat_turn_context(
     return ChatTurnContext(
         chat_session_id=chat_session_id,
         message_id=message_id,
-        research_type=research_type,
         run_dependencies=chat_turn_dependencies,
     )

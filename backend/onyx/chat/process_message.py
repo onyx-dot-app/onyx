@@ -972,6 +972,7 @@ def _fast_message_stream(
         research_type=answer.graph_config.behavior.research_type,
         prompt_config=prompt_config,
         force_use_tool=answer.graph_tooling.force_use_tool,
+        latest_query_files=answer.graph_inputs.files,
     )
 
 

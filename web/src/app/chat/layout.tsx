@@ -26,7 +26,6 @@ export default async function Layout({ children }: LayoutProps) {
   const {
     chatSessions,
     availableSources,
-    user,
     documentSets,
     tags,
     llmProviders,

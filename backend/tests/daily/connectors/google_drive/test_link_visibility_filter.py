@@ -76,12 +76,16 @@ def test_connector_skips_link_only_files_when_enabled() -> None:
     )
     fetch_mock = MagicMock(return_value=iter([retrieved_file]))
 
-    with patch.object(connector, "_fetch_drive_items", fetch_mock), patch(
-        "onyx.connectors.google_drive.connector.run_functions_tuples_in_parallel",
-        side_effect=_stub_run_functions,
-    ), patch(
-        "onyx.connectors.google_drive.connector.convert_drive_item_to_document"
-    ) as convert_mock:
+    with (
+        patch.object(connector, "_fetch_drive_items", fetch_mock),
+        patch(
+            "onyx.connectors.google_drive.connector.run_functions_tuples_in_parallel",
+            side_effect=_stub_run_functions,
+        ),
+        patch(
+            "onyx.connectors.google_drive.connector.convert_drive_item_to_document"
+        ) as convert_mock,
+    ):
         convert_mock.return_value = "doc"
         checkpoint = connector.build_dummy_checkpoint()
         results = list(
@@ -108,12 +112,16 @@ def test_connector_processes_files_when_option_disabled() -> None:
     )
     fetch_mock = MagicMock(return_value=iter([retrieved_file]))
 
-    with patch.object(connector, "_fetch_drive_items", fetch_mock), patch(
-        "onyx.connectors.google_drive.connector.run_functions_tuples_in_parallel",
-        side_effect=_stub_run_functions,
-    ), patch(
-        "onyx.connectors.google_drive.connector.convert_drive_item_to_document"
-    ) as convert_mock:
+    with (
+        patch.object(connector, "_fetch_drive_items", fetch_mock),
+        patch(
+            "onyx.connectors.google_drive.connector.run_functions_tuples_in_parallel",
+            side_effect=_stub_run_functions,
+        ),
+        patch(
+            "onyx.connectors.google_drive.connector.convert_drive_item_to_document"
+        ) as convert_mock,
+    ):
         convert_mock.return_value = "doc"
         checkpoint = connector.build_dummy_checkpoint()
         results = list(

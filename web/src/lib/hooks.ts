@@ -39,52 +39,8 @@ import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
-import { usePathname, useSearchParams } from "next/navigation";
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useLLMProviders } from "./hooks/useLLMProviders";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-
-export function useIsMounted() {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  return mounted;
-}
-
-// "AppFocus" is the current part of the main application which is active / focused on.
-// Namely, if the URL is pointing towards a "chat", then a `{ type: "chat", id: "..." }` is returned.
-//
-// This is useful in determining what `SidebarTab` should be active, for example.
-type AppFocus =
-  | { type: "agent" | "project" | "chat"; id: string }
-  | "new-session"
-  | "more-agents";
-
-export function useAppFocus(): AppFocus {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  // Check if we're on the agents page
-  if (pathname === "/chat/agents") {
-    return "more-agents";
-  }
-
-  // Check search params for chat, agent, or project
-  const chatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
-  if (chatId) return { type: "chat", id: chatId };
-
-  const agentId = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
-  if (agentId) return { type: "agent", id: agentId };
-
-  const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
-  if (projectId) return { type: "project", id: projectId };
-
-  // No search params means we're on a new session
-  return "new-session";
-}
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -963,6 +919,16 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-3-7-sonnet-202502019": "Claude 3.7 Sonnet",
   "claude-sonnet-4-5-20250929": "Claude 4.5 Sonnet",
   "claude-haiku-4-5-20251001": "Claude 4.5 Haiku",
+  "claude-opus-4-5-20251101": "Claude 4.5 Opus",
+  "claude-opus-4-1-20250805": "Claude 4.1 Opus",
+  "claude-opus-4-1": "Claude 4.1 Opus",
+  "claude-opus-4-20250514": "Claude 4 Opus",
+  "claude-4-opus-20250514": "Claude 4 Opus",
+  "claude-sonnet-4-5": "Claude 4.5 Sonnet (Latest)",
+  "claude-sonnet-4-20250514": "Claude 4 Sonnet",
+  "claude-4-sonnet-20250514": "Claude 4 Sonnet",
+  "claude-haiku-4-5": "Claude 4.5 Haiku (Latest)",
+  "claude-3-7-sonnet-latest": "Claude 3.7 Sonnet (Latest)",
 
   // Google Models
 
@@ -1054,6 +1020,20 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "us.anthropic.claude-sonnet-4-20250514-v1:0": "Claude 4 Sonnet (US)",
   "us.anthropic.claude-sonnet-4-5-20250929-v1:0": "Claude 4.5 Sonnet (US)",
   "us.anthropic.claude-haiku-4-5-20251001-v1:0": "Claude 4.5 Haiku (US)",
+  "us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0":
+    "Claude 4.5 Sonnet (US Gov)",
+  "us-gov.anthropic.claude-sonnet-4-20250514-v1:0": "Claude 4 Sonnet (US Gov)",
+  "us-gov.anthropic.claude-haiku-4-5-20251001-v1:0":
+    "Claude 4.5 Haiku (US Gov)",
+  "us-gov.anthropic.claude-3-5-haiku-20241022-v1:0":
+    "Claude 3.5 Haiku (US Gov)",
+  "us-gov.anthropic.claude-3-5-sonnet-20241022-v2:0":
+    "Claude 3.5 Sonnet v2 (US Gov)",
+  "us-gov.anthropic.claude-3-7-sonnet-20250219-v1:0":
+    "Claude 3.7 Sonnet (US Gov)",
+  "us-gov.anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku (US Gov)",
+  "us-gov.anthropic.claude-opus-4-1-20250805-v1:0": "Claude Opus 4.1 (US Gov)",
+  "us-gov.anthropic.claude-opus-4-20250514-v1:0": "Claude Opus 4 (US Gov)",
   "us.deepseek.r1-v1:0": "DeepSeek R1 (US)",
   "us.meta.llama3-1-405b-instruct-v1:0": "Llama 3.1 405B (US)",
   "us.meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B (US)",

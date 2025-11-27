@@ -15,7 +15,7 @@ import { numToDisplay } from "./constants";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { HoverPopup } from "@/components/HoverPopup";
-import { CustomCheckbox } from "@/components/CustomCheckbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { ScoreSection } from "../ScoreEditor";
 import { truncateString } from "@/lib/utils";
 
@@ -42,7 +42,7 @@ const IsVisibleSection = ({
           >
             <div className="select-none">Hidden</div>
             <div className="ml-1 my-auto">
-              <CustomCheckbox checked={false} />
+              <Checkbox checked={false} />
             </div>
           </div>
         ) : (
@@ -58,7 +58,7 @@ const IsVisibleSection = ({
           >
             <div className="my-auto select-none">Visible</div>
             <div className="ml-1 my-auto">
-              <CustomCheckbox checked={true} />
+              <Checkbox checked={true} />
             </div>
           </div>
         )

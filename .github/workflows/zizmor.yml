@@ -12,11 +12,12 @@ jobs:
   zizmor:
     name: zizmor
     runs-on: ubuntu-slim
+    timeout-minutes: 45
     permissions:
       security-events: write # needed for SARIF uploads
     steps:
       - name: Checkout repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # ratchet:actions/checkout@v5.0.1
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6.0.0
         with:
           persist-credentials: false
 
