@@ -153,10 +153,29 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
   const { popup, setPopup } = usePopup();
 
   // Use SWR hooks for data fetching
-  const { chatSessions, refreshChatSessions } = useChatSessions();
-  const { projects, refreshProjects } = useProjects();
-  const { agents } = useAgents();
-  const { pinnedAgentIds, refresh: refreshPinnedAgents } = usePinnedAgents();
+  const {
+    chatSessions,
+    refreshChatSessions,
+    isLoading: isLoadingChatSessions,
+  } = useChatSessions();
+  const {
+    projects,
+    refreshProjects,
+    isLoading: isLoadingProjects,
+  } = useProjects();
+  const { agents, isLoading: isLoadingAgents } = useAgents();
+  const {
+    pinnedAgentIds,
+    refresh: refreshPinnedAgents,
+    isLoading: isLoadingPinnedAgents,
+  } = usePinnedAgents();
+
+  // Wait for ALL dynamic data before showing any sections
+  const isLoadingDynamicContent =
+    isLoadingChatSessions ||
+    isLoadingProjects ||
+    isLoadingAgents ||
+    isLoadingPinnedAgents;
 
   // Still need some context for stateful operations
   const { refreshCurrentProjectDetails, currentProjectId } =
@@ -516,7 +535,8 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
 
       <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
         <SidebarBody footer={settingsButton} actionButton={newSessionButton}>
-          {folded ? (
+          {/* Show nothing below top buttons until ALL data is ready */}
+          {isLoadingDynamicContent ? null : folded ? (
             <>
               {moreAgentsButton}
               {newProjectButton}

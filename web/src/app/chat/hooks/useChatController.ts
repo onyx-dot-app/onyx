@@ -58,7 +58,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useChatSessions } from "@/lib/hooks/useChatSessions";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -138,7 +138,7 @@ export function useChatController({
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useAppParams();
-  const { refreshChatSessions } = useChatContext();
+  const { refreshChatSessions } = useChatSessions();
   const { agentPreferences: assistantPreferences, forcedToolIds } =
     useAgentsContext();
   const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =

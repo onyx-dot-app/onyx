@@ -210,8 +210,12 @@ function ChatInputBarInner({
   );
 
   const { inputPrompts } = useInputPrompts();
-  const { ccPairs } = useCCPairs();
-  const { data: federatedConnectorsData } = useFederatedConnectors();
+  const { ccPairs, isLoading: ccPairsLoading } = useCCPairs();
+  const { data: federatedConnectorsData, isLoading: federatedLoading } =
+    useFederatedConnectors();
+
+  // Bottom controls are hidden until all data is loaded
+  const controlsLoading = ccPairsLoading || federatedLoading;
   const [showPrompts, setShowPrompts] = useState(false);
 
   // Memoize availableSources to prevent unnecessary re-renders
@@ -433,6 +437,7 @@ function ChatInputBarInner({
           id="onyx-chat-input-textarea"
           className={cn(
             "w-full",
+            "h-[44px]", // Fixed initial height to prevent flash - useEffect will adjust as needed
             "outline-none",
             "bg-transparent",
             "resize-none",
@@ -445,18 +450,11 @@ function ChatInputBarInner({
             "pb-2",
             "pt-3"
           )}
-          autoFocus={!disabled}
+          autoFocus
           style={{ scrollbarWidth: "thin" }}
           role="textarea"
           aria-multiline
-          placeholder={
-            selectedAssistant.id === 0
-              ? `How can ${
-                  combinedSettings?.enterpriseSettings?.application_name ||
-                  "Onyx"
-                } help you today`
-              : `How can ${selectedAssistant.name} help you today`
-          }
+          placeholder="How can I help you today"
           value={message}
           onKeyDown={(event) => {
             if (
@@ -524,7 +522,12 @@ function ChatInputBarInner({
           </div>
         )}
 
-        <div className="flex justify-between items-center w-full p-1">
+        <div
+          className={cn(
+            "flex justify-between items-center w-full p-1 min-h-[40px]",
+            controlsLoading && "invisible"
+          )}
+        >
           <div className="flex flex-row items-center">
             <FilePickerPopover
               onFileClick={handleFileClick}

@@ -26,7 +26,8 @@ import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useAvailableTools } from "@/lib/hooks/useAvailableTools";
+import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSliders from "@/icons/sliders";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -144,11 +145,12 @@ export default function ActionsPopover({
 
   const { user, isAdmin, isCurator } = useUser();
 
-  const { availableTools, ccPairs } = useChatContext();
+  const { tools: availableTools } = useAvailableTools();
+  const { ccPairs } = useCCPairs();
   const availableToolIds = availableTools.map((tool) => tool.id);
 
   // Check if there are any connectors available
-  const hasNoConnectors = ccPairs.length === 0;
+  const hasNoConnectors = !ccPairs || ccPairs.length === 0;
 
   const assistantPreference = assistantPreferences?.[selectedAssistant.id];
   const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
