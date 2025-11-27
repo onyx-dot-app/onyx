@@ -7,7 +7,7 @@ import InputKeyValue, {
 } from "@/refresh-components/inputs/InputKeyValue";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import SvgUser from "@/icons/user";
 import type { MCPAuthFormValues } from "./modals/MCPAuthenticationModal";
 
@@ -134,7 +134,7 @@ export function PerUserAuthConfig({
       {/* Only show user credentials section if there are required fields */}
       {requiredFields.length > 0 && (
         <>
-          <Separator className="my-0 bg-border-01" />
+          <Separator className="-my-2" />
 
           <div className="flex flex-col gap-4">
             <div className="flex items-start gap-1">

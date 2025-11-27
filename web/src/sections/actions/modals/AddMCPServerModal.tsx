@@ -7,17 +7,13 @@ import Modal from "@/refresh-components/Modal";
 import { FormField } from "@/refresh-components/form/FormField";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { Textarea } from "@/components/ui/textarea";
+import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import SvgServer from "@/icons/server";
 import SvgCheckCircle from "@/icons/check-circle";
 import { createMCPServer, updateMCPServer } from "@/lib/mcpService";
-import {
-  MCPServerCreateRequest,
-  MCPServerStatus,
-  MCPServerWithStatus,
-} from "../types";
+import { MCPServerCreateRequest, MCPServerStatus } from "../types";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgUnplug from "@/icons/unplug";
 import { useMCPActions } from "../MCPActionsContext";
@@ -141,18 +137,17 @@ export default function AddMCPServerModal({
         >
           {({ values, errors, touched, handleChange, handleBlur }) => (
             <Form className="gap-0">
-              <Modal.Header className="p-4 w-full">
-                <Modal.CloseButton />
-                <Modal.Icon icon={SvgServer} className="mb-1" />
-                <Modal.Title>
-                  {isEditMode ? "Manage MCP server" : "Add MCP server"}
-                </Modal.Title>
-                <Modal.Description>
-                  {isEditMode
+              <Modal.Header
+                icon={SvgServer}
+                title={isEditMode ? "Manage MCP server" : "Add MCP server"}
+                description={
+                  isEditMode
                     ? "Update your MCP server configuration and manage authentication."
-                    : "Connect MCP (Model Context Protocol) server to add custom actions."}
-                </Modal.Description>
-              </Modal.Header>
+                    : "Connect MCP (Model Context Protocol) server to add custom actions."
+                }
+                className="p-4 w-full"
+                onClose={() => handleModalClose(false)}
+              />
 
               <Modal.Body className="flex flex-col bg-background-tint-01 p-4 gap-4">
                 <FormField
@@ -198,7 +193,7 @@ export default function AddMCPServerModal({
                 >
                   <FormField.Label optional>Description</FormField.Label>
                   <FormField.Control asChild>
-                    <Textarea
+                    <InputTextArea
                       id="description"
                       name="description"
                       placeholder="More details about the MCP server"
@@ -216,7 +211,7 @@ export default function AddMCPServerModal({
                   />
                 </FormField>
 
-                <Separator className="my-0 bg-border-01" />
+                <Separator className="-my-2" />
 
                 <FormField
                   id="server_url"

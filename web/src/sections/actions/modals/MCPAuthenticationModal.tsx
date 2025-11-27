@@ -20,7 +20,7 @@ import {
   MCPAuthenticationType,
   MCPTransportType,
 } from "@/lib/tools/interfaces";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import {
   Tabs,
   TabsList,
@@ -111,6 +111,10 @@ export default function MCPAuthenticationModal({
     mcpServer ? `/api/admin/mcp/servers/${mcpServer.id}` : null,
     errorHandlingFetcher
   );
+
+  const isEditConfigsFlow =
+    mcpServer?.is_authenticated &&
+    mcpServer?.status !== MCPServerStatus.AWAITING_AUTH;
 
   // Set the initial active tab based on the server configuration
   useEffect(() => {
@@ -312,24 +316,12 @@ export default function MCPAuthenticationModal({
   return (
     <Modal open={isOpen} onOpenChange={toggle}>
       <Modal.Content tall skipOverlay={skipOverlay}>
-        <Modal.Header className="p-4">
-          <Modal.CloseButton />
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1">
-              <div className="flex items-center justify-center p-0.5 w-7 h-7">
-                <SvgArrowExchange className="w-6 h-6 stroke-text-04" />
-              </div>
-            </div>
-            <div className="flex flex-col">
-              <Modal.Title>
-                Authenticate {mcpServer?.name || "MCP Server"}
-              </Modal.Title>
-              <Modal.Description>
-                Authenticate your connection to start using the MCP server.
-              </Modal.Description>
-            </div>
-          </div>
-        </Modal.Header>
+        <Modal.Header
+          icon={SvgArrowExchange}
+          title={`Authenticate ${mcpServer?.name || "MCP Server"}`}
+          description="Authenticate your connection to start using the MCP server."
+          className="p-4"
+        />
 
         <Formik<MCPAuthFormValues>
           initialValues={initialValues}
@@ -367,17 +359,19 @@ export default function MCPAuthenticationModal({
                         onValueChange={(value) =>
                           setFieldValue("transport", value)
                         }
-                        options={[
-                          {
-                            value: MCPTransportType.STREAMABLE_HTTP,
-                            label: "Streamable HTTP",
-                          },
-                          {
-                            value: MCPTransportType.SSE,
-                            label: "Server-Sent Events (SSE)",
-                          },
-                        ]}
-                      />
+                      >
+                        <InputSelect.Trigger placeholder="Select transport" />
+                        <InputSelect.Content>
+                          <InputSelect.Item
+                            value={MCPTransportType.STREAMABLE_HTTP}
+                          >
+                            Streamable HTTP
+                          </InputSelect.Item>
+                          <InputSelect.Item value={MCPTransportType.SSE}>
+                            Server-Sent Events (SSE)
+                          </InputSelect.Item>
+                        </InputSelect.Content>
+                      </InputSelect>
                     </FormField.Control>
                     <FormField.Description>
                       Used for client-server communication and authentication.
@@ -414,26 +408,29 @@ export default function MCPAuthenticationModal({
                             );
                           }
                         }}
-                        options={[
-                          {
-                            value: MCPAuthenticationType.OAUTH,
-                            label: "OAuth 2.0",
-                            description:
-                              "Each user need to authenticate via OAuth with their own credentials.",
-                          },
-                          {
-                            value: MCPAuthenticationType.API_TOKEN,
-                            label: "API Key",
-                            description:
-                              "Use per-user individual API key or organization-wide shared API key.",
-                          },
-                          {
-                            value: MCPAuthenticationType.NONE,
-                            label: "None",
-                            description: "Not Recommended",
-                          },
-                        ]}
-                      />
+                      >
+                        <InputSelect.Trigger placeholder="Select method" />
+                        <InputSelect.Content>
+                          <InputSelect.Item
+                            value={MCPAuthenticationType.OAUTH}
+                            description="Each user need to authenticate via OAuth with their own credentials."
+                          >
+                            OAuth 2.0
+                          </InputSelect.Item>
+                          <InputSelect.Item
+                            value={MCPAuthenticationType.API_TOKEN}
+                            description="Use per-user individual API key or organization-wide shared API key."
+                          >
+                            API Key
+                          </InputSelect.Item>
+                          <InputSelect.Item
+                            value={MCPAuthenticationType.NONE}
+                            description="Not Recommended"
+                          >
+                            None
+                          </InputSelect.Item>
+                        </InputSelect.Content>
+                      </InputSelect>
                     </FormField.Control>
                     <FormField.Message
                       messages={{
@@ -446,7 +443,7 @@ export default function MCPAuthenticationModal({
                   {(values.auth_type === MCPAuthenticationType.API_TOKEN ||
                     values.auth_type === MCPAuthenticationType.OAUTH ||
                     values.auth_type === MCPAuthenticationType.NONE) && (
-                    <Separator className="my-0 bg-border-01" />
+                    <Separator className="-my-2" />
                   )}
                 </div>
 
@@ -654,7 +651,7 @@ export default function MCPAuthenticationModal({
                   secondary
                   type="button"
                   onClick={() => handleSaveConfigsOnly(values)}
-                  disabled={!isValid || isSubmitting}
+                  disabled={!isValid || isSubmitting || isEditConfigsFlow}
                 >
                   Save Configs Only
                 </Button>

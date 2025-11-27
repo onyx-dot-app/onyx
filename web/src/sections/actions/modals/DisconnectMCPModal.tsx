@@ -31,7 +31,14 @@ export default function DisconnectMCPModal({
   if (!server) return null;
 
   return (
-    <Modal open={isOpen} onOpenChange={onClose}>
+    <Modal
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+    >
       <Modal.Content
         mini
         preventAccidentalClose={false}
@@ -41,19 +48,12 @@ export default function DisconnectMCPModal({
           disconnectButtonRef.current?.focus();
         }}
       >
-        <Modal.Header className="p-4 flex flex-col gap-1">
-          <Modal.CloseButton onClose={onClose} />
-          <div className="flex items-center gap-1">
-            <div className="p-1">
-              <SvgUnplug className="w-6 h-6 stroke-action-danger-05" />
-            </div>
-          </div>
-          <Modal.Title>
-            <Text text04 headingH3>
-              Disconnect {server.name}
-            </Text>
-          </Modal.Title>
-        </Modal.Header>
+        <Modal.Header
+          icon={SvgUnplug}
+          title={`Disconnect ${server.name}`}
+          className="p-4"
+          onClose={onClose}
+        />
 
         <Modal.Body className="p-4 flex flex-col gap-2 bg-background-tint-01">
           <Text text03 mainUiBody>

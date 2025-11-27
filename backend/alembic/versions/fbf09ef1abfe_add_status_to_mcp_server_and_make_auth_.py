@@ -1,14 +1,14 @@
 """add status to mcp server and make auth fields nullable
 
-Revision ID: 6f835fa21628
-Revises: 3c9a65f1207f
-Create Date: 2025-11-21 13:18:19.466924
+Revision ID: fbf09ef1abfe
+Revises: c7e9f4a3b2d1
+Create Date: 2025-11-27 16:45:09.775152
 
 """
 
 from alembic import op
 import sqlalchemy as sa
-from onyx.db.enums import (
+from onyx.db.enums import (  # type: ignore[import-untyped]
     MCPTransport,
     MCPAuthenticationType,
     MCPAuthenticationPerformer,
@@ -16,8 +16,8 @@ from onyx.db.enums import (
 )
 
 # revision identifiers, used by Alembic.
-revision = "6f835fa21628"
-down_revision = "3c9a65f1207f"
+revision = "fbf09ef1abfe"
+down_revision = "c7e9f4a3b2d1"
 branch_labels = None
 depends_on = None
 

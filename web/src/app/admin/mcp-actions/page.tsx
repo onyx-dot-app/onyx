@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import PageHeader from "@/refresh-components/headers/PageHeader";
 import SvgActions from "@/icons/actions";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import Actionbar from "@/sections/actions/Actionbar";
 import MCPActionsList from "../../../sections/actions/MCPActionsList";
 import AddMCPServerModal from "../../../sections/actions/modals/AddMCPServerModal";
@@ -107,7 +107,7 @@ function MCPActionsPageContent() {
         title="MCP Actions"
         description="Connect MCP (Model Context Protocol) server to add custom actions for chats and agents to retrieve specific data or perform predefined tasks."
       />
-      <Separator className="my-0 border border-border-01 mb-6" />
+      <Separator className="mb-6" />
       <Actionbar
         hasActions={hasActions}
         onAddMCPServer={() => {
