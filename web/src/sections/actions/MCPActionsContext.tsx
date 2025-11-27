@@ -142,6 +142,7 @@ export function MCPActionsProvider({
 
   // Track if any modal is open to manage the shared overlay
   useEffect(() => {
+    // Keep a shared overlay in sync with any MCP actions modal being open
     const anyModalOpen =
       authModal.isOpen || disconnectModal.isOpen || manageServerModal.isOpen;
     setShowSharedOverlay(anyModalOpen);
@@ -219,7 +220,7 @@ export function MCPActionsProvider({
     }
   }, [serverToDisconnect, setPopup, mutateMcpServers, disconnectModal]);
 
-  const handleManage = useCallback(
+  const openManageServerModal = useCallback(
     (serverId: number) => {
       const server = mcpServers.find((s) => s.id === serverId);
       if (server) {
@@ -230,15 +231,18 @@ export function MCPActionsProvider({
     [mcpServers, manageServerModal]
   );
 
+  const handleManage = useCallback(
+    (serverId: number) => {
+      openManageServerModal(serverId);
+    },
+    [openManageServerModal]
+  );
+
   const handleEdit = useCallback(
     (serverId: number) => {
-      const server = mcpServers.find((s) => s.id === serverId);
-      if (server) {
-        setServerToManage(server);
-        manageServerModal.toggle(true);
-      }
+      openManageServerModal(serverId);
     },
-    [mcpServers, manageServerModal]
+    [openManageServerModal]
   );
 
   const handleDelete = useCallback(

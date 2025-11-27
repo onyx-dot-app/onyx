@@ -1,9 +1,8 @@
 import useSWR, { KeyedMutator } from "swr";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { Tool } from "@/sections/actions/ToolsList";
 import { getMCPServerIcon } from "@/lib/mcpUtils";
-import { MCPServerWithStatus } from "./types";
+import { MCPServerWithStatus, MCPTool } from "./types";
 
 interface UseServerToolsOptions {
   serverId: number;
@@ -12,7 +11,7 @@ interface UseServerToolsOptions {
 }
 
 interface UseServerToolsReturn {
-  tools: Tool[];
+  tools: MCPTool[];
   isLoading: boolean;
   error: Error | undefined;
   mutate: KeyedMutator<ToolSnapshot[]>;
@@ -46,7 +45,7 @@ export function useServerTools({
   );
 
   // Convert ToolSnapshot[] to Tool[] format
-  const tools: Tool[] = toolsData
+  const tools: MCPTool[] = toolsData
     ? toolsData.map((tool) => ({
         id: tool.id.toString(),
         icon: getMCPServerIcon(server),

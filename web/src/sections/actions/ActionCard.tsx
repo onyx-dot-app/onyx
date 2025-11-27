@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import SvgServer from "@/icons/server";
 import ActionCardHeader from "./ActionCardHeader";
 import MCPActions from "./MCPActions";
@@ -86,9 +86,13 @@ export default function ActionCard({
   const [searchQuery, setSearchQuery] = useState("");
 
   // Update expanded state when initialExpanded changes
+  const hasInitializedExpansion = useRef(false);
+
+  // Apply initial expansion only once per component lifetime
   useEffect(() => {
-    if (initialExpanded) {
+    if (initialExpanded && !hasInitializedExpansion.current) {
       setIsToolsExpanded(true);
+      hasInitializedExpansion.current = true;
     }
   }, [initialExpanded]);
 
@@ -138,7 +142,7 @@ export default function ActionCard({
       : "";
 
   const handleToggleTools = () => {
-    setIsToolsExpanded(!isToolsExpanded);
+    setIsToolsExpanded((prev) => !prev);
     if (isToolsExpanded) {
       setSearchQuery("");
     }

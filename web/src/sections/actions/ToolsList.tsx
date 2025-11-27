@@ -5,18 +5,10 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import ToolItem from "./ToolItem";
 import ToolItemSkeleton from "./skeleton/ToolItemSkeleton";
-
-export interface Tool {
-  id: string;
-  name: string;
-  description: string;
-  icon?: React.ReactNode;
-  isAvailable: boolean;
-  isEnabled: boolean;
-}
+import type { MCPTool } from "./types";
 
 interface ToolsListProps {
-  tools: Tool[];
+  tools: MCPTool[];
   searchQuery?: string;
   onToolToggle?: (toolId: string, enabled: boolean) => void;
   className?: string;
@@ -35,6 +27,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
   const hasRetried = useRef(false);
 
   useEffect(() => {
+    // If the server reports tools but none were returned, try one automatic refetch
     if (!isFetching && tools.length === 0 && !hasRetried.current && onRetry) {
       hasRetried.current = true;
       onRetry();

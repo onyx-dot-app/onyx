@@ -9,19 +9,19 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
 import { Separator } from "@/components/ui/separator";
 import SvgUser from "@/icons/user";
+import type { MCPAuthFormValues } from "./modals/MCPAuthenticationModal";
 
 interface PerUserAuthConfigProps {
-  values: any;
-  setFieldValue: (field: string, value: any) => void;
-  errors: any;
-  touched: any;
+  values: MCPAuthFormValues;
+  setFieldValue: (
+    field: keyof MCPAuthFormValues | string,
+    value: unknown
+  ) => void;
 }
 
 export function PerUserAuthConfig({
   values,
   setFieldValue,
-  errors,
-  touched,
 }: PerUserAuthConfigProps) {
   // Use draft state for KeyValue array (like in LLMConnectionFieldsCustom)
   const [headersDraft, setHeadersDraft] = useState<KeyValue[]>(

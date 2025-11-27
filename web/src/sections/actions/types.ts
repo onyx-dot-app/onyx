@@ -1,3 +1,4 @@
+import type React from "react";
 import { MCPServer } from "@/lib/tools/interfaces";
 
 export enum MCPActionStatus {
@@ -35,4 +36,13 @@ export interface MCPServerUpdateRequest {
   name?: string;
   description?: string;
   server_url?: string;
+}
+
+export interface MCPTool {
+  id: string;
+  name: string;
+  description: string;
+  icon?: React.ReactNode;
+  isAvailable: boolean;
+  isEnabled: boolean;
 }

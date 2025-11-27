@@ -1,7 +1,7 @@
 "use client";
 import ActionCard from "@/sections/actions/ActionCard";
 import { getMCPServerIcon } from "@/lib/mcpUtils";
-import { MCPActionStatus, MCPServerStatus } from "./types";
+import { MCPActionStatus, MCPServerStatus, MCPServerWithStatus } from "./types";
 import MCPAuthenticationModal from "./modals/MCPAuthenticationModal";
 import DisconnectMCPModal from "./modals/DisconnectMCPModal";
 import { useMCPActions } from "./MCPActionsContext";
@@ -29,8 +29,8 @@ export default function MCPActionsList() {
     handleConfirmDisconnectAndDelete,
   } = useMCPActions();
 
-  // Determine status based on server status field
-  const getStatus = (server: any): MCPActionStatus => {
+  // Determine MCP action status based on server status field
+  const getStatus = (server: MCPServerWithStatus): MCPActionStatus => {
     if (server.status === MCPServerStatus.CONNECTED) {
       return MCPActionStatus.CONNECTED;
     } else if (

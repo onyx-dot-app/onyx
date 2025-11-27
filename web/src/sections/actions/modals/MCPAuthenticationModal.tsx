@@ -39,6 +39,22 @@ interface MCPAuthenticationModalProps {
   skipOverlay?: boolean;
 }
 
+interface MCPAuthTemplate {
+  headers: Record<string, string>;
+  required_fields: string[];
+}
+
+export interface MCPAuthFormValues {
+  transport: MCPTransportType;
+  auth_type: MCPAuthenticationType;
+  auth_performer: MCPAuthenticationPerformer;
+  api_token: string;
+  auth_template: MCPAuthTemplate;
+  user_credentials: Record<string, string>;
+  oauth_client_id: string;
+  oauth_client_secret: string;
+}
+
 const validationSchema = Yup.object().shape({
   transport: Yup.string()
     .oneOf([MCPTransportType.STREAMABLE_HTTP, MCPTransportType.SSE])
@@ -110,7 +126,7 @@ export default function MCPAuthenticationModal({
     }
   }, [fullServer]);
 
-  const initialValues = useMemo(() => {
+  const initialValues = useMemo<MCPAuthFormValues>(() => {
     if (!fullServer) {
       return {
         transport: MCPTransportType.STREAMABLE_HTTP,
@@ -143,16 +159,17 @@ export default function MCPAuthenticationModal({
       oauth_client_id: fullServer.admin_credentials?.client_id || "",
       oauth_client_secret: fullServer.admin_credentials?.client_secret || "",
       // Auth Template
-      auth_template: fullServer.auth_template || {
+      auth_template: (fullServer.auth_template as MCPAuthTemplate) || {
         headers: { Authorization: "Bearer {api_key}" },
         required_fields: ["api_key"],
       },
       // User Credentials (substitutions)
-      user_credentials: fullServer.user_credentials || {},
+      user_credentials:
+        (fullServer.user_credentials as Record<string, string>) || {},
     };
   }, [fullServer]);
 
-  const constructServerData = (values: any) => {
+  const constructServerData = (values: MCPAuthFormValues) => {
     if (!mcpServer) return null;
     const authType = values.auth_type;
 
@@ -190,7 +207,7 @@ export default function MCPAuthenticationModal({
     };
   };
 
-  const handleSaveConfigsOnly = async (values: any) => {
+  const handleSaveConfigsOnly = async (values: MCPAuthFormValues) => {
     const serverData = constructServerData(values);
     if (!serverData) return;
 
@@ -225,7 +242,7 @@ export default function MCPAuthenticationModal({
     }
   };
 
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async (values: MCPAuthFormValues) => {
     const serverData = constructServerData(values);
     if (!serverData || !mcpServer) return;
 
@@ -280,7 +297,13 @@ export default function MCPAuthenticationModal({
       }
     } catch (error) {
       console.error("Error saving authentication:", error);
-      throw error;
+      setPopup({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to save authentication configuration",
+        type: "error",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -308,7 +331,7 @@ export default function MCPAuthenticationModal({
           </div>
         </Modal.Header>
 
-        <Formik
+        <Formik<MCPAuthFormValues>
           initialValues={initialValues}
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
@@ -562,8 +585,6 @@ export default function MCPAuthenticationModal({
                         <PerUserAuthConfig
                           values={values}
                           setFieldValue={setFieldValue}
-                          errors={errors}
-                          touched={touched}
                         />
                       </TabsContent>
 
