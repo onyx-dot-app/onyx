@@ -4,7 +4,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export function useAvailableTools() {
   const { data, error, mutate } = useSWR<ToolSnapshot[]>(
-    "/api/tools",
+    "/api/tool",
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,

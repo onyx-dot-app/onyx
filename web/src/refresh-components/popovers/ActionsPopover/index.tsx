@@ -16,7 +16,8 @@ import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
 } from "@/lib/tools/interfaces";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
 import { useUser } from "@/components/user/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
@@ -136,12 +137,9 @@ export default function ActionsPopover({
   });
 
   // Get the assistant preference for this assistant
-  const {
-    agentPreferences: assistantPreferences,
-    setSpecificAgentPreferences: setSpecificAssistantPreferences,
-    forcedToolIds,
-    setForcedToolIds,
-  } = useAgentsContext();
+  const { assistantPreferences, setSpecificAssistantPreferences } =
+    useAssistantPreferences();
+  const { forcedToolIds, setForcedToolIds } = useForcedTools();
 
   const { user, isAdmin, isCurator } = useUser();
 

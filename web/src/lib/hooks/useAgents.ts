@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { pinAgents } from "../assistants/orderAssistants";
@@ -40,13 +40,12 @@ export function usePinnedAgents() {
  */
 export function usePinnedAgentsWithDetails() {
   const { agents, isLoading: isLoadingAgents } = useAgents();
-  const { pinnedAgentIds } = usePinnedAgents();
+  const { pinnedAgentIds, refresh: refreshUser } = usePinnedAgents();
 
   // Local state for optimistic updates during drag-and-drop
   const [localPinnedAgents, setLocalPinnedAgents] = useState<
     MinimalPersonaSnapshot[]
   >([]);
-  const isInitialMount = useRef(true);
 
   // Derive pinned agents from server data
   const serverPinnedAgents = useMemo(() => {
@@ -69,20 +68,40 @@ export function usePinnedAgentsWithDetails() {
     }
   }, [serverPinnedAgents]);
 
-  // Persist to server when local state changes (after initial mount)
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    if (localPinnedAgents.length > 0) {
-      pinAgents(localPinnedAgents.map((a) => a.id));
-    }
-  }, [localPinnedAgents]);
+  // Toggle pin status - updates local state AND persists to server
+  const togglePinnedAgent = useCallback(
+    async (agent: MinimalPersonaSnapshot, shouldPin: boolean) => {
+      const newPinned = shouldPin
+        ? [...localPinnedAgents, agent]
+        : localPinnedAgents.filter((a) => a.id !== agent.id);
+
+      // Optimistic update
+      setLocalPinnedAgents(newPinned);
+
+      // Persist to server
+      await pinAgents(newPinned.map((a) => a.id));
+      refreshUser(); // Refresh user to sync pinned_assistants
+    },
+    [localPinnedAgents, refreshUser]
+  );
+
+  // Update pinned agents order (for drag-and-drop) - updates AND persists
+  const updatePinnedAgents = useCallback(
+    async (newPinnedAgents: MinimalPersonaSnapshot[]) => {
+      // Optimistic update
+      setLocalPinnedAgents(newPinnedAgents);
+
+      // Persist to server
+      await pinAgents(newPinnedAgents.map((a) => a.id));
+      refreshUser();
+    },
+    [refreshUser]
+  );
 
   return {
     pinnedAgents: localPinnedAgents,
-    setPinnedAgents: setLocalPinnedAgents,
+    togglePinnedAgent,
+    updatePinnedAgents, // Use this instead of setPinnedAgents for drag-and-drop
     isLoading: isLoadingAgents,
   };
 }

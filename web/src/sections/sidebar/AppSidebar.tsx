@@ -149,7 +149,7 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
   const { agents, isLoading: isLoadingAgents } = useAgents();
   const {
     pinnedAgents,
-    setPinnedAgents,
+    updatePinnedAgents,
     isLoading: isLoadingPinnedAgents,
   } = usePinnedAgentsWithDetails();
 
@@ -211,32 +211,41 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
       if (!over) return;
       if (active.id === over.id) return;
 
-      setPinnedAgents((prev) => {
-        const activeIndex = visibleAgentIds.findIndex(
-          (agentId) => agentId === active.id
-        );
-        const overIndex = visibleAgentIds.findIndex(
-          (agentId) => agentId === over.id
-        );
+      const activeIndex = visibleAgentIds.findIndex(
+        (agentId) => agentId === active.id
+      );
+      const overIndex = visibleAgentIds.findIndex(
+        (agentId) => agentId === over.id
+      );
 
-        if (currentAgent && !currentAgentIsPinned) {
-          // This is the case in which the user is dragging the UNPINNED agent and moving it to somewhere else in the list.
-          // This is an indication that we WANT to pin this agent!
-          if (activeIndex === visibleAgentIds.length - 1) {
-            const prevWithVisible = [...prev, currentAgent];
-            return arrayMove(prevWithVisible, activeIndex, overIndex);
-          }
+      let newPinnedAgents: MinimalPersonaSnapshot[];
+
+      if (currentAgent && !currentAgentIsPinned) {
+        // This is the case in which the user is dragging the UNPINNED agent and moving it to somewhere else in the list.
+        // This is an indication that we WANT to pin this agent!
+        if (activeIndex === visibleAgentIds.length - 1) {
+          const pinnedWithCurrent = [...pinnedAgents, currentAgent];
+          newPinnedAgents = arrayMove(
+            pinnedWithCurrent,
+            activeIndex,
+            overIndex
+          );
+        } else {
+          // Use visibleAgents to ensure the indices match with `visibleAgentIds`
+          newPinnedAgents = arrayMove(visibleAgents, activeIndex, overIndex);
         }
+      } else {
+        // Use visibleAgents to ensure the indices match with `visibleAgentIds`
+        newPinnedAgents = arrayMove(visibleAgents, activeIndex, overIndex);
+      }
 
-        // Use visibleAgents instead of prev to ensure the indices match
-        // with `visibleAgentIds`
-        return arrayMove(visibleAgents, activeIndex, overIndex);
-      });
+      updatePinnedAgents(newPinnedAgents);
     },
     [
       visibleAgentIds,
       visibleAgents,
-      setPinnedAgents,
+      pinnedAgents,
+      updatePinnedAgents,
       currentAgent,
       currentAgentIsPinned,
     ]

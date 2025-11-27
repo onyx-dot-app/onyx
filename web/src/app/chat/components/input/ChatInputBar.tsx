@@ -15,7 +15,7 @@ import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { DocumentIcon2, FileIcon } from "@/components/icons/icons";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/chat/interfaces";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { CalendarIcon, XIcon } from "lucide-react";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString, cn, hasNonImageFiles } from "@/lib/utils";
@@ -132,7 +132,7 @@ function ChatInputBarInner({
   disabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
-  const { forcedToolIds, setForcedToolIds } = useAgentsContext();
+  const { forcedToolIds, setForcedToolIds } = useForcedTools();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
   const currentIndexingFiles = useMemo(() => {
@@ -604,8 +604,8 @@ function ChatInputBarInner({
                       key={toolId}
                       leftIcon={getIconForAction(tool)}
                       onClick={() => {
-                        setForcedToolIds((prev) =>
-                          prev.filter((id) => id !== toolId)
+                        setForcedToolIds(
+                          forcedToolIds.filter((id) => id !== toolId)
                         );
                       }}
                       engaged

@@ -71,7 +71,8 @@ import {
   MessageStart,
   PacketType,
 } from "../services/streamingModels";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "../services/fileUtils";
@@ -139,8 +140,8 @@ export function useChatController({
   const searchParams = useSearchParams();
   const params = useAppParams();
   const { refreshChatSessions } = useChatSessions();
-  const { agentPreferences: assistantPreferences, forcedToolIds } =
-    useAgentsContext();
+  const { assistantPreferences } = useAssistantPreferences();
+  const { forcedToolIds } = useForcedTools();
   const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const posthog = usePostHog();

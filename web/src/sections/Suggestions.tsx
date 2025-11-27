@@ -2,7 +2,7 @@
 
 import { OnSubmitProps } from "@/app/chat/hooks/useChatController";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useCurrentAgent } from "@/lib/hooks/useCurrentAgent";
 import { cn } from "@/lib/utils";
 
 interface SuggestionsProps {
@@ -10,7 +10,7 @@ interface SuggestionsProps {
 }
 
 export function Suggestions({ onSubmit }: SuggestionsProps) {
-  const { currentAgent } = useAgentsContext();
+  const { currentAgent } = useCurrentAgent();
 
   if (
     !currentAgent ||
