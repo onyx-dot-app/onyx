@@ -13,6 +13,7 @@ permissions:
 jobs:
   linear-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Check PR body for Linear link or override
         env:

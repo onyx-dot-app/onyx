@@ -9,7 +9,7 @@ import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import { useUser } from "@/components/user/UserProvider";
 import { Avatar } from "@/components/ui/avatar";
 import Text from "@/refresh-components/texts/Text";
-import MenuButton from "@/refresh-components/buttons/MenuButton";
+import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   Popover,
   PopoverContent,
@@ -92,11 +92,11 @@ function SettingsPopover({
           //   </NavigationTab>
           // )),
           <div key="user-settings" data-testid="Settings/user-settings">
-            <MenuButton icon={SvgUser} onClick={onUserSettingsClick}>
+            <LineItem icon={SvgUser} onClick={onUserSettingsClick}>
               Paramètres utilisateur
-            </MenuButton>
+            </LineItem>
           </div>,
-          <MenuButton
+          <LineItem
             key="notifications"
             icon={SvgBell}
             onClick={onNotificationsClick}
@@ -106,17 +106,17 @@ function SettingsPopover({
                 ? `(${notifications.length})`
                 : ""
             }`}
-          </MenuButton>,
+          </LineItem>,
           null,
           showLogout && (
-            <MenuButton
+            <LineItem
               key="log-out"
               icon={SvgLogOut}
               danger
               onClick={handleLogout}
             >
               Se déconnecter
-            </MenuButton>
+            </LineItem>
           ),
         ]}
       </PopoverMenu>

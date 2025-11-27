@@ -35,11 +35,12 @@ jobs:
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
+    timeout-minutes: 45
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -66,10 +67,11 @@ jobs:
 
   build-backend-image:
     runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
+    timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -102,10 +104,11 @@ jobs:
 
   build-model-server-image:
     runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
+    timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -136,10 +139,11 @@ jobs:
 
   build-integration-image:
     runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-build-integration-image", "extras=ecr-cache"]
+    timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -181,6 +185,7 @@ jobs:
       - runner=4cpu-linux-arm64
       - ${{ format('run-id={0}-integration-tests-job-{1}', github.run_id, strategy['job-index']) }}
       - extras=ecr-cache
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false
@@ -190,7 +195,7 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -221,6 +226,7 @@ jobs:
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           INTEGRATION_TESTS_MODE=true \
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001 \
+          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
@@ -229,43 +235,56 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
+            mcp_server \
             background \
             -d
         id: start_docker
 
-      - name: Wait for service to be ready
+      - name: Wait for services to be ready
         run: |
           echo "Starting wait-for-service script..."
 
-          docker logs -f onyx-api_server-1 &
+          wait_for_service() {
+            local url=$1
+            local label=$2
+            local timeout=${3:-300}  # default 5 minutes
+            local start_time
+            start_time=$(date +%s)
 
-          start_time=$(date +%s)
-          timeout=300  # 5 minutes in seconds
+            while true; do
+              local current_time
+              current_time=$(date +%s)
+              local elapsed_time=$((current_time - start_time))
 
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
+              if [ $elapsed_time -ge $timeout ]; then
+                echo "Timeout reached. ${label} did not become ready in $timeout seconds."
+                exit 1
+              fi
 
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. Service did not become ready in 5 minutes."
-              exit 1
-            fi
+              local response
+              response=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "curl_error")
 
-            # Use curl with error handling to ignore specific exit code 56
-            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
+              if [ "$response" = "200" ]; then
+                echo "${label} is ready!"
+                break
+              elif [ "$response" = "curl_error" ]; then
+                echo "Curl encountered an error while checking ${label}. Retrying in 5 seconds..."
+              else
+                echo "${label} not ready yet (HTTP status $response). Retrying in 5 seconds..."
+              fi
 
-            if [ "$response" = "200" ]; then
-              echo "Service is ready!"
-              break
-            elif [ "$response" = "curl_error" ]; then
-              echo "Curl encountered an error, possibly exit code 56. Continuing to retry..."
-            else
-              echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
-            fi
+              sleep 5
+            done
+          }
 
-            sleep 5
-          done
-          echo "Finished waiting for service."
+          wait_for_service "http://localhost:8080/health" "API server"
+          test_dir="${{ matrix.test-dir.path }}"
+          if [ "$test_dir" = "tests/mcp" ]; then
+            wait_for_service "http://localhost:8090/health" "MCP server"
+          else
+            echo "Skipping MCP server wait for non-MCP suite: $test_dir"
+          fi
+          echo "Finished waiting for services."
 
       - name: Start Mock Services
         run: |
@@ -294,6 +313,8 @@ jobs:
               -e VESPA_HOST=index \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
+              -e MCP_SERVER_HOST=mcp_server \
+              -e MCP_SERVER_PORT=8090 \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e EXA_API_KEY=${EXA_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
@@ -346,11 +367,12 @@ jobs:
         build-integration-image,
       ]
     runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-multitenant-tests", "extras=ecr-cache"]
+    timeout-minutes: 45
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -374,6 +396,7 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           DEV_MODE=true \
+          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.multitenant-dev.yml up \
             relational_db \
             index \
@@ -382,6 +405,7 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
+            mcp_server \
             background \
             -d
         id: start_docker_multi_tenant
@@ -430,6 +454,8 @@ jobs:
             -e VESPA_HOST=index \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
+            -e MCP_SERVER_HOST=mcp_server \
+            -e MCP_SERVER_PORT=8090 \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
             -e EXA_API_KEY=${EXA_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
@@ -471,6 +497,7 @@ jobs:
   required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
+    timeout-minutes: 45
     needs: [integration-tests, multitenant-tests]
     if: ${{ always() }}
     steps:

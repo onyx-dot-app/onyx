@@ -83,29 +83,25 @@ export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
 
-  // Find the Image Generation tool toggle
+  // Find the Image Generation tool checkbox
   // The tool display name is "Image Generation" based on the description in the code
-  // Use a more specific selector to avoid matching parent containers
-  const switchElement = page
-    .locator('div:has-text("Image Generation")')
-    .filter({ hasText: "Image Generation" })
-    .locator('button[role="switch"]')
-    .first();
+  // Note: The UI changed from switches to checkboxes
+  const checkboxElement = page.getByLabel("image-generation-checkbox").first();
 
   // Check if it's already enabled
-  const isEnabled = await switchElement.getAttribute("data-state");
+  const isEnabled = Boolean(await checkboxElement.getAttribute("aria-checked"));
 
-  if (isEnabled !== "checked") {
+  if (!isEnabled) {
     // If not enabled, click to enable it
-    await switchElement.click();
+    await checkboxElement.click();
 
     // Wait for the toggle to complete
     await page.waitForTimeout(1000);
 
     // Verify it's now enabled
-    const newState = await switchElement.getAttribute("data-state");
-    if (newState !== "checked") {
-      throw new Error("Failed to enable Image Generation tool");
-    }
+    const newState = Boolean(
+      await checkboxElement.getAttribute("aria-checked")
+    );
+    if (!newState) throw new Error("Failed to enable Image Generation tool");
   }
 }

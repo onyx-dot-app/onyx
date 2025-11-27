@@ -243,10 +243,12 @@ def get_federated_connector_document_set_mappings_by_document_set_names(
             DocumentSet,
             FederatedConnector__DocumentSet.document_set_id == DocumentSet.id,
         )
+        .options(joinedload(FederatedConnector__DocumentSet.federated_connector))
         .where(DocumentSet.name.in_(document_set_names))
     )
     result = db_session.scalars(stmt)
-    return list(result)
+    # Use unique() because joinedload can cause duplicate rows
+    return list(result.unique())
 
 
 def update_federated_connector(

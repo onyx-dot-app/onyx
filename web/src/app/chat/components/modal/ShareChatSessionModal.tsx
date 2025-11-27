@@ -9,7 +9,7 @@ import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { structureValue } from "@/lib/llm/utils";
 import { LlmDescriptor, useLlmManager } from "@/lib/hooks";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { cn } from "@/lib/utils";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";

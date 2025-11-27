@@ -128,6 +128,7 @@ def save_turn(
             additional_data=iteration_answer.additional_data,
             is_web_fetch=iteration_answer.is_web_fetch,
             queries=iteration_answer.queries,
+            file_ids=iteration_answer.file_ids,
         )
         db_session.add(research_agent_iteration_sub_step)
 

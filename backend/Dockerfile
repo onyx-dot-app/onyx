@@ -12,6 +12,13 @@ ENV DANSWER_RUNNING_IN_DOCKER="true" \
     DO_NOT_TRACK="true" \
     PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
 
+# Create non-root user for security best practices
+RUN groupadd -g 1001 onyx && \
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
+    mkdir -p /var/log/onyx && \
+    chmod 755 /var/log/onyx && \
+    chown onyx:onyx /var/log/onyx
+
 COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 
 # Install system dependencies
@@ -51,6 +58,7 @@ RUN uv pip install --system --no-cache-dir --upgrade \
     pip uninstall -y py && \
     playwright install chromium && \
     playwright install-deps chromium && \
+    chown -R onyx:onyx /app && \
     ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     # Cleanup for CVEs and size reduction
     # https://github.com/tornadoweb/tornado/issues/3107
@@ -93,13 +101,6 @@ tiktoken.get_encoding('cl100k_base')"
 
 # Set up application files
 WORKDIR /app
-
-# Create non-root user for security best practices
-RUN groupadd -g 1001 onyx && \
-    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
-    mkdir -p /var/log/onyx && \
-    chmod 755 /var/log/onyx && \
-    chown onyx:onyx /var/log/onyx
 
 # Enterprise Version Files
 COPY --chown=onyx:onyx ./ee /app/ee

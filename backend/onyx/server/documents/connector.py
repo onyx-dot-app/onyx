@@ -129,7 +129,7 @@ from onyx.server.documents.models import GmailCallback
 from onyx.server.documents.models import GoogleAppCredentials
 from onyx.server.documents.models import GoogleServiceAccountCredentialRequest
 from onyx.server.documents.models import GoogleServiceAccountKey
-from onyx.server.documents.models import IndexedSourceTypesResponse
+from onyx.server.documents.models import IndexedSourcesResponse
 from onyx.server.documents.models import IndexingStatusRequest
 from onyx.server.documents.models import ObjectCreationIdResponse
 from onyx.server.documents.models import RunConnectorRequest
@@ -1481,15 +1481,15 @@ def get_connectors(
     ]
 
 
-@router.get("/indexed-source-types")
-def get_indexed_source_types(
+@router.get("/indexed-sources")
+def get_indexed_sources(
     _: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> IndexedSourceTypesResponse:
-    source_types = sorted(
+) -> IndexedSourcesResponse:
+    sources = sorted(
         fetch_unique_document_sources(db_session), key=lambda source: source.value
     )
-    return IndexedSourceTypesResponse(source_types=source_types)
+    return IndexedSourcesResponse(sources=sources)
 
 
 @router.get("/connector/{connector_id}")

@@ -160,3 +160,8 @@ def is_valid_email(text: str) -> bool:
 
 def count_punctuation(text: str) -> int:
     return sum(1 for char in text if char in string.punctuation)
+
+
+def remove_markdown_image_references(text: str) -> str:
+    """Remove markdown-style image references like ![alt text](url)"""
+    return re.sub(r"!\[[^\]]*\]\([^\)]+\)", "", text)

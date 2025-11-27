@@ -3,7 +3,7 @@ import SvgCpu from "@/icons/cpu";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import SvgExternalLink from "@/icons/external-link";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import LLMProvider from "../components/LLMProvider";
 import { OnboardingActions, OnboardingState, OnboardingStep } from "../types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";

@@ -55,9 +55,9 @@ class ChunkInfo(BaseModel):
     num_tokens: int
 
 
-class IndexedSourceTypesResponse(BaseModel):
+class IndexedSourcesResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
-    source_types: list[DocumentSource]
+    sources: list[DocumentSource]
 
 
 class DeletionAttemptSnapshot(BaseModel):

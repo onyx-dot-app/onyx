@@ -1,4 +1,20 @@
+default_install_hook_types:
+  - pre-commit
+  - post-checkout
+  - post-merge
+  - post-rewrite
 repos:
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    # This revision is from https://github.com/astral-sh/uv-pre-commit/pull/53
+    rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
+    hooks:
+      - id: uv-sync
+      - id: uv-run
+        name: mypy
+        args: ["mypy"]
+        pass_filenames: true
+        files: ^backend/.*\.py$
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
@@ -71,31 +87,3 @@ repos:
         entry: python3 backend/scripts/check_lazy_imports.py
         language: system
         files: ^backend/(?!\.venv/).*\.py$
-
-  # We would like to have a mypy pre-commit hook, but due to the fact that
-  # pre-commit runs in it's own isolated environment, we would need to install
-  # and keep in sync all dependencies so mypy has access to the appropriate type
-  # stubs. This does not seem worth it at the moment, so for now we will stick to
-  # having mypy run via Github Actions / manually by contributors
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.1.1
-  #   hooks:
-  #     - id: mypy
-  #       exclude: ^tests/
-  #       # below are needed for type stubs since pre-commit runs in it's own
-  #       # isolated environment. Unfortunately, this needs to be kept in sync
-  #       # with requirements/dev.txt + requirements/default.txt
-  #       additional_dependencies: [
-  #         alembic==1.10.4,
-  #         types-beautifulsoup4==4.12.0.3,
-  #         types-html5lib==1.1.11.13,
-  #         types-oauthlib==3.2.0.9,
-  #         types-psycopg2==2.9.21.10,
-  #         types-python-dateutil==2.8.19.13,
-  #         types-regex==2023.3.23.1,
-  #         types-requests==2.28.11.17,
-  #         types-retry==0.9.9.3,
-  #         types-urllib3==1.26.25.11
-  #       ]
-  #       # TODO: add back once errors are addressed
-  #       # args: [--strict]

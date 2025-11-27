@@ -227,11 +227,14 @@ def run_internal_search_core_with_dependencies(
     from onyx.tools.tool_implementations_v2.internal_search import _internal_search_core
 
     # Patch the dependencies that the real function uses
-    with patch(
-        "onyx.tools.tool_implementations_v2.internal_search.get_session_with_current_tenant"
-    ) as mock_get_session, patch(
-        "onyx.tools.tool_implementations_v2.internal_search.get_tool_by_name"
-    ) as mock_get_tool_by_name:
+    with (
+        patch(
+            "onyx.tools.tool_implementations_v2.internal_search.get_session_with_current_tenant"
+        ) as mock_get_session,
+        patch(
+            "onyx.tools.tool_implementations_v2.internal_search.get_tool_by_name"
+        ) as mock_get_tool_by_name,
+    ):
 
         # Set up the session context manager mock
         if session_context_manager:

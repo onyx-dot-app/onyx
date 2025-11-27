@@ -14,7 +14,6 @@ from onyx.agents.agent_sdk.message_types import FunctionCallOutputMessage
 from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.turn.context_handler.citation import (
     assign_citation_numbers_recent_tool_calls,
@@ -162,7 +161,6 @@ def test_assign_citation_numbers_basic(
     context = ChatTurnContext(
         chat_session_id=uuid4(),
         message_id=1,
-        research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
         fetched_documents_cache={
             "first": FetchedDocumentCacheEntry(
@@ -211,7 +209,6 @@ def test_assign_citation_numbers_no_relevant_tool_calls(
     context = ChatTurnContext(
         chat_session_id=uuid4(),
         message_id=1,
-        research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
     )
     result = assign_citation_numbers_recent_tool_calls(messages, context)
@@ -272,7 +269,6 @@ def test_assign_citation_numbers_previous_tool_calls(
     context = ChatTurnContext(
         chat_session_id=uuid4(),
         message_id=1,
-        research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
         documents_processed_by_citation_context_handler=2,
         tool_calls_processed_by_citation_context_handler=1,
@@ -352,7 +348,6 @@ def test_assign_citation_numbers_parallel_tool_calls(
     context = ChatTurnContext(
         chat_session_id=uuid4(),
         message_id=1,
-        research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
         documents_processed_by_citation_context_handler=0,
         tool_calls_processed_by_citation_context_handler=0,
@@ -434,7 +429,6 @@ def test_assign_reused_citation_numbers(
     context = ChatTurnContext(
         chat_session_id=uuid4(),
         message_id=1,
-        research_type=ResearchType.FAST,
         run_dependencies=chat_turn_dependencies,
         documents_processed_by_citation_context_handler=1,
         tool_calls_processed_by_citation_context_handler=1,
