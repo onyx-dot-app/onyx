@@ -4,7 +4,6 @@ Provides backwards compatibility with older response formats.
 """
 
 import json
-from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
 
@@ -25,7 +24,6 @@ from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import User
-from onyx.server.query_and_chat.chat_backend import is_connected
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -216,7 +214,6 @@ def handle_new_chat_message_v0(
     request: Request,
     user: User | None = Depends(current_chat_accessible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
-    is_connected_func: Callable[[], bool] = Depends(is_connected),
 ) -> StreamingResponse:
     """
     TODO: deprecate this shortly.
@@ -261,7 +258,6 @@ def handle_new_chat_message_v0(
                     custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                         request.headers
                     ),
-                    is_connected=is_connected_func,
                 )
 
                 # Transform and yield each packet

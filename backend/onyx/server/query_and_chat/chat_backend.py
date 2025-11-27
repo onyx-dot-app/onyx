@@ -421,8 +421,6 @@ def handle_new_chat_message(
         request (Request): The current HTTP request context.
         user (User | None): The current user, obtained via dependency injection.
         _ (None): Rate limit check is run if user/group/global rate limits are enabled.
-        is_connected_func (Callable[[], bool]): Function to check client disconnection,
-            used to stop the streaming response if the client disconnects.
 
     Returns:
         StreamingResponse: Streams the response to the new chat message.

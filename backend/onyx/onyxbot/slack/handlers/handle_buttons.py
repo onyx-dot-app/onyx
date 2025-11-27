@@ -254,7 +254,7 @@ def handle_publish_ephemeral_message_button(
             answer=chat_message_detail.message,
             answer_citationless=remove_answer_citations(chat_message_detail.message),
             cited_documents={
-                citation_info.citation_num: citation_info.document_id
+                citation_info.citation_number: citation_info.document_id
                 for citation_info in citation_list
             },
             top_documents=(

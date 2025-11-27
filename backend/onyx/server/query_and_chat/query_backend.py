@@ -20,7 +20,7 @@ from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.chat import get_search_docs_for_chat_message
 from onyx.db.chat import get_valid_messages_from_query_sessions
 from onyx.db.chat import translate_db_message_to_chat_message_detail
-from onyx.db.chat import translate_db_search_doc_to_server_search_doc
+from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
@@ -215,7 +215,7 @@ def get_search_session(
                 db_session=db_session, chat_message_id=message.id
             )
             for doc in docs:
-                server_doc = translate_db_search_doc_to_server_search_doc(doc)
+                server_doc = translate_db_search_doc_to_saved_search_doc(doc)
                 docs_response.append(server_doc)
 
     response = SearchSessionDetailResponse(

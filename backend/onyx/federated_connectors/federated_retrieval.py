@@ -96,8 +96,8 @@ def get_federated_retrieval_functions(
                     token: str,
                     ctx: SlackContext,
                     bot_tok: str,
-                ) -> Callable[[SearchQuery], list[InferenceChunk]]:
-                    def retrieval_fn(query: SearchQuery) -> list[InferenceChunk]:
+                ) -> Callable[[ChunkIndexRequest], list[InferenceChunk]]:
+                    def retrieval_fn(query: ChunkIndexRequest) -> list[InferenceChunk]:
                         return conn.search(
                             query,
                             {},  # Empty entities for Slack context

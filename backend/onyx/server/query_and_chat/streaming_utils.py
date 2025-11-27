@@ -8,7 +8,7 @@ from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_db_search_doc_by_document_id
 from onyx.db.chat import get_db_search_doc_by_id
-from onyx.db.chat import translate_db_search_doc_to_server_search_doc
+from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tool_by_id
 from onyx.feature_flags.factory import get_default_feature_flag_provider
@@ -311,7 +311,7 @@ def translate_db_message_to_packets_simple(
                         if tool_call.search_docs:
                             for doc in tool_call.search_docs:
                                 saved_search_docs.append(
-                                    translate_db_search_doc_to_server_search_doc(doc)
+                                    translate_db_search_doc_to_saved_search_doc(doc)
                                 )
 
                         # Handle different tool types
@@ -387,7 +387,7 @@ def translate_db_message_to_packets_simple(
                 create_message_packets(
                     message_text=chat_message.message,
                     final_documents=[
-                        translate_db_search_doc_to_server_search_doc(doc)
+                        translate_db_search_doc_to_saved_search_doc(doc)
                         for doc in chat_message.search_docs
                     ],
                     turn_index=message_turn_index,
@@ -408,7 +408,7 @@ def translate_db_message_to_packets_simple(
                 )
                 if cited_doc:
                     saved_search_docs.append(
-                        translate_db_search_doc_to_server_search_doc(cited_doc)
+                        translate_db_search_doc_to_saved_search_doc(cited_doc)
                     )
 
             packet_list.extend(
@@ -610,7 +610,7 @@ def translate_db_message_to_packets(
                 create_message_packets(
                     message_text=chat_message.message,
                     final_documents=[
-                        translate_db_search_doc_to_server_search_doc(doc)
+                        translate_db_search_doc_to_saved_search_doc(doc)
                         for doc in chat_message.search_docs
                     ],
                     turn_index=turn_index,
@@ -627,7 +627,7 @@ def translate_db_message_to_packets(
                 )
                 if cited_doc:
                     saved_search_docs.append(
-                        translate_db_search_doc_to_server_search_doc(cited_doc)
+                        translate_db_search_doc_to_saved_search_doc(cited_doc)
                     )
 
             packet_list.extend(

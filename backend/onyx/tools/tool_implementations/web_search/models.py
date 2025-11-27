@@ -32,3 +32,8 @@ class WebSearchProvider:
     @abstractmethod
     def search(self, query: str) -> Sequence[WebSearchResult]:
         pass
+
+
+class WebContentProviderConfig(BaseModel):
+    timeout_seconds: int | None = None
+    base_url: str | None = None

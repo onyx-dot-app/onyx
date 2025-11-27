@@ -106,8 +106,11 @@ def get_company_context() -> str | None:
         workspace_settings = load_settings()
         company_name = workspace_settings.company_name
         company_description = workspace_settings.company_description
-        if company_name or company_description:
-            prompt_str = ""
+
+        if not company_name and not company_description:
+            return None
+
+        prompt_str = ""
         if company_name:
             prompt_str += COMPANY_NAME_BLOCK.format(company_name=company_name)
         if company_description:

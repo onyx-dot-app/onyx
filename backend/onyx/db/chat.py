@@ -834,7 +834,7 @@ def get_db_search_doc_by_document_id(
     return search_doc
 
 
-def translate_db_search_doc_to_server_search_doc(
+def translate_db_search_doc_to_saved_search_doc(
     db_search_doc: DBSearchDoc,
     remove_doc_content: bool = False,
 ) -> SavedSearchDoc:
@@ -870,7 +870,7 @@ def get_retrieval_docs_from_search_docs(
     sort_by_score: bool = True,
 ) -> RetrievalDocs:
     top_documents = [
-        translate_db_search_doc_to_server_search_doc(
+        translate_db_search_doc_to_saved_search_doc(
             db_doc, remove_doc_content=remove_doc_content
         )
         for db_doc in search_docs

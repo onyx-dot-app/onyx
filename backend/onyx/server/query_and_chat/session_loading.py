@@ -10,7 +10,7 @@ from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import get_db_search_doc_by_id
-from onyx.db.chat import translate_db_search_doc_to_server_search_doc
+from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tool_by_id
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
@@ -279,7 +279,7 @@ def translate_assistant_message_to_packets(
                             list[str], tool_call.tool_call_arguments.get("queries", [])
                         )
                         search_docs: list[SavedSearchDoc] = [
-                            translate_db_search_doc_to_server_search_doc(doc)
+                            translate_db_search_doc_to_saved_search_doc(doc)
                             for doc in tool_call.search_docs
                         ]
                         packet_list.extend(
@@ -294,7 +294,7 @@ def translate_assistant_message_to_packets(
 
                     elif tool.in_code_tool_id == OpenURLTool.__name__:
                         fetch_docs: list[SavedSearchDoc] = [
-                            translate_db_search_doc_to_server_search_doc(doc)
+                            translate_db_search_doc_to_saved_search_doc(doc)
                             for doc in tool_call.search_docs
                         ]
                         packet_list.extend(create_fetch_packets([fetch_docs], turn_num))
@@ -352,7 +352,7 @@ def translate_assistant_message_to_packets(
             create_message_packets(
                 message_text=chat_message.message,
                 final_documents=[
-                    translate_db_search_doc_to_server_search_doc(doc)
+                    translate_db_search_doc_to_saved_search_doc(doc)
                     for doc in chat_message.search_docs
                 ],
                 turn_index=message_turn_index,

@@ -17,7 +17,6 @@ from onyx.configs.constants import MessageType
 from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.enums import SearchType
-from onyx.context.search.models import RetrievalDocs
 from onyx.context.search.models import SearchDoc
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.file_store.models import FileDescriptor
@@ -58,7 +57,8 @@ class LlmDoc(BaseModel):
 
 
 # First chunk of info for streaming QA
-class QADocsResponse(RetrievalDocs):
+class QADocsResponse(BaseModel):
+    top_documents: list[SearchDoc]
     rephrased_query: str | None = None
     predicted_flow: QueryFlow | None
     predicted_search: SearchType | None
