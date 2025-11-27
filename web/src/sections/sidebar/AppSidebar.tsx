@@ -35,7 +35,6 @@ import SidebarSection from "@/sections/sidebar/SidebarSection";
 import { useChatSessions } from "@/lib/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useAgents, usePinnedAgents } from "@/lib/hooks/useAgents";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import SvgFolderPlus from "@/icons/folder-plus";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
@@ -65,6 +64,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { pinAgentsToServer } from "./utils";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -130,22 +130,6 @@ interface AppSidebarInnerProps {
   onFoldClick: () => void;
 }
 
-// Helper to persist pinned agents to the server
-async function pinAgentsToServer(pinnedAgentIds: number[]) {
-  const response = await fetch(`/api/user/pinned-assistants`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      ordered_assistant_ids: pinnedAgentIds,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error("Failed to update pinned assistants");
-  }
-}
-
 function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
   const route = useAppRouter();
   const searchParams = useSearchParams();
@@ -180,12 +164,6 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
   // Still need some context for stateful operations
   const { refreshCurrentProjectDetails, currentProjectId } =
     useProjectsContext();
-  const {
-    forcedToolIds,
-    setForcedToolIds,
-    agentPreferences,
-    setSpecificAgentPreferences,
-  } = useAgentsContext();
 
   // Local state for pinned agents (allows optimistic updates)
   const [localPinnedAgents, setLocalPinnedAgents] = useState<

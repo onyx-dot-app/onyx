@@ -80,25 +80,9 @@ import AppPageLayout from "@/layouts/AppPageLayout";
 import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgChevronDown from "@/icons/chevron-down";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 
-// Default assistant used during loading to prevent UI flash
-const DEFAULT_ASSISTANT: MinimalPersonaSnapshot = {
-  id: 0,
-  name: "",
-  description: "",
-  tools: [],
-  starter_messages: null,
-  document_sets: [],
-  is_public: true,
-  is_visible: true,
-  display_priority: null,
-  is_default_persona: true,
-  builtin_persona: true,
-  owner: null,
-};
 interface ChatPageProps {
   documentSidebarInitialWidth?: number;
   firstMessage?: string;
@@ -857,7 +841,7 @@ export default function ChatPage({
                       <MessagesDisplay
                         messageHistory={messageHistory}
                         completeMessageTree={completeMessageTree}
-                        liveAssistant={liveAssistant || DEFAULT_ASSISTANT}
+                        liveAssistant={liveAssistant}
                         llmManager={llmManager}
                         deepResearchEnabled={deepResearchEnabled}
                         currentMessageFiles={currentMessageFiles}
@@ -958,9 +942,7 @@ export default function ChatPage({
                             }
                             availableContextTokens={availableContextTokens}
                             selectedAssistant={
-                              selectedAssistant ||
-                              liveAssistant ||
-                              DEFAULT_ASSISTANT
+                              selectedAssistant || liveAssistant
                             }
                             handleFileUpload={handleMessageSpecificFileUpload}
                             textAreaRef={textAreaRef}

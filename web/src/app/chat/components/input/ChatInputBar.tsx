@@ -94,7 +94,7 @@ export interface ChatInputBarProps {
   availableContextTokens: number;
 
   // assistants
-  selectedAssistant: MinimalPersonaSnapshot;
+  selectedAssistant: MinimalPersonaSnapshot | undefined;
 
   toggleDocumentSidebar: () => void;
   handleFileUpload: (files: File[]) => void;
@@ -215,7 +215,8 @@ function ChatInputBarInner({
     useFederatedConnectors();
 
   // Bottom controls are hidden until all data is loaded
-  const controlsLoading = ccPairsLoading || federatedLoading;
+  const controlsLoading =
+    ccPairsLoading || federatedLoading || !selectedAssistant;
   const [showPrompts, setShowPrompts] = useState(false);
 
   // Memoize availableSources to prevent unnecessary re-renders
@@ -320,10 +321,10 @@ function ChatInputBarInner({
       combinedSettings?.settings?.deep_research_enabled ?? true;
     return (
       deepResearchGloballyEnabled &&
-      hasSearchToolsAvailable(selectedAssistant.tools)
+      hasSearchToolsAvailable(selectedAssistant?.tools || [])
     );
   }, [
-    selectedAssistant.tools,
+    selectedAssistant?.tools,
     combinedSettings?.settings?.deep_research_enabled,
   ]);
 
@@ -560,7 +561,7 @@ function ChatInputBarInner({
               )}
               selectedFileIds={currentMessageFiles.map((f) => f.id)}
             />
-            {selectedAssistant.tools.length > 0 && (
+            {selectedAssistant && selectedAssistant.tools.length > 0 && (
               <ActionsPopover
                 selectedAssistant={selectedAssistant}
                 filterManager={filterManager}
@@ -582,7 +583,8 @@ function ChatInputBarInner({
               </SelectButton>
             )}
 
-            {forcedToolIds.length > 0 &&
+            {selectedAssistant &&
+              forcedToolIds.length > 0 &&
               forcedToolIds.map((toolId) => {
                 const tool = selectedAssistant.tools.find(
                   (tool) => tool.id === toolId
