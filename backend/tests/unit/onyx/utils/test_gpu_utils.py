@@ -76,12 +76,11 @@ class TestGPUUtils(TestCase):
         assert result is False
         mock_get.assert_called_once()
 
+    @patch.dict(os.environ, {"DISABLE_MODEL_SERVER": "true"})
     def test_disabled_host_fallback(self) -> None:
-        """Test that disabled host is handled correctly"""
-        # Directly test the disabled host check
-        with patch("onyx.utils.gpu_utils.INDEXING_MODEL_SERVER_HOST", "disabled"):
-            result = _get_gpu_status_from_model_server(indexing=True)
-            assert result is False
+        """Test that disabled host is handled correctly via environment variable"""
+        result = _get_gpu_status_from_model_server(indexing=True)
+        assert result is False
 
     @patch.dict(os.environ, {"DISABLE_MODEL_SERVER": "false"})
     @patch("requests.get")
