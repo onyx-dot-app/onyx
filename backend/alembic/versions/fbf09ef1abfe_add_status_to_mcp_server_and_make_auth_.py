@@ -62,6 +62,18 @@ def upgrade() -> None:
         ),
     )
 
+    # For existing records, mark status as CONNECTED
+    bind = op.get_bind()
+    bind.execute(
+        sa.text(
+            """
+        UPDATE mcp_server
+        SET status = 'CONNECTED'
+        WHERE status = 'CREATED'
+        """
+        )
+    )
+
 
 def downgrade() -> None:
     # Remove status column
