@@ -245,6 +245,6 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
       setError,
       reset,
     },
-    isLoading: isLoadingProviders,
+    isLoading: isLoadingProviders || !!liveAssistant,
   };
 }

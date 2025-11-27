@@ -831,7 +831,6 @@ export default function ChatPage({
               className="flex h-full w-full overflow-x-hidden"
             >
               <Dropzone
-                key={chatSessionId}
                 onDrop={(acceptedFiles) =>
                   handleMessageSpecificFileUpload(acceptedFiles)
                 }
