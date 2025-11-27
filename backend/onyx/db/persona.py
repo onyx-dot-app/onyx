@@ -14,6 +14,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import with_loader_criteria
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS
@@ -23,7 +24,9 @@ from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
+from onyx.db.enums import MCPServerStatus
 from onyx.db.models import DocumentSet
+from onyx.db.models import MCPServer
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
@@ -379,6 +382,16 @@ def get_minimal_persona_snapshots_for_user(
     )
     stmt = stmt.options(
         selectinload(Persona.tools),
+        # Filter out tools from disconnected MCP servers
+        with_loader_criteria(
+            Tool,
+            or_(
+                Tool.mcp_server_id.is_(None),  # Non-MCP tools
+                Tool.mcp_server.has(
+                    MCPServer.status == MCPServerStatus.CONNECTED
+                ),  # MCP tools not disconnected
+            ),
+        ),
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),

@@ -106,7 +106,7 @@ class MCPServerStatus(str, PyEnum):
     AWAITING_AUTH = "AWAITING_AUTH"  # Auth configured, pending user authentication
     FETCHING_TOOLS = "FETCHING_TOOLS"  # Auth complete, fetching tools
     CONNECTED = "CONNECTED"  # Fully configured and connected
-    DISCONNECTED = "DISCONNECTED"
+    DISCONNECTED = "DISCONNECTED"  # Server disconnected, but not deleted
 
 
 # Consistent with Celery task statuses

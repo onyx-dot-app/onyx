@@ -1,15 +1,15 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import SvgServer from "@/icons/server";
 import ActionCardHeader from "./ActionCardHeader";
 import MCPActions from "./MCPActions";
 import ToolsSection from "./ToolsSection";
 import ToolsList from "./ToolsList";
 import { cn } from "@/lib/utils";
-import type { MCPActionStatus } from "./types";
-import { useServerTools } from "@/app/admin/mcp-actions/useServerTools";
-import { MCPServerWithStatus } from "@/app/admin/mcp-actions/types";
+import { MCPActionStatus } from "@/sections/actions/types";
+import { useServerTools } from "@/sections/actions/useServerTools";
+import { MCPServerStatus, MCPServerWithStatus } from "@/sections/actions/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { KeyedMutator } from "swr";
 
@@ -68,7 +68,7 @@ export default function ActionCard({
   title,
   description,
   logo,
-  status = "connected",
+  status = MCPActionStatus.CONNECTED,
   initialExpanded = false,
   toolCount,
   onDisconnect,
@@ -86,11 +86,20 @@ export default function ActionCard({
   const [searchQuery, setSearchQuery] = useState("");
 
   // Update expanded state when initialExpanded changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (initialExpanded) {
       setIsToolsExpanded(true);
     }
   }, [initialExpanded]);
+
+  useEffect(() => {
+    if (
+      server.status === MCPServerStatus.DISCONNECTED ||
+      server.status === MCPServerStatus.AWAITING_AUTH
+    ) {
+      setIsToolsExpanded(false);
+    }
+  }, [server.status]);
 
   // Lazy load tools only when expanded
   const { tools, isLoading, mutate } = useServerTools({
@@ -99,8 +108,9 @@ export default function ActionCard({
     isExpanded: isToolsExpanded,
   });
 
-  const isConnected = status === "connected";
-  const isDisconnected = status === "disconnected";
+  const isConnected = status === MCPActionStatus.CONNECTED;
+  const isDisconnected = status === MCPActionStatus.DISCONNECTED;
+  const isNotAuthenticated = status === MCPActionStatus.PENDING;
 
   // Filter tools based on search query
   const filteredTools = useMemo(() => {
@@ -115,7 +125,7 @@ export default function ActionCard({
     );
   }, [tools, searchQuery]);
 
-  const icon = isConnected ? (
+  const icon = !isNotAuthenticated ? (
     logo
   ) : (
     <SvgServer className="h-5 w-5 stroke-text-04" aria-hidden="true" />
@@ -200,7 +210,7 @@ export default function ActionCard({
             onToolToggle={(toolId, enabled) =>
               onToolToggle?.(serverId, toolId, enabled, mutate)
             }
-            isFetching={server.status === "FETCHING_TOOLS"}
+            isFetching={server.status === MCPServerStatus.FETCHING_TOOLS}
             onRetry={() => mutate()}
           />
         </div>

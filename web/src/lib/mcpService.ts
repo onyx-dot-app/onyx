@@ -6,7 +6,8 @@ import {
   MCPServerWithStatus,
   MCPServerCreateRequest,
   MCPServerUpdateRequest,
-} from "@/app/admin/mcp-actions/types";
+  MCPServerStatus,
+} from "@/sections/actions/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 
 export interface ToolStatusUpdateRequest {
@@ -146,7 +147,7 @@ export async function updateMCPServer(
  */
 export async function updateMCPServerStatus(
   serverId: number,
-  status: string
+  status: MCPServerStatus
 ): Promise<void> {
   const response = await fetch(
     `/api/admin/mcp/server/${serverId}/status?status=${status}`,

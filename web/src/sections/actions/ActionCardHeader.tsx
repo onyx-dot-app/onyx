@@ -2,7 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import type { MCPActionStatus } from "./types";
+import { MCPActionStatus } from "./types";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgEdit from "@/icons/edit";
@@ -17,9 +17,9 @@ interface ActionCardHeaderProps {
 
 const ActionCardHeader: React.FC<ActionCardHeaderProps> = React.memo(
   ({ title, description, icon, status, onEdit }) => {
-    const isConnected = status === "connected";
-    const isPending = status === "pending";
-    const isDisconnected = status === "disconnected";
+    const isConnected = status === MCPActionStatus.CONNECTED;
+    const isPending = status === MCPActionStatus.PENDING;
+    const isDisconnected = status === MCPActionStatus.DISCONNECTED;
 
     const showEditButton = isPending;
 

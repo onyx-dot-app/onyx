@@ -1,9 +1,9 @@
 "use client";
 import ActionCard from "@/sections/actions/ActionCard";
 import { getMCPServerIcon } from "@/lib/mcpUtils";
-import { MCPActionStatus } from "./types";
-import MCPAuthenticationModal from "./MCPAuthenticationModal";
-import DisconnectMCPModal from "./DisconnectMCPModal";
+import { MCPActionStatus, MCPServerStatus } from "./types";
+import MCPAuthenticationModal from "./modals/MCPAuthenticationModal";
+import DisconnectMCPModal from "./modals/DisconnectMCPModal";
 import { useMCPActions } from "./MCPActionsContext";
 
 export default function MCPActionsList() {
@@ -31,17 +31,17 @@ export default function MCPActionsList() {
 
   // Determine status based on server status field
   const getStatus = (server: any): MCPActionStatus => {
-    if (server.status === "CONNECTED") {
-      return "connected";
+    if (server.status === MCPServerStatus.CONNECTED) {
+      return MCPActionStatus.CONNECTED;
     } else if (
-      server.status === "AWAITING_AUTH" ||
-      server.status === "CREATED"
+      server.status === MCPServerStatus.AWAITING_AUTH ||
+      server.status === MCPServerStatus.CREATED
     ) {
-      return "pending";
-    } else if (server.status === "FETCHING_TOOLS") {
-      return "fetching";
+      return MCPActionStatus.PENDING;
+    } else if (server.status === MCPServerStatus.FETCHING_TOOLS) {
+      return MCPActionStatus.FETCHING;
     }
-    return "disconnected";
+    return MCPActionStatus.DISCONNECTED;
   };
 
   return (

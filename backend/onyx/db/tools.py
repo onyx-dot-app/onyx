@@ -28,19 +28,19 @@ def get_tools(
     db_session: Session,
     *,
     only_enabled: bool = False,
-    exclude_disconnected_mcp: bool = False,
+    only_connected_mcp: bool = False,
 ) -> list[Tool]:
     query = select(Tool)
 
-    if exclude_disconnected_mcp:
+    if only_connected_mcp:
         # Left join with MCPServer to check status
         # Keep tools that either:
-        # 1. Don't have an MCP server (mcp_server_id IS NULL) OR
-        # 2. Have an MCP server that is NOT disconnected
+        # 1. Don't have an MCP server (mcp_server_id IS NULL) - Non-MCP tools
+        # 2. Have an MCP server that is connected - Connected MCP tools
         query = query.outerjoin(MCPServer, Tool.mcp_server_id == MCPServer.id).where(
             or_(
-                Tool.mcp_server_id.is_(None),  # Non-MCP tools
-                MCPServer.status != MCPServerStatus.DISCONNECTED,  # Connected MCP tools
+                Tool.mcp_server_id.is_(None),  # Non-MCP tools (built-in, custom)
+                MCPServer.status == MCPServerStatus.CONNECTED,  # MCP tools connected
             )
         )
 

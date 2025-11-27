@@ -1085,8 +1085,6 @@ def admin_list_mcp_tools_by_id(
     If format=snapshot, performs discovery, upserts to DB, and returns ToolSnapshot format.
     Otherwise, returns MCPToolListResponse format (discovered tools).
     """
-    from onyx.db.tools import get_tools_by_mcp_server_id
-
     if format == "snapshot":
         # Perform discovery and upsert using the existing logic
         _list_mcp_tools_by_id(server_id, db, True, user)
@@ -1125,16 +1123,26 @@ def get_mcp_server_tools_snapshots(
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
     if source == "mcp":
-        # Discover tools from MCP server and sync to DB
-        _list_mcp_tools_by_id(server_id, db, True, user)
+        try:
+            # Discover tools from MCP server and sync to DB
+            _list_mcp_tools_by_id(server_id, db, True, user)
 
-        # Successfully discovered tools, update status to CONNECTED
-        update_mcp_server__no_commit(
-            server_id=server_id,
-            db_session=db,
-            status=MCPServerStatus.CONNECTED,
-        )
-        db.commit()
+            # Successfully discovered tools, update status to CONNECTED
+            update_mcp_server__no_commit(
+                server_id=server_id,
+                db_session=db,
+                status=MCPServerStatus.CONNECTED,
+            )
+            db.commit()
+        except Exception as e:
+            update_mcp_server__no_commit(
+                server_id=server_id,
+                db_session=db,
+                status=MCPServerStatus.AWAITING_AUTH,
+            )
+            db.commit()
+            logger.error(f"Failed to discover tools for MCP server: {e}")
+            raise HTTPException(status_code=500, detail="Failed to discover tools")
     elif source != "db":
         raise HTTPException(
             status_code=400,

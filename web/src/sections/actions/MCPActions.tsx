@@ -1,5 +1,5 @@
 "use client";
-import type { MCPActionStatus } from "./types";
+import { MCPActionStatus } from "./types";
 import React from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgUnplug from "@/icons/unplug";
@@ -38,12 +38,17 @@ const MCPActions: React.FC<MCPActionsProps> = React.memo(
     onToggleTools,
   }) => {
     const showViewToolsButton =
-      (status === "connected" || status === "fetching") &&
+      (status === MCPActionStatus.CONNECTED ||
+        status === MCPActionStatus.FETCHING ||
+        status === MCPActionStatus.DISCONNECTED) &&
       !isToolsExpanded &&
       onToggleTools;
 
     // Connected state
-    if (status === "connected" || status === "fetching") {
+    if (
+      status === MCPActionStatus.CONNECTED ||
+      status === MCPActionStatus.FETCHING
+    ) {
       return (
         <div className="flex flex-col gap-1 items-end">
           <div className="flex items-center">
@@ -76,7 +81,7 @@ const MCPActions: React.FC<MCPActionsProps> = React.memo(
               aria-label={`View tools for ${serverName}`}
               className="mr-0.5"
             >
-              {status === "fetching"
+              {status === MCPActionStatus.FETCHING
                 ? "Fetching tools..."
                 : `View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
             </Button>
@@ -86,7 +91,7 @@ const MCPActions: React.FC<MCPActionsProps> = React.memo(
     }
 
     // Pending state
-    if (status === "pending") {
+    if (status === MCPActionStatus.PENDING) {
       return (
         <div className="flex flex-col gap-1 items-end p-1 shrink-0">
           {onAuthenticate && (

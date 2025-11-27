@@ -11,12 +11,16 @@ import { Textarea } from "@/components/ui/textarea";
 import SvgServer from "@/icons/server";
 import SvgCheckCircle from "@/icons/check-circle";
 import { createMCPServer, updateMCPServer } from "@/lib/mcpService";
-import { MCPServerCreateRequest, MCPServerWithStatus } from "./types";
+import {
+  MCPServerCreateRequest,
+  MCPServerStatus,
+  MCPServerWithStatus,
+} from "../types";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { Separator } from "@/components/ui/separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgUnplug from "@/icons/unplug";
-import { useMCPActions } from "./MCPActionsContext";
+import { useMCPActions } from "../MCPActionsContext";
 
 interface AddMCPServerModalProps {
   skipOverlay?: boolean;
@@ -249,50 +253,52 @@ export default function AddMCPServerModal({
                 </FormField>
 
                 {/* Authentication Status Section - Only show in edit mode when authenticated */}
-                {isEditMode && server?.is_authenticated && (
-                  <FormField state="idle">
-                    <div className="flex items-start justify-between w-full">
-                      <div className="flex-1 flex flex-col gap-0 items-start">
-                        <FormField.Label
-                          leftIcon={
-                            <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-                          }
-                        >
-                          Authenticated & Connected
-                        </FormField.Label>
-                        <FormField.Description className="pl-5">
-                          {server.auth_type === "OAUTH"
-                            ? `OAuth connected to ${server.owner}`
-                            : server.auth_type === "API_TOKEN"
-                              ? "API token configured"
-                              : "Connected"}
-                        </FormField.Description>
-                      </div>
-                      <FormField.Control asChild>
-                        <div className="flex gap-2 items-center justify-end">
-                          <IconButton
-                            icon={SvgUnplug}
-                            tertiary
-                            type="button"
-                            tooltip="Disconnect Server"
-                            onClick={handleDisconnectClick}
-                          />
-                          <Button
-                            secondary
-                            type="button"
-                            onClick={() => {
-                              // Close this modal and open the auth modal for this server
-                              toggle(false);
-                              handleAuthenticate(server.id);
-                            }}
+                {isEditMode &&
+                  server?.is_authenticated &&
+                  server?.status === MCPServerStatus.CONNECTED && (
+                    <FormField state="idle">
+                      <div className="flex items-start justify-between w-full">
+                        <div className="flex-1 flex flex-col gap-0 items-start">
+                          <FormField.Label
+                            leftIcon={
+                              <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+                            }
                           >
-                            Edit Configs
-                          </Button>
+                            Authenticated & Connected
+                          </FormField.Label>
+                          <FormField.Description className="pl-5">
+                            {server.auth_type === "OAUTH"
+                              ? `OAuth connected to ${server.owner}`
+                              : server.auth_type === "API_TOKEN"
+                                ? "API token configured"
+                                : "Connected"}
+                          </FormField.Description>
                         </div>
-                      </FormField.Control>
-                    </div>
-                  </FormField>
-                )}
+                        <FormField.Control asChild>
+                          <div className="flex gap-2 items-center justify-end">
+                            <IconButton
+                              icon={SvgUnplug}
+                              tertiary
+                              type="button"
+                              tooltip="Disconnect Server"
+                              onClick={handleDisconnectClick}
+                            />
+                            <Button
+                              secondary
+                              type="button"
+                              onClick={() => {
+                                // Close this modal and open the auth modal for this server
+                                toggle(false);
+                                handleAuthenticate(server.id);
+                              }}
+                            >
+                              Edit Configs
+                            </Button>
+                          </div>
+                        </FormField.Control>
+                      </div>
+                    </FormField>
+                  )}
               </Modal.Body>
 
               <Modal.Footer className="p-4 gap-2">

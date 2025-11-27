@@ -6,10 +6,14 @@ import PageHeader from "@/refresh-components/headers/PageHeader";
 import SvgActions from "@/icons/actions";
 import { Separator } from "@/components/ui/separator";
 import Actionbar from "@/sections/actions/Actionbar";
-import MCPActionsList from "./MCPActionsList";
-import AddMCPServerModal from "./AddMCPServerModal";
+import MCPActionsList from "../../../sections/actions/MCPActionsList";
+import AddMCPServerModal from "../../../sections/actions/modals/AddMCPServerModal";
 import { refreshMCPServerTools, updateMCPServerStatus } from "@/lib/mcpService";
-import { MCPActionsProvider, useMCPActions } from "./MCPActionsContext";
+import {
+  MCPActionsProvider,
+  useMCPActions,
+} from "../../../sections/actions/MCPActionsContext";
+import { MCPServerStatus } from "../../../sections/actions/types";
 
 function MCPActionsPageContent() {
   const {
@@ -40,7 +44,10 @@ function MCPActionsPageContent() {
 
       const handleFetchingTools = async () => {
         try {
-          await updateMCPServerStatus(serverIdInt, "FETCHING_TOOLS");
+          await updateMCPServerStatus(
+            serverIdInt,
+            MCPServerStatus.FETCHING_TOOLS
+          );
 
           await mutateMcpServers();
 

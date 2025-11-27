@@ -62,9 +62,14 @@ def get_mcp_servers_for_persona(
     if not mcp_server_ids:
         return []
 
-    # Fetch the MCP servers
+    # Fetch the MCP servers (exclude disconnected servers)
     mcp_servers = (
-        db_session.query(MCPServer).filter(MCPServer.id.in_(mcp_server_ids)).all()
+        db_session.query(MCPServer)
+        .filter(
+            MCPServer.id.in_(mcp_server_ids),
+            MCPServer.status == MCPServerStatus.CONNECTED,
+        )
+        .all()
     )
 
     return list(mcp_servers)

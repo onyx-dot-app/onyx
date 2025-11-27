@@ -23,7 +23,7 @@ import {
   disableAllServerTools,
   updateMCPServerStatus,
 } from "@/lib/mcpService";
-import { MCPServerWithStatus } from "./types";
+import { MCPServerStatus, MCPServerWithStatus } from "./types";
 
 interface MCPActionsContextValue {
   // Data
@@ -134,7 +134,7 @@ export function MCPActionsProvider({
   useEffect(() => {
     if (mcpServers) {
       const fetchingIds = mcpServers
-        .filter((server) => server.status === "FETCHING_TOOLS")
+        .filter((server) => server.status === MCPServerStatus.FETCHING_TOOLS)
         .map((server) => server.id);
       setFetchingToolsServerIds(fetchingIds);
     }
@@ -163,7 +163,10 @@ export function MCPActionsProvider({
 
     setIsDisconnecting(true);
     try {
-      await updateMCPServerStatus(serverToDisconnect.id, "DISCONNECTED");
+      await updateMCPServerStatus(
+        serverToDisconnect.id,
+        MCPServerStatus.DISCONNECTED
+      );
 
       setPopup({
         message: "MCP Server disconnected successfully",
@@ -277,7 +280,7 @@ export function MCPActionsProvider({
   const handleReconnect = useCallback(
     async (serverId: number) => {
       try {
-        await updateMCPServerStatus(serverId, "CONNECTED");
+        await updateMCPServerStatus(serverId, MCPServerStatus.CONNECTED);
 
         setPopup({
           message: "MCP Server reconnected successfully",

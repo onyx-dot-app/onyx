@@ -27,10 +27,12 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/refresh-components/tabs/tabs";
-import { PerUserAuthConfig } from "./PerUserAuthConfig";
+import { PerUserAuthConfig } from "../PerUserAuthConfig";
 import { createMCPServer } from "@/lib/tools/edit";
-import { MCPServerWithStatus } from "./types";
+import { MCPServerStatus, MCPServerWithStatus } from "../types";
 import { updateMCPServerStatus } from "@/lib/mcpService";
+import { useMCPActions } from "../MCPActionsContext";
+import Message from "@/refresh-components/messages/Message";
 
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServerWithStatus | null;
@@ -83,6 +85,7 @@ export default function MCPAuthenticationModal({
   skipOverlay = false,
 }: MCPAuthenticationModalProps) {
   const { isOpen, toggle } = useModal();
+  const { setPopup, mutateMcpServers } = useMCPActions();
   const [activeAuthTab, setActiveAuthTab] = useState<"per-user" | "admin">(
     "per-user"
   );
@@ -149,47 +152,89 @@ export default function MCPAuthenticationModal({
     };
   }, [fullServer]);
 
+  const constructServerData = (values: any) => {
+    if (!mcpServer) return null;
+    const authType = values.auth_type;
+
+    return {
+      name: mcpServer.name,
+      description: mcpServer.description || undefined,
+      server_url: mcpServer.server_url,
+      transport: values.transport,
+      auth_type: values.auth_type,
+      auth_performer: values.auth_performer,
+      api_token:
+        authType === MCPAuthenticationType.API_TOKEN &&
+        values.auth_performer === MCPAuthenticationPerformer.ADMIN
+          ? values.api_token
+          : undefined,
+      auth_template:
+        values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+        authType === MCPAuthenticationType.API_TOKEN
+          ? values.auth_template
+          : undefined,
+      admin_credentials:
+        values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+        authType === MCPAuthenticationType.API_TOKEN
+          ? values.user_credentials || {}
+          : undefined,
+      oauth_client_id:
+        authType === MCPAuthenticationType.OAUTH
+          ? values.oauth_client_id
+          : undefined,
+      oauth_client_secret:
+        authType === MCPAuthenticationType.OAUTH
+          ? values.oauth_client_secret
+          : undefined,
+      existing_server_id: mcpServer.id,
+    };
+  };
+
+  const handleSaveConfigsOnly = async (values: any) => {
+    const serverData = constructServerData(values);
+    if (!serverData) return;
+
+    setIsSubmitting(true);
+
+    try {
+      const { data: serverResult, error: serverError } =
+        await createMCPServer(serverData);
+
+      if (serverError || !serverResult) {
+        throw new Error(serverError || "Failed to save server configuration");
+      }
+
+      setPopup({
+        message: "Authentication configuration saved successfully",
+        type: "success",
+      });
+
+      await mutateMcpServers();
+      toggle(false);
+    } catch (error) {
+      console.error("Error saving authentication config:", error);
+      setPopup({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to save configuration",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (values: any) => {
-    if (!mcpServer) return;
+    const serverData = constructServerData(values);
+    if (!serverData || !mcpServer) return;
+
     setIsSubmitting(true);
 
     try {
       const authType = values.auth_type;
 
       // Step 1: Save the authentication configuration to the MCP server
-      const serverData = {
-        name: mcpServer.name,
-        description: mcpServer.description || undefined,
-        server_url: mcpServer.server_url,
-        transport: values.transport,
-        auth_type: values.auth_type,
-        auth_performer: values.auth_performer,
-        api_token:
-          authType === MCPAuthenticationType.API_TOKEN &&
-          values.auth_performer === MCPAuthenticationPerformer.ADMIN
-            ? values.api_token
-            : undefined,
-        auth_template:
-          values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-          authType === MCPAuthenticationType.API_TOKEN
-            ? values.auth_template
-            : undefined,
-        admin_credentials:
-          values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-          authType === MCPAuthenticationType.API_TOKEN
-            ? values.user_credentials || {}
-            : undefined,
-        oauth_client_id:
-          authType === MCPAuthenticationType.OAUTH
-            ? values.oauth_client_id
-            : undefined,
-        oauth_client_secret:
-          authType === MCPAuthenticationType.OAUTH
-            ? values.oauth_client_secret
-            : undefined,
-        existing_server_id: mcpServer.id,
-      };
-
       const { data: serverResult, error: serverError } =
         await createMCPServer(serverData);
 
@@ -199,7 +244,10 @@ export default function MCPAuthenticationModal({
 
       // Step 2: Update status to AWAITING_AUTH after successful config save
       if (authType === MCPAuthenticationType.OAUTH) {
-        await updateMCPServerStatus(mcpServer.id, "AWAITING_AUTH");
+        await updateMCPServerStatus(
+          mcpServer.id,
+          MCPServerStatus.AWAITING_AUTH
+        );
       }
 
       // Step 3: For OAuth, initiate the OAuth flow
@@ -373,7 +421,8 @@ export default function MCPAuthenticationModal({
 
                   {/* Divider - only show if we have authentication fields */}
                   {(values.auth_type === MCPAuthenticationType.API_TOKEN ||
-                    values.auth_type === MCPAuthenticationType.OAUTH) && (
+                    values.auth_type === MCPAuthenticationType.OAUTH ||
+                    values.auth_type === MCPAuthenticationType.NONE) && (
                     <Separator className="my-0 bg-border-01" />
                   )}
                 </div>
@@ -557,6 +606,17 @@ export default function MCPAuthenticationModal({
                     </Tabs>
                   </div>
                 )}
+                {values.auth_type === MCPAuthenticationType.NONE && (
+                  <Message
+                    text="No authentication for this MCP server"
+                    description="No authentication will be used for this connection. Make sure you trust this server. You are responsible for actions taken with this connection."
+                    default
+                    medium
+                    static
+                    className="w-full"
+                    close={false}
+                  />
+                )}
               </Modal.Body>
 
               <Modal.Footer className="p-4 gap-2 bg-background-tint-00">
@@ -568,7 +628,13 @@ export default function MCPAuthenticationModal({
                 >
                   Skip for Now
                 </Button>
-                <Button main secondary type="button">
+                <Button
+                  main
+                  secondary
+                  type="button"
+                  onClick={() => handleSaveConfigsOnly(values)}
+                  disabled={!isValid || isSubmitting}
+                >
                   Save Configs Only
                 </Button>
                 <Button
