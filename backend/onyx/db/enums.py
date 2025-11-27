@@ -86,6 +86,7 @@ class MCPAuthenticationType(str, PyEnum):
     NONE = "NONE"
     API_TOKEN = "API_TOKEN"
     OAUTH = "OAUTH"
+    PT_OAUTH = "PT_OAUTH"
 
 
 class MCPTransport(str, PyEnum):

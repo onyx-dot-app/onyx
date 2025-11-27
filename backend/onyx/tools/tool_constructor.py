@@ -354,8 +354,12 @@ def construct_tools(
             # Get user-specific connection config if needed
             connection_config = None
             user_email = user.email if user else ""
+            mcp_user_oauth_token = None
 
-            if (
+            if mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
+                # Pass-through OAuth: use the user's login OAuth token
+                mcp_user_oauth_token = user_oauth_token
+            elif (
                 mcp_server.auth_type == MCPAuthenticationType.API_TOKEN
                 or mcp_server.auth_type == MCPAuthenticationType.OAUTH
             ):
@@ -387,6 +391,7 @@ def construct_tools(
                     tool_definition=saved_tool.mcp_input_schema or {},
                     connection_config=connection_config,
                     user_email=user_email,
+                    user_oauth_token=mcp_user_oauth_token,
                 )
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
 
