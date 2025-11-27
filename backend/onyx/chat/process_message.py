@@ -33,6 +33,7 @@ from onyx.chat.models import PromptConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import StreamingError
 from onyx.chat.prompt_builder.answer_prompt_builder import calculate_reserved_tokens
+from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.temp_translation import translate_llm_loop_packets
 from onyx.chat.turn import fast_chat_turn
@@ -602,6 +603,9 @@ def stream_chat_message_objects(
             redis_client,
         )
 
+        def check_is_connected() -> bool:
+            return check_stop_signal(chat_session_id, redis_client)
+
         # Run the LLM loop and translate packets for frontend
         # Note, this uses the emitter_generator_wrapper decorator which runs the entire thing
         # in a background thread. Technical the DB session is not thread safe but nothing else
@@ -618,7 +622,7 @@ def stream_chat_message_objects(
             tokenizer_func=tokenizer_encode_func,
             assistant_response=assistant_response,
             db_session=db_session,
-            redis_client=redis_client,
+            is_connected=check_is_connected,
         )
 
         # Translate packets to frontend-expected format
@@ -711,7 +715,6 @@ def stream_chat_message(
     user: User | None,
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
-    is_connected: Callable[[], bool] | None = None,
 ) -> Iterator[str]:
     start_time = time.time()
     with get_session_with_current_tenant() as db_session:
@@ -721,7 +724,6 @@ def stream_chat_message(
             db_session=db_session,
             litellm_additional_headers=litellm_additional_headers,
             custom_tool_additional_headers=custom_tool_additional_headers,
-            is_connected=is_connected,
         )
         for obj in objects:
             # Check if this is a QADocsResponse with document results

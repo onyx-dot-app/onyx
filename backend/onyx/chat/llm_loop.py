@@ -2,7 +2,6 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_processor import DynamicCitationProcessor
@@ -685,7 +684,7 @@ def run_llm_loop(
     tokenizer_func: Callable[[str], list[int]],
     assistant_response: ChatMessage,
     db_session: Session,
-    redis_client: Redis,
+    is_connected: Callable[[], bool] | None = None,
     force_use_tool_name: str | None = None,
 ) -> None:
     # Fix some LiteLLM issues,

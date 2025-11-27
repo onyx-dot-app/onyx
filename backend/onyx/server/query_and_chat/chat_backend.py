@@ -1,8 +1,6 @@
-import asyncio
 import datetime
 import json
 import os
-from collections.abc import Callable
 from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
@@ -402,36 +400,12 @@ def delete_chat_session_by_id(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-async def is_connected(request: Request) -> Callable[[], bool]:
-    main_loop = asyncio.get_event_loop()
-
-    def is_connected_sync() -> bool:
-        future = asyncio.run_coroutine_threadsafe(request.is_disconnected(), main_loop)
-        try:
-            is_connected = not future.result(timeout=0.05)
-            return is_connected
-        except asyncio.TimeoutError:
-            logger.warning(
-                "Asyncio timed out (potentially missed request to stop streaming)"
-            )
-            return True
-        except Exception as e:
-            error_msg = str(e)
-            logger.critical(
-                f"An unexpected error occured with the disconnect check coroutine: {error_msg}"
-            )
-            return True
-
-    return is_connected_sync
-
-
 @router.post("/send-message")
 def handle_new_chat_message(
     chat_message_req: CreateChatMessageRequest,
     request: Request,
     user: User | None = Depends(current_chat_accessible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
-    is_connected_func: Callable[[], bool] = Depends(is_connected),
 ) -> StreamingResponse:
     """
     This endpoint is both used for all the following purposes:
@@ -479,7 +453,6 @@ def handle_new_chat_message(
                 custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                     request.headers
                 ),
-                is_connected=is_connected_func,
             ):
                 yield packet
 

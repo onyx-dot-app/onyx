@@ -18,7 +18,7 @@ from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import RetrievalDocs
-from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
@@ -390,7 +390,7 @@ class ChatBasicResponse(BaseModel):
     answer: str
     answer_citationless: str
 
-    top_documents: list[SavedSearchDoc]
+    top_documents: list[SearchDoc]
 
     error_msg: str | None
     message_id: int
