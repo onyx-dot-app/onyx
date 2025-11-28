@@ -36,6 +36,7 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
         <div className="flex-1 min-w-[160px]">
           <InputTypeIn
             placeholder="Search tools…"
+            aria-label="Search tools"
             value={searchQuery}
             onChange={handleSearchChange}
             leftSearchIcon
