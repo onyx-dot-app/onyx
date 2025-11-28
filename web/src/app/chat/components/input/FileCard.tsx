@@ -33,8 +33,6 @@ function ImageFileCard({
   const sizeClass = compact ? "h-14 w-14" : "h-20 w-20";
   const loaderSize = compact ? "h-5 w-5" : "h-8 w-8";
 
-  const doneUploading = String(file.status) !== UserFileStatus.UPLOADING;
-
   return (
     <div
       className={`relative group ${sizeClass} rounded-12 border border-border-01 ${
@@ -48,7 +46,7 @@ function ImageFileCard({
         }
       }}
     >
-      {doneUploading && (
+      {!isProcessing && (
         <button
           onClick={handleRemoveFile}
           title="Delete file"
@@ -84,7 +82,7 @@ function ImageFileCard({
           <SvgX className="h-4 w-4 stroke-text-inverted-03" />
         </button>
       )}
-      {!doneUploading || !imageUrl ? (
+      {isProcessing || !imageUrl ? (
         <div className="h-full w-full flex items-center justify-center">
           <SimpleLoader className={loaderSize} />
         </div>
