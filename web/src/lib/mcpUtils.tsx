@@ -1,5 +1,4 @@
 import { SOURCE_METADATA_MAP } from "./sources";
-import { ValidSources } from "./types";
 import SvgServer from "@/icons/server";
 import { MCPServer } from "./tools/interfaces";
 import { DatabaseIcon, FileIcon } from "@/components/icons/icons";
