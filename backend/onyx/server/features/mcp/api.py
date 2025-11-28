@@ -35,6 +35,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.mcp import create_connection_config
 from onyx.db.mcp import create_mcp_server__no_commit
@@ -65,6 +66,8 @@ from onyx.server.features.mcp.models import MCPOAuthCallbackResponse
 from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.server.features.mcp.models import MCPServer
 from onyx.server.features.mcp.models import MCPServerCreateResponse
+from onyx.server.features.mcp.models import MCPServerSimpleCreateRequest
+from onyx.server.features.mcp.models import MCPServerSimpleUpdateRequest
 from onyx.server.features.mcp.models import MCPServersResponse
 from onyx.server.features.mcp.models import MCPServerUpdateResponse
 from onyx.server.features.mcp.models import MCPToolCreateRequest
@@ -73,6 +76,7 @@ from onyx.server.features.mcp.models import MCPToolUpdateRequest
 from onyx.server.features.mcp.models import MCPUserCredentialsRequest
 from onyx.server.features.mcp.models import MCPUserOAuthConnectRequest
 from onyx.server.features.mcp.models import MCPUserOAuthConnectResponse
+from onyx.server.features.tool.models import ToolSnapshot
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
 from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
@@ -440,9 +444,10 @@ async def _connect_oauth(
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
     if mcp_server.auth_type != MCPAuthenticationType.OAUTH:
+        auth_type_str = mcp_server.auth_type.value if mcp_server.auth_type else "None"
         raise HTTPException(
             status_code=400,
-            detail=f"Server was configured with authentication type {mcp_server.auth_type.value}",
+            detail=f"Server was configured with authentication type {auth_type_str}",
         )
 
     # Create admin config with client info if provided
@@ -500,6 +505,12 @@ async def _connect_oauth(
     )
     # Step 1: make unauthenticated request and parse returned www authenticate header
     # Ensure we have a trailing slash for the MCP endpoint
+
+    if mcp_server.transport is None:
+        raise HTTPException(
+            status_code=400,
+            detail="MCP server transport is not configured",
+        )
 
     # always make a http request for the initial probe
     transport = mcp_server.transport if is_connected else MCPTransport.STREAMABLE_HTTP
@@ -972,7 +983,7 @@ def _db_mcp_server_to_api_mcp_server(
             )
 
     is_authenticated: bool = (
-        db_server.auth_type == MCPAuthenticationType.NONE.value
+        db_server.auth_type == MCPAuthenticationType.NONE
         or (
             auth_performer == MCPAuthenticationPerformer.ADMIN
             and db_server.auth_type != MCPAuthenticationType.OAUTH
@@ -982,6 +993,9 @@ def _db_mcp_server_to_api_mcp_server(
             auth_performer == MCPAuthenticationPerformer.PER_USER and user_authenticated
         )
     )
+
+    # Calculate tool count from the relationship
+    tool_count = len(db_server.current_actions) if db_server.current_actions else 0
 
     return MCPServer(
         id=db_server.id,
@@ -994,6 +1008,8 @@ def _db_mcp_server_to_api_mcp_server(
         auth_performer=auth_performer,
         is_authenticated=is_authenticated,
         user_authenticated=user_authenticated,
+        status=db_server.status,
+        tool_count=tool_count,
         auth_template=auth_template,
         user_credentials=user_credentials,
         admin_credentials=admin_credentials,
@@ -1064,10 +1080,83 @@ def _get_connection_config(
 @admin_router.get("/server/{server_id}/tools")
 def admin_list_mcp_tools_by_id(
     server_id: int,
+    format: str | None = None,
     db: Session = Depends(get_session),
     user: User | None = Depends(current_curator_or_admin_user),
-) -> MCPToolListResponse:
-    return _list_mcp_tools_by_id(server_id, db, True, user)
+):
+    """
+    Discover and list tools for an MCP server.
+
+    If format=snapshot, performs discovery, upserts to DB, and returns ToolSnapshot format.
+    Otherwise, returns MCPToolListResponse format (discovered tools).
+    """
+    if format == "snapshot":
+        # Perform discovery and upsert using the existing logic
+        _list_mcp_tools_by_id(server_id, db, True, user)
+
+        # Then fetch and return the tools in ToolSnapshot format from the database
+        mcp_tools = get_tools_by_mcp_server_id(server_id, db)
+        return [ToolSnapshot.from_model(tool) for tool in mcp_tools]
+    else:
+        # Default behavior: return MCPToolListResponse for tool selection UI
+        return _list_mcp_tools_by_id(server_id, db, True, user)
+
+
+@admin_router.get("/server/{server_id}/tools/snapshots")
+def get_mcp_server_tools_snapshots(
+    server_id: int,
+    source: str = "db",
+    db: Session = Depends(get_session),
+    user: User | None = Depends(current_curator_or_admin_user),
+) -> list[ToolSnapshot]:
+    """
+    Get tools for an MCP server as ToolSnapshot objects.
+
+    Query Parameters:
+    - source: "db" (default) - fetch from database only, "mcp" - discover from MCP server and sync to DB
+
+    Returns: List of ToolSnapshot objects
+    """
+    from onyx.db.tools import get_tools_by_mcp_server_id
+
+    try:
+        # Verify the server exists
+        mcp_server = get_mcp_server_by_id(server_id, db)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="MCP server not found")
+
+    _ensure_mcp_server_owner_or_admin(mcp_server, user)
+
+    if source == "mcp":
+        try:
+            # Discover tools from MCP server and sync to DB
+            _list_mcp_tools_by_id(server_id, db, True, user)
+
+            # Successfully discovered tools, update status to CONNECTED
+            update_mcp_server__no_commit(
+                server_id=server_id,
+                db_session=db,
+                status=MCPServerStatus.CONNECTED,
+            )
+            db.commit()
+        except Exception as e:
+            update_mcp_server__no_commit(
+                server_id=server_id,
+                db_session=db,
+                status=MCPServerStatus.AWAITING_AUTH,
+            )
+            db.commit()
+            logger.error(f"Failed to discover tools for MCP server: {e}")
+            raise HTTPException(status_code=500, detail="Failed to discover tools")
+    elif source != "db":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid source parameter: {source}. Must be 'db' or 'mcp'",
+        )
+
+    # Fetch and return tools from database
+    mcp_tools = get_tools_by_mcp_server_id(server_id, db, order_by_id=True)
+    return [ToolSnapshot.from_model(tool) for tool in mcp_tools]
 
 
 @router.get("/server/{server_id}/tools")
@@ -1176,10 +1265,18 @@ def _list_mcp_tools_by_id(
     t1 = time.time()
     logger.info(f"Discovering tools for MCP server: {mcp_server.name}: {t1}")
     server_url = mcp_server.server_url
+
+    if mcp_server.transport is None:
+        raise HTTPException(
+            status_code=400,
+            detail="MCP server transport is not configured",
+        )
+    transport: MCPTransport = mcp_server.transport
+
     discovered_tools = discover_mcp_tools(
         server_url,
         connection_config.config.get("headers", {}) if connection_config else {},
-        transport=mcp_server.transport,
+        transport=transport,
         auth=auth,
     )
     logger.info(
@@ -1474,6 +1571,52 @@ def get_mcp_server_detail(
     )
 
 
+@admin_router.get("/tools")
+def get_all_mcp_tools(
+    db: Session = Depends(get_session),
+    user: User | None = Depends(current_curator_or_admin_user),
+) -> list:
+    """Get all tools associated with MCP servers, including both enabled and disabled tools"""
+    from sqlalchemy import select
+    from onyx.db.models import Tool
+
+    # Query MCP tools ordered by ID to maintain consistent ordering
+    stmt = select(Tool).where(Tool.mcp_server_id.is_not(None)).order_by(Tool.id)
+
+    mcp_tools = db.scalars(stmt).all()
+
+    # Convert to ToolSnapshot format
+    return [ToolSnapshot.from_model(tool) for tool in mcp_tools]
+
+
+@admin_router.patch("/server/{server_id}/status")
+def update_mcp_server_status(
+    server_id: int,
+    status: MCPServerStatus,
+    db: Session = Depends(get_session),
+    user: User | None = Depends(current_curator_or_admin_user),
+) -> dict[str, str]:
+    """Update the status of an MCP server"""
+    logger.info(f"Updating MCP server {server_id} status to {status}")
+
+    try:
+        mcp_server = get_mcp_server_by_id(server_id, db)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="MCP server not found")
+
+    _ensure_mcp_server_owner_or_admin(mcp_server, user)
+
+    update_mcp_server__no_commit(
+        server_id=server_id,
+        db_session=db,
+        status=status,
+    )
+    db.commit()
+
+    logger.info(f"Successfully updated MCP server {server_id} status to {status}")
+    return {"message": f"Server status updated to {status.value}"}
+
+
 @admin_router.get("/servers", response_model=MCPServersResponse)
 def get_mcp_servers_for_admin(
     db: Session = Depends(get_session),
@@ -1576,16 +1719,22 @@ def upsert_mcp_server_with_tools(
             f"{action_verb} MCP server '{request.name}' with ID {mcp_server.id}"
         )
 
+        if mcp_server.auth_type is None:
+            raise HTTPException(
+                status_code=500, detail="MCP server auth_type not configured"
+            )
+        auth_type_str = mcp_server.auth_type.value
+
         return MCPServerCreateResponse(
             server_id=mcp_server.id,
             server_name=mcp_server.name,
             server_url=mcp_server.server_url,
-            auth_type=mcp_server.auth_type,
+            auth_type=auth_type_str,
             auth_performer=(
                 request.auth_performer.value if request.auth_performer else None
             ),
             is_authenticated=(
-                mcp_server.auth_type == MCPAuthenticationType.NONE.value
+                mcp_server.auth_type == MCPAuthenticationType.NONE
                 or request.auth_performer == MCPAuthenticationPerformer.ADMIN
             ),
         )
@@ -1636,6 +1785,88 @@ def update_mcp_server_with_tools(
         server_id=mcp_server.id,
         updated_tools=updated_tools,
     )
+
+
+@admin_router.post("/server", response_model=MCPServer)
+def create_mcp_server_simple(
+    request: MCPServerSimpleCreateRequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_curator_or_admin_user),
+) -> MCPServer:
+    """Create MCP server with minimal information - auth to be configured later"""
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Must be logged in as a curator or admin to create MCP server",
+        )
+
+    mcp_server = create_mcp_server__no_commit(
+        owner_email=user.email,
+        name=request.name,
+        description=request.description,
+        server_url=request.server_url,
+        auth_type=None,  # To be configured later
+        transport=None,  # To be configured later
+        auth_performer=None,  # To be configured later
+        db_session=db_session,
+    )
+
+    db_session.commit()
+
+    return MCPServer(
+        id=mcp_server.id,
+        name=mcp_server.name,
+        description=mcp_server.description,
+        server_url=mcp_server.server_url,
+        owner=mcp_server.owner,
+        transport=mcp_server.transport,
+        auth_type=mcp_server.auth_type,
+        auth_performer=mcp_server.auth_performer,
+        is_authenticated=False,  # Not authenticated yet
+        status=mcp_server.status,
+        tool_count=0,  # New server, no tools yet
+        auth_template=None,
+        user_credentials=None,
+        admin_credentials=None,
+    )
+
+
+@admin_router.patch("/server/{server_id}", response_model=MCPServer)
+def update_mcp_server_simple(
+    server_id: int,
+    request: MCPServerSimpleUpdateRequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_curator_or_admin_user),
+) -> MCPServer:
+    """Update MCP server basic information (name, description, URL)"""
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Must be logged in as a curator or admin to update MCP server",
+        )
+
+    try:
+        mcp_server = get_mcp_server_by_id(server_id, db_session)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="MCP server not found")
+
+    _ensure_mcp_server_owner_or_admin(mcp_server, user)
+
+    # Update only provided fields
+    updated_server = update_mcp_server__no_commit(
+        server_id=server_id,
+        db_session=db_session,
+        name=request.name,
+        description=request.description,
+        server_url=request.server_url,
+    )
+
+    db_session.commit()
+
+    # Return the updated server in API format
+    return _db_mcp_server_to_api_mcp_server(updated_server, user.email, db_session)
 
 
 @admin_router.delete("/server/{server_id}")

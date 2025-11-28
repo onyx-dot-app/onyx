@@ -144,6 +144,48 @@ def delete_custom_tool(
     db_session.commit()
 
 
+class ToolStatusUpdateRequest(BaseModel):
+    tool_ids: list[int]
+    enabled: bool
+
+
+class ToolStatusUpdateResponse(BaseModel):
+    updated_count: int
+    tool_ids: list[int]
+
+
+@admin_router.patch("/status")
+def update_tools_status(
+    update_data: ToolStatusUpdateRequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_curator_or_admin_user),
+) -> ToolStatusUpdateResponse:
+    """Enable or disable one or more tools.
+
+    Pass a single tool ID in the list to update one tool, or multiple IDs for
+    bulk updates.
+    """
+    if not update_data.tool_ids:
+        raise HTTPException(status_code=400, detail="No tool IDs provided")
+
+    updated_tools = []
+    for tool_id in update_data.tool_ids:
+        try:
+            tool = get_tool_by_id(tool_id, db_session)
+            tool.enabled = update_data.enabled
+            updated_tools.append(tool_id)
+        except ValueError:
+            # Skip tools that don't exist
+            continue
+
+    db_session.commit()
+
+    return ToolStatusUpdateResponse(
+        updated_count=len(updated_tools),
+        tool_ids=updated_tools,
+    )
+
+
 class ValidateToolRequest(BaseModel):
     definition: dict[str, Any]
 
@@ -183,7 +225,7 @@ def list_tools(
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_user),
 ) -> list[ToolSnapshot]:
-    tools = get_tools(db_session, only_enabled=True)
+    tools = get_tools(db_session, only_enabled=True, only_connected_mcp=True)
 
     filtered_tools: list[ToolSnapshot] = []
     for tool in tools:

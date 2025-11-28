@@ -26,6 +26,7 @@ class ToolSnapshot(BaseModel):
     user_id: str | None = None
     oauth_config_id: int | None = None
     oauth_config_name: str | None = None
+    enabled: bool = True
 
     @classmethod
     def from_model(cls, tool: Tool) -> "ToolSnapshot":
@@ -42,6 +43,7 @@ class ToolSnapshot(BaseModel):
             user_id=str(tool.user_id) if tool.user_id else None,
             oauth_config_id=tool.oauth_config_id,
             oauth_config_name=tool.oauth_config.name if tool.oauth_config else None,
+            enabled=tool.enabled,
         )
 
 

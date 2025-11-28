@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from onyx.db.enums import MCPAuthenticationPerformer
+from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPAuthenticationType
 from onyx.db.models import MCPConnectionConfig
@@ -61,9 +62,14 @@ def get_mcp_servers_for_persona(
     if not mcp_server_ids:
         return []
 
-    # Fetch the MCP servers
+    # Fetch the MCP servers (include connected servers only)
     mcp_servers = (
-        db_session.query(MCPServer).filter(MCPServer.id.in_(mcp_server_ids)).all()
+        db_session.query(MCPServer)
+        .filter(
+            MCPServer.id.in_(mcp_server_ids),
+            MCPServer.status == MCPServerStatus.CONNECTED,
+        )
+        .all()
     )
 
     return list(mcp_servers)
@@ -90,9 +96,9 @@ def create_mcp_server__no_commit(
     name: str,
     description: str | None,
     server_url: str,
-    auth_type: MCPAuthenticationType,
-    transport: MCPTransport,
-    auth_performer: MCPAuthenticationPerformer,
+    auth_type: MCPAuthenticationType | None,
+    transport: MCPTransport | None,
+    auth_performer: MCPAuthenticationPerformer | None,
     db_session: Session,
     admin_connection_config_id: int | None = None,
 ) -> MCPServer:
@@ -122,6 +128,7 @@ def update_mcp_server__no_commit(
     admin_connection_config_id: int | None = None,
     auth_performer: MCPAuthenticationPerformer | None = None,
     transport: MCPTransport | None = None,
+    status: MCPServerStatus | None = None,
 ) -> MCPServer:
     """Update an existing MCP server"""
     server = get_mcp_server_by_id(server_id, db_session)
@@ -140,6 +147,8 @@ def update_mcp_server__no_commit(
         server.auth_performer = auth_performer
     if transport is not None:
         server.transport = transport
+    if status is not None:
+        server.status = status
 
     db_session.flush()  # Don't commit yet, let caller decide when to commit
     return server
