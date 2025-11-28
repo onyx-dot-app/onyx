@@ -1081,26 +1081,10 @@ def _get_connection_config(
 @admin_router.get("/server/{server_id}/tools")
 def admin_list_mcp_tools_by_id(
     server_id: int,
-    format: str | None = None,
     db: Session = Depends(get_session),
     user: User | None = Depends(current_curator_or_admin_user),
-):
-    """
-    Discover and list tools for an MCP server.
-
-    If format=snapshot, performs discovery, upserts to DB, and returns ToolSnapshot format.
-    Otherwise, returns MCPToolListResponse format (discovered tools).
-    """
-    if format == "snapshot":
-        # Perform discovery and upsert using the existing logic
-        _list_mcp_tools_by_id(server_id, db, True, user)
-
-        # Then fetch and return the tools in ToolSnapshot format from the database
-        mcp_tools = get_tools_by_mcp_server_id(server_id, db)
-        return [ToolSnapshot.from_model(tool) for tool in mcp_tools]
-    else:
-        # Default behavior: return MCPToolListResponse for tool selection UI
-        return _list_mcp_tools_by_id(server_id, db, True, user)
+) -> MCPToolListResponse:
+    return _list_mcp_tools_by_id(server_id, db, True, user)
 
 
 class ToolSnapshotSource(str, Enum):
