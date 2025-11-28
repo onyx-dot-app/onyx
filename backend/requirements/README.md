@@ -62,25 +62,28 @@ curl -LsSf https://astral.py/uv/install.sh | sh
 ./backend/scripts/compile_requirements.py
 ```
 
-This resolves all dependencies (core + all extras) together into a single `uv.lock` file, ensuring all versions are compatible.
+This resolves all dependencies (core + all groups) together into a single `uv.lock` file, ensuring all versions are compatible.
 
 ### 4. Installing Dependencies
 
+If enabled, all packages are installed automatically by the `uv-sync` pre-commit hook when changing
+branches or pulling new changes.
+
 ```bash
+# For everything (most common)
+uv sync
+
 # For backend production (shared + backend dependencies)
-uv sync --extra backend
+uv sync --group backend
 
 # For backend development (shared + backend + dev tools)
-uv sync --extra backend --extra dev
+uv sync --group backend --group dev
 
 # For backend with EE (shared + backend + ee)
-uv sync --extra backend --extra ee
+uv sync --group backend --group ee
 
 # For model server (shared + model_server, NO backend deps!)
-uv sync --extra model_server
-
-# For everything (testing)
-uv sync --all-extras
+uv sync --group model_server
 ```
 
 ### 5. Upgrading Dependencies

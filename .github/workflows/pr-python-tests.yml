@@ -17,6 +17,7 @@ jobs:
   backend-check:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-backend-check"]
+    timeout-minutes: 45
 
 
     env:
@@ -36,6 +37,12 @@ jobs:
 
     - name: Setup Python and Install Dependencies
       uses: ./.github/actions/setup-python-and-install-dependencies
+      with:
+        requirements: |
+          backend/requirements/default.txt
+          backend/requirements/dev.txt
+          backend/requirements/model_server.txt
+          backend/requirements/ee.txt
 
     - name: Run Tests
       shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"

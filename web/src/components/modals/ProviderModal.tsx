@@ -1,5 +1,4 @@
 import React from "react";
-
 import Button from "@/refresh-components/buttons/Button";
 import { SvgProps } from "@/icons";
 import Modal from "@/refresh-components/Modal";
@@ -12,7 +11,7 @@ export interface ProviderModalProps {
   // Base modal props
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  icon?: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<SvgProps>;
   title: string;
   description?: string;
   className?: string;
@@ -29,7 +28,7 @@ export interface ProviderModalProps {
 export default function ProviderModal({
   open,
   onOpenChange,
-  icon: Icon,
+  icon: icon,
   title,
   description,
   children,
@@ -67,13 +66,7 @@ export default function ProviderModal({
   return (
     <Modal open={open} onOpenChange={handleOpenChange}>
       <Modal.Content tall onKeyDown={handleKeyDown}>
-        <Modal.CloseButton />
-
-        <Modal.Header className="flex flex-col gap-2 p-4">
-          {Icon && <Modal.Icon icon={Icon} />}
-          <Modal.Title>{title}</Modal.Title>
-          {description && <Modal.Description>{description}</Modal.Description>}
-        </Modal.Header>
+        <Modal.Header icon={icon} title={title} description={description} />
 
         <Modal.Body className="flex-1 overflow-y-auto">{children}</Modal.Body>
 
