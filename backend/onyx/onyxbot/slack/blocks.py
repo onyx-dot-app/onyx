@@ -547,7 +547,7 @@ def build_slack_response_blocks(
     answer_blocks = _build_main_response_blocks(answer)
 
     web_follow_up_block = []
-    if channel_conf and channel_conf.get("show_continue_in_web_ui"):
+    if channel_conf and channel_conf.get("show_continue_in_web_ui") and answer.message_id is not None:
         web_follow_up_block.append(
             _build_continue_in_web_ui_block(
                 message_id=answer.message_id,

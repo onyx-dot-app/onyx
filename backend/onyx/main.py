@@ -297,9 +297,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             try:
                 qualification_service = QuestionQualificationService()
                 if qualification_service.is_enabled():
-                    logger.info(
-                        "Question qualification service initialized with fast LLM approach"
-                    )
+                    logger.info("Question qualification service initialized")
             except Exception as e:
                 logger.error(f"Error initializing question qualification service: {e}")
     else:

@@ -776,7 +776,10 @@ def gather_stream(
         elif isinstance(packet, MessageResponseIDInfo):
             message_id = packet.reserved_assistant_message_id
 
-    if message_id is None:
+    # Only require message_id when there's no error
+    # When a question is blocked early (e.g., by qualification service),
+    # we may return an error without creating a message
+    if message_id is None and error_msg is None:
         raise ValueError("Message ID is required")
 
     if answer is None:

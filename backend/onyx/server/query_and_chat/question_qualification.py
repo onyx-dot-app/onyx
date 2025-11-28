@@ -21,7 +21,7 @@ class QuestionQualificationResponse(BaseModel):
 
     blocked: bool = Field(description="Whether the question should be blocked")
     confidence: float = Field(
-        description="Confidence score between 0.0 and 1.0", ge=0.0, le=1.0
+        description="Confidence score between 0.0 and 1.0, where 1.0 means 'should block'", ge=0.0, le=1.0
     )
     matched_index: int = Field(
         description="Index of matched blocked question, -1 if no match", ge=-1
@@ -87,9 +87,6 @@ class QuestionQualificationService:
         # Store questions
         self.questions = []
 
-        # Cache for fast LLM
-        self._fast_llm: LLM | None = None
-
         # Track if config has been loaded
         self._config_loaded = False
 
@@ -126,30 +123,19 @@ class QuestionQualificationService:
                 "standard_response", "I am sorry, but I cannot answer this question."
             )
 
-            # Load questions, ignoring any embedding fields (legacy)
+            # Load questions
             questions_config = config.get("questions", [])
             self.questions = []
-            config_modified = False
 
-            for i, q_config in enumerate(questions_config):
+            for q_config in questions_config:
                 if isinstance(q_config, dict) and "question" in q_config:
                     self.questions.append(q_config["question"])
-                    # Check if embedding fields exist and mark for cleanup
-                    if "embedding" in q_config:
-                        config_modified = True
                 elif isinstance(q_config, str):
                     self.questions.append(q_config)
-
-            # Clean up config file if it contains embedding fields (only when enabled)
-            if config_modified and ENABLE_QUESTION_QUALIFICATION:
-                self._cleanup_config_embeddings(config)
 
             logger.info(
                 f"Question qualification service initialized with {len(self.questions)} questions, "
                 f"threshold={self.threshold}, env_enabled={ENABLE_QUESTION_QUALIFICATION}"
-            )
-            logger.info(
-                "Note: Embedding fields in config are ignored - using fast LLM approach"
             )
             self._config_loaded = True
             return True
@@ -159,49 +145,10 @@ class QuestionQualificationService:
             self._config_loaded = True  # Mark as loaded to avoid repeated attempts
             return False
 
-    def _cleanup_config_embeddings(self, config: dict) -> None:
-        """Remove embedding fields from config and save clean version."""
-        try:
-            logger.info("Cleaning up embedding fields from configuration file...")
-
-            # Clean questions config
-            questions_config = config.get("questions", [])
-            cleaned_questions = []
-
-            for q_config in questions_config:
-                if isinstance(q_config, dict) and "question" in q_config:
-                    # Keep only the question, remove embedding fields
-                    cleaned_questions.append({"question": q_config["question"]})
-                elif isinstance(q_config, str):
-                    cleaned_questions.append(q_config)
-
-            config["questions"] = cleaned_questions
-
-            # Write cleaned config back to file
-            with open(self.config_path, "w", encoding="utf-8") as f:
-                yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
-
-            logger.info("Successfully cleaned embedding fields from configuration file")
-
-        except Exception as e:
-            logger.error(f"Error cleaning up config file: {e}")
-            # Don't fail the initialization if cleanup fails
-
     def _get_fast_llm(self) -> LLM:
         """Get the fast LLM for question qualification."""
-        if self._fast_llm is None:
-            try:
-                # Get both regular and fast LLM, use the fast one
-                _, fast_llm = get_default_llms()
-                self._fast_llm = fast_llm
-                logger.info(
-                    f"Initialized fast LLM for question qualification: "
-                    f"{fast_llm.config.model_name} ({fast_llm.config.model_provider})"
-                )
-            except Exception as e:
-                logger.error(f"Failed to get fast LLM: {e}")
-                raise
-        return self._fast_llm
+        _, fast_llm = get_default_llms()
+        return fast_llm
 
     def is_enabled(self) -> bool:
         """Check if question qualification is enabled by environment variable."""
@@ -286,18 +233,12 @@ class QuestionQualificationService:
                     logger.info(
                         f"Question blocked by LLM analysis: confidence {confidence:.3f} >= {self.threshold}"
                     )
-                    return QuestionQualificationResult(
-                        is_blocked=True,
-                        similarity_score=confidence,
-                        standard_response=self.standard_response,
-                        matched_question=matched_question,
-                        matched_question_index=matched_index,
-                        reasoning="",  # No reasoning in structured output
-                    )
 
+                standard_response = self.standard_response if final_blocked else ""
                 return QuestionQualificationResult(
-                    is_blocked=False,
+                    is_blocked=final_blocked,
                     similarity_score=confidence,
+                    standard_response=standard_response,
                     matched_question=matched_question,
                     matched_question_index=matched_index,
                     reasoning="",  # No reasoning in structured output

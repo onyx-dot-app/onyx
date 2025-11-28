@@ -200,6 +200,7 @@ class ChatBasicResponse(BaseModel):
     top_documents: list[SearchDoc]
 
     error_msg: str | None
+<<<<<<< HEAD
     message_id: int
     citation_info: list[CitationInfo]
 
