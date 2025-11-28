@@ -6,6 +6,7 @@ import { ProjectFile } from "../../projects/projectsService";
 import { LlmDescriptor } from "@/lib/hooks";
 import { IconType } from "react-icons";
 import { OnyxIconType } from "@/components/icons/icons";
+import { Message } from "../../interfaces";
 
 export enum RenderType {
   HIGHLIGHT = "highlight",
@@ -23,6 +24,8 @@ export interface FullChatState {
   regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
   overriddenModel?: string;
   researchType?: string | null;
+  parentMessage?: Message;
+  conversationHasImages?: boolean;
 }
 
 export interface RendererResult {

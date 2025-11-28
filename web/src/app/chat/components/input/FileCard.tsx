@@ -107,13 +107,11 @@ function ImageFileCard({
 export function FileCard({
   file,
   removeFile,
-  hideProcessingState = false,
   onFileClick,
   compactImages = false,
 }: {
   file: ProjectFile;
   removeFile: (fileId: string) => void;
-  hideProcessingState?: boolean;
   onFileClick?: (file: ProjectFile) => void;
   compactImages?: boolean;
 }) {
@@ -137,12 +135,9 @@ export function FileCard({
     return null;
   }, [isImage, file.file_id]);
 
-  const isActuallyProcessing =
+  const isProcessing =
     String(file.status) === UserFileStatus.UPLOADING ||
     String(file.status) === UserFileStatus.PROCESSING;
-
-  // When hideProcessingState is true, we treat processing files as completed for display purposes
-  const isProcessing = hideProcessingState ? false : isActuallyProcessing;
 
   const handleRemoveFile = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -223,3 +218,37 @@ export function FileCard({
 export const FileCardSkeleton = () => (
   <div className="w-40 h-14 rounded-12 bg-background-tint-02 animate-pulse" />
 );
+
+// Grid component for displaying multiple images compactly
+export function ImageGrid({
+  files,
+  removeFile,
+  onFileClick,
+}: {
+  files: ProjectFile[];
+  removeFile: (fileId: string) => void;
+  onFileClick?: (file: ProjectFile) => void;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-1 p-1 rounded-12 border border-border-01 bg-background-tint-00">
+      {files.map((file) => {
+        const imageUrl = file.file_id ? `/api/chat/file/${file.file_id}` : null;
+        const isProcessing =
+          String(file.status) === UserFileStatus.UPLOADING ||
+          String(file.status) === UserFileStatus.PROCESSING;
+
+        return (
+          <ImageFileCard
+            key={file.id}
+            file={file}
+            imageUrl={imageUrl}
+            removeFile={removeFile}
+            onFileClick={onFileClick}
+            isProcessing={isProcessing}
+            compact
+          />
+        );
+      })}
+    </div>
+  );
+}

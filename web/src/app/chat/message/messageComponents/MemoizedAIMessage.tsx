@@ -21,10 +21,12 @@ interface BaseMemoizedAIMessageProps {
   llmManager: LlmManager | null;
   projectFiles?: ProjectFile[];
   researchType?: string | null;
+  conversationHasImages?: boolean;
 }
 
 interface InternalMemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
   regenerate?: (modelOverride: LlmDescriptor) => Promise<void>;
+  parentMessage?: Message;
 }
 
 interface MemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
@@ -54,6 +56,8 @@ const InternalMemoizedAIMessage = React.memo(
     llmManager,
     projectFiles,
     researchType,
+    parentMessage,
+    conversationHasImages,
   }: InternalMemoizedAIMessageProps) {
     const chatState = React.useMemo(
       () => ({
@@ -65,6 +69,8 @@ const InternalMemoizedAIMessage = React.memo(
         regenerate,
         overriddenModel,
         researchType,
+        parentMessage,
+        conversationHasImages,
       }),
       [
         assistant,
@@ -75,6 +81,8 @@ const InternalMemoizedAIMessage = React.memo(
         regenerate,
         overriddenModel,
         researchType,
+        parentMessage,
+        conversationHasImages,
       ]
     );
 
@@ -88,6 +96,7 @@ const InternalMemoizedAIMessage = React.memo(
         llmManager={llmManager}
         otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
         onMessageSelection={onMessageSelection}
+        conversationHasImages={conversationHasImages}
       />
     );
   }
@@ -110,6 +119,7 @@ export const MemoizedAIMessage = ({
   llmManager,
   projectFiles,
   researchType,
+  conversationHasImages,
 }: MemoizedAIMessageProps) => {
   const regenerate = useMemo(() => {
     if (messageId === undefined) {
@@ -145,6 +155,8 @@ export const MemoizedAIMessage = ({
       llmManager={llmManager}
       projectFiles={projectFiles}
       researchType={researchType}
+      parentMessage={parentMessage}
+      conversationHasImages={conversationHasImages}
     />
   );
 };

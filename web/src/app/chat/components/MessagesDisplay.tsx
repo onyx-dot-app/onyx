@@ -48,6 +48,7 @@ interface MessagesDisplayProps {
   hasPerformedInitialScroll: boolean;
   chatSessionId: string | null;
   enterpriseSettings?: EnterpriseSettings | null;
+  conversationHasImages?: boolean;
 }
 
 export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
@@ -72,6 +73,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   hasPerformedInitialScroll,
   chatSessionId,
   enterpriseSettings,
+  conversationHasImages,
 }) => {
   // Stable fallbacks to avoid changing prop identities on each render
   const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
@@ -196,6 +198,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                 }
                 onMessageSelection={onMessageSelection}
                 researchType={message.researchType}
+                conversationHasImages={conversationHasImages}
               />
             </div>
           );

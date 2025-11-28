@@ -564,6 +564,20 @@ export function useChatController({
         return;
       }
 
+      // Build attachment descriptors with fallback for regeneration
+      const uploadedFileDescriptors =
+        projectFilesToFileDescriptors(currentMessageFiles);
+      const fallbackFileDescriptors =
+        overrideFileDescriptors && overrideFileDescriptors.length > 0
+          ? overrideFileDescriptors
+          : regenerationRequest?.parentMessage.files ||
+            messageToResend?.files ||
+            [];
+      const attachmentDescriptors =
+        uploadedFileDescriptors.length > 0
+          ? uploadedFileDescriptors
+          : fallbackFileDescriptors || [];
+
       // When editing (messageIdToResend exists but no regenerationRequest), use the new message
       // When regenerating (regenerationRequest exists), use the original message
       let currMessage = regenerationRequest
@@ -608,7 +622,7 @@ export function useChatController({
         const result = buildImmediateMessages(
           parentNodeIdForMessage,
           currMessage,
-          projectFilesToFileDescriptors(currentMessageFiles),
+          attachmentDescriptors,
           messageToResend
         );
         initialUserNode = result.initialUserNode;
@@ -642,7 +656,7 @@ export function useChatController({
 
       let finalMessage: BackendMessage | null = null;
       let toolCall: ToolCallMetadata | null = null;
-      let files = projectFilesToFileDescriptors(currentMessageFiles);
+      let files = [...attachmentDescriptors];
       let packets: Packet[] = [];
 
       let newUserMessageId: number | null = null;
@@ -686,12 +700,7 @@ export function useChatController({
             .map((document) => document.db_doc_id as number),
           queryOverride,
           forceSearch,
-          currentMessageFiles: currentMessageFiles.map((file) => ({
-            id: file.file_id,
-            type: file.chat_file_type,
-            name: file.name,
-            user_file_id: file.id,
-          })),
+          currentMessageFiles: attachmentDescriptors,
           regenerate: regenerationRequest !== undefined,
           modelProvider:
             modelOverride?.name || llmManager.currentLlm.name || undefined,
@@ -821,30 +830,57 @@ export function useChatController({
             parentMessage =
               parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
 
+            // During regeneration, don't re-upsert the user message as it overwrites
+            // the current tree state with a stale snapshot, losing child references
+            const messagesToUpdate = regenerationRequest
+              ? [
+                  {
+                    ...initialAssistantNode,
+                    messageId: newAssistantMessageId ?? undefined,
+                    message: error || answer,
+                    type: (error ? "error" : "assistant") as
+                      | "error"
+                      | "assistant",
+                    retrievalType,
+                    query: finalMessage?.rephrased_query || query,
+                    documents: documents,
+                    citations: finalMessage?.citations || citations || {},
+                    files: finalMessage?.files || aiMessageImages || [],
+                    toolCall: finalMessage?.tool_call || toolCall,
+                    stackTrace: stackTrace,
+                    overridden_model: finalMessage?.overridden_model,
+                    stopReason: stopReason,
+                    packets: packets,
+                  },
+                ]
+              : [
+                  {
+                    ...initialUserNode,
+                    messageId: newUserMessageId ?? undefined,
+                    files: files,
+                  },
+                  {
+                    ...initialAssistantNode,
+                    messageId: newAssistantMessageId ?? undefined,
+                    message: error || answer,
+                    type: (error ? "error" : "assistant") as
+                      | "error"
+                      | "assistant",
+                    retrievalType,
+                    query: finalMessage?.rephrased_query || query,
+                    documents: documents,
+                    citations: finalMessage?.citations || citations || {},
+                    files: finalMessage?.files || aiMessageImages || [],
+                    toolCall: finalMessage?.tool_call || toolCall,
+                    stackTrace: stackTrace,
+                    overridden_model: finalMessage?.overridden_model,
+                    stopReason: stopReason,
+                    packets: packets,
+                  },
+                ];
+
             currentMessageTreeLocal = upsertToCompleteMessageTree({
-              messages: [
-                {
-                  ...initialUserNode,
-                  messageId: newUserMessageId ?? undefined,
-                  files: files,
-                },
-                {
-                  ...initialAssistantNode,
-                  messageId: newAssistantMessageId ?? undefined,
-                  message: error || answer,
-                  type: error ? "error" : "assistant",
-                  retrievalType,
-                  query: finalMessage?.rephrased_query || query,
-                  documents: documents,
-                  citations: finalMessage?.citations || citations || {},
-                  files: finalMessage?.files || aiMessageImages || [],
-                  toolCall: finalMessage?.tool_call || toolCall,
-                  stackTrace: stackTrace,
-                  overridden_model: finalMessage?.overridden_model,
-                  stopReason: stopReason,
-                  packets: packets,
-                },
-              ],
+              messages: messagesToUpdate,
               // Pass the latest map state
               completeMessageTreeOverride: currentMessageTreeLocal,
               chatSessionId: frozenSessionId!,
@@ -854,32 +890,42 @@ export function useChatController({
       } catch (e: any) {
         console.log("Error:", e);
         const errorMsg = e.message;
+        // During regeneration, don't re-upsert the user message as it overwrites
+        // the current tree state with a stale snapshot, losing child references
+        const errorMessagesToUpdate = regenerationRequest
+          ? [
+              {
+                nodeId: initialAssistantNode.nodeId,
+                message: errorMsg,
+                type: "error" as const,
+                files: aiMessageImages || [],
+                toolCall: null,
+                parentNodeId: initialUserNode.nodeId,
+                packets: [],
+              },
+            ]
+          : [
+              {
+                nodeId: initialUserNode.nodeId,
+                message: currMessage,
+                type: "user" as const,
+                files: files,
+                toolCall: null,
+                parentNodeId: parentMessage?.nodeId || SYSTEM_NODE_ID,
+                packets: [],
+              },
+              {
+                nodeId: initialAssistantNode.nodeId,
+                message: errorMsg,
+                type: "error" as const,
+                files: aiMessageImages || [],
+                toolCall: null,
+                parentNodeId: initialUserNode.nodeId,
+                packets: [],
+              },
+            ];
         currentMessageTreeLocal = upsertToCompleteMessageTree({
-          messages: [
-            {
-              nodeId: initialUserNode.nodeId,
-              message: currMessage,
-              type: "user",
-              files: currentMessageFiles.map((file) => ({
-                id: file.file_id,
-                type: file.chat_file_type,
-                name: file.name,
-                user_file_id: file.id,
-              })),
-              toolCall: null,
-              parentNodeId: parentMessage?.nodeId || SYSTEM_NODE_ID,
-              packets: [],
-            },
-            {
-              nodeId: initialAssistantNode.nodeId,
-              message: errorMsg,
-              type: "error",
-              files: aiMessageImages || [],
-              toolCall: null,
-              parentNodeId: initialUserNode.nodeId,
-              packets: [],
-            },
-          ],
+          messages: errorMessagesToUpdate,
           completeMessageTreeOverride: currentMessageTreeLocal,
           chatSessionId: frozenSessionId,
         });
@@ -922,28 +968,35 @@ export function useChatController({
     ]
   );
 
+  // Shared validation for image uploads - returns true if allowed, false if blocked
+  const validateImageUpload = useCallback((): boolean => {
+    const [, llmModel] = getFinalLLM(
+      llmManager.llmProviders || [],
+      liveAssistant || null,
+      llmManager.currentLlm
+    );
+    const llmAcceptsImages = modelSupportsImageInput(
+      llmManager.llmProviders || [],
+      llmModel
+    );
+    if (!llmAcceptsImages) {
+      setPopup({
+        type: "error",
+        message:
+          "The current model does not support image input. Please select a model with Vision support.",
+      });
+      return false;
+    }
+    return true;
+  }, [liveAssistant, llmManager, setPopup]);
+
   const handleMessageSpecificFileUpload = useCallback(
     async (acceptedFiles: File[]) => {
-      const [_, llmModel] = getFinalLLM(
-        llmManager.llmProviders || [],
-        liveAssistant || null,
-        llmManager.currentLlm
-      );
-      const llmAcceptsImages = modelSupportsImageInput(
-        llmManager.llmProviders || [],
-        llmModel
-      );
-
       const imageFiles = acceptedFiles.filter((file) =>
         file.type.startsWith("image/")
       );
 
-      if (imageFiles.length > 0 && !llmAcceptsImages) {
-        setPopup({
-          type: "error",
-          message:
-            "The current model does not support image input. Please select a model with Vision support.",
-        });
+      if (imageFiles.length > 0 && !validateImageUpload()) {
         return;
       }
       updateChatStateAction(getCurrentSessionId(), "uploading");
@@ -955,7 +1008,7 @@ export function useChatController({
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [liveAssistant, llmManager, forcedToolIds]
+    [validateImageUpload, forcedToolIds]
   );
 
   useEffect(() => {
@@ -1064,5 +1117,6 @@ export function useChatController({
     onSubmit,
     stopGenerating,
     handleMessageSpecificFileUpload,
+    validateImageUpload,
   };
 }
