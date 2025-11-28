@@ -1,0 +1,68 @@
+"use client";
+
+import React from "react";
+import { cn } from "@/lib/utils";
+import Button from "@/refresh-components/buttons/Button";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import Text from "@/refresh-components/texts/Text";
+import SvgPlusCircle from "@/icons/plus-circle";
+
+interface ActionbarProps {
+  hasActions: boolean;
+  searchQuery?: string;
+  onSearchQueryChange?: (query: string) => void;
+  onAddMCPServer: () => void;
+  className?: string;
+  buttonText?: string;
+}
+
+const Actionbar: React.FC<ActionbarProps> = ({
+  hasActions,
+  searchQuery = "",
+  onSearchQueryChange,
+  onAddMCPServer,
+  className,
+  buttonText = "Add MCP Server",
+}) => {
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onSearchQueryChange?.(e.target.value);
+  };
+
+  return (
+    <div
+      className={cn(
+        "flex gap-4 items-center p-4 rounded-16",
+        !hasActions ? "bg-background-tint-00 border border-border-01" : "",
+        className
+      )}
+    >
+      {hasActions ? (
+        <div className="flex-1 min-w-[160px]">
+          <InputTypeIn
+            placeholder="Search servers…"
+            value={searchQuery}
+            onChange={handleSearchChange}
+            leftSearchIcon
+            showClearButton
+            className="w-full bg-transparent border-none"
+          />
+        </div>
+      ) : (
+        <div className="flex-1">
+          <Text mainUiMuted text03>
+            Connect MCP server to add custom actions.
+          </Text>
+        </div>
+      )}
+
+      <div className="flex gap-2 items-center justify-end">
+        <Button main primary leftIcon={SvgPlusCircle} onClick={onAddMCPServer}>
+          {buttonText}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+Actionbar.displayName = "Actionbar";
+export default Actionbar;
