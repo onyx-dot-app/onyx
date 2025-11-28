@@ -401,6 +401,6 @@ class ChatBasicResponse(BaseModel):
     top_documents: list[SavedSearchDoc]
 
     error_msg: str | None
-    message_id: int
+    message_id: int | None
     # this is a map of the citation number to the document id
     cited_documents: dict[int, str]
