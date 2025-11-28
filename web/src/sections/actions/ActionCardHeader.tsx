@@ -2,7 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { MCPActionStatus } from "./types";
+import { MCPActionStatus } from "@/sections/actions/types";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgEdit from "@/icons/edit";

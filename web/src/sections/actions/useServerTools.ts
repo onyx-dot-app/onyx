@@ -2,7 +2,7 @@ import useSWR, { KeyedMutator } from "swr";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { getMCPServerIcon } from "@/lib/mcpUtils";
-import { MCPServerWithStatus, MCPTool } from "./types";
+import { MCPServerWithStatus, MCPTool } from "@/sections/actions/types";
 
 interface UseServerToolsOptions {
   serverId: number;
