@@ -16,6 +16,7 @@ from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tool_by_id
 from onyx.db.tools import get_tools
+from onyx.db.tools import get_tools_by_ids
 from onyx.db.tools import update_tool
 from onyx.server.features.tool.models import CustomToolCreate
 from onyx.server.features.tool.models import CustomToolUpdate
@@ -168,15 +169,24 @@ def update_tools_status(
     if not update_data.tool_ids:
         raise HTTPException(status_code=400, detail="No tool IDs provided")
 
+    tools = get_tools_by_ids(update_data.tool_ids, db_session)
+    tools_by_id = {tool.id: tool for tool in tools}
+
     updated_tools = []
+    missing_tools = []
+
     for tool_id in update_data.tool_ids:
-        try:
-            tool = get_tool_by_id(tool_id, db_session)
+        tool = tools_by_id.get(tool_id)
+        if tool:
             tool.enabled = update_data.enabled
             updated_tools.append(tool_id)
-        except ValueError:
-            # Skip tools that don't exist
-            continue
+        else:
+            missing_tools.append(tool_id)
+
+    if missing_tools:
+        raise HTTPException(
+            status_code=404, detail=f"Tools with IDs {missing_tools} not found"
+        )
 
     db_session.commit()
 
