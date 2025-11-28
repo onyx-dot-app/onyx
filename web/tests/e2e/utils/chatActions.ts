@@ -7,7 +7,7 @@ export async function verifyAssistantIsChosen(
   timeout: number = 5000
 ) {
   await expect(
-    page.getByPlaceholder(`How can ${assistantName} help you today`)
+    page.getByTestId("assistant-name-display").getByText(assistantName)
   ).toBeVisible({ timeout });
 }
 
