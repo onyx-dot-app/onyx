@@ -347,6 +347,7 @@ function MessageComponent(
               internal
               icon={SvgX}
               onClick={onClose}
+              aria-label="Close"
               className={size === "large" ? "p-2 rounded-12" : "p-1 rounded-08"}
             />
           </div>
