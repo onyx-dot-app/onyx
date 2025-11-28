@@ -23,7 +23,7 @@ import {
   disableAllServerTools,
   updateMCPServerStatus,
 } from "@/lib/mcpService";
-import { MCPServerStatus, MCPServerWithStatus } from "./types";
+import { MCPServerStatus, MCPServerWithStatus } from "@/sections/actions/types";
 
 interface MCPActionsContextValue {
   // Data
