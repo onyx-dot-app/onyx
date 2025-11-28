@@ -9,7 +9,6 @@ from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import FetchedDocumentCacheEntry
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
-from onyx.server.query_and_chat.streaming_models import OpenUrl
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
@@ -151,17 +150,17 @@ def _open_url_core(
 ) -> list[LlmOpenUrlResult]:
     # TODO: Find better way to track index that isn't so implicit
     # based on number of tool calls
-    index = run_context.context.current_run_step
+    run_context.context.current_run_step
 
     # Create SavedSearchDoc objects from URLs for the OpenUrlStart event
-    saved_search_docs = [SavedSearchDoc.from_url(url) for url in urls]
+    [SavedSearchDoc.from_url(url) for url in urls]
 
-    run_context.context.run_dependencies.emitter.emit(
-        Packet(
-            turn_index=index,
-            obj=OpenUrl(documents=saved_search_docs),
-        )
-    )
+    # run_context.context.run_dependencies.emitter.emit(
+    #     Packet(
+    #         turn_index=index,
+    #         obj=OpenUrl(documents=saved_search_docs),
+    #     )
+    # )
 
     docs = content_provider.contents(urls)
     results = [

@@ -1,5 +1,4 @@
 # create adapter from Tool to FunctionTool
-import json
 from collections.abc import Sequence
 from typing import Any
 from typing import Union
@@ -8,9 +7,6 @@ from agents import FunctionTool
 from agents import RunContextWrapper
 
 from onyx.chat.turn.models import ChatTurnContext
-from onyx.server.query_and_chat.streaming_models import CustomToolDelta
-from onyx.server.query_and_chat.streaming_models import CustomToolStart
-from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.built_in_tools_v2 import BUILT_IN_TOOL_MAP_V2
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
@@ -34,42 +30,42 @@ async def _tool_run_wrapper(
     """
     Wrapper function to adapt Tool.run() to FunctionTool.on_invoke_tool() signature.
     """
-    args = json.loads(json_string) if json_string else {}
-    index = run_context.context.current_run_step
-    run_context.context.run_dependencies.emitter.emit(
-        Packet(
-            ind=index,
-            obj=CustomToolStart(type="custom_tool_start", tool_name=tool.name),
-        )
-    )
-    results = []
-    for result in tool.run(**args):
-        results.append(result)
-        # Extract data from CustomToolCallSummary within the ToolResponse
-        custom_summary = result.response
-        data = None
-        file_ids = None
+    # args = json.loads(json_string) if json_string else {}
+    # index = run_context.context.current_run_step
+    # run_context.context.run_dependencies.emitter.emit(
+    #     Packet(
+    #         ind=index,
+    #         obj=CustomToolStart(type="custom_tool_start", tool_name=tool.name),
+    #     )
+    # )
+    # results = []
+    # for result in tool.run(**args):
+    #     results.append(result)
+    #     # Extract data from CustomToolCallSummary within the ToolResponse
+    #     custom_summary = result.response
+    #     data = None
+    #     file_ids = None
 
-        # Handle different response types
-        if custom_summary.response_type in ["image", "csv"] and hasattr(
-            custom_summary.tool_result, "file_ids"
-        ):
-            file_ids = custom_summary.tool_result.file_ids
-        else:
-            data = custom_summary.tool_result
-        run_context.context.run_dependencies.emitter.emit(
-            Packet(
-                ind=index,
-                obj=CustomToolDelta(
-                    type="custom_tool_delta",
-                    tool_name=tool.name,
-                    response_type=custom_summary.response_type,
-                    data=data,
-                    file_ids=file_ids,
-                ),
-            )
-        )
-    return results
+    #     # Handle different response types
+    #     if custom_summary.response_type in ["image", "csv"] and hasattr(
+    #         custom_summary.tool_result, "file_ids"
+    #     ):
+    #         file_ids = custom_summary.tool_result.file_ids
+    #     else:
+    #         data = custom_summary.tool_result
+    #     run_context.context.run_dependencies.emitter.emit(
+    #         Packet(
+    #             ind=index,
+    #             obj=CustomToolDelta(
+    #                 type="custom_tool_delta",
+    #                 tool_name=tool.name,
+    #                 response_type=custom_summary.response_type,
+    #                 data=data,
+    #                 file_ids=file_ids,
+    #             ),
+    #         )
+    #     )
+    return []
 
 
 def custom_or_mcp_tool_to_function_tool(tool: Tool) -> FunctionTool:

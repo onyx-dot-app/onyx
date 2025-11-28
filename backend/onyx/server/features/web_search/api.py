@@ -70,7 +70,7 @@ def _get_active_search_provider(
         )
 
     try:
-        provider: WebSearchProvider | None = build_search_provider_from_config(
+        provider: WebSearchProvider = build_search_provider_from_config(
             provider_type=provider_view.provider_type,
             api_key=provider_model.api_key,
             config=provider_model.config or {},

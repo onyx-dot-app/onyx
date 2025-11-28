@@ -5,16 +5,7 @@ from agents import RunContextWrapper
 
 from onyx.chat.stop_signal_checker import is_connected
 from onyx.chat.turn.models import ChatTurnContext
-from onyx.file_store.utils import build_frontend_file_url
-from onyx.file_store.utils import save_files
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
-from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationResponse,
-)
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -31,16 +22,16 @@ def _image_generation_core(
     shape: str,
     image_generation_tool_instance: ImageGenerationTool,
 ) -> list[GeneratedImage]:
-    index = run_context.context.current_run_step
-    emitter = run_context.context.run_dependencies.emitter
+    run_context.context.current_run_step
+    run_context.context.run_dependencies.emitter
 
     # Emit start event
-    emitter.emit(
-        Packet(
-            ind=index,
-            obj=ImageGenerationToolStart(type="image_generation_tool_start"),
-        )
-    )
+    # emitter.emit(
+    #     Packet(
+    #         ind=index,
+    #         obj=ImageGenerationToolStart(type="image_generation_tool_start"),
+    #     )
+    # )
 
     # Prepare tool arguments
     tool_args = {"prompt": prompt}
@@ -49,7 +40,6 @@ def _image_generation_core(
 
     # Run the actual image generation tool with heartbeat handling
     generated_images: list[GeneratedImage] = []
-    heartbeat_count = 0
 
     for tool_response in image_generation_tool_instance.run(
         **tool_args  # type: ignore[arg-type]
@@ -61,48 +51,48 @@ def _image_generation_core(
         ):
             break
 
-        # Handle heartbeat responses
-        if tool_response.id == "image_generation_heartbeat":
-            # Emit heartbeat event for every iteration
-            emitter.emit(
-                Packet(
-                    ind=index,
-                    obj=ImageGenerationToolHeartbeat(
-                        type="image_generation_tool_heartbeat"
-                    ),
-                )
-            )
-            heartbeat_count += 1
-            logger.debug(f"Image generation heartbeat #{heartbeat_count}")
-            continue
+        # # Handle heartbeat responses
+        # if tool_response.id == "image_generation_heartbeat":
+        #     # Emit heartbeat event for every iteration
+        #     emitter.emit(
+        #         Packet(
+        #             ind=index,
+        #             obj=ImageGenerationToolHeartbeat(
+        #                 type="image_generation_tool_heartbeat"
+        #             ),
+        #         )
+        #     )
+        #     heartbeat_count += 1
+        #     logger.debug(f"Image generation heartbeat #{heartbeat_count}")
+        #     continue
 
         # Process the tool response to get the generated images
-        if tool_response.id == "image_generation_response":
-            image_generation_responses = cast(
-                list[ImageGenerationResponse], tool_response.response
-            )
-            file_ids = save_files(
-                urls=[],
-                base64_files=[img.image_data for img in image_generation_responses],
-            )
-            generated_images = [
-                GeneratedImage(
-                    file_id=file_id,
-                    url=build_frontend_file_url(file_id),
-                    revised_prompt=img.revised_prompt,
-                )
-                for img, file_id in zip(image_generation_responses, file_ids)
-            ]
-            break
+        # if tool_response.id == "image_generation_response":
+        #     image_generation_responses = cast(
+        #         list[ImageGenerationResponse], tool_response.response
+        #     )
+        #     file_ids = save_files(
+        #         urls=[],
+        #         base64_files=[img.image_data for img in image_generation_responses],
+        #     )
+        #     generated_images = [
+        #         GeneratedImage(
+        #             file_id=file_id,
+        #             url=build_frontend_file_url(file_id),
+        #             revised_prompt=img.revised_prompt,
+        #         )
+        #         for img, file_id in zip(image_generation_responses, file_ids)
+        #     ]
+        #     break
 
-    emitter.emit(
-        Packet(
-            ind=index,
-            obj=ImageGenerationFinal(
-                type="image_generation_tool_delta", images=generated_images
-            ),
-        )
-    )
+    # emitter.emit(
+    #     Packet(
+    #         ind=index,
+    #         obj=ImageGenerationFinal(
+    #             type="image_generation_tool_delta", images=generated_images
+    #         ),
+    #     )
+    # )
 
     return generated_images
 
@@ -125,7 +115,7 @@ def image_generation(
         (
             tool
             for tool in run_context.context.run_dependencies.tools
-            if tool.name == ImageGenerationTool._NAME
+            if tool.name == ImageGenerationTool.NAME
         ),
         None,
     )

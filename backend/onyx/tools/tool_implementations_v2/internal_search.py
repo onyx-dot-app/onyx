@@ -4,6 +4,7 @@ from agents import function_tool
 from agents import RunContextWrapper
 from pydantic import TypeAdapter
 
+from onyx.chat.models import ContextualPruningConfig
 from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.prune_and_merge import prune_and_merge_sections
 from onyx.chat.stop_signal_checker import is_connected
@@ -84,11 +85,9 @@ def _internal_search_core(
                 persona=search_tool.persona,
             )
 
-            top_sections = merge_individual_chunks(top_chunks)
+            merge_individual_chunks(top_chunks)
 
             # TODO: just a heuristic to not overload context window -- carried over from existing DR flow
-            docs_to_feed_llm = 15
-            retrieved_sections: list[InferenceSection] = top_sections[:docs_to_feed_llm]
 
             # Store sections in fetched_documents_cache
             for section in retrieved_sections:
@@ -141,7 +140,13 @@ def _internal_search_core(
         section_relevance_list=None,
         llm_config=search_tool.llm.config,
         existing_input_tokens=existing_input_tokens,
-        contextual_pruning_config=search_tool.contextual_pruning_config,
+        contextual_pruning_config=ContextualPruningConfig(
+            max_chunks=1,
+            num_chunk_multiple=1,
+            is_manually_selected_docs=False,
+            use_sections=True,
+            using_tool_message=False,
+        ),
     )
 
     search_results_for_query = [
@@ -197,7 +202,7 @@ def internal_search(
         (
             tool
             for tool in run_context.context.run_dependencies.tools
-            if tool.name == SearchTool._NAME
+            if tool.name == SearchTool.NAME
         ),
         None,
     )

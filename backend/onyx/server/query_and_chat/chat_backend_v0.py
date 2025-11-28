@@ -103,7 +103,7 @@ def transform_packet_to_v0_format(packet: Any) -> dict[str, Any] | None:
         # Handle AgentResponseStart (formerly MessageStart)
         if isinstance(obj, AgentResponseStart):
             # First message piece
-            result = {}
+            result: dict[str, Any] = {}
             if obj.final_documents:
                 # Return final context docs separately
                 return {
@@ -124,7 +124,7 @@ def transform_packet_to_v0_format(packet: Any) -> dict[str, Any] | None:
 
         # Handle SearchToolQueriesDelta
         if isinstance(obj, SearchToolQueriesDelta):
-            tool_response = {
+            tool_response: dict[str, Any] = {
                 "tool_name": "run_search",
                 "tool_args": {},
             }

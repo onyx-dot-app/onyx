@@ -19,12 +19,13 @@ class KnowledgeGraphTool(Tool[None]):
     _DISPLAY_NAME = "Knowledge Graph Search"
 
     def __init__(self, tool_id: int, emitter: Emitter) -> None:
-        raise NotImplementedError(
-            "KnowledgeGraphTool should not be getting used right now."
-        )
         super().__init__(emitter=emitter)
 
         self._id = tool_id
+
+        raise NotImplementedError(
+            "KnowledgeGraphTool should not be getting used right now."
+        )
 
     @property
     def id(self) -> int:
@@ -72,7 +73,6 @@ class KnowledgeGraphTool(Tool[None]):
 
     def run(
         self,
-        run_context: None,
         turn_index: int,
         override_kwargs: None,
         **llm_kwargs: Any,

@@ -14,6 +14,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from backend.onyx.chat.infra import get_default_emitter
 from sqlalchemy.orm import Session
 
 from onyx.context.search.enums import RecencyBiasSetting
@@ -187,6 +188,7 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
+            emitter=get_default_emitter(),
             user=user,
             llm=llm,
             fast_llm=fast_llm,
@@ -245,6 +247,7 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
+            emitter=get_default_emitter(),
             user=user,
             llm=llm,
             fast_llm=fast_llm,
@@ -297,6 +300,7 @@ class TestOAuthToolIntegrationPriority:
             tool_dict = construct_tools(
                 persona=persona,
                 db_session=db_session,
+                emitter=get_default_emitter(),
                 user=user,
                 llm=llm,
                 fast_llm=fast_llm,
@@ -358,6 +362,7 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
+            emitter=get_default_emitter(),
             user=user,
             llm=llm,
             fast_llm=fast_llm,
@@ -429,6 +434,7 @@ class TestOAuthToolIntegrationPriority:
             tool_dict = construct_tools(
                 persona=persona,
                 db_session=db_session,
+                emitter=get_default_emitter(),
                 user=user,
                 llm=llm,
                 fast_llm=fast_llm,
@@ -496,6 +502,7 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
+            emitter=get_default_emitter(),
             user=user,
             llm=llm,
             fast_llm=fast_llm,
