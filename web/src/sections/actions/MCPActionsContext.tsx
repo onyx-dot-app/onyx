@@ -438,7 +438,6 @@ export function MCPActionsProvider({
 
   const onServerCreated = useCallback(
     (server: MCPServerWithStatus) => {
-      console.log("Server created:", server);
       setSelectedServer(server);
       authModal.toggle(true);
     },

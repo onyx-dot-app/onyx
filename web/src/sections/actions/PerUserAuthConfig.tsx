@@ -92,14 +92,6 @@ export function PerUserAuthConfig({
   const requiredFields: string[] = values.auth_template?.required_fields || [];
   const userCredentials = values.user_credentials || {};
 
-  // Initialize required fields on mount
-  useEffect(() => {
-    const headers = values.auth_template?.headers || {};
-    if (headers && Object.keys(headers).length > 0) {
-      updateRequiredFields(headers);
-    }
-  }, []); // Only run on mount
-
   return (
     <div className="flex flex-col gap-4 -mx-2 px-2 py-2 bg-background-tint-00 rounded-12">
       {/* Authentication Headers */}

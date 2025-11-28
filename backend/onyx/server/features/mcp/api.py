@@ -1136,6 +1136,11 @@ def get_mcp_server_tools_snapshots(
                 status=MCPServerStatus.AWAITING_AUTH,
             )
             db.commit()
+
+            if isinstance(e, HTTPException):
+                # Re-raise HTTP exceptions (e.g. 401, 400) so they are returned to client
+                raise e
+
             logger.error(f"Failed to discover tools for MCP server: {e}")
             raise HTTPException(status_code=500, detail="Failed to discover tools")
 
