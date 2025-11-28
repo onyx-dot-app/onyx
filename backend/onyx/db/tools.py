@@ -64,6 +64,13 @@ def get_tools_by_mcp_server_id(
     return list(db_session.scalars(query).all())
 
 
+def get_tools_by_ids(tool_ids: list[int], db_session: Session) -> list[Tool]:
+    if not tool_ids:
+        return []
+    stmt = select(Tool).where(Tool.id.in_(tool_ids))
+    return list(db_session.scalars(stmt).all())
+
+
 def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
     tool = db_session.scalar(select(Tool).where(Tool.id == tool_id))
     if not tool:
