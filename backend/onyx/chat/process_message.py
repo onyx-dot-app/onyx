@@ -20,6 +20,7 @@ from onyx.chat.chat_utils import create_temporary_persona
 from onyx.chat.chat_utils import get_custom_agent_prompt
 from onyx.chat.chat_utils import load_all_chat_files
 from onyx.chat.infra import get_default_emitter
+from onyx.chat.infra import run_with_emitter_wrapper
 from onyx.chat.llm_loop import run_llm_loop
 from onyx.chat.memories import get_memories
 from onyx.chat.models import AnswerStream
@@ -33,6 +34,8 @@ from onyx.chat.models import PromptConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import StreamingError
 from onyx.chat.prompt_builder.answer_prompt_builder import calculate_reserved_tokens
+from onyx.chat.save_chat import save_chat_turn
+from onyx.chat.state import LLMLoopStateContainer
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.temp_translation import translate_llm_loop_packets
@@ -43,6 +46,7 @@ from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
+from onyx.context.search.models import CitationDocInfo
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_message
@@ -606,12 +610,18 @@ def stream_chat_message_objects(
         def check_is_connected() -> bool:
             return check_stop_signal(chat_session_id, redis_client)
 
-        # Run the LLM loop and translate packets for frontend
-        # Note, this uses the emitter_generator_wrapper decorator which runs the entire thing
-        # in a background thread. Technical the DB session is not thread safe but nothing else
-        # uses it and the reference is passed directly so it's ok.
-        llm_loop_packets = run_llm_loop(
+        # Create state container for accumulating partial results
+        state_container = LLMLoopStateContainer()
+
+        # Run the LLM loop with explicit wrapper for stop signal handling
+        # The wrapper runs run_llm_loop in a background thread and polls every 300ms
+        # for stop signals. run_llm_loop itself doesn't know about stopping.
+        # Note: DB session is not thread safe but nothing else uses it and the
+        # reference is passed directly so it's ok.
+        llm_loop_packets = run_with_emitter_wrapper(
+            run_llm_loop,
             emitter=emitter,
+            is_connected=check_is_connected,
             simple_chat_history=simple_chat_history,
             tools=tools,
             custom_agent_prompt=custom_agent_prompt,
@@ -622,7 +632,7 @@ def stream_chat_message_objects(
             tokenizer_func=tokenizer_encode_func,
             assistant_response=assistant_response,
             db_session=db_session,
-            is_connected=check_is_connected,
+            state_container=state_container,
         )
 
         # Translate packets to frontend-expected format
@@ -631,6 +641,52 @@ def stream_chat_message_objects(
             packet_stream=llm_loop_packets,
             message_id=assistant_response.id,
         )  # type: ignore
+
+        # Determine if stopped by user
+        stopped_by_user = not check_is_connected()
+        if stopped_by_user:
+            logger.info(f"Chat session {chat_session_id} stopped by user")
+
+        # Single unified save for both normal completion and stopped cases
+        # Determine completion status
+        completed_normally = not stopped_by_user
+
+        # Build final answer based on completion status
+        if completed_normally:
+            # Normal completion - use answer as-is
+            final_answer = state_container.answer_tokens or ""
+        else:
+            # Stopped by user - append stop message
+            if state_container.answer_tokens:
+                final_answer = (
+                    state_container.answer_tokens
+                    + " ... The response was stopped by the user here."
+                )
+            else:
+                final_answer = "The generation was stopped by the user."
+
+        # Build citation_docs_info from accumulated citations in state container
+        citation_docs_info: list[CitationDocInfo] = []
+        seen_citation_nums: set[int] = set()
+        for citation_num, search_doc in state_container.citation_to_doc.items():
+            if citation_num not in seen_citation_nums:
+                seen_citation_nums.add(citation_num)
+                citation_docs_info.append(
+                    CitationDocInfo(
+                        search_doc=search_doc,
+                        citation_number=citation_num,
+                    )
+                )
+
+        # Single save for all cases
+        save_chat_turn(
+            message_text=final_answer,
+            reasoning_tokens=state_container.reasoning_tokens,
+            citation_docs_info=citation_docs_info,
+            tool_calls=state_container.tool_calls,
+            db_session=db_session,
+            assistant_message=assistant_response,
+        )
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")
