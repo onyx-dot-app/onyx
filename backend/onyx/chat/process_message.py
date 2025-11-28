@@ -625,6 +625,10 @@ def stream_chat_message_objects(
             is_connected=check_is_connected,
         )
 
+        # TODO: Slack doesn't need the translation later, later handle these all the same
+        if single_message_history:
+            yield from llm_loop_packets
+
         # Translate packets to frontend-expected format
         # this doesn't use the correct backend packet types and is a temporary fix
         yield from translate_llm_loop_packets(
@@ -779,9 +783,7 @@ def gather_stream(
     return ChatBasicResponse(
         answer=answer,
         answer_citationless=remove_answer_citations(answer),
-        cited_documents={
-            citation.citation_number: citation.document_id for citation in citations
-        },
+        citation_info=citations,
         message_id=message_id,
         error_msg=error_msg,
         top_documents=top_documents,

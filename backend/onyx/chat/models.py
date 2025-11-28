@@ -394,8 +394,7 @@ class ChatBasicResponse(BaseModel):
 
     error_msg: str | None
     message_id: int
-    # this is a map of the citation number to the document id
-    cited_documents: dict[int, str]
+    citation_info: list[CitationInfo]
 
 
 class ChatLoadedFile(InMemoryChatFile):

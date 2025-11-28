@@ -12,14 +12,13 @@ from onyx.chat.models import PromptConfig
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
+from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.utils import get_max_input_tokens
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.search_like_tool_utils import (
-    FINAL_CONTEXT_DOCUMENTS_ID,
-)
 
 QUERY = "Test question"
 DEFAULT_SEARCH_ARGS = {"query": "search"}
@@ -137,9 +136,41 @@ def mock_search_tool(mock_search_results: list[LlmDoc]) -> MagicMock:
     mock_tool.final_result.return_value = [
         json.loads(doc.model_dump_json()) for doc in mock_search_results
     ]
-    mock_tool.run.return_value = [
-        ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=mock_search_results),
+    # Convert LlmDoc objects to SearchDoc objects
+    search_docs = [
+        SearchDoc(
+            document_id=doc.document_id,
+            chunk_ind=0,  # Default value
+            semantic_identifier=doc.semantic_identifier,
+            link=doc.link,
+            blurb=doc.blurb,
+            source_type=doc.source_type,
+            boost=0,  # Default value
+            hidden=False,  # Default value
+            metadata=doc.metadata,
+            score=None,  # Default value
+            match_highlights=doc.match_highlights or [],
+            updated_at=doc.updated_at,
+            primary_owners=None,  # Default value
+            secondary_owners=None,  # Default value
+            is_internet=False,  # Default value
+        )
+        for doc in mock_search_results
     ]
+    # Create citation mapping (1-indexed citations)
+    citation_mapping = {
+        i + 1: doc.document_id for i, doc in enumerate(mock_search_results)
+    }
+    # Create a simple LLM-facing response string
+    llm_facing_response = "\n\n".join(
+        f"[{i+1}] {doc.content}" for i, doc in enumerate(mock_search_results)
+    )
+    mock_tool.run.return_value = ToolResponse(
+        rich_response=SearchDocsResponse(
+            search_docs=search_docs, citation_mapping=citation_mapping
+        ),
+        llm_facing_response=llm_facing_response,
+    )
     mock_tool.tool_definition.return_value = {
         "type": "function",
         "function": {

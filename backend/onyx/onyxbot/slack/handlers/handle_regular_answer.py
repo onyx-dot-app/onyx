@@ -6,13 +6,11 @@ from typing import TypeVar
 
 from retry import retry
 from slack_sdk import WebClient
-from slack_sdk.models.blocks import SectionBlock
 
 from onyx.chat.chat_utils import prepare_chat_message_request
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
-from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.configs.onyxbot_configs import ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER
@@ -266,50 +264,6 @@ def handle_regular_answer(
 
         return True
 
-    # Edge case handling, for tracking down the Slack usage issue
-    if answer is None:
-        assert DISABLE_GENERATIVE_AI is True
-        try:
-            respond_in_thread_or_channel(
-                client=client,
-                channel=channel,
-                receiver_ids=target_receiver_ids,
-                text="Hello! Onyx has some results for you!",
-                blocks=[
-                    SectionBlock(
-                        text="Onyx is down for maintenance.\nWe're working hard on recharging the AI!"
-                    )
-                ],
-                thread_ts=target_thread_ts,
-                send_as_ephemeral=send_as_ephemeral,
-                # don't unfurl, since otherwise we will have 5+ previews which makes the message very long
-                unfurl=False,
-            )
-
-            # For DM (ephemeral message), we need to create a thread via a normal message so the user can see
-            # the ephemeral message. This also will give the user a notification which ephemeral message does not.
-
-            # If the channel is ephemeral, we don't need to send a message to the user since they will already see the message
-            if target_receiver_ids and not send_as_ephemeral:
-                respond_in_thread_or_channel(
-                    client=client,
-                    channel=channel,
-                    text=(
-                        "👋 Hi, we've just gathered and forwarded the relevant "
-                        + "information to the team. They'll get back to you shortly!"
-                    ),
-                    thread_ts=target_thread_ts,
-                    send_as_ephemeral=send_as_ephemeral,
-                )
-
-            return False
-
-        except Exception:
-            logger.exception(
-                f"Unable to process message - could not respond in slack in {num_retries} attempts"
-            )
-            return True
-
     # Got an answer at this point, can remove reaction and give results
     if not is_slash_command:  # Slash commands don't have reactions
         update_emote_react(
@@ -353,7 +307,7 @@ def handle_regular_answer(
     if (
         expecting_search_result
         and only_respond_if_citations
-        and not answer.cited_documents
+        and not answer.citation_info
         and not message_info.bypass_filters
     ):
         logger.error(

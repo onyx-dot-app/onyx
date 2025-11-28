@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.chat import get_db_search_doc_by_document_id
 from onyx.db.chat import get_db_search_doc_by_id
 from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
@@ -75,7 +76,7 @@ def create_message_packets(
         Packet(
             turn_index=turn_index,
             obj=AgentResponseStart(
-                final_documents=final_documents,
+                final_documents=SearchDoc.from_saved_search_docs(final_documents),
             ),
         )
     )
@@ -214,7 +215,7 @@ def create_fetch_packets(
         packets.append(
             Packet(
                 turn_index=turn_index,
-                obj=OpenUrl(documents=fetch),
+                obj=OpenUrl(documents=SearchDoc.from_saved_search_docs(fetch)),
             )
         )
         packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
@@ -252,7 +253,9 @@ def create_search_packets(
         packets.append(
             Packet(
                 turn_index=turn_index,
-                obj=SearchToolDocumentsDelta(documents=saved_search_docs),
+                obj=SearchToolDocumentsDelta(
+                    documents=SearchDoc.from_saved_search_docs(saved_search_docs)
+                ),
             ),
         )
 

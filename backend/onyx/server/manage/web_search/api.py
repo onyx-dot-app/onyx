@@ -319,7 +319,7 @@ def test_content_provider(
         provider = build_content_provider_from_config(
             provider_type=request.provider_type,
             api_key=request.api_key,
-            config=request.config or {},
+            config=request.config,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

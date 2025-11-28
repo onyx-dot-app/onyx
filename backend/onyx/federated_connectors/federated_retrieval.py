@@ -11,7 +11,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import SearchQuery
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
 )
@@ -191,10 +190,10 @@ def get_federated_retrieval_functions(
             conn: FederatedConnector,
             ent: dict[str, Any],
             token: str,
-        ) -> Callable[[SearchQuery], list[InferenceChunk]]:
+        ) -> Callable[[ChunkIndexRequest], list[InferenceChunk]]:
             return lambda query: conn.search(
-                query,
-                ent,
+                query=query,
+                entities=ent,
                 access_token=token,
                 limit=None,  # Let connector use its own max_messages_per_query config
             )

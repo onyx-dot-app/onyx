@@ -60,7 +60,7 @@ class WebContentProviderUpsertRequest(BaseModel):
 
 class WebSearchProviderTestRequest(BaseModel):
     provider_type: WebSearchProviderType
-    api_key: str | None = None
+    api_key: str
     config: dict[str, Any] | None = None
 
 

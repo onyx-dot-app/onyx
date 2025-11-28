@@ -106,7 +106,6 @@ class ChatSessionManager:
             parent_message_id=parent_message_id,
             message=message,
             file_descriptors=file_descriptors or [],
-            current_message_files=current_message_files or [],
             search_doc_ids=search_doc_ids or [],
             retrieval_options=retrieval_options,
             rerank_settings=None,  # Can be added if needed

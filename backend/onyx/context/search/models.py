@@ -435,6 +435,24 @@ class SearchDoc(BaseModel):
 
         return search_docs
 
+    # TODO - there is likely a way to clean this all up and not have the switch between these
+    @classmethod
+    def from_saved_search_doc(cls, saved_search_doc: "SavedSearchDoc") -> "SearchDoc":
+        """Convert a SavedSearchDoc to SearchDoc by dropping the db_doc_id field."""
+        saved_search_doc_data = saved_search_doc.model_dump()
+        # Remove db_doc_id as it's not part of SearchDoc
+        saved_search_doc_data.pop("db_doc_id", None)
+        return cls(**saved_search_doc_data)
+
+    @classmethod
+    def from_saved_search_docs(
+        cls, saved_search_docs: list["SavedSearchDoc"]
+    ) -> list["SearchDoc"]:
+        return [
+            cls.from_saved_search_doc(saved_search_doc)
+            for saved_search_doc in saved_search_docs
+        ]
+
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(*args, **kwargs)  # type: ignore
         initial_dict["updated_at"] = (

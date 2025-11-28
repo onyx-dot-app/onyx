@@ -21,7 +21,7 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_DOCS_TO_DISPLAY
-from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.chat import get_chat_session_by_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChannelConfig
@@ -251,7 +251,7 @@ def get_restate_blocks(
 
 
 def _build_documents_blocks(
-    documents: list[SavedSearchDoc],
+    documents: list[SearchDoc],
     message_id: int | None,
     num_docs_to_display: int = ONYX_BOT_NUM_DOCS_TO_DISPLAY,
 ) -> list[Block]:
@@ -310,7 +310,7 @@ def _build_documents_blocks(
 
 
 def _build_sources_blocks(
-    cited_documents: list[tuple[int, SavedSearchDoc]],
+    cited_documents: list[tuple[int, SearchDoc]],
     num_docs_to_display: int = ONYX_BOT_NUM_DOCS_TO_DISPLAY,
 ) -> list[Block]:
     if not cited_documents:
@@ -403,15 +403,15 @@ def _build_citations_blocks(
     answer: ChatBasicResponse,
 ) -> list[Block]:
     top_docs = answer.top_documents
-    citations = answer.cited_documents or {}
-    cited_docs = []
-    for citation_num, document_id in citations.items():
+    citations = answer.citation_info or []
+    cited_docs: list[tuple[int, SearchDoc]] = []
+    for citation_info in citations:
         matching_doc = next(
-            (d for d in top_docs if d.document_id == document_id),
+            (d for d in top_docs if d.document_id == citation_info.document_id),
             None,
         )
         if matching_doc:
-            cited_docs.append((citation_num, matching_doc))
+            cited_docs.append((citation_info.citation_number, matching_doc))
 
     cited_docs.sort()
     citations_block = _build_sources_blocks(cited_documents=cited_docs)
@@ -643,7 +643,7 @@ def build_slack_response_blocks(
 
     citations_blocks = []
     document_blocks = []
-    if use_citations and answer.cited_documents:
+    if use_citations and answer.citation_info:
         citations_blocks = _build_citations_blocks(answer)
     else:
         document_blocks = _priority_ordered_documents_blocks(answer)

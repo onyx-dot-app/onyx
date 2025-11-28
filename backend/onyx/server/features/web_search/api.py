@@ -20,6 +20,7 @@ from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     OnyxWebCrawler,
 )
+from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
 from onyx.tools.tool_implementations.web_search.providers import (
     build_content_provider_from_config,
@@ -93,12 +94,29 @@ def _get_active_content_provider(
 
         return None, OnyxWebCrawler()
 
+    if provider_model.api_key is None:
+        # TODO - this is not a great error, in fact, this key should not be nullable.
+        raise HTTPException(
+            status_code=400,
+            detail="Web content provider requires an API key.",
+        )
+
     try:
         provider_type = WebContentProviderType(provider_model.provider_type)
+
+        config = provider_model.config or {}
+        if config.get("timeout_seconds") is not None:
+            timeout_seconds = int(config.get("timeout_seconds"))
+        else:
+            timeout_seconds = None
+        base_url = config.get("base_url")
         provider: WebContentProvider | None = build_content_provider_from_config(
             provider_type=provider_type,
             api_key=provider_model.api_key,
-            config=provider_model.config or {},
+            config=WebContentProviderConfig(
+                timeout_seconds=timeout_seconds,
+                base_url=base_url,
+            ),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

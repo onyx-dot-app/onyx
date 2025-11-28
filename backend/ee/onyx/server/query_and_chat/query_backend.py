@@ -38,7 +38,6 @@ from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
 
@@ -187,10 +186,7 @@ def get_answer_with_citation(
             answer=answer.answer,
             chat_message_id=answer.message_id,
             error_msg=answer.error_msg,
-            citations=[
-                CitationInfo(citation_number=i, document_id=doc_id)
-                for i, doc_id in answer.cited_documents.items()
-            ],
+            citations=answer.citation_info,
             docs=QADocsResponse(
                 top_documents=answer.top_documents,
                 predicted_flow=None,
