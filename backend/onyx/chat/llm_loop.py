@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.infra import Emitter
-from onyx.chat.infra import emitter_generator_wrapper
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmStepResult
@@ -15,9 +14,8 @@ from onyx.chat.prompt_builder.answer_prompt_builder import build_system_prompt
 from onyx.chat.prompt_builder.answer_prompt_builder import (
     get_default_base_system_prompt,
 )
-from onyx.chat.save_chat import save_chat_turn
+from onyx.chat.state import LLMLoopStateContainer
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import CitationDocInfo
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.models import ChatMessage
@@ -465,6 +463,7 @@ def run_llm_step(
     llm: LLM,
     turn_index: int,
     citation_processor: DynamicCitationProcessor,
+    state_container: LLMLoopStateContainer,
     final_documents: list[SearchDoc] | None = None,
 ) -> tuple[LlmStepResult, int]:
     # The second return value is for the turn index because reasoning counts on the frontend as a turn
@@ -495,6 +494,8 @@ def run_llm_step(
         # ReasoningStart or ReasoningDone packets.
         if delta.reasoning_content:
             accumulated_reasoning += delta.reasoning_content
+            # Save reasoning incrementally to state container
+            state_container.set_reasoning_tokens(accumulated_reasoning)
             if not reasoning_start:
                 emitter.emit(
                     Packet(
@@ -535,6 +536,8 @@ def run_llm_step(
             for result in citation_processor.process_token(delta.content):
                 if isinstance(result, str):
                     accumulated_answer += result
+                    # Save answer incrementally to state container
+                    state_container.set_answer_tokens(accumulated_answer)
                     emitter.emit(
                         Packet(
                             turn_index=turn_index,
@@ -580,6 +583,9 @@ def run_llm_step(
     if citation_processor:
         for result in citation_processor.process_token(None):
             if isinstance(result, str):
+                accumulated_answer += result
+                # Save answer incrementally to state container
+                state_container.set_answer_tokens(accumulated_answer)
                 emitter.emit(
                     Packet(
                         turn_index=turn_index,
@@ -671,7 +677,6 @@ def _update_tool_call_with_delta(
             ] += tool_call_delta.function.arguments
 
 
-@emitter_generator_wrapper
 def run_llm_loop(
     emitter: Emitter,
     simple_chat_history: list[ChatMessageSimple],
@@ -684,7 +689,7 @@ def run_llm_loop(
     tokenizer_func: Callable[[str], list[int]],
     assistant_response: ChatMessage,
     db_session: Session,
-    is_connected: Callable[[], bool] | None = None,
+    state_container: LLMLoopStateContainer,
     force_use_tool_name: str | None = None,
 ) -> None:
     # Fix some LiteLLM issues,
@@ -823,10 +828,14 @@ def run_llm_loop(
             llm=llm,
             turn_index=current_tool_call_index,
             citation_processor=citation_processor,
+            state_container=state_container,
             # The rich docs representation is passed in so that when yielding the answer, it can also immediately yield the full
             # set of found documents. This gives us the option to show the final set of documents immediately if desired.
             final_documents=gathered_documents,
         )
+
+        # Save citation mapping after each LLM step for incremental state updates
+        state_container.set_citation_mapping(citation_processor.citation_to_doc)
 
         # Run the LLM selected tools, there is some more logic here than a simple execution
         # each tool might have custom logic here
@@ -896,6 +905,8 @@ def run_llm_loop(
                     generated_images=generated_images,
                 )
                 collected_tool_calls.append(tool_call_info)
+                # Add to state container for partial save support
+                state_container.add_tool_call(tool_call_info)
 
                 # Store tool call with function name and arguments in separate layers
                 tool_call_data = {
@@ -976,30 +987,10 @@ def run_llm_loop(
     if not llm_step_result or not llm_step_result.answer:
         raise RuntimeError("LLM did not return an answer.")
 
-    # Build citation_docs_info from the accumulated citation_to_doc mapping
-    # citation_info is the accumulation of citation_to_doc from the citation processor
-    citation_docs_info: list[CitationDocInfo] = []
-    seen_citation_nums: set[int] = set()
-    for citation_num, search_doc in citation_processor.citation_to_doc.items():
-        if citation_num not in seen_citation_nums:
-            seen_citation_nums.add(citation_num)
-            citation_docs_info.append(
-                CitationDocInfo(
-                    search_doc=search_doc,
-                    citation_number=citation_num,
-                )
-            )
+    # Note: All state (answer, reasoning, citations, tool_calls) is saved incrementally
+    # in state_container. The process_message layer will persist to DB.
 
-    save_chat_turn(
-        message_text=llm_step_result.answer,
-        reasoning_tokens=llm_step_result.reasoning,
-        citation_docs_info=citation_docs_info,
-        tool_calls=collected_tool_calls,
-        db_session=db_session,
-        assistant_message=assistant_response,
-    )
-
-    # Very important that this happens at the end, otherwise the commit may get rolled back
+    # Signal completion
     emitter.emit(
         Packet(turn_index=current_tool_call_index, obj=OverallStop(type="stop"))
     )
