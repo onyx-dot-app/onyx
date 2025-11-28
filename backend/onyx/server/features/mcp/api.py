@@ -3,6 +3,7 @@ import base64
 import hashlib
 import json
 from collections.abc import Awaitable
+from enum import Enum
 from secrets import token_urlsafe
 from typing import cast
 from typing import Literal
@@ -1102,10 +1103,15 @@ def admin_list_mcp_tools_by_id(
         return _list_mcp_tools_by_id(server_id, db, True, user)
 
 
+class ToolSnapshotSource(str, Enum):
+    DB = "db"
+    MCP = "mcp"
+
+
 @admin_router.get("/server/{server_id}/tools/snapshots")
 def get_mcp_server_tools_snapshots(
     server_id: int,
-    source: str = "db",
+    source: ToolSnapshotSource = ToolSnapshotSource.DB,
     db: Session = Depends(get_session),
     user: User | None = Depends(current_curator_or_admin_user),
 ) -> list[ToolSnapshot]:
@@ -1127,7 +1133,7 @@ def get_mcp_server_tools_snapshots(
 
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
-    if source == "mcp":
+    if source == ToolSnapshotSource.MCP:
         try:
             # Discover tools from MCP server and sync to DB
             _list_mcp_tools_by_id(server_id, db, True, user)
@@ -1148,11 +1154,6 @@ def get_mcp_server_tools_snapshots(
             db.commit()
             logger.error(f"Failed to discover tools for MCP server: {e}")
             raise HTTPException(status_code=500, detail="Failed to discover tools")
-    elif source != "db":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid source parameter: {source}. Must be 'db' or 'mcp'",
-        )
 
     # Fetch and return tools from database
     mcp_tools = get_tools_by_mcp_server_id(server_id, db, order_by_id=True)
