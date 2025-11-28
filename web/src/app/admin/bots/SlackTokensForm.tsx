@@ -5,7 +5,7 @@ import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { createSlackBot, updateSlackBot } from "./new/lib";
 import Button from "@/refresh-components/buttons/Button";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import { useEffect } from "react";
 
 export const SlackTokensForm = ({
@@ -129,6 +129,7 @@ export const SlackTokensForm = ({
           />
           <div className="flex justify-end w-full mt-4">
             <Button
+              type="submit"
               disabled={
                 isSubmitting ||
                 !values.bot_token ||

@@ -197,7 +197,7 @@ def get_documents_for_connector_credential_pair_limited_columns(
         doc_row = DocumentRow(
             id=row.id,
             doc_metadata=row.doc_metadata,
-            external_user_group_ids=row.external_user_group_ids,
+            external_user_group_ids=row.external_user_group_ids or [],
         )
         doc_rows.append(doc_row)
     return doc_rows

@@ -644,11 +644,14 @@ def clarifier(
             if context_llm_docs:
                 persona = graph_config.inputs.persona
                 if persona is not None:
-                    prompt_config = PromptConfig.from_model(persona)
+                    prompt_config = PromptConfig.from_model(
+                        persona, db_session=graph_config.persistence.db_session
+                    )
                 else:
                     prompt_config = PromptConfig(
-                        system_prompt=assistant_system_prompt,
-                        task_prompt="",
+                        default_behavior_system_prompt=assistant_system_prompt,
+                        custom_instructions=None,
+                        reminder="",
                         datetime_aware=True,
                     )
 
@@ -677,7 +680,7 @@ def clarifier(
 
             @traced(name="clarifier stream and process", type="llm")
             def stream_and_process() -> BasicSearchProcessedStreamResults:
-                stream = graph_config.tooling.primary_llm.stream(
+                stream = graph_config.tooling.primary_llm.stream_langchain(
                     prompt=create_question_prompt(
                         cast(str, system_prompt_to_use),
                         cast(str, user_prompt_to_use),

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
   parseLlmDescriptor,
@@ -7,29 +7,26 @@ import {
 } from "@/lib/llm/utils";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { createIcon } from "@/components/icons/icons";
 
-interface LLMSelectorProps {
+export interface LLMSelectorProps {
   userSettings?: boolean;
   llmProviders: LLMProviderDescriptor[];
   currentLlm: string | null;
   onSelect: (value: string | null) => void;
   requiresImageGeneration?: boolean;
+  excludePublicProviders?: boolean;
 }
 
-export const LLMSelector: React.FC<LLMSelectorProps> = ({
+export default function LLMSelector({
   userSettings,
   llmProviders,
   currentLlm,
   onSelect,
   requiresImageGeneration,
-}) => {
+  excludePublicProviders = false,
+}: LLMSelectorProps) {
   const currentDescriptor = useMemo(
     () => (currentLlm ? parseLlmDescriptor(currentLlm) : null),
     [currentLlm]
@@ -108,41 +105,38 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
   const defaultModelDisplayName = defaultModelName
     ? getDisplayNameForModel(defaultModelName)
     : null;
-
-  const currentLlmName = currentDescriptor?.modelName;
+  const defaultLabel = userSettings ? "System Default" : "User Default";
 
   return (
-    <Select
+    <InputSelect
       value={currentLlm ? currentLlm : "default"}
       onValueChange={(value) => onSelect(value === "default" ? null : value)}
     >
-      <SelectTrigger className="min-w-40">
-        <SelectValue>
-          {currentLlmName
-            ? getDisplayNameForModel(currentLlmName)
-            : userSettings
-              ? "System Default"
-              : "User Default"}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent className="z-[99999]">
-        <SelectItem className="flex" hideCheck value="default">
-          <span>{userSettings ? "System Default" : "User Default"}</span>
-          {userSettings && (
-            <span className=" my-auto font-normal ml-1">
-              ({defaultModelDisplayName})
-            </span>
-          )}
-        </SelectItem>
+      <InputSelect.Trigger placeholder={defaultLabel} />
+
+      <InputSelect.Content>
+        {!excludePublicProviders && (
+          <InputSelect.Item
+            value="default"
+            description={
+              userSettings && defaultModelDisplayName
+                ? `(${defaultModelDisplayName})`
+                : undefined
+            }
+          >
+            {defaultLabel}
+          </InputSelect.Item>
+        )}
         {llmOptions.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            <div className="my-1 flex items-center">
-              {option.icon && option.icon({ size: 16 })}
-              <span className="ml-2">{option.name}</span>
-            </div>
-          </SelectItem>
+          <InputSelect.Item
+            key={option.value}
+            value={option.value}
+            icon={createIcon(option.icon)}
+          >
+            {option.name}
+          </InputSelect.Item>
         ))}
-      </SelectContent>
-    </Select>
+      </InputSelect.Content>
+    </InputSelect>
   );
-};
+}

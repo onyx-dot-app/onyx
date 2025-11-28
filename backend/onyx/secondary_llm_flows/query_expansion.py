@@ -42,7 +42,7 @@ def llm_multilingual_query_expansion(query: str, language: str) -> str:
 
     messages = _get_rephrase_messages()
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-    model_output = message_to_string(fast_llm.invoke(filled_llm_prompt))
+    model_output = message_to_string(fast_llm.invoke_langchain(filled_llm_prompt))
     logger.debug(model_output)
 
     return model_output
@@ -124,7 +124,7 @@ def history_based_query_rephrase(
     )
 
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    rephrased_query = message_to_string(llm.invoke(filled_llm_prompt))
+    rephrased_query = message_to_string(llm.invoke_langchain(filled_llm_prompt))
 
     logger.debug(f"Rephrased combined query: {rephrased_query}")
 
@@ -159,7 +159,7 @@ def thread_based_query_rephrase(
     )
 
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    rephrased_query = message_to_string(llm.invoke(filled_llm_prompt))
+    rephrased_query = message_to_string(llm.invoke_langchain(filled_llm_prompt))
 
     logger.debug(f"Rephrased combined query: {rephrased_query}")
 

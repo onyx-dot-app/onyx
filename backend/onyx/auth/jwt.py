@@ -11,11 +11,8 @@ from jwt import decode as jwt_decode
 from jwt import InvalidTokenError
 from jwt import PyJWTError
 from jwt.algorithms import RSAAlgorithm
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
-from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
 
@@ -131,7 +128,7 @@ def _resolve_public_key_from_jwks(
         return None
 
 
-async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User | None:
+async def verify_jwt_token(token: str) -> dict[str, Any] | None:
     for attempt in range(_PUBLIC_KEY_FETCH_ATTEMPTS):
         public_key = get_public_key(token)
         if public_key is None:
@@ -142,8 +139,6 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
             return None
 
         try:
-            from sqlalchemy import func
-
             payload = jwt_decode(
                 token,
                 public_key,
@@ -163,15 +158,6 @@ async def verify_jwt_token(token: str, async_db_session: AsyncSession) -> User |
                 continue
             return None
 
-        email = payload.get("email")
-        if email:
-            result = await async_db_session.execute(
-                select(User).where(func.lower(User.email) == func.lower(email))
-            )
-            return result.scalars().first()
-        logger.warning(
-            "JWT token decoded successfully but no email claim found; skipping auth"
-        )
-        break
+        return payload
 
     return None

@@ -65,7 +65,7 @@ def generic_internal_tool_act(
             base_question=base_question,
             tool_description=generic_internal_tool_info.description,
         )
-        tool_calling_msg = graph_config.tooling.primary_llm.invoke(
+        tool_calling_msg = graph_config.tooling.primary_llm.invoke_langchain(
             tool_use_prompt,
             tools=[generic_internal_tool.tool_definition()],
             tool_choice="required",
@@ -113,7 +113,7 @@ def generic_internal_tool_act(
         query=branch_query, base_question=base_question, tool_response=tool_str
     )
     answer_string = str(
-        graph_config.tooling.primary_llm.invoke(
+        graph_config.tooling.primary_llm.invoke_langchain(
             tool_summary_prompt, timeout_override=TF_DR_TIMEOUT_SHORT
         ).content
     ).strip()

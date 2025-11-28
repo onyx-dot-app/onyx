@@ -382,6 +382,7 @@ def test_mock_connector_checkpoint_recovery(
     assert response.status_code == 200
 
     # Create CC Pair and run initial indexing attempt
+    # Note: Setting refresh_freq to allow manual retrigger after failure
     cc_pair = CCPairManager.create_from_scratch(
         name=f"mock-connector-checkpoint-{uuid.uuid4()}",
         source=DocumentSource.MOCK_CONNECTOR,
@@ -391,6 +392,7 @@ def test_mock_connector_checkpoint_recovery(
             "mock_server_port": MOCK_CONNECTOR_SERVER_PORT,
         },
         user_performing_action=admin_user,
+        refresh_freq=60 * 60,  # 1 hour
     )
 
     # Wait for first index attempt to complete
@@ -463,10 +465,14 @@ def test_mock_connector_checkpoint_recovery(
     )
     assert response.status_code == 200
 
-    # Trigger another indexing attempt
+    # After the failure, the connector is in repeated error state and paused.
+    # Set the manual indexing trigger first (while paused), then unpause.
+    # This ensures the trigger is set before CHECK_FOR_INDEXING runs, which will
+    # prevent the connector from being re-paused when repeated error state is detected.
     CCPairManager.run_once(
         cc_pair, from_beginning=False, user_performing_action=admin_user
     )
+    CCPairManager.unpause_cc_pair(cc_pair, user_performing_action=admin_user)
     recovery_index_attempt = IndexAttemptManager.wait_for_index_attempt_start(
         cc_pair_id=cc_pair.id,
         index_attempts_to_ignore=[initial_index_attempt.id],

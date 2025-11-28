@@ -5,6 +5,9 @@ metadata:
   name: {{ include "onyx.fullname" . }}-celery-worker-user-files-indexing
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.celery_worker_user_files_indexing.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   {{- if not .Values.celery_worker_user_files_indexing.autoscaling.enabled }}
   replicas: {{ .Values.celery_worker_user_files_indexing.replicaCount }}
@@ -24,6 +27,9 @@ spec:
       {{- end }}
       labels:
         {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.celery_worker_user_files_indexing.deploymentLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .Values.celery_worker_user_files_indexing.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -37,6 +43,14 @@ spec:
         {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
       {{- with .Values.celery_worker_user_files_indexing.nodeSelector }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.celery_worker_user_files_indexing.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.celery_worker_user_files_indexing.tolerations }}
+      tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:

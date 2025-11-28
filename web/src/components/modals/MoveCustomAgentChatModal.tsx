@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
-import { Checkbox } from "@/components/ui/checkbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/refresh-components/texts/Text";
 import SvgAlertCircle from "@/icons/alert-circle";
 
@@ -19,7 +19,7 @@ export default function MoveCustomAgentChatModal({
   const [doNotShowAgain, setDoNotShowAgain] = useState(false);
 
   return (
-    <ConfirmationModal
+    <ConfirmationModalLayout
       icon={SvgAlertCircle}
       title="Move Custom Agent Chat"
       onClose={onCancel}
@@ -49,6 +49,6 @@ export default function MoveCustomAgentChatModal({
           </label>
         </div>
       </div>
-    </ConfirmationModal>
+    </ConfirmationModalLayout>
   );
 }

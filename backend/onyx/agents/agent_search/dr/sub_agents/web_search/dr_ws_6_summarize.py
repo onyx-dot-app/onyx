@@ -1,7 +1,5 @@
 from datetime import datetime
 from typing import cast
-from urllib.parse import urlparse
-from urllib.parse import urlunparse
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
@@ -23,18 +21,10 @@ from onyx.configs.agent_configs import TF_DR_TIMEOUT_SHORT
 from onyx.context.search.models import InferenceSection
 from onyx.prompts.dr_prompts import INTERNAL_SEARCH_PROMPTS
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import normalize_url
 
 
 logger = setup_logger()
-
-
-def normalize_url(url: str) -> str:
-    """
-    Normalize a URL by removing query parameters and fragments.
-    This prevents KeyErrors when URLs differ only in query parameters like ?activeTab=explore.
-    """
-    parsed = urlparse(url)
-    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
 
 
 def is_summarize(

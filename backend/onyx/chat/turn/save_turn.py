@@ -15,9 +15,8 @@ from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
     GeneratedImageFullResult,
 )
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
-from onyx.chat.models import LlmDoc
+from onyx.chat.turn.models import FetchedDocumentCacheEntry
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import InferenceSection
 from onyx.db.chat import create_search_doc_from_inference_section
 from onyx.db.chat import update_db_session_with_messages
 from onyx.db.models import ChatMessage__SearchDoc
@@ -35,50 +34,41 @@ def save_turn(
     chat_session_id: UUID,
     research_type: ResearchType,
     final_answer: str,
-    unordered_fetched_inference_sections: list[InferenceSection],
-    ordered_fetched_documents: list[LlmDoc],
+    fetched_documents_cache: dict[str, FetchedDocumentCacheEntry],
     iteration_instructions: list[IterationInstructions],
     global_iteration_responses: list[IterationAnswer],
     # TODO: figure out better way to pass these dependencies
     model_name: str,
     model_provider: str,
 ) -> None:
-    # first, insert the search_docs
-    search_docs = [
-        create_search_doc_from_inference_section(
-            inference_section=doc,
-            is_internet=doc.center_chunk.source_type == DocumentSource.WEB,
+    # Create search docs from inference sections and build mapping
+    citation_number_to_search_doc_id: dict[int, int] = {}
+    search_docs = []
+    for cache_entry in fetched_documents_cache.values():
+        search_doc = create_search_doc_from_inference_section(
+            inference_section=cache_entry.inference_section,
+            is_internet=cache_entry.inference_section.center_chunk.source_type
+            == DocumentSource.WEB,
             db_session=db_session,
             commit=False,
         )
-        for doc in unordered_fetched_inference_sections
-    ]
+        search_docs.append(search_doc)
+        citation_number_to_search_doc_id[cache_entry.document_citation_number] = (
+            search_doc.id
+        )
 
-    # then, map_search_docs to message
+    # Map search_docs to message
     _insert_chat_message_search_doc_pair(
-        message_id, [search_doc.id for search_doc in search_docs], db_session
+        message_id, [doc.id for doc in search_docs], db_session
     )
-    # lastly, insert the citations
-    citation_dict: dict[int, int] = {}
+
+    # Build citations dict using cited doc numbers from the final answer
     cited_doc_nrs = _extract_citation_numbers(final_answer)
-    if search_docs:
-        # Create mapping: citation_number -> document_id
-        citation_to_doc_id = {
-            doc.document_citation_number: doc.document_id
-            for doc in ordered_fetched_documents
-            if doc.document_citation_number is not None
-        }
-
-        # Create mapping: document_id -> search_doc.id
-        doc_id_to_search_doc_id = {doc.document_id: doc.id for doc in search_docs}
-
-        # Chain the lookups: cited_doc_nr -> document_id -> search_doc.id
-        citation_dict = {
-            cited_doc_nr: doc_id_to_search_doc_id[citation_to_doc_id[cited_doc_nr]]
-            for cited_doc_nr in cited_doc_nrs
-            if cited_doc_nr in citation_to_doc_id
-            and citation_to_doc_id[cited_doc_nr] in doc_id_to_search_doc_id
-        }
+    citation_dict: dict[int, int] = {
+        cited_doc_nr: citation_number_to_search_doc_id[cited_doc_nr]
+        for cited_doc_nr in cited_doc_nrs
+        if cited_doc_nr in citation_number_to_search_doc_id
+    }
     llm_tokenizer = get_tokenizer(
         model_name=model_name,
         provider_type=model_provider,
@@ -138,6 +128,7 @@ def save_turn(
             additional_data=iteration_answer.additional_data,
             is_web_fetch=iteration_answer.is_web_fetch,
             queries=iteration_answer.queries,
+            file_ids=iteration_answer.file_ids,
         )
         db_session.add(research_agent_iteration_sub_step)
 

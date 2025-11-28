@@ -149,35 +149,7 @@ export default function UpgradingPage({
             </Button>
 
             {connectors && connectors.length > 0 ? (
-              futureEmbeddingModel.background_reindex_enabled ? (
-                <>
-                  {failedIndexingStatus && failedIndexingStatus.length > 0 && (
-                    <FailedReIndexAttempts
-                      failedIndexingStatuses={failedIndexingStatus}
-                      setPopup={setPopup}
-                    />
-                  )}
-
-                  <Text className="my-4">
-                    The table below shows the re-indexing progress of all
-                    existing connectors. Once all connectors have been
-                    re-indexed successfully, the new model will be used for all
-                    search queries. Until then, we will use the old model so
-                    that no downtime is necessary during this transition.
-                    <br />
-                    Note: User file re-indexing progress is not shown. You will
-                    see this page until all user files are re-indexed!
-                  </Text>
-
-                  {sortedReindexingProgress ? (
-                    <ReindexingProgressTable
-                      reindexingProgress={sortedReindexingProgress}
-                    />
-                  ) : (
-                    <ErrorCallout errorTitle="Failed to fetch re-indexing progress" />
-                  )}
-                </>
-              ) : (
+              futureEmbeddingModel.switchover_type === "instant" ? (
                 <div className="mt-8">
                   <h3 className="text-lg font-semibold mb-2">
                     Switching Embedding Models
@@ -191,6 +163,53 @@ export default function UpgradingPage({
                     The new model will be active soon.
                   </p>
                 </div>
+              ) : (
+                <>
+                  {failedIndexingStatus && failedIndexingStatus.length > 0 && (
+                    <FailedReIndexAttempts
+                      failedIndexingStatuses={failedIndexingStatus}
+                      setPopup={setPopup}
+                    />
+                  )}
+
+                  <Text className="my-4">
+                    {futureEmbeddingModel.switchover_type === "active_only" ? (
+                      <>
+                        The table below shows the re-indexing progress of active
+                        (non-paused) connectors. Once all active connectors have
+                        been re-indexed successfully, the new model will be used
+                        for all search queries. Paused connectors will continue
+                        to be indexed in the background but won&apos;t block the
+                        switchover. Until then, we will use the old model so
+                        that no downtime is necessary during this transition.
+                        <br />
+                        Note: User file re-indexing progress is not shown. You
+                        will see this page until all active connectors are
+                        re-indexed!
+                      </>
+                    ) : (
+                      <>
+                        The table below shows the re-indexing progress of all
+                        existing connectors. Once all connectors have been
+                        re-indexed successfully, the new model will be used for
+                        all search queries. Until then, we will use the old
+                        model so that no downtime is necessary during this
+                        transition.
+                        <br />
+                        Note: User file re-indexing progress is not shown. You
+                        will see this page until all user files are re-indexed!
+                      </>
+                    )}
+                  </Text>
+
+                  {sortedReindexingProgress ? (
+                    <ReindexingProgressTable
+                      reindexingProgress={sortedReindexingProgress}
+                    />
+                  ) : (
+                    <ErrorCallout errorTitle="Failed to fetch re-indexing progress" />
+                  )}
+                </>
               )
             ) : (
               <div className="mt-8 p-6 bg-background-100 border border-border-strong rounded-lg max-w-2xl">

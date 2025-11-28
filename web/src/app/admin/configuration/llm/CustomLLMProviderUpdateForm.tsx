@@ -1,6 +1,6 @@
 import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/components/ui/text";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import Button from "@/refresh-components/buttons/Button";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import {
@@ -476,7 +476,6 @@ export function CustomLLMProviderUpdateForm({
                 </Button>
                 {existingLlmProvider && (
                   <Button
-                    type="button"
                     danger
                     className="ml-3"
                     leftIcon={SvgTrash}

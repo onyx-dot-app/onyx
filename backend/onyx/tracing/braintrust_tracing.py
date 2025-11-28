@@ -80,7 +80,11 @@ def setup_braintrust_if_creds_available() -> None:
         api_key=BRAINTRUST_API_KEY,
     )
     braintrust.set_masking_function(_mask)
+    set_trace_processors([BraintrustTracingProcessor(braintrust_logger)])
+    _setup_legacy_langchain_tracing()
+    logger.notice("Braintrust tracing initialized")
+
+
+def _setup_legacy_langchain_tracing() -> None:
     handler = BraintrustCallbackHandler()
     set_global_handler(handler)
-    set_trace_processors([BraintrustTracingProcessor(braintrust_logger)])
-    logger.notice("Braintrust tracing initialized")

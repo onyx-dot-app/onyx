@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import { DocumentSetSummary } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";

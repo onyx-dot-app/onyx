@@ -19,3 +19,14 @@ class RerankerProvider(str, Enum):
 class EmbedTextType(str, Enum):
     QUERY = "query"
     PASSAGE = "passage"
+
+
+class WebSearchProviderType(str, Enum):
+    GOOGLE_PSE = "google_pse"
+    SERPER = "serper"
+    EXA = "exa"
+
+
+class WebContentProviderType(str, Enum):
+    ONYX_WEB_CRAWLER = "onyx_web_crawler"
+    FIRECRAWL = "firecrawl"

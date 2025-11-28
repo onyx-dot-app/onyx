@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import { ValidSources, AccessType } from "@/lib/types";
 import { FaAccusoft } from "react-icons/fa";

@@ -31,6 +31,7 @@ from onyx.federated_connectors.oauth_utils import generate_oauth_state
 from onyx.federated_connectors.oauth_utils import get_oauth_callback_uri
 from onyx.federated_connectors.oauth_utils import verify_oauth_state
 from onyx.server.federated.models import AuthorizeUrlResponse
+from onyx.server.federated.models import ConfigurationSchemaResponse
 from onyx.server.federated.models import CredentialSchemaResponse
 from onyx.server.federated.models import EntitySpecResponse
 from onyx.server.federated.models import FederatedConnectorCredentials
@@ -86,6 +87,7 @@ def create_federated_connector(
             db_session=db_session,
             source=federated_connector_data.source,
             credentials=federated_connector_data.credentials.model_dump(),
+            config=federated_connector_data.config,
         )
 
         logger.info(
@@ -122,7 +124,7 @@ def get_entities(
         connector_instance = _get_federated_connector_instance(
             federated_connector.source, federated_connector.credentials
         )
-        entities_spec = connector_instance.entities_schema()
+        entities_spec = connector_instance.configuration_schema()
 
         # Convert EntityField objects to a dictionary format for the API response
         entities_dict = {}
@@ -181,6 +183,34 @@ def get_credentials_schema(
         logger.error(
             f"Error fetching credentials schema for federated connector {id}: {e}"
         )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sources/{source}/configuration/schema")
+def get_configuration_schema_by_source(
+    source: FederatedConnectorSource,
+    _: User = Depends(current_curator_or_admin_user),
+) -> ConfigurationSchemaResponse:
+    """Fetch configuration schema for a specific source type (for setup/edit forms)"""
+    try:
+        connector_cls = get_federated_connector_cls(source)
+        entities_spec = connector_cls.configuration_schema()
+
+        # Convert EntityField objects to a dictionary format for the API response
+        configuration_dict = {}
+        for key, field in entities_spec.items():
+            configuration_dict[key] = {
+                "type": field.type,
+                "description": field.description,
+                "required": field.required,
+                "default": field.default,
+                "example": field.example,
+            }
+
+        return ConfigurationSchemaResponse(configuration=configuration_dict)
+
+    except Exception as e:
+        logger.error(f"Error fetching configuration schema for source {source}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -498,6 +528,7 @@ def get_federated_connector_detail(
         source=federated_connector.source,
         name=f"{federated_connector.source.replace('_', ' ').title()}",
         credentials=FederatedConnectorCredentials(**federated_connector.credentials),
+        config=federated_connector.config,
         oauth_token_exists=oauth_token is not None,
         oauth_token_expires_at=oauth_token.expires_at if oauth_token else None,
         document_sets=document_sets,
@@ -522,6 +553,7 @@ def update_federated_connector_endpoint(
                 if update_request.credentials
                 else None
             ),
+            config=update_request.config,
         )
 
         if not updated_connector:

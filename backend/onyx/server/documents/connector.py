@@ -72,6 +72,7 @@ from onyx.db.connector import create_connector
 from onyx.db.connector import delete_connector
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector import fetch_connectors
+from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.connector import get_connector_credential_ids
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector import update_connector
@@ -128,6 +129,7 @@ from onyx.server.documents.models import GmailCallback
 from onyx.server.documents.models import GoogleAppCredentials
 from onyx.server.documents.models import GoogleServiceAccountCredentialRequest
 from onyx.server.documents.models import GoogleServiceAccountKey
+from onyx.server.documents.models import IndexedSourcesResponse
 from onyx.server.documents.models import IndexingStatusRequest
 from onyx.server.documents.models import ObjectCreationIdResponse
 from onyx.server.documents.models import RunConnectorRequest
@@ -1477,6 +1479,17 @@ def get_connectors(
         # connector like those created by the user
         if connector.source != DocumentSource.INGESTION_API
     ]
+
+
+@router.get("/indexed-sources")
+def get_indexed_sources(
+    _: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> IndexedSourcesResponse:
+    sources = sorted(
+        fetch_unique_document_sources(db_session), key=lambda source: source.value
+    )
+    return IndexedSourcesResponse(sources=sources)
 
 
 @router.get("/connector/{connector_id}")

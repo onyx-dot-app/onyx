@@ -17,6 +17,19 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * - `createDocumentSet(name, ccPairIds)` - Creates a document set from connector pairs
  * - `deleteDocumentSet(id)` - Deletes a document set (with polling until complete)
  *
+ * **LLM Providers:**
+ * - `createRestrictedProvider(name, groupId)` - Creates a restricted LLM provider assigned to a group
+ * - `deleteProvider(id)` - Deletes an LLM provider
+ *
+ * **User Groups:**
+ * - `createUserGroup(name)` - Creates a user group
+ * - `deleteUserGroup(id)` - Deletes a user group
+ *
+ * **Tool Providers:**
+ * - `createWebSearchProvider(type, name)` - Creates and activates a web search provider
+ * - `deleteWebSearchProvider(id)` - Deletes a web search provider
+ * - `createImageGenProvider(name)` - Creates an OpenAI LLM provider for image generation
+ *
  * **Usage Example:**
  * ```typescript
  * const client = new OnyxApiClient(page);
@@ -64,6 +77,19 @@ export class OnyxApiClient {
    */
   private async delete(endpoint: string): Promise<APIResponse> {
     return await this.page.request.delete(`${this.baseUrl}${endpoint}`);
+  }
+
+  /**
+   * Generic PUT request to the API.
+   *
+   * @param endpoint - API endpoint path (e.g., "/manage/admin/cc-pair/123/status")
+   * @param data - Optional request body data
+   * @returns The API response
+   */
+  private async put(endpoint: string, data?: any): Promise<APIResponse> {
+    return await this.page.request.put(`${this.baseUrl}${endpoint}`, {
+      data,
+    });
   }
 
   /**
@@ -186,7 +212,28 @@ export class OnyxApiClient {
       `Created file connector: ${connectorName} (CC Pair ID: ${ccPairId})`
     );
 
+    // Pause the connector immediately to prevent indexing during tests
+    await this.pauseConnector(ccPairId);
+
     return ccPairId;
+  }
+
+  /**
+   * Pauses a connector-credential pair to prevent indexing.
+   *
+   * @param ccPairId - The connector-credential pair ID to pause
+   * @throws Error if the pause operation fails
+   */
+  async pauseConnector(ccPairId: number): Promise<void> {
+    const response = await this.put(
+      `/manage/admin/cc-pair/${ccPairId}/status`,
+      {
+        status: "PAUSED",
+      }
+    );
+
+    await this.handleResponse(response, "Failed to pause connector");
+    this.log(`Paused connector CC Pair ID: ${ccPairId}`);
   }
 
   /**
@@ -301,5 +348,341 @@ export class OnyxApiClient {
       ccPairId
     );
     this.log(`CC pair ${ccPairId} deletion confirmed`);
+  }
+
+  /**
+   * Creates a restricted LLM provider assigned to a specific user group.
+   *
+   * @param providerName - Name for the provider
+   * @param groupId - The user group ID that should have access to this provider
+   * @returns The provider ID
+   * @throws Error if the provider creation fails
+   */
+  async createRestrictedProvider(
+    providerName: string,
+    groupId: number
+  ): Promise<number> {
+    const response = await this.page.request.put(
+      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      {
+        data: {
+          name: providerName,
+          provider: "openai",
+          api_key: "test-key",
+          default_model_name: "gpt-4o",
+          fast_default_model_name: "gpt-4o-mini",
+          is_public: false,
+          groups: [groupId],
+          personas: [],
+        },
+      }
+    );
+
+    const responseData = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create restricted provider"
+    );
+
+    this.log(
+      `Created restricted LLM provider: ${providerName} (ID: ${responseData.id}, Group: ${groupId})`
+    );
+    return responseData.id;
+  }
+
+  /**
+   * Deletes an LLM provider.
+   *
+   * @param providerId - The provider ID to delete
+   */
+  async deleteProvider(providerId: number): Promise<void> {
+    const response = await this.delete(`/admin/llm/provider/${providerId}`);
+
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete provider ${providerId}`
+    );
+
+    this.log(`Deleted LLM provider: ${providerId}`);
+  }
+
+  /**
+   * Creates a user group.
+   *
+   * @param groupName - Name for the user group
+   * @returns The user group ID
+   * @throws Error if the user group creation fails
+   */
+  async createUserGroup(
+    groupName: string,
+    userIds: string[] = []
+  ): Promise<number> {
+    const response = await this.post("/manage/admin/user-group", {
+      name: groupName,
+      user_ids: userIds,
+      cc_pair_ids: [],
+    });
+
+    const responseData = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create user group"
+    );
+
+    this.log(`Created user group: ${groupName} (ID: ${responseData.id})`);
+    return responseData.id;
+  }
+
+  /**
+   * Deletes a user group.
+   *
+   * @param groupId - The user group ID to delete
+   */
+  async deleteUserGroup(groupId: number): Promise<void> {
+    const response = await this.delete(`/manage/admin/user-group/${groupId}`);
+
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete user group ${groupId}`
+    );
+
+    this.log(`Deleted user group: ${groupId}`);
+  }
+
+  async setUserRole(
+    email: string,
+    role: "admin" | "curator" | "global_curator" | "basic",
+    explicitOverride = false
+  ): Promise<void> {
+    const response = await this.page.request.patch(
+      `${this.baseUrl}/manage/set-user-role`,
+      {
+        data: {
+          user_email: email,
+          new_role: role,
+          explicit_override: explicitOverride,
+        },
+      }
+    );
+    await this.handleResponse(response, `Failed to set user role for ${email}`);
+    this.log(`Updated role for ${email} to ${role}`);
+  }
+
+  async deleteMcpServer(serverId: number): Promise<boolean> {
+    const response = await this.page.request.delete(
+      `${this.baseUrl}/admin/mcp/server/${serverId}`
+    );
+    const success = await this.handleResponseSoft(
+      response,
+      `Failed to delete MCP server ${serverId}`
+    );
+    if (success) {
+      this.log(`Deleted MCP server ${serverId}`);
+    }
+    return success;
+  }
+
+  async deleteAssistant(assistantId: number): Promise<boolean> {
+    const response = await this.page.request.delete(
+      `${this.baseUrl}/persona/${assistantId}`
+    );
+    const success = await this.handleResponseSoft(
+      response,
+      `Failed to delete assistant ${assistantId}`
+    );
+    if (success) {
+      this.log(`Deleted assistant ${assistantId}`);
+    }
+    return success;
+  }
+
+  async listMcpServers(): Promise<any[]> {
+    const response = await this.get(`/admin/mcp/servers`);
+    const data = await this.handleResponse<{ mcp_servers: any[] }>(
+      response,
+      "Failed to list MCP servers"
+    );
+    return data.mcp_servers;
+  }
+
+  async listAssistants(options?: {
+    includeDeleted?: boolean;
+    getEditable?: boolean;
+  }): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (options?.includeDeleted) {
+      params.set("include_deleted", "true");
+    }
+    if (options?.getEditable ?? true) {
+      params.set("get_editable", "true");
+    }
+    const query = params.toString();
+    const response = await this.get(
+      `/admin/persona${query ? `?${query}` : ""}`
+    );
+    return await this.handleResponse<any[]>(
+      response,
+      "Failed to list assistants"
+    );
+  }
+
+  async findAssistantByName(
+    name: string,
+    options?: { includeDeleted?: boolean; getEditable?: boolean }
+  ): Promise<any | null> {
+    const assistants = await this.listAssistants(options);
+    return assistants.find((assistant) => assistant.name === name) ?? null;
+  }
+
+  async registerUser(email: string, password: string): Promise<{ id: string }> {
+    const response = await this.page.request.post(
+      `${this.baseUrl}/auth/register`,
+      {
+        data: {
+          email,
+          username: email,
+          password,
+        },
+      }
+    );
+    const data = await this.handleResponse<{ id: string }>(
+      response,
+      `Failed to register user ${email}`
+    );
+    return data;
+  }
+
+  async getUserByEmail(email: string): Promise<{
+    id: string;
+    email: string;
+    role: string;
+  } | null> {
+    const response = await this.page.request.get(
+      `${this.baseUrl}/manage/users/accepted`,
+      {
+        params: {
+          q: email,
+          page_size: 1,
+        },
+      }
+    );
+    const data = await this.handleResponse<{ items: any[] }>(
+      response,
+      `Failed to fetch user ${email}`
+    );
+    const [user] = data.items;
+    return user
+      ? {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+        }
+      : null;
+  }
+
+  async setCuratorStatus(
+    userGroupId: string,
+    userId: string,
+    isCurator: boolean = true
+  ): Promise<void> {
+    const response = await this.page.request.post(
+      `${this.baseUrl}/manage/admin/user-group/${userGroupId}/set-curator`,
+      {
+        data: {
+          user_id: userId,
+          is_curator: isCurator,
+        },
+      }
+    );
+    await this.handleResponse(
+      response,
+      `Failed to update curator status for ${userId}`
+    );
+  }
+
+  /**
+   * Create and activate a web search provider for testing.
+   * Uses a dummy API key that won't actually work, but allows the tool to be available.
+   *
+   * @param providerType - Type of provider: "exa", "serper", or "google_pse"
+   * @param name - Optional name for the provider (defaults to "Test Provider")
+   * @returns The created provider ID
+   */
+  async createWebSearchProvider(
+    providerType: "exa" | "serper" | "google_pse" = "exa",
+    name: string = "Test Provider"
+  ): Promise<number> {
+    const config: Record<string, string> = {};
+    if (providerType === "google_pse") {
+      config.search_engine_id = "test-engine-id";
+    }
+
+    const response = await this.post("/admin/web-search/search-providers", {
+      name,
+      provider_type: providerType,
+      api_key: "test-api-key-12345",
+      api_key_changed: true,
+      config: Object.keys(config).length > 0 ? config : undefined,
+      activate: true,
+    });
+
+    const data = await this.handleResponse<{ id: number }>(
+      response,
+      `Failed to create web search provider ${providerType}`
+    );
+    return data.id;
+  }
+
+  /**
+   * Delete a web search provider.
+   *
+   * @param providerId - ID of the provider to delete
+   */
+  async deleteWebSearchProvider(providerId: number): Promise<void> {
+    const response = await this.delete(
+      `/admin/web-search/search-providers/${providerId}`
+    );
+    if (!response.ok()) {
+      const errorText = await response.text();
+      console.warn(
+        `Failed to delete web search provider ${providerId}: ${response.status()} - ${errorText}`
+      );
+    }
+  }
+
+  /**
+   * Create an OpenAI LLM provider to enable image generation.
+   * Image generation requires an OpenAI provider with an API key.
+   *
+   * @param name - Optional name for the provider (defaults to "Test Image Gen Provider")
+   * @returns The provider ID
+   * @throws Error if the provider creation fails
+   */
+  async createImageGenProvider(
+    name: string = "Test Image Gen Provider"
+  ): Promise<number> {
+    const response = await this.page.request.put(
+      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      {
+        data: {
+          name,
+          provider: "openai",
+          api_key: "test-image-gen-key",
+          default_model_name: "gpt-4o",
+          fast_default_model_name: "gpt-4o-mini",
+          is_public: true,
+          groups: [],
+          personas: [],
+        },
+      }
+    );
+
+    const responseData = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create image generation provider"
+    );
+
+    this.log(
+      `Created image generation provider: ${name} (ID: ${responseData.id})`
+    );
+    return responseData.id;
   }
 }

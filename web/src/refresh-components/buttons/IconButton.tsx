@@ -3,13 +3,7 @@
 import React, { useMemo } from "react";
 import { SvgProps } from "@/icons";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import Text from "@/refresh-components/texts/Text";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 const buttonClasses = (transient: boolean | undefined) =>
   ({
@@ -333,13 +327,8 @@ export default function IconButton({
   if (!tooltip) return buttonElement;
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>{buttonElement}</TooltipTrigger>
-        <TooltipContent side="top">
-          <Text inverted>{tooltip}</Text>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <SimpleTooltip side="top" tooltip={tooltip}>
+      {buttonElement}
+    </SimpleTooltip>
   );
 }

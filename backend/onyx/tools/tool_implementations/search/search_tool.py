@@ -46,6 +46,7 @@ from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import SearchQueryInfo
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_utils import llm_doc_to_dict
 from onyx.tools.tool_implementations.search_like_tool_utils import (
@@ -259,6 +260,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     """Actual tool execution"""
 
+    def run_v2(
+        self,
+        run_context: RunContextWrapper[Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        raise NotImplementedError("SearchTool.run_v2 is not implemented.")
+
     def _build_response_for_specified_sections(
         self, query: str
     ) -> Generator[ToolResponse, None, None]:
@@ -292,13 +301,19 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             response=selected_sections,
         )
 
+        from onyx.llm.utils import check_number_of_tokens
+
+        # For backwards compatibility with non-v2 flows, use query token count
+        # and pass prompt_config for proper token calculation
+        query_token_count = check_number_of_tokens(query)
+
         final_context_sections = prune_and_merge_sections(
             sections=self.selected_sections,
             section_relevance_list=None,
-            prompt_config=self.prompt_config,
             llm_config=self.llm.config,
-            question=query,
+            existing_input_tokens=query_token_count,
             contextual_pruning_config=self.contextual_pruning_config,
+            prompt_config=self.prompt_config,
         )
 
         llm_docs = [
@@ -522,14 +537,18 @@ def yield_search_responses(
     final_context_sections = get_final_context_sections()
 
     # Use the section_relevance we already computed above
+    # TODO: In the newer flows, we are not using prune_sections here
+    # but rather pruning after parallel fetches from the search tool
     pruned_sections = prune_sections(
         sections=final_context_sections,
         section_relevance_list=section_relevance_list_impl(
             section_relevance, final_context_sections
         ),
+        # prompt_config should not be none so this 0 shouldn't matter
+        # we'll clean this up later
+        existing_input_tokens=0,
         prompt_config=search_tool.prompt_config,
         llm_config=search_tool.llm.config,
-        question=query,
         contextual_pruning_config=search_tool.contextual_pruning_config,
     )
     llm_docs = [llm_doc_from_inference_section(section) for section in pruned_sections]

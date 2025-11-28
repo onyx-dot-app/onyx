@@ -9,6 +9,7 @@ from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
 from onyx.db.models import StarterMessage
 from onyx.server.features.document_set.models import DocumentSetSummary
+from onyx.server.features.tool.models import should_expose_tool_to_fe
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
@@ -127,7 +128,11 @@ class MinimalPersonaSnapshot(BaseModel):
             id=persona.id,
             name=persona.name,
             description=persona.description,
-            tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
+            tools=[
+                ToolSnapshot.from_model(tool)
+                for tool in persona.tools
+                if should_expose_tool_to_fe(tool)
+            ],
             starter_messages=persona.starter_messages,
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
@@ -204,7 +209,11 @@ class PersonaSnapshot(BaseModel):
             starter_messages=persona.starter_messages,
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
-            tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
+            tools=[
+                ToolSnapshot.from_model(tool)
+                for tool in persona.tools
+                if should_expose_tool_to_fe(tool)
+            ],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
                 MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
@@ -266,7 +275,11 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 for user in persona.users
             ],
             groups=[user_group.id for user_group in persona.groups],
-            tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
+            tools=[
+                ToolSnapshot.from_model(tool)
+                for tool in persona.tools
+                if should_expose_tool_to_fe(tool)
+            ],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
                 MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)

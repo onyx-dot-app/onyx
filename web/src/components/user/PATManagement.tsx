@@ -5,7 +5,6 @@ import useSWR from "swr";
 import SvgTrash from "@/icons/trash";
 import SvgCopy from "@/icons/copy";
 import SvgCheck from "@/icons/check";
-
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@/lib/time";
@@ -13,14 +12,8 @@ import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 
 interface PAT {
   id: number;
@@ -36,7 +29,7 @@ interface CreatedTokenState {
   token: string;
 }
 
-export function PATManagement() {
+export default function PATManagement() {
   const [isCreating, setIsCreating] = useState(false);
   const [newTokenName, setNewTokenName] = useState("");
   const [expirationDays, setExpirationDays] = useState<string>("30");
@@ -146,7 +139,7 @@ export function PATManagement() {
   return (
     <>
       {tokenToDelete && (
-        <ConfirmationModal
+        <ConfirmationModalLayout
           icon={SvgTrash}
           title="Delete Token"
           onClose={() => setTokenToDelete(null)}
@@ -158,8 +151,9 @@ export function PATManagement() {
         >
           Are you sure you want to delete token &quot;{tokenToDelete.name}
           &quot;? This action cannot be undone.
-        </ConfirmationModal>
+        </ConfirmationModalLayout>
       )}
+
       <div className="space-y-6">
         {/* Create New Token Form */}
         <div className="space-y-4">
@@ -174,24 +168,25 @@ export function PATManagement() {
               autoComplete="new-password"
             />
             {/* autoComplete="new-password" is a workaround for Safari browers to disable autoComplete*/}
-            <div className="space-y-1">
+            <div className="space-y-1" aria-label="Select token expiration">
               {/* NOTE: Use Select dropdown (not free text input) to guide users to common values.
                   Backend accepts any positive integer, but we provide curated options for UX. */}
-              <Select
+              <InputSelect
                 value={expirationDays}
                 onValueChange={setExpirationDays}
                 disabled={isCreating}
               >
-                <SelectTrigger aria-label="Select token expiration">
-                  <SelectValue placeholder="Select expiration" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="7">7 days</SelectItem>
-                  <SelectItem value="30">30 days</SelectItem>
-                  <SelectItem value="365">365 days</SelectItem>
-                  <SelectItem value="null">No expiration</SelectItem>
-                </SelectContent>
-              </Select>
+                <InputSelect.Trigger placeholder="Select expiration" />
+                <InputSelect.Content>
+                  <InputSelect.Item value="7">7 days</InputSelect.Item>
+                  <InputSelect.Item value="30">30 days</InputSelect.Item>
+                  <InputSelect.Item value="365">365 days</InputSelect.Item>
+                  <InputSelect.Item value="null">
+                    No expiration
+                  </InputSelect.Item>
+                </InputSelect.Content>
+              </InputSelect>
+
               <Text text02 secondaryBody>
                 Expires at end of day (23:59 UTC).
               </Text>

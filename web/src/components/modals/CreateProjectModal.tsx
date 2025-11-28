@@ -3,19 +3,16 @@
 import { useRef } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import SvgFolderPlus from "@/icons/folder-plus";
-import Modal from "@/refresh-components/modals/Modal";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
+import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { useKeyPress } from "@/hooks/useKeyPress";
 import FieldInput from "@/refresh-components/inputs/FieldInput";
 import { useAppRouter } from "@/hooks/appNavigation";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
 
 export default function CreateProjectModal() {
   const { createProject } = useProjectsContext();
-  const { toggleModal } = useChatModal();
+  const modal = useModal();
   const fieldInputRef = useRef<HTMLInputElement>(null);
   const route = useAppRouter();
 
@@ -31,18 +28,17 @@ export default function CreateProjectModal() {
       console.error(`Failed to create the project ${name}`);
     }
 
-    toggleModal(ModalIds.CreateProjectModal, false);
+    modal.toggle(false);
   }
 
   useKeyPress(handleSubmit, "Enter");
 
   return (
-    <Modal
-      id={ModalIds.CreateProjectModal}
+    <DefaultModalLayout
       icon={SvgFolderPlus}
       title="Create New Project"
       description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
-      xs
+      mini
     >
       <div className="flex flex-col p-4 bg-background-tint-01">
         <FieldInput
@@ -52,14 +48,11 @@ export default function CreateProjectModal() {
         />
       </div>
       <div className="flex flex-row justify-end gap-2 p-4">
-        <Button
-          secondary
-          onClick={() => toggleModal(ModalIds.CreateProjectModal, false)}
-        >
+        <Button secondary onClick={() => modal.toggle(false)}>
           Cancel
         </Button>
         <Button onClick={handleSubmit}>Create Project</Button>
       </div>
-    </Modal>
+    </DefaultModalLayout>
   );
 }

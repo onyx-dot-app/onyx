@@ -1,9 +1,11 @@
+from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage
 
 from onyx.llm.utils import message_to_prompt_and_imgs
+from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool import Tool
 
 if TYPE_CHECKING:
@@ -35,6 +37,14 @@ Now respond to the following:
 
 
 class BaseTool(Tool[None]):
+    def run_v2(
+        self,
+        run_context: RunContextWrapper[Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        raise NotImplementedError("BaseTool.run_v2 is not implemented.")
+
     def build_next_prompt(
         self,
         prompt_builder: "AnswerPromptBuilder",

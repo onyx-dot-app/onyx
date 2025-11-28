@@ -143,7 +143,7 @@ def generate_starter_messages(
             num_categories=generation_count,
         )
 
-        category_response = fast_llm.invoke(category_generation_prompt)
+        category_response = fast_llm.invoke_langchain(category_generation_prompt)
         categories = parse_categories(cast(str, category_response.content))
 
         if not categories:

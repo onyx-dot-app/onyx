@@ -1,9 +1,9 @@
 import { Form, Formik } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { TextFormField } from "@/components/Field";
-import CoreModal from "@/refresh-components/modals/CoreModal";
+import RawModal from "@/refresh-components/RawModal";
 import Button from "@/refresh-components/buttons/Button";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import { Callout } from "@/components/ui/callout";
 import Text from "@/refresh-components/texts/Text";
 import {
@@ -51,7 +51,7 @@ export const OAuthConfigForm = ({
   const isUpdate = config !== undefined;
 
   return (
-    <CoreModal onClickOutside={onClose} className="w-[60%] max-h-[80vh]">
+    <RawModal onClose={onClose} className="w-[60%] max-h-[80vh]">
       <div className="overflow-y-auto p-6">
         <Text headingH2 className="mb-4">
           {isUpdate
@@ -254,6 +254,6 @@ export const OAuthConfigForm = ({
           )}
         </Formik>
       </div>
-    </CoreModal>
+    </RawModal>
   );
 };

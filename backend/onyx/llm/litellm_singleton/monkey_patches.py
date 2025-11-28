@@ -3,27 +3,85 @@ import time
 import uuid
 from typing import Any
 from typing import cast
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
+from typing import TypedDict
+from typing import Union
 
 from litellm import AllMessageValues
+from litellm.completion_extras.litellm_responses_transformation.transformation import (
+    OpenAiResponsesToChatCompletionStreamIterator,
+)
 from litellm.litellm_core_utils.prompt_templates.common_utils import (
     convert_content_list_to_str,
 )
-from litellm.litellm_core_utils.prompt_templates.common_utils import (
-    extract_images_from_message,
-)
+
+try:
+    from litellm.litellm_core_utils.prompt_templates.common_utils import (
+        extract_images_from_message,
+    )
+except ImportError:
+    extract_images_from_message = None  # type: ignore[assignment]
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.llms.ollama.chat.transformation import OllamaChatConfig
 from litellm.llms.ollama.common_utils import OllamaError
-from litellm.types.llms.ollama import OllamaChatCompletionMessage
+
+try:
+    from litellm.types.llms.ollama import OllamaChatCompletionMessage
+except ImportError:
+
+    class OllamaChatCompletionMessage(TypedDict, total=False):  # type: ignore[no-redef]
+        """Fallback for LiteLLM versions where this TypedDict was removed."""
+
+        role: str
+        content: Optional[str]
+        images: Optional[List[Any]]
+        thinking: Optional[str]
+        tool_calls: Optional[List["OllamaToolCall"]]
+
+
 from litellm.types.llms.ollama import OllamaToolCall
 from litellm.types.llms.ollama import OllamaToolCallFunction
 from litellm.types.llms.openai import ChatCompletionAssistantToolCall
 from litellm.types.utils import ChatCompletionUsageBlock
+from litellm.types.utils import GenericStreamingChunk
 from litellm.types.utils import ModelResponseStream
+from litellm.utils import verbose_logger
 from pydantic import BaseModel
+
+
+if extract_images_from_message is None:
+
+    def extract_images_from_message(
+        message: AllMessageValues,
+    ) -> Optional[List[Any]]:
+        """Fallback for LiteLLM versions that dropped extract_images_from_message."""
+
+        images: List[Any] = []
+        content = message.get("content")
+        if not isinstance(content, list):
+            return None
+
+        for item in content:
+            if not isinstance(item, Dict):
+                continue
+
+            item_type = item.get("type")
+            if item_type == "image_url":
+                image_url = item.get("image_url")
+                if isinstance(image_url, dict):
+                    if image_url.get("url"):
+                        images.append(image_url)
+                elif image_url:
+                    images.append(image_url)
+            elif item_type in {"input_image", "image"}:
+                image_value = item.get("image")
+                if image_value:
+                    images.append(image_value)
+
+        return images or None
 
 
 def _patch_ollama_transform_request() -> None:
@@ -254,16 +312,189 @@ def _patch_ollama_chunk_parser() -> None:
     OllamaChatCompletionResponseIterator.chunk_parser = _patched_chunk_parser  # type: ignore[method-assign]
 
 
+def _patch_openai_responses_chunk_parser() -> None:
+    """
+    Patches OpenAiResponsesToChatCompletionStreamIterator.chunk_parser to properly
+    handle OpenAI Responses API streaming format and convert it to chat completion format.
+    """
+    if (
+        getattr(
+            OpenAiResponsesToChatCompletionStreamIterator.chunk_parser,
+            "__name__",
+            "",
+        )
+        == "_patched_openai_responses_chunk_parser"
+    ):
+        return
+
+    def _patched_openai_responses_chunk_parser(
+        self: Any, chunk: dict
+    ) -> Union["GenericStreamingChunk", "ModelResponseStream"]:
+        # Transform responses API streaming chunk to chat completion format
+        from litellm.types.llms.openai import ChatCompletionToolCallFunctionChunk
+        from litellm.types.utils import (
+            ChatCompletionToolCallChunk,
+            GenericStreamingChunk,
+        )
+
+        verbose_logger.debug(
+            f"Chat provider: transform_streaming_response called with chunk: {chunk}"
+        )
+        parsed_chunk = chunk
+        if not parsed_chunk:
+            raise ValueError("Chat provider: Empty parsed_chunk")
+        if not isinstance(parsed_chunk, dict):
+            raise ValueError(f"Chat provider: Invalid chunk type {type(parsed_chunk)}")
+        # Handle different event types from responses API
+
+        event_type = parsed_chunk.get("type")
+        verbose_logger.debug(f"Chat provider: Processing event type: {event_type}")
+
+        if event_type == "response.created":
+            # Initial response creation event
+            verbose_logger.debug(f"Chat provider: response.created -> {chunk}")
+            return GenericStreamingChunk(
+                text="", tool_use=None, is_finished=False, finish_reason="", usage=None
+            )
+
+        elif event_type == "response.output_item.added":
+            # New output item added
+            output_item = parsed_chunk.get("item", {})
+            if output_item.get("type") == "function_call":
+                return GenericStreamingChunk(
+                    text="",
+                    tool_use=ChatCompletionToolCallChunk(
+                        id=output_item.get("call_id"),
+                        index=0,
+                        type="function",
+                        function=ChatCompletionToolCallFunctionChunk(
+                            name=output_item.get("name", None),
+                            arguments=parsed_chunk.get("arguments", ""),
+                        ),
+                    ),
+                    is_finished=False,
+                    finish_reason="",
+                    usage=None,
+                )
+            elif output_item.get("type") == "message":
+                pass
+            elif output_item.get("type") == "reasoning":
+                pass
+            else:
+                raise ValueError(f"Chat provider: Invalid output_item  {output_item}")
+
+        elif event_type == "response.function_call_arguments.delta":
+            content_part: Optional[str] = parsed_chunk.get("delta", None)
+            if content_part:
+                return GenericStreamingChunk(
+                    text="",
+                    tool_use=ChatCompletionToolCallChunk(
+                        id=None,
+                        index=0,
+                        type="function",
+                        function=ChatCompletionToolCallFunctionChunk(
+                            name=None, arguments=content_part
+                        ),
+                    ),
+                    is_finished=False,
+                    finish_reason="",
+                    usage=None,
+                )
+            else:
+                raise ValueError(
+                    f"Chat provider: Invalid function argument delta {parsed_chunk}"
+                )
+
+        elif event_type == "response.output_item.done":
+            # New output item added
+            output_item = parsed_chunk.get("item", {})
+            if output_item.get("type") == "function_call":
+                return GenericStreamingChunk(
+                    text="",
+                    tool_use=ChatCompletionToolCallChunk(
+                        id=output_item.get("call_id"),
+                        index=0,
+                        type="function",
+                        function=ChatCompletionToolCallFunctionChunk(
+                            name=parsed_chunk.get("name", None),
+                            arguments="",  # responses API sends everything again, we don't
+                        ),
+                    ),
+                    is_finished=True,
+                    finish_reason="tool_calls",
+                    usage=None,
+                )
+            elif output_item.get("type") == "message":
+                return GenericStreamingChunk(
+                    finish_reason="stop", is_finished=True, usage=None, text=""
+                )
+            elif output_item.get("type") == "reasoning":
+                pass
+            else:
+                raise ValueError(f"Chat provider: Invalid output_item  {output_item}")
+
+        elif event_type == "response.output_text.delta":
+            # Content part added to output
+            content_part = parsed_chunk.get("delta", None)
+            if content_part is not None:
+                return GenericStreamingChunk(
+                    text=content_part,
+                    tool_use=None,
+                    is_finished=False,
+                    finish_reason="",
+                    usage=None,
+                )
+            else:
+                raise ValueError(f"Chat provider: Invalid text delta {parsed_chunk}")
+
+        elif event_type == "response.reasoning_summary_text.delta":
+            content_part = parsed_chunk.get("delta", None)
+            if content_part:
+                from litellm.types.utils import (
+                    Delta,
+                    ModelResponseStream,
+                    StreamingChoices,
+                )
+
+                return ModelResponseStream(
+                    choices=[
+                        StreamingChoices(
+                            index=cast(int, parsed_chunk.get("summary_index")),
+                            delta=Delta(reasoning_content=content_part),
+                        )
+                    ]
+                )
+
+        else:
+            pass
+
+        # For any unhandled event types, create a minimal valid chunk or skip
+        verbose_logger.debug(
+            f"Chat provider: Unhandled event type '{event_type}', creating empty chunk"
+        )
+        # Return a minimal valid chunk for unknown events
+        return GenericStreamingChunk(
+            text="", tool_use=None, is_finished=False, finish_reason="", usage=None
+        )
+
+    _patched_openai_responses_chunk_parser.__name__ = (
+        "_patched_openai_responses_chunk_parser"
+    )
+    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_openai_responses_chunk_parser  # type: ignore[method-assign]
+
+
 def apply_monkey_patches() -> None:
     """
-    Apply all necessary monkey patches to LiteLLM for Ollama compatibility.
+    Apply all necessary monkey patches to LiteLLM for compatibility.
 
     This includes:
     - Patching OllamaChatConfig.transform_request for reasoning content support
     - Patching OllamaChatCompletionResponseIterator.chunk_parser for streaming content
+    - Patching OpenAiResponsesToChatCompletionStreamIterator.chunk_parser for OpenAI Responses API
     """
     _patch_ollama_transform_request()
     _patch_ollama_chunk_parser()
+    _patch_openai_responses_chunk_parser()
 
 
 def _extract_reasoning_content(message: dict) -> Tuple[Optional[str], Optional[str]]:

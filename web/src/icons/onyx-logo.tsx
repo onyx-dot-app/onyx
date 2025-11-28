@@ -1,45 +1,26 @@
 import * as React from "react";
 import type { SVGProps } from "react";
-const OnyxLogo = (props: SVGProps<SVGSVGElement>) => (
+
+const OnyxLogo = ({
+  width = 24,
+  height = 24,
+  className,
+  ...props
+}: SVGProps<SVGSVGElement>) => (
   <svg
-    width="16"
-    height="16"
-    viewBox="0 0 16 16"
-    fill="none"
+    width={width}
+    height={height}
+    viewBox="0 0 56 56"
     xmlns="http://www.w3.org/2000/svg"
+    className={className}
     {...props}
   >
-    <g clipPath="url(#clip0_586_577)">
-      <path
-        d="M8 4.00001L4.5 2.50002L8 1.00002L11.5 2.50002L8 4.00001Z"
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M8 12L11.5 13.5L8 15L4.5 13.5L8 12Z"
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M4 8L2.5 11.5L1 8L2.5 4.50002L4 8Z"
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M12 8.00002L13.5 4.50002L15 8.00001L13.5 11.5L12 8.00002Z"
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </g>
-    <defs>
-      <clipPath id="clip0_586_577">
-        <rect width={16} height={16} fill="white" />
-      </clipPath>
-    </defs>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M28 0 10.869 7.77 28 15.539l17.131-7.77L28 0Zm0 40.461-17.131 7.77L28 56l17.131-7.77L28 40.461Zm20.231-29.592L56 28.001l-7.769 17.131L40.462 28l7.769-17.131ZM15.538 28 7.77 10.869 0 28l7.769 17.131L15.538 28Z"
+      fill="currentColor"
+    />
   </svg>
 );
 export default OnyxLogo;

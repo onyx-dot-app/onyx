@@ -543,7 +543,7 @@ def add_document_summaries(
     doc_content = tokenizer_trim_middle(doc_tokens, trunc_doc_tokens, tokenizer)
     summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
     doc_summary = message_to_string(
-        llm.invoke(summary_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+        llm.invoke_langchain(summary_prompt, max_tokens=MAX_CONTEXT_TOKENS)
     )
 
     for chunk in chunks_by_doc:
@@ -584,7 +584,7 @@ def add_chunk_summaries(
         # This happens if the document is too long AND document summaries are turned off
         # In this case we compute a doc summary using the LLM
         doc_info = message_to_string(
-            llm.invoke(
+            llm.invoke_langchain(
                 DOCUMENT_SUMMARY_PROMPT.format(document=doc_content),
                 max_tokens=MAX_CONTEXT_TOKENS,
             )
@@ -596,7 +596,7 @@ def add_chunk_summaries(
         context_prompt2 = CONTEXTUAL_RAG_PROMPT2.format(chunk=chunk.content)
         try:
             chunk.chunk_context = message_to_string(
-                llm.invoke(
+                llm.invoke_langchain(
                     context_prompt1 + context_prompt2,
                     max_tokens=MAX_CONTEXT_TOKENS,
                 )

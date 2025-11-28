@@ -88,7 +88,13 @@ def handle_onyx_date_awareness(
         return prompt_with_datetime
     any_tag_present = any(
         _DANSWER_DATETIME_REPLACEMENT_PAT in text
-        for text in [prompt_str, prompt_config.system_prompt, prompt_config.task_prompt]
+        for text in [
+            prompt_str,
+            prompt_config.default_behavior_system_prompt,
+            prompt_config.custom_instructions,
+            prompt_config.reminder,
+        ]
+        if text
     )
     if add_additional_info_if_no_tag and not any_tag_present:
         return prompt_str + build_date_time_string()
@@ -126,20 +132,23 @@ def build_task_prompt_reminders(
     citation_str: str = CITATION_REMINDER,
     language_hint_str: str = LANGUAGE_HINT,
 ) -> str:
-    base_task = prompt.task_prompt or ""
+    base_task = (
+        prompt.reminder
+        if isinstance(prompt, PromptConfig)
+        else prompt.task_prompt or ""
+    )
     citation_or_nothing = citation_str
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
     return base_task + citation_or_nothing + language_hint_or_nothing
 
 
 def build_task_prompt_reminders_v2(
-    chat_turn_user_message: str,
     prompt: Persona | PromptConfig,
     use_language_hint: bool,
     should_cite: bool,
     last_iteration_included_web_search: bool = False,
     language_hint_str: str = LANGUAGE_HINT,
-) -> str:
+) -> str | None:
     """V2 version that conditionally includes citation requirements.
 
     Args:
@@ -153,7 +162,11 @@ def build_task_prompt_reminders_v2(
     Returns:
         Task prompt with optional citation statement and language hint
     """
-    base_task = prompt.task_prompt or ""
+    base_task = (
+        prompt.reminder
+        if isinstance(prompt, PromptConfig)
+        else prompt.task_prompt or ""
+    )
 
     open_url_or_nothing = (
         OPEN_URL_REMINDER if last_iteration_included_web_search else ""
@@ -161,24 +174,22 @@ def build_task_prompt_reminders_v2(
     citation_or_nothing = CITATION_REMINDER if should_cite else ""
 
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
-    if (
-        len(base_task)
-        + len(open_url_or_nothing)
-        + len(citation_or_nothing)
-        + len(language_hint_or_nothing)
-        > 0
-    ):
-        return f"""
-        {LONG_CONVERSATION_REMINDER_TAG_OPEN}
-        {base_task}
-        {open_url_or_nothing}
-        {citation_or_nothing}
-        {language_hint_or_nothing}
-        {LONG_CONVERSATION_REMINDER_TAG_CLOSED}
-        {chat_turn_user_message}
-        """
-    else:
-        return chat_turn_user_message
+    lines = []
+    if base_task:
+        lines.append(base_task)
+    if open_url_or_nothing:
+        lines.append(open_url_or_nothing)
+    if citation_or_nothing:
+        lines.append(citation_or_nothing)
+    if language_hint_or_nothing:
+        lines.append(language_hint_or_nothing)
+    if lines:
+        return "\n".join(
+            [LONG_CONVERSATION_REMINDER_TAG_OPEN]
+            + lines
+            + [LONG_CONVERSATION_REMINDER_TAG_CLOSED]
+        )
+    return None
 
 
 # Maps connector enum string to a more natural language representation for the LLM

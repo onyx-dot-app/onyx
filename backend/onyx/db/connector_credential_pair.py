@@ -442,10 +442,25 @@ def set_cc_pair_repeated_error_state(
     cc_pair_id: int,
     in_repeated_error_state: bool,
 ) -> None:
+    values: dict = {"in_repeated_error_state": in_repeated_error_state}
+
+    # When entering repeated error state, also pause the connector
+    # to prevent continued indexing retry attempts.
+    # However, don't pause if there's an active manual indexing trigger,
+    # which indicates the user wants to retry immediately.
+    if in_repeated_error_state:
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=cc_pair_id,
+        )
+        # Only pause if there's no manual indexing trigger active
+        if cc_pair and cc_pair.indexing_trigger is None:
+            values["status"] = ConnectorCredentialPairStatus.PAUSED
+
     stmt = (
         update(ConnectorCredentialPair)
         .where(ConnectorCredentialPair.id == cc_pair_id)
-        .values(in_repeated_error_state=in_repeated_error_state)
+        .values(**values)
     )
     db_session.execute(stmt)
     db_session.commit()

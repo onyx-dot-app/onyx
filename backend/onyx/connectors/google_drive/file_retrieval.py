@@ -36,7 +36,7 @@ class DriveFileFieldType(Enum):
 
 
 PERMISSION_FULL_DESCRIPTION = (
-    "permissions(id, emailAddress, type, domain, permissionDetails)"
+    "permissions(id, emailAddress, type, domain, allowFileDiscovery, permissionDetails)"
 )
 FILE_FIELDS = (
     "nextPageToken, files(mimeType, id, name, "
@@ -67,6 +67,23 @@ def generate_time_range_filter(
         time_stop = datetime.fromtimestamp(end, tz=timezone.utc).isoformat()
         time_range_filter += f" and {GoogleFields.MODIFIED_TIME.value} <= '{time_stop}'"
     return time_range_filter
+
+
+LINK_ONLY_PERMISSION_TYPES = {"domain", "anyone"}
+
+
+def has_link_only_permission(file: GoogleDriveFileType) -> bool:
+    """
+    Return True if any permission requires a direct link to access
+    (allowFileDiscovery is explicitly false for supported types).
+    """
+    permissions = file.get("permissions") or []
+    for permission in permissions:
+        if permission.get("type") not in LINK_ONLY_PERMISSION_TYPES:
+            continue
+        if permission.get("allowFileDiscovery") is False:
+            return True
+    return False
 
 
 def _get_folders_in_parent(

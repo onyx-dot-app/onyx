@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FiX } from "react-icons/fi";
 import Button from "@/refresh-components/buttons/Button";
 import { Badge } from "@/components/ui/badge";
 import { FilterComponent, FilterOptions } from "./FilterComponent";

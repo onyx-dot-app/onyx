@@ -22,6 +22,7 @@ import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { InviteUserButton } from "./buttons/InviteUserButton";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   Select,
   SelectContent,
@@ -53,16 +54,6 @@ import SvgKey from "@/icons/key";
 const ITEMS_PER_PAGE = 10;
 const PAGES_PER_BATCH = 2;
 
-interface Props {
-  invitedUsers: InvitedUserSnapshot[];
-  setPopup: (spec: PopupSpec) => void;
-  q: string;
-  invitedUsersMutate: () => void;
-  countDisplay?: ReactNode;
-  onTotalItemsChange?: (count: number) => void;
-  onLoadingChange?: (isLoading: boolean) => void;
-}
-
 interface ActionMenuProps {
   user: User;
   currentUser: User | null;
@@ -72,7 +63,17 @@ interface ActionMenuProps {
   handleResetPassword: (user: User) => void;
 }
 
-const SignedUpUserTable = ({
+export interface SignedUpUserTableProps {
+  invitedUsers: InvitedUserSnapshot[];
+  setPopup: (spec: PopupSpec) => void;
+  q: string;
+  invitedUsersMutate: () => void;
+  countDisplay?: ReactNode;
+  onTotalItemsChange?: (count: number) => void;
+  onLoadingChange?: (isLoading: boolean) => void;
+}
+
+export default function SignedUpUserTable({
   invitedUsers,
   setPopup,
   q = "",
@@ -80,7 +81,7 @@ const SignedUpUserTable = ({
   countDisplay,
   onTotalItemsChange,
   onLoadingChange,
-}: Props) => {
+}: SignedUpUserTableProps) {
   const [filters, setFilters] = useState<{
     is_active?: boolean;
     roles?: UserRole[];
@@ -169,7 +170,7 @@ const SignedUpUserTable = ({
     <>
       <div className="flex flex-wrap items-center justify-between gap-4 py-4">
         <div className="flex flex-wrap items-center gap-4">
-          <Select
+          <InputSelect
             value={filters.is_active?.toString() || "all"}
             onValueChange={(selectedStatus) =>
               setFilters((prev) => {
@@ -184,15 +185,15 @@ const SignedUpUserTable = ({
               })
             }
           >
-            <SelectTrigger className="w-[260px] h-[34px] bg-neutral">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-background-tint-00">
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="true">Active</SelectItem>
-              <SelectItem value="false">Inactive</SelectItem>
-            </SelectContent>
-          </Select>
+            <InputSelect.Trigger />
+
+            <InputSelect.Content>
+              <InputSelect.Item value="all">All Status</InputSelect.Item>
+              <InputSelect.Item value="true">Active</InputSelect.Item>
+              <InputSelect.Item value="false">Inactive</InputSelect.Item>
+            </InputSelect.Content>
+          </InputSelect>
+
           <Select value="roles">
             <SelectTrigger className="w-[260px] h-[34px] bg-neutral">
               <SelectValue>
@@ -415,6 +416,4 @@ const SignedUpUserTable = ({
       )}
     </>
   );
-};
-
-export default SignedUpUserTable;
+}

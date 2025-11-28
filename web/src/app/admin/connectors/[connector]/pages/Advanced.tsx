@@ -36,7 +36,7 @@ export default function AdvancedFormPage() {
         name="indexingStart"
       />
       <div className="mt-4 flex w-full mx-auto max-w-2xl justify-start">
-        <Button leftIcon={SvgTrash} danger>
+        <Button leftIcon={SvgTrash} danger type="submit">
           Reset
         </Button>
       </div>

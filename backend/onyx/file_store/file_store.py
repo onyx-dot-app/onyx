@@ -332,13 +332,18 @@ class S3BackedFileStore(FileStore):
         sha256_hash = hashlib.sha256()
         kwargs: S3PutKwargs = {}
 
+        # FIX: Optimize checksum generation to avoid creating extra copies in memory
         # Read content from IO object
         if hasattr(content, "read"):
             file_content = content.read()
             if S3_GENERATE_LOCAL_CHECKSUM:
-                data_bytes = str(file_content).encode()
-                sha256_hash.update(data_bytes)
-                hash256 = sha256_hash.hexdigest()  # get the sha256 has in hex format
+                # FIX: Don't convert to string first (creates unnecessary copy)
+                # Work directly with bytes
+                if isinstance(file_content, bytes):
+                    sha256_hash.update(file_content)
+                else:
+                    sha256_hash.update(str(file_content).encode())
+                hash256 = sha256_hash.hexdigest()
                 kwargs["ChecksumSHA256"] = hash256
             if hasattr(content, "seek"):
                 content.seek(0)  # Reset position for potential re-reads
@@ -392,15 +397,20 @@ class S3BackedFileStore(FileStore):
             logger.error(f"Failed to read file {file_id} from S3")
             raise
 
-        file_content = response["Body"].read()
-
+        # FIX: Stream file content instead of loading entire file into memory
+        # This prevents OOM issues with large files (500MB+ PDFs, etc.)
         if use_tempfile:
-            # Always open in binary mode for temp files since we're writing bytes
-            temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=False)
-            temp_file.write(file_content)
+            # Stream directly to temp file to avoid holding entire file in memory
+            temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=True)
+            # Stream in 8MB chunks to reduce memory footprint
+            for chunk in response["Body"].iter_chunks(chunk_size=8 * 1024 * 1024):
+                temp_file.write(chunk)
             temp_file.seek(0)
             return temp_file
         else:
+            # For BytesIO, we still need to read into memory (legacy behavior)
+            # but at least we're not creating duplicate copies
+            file_content = response["Body"].read()
             return BytesIO(file_content)
 
     def read_file_record(

@@ -1,6 +1,7 @@
 """Strongly typed message structures for Agent SDK messages."""
 
 from typing import Literal
+from typing import NotRequired
 
 from typing_extensions import TypedDict
 
@@ -81,7 +82,7 @@ class FunctionCallMessage(TypedDict):
     """Agent SDK function call message format."""
 
     type: Literal["function_call"]
-    id: str
+    id: NotRequired[str]
     call_id: str
     name: str
     arguments: str

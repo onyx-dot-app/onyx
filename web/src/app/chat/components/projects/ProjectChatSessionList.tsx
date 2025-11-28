@@ -12,12 +12,14 @@ import { formatRelativeTime } from "./project_utils";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
+import ChatSessionSkeleton from "@/refresh-components/skeletons/ChatSessionSkeleton";
 
 export default function ProjectChatSessionList() {
   const {
     currentProjectDetails,
     currentProjectId,
     refreshCurrentProjectDetails,
+    isLoadingProjectDetails,
   } = useProjectsContext();
   const { agents: assistants } = useAgentsContext();
   const [isRenamingChat, setIsRenamingChat] = React.useState<string | null>(
@@ -43,7 +45,13 @@ export default function ProjectChatSessionList() {
         </Text>
       </div>
 
-      {projectChats.length === 0 ? (
+      {isLoadingProjectDetails && !currentProjectDetails ? (
+        <div className="flex flex-col gap-2">
+          <ChatSessionSkeleton />
+          <ChatSessionSkeleton />
+          <ChatSessionSkeleton />
+        </div>
+      ) : projectChats.length === 0 ? (
         <Text text02 secondaryBody className="p-2">
           No chats yet.
         </Text>

@@ -348,6 +348,7 @@ export default function Button({
         className
       )}
       disabled={disabled}
+      type="button"
       {...props}
     >
       {LeftIcon && (

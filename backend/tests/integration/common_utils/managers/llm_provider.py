@@ -21,7 +21,9 @@ class LLMProviderManager:
         api_base: str | None = None,
         api_version: str | None = None,
         groups: list[int] | None = None,
+        personas: list[int] | None = None,
         is_public: bool | None = None,
+        set_as_default: bool = True,
         user_performing_action: DATestUser | None = None,
     ) -> DATestLLMProvider:
         email = "Unknown"
@@ -39,8 +41,9 @@ class LLMProviderManager:
             api_version=api_version,
             custom_config=None,
             fast_default_model_name=default_model_name or "gpt-4o-mini",
-            is_public=is_public or True,
+            is_public=True if is_public is None else is_public,
             groups=groups or [],
+            personas=personas or [],
             model_configurations=[],
             api_key_changed=True,
         )
@@ -65,19 +68,21 @@ class LLMProviderManager:
             default_model_name=response_data["default_model_name"],
             is_public=response_data["is_public"],
             groups=response_data["groups"],
+            personas=response_data.get("personas", []),
             api_base=response_data["api_base"],
             api_version=response_data["api_version"],
         )
 
-        set_default_response = requests.post(
-            f"{API_SERVER_URL}/admin/llm/provider/{llm_response.json()['id']}/default",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
-        )
-        set_default_response.raise_for_status()
+        if set_as_default:
+            set_default_response = requests.post(
+                f"{API_SERVER_URL}/admin/llm/provider/{llm_response.json()['id']}/default",
+                headers=(
+                    user_performing_action.headers
+                    if user_performing_action
+                    else GENERAL_HEADERS
+                ),
+            )
+            set_default_response.raise_for_status()
 
         return result_llm
 
@@ -135,6 +140,7 @@ class LLMProviderManager:
                     and llm_provider.default_model_name
                     == fetched_llm_provider.default_model_name
                     and llm_provider.is_public == fetched_llm_provider.is_public
+                    and set(fetched_llm_provider.personas) == set(llm_provider.personas)
                 ):
                     return
         if not verify_deleted:

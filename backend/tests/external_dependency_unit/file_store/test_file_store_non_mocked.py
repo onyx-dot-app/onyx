@@ -59,10 +59,11 @@ def _get_all_backend_configs() -> List[BackendConfig]:
     """Get configurations for all available backends"""
     from onyx.configs.app_configs import (
         S3_ENDPOINT_URL,
-        S3_AWS_ACCESS_KEY_ID,
-        S3_AWS_SECRET_ACCESS_KEY,
         AWS_REGION_NAME,
     )
+
+    s3_aws_access_key_id = os.environ.get("S3_AWS_ACCESS_KEY_ID_FOR_TEST")
+    s3_aws_secret_access_key = os.environ.get("S3_AWS_SECRET_ACCESS_KEY_FOR_TEST")
 
     configs: List[BackendConfig] = []
 
@@ -82,12 +83,12 @@ def _get_all_backend_configs() -> List[BackendConfig]:
         )
 
     # AWS S3 configuration (if credentials are available)
-    elif S3_AWS_ACCESS_KEY_ID and S3_AWS_SECRET_ACCESS_KEY:
+    if s3_aws_access_key_id and s3_aws_secret_access_key:
         configs.append(
             {
                 "endpoint_url": None,
-                "access_key": S3_AWS_ACCESS_KEY_ID,
-                "secret_key": S3_AWS_SECRET_ACCESS_KEY,
+                "access_key": s3_aws_access_key_id,
+                "secret_key": s3_aws_secret_access_key,
                 "region": AWS_REGION_NAME or "us-east-2",
                 "verify_ssl": True,
                 "backend_name": "AWS S3",

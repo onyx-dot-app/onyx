@@ -1,22 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Label } from "@/components/Field";
 
 interface ReferralSourceSelectorProps {
   defaultValue?: string;
 }
 
-const ReferralSourceSelector: React.FC<ReferralSourceSelectorProps> = ({
+export default function ReferralSourceSelector({
   defaultValue,
-}) => {
+}: ReferralSourceSelectorProps) {
   const [referralSource, setReferralSource] = useState(defaultValue);
 
   const referralOptions = [
@@ -48,27 +42,21 @@ const ReferralSourceSelector: React.FC<ReferralSourceSelectorProps> = ({
       <Label className="text-text-950" small={false}>
         How did you hear about us?
       </Label>
-      <Select value={referralSource} onValueChange={handleChange}>
-        <SelectTrigger
-          id="referral-source"
-          className="w-full border-background-300 !rounded-08 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-        >
-          <SelectValue placeholder="Select an option" />
-        </SelectTrigger>
-        <SelectContent className="max-h-60 overflow-y-auto !rounded-08">
+      <InputSelect
+        value={referralSource}
+        onValueChange={handleChange}
+        className="w-full border-background-300 !rounded-08 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+      >
+        <InputSelect.Trigger placeholder="Select an option" />
+
+        <InputSelect.Content>
           {referralOptions.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={option.value}
-              className="py-2 px-3 hover:bg-indigo-100 cursor-pointer !rounded-08"
-            >
+            <InputSelect.Item key={option.value} value={option.value}>
               {option.label}
-            </SelectItem>
+            </InputSelect.Item>
           ))}
-        </SelectContent>
-      </Select>
+        </InputSelect.Content>
+      </InputSelect>
     </div>
   );
-};
-
-export default ReferralSourceSelector;
+}

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import threading
 import time
 from collections.abc import Callable
@@ -16,6 +17,7 @@ import httpx
 import requests
 import voyageai  # type: ignore
 from cohere import AsyncClient as CohereAsyncClient
+from cohere.core.api_error import ApiError
 from google.oauth2 import service_account  # type: ignore
 from httpx import HTTPError
 from requests import JSONDecodeError
@@ -38,9 +40,8 @@ from onyx.natural_language_processing.constants import DEFAULT_OPENAI_MODEL
 from onyx.natural_language_processing.constants import DEFAULT_VERTEX_MODEL
 from onyx.natural_language_processing.constants import DEFAULT_VOYAGE_MODEL
 from onyx.natural_language_processing.constants import EmbeddingModelTextType
-from onyx.natural_language_processing.exceptions import (
-    ModelServerRateLimitError,
-)
+from onyx.natural_language_processing.exceptions import CohereBillingLimitError
+from onyx.natural_language_processing.exceptions import ModelServerRateLimitError
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.utils.logger import setup_logger
@@ -263,43 +264,80 @@ class CloudEmbedding:
         return embeddings
 
     async def _embed_vertex(
-        self, texts: list[str], model: str | None, embedding_type: str
+        self,
+        texts: list[str],
+        model: str | None,
+        embedding_type: str,
+        reduced_dimension: int | None,
     ) -> list[Embedding]:
-        import vertexai  # type: ignore[import-untyped]
-        from vertexai.language_models import TextEmbeddingModel, TextEmbeddingInput  # type: ignore[import-untyped]
+        from google import genai  # type: ignore[import-untyped]
+        from google.genai import types as genai_types  # type: ignore[import-untyped]
 
         if not model:
             model = DEFAULT_VERTEX_MODEL
 
         service_account_info = json.loads(self.api_key)
         credentials = service_account.Credentials.from_service_account_info(
-            service_account_info
+            service_account_info,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
         )
         project_id = service_account_info["project_id"]
-        vertexai.init(project=project_id, credentials=credentials)
-        client = TextEmbeddingModel.from_pretrained(model)
+        location = (
+            service_account_info.get("location")
+            or os.environ.get("GOOGLE_CLOUD_LOCATION")
+            or "us-central1"
+        )
 
-        inputs = [TextEmbeddingInput(text, embedding_type) for text in texts]
+        client = genai.Client(
+            vertexai=True,
+            project=project_id,
+            location=location,
+            credentials=credentials,
+        )
 
-        # Split into batches of 25 texts
-        max_texts_per_batch = VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
+        embed_config = genai_types.EmbedContentConfig(
+            task_type=embedding_type,
+            output_dimensionality=reduced_dimension,
+            auto_truncate=True,
+        )
+
         batches = [
-            inputs[i : i + max_texts_per_batch]
-            for i in range(0, len(inputs), max_texts_per_batch)
+            texts[i : i + VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE]
+            for i in range(0, len(texts), VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
         ]
 
-        # Dispatch all embedding calls asynchronously at once
-        tasks = [
-            client.get_embeddings_async(
-                cast(list[str | TextEmbeddingInput], batch), auto_truncate=True
+        async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
+            content_requests: list[Any] = [
+                genai_types.Content(parts=[genai_types.Part(text=text)])
+                for text in batch_texts
+            ]
+            response = await client.aio.models.embed_content(
+                model=model,
+                contents=content_requests,
+                config=embed_config,
             )
-            for batch in batches
-        ]
 
-        # Wait for all tasks to complete in parallel
-        results = await asyncio.gather(*tasks)
+            if not response.embeddings:
+                raise RuntimeError("Received empty embeddings from Google GenAI.")
 
-        return [embedding.values for batch in results for embedding in batch]
+            embeddings: list[Embedding] = []
+            for idx, embedding in enumerate(response.embeddings):
+                if embedding.values is None:
+                    raise RuntimeError(
+                        f"Missing embedding values for input at index {idx}."
+                    )
+                embeddings.append(embedding.values)
+            return embeddings
+
+        try:
+            results = await asyncio.gather(*[_embed_batch(batch) for batch in batches])
+            return [
+                embedding
+                for batch_embeddings in results
+                for embedding in batch_embeddings
+            ]
+        finally:
+            await client.aio.aclose()
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
@@ -352,7 +390,9 @@ class CloudEmbedding:
             elif self.provider == EmbeddingProvider.VOYAGE:
                 return await self._embed_voyage(texts, model_name, embedding_type)
             elif self.provider == EmbeddingProvider.GOOGLE:
-                return await self._embed_vertex(texts, model_name, embedding_type)
+                return await self._embed_vertex(
+                    texts, model_name, embedding_type, reduced_dimension
+                )
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
         except openai.AuthenticationError:
@@ -429,7 +469,20 @@ async def cohere_rerank_api(
     query: str, docs: list[str], model_name: str, api_key: str
 ) -> list[float]:
     cohere_client = CohereAsyncClient(api_key=api_key)
-    response = await cohere_client.rerank(query=query, documents=docs, model=model_name)
+    try:
+        response = await cohere_client.rerank(
+            query=query, documents=docs, model=model_name
+        )
+    except ApiError as err:
+        if err.status_code == 402:
+            logger.warning(
+                "Cohere rerank request rejected due to billing cap. "
+                "Falling back to retrieval ordering until billing resets."
+            )
+            raise CohereBillingLimitError(
+                "Cohere billing limit reached for reranking"
+            ) from err
+        raise
     results = response.results
     sorted_results = sorted(results, key=lambda item: item.index)
     return [result.relevance_score for result in sorted_results]

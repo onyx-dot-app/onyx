@@ -5,7 +5,6 @@ import { useContext, useState } from "react";
 
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import Button from "@/refresh-components/buttons/Button";
-import { ClipboardIcon } from "@/components/icons/icons";
 import { Input } from "@/components/ui/input";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { SettingsContext } from "@/components/settings/SettingsProvider";

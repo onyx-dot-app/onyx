@@ -22,10 +22,17 @@ export async function fetchAssistantEditorInfoSS(
     ]
   | [null, string]
 > {
+  // When editing an existing persona, fetch only the providers available to that persona
+  // When creating a new persona, fetch all providers
+  const llmProvidersUrl =
+    personaId !== undefined
+      ? `/llm/persona/${personaId}/providers`
+      : "/llm/provider";
+
   const tasks = [
     fetchSS("/manage/connector-status"),
     fetchSS("/manage/document-set"),
-    fetchSS("/llm/provider"),
+    fetchSS(llmProvidersUrl),
     // duplicate fetch, but shouldn't be too big of a deal
     // this page is not a high traffic page
     getCurrentUserSS(),

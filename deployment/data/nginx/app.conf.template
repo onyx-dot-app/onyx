@@ -20,12 +20,18 @@ upstream web_server {
     server ${ONYX_WEB_SERVER_HOST}:3000 fail_timeout=0;
 }
 
+# Conditionally include MCP upstream configuration
+include /etc/nginx/conf.d/mcp_upstream.conf.inc;
+
 server {
     listen 80 default_server;
 
     client_max_body_size 5G;    # Maximum upload size
 
     access_log /var/log/nginx/access.log custom_main;
+
+    # Conditionally include MCP location configuration
+    include /etc/nginx/conf.d/mcp.conf.inc;
 
     # Match both /api/* and /openapi.json in a single rule
     location ~ ^/(api|openapi.json)(/.*)?$ {

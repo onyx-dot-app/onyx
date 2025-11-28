@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import model_validator
 from sqlalchemy.orm import Session
 
@@ -85,8 +86,7 @@ class SearchToolOverrideKwargs(BaseModel):
     kg_sources: list[str] | None = None
     kg_chunk_id_zero_only: bool | None = False
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

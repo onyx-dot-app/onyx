@@ -10,6 +10,7 @@ from typing import Union
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -273,22 +274,54 @@ class PromptConfig(BaseModel):
     """Final representation of the Prompt configuration passed
     into the `PromptBuilder` object."""
 
-    system_prompt: str
-    task_prompt: str
+    default_behavior_system_prompt: str
+    custom_instructions: str | None
+    reminder: str
     datetime_aware: bool
 
     @classmethod
     def from_model(
-        cls, model: "Persona", prompt_override: PromptOverride | None = None
+        cls,
+        model: "Persona",
+        db_session: Session,
+        prompt_override: PromptOverride | None = None,
     ) -> "PromptConfig":
+        from onyx.db.persona import get_default_behavior_persona
+
+        # Get the default persona's system prompt
+        default_persona = get_default_behavior_persona(db_session)
+        default_behavior_system_prompt = (
+            default_persona.system_prompt
+            if default_persona and default_persona.system_prompt
+            else ""
+        )
+
+        # Check if this persona is the default assistant
+        is_default_persona = default_persona and model.id == default_persona.id
+
+        # If this persona IS the default assistant, custom_instruction should be None
+        # Otherwise, it should be the persona's system_prompt
+        custom_instruction = None
+        if not is_default_persona:
+            custom_instruction = model.system_prompt or None
+
+        # Handle prompt overrides
         override_system_prompt = (
             prompt_override.system_prompt if prompt_override else None
         )
         override_task_prompt = prompt_override.task_prompt if prompt_override else None
 
+        # If there's an override, apply it to the appropriate field
+        if override_system_prompt:
+            if is_default_persona:
+                default_behavior_system_prompt = override_system_prompt
+            else:
+                custom_instruction = override_system_prompt
+
         return cls(
-            system_prompt=override_system_prompt or model.system_prompt or "",
-            task_prompt=override_task_prompt or model.task_prompt or "",
+            default_behavior_system_prompt=default_behavior_system_prompt,
+            custom_instructions=custom_instruction,
+            reminder=override_task_prompt or model.task_prompt or "",
             datetime_aware=model.datetime_aware,
         )
 
@@ -357,8 +390,7 @@ class AnswerPostInfo(BaseModel):
     tool_result: ToolCallFinalResult | None = None
     message_specific_citations: MessageSpecificCitations | None = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class ChatBasicResponse(BaseModel):

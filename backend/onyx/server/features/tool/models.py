@@ -5,6 +5,14 @@ from pydantic import BaseModel
 from onyx.db.models import Tool
 
 
+HIDDEN_TOOL_IDS = {"OktaProfileTool"}
+
+
+def should_expose_tool_to_fe(tool: Tool) -> bool:
+    """Return True when the given tool should be sent to the frontend."""
+    return tool.in_code_tool_id is None or tool.in_code_tool_id not in HIDDEN_TOOL_IDS
+
+
 class ToolSnapshot(BaseModel):
     id: int
     name: str

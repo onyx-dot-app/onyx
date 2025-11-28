@@ -131,13 +131,18 @@ function ChatInputBarInner({
   disabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
-
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
   const currentIndexingFiles = useMemo(() => {
     return currentMessageFiles.filter(
       (file) => file.status === UserFileStatus.PROCESSING
+    );
+  }, [currentMessageFiles]);
+
+  const hasUploadingFiles = useMemo(() => {
+    return currentMessageFiles.some(
+      (file) => file.status === UserFileStatus.UPLOADING
     );
   }, [currentMessageFiles]);
 
@@ -430,7 +435,7 @@ function ChatInputBarInner({
             "bg-transparent",
             "resize-none",
             "placeholder:text-text-03",
-            "whitespace-normal",
+            "whitespace-pre-wrap",
             "break-word",
             "overscroll-contain",
             "overflow-y-auto",
@@ -611,7 +616,9 @@ function ChatInputBarInner({
             <IconButton
               id="onyx-chat-input-send-button"
               icon={chatState === "input" ? SvgArrowUp : SvgStop}
-              disabled={chatState === "input" && !message}
+              disabled={
+                (chatState === "input" && !message) || hasUploadingFiles
+              }
               onClick={() => {
                 if (chatState == "streaming") {
                   stopGenerating();
@@ -626,7 +633,6 @@ function ChatInputBarInner({
     </div>
   );
 }
-
 const ChatInputBar = React.memo(ChatInputBarInner);
 ChatInputBar.displayName = "ChatInputBar";
 

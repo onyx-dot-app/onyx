@@ -6,7 +6,7 @@ from pydantic import Field
 from pydantic import field_validator
 
 from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import litellm_thinks_model_supports_image_input
 
 
 if TYPE_CHECKING:
@@ -88,6 +88,7 @@ class LLMProvider(BaseModel):
     fast_default_model_name: str | None = None
     is_public: bool = True
     groups: list[int] = Field(default_factory=list)
+    personas: list[int] = Field(default_factory=list)
     deployment_name: str | None = None
     default_vision_model: str | None = None
 
@@ -124,6 +125,11 @@ class LLMProviderView(LLMProvider):
         except Exception:
             # If groups relationship can't be loaded (detached instance), use empty list
             groups = []
+        # Safely get personas - similar handling as groups
+        try:
+            personas = [persona.id for persona in llm_provider_model.personas]
+        except Exception:
+            personas = []
 
         return cls(
             id=llm_provider_model.id,
@@ -140,6 +146,7 @@ class LLMProviderView(LLMProvider):
             default_vision_model=llm_provider_model.default_vision_model,
             is_public=llm_provider_model.is_public,
             groups=groups,
+            personas=personas,
             deployment_name=llm_provider_model.deployment_name,
             model_configurations=list(
                 ModelConfigurationView.from_model(
@@ -183,13 +190,19 @@ class ModelConfigurationView(BaseModel):
         return cls(
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
-            max_input_tokens=model_configuration_model.max_input_tokens
-            or get_max_input_tokens(
-                model_name=model_configuration_model.name, model_provider=provider_name
+            max_input_tokens=(
+                model_configuration_model.max_input_tokens
+                or get_max_input_tokens(
+                    model_name=model_configuration_model.name,
+                    model_provider=provider_name,
+                )
             ),
-            supports_image_input=model_supports_image_input(
-                model_name=model_configuration_model.name,
-                model_provider=provider_name,
+            supports_image_input=(
+                val
+                if (val := model_configuration_model.supports_image_input) is not None
+                else litellm_thinks_model_supports_image_input(
+                    model_configuration_model.name, provider_name
+                )
             ),
         )
 

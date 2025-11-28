@@ -168,6 +168,19 @@ class OnyxTokenStorage(TokenStorage):
             client_info_raw = config.config.get(MCPOAuthKeys.CLIENT_INFO.value)
             if client_info_raw:
                 return OAuthClientInformationFull.model_validate(client_info_raw)
+            if self.alt_config_id:
+                alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
+                if alt_config:
+                    alt_client_info = alt_config.config.get(
+                        MCPOAuthKeys.CLIENT_INFO.value
+                    )
+                    if alt_client_info:
+                        # Cache the admin client info on the user config for future calls
+                        config.config[MCPOAuthKeys.CLIENT_INFO.value] = alt_client_info
+                        update_connection_config(config.id, db_session, config.config)
+                        return OAuthClientInformationFull.model_validate(
+                            alt_client_info
+                        )
             return None
 
     async def set_client_info(self, info: OAuthClientInformationFull) -> None:
@@ -423,7 +436,8 @@ async def _connect_oauth(
     except Exception:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
-    _ensure_mcp_server_owner_or_admin(mcp_server, user)
+    if is_admin:
+        _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
     if mcp_server.auth_type != MCPAuthenticationType.OAUTH:
         raise HTTPException(
@@ -489,7 +503,7 @@ async def _connect_oauth(
 
     # always make a http request for the initial probe
     transport = mcp_server.transport if is_connected else MCPTransport.STREAMABLE_HTTP
-    probe_url = mcp_server.server_url.rstrip("/") + "/"
+    probe_url = mcp_server.server_url
     logger.info(f"Probing OAuth server at: {probe_url}")
 
     oauth_auth = make_oauth_provider(
@@ -784,8 +798,7 @@ def save_user_credentials(
                 for k, v in config_data["headers"].items():
                     config_data["headers"][k] = v.replace(f"{{{key}}}", value)
 
-        # Normalize URL to include trailing slash to avoid redirect/slow path handling
-        server_url = mcp_server.server_url.rstrip("/") + "/"
+        server_url = mcp_server.server_url
         is_valid, test_message = test_mcp_server_credentials(
             server_url,
             config_data["headers"],
@@ -855,10 +868,14 @@ class ServerToolsResponse(BaseModel):
 
 
 def _ensure_mcp_server_owner_or_admin(server: DbMCPServer, user: User | None) -> None:
+    logger.info(
+        f"Ensuring MCP server owner or admin: {server.name} {user} {user.role if user else None} server.owner={server.owner}"
+    )
     if not user or user.role == UserRole.ADMIN:
         return
 
     user_email = user.email if user else None
+    logger.info(f"User email: {user_email} server.owner={server.owner}")
     if not user_email or server.owner != user_email:
         raise HTTPException(
             status_code=403,
@@ -1126,7 +1143,8 @@ def _list_mcp_tools_by_id(
     except ValueError:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
-    _ensure_mcp_server_owner_or_admin(mcp_server, user)
+    if is_admin:
+        _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
     # Get connection config based on auth type
     # TODO: for now, only the admin that set up a per-user api key server can
@@ -1157,8 +1175,7 @@ def _list_mcp_tools_by_id(
 
     t1 = time.time()
     logger.info(f"Discovering tools for MCP server: {mcp_server.name}: {t1}")
-    # Normalize URL to include trailing slash to avoid redirect/slow path handling
-    server_url = mcp_server.server_url.rstrip("/") + "/"
+    server_url = mcp_server.server_url
     discovered_tools = discover_mcp_tools(
         server_url,
         connection_config.config.get("headers", {}) if connection_config else {},
@@ -1284,20 +1301,6 @@ def _upsert_mcp_server(
                 detail="Authenticated user email required to create MCP servers",
             )
 
-        # Check existing servers for same server_url
-        existing_servers = get_all_mcp_servers(db_session)
-        existing_server = None
-        for server in existing_servers:
-            if server.server_url == normalized_url:
-                existing_server = server
-                break
-        if existing_server:
-            raise HTTPException(
-                status_code=409,
-                detail="An MCP server with this URL already exists for this owner",
-            )
-
-        # Create new MCP server
         mcp_server = create_mcp_server__no_commit(
             owner_email=user.email if user else "",
             name=request.name,
@@ -1501,7 +1504,7 @@ def get_mcp_servers_for_admin(
 def get_mcp_server_db_tools(
     server_id: int,
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> ServerToolsResponse:
     """Get existing database tools created for an MCP server"""
     logger.info(f"Getting database tools for MCP server: {server_id}")

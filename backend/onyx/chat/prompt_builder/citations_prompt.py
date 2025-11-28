@@ -1,5 +1,6 @@
 from langchain.schema.messages import HumanMessage
 from langchain.schema.messages import SystemMessage
+from sqlalchemy.orm import Session
 
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
@@ -8,8 +9,7 @@ from onyx.context.search.models import InferenceChunk
 from onyx.db.models import Persona
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.file_store.models import InMemoryChatFile
-from onyx.llm.factory import get_llms_for_persona
-from onyx.llm.factory import get_main_llm_from_tuple
+from onyx.llm.factory import get_llm_config_for_persona
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import check_number_of_tokens
@@ -36,8 +36,8 @@ logger = setup_logger()
 def get_prompt_tokens(prompt_config: PromptConfig) -> int:
     # Note: currently custom prompts do not allow datetime aware, only default prompts
     return (
-        check_number_of_tokens(prompt_config.system_prompt)
-        + check_number_of_tokens(prompt_config.task_prompt)
+        check_number_of_tokens(prompt_config.default_behavior_system_prompt)
+        + check_number_of_tokens(prompt_config.reminder)
         + CHAT_USER_PROMPT_WITH_CONTEXT_OVERHEAD_TOKEN_CNT
         + CITATION_STATEMENT_TOKEN_CNT
         + CITATION_REMINDER_TOKEN_CNT
@@ -88,12 +88,14 @@ def compute_max_document_tokens(
 
 def compute_max_document_tokens_for_persona(
     persona: Persona,
+    db_session: Session,
     actual_user_input: str | None = None,
 ) -> int:
     # Use the persona directly since prompts are now embedded
+    # Access to persona is assumed to have been verified already
     return compute_max_document_tokens(
-        prompt_config=PromptConfig.from_model(persona),
-        llm_config=get_main_llm_from_tuple(get_llms_for_persona(persona)).config,
+        prompt_config=PromptConfig.from_model(persona, db_session=db_session),
+        llm_config=get_llm_config_for_persona(persona=persona, db_session=db_session),
         actual_user_input=actual_user_input,
     )
 
@@ -106,7 +108,7 @@ def compute_max_llm_input_tokens(llm_config: LLMConfig) -> int:
 def build_citations_system_message(
     prompt_config: PromptConfig,
 ) -> SystemMessage:
-    system_prompt = prompt_config.system_prompt.strip()
+    system_prompt = prompt_config.default_behavior_system_prompt.strip()
     # Citations are always enabled
     system_prompt += REQUIRE_CITATION_STATEMENT
     tag_handled_prompt = handle_onyx_date_awareness(

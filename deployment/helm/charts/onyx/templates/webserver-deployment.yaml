@@ -5,6 +5,9 @@ metadata:
   name: {{ include "onyx.fullname" . }}-web-server
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.webserver.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   {{- if not .Values.webserver.autoscaling.enabled }}
   replicas: {{ .Values.webserver.replicaCount }}
@@ -24,6 +27,9 @@ spec:
       {{- end }}
       labels:
         {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.webserver.deploymentLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .Values.webserver.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -37,6 +43,14 @@ spec:
         {{- toYaml .Values.webserver.podSecurityContext | nindent 8 }}
       {{- with .Values.webserver.nodeSelector }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webserver.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webserver.tolerations }}
+      tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:

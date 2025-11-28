@@ -1,44 +1,46 @@
 "use client";
 
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import type { ProjectFile } from "../../projects/projectsService";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Button from "@/refresh-components/buttons/Button";
-import {
-  useChatModal,
-  ModalIds,
-} from "@/refresh-components/contexts/ChatModalContext";
+
 import AddInstructionModal from "@/components/modals/AddInstructionModal";
-import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
-import { useEscape } from "@/hooks/useKeyPress";
-import CoreModal from "@/refresh-components/modals/CoreModal";
+import UserFilesModal from "@/components/modals/UserFilesModal";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Text from "@/refresh-components/texts/Text";
 import SvgFolderOpen from "@/icons/folder-open";
 import SvgAddLines from "@/icons/add-lines";
 import SvgFiles from "@/icons/files";
+import SvgEdit from "@/icons/edit";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FileCard } from "../input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
-
+import IconButton from "@/refresh-components/buttons/IconButton";
+import { FileCardSkeleton } from "@/app/chat/components/input/FileCard";
+import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
+import { UserFileStatus } from "../../projects/projectsService";
+export interface ProjectContextPanelProps {
+  projectTokenCount?: number;
+  availableContextTokens?: number;
+  setPresentingDocument?: (document: MinimalOnyxDocument) => void;
+}
 export default function ProjectContextPanel({
   projectTokenCount = 0,
   availableContextTokens = 128_000,
   setPresentingDocument,
-}: {
-  projectTokenCount?: number;
-  availableContextTokens?: number;
-  setPresentingDocument?: (document: MinimalOnyxDocument) => void;
-}) {
+}: ProjectContextPanelProps) {
   const { popup, setPopup } = usePopup();
-  const { isOpen, toggleModal } = useChatModal();
-  const open = isOpen(ModalIds.ProjectFilesModal);
-  const onClose = () => toggleModal(ModalIds.ProjectFilesModal, false);
-  useEscape(onClose, open);
+
+  const addInstructionModal = useCreateModal();
+  const projectFilesModal = useCreateModal();
+  // Edit project name state
+  const [isEditingName, setIsEditingName] = useState(false);
   // Convert ProjectFile to MinimalOnyxDocument format for viewing
   const handleOnView = useCallback(
     (file: ProjectFile) => {
@@ -59,8 +61,10 @@ export default function ProjectContextPanel({
     unlinkFileFromProject,
     linkFileToProject,
     allCurrentProjectFiles,
+    isLoadingProjectDetails,
     beginUpload,
     projects,
+    renameProject,
   } = useProjectsContext();
   const handleUploadFiles = useCallback(
     async (files: File[]) => {
@@ -94,6 +98,18 @@ export default function ProjectContextPanel({
     },
   });
 
+  // Handle project name editing
+  const currentProject = projects.find((p) => p.id === currentProjectId);
+  const projectName = currentProject?.name || "Loading project...";
+
+  const startEditing = useCallback(() => {
+    setIsEditingName(true);
+  }, []);
+
+  const cancelEditing = useCallback(() => {
+    setIsEditingName(false);
+  }, []);
+
   if (!currentProjectId) return null; // no selection yet
 
   // Detect if there are any non-image files in the displayed files
@@ -102,125 +118,152 @@ export default function ProjectContextPanel({
   const shouldCompactImages = hasNonImageFiles(displayedFiles);
 
   return (
-    <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
-      <div className="flex flex-col gap-1 text-text-04">
-        <SvgFolderOpen className="h-8 w-8 text-text-04" />
-        <Text headingH2 className="font-heading-h2">
-          {projects.find((p) => p.id === currentProjectId)?.name ||
-            "Loading project..."}
-        </Text>
-      </div>
+    <>
+      {popup}
 
-      <Separator className="my-0" />
-      <div className="flex flex-row gap-2 justify-between">
-        <div className="min-w-0">
-          <Text headingH3 text04>
-            Instructions
-          </Text>
-          {currentProjectDetails?.project?.instructions ? (
-            <Text text02 secondaryBody className="truncate">
-              {currentProjectDetails.project.instructions}
-            </Text>
-          ) : (
-            <Text text02 secondaryBody className="truncate">
-              Add instructions to tailor the response in this project.
-            </Text>
-          )}
-        </div>
-        <Button
-          leftIcon={SvgAddLines}
-          onClick={() => toggleModal(ModalIds.AddInstructionModal, true)}
-          tertiary
-        >
-          Set Instructions
-        </Button>
-      </div>
-      <div
-        className="flex flex-col gap-2 "
-        {...getRootProps({ onClick: (e) => e.stopPropagation() })}
-      >
-        <div className="flex flex-row gap-2 justify-between">
-          <div>
-            <Text headingH3 text04>
-              Files
-            </Text>
-            <Text text02 secondaryBody>
-              Chats in this project can access these files.
-            </Text>
-          </div>
-          <FilePickerPopover
-            trigger={(open) => (
-              // The `secondary={undefined}` is required here because `CreateButton` sets it to true.
-              // Therefore, we need to first remove the truthiness before passing in the other `tertiary` flag.
-              <CreateButton secondary={undefined} tertiary transient={open}>
-                Add Files
-              </CreateButton>
+      <addInstructionModal.Provider>
+        <AddInstructionModal />
+      </addInstructionModal.Provider>
+
+      <projectFilesModal.Provider>
+        <UserFilesModal
+          title="Project files"
+          description="Sessions in this project can access the files here."
+          icon={SvgFiles}
+          recentFiles={[...allCurrentProjectFiles]}
+          onView={handleOnView}
+          handleUploadChange={handleUploadChange}
+          onDelete={async (file: ProjectFile) => {
+            if (!currentProjectId) return;
+            await unlinkFileFromProject(currentProjectId, file.id);
+          }}
+        />
+      </projectFilesModal.Provider>
+      <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
+        <div className="flex flex-col gap-1 text-text-04">
+          <SvgFolderOpen className="h-8 w-8 text-text-04" />
+          <div className="group flex items-center gap-2">
+            {isEditingName ? (
+              <ButtonRenaming
+                initialName={projectName}
+                onRename={async (newName) => {
+                  if (currentProjectId) {
+                    await renameProject(currentProjectId, newName);
+                  }
+                }}
+                onClose={cancelEditing}
+                className="font-heading-h2 text-text-04"
+              />
+            ) : (
+              <>
+                <Text headingH2 className="font-heading-h2">
+                  {projectName}
+                </Text>
+                <IconButton
+                  icon={SvgEdit}
+                  internal
+                  onClick={startEditing}
+                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                  tooltip="Edit project name"
+                />
+              </>
             )}
-            onFileClick={handleOnView}
-            onPickRecent={async (file) => {
-              if (!currentProjectId) return;
-              if (!linkFileToProject) return;
-              linkFileToProject(currentProjectId, file);
-            }}
-            onUnpickRecent={async (file) => {
-              if (!currentProjectId) return;
-              await unlinkFileFromProject(currentProjectId, file.id);
-            }}
-            handleUploadChange={handleUploadChange}
-            selectedFileIds={(allCurrentProjectFiles || []).map((f) => f.id)}
-          />
+          </div>
         </div>
-        {/* Hidden input just to satisfy dropzone contract; we rely on FilePicker for clicks */}
-        <input {...getInputProps()} />
 
-        {allCurrentProjectFiles.length > 0 ? (
-          <>
-            {/* Mobile / small screens: just show a button to view files */}
-            <div className="sm:hidden">
-              <button
-                className="w-full rounded-xl px-3 py-3 text-left bg-transparent hover:bg-accent-background-hovered hover:dark:bg-neutral-800/75 transition-colors"
-                onClick={() => toggleModal(ModalIds.ProjectFilesModal, true)}
-              >
-                <div className="flex flex-col overflow-hidden">
-                  <div className="flex items-center justify-between gap-2 w-full">
-                    <Text text04 secondaryAction>
-                      View files
-                    </Text>
-                    <SvgFiles className="h-5 w-5 stroke-text-02" />
-                  </div>
-                  <Text text03 secondaryBody>
-                    {displayFileCount} files
-                  </Text>
-                </div>
-              </button>
+        <Separator className="my-0" />
+        <div className="flex flex-row gap-2 justify-between">
+          <div className="min-w-0 flex-1">
+            <Text headingH3 text04>
+              Instructions
+            </Text>
+            {isLoadingProjectDetails && !currentProjectDetails ? (
+              <div className="h-5 w-3/4 rounded bg-background-tint-02 animate-pulse" />
+            ) : currentProjectDetails?.project?.instructions ? (
+              <Text text02 secondaryBody className="truncate">
+                {currentProjectDetails.project.instructions}
+              </Text>
+            ) : (
+              <Text text02 secondaryBody className="truncate">
+                Add instructions to tailor the response in this project.
+              </Text>
+            )}
+          </div>
+          <Button
+            leftIcon={SvgAddLines}
+            onClick={() => addInstructionModal.toggle(true)}
+            tertiary
+          >
+            Set Instructions
+          </Button>
+        </div>
+        <div
+          className="flex flex-col gap-2 "
+          {...getRootProps({ onClick: (e) => e.stopPropagation() })}
+        >
+          <div className="flex flex-row gap-2 justify-between">
+            <div>
+              <Text headingH3 text04>
+                Files
+              </Text>
+              <Text text02 secondaryBody>
+                Chats in this project can access these files.
+              </Text>
             </div>
+            <FilePickerPopover
+              trigger={(open) => (
+                // The `secondary={undefined}` is required here because `CreateButton` sets it to true.
+                // Therefore, we need to first remove the truthiness before passing in the other `tertiary` flag.
+                <CreateButton secondary={undefined} tertiary transient={open}>
+                  Add Files
+                </CreateButton>
+              )}
+              onFileClick={handleOnView}
+              onPickRecent={async (file) => {
+                if (file.status === UserFileStatus.UPLOADING) return;
+                if (file.status === UserFileStatus.DELETING) return;
+                if (!currentProjectId) return;
+                if (!linkFileToProject) return;
+                linkFileToProject(currentProjectId, file);
+              }}
+              onUnpickRecent={async (file) => {
+                if (!currentProjectId) return;
+                await unlinkFileFromProject(currentProjectId, file.id);
+              }}
+              handleUploadChange={handleUploadChange}
+              selectedFileIds={(allCurrentProjectFiles || []).map((f) => f.id)}
+            />
+          </div>
+          {/* Hidden input just to satisfy dropzone contract; we rely on FilePicker for clicks */}
+          <input {...getInputProps()} />
 
-            {/* Desktop / larger screens: show previews with optional View All */}
-            <div className="hidden sm:flex gap-1 relative">
-              {(() => {
-                return allCurrentProjectFiles.slice(0, 4).map((f) => (
-                  <div key={f.id} className="w-40">
-                    <FileCard
-                      file={f}
-                      removeFile={async (fileId: string) => {
-                        if (!currentProjectId) return;
-                        await unlinkFileFromProject(currentProjectId, fileId);
-                      }}
-                      onFileClick={handleOnView}
-                      compactImages={shouldCompactImages}
-                    />
-                  </div>
-                ));
-              })()}
-              {totalFiles > 4 && (
+          {isLoadingProjectDetails && !currentProjectDetails ? (
+            <>
+              {/* Mobile / small screens: show skeleton */}
+              <div className="sm:hidden">
+                <div className="w-full h-[68px] rounded-xl bg-background-tint-02 animate-pulse" />
+              </div>
+
+              {/* Desktop / larger screens: show skeleton file cards */}
+              <div className="hidden sm:flex gap-1">
+                <FileCardSkeleton />
+                <FileCardSkeleton />
+                <FileCardSkeleton />
+                <FileCardSkeleton />
+              </div>
+            </>
+          ) : allCurrentProjectFiles.length > 0 ? (
+            <>
+              {/* Mobile / small screens: just show a button to view files */}
+              <div className="sm:hidden">
                 <button
-                  className="rounded-xl px-3 py-1 text-left transition-colors hover:bg-background-tint-02"
-                  onClick={() => toggleModal(ModalIds.ProjectFilesModal, true)}
+                  className="w-full rounded-xl px-3 py-3 text-left bg-transparent hover:bg-accent-background-hovered hover:dark:bg-neutral-800/75 transition-colors"
+                  onClick={() => projectFilesModal.toggle(true)}
                 >
-                  <div className="flex flex-col overflow-hidden h-12 p-1">
+                  <div className="flex flex-col overflow-hidden">
                     <div className="flex items-center justify-between gap-2 w-full">
                       <Text text04 secondaryAction>
-                        View All
+                        View files
                       </Text>
                       <SvgFiles className="h-5 w-5 stroke-text-02" />
                     </div>
@@ -229,63 +272,76 @@ export default function ProjectContextPanel({
                     </Text>
                   </div>
                 </button>
+              </div>
+
+              {/* Desktop / larger screens: show previews with optional View All */}
+              <div className="hidden sm:flex gap-1 relative">
+                {(() => {
+                  return allCurrentProjectFiles.slice(0, 4).map((f) => (
+                    <div key={f.id}>
+                      <FileCard
+                        file={f}
+                        removeFile={async (fileId: string) => {
+                          if (!currentProjectId) return;
+                          await unlinkFileFromProject(currentProjectId, fileId);
+                        }}
+                        onFileClick={handleOnView}
+                        compactImages={shouldCompactImages}
+                      />
+                    </div>
+                  ));
+                })()}
+                {totalFiles > 4 && (
+                  <button
+                    className="rounded-xl px-3 py-1 text-left transition-colors hover:bg-background-tint-02"
+                    onClick={() => projectFilesModal.toggle(true)}
+                  >
+                    <div className="flex flex-col overflow-hidden h-12 p-1">
+                      <div className="flex items-center justify-between gap-2 w-full">
+                        <Text text04 secondaryAction>
+                          View All
+                        </Text>
+                        <SvgFiles className="h-5 w-5 stroke-text-02" />
+                      </div>
+                      <Text text03 secondaryBody>
+                        {displayFileCount} files
+                      </Text>
+                    </div>
+                  </button>
+                )}
+                {isDragActive && (
+                  <div className="pointer-events-none absolute inset-0 rounded-lg border-2 border-dashed border-action-link-05" />
+                )}
+              </div>
+              {projectTokenCount > availableContextTokens && (
+                <Text text02 secondaryBody>
+                  This project exceeds the model&apos;s context limits. Sessions
+                  will automatically search for relevant files first before
+                  generating response.
+                </Text>
               )}
-              {isDragActive && (
-                <div className="pointer-events-none absolute inset-0 rounded-lg border-2 border-dashed border-action-link-05" />
-              )}
-            </div>
-            {projectTokenCount > availableContextTokens && (
-              <Text text02 secondaryBody>
-                This project exceeds the model&apos;s context limits. Sessions
-                will automatically search for relevant files first before
-                generating response.
-              </Text>
-            )}
-          </>
-        ) : (
-          <div
-            className={`h-12 rounded-lg border border-dashed ${
-              isDragActive
-                ? "bg-action-link-01 border-action-link-05"
-                : "border-border-01"
-            } flex items-center pl-2`}
-          >
-            <p
-              className={`font-secondary-body ${
-                isDragActive ? "text-action-link-05" : "text-text-02 "
-              }`}
+            </>
+          ) : (
+            <div
+              className={`h-12 rounded-lg border border-dashed ${
+                isDragActive
+                  ? "bg-action-link-01 border-action-link-05"
+                  : "border-border-01"
+              } flex items-center pl-2`}
             >
-              {isDragActive
-                ? "Drop files here to add to this project"
-                : "Add documents, texts, or images to use in the project. Drag & drop supported."}
-            </p>
-          </div>
-        )}
+              <p
+                className={`font-secondary-body ${
+                  isDragActive ? "text-action-link-05" : "text-text-02 "
+                }`}
+              >
+                {isDragActive
+                  ? "Drop files here to add to this project"
+                  : "Add documents, texts, or images to use in the project. Drag & drop supported."}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
-
-      <AddInstructionModal />
-
-      {open && (
-        <CoreModal
-          className="w-[32rem] rounded-16 border flex flex-col bg-background-tint-00"
-          onClickOutside={onClose}
-        >
-          <UserFilesModalContent
-            title="Project files"
-            description="Sessions in this project can access the files here."
-            icon={SvgFiles}
-            recentFiles={[...allCurrentProjectFiles]}
-            onView={handleOnView}
-            handleUploadChange={handleUploadChange}
-            onDelete={async (file: ProjectFile) => {
-              if (!currentProjectId) return;
-              await unlinkFileFromProject(currentProjectId, file.id);
-            }}
-            onClose={onClose}
-          />
-        </CoreModal>
-      )}
-      {popup}
-    </div>
+    </>
   );
 }

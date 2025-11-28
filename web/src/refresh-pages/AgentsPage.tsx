@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import AgentCard from "@/refresh-components/AgentCard";
 import { useUser } from "@/components/user/UserProvider";
 import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/assistants/checkOwnership";
@@ -8,9 +8,9 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import PageHeader from "@/refresh-components/page-components/PageHeader";
+import PageHeader from "@/refresh-components/headers/PageHeader";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
-import PageWrapper from "@/refresh-components/page-components/PageWrapper";
+import PageLayout from "@/refresh-components/layouts/PageLayout";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SvgUser from "@/icons/user";
@@ -411,7 +411,7 @@ export default function AgentsPage() {
   }, [selectedActionIds, selectedMcpServerIds, uniqueActions]);
 
   return (
-    <PageWrapper data-testid="AgentsPage/container" aria-label="Agents Page">
+    <PageLayout data-testid="AgentsPage/container" aria-label="Agents Page">
       <PageHeader
         icon={SvgOnyxOctagon}
         title="Agents & Assistants"
@@ -492,7 +492,8 @@ export default function AgentsPage() {
                         <LineItem
                           key={creator.id}
                           icon={icon}
-                          heavyForced={isSelected}
+                          selected={isSelected}
+                          emphasized
                           onClick={() => {
                             setSelectedCreatorIds((prev) => {
                               const newSet = new Set(prev);
@@ -568,7 +569,8 @@ export default function AgentsPage() {
                           <LineItem
                             key={action.id}
                             icon={icon}
-                            heavyForced={isSelected}
+                            selected={isSelected}
+                            emphasized
                             onClick={() => {
                               setSelectedActionIds((prev) => {
                                 const newSet = new Set(prev);
@@ -597,7 +599,8 @@ export default function AgentsPage() {
                           <LineItem
                             key={groupKey}
                             icon={SvgActions}
-                            heavyForced={isSelected}
+                            selected={isSelected}
+                            emphasized
                             onClick={() => {
                               setSelectedMcpServerIds((prev) => {
                                 const newSet = new Set(prev);
@@ -649,6 +652,6 @@ export default function AgentsPage() {
           </>
         )}
       </div>
-    </PageWrapper>
+    </PageLayout>
   );
 }

@@ -1,4 +1,3 @@
-import React from "react";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/components/ui/text";
 
@@ -13,13 +12,9 @@ import {
 import { createEditingValidationSchema, createInitialValues } from "../lib";
 import { dictionaryType, formType } from "../types";
 import { isTypedFileField } from "@/lib/connectors/fileTypes";
+import SvgTrash from "@/icons/trash";
 
-const EditCredential = ({
-  credential,
-  onClose,
-  setPopup,
-  onUpdate,
-}: {
+export interface EditCredentialProps {
   credential: Credential<dictionaryType>;
   onClose: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
@@ -28,7 +23,14 @@ const EditCredential = ({
     details: any,
     onSuccess: () => void
   ) => Promise<void>;
-}) => {
+}
+
+export default function EditCredential({
+  credential,
+  onClose,
+  setPopup,
+  onUpdate,
+}: EditCredentialProps) {
   const validationSchema = createEditingValidationSchema(
     credential.credential_json
   );
@@ -94,21 +96,16 @@ const EditCredential = ({
               )
             )}
             <div className="flex justify-between w-full">
-              <Button type="button" onClick={() => resetForm()}>
-                <div className="flex gap-x-2 items-center w-full border-none">
-                  <FaTrash />
-                  <p>Reset Changes</p>
-                </div>
+              <Button onClick={() => resetForm()} leftIcon={SvgTrash}>
+                Reset Changes
               </Button>
               <Button
                 type="submit"
                 disabled={isSubmitting}
                 className="bg-indigo-500 hover:bg-indigo-400"
+                leftIcon={FaNewspaper}
               >
-                <div className="flex gap-x-2 items-center w-full border-none">
-                  <FaNewspaper />
-                  <p>Update</p>
-                </div>
+                Update
               </Button>
             </div>
           </Form>
@@ -116,6 +113,4 @@ const EditCredential = ({
       </Formik>
     </div>
   );
-};
-
-export default EditCredential;
+}

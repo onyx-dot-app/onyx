@@ -61,7 +61,7 @@ def create_search_settings(
         rerank_provider_type=search_settings.rerank_provider_type,
         rerank_api_key=search_settings.rerank_api_key,
         num_rerank=search_settings.num_rerank,
-        background_reindex_enabled=search_settings.background_reindex_enabled,
+        switchover_type=search_settings.switchover_type,
     )
 
     db_session.add(embedding_model)

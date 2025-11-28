@@ -8,8 +8,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn, noProp } from "@/lib/utils";
-import CoreModal from "@/refresh-components/modals/CoreModal";
-import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
+import UserFilesModal from "@/components/modals/UserFilesModal";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import {
   ProjectFile,
   UserFileStatus,
@@ -26,6 +26,8 @@ import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
 import SvgLoader from "@/icons/loader";
+import { isImageFile } from "@/lib/utils";
+import SvgImage from "@/icons/image";
 
 const getFileExtension = (fileName: string): string => {
   const idx = fileName.lastIndexOf(".");
@@ -70,7 +72,9 @@ function FileLineItem({
           ? ({ className }) => (
               <SvgLoader className={cn(className, "animate-spin")} />
             )
-          : SvgFileText
+          : isImageFile(projectFile.name)
+            ? SvgImage
+            : SvgFileText
       }
       rightChildren={
         <div className="h-[1rem] flex flex-col justify-center">
@@ -102,7 +106,7 @@ interface FilePickerPopoverContentsProps {
   onPickRecent: (file: ProjectFile) => void;
   onFileClick: (file: ProjectFile) => void;
   triggerUploadPicker: () => void;
-  setShowRecentFiles: (show: boolean) => void;
+  openRecentFilesModal: () => void;
 }
 
 function FilePickerPopoverContents({
@@ -110,7 +114,7 @@ function FilePickerPopoverContents({
   onPickRecent,
   onFileClick,
   triggerUploadPicker,
-  setShowRecentFiles,
+  openRecentFilesModal,
 }: FilePickerPopoverContentsProps) {
   // These are the "quick" files that we show. Essentially "speed dial", but for files.
   // The rest of the files will be hidden behind the "All Recent Files" button, should there be more files left to show!
@@ -155,10 +159,7 @@ function FilePickerPopoverContents({
 
         // Rest of the files
         shouldShowMoreFilesButton && (
-          <LineItem
-            icon={MoreHorizontal}
-            onClick={() => setShowRecentFiles(true)}
-          >
+          <LineItem icon={MoreHorizontal} onClick={openRecentFilesModal}>
             All Recent Files
           </LineItem>
         ),
@@ -186,7 +187,7 @@ export default function FilePickerPopover({
 }: FilePickerPopoverProps) {
   const { allRecentFiles } = useProjectsContext();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [showRecentFiles, setShowRecentFiles] = useState(false);
+  const recentFilesModal = useCreateModal();
   const [open, setOpen] = useState(false);
   // Snapshot of recent files to avoid re-arranging when the modal is open
   const [recentFilesSnapshot, setRecentFilesSnapshot] = useState<ProjectFile[]>(
@@ -264,6 +265,8 @@ export default function FilePickerPopover({
 
   return (
     <>
+      {popup}
+
       <input
         ref={fileInputRef}
         type="file"
@@ -273,61 +276,52 @@ export default function FilePickerPopover({
         accept={"*/*"}
       />
 
-      <div className={cn("relative")}>
-        {popup}
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            {typeof trigger === "function" ? trigger(open) : trigger}
-          </PopoverTrigger>
-          <PopoverContent align="start" side="bottom">
-            <FilePickerPopoverContents
-              recentFiles={recentFilesSnapshot}
-              onPickRecent={(file) => {
-                onPickRecent && onPickRecent(file);
-                setOpen(false);
-              }}
-              onFileClick={(file) => {
-                onFileClick && onFileClick(file);
-                setOpen(false);
-              }}
-              triggerUploadPicker={() => {
-                triggerUploadPicker();
-                setOpen(false);
-              }}
-              setShowRecentFiles={(show) => {
-                setShowRecentFiles(show);
-                // Close the small popover when opening the dialog
-                if (show) setOpen(false);
-              }}
-            />
-          </PopoverContent>
-        </Popover>
+      <recentFilesModal.Provider>
+        <UserFilesModal
+          title="Recent Files"
+          description="Upload files or pick from your recent files."
+          icon={SvgFiles}
+          recentFiles={recentFilesSnapshot}
+          onPickRecent={(file) => {
+            onPickRecent && onPickRecent(file);
+          }}
+          onUnpickRecent={(file) => {
+            onUnpickRecent && onUnpickRecent(file);
+          }}
+          handleUploadChange={handleUploadChange}
+          onView={onFileClick}
+          selectedFileIds={selectedFileIds}
+          onDelete={handleDeleteFile}
+        />
+      </recentFilesModal.Provider>
 
-        {showRecentFiles && (
-          <CoreModal
-            className="w-[32rem] border flex flex-col bg-background-tint-00"
-            onClickOutside={() => setShowRecentFiles(false)}
-          >
-            <UserFilesModalContent
-              title="Recent Files"
-              description="Upload files or pick from your recent files."
-              icon={SvgFiles}
-              recentFiles={recentFilesSnapshot}
-              onPickRecent={(file) => {
-                onPickRecent && onPickRecent(file);
-              }}
-              onUnpickRecent={(file) => {
-                onUnpickRecent && onUnpickRecent(file);
-              }}
-              handleUploadChange={handleUploadChange}
-              onView={onFileClick}
-              onClose={() => setShowRecentFiles(false)}
-              selectedFileIds={selectedFileIds}
-              onDelete={handleDeleteFile}
-            />
-          </CoreModal>
-        )}
-      </div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          {typeof trigger === "function" ? trigger(open) : trigger}
+        </PopoverTrigger>
+        <PopoverContent align="start" side="bottom">
+          <FilePickerPopoverContents
+            recentFiles={recentFilesSnapshot}
+            onPickRecent={(file) => {
+              onPickRecent && onPickRecent(file);
+              setOpen(false);
+            }}
+            onFileClick={(file) => {
+              onFileClick && onFileClick(file);
+              setOpen(false);
+            }}
+            triggerUploadPicker={() => {
+              triggerUploadPicker();
+              setOpen(false);
+            }}
+            openRecentFilesModal={() => {
+              recentFilesModal.toggle(true);
+              // Close the small popover when opening the dialog
+              setOpen(false);
+            }}
+          />
+        </PopoverContent>
+      </Popover>
     </>
   );
 }

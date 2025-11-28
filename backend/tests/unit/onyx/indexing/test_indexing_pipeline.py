@@ -306,7 +306,7 @@ def test_contextual_rag(
     mock_llm.config.max_input_tokens = get_max_input_tokens(
         model_provider="openai", model_name="gtp-4o"
     )
-    mock_llm.invoke = mock_llm_invoke
+    mock_llm.invoke_langchain = mock_llm_invoke
 
     chunker = Chunker(
         tokenizer=embedder.embedding_model.tokenizer,

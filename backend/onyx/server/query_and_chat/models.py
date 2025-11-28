@@ -4,19 +4,25 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import Field
 from pydantic import model_validator
 
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.models import PersonaOverrideConfig
+from onyx.chat.models import QADocsResponse
 from onyx.chat.models import RetrievalDocs
+from onyx.chat.models import ThreadMessage
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.constants import SessionType
+from onyx.context.search.enums import LLMEvaluationType
+from onyx.context.search.enums import SearchType
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkContext
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import Tag
 from onyx.db.enums import ChatSessionSharedStatus
@@ -25,6 +31,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import ToolCallFinalResult
 
@@ -342,3 +349,69 @@ class ChatSearchRequest(BaseModel):
 
 class CreateChatResponse(BaseModel):
     chat_session_id: str
+
+
+class DocumentSearchRequest(ChunkContext):
+    message: str
+    search_type: SearchType
+    retrieval_options: RetrievalDetails
+    recency_bias_multiplier: float = 1.0
+    evaluation_type: LLMEvaluationType
+    # None to use system defaults for reranking
+    rerank_settings: RerankingDetails | None = None
+
+
+class OneShotQARequest(ChunkContext):
+    # Supports simplier APIs that don't deal with chat histories or message edits
+    # Easier APIs to work with for developers
+    persona_override_config: PersonaOverrideConfig | None = None
+    persona_id: int | None = None
+
+    messages: list[ThreadMessage]
+    retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
+    rerank_settings: RerankingDetails | None = None
+
+    # allows the caller to specify the exact search query they want to use
+    # can be used if the message sent to the LLM / query should not be the same
+    # will also disable Thread-based Rewording if specified
+    query_override: str | None = None
+
+    # If True, skips generating an AI response to the search query
+    skip_gen_ai_answer_generation: bool = False
+
+    # If True, uses agentic search instead of basic search
+    use_agentic_search: bool = False
+
+    @model_validator(mode="after")
+    def check_persona_fields(self) -> "OneShotQARequest":
+        if self.persona_override_config is None and self.persona_id is None:
+            raise ValueError("Exactly one of persona_config or persona_id must be set")
+        elif self.persona_override_config is not None and (self.persona_id is not None):
+            raise ValueError(
+                "If persona_override_config is set, persona_id cannot be set"
+            )
+        return self
+
+
+class OneShotQAResponse(BaseModel):
+    # This is built piece by piece, any of these can be None as the flow could break
+    answer: str | None = None
+    rephrase: str | None = None
+    citations: list[CitationInfo] | None = None
+    docs: QADocsResponse | None = None
+    error_msg: str | None = None
+    chat_message_id: int | None = None
+
+
+class DocumentSearchPagination(BaseModel):
+    offset: int
+    limit: int
+    returned_count: int
+    has_more: bool
+    next_offset: int | None = None
+
+
+class DocumentSearchResponse(BaseModel):
+    top_documents: list[SavedSearchDocWithContent]
+    llm_indices: list[int]
+    pagination: DocumentSearchPagination

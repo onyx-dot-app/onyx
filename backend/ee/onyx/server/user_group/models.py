@@ -87,6 +87,10 @@ class UserGroupUpdate(BaseModel):
     cc_pair_ids: list[int]
 
 
+class AddUsersToUserGroupRequest(BaseModel):
+    user_ids: list[UUID]
+
+
 class SetCuratorRequest(BaseModel):
     user_id: UUID
     is_curator: bool

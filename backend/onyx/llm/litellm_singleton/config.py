@@ -7,6 +7,7 @@ def configure_litellm_settings() -> None:
     litellm.drop_params = True
     litellm.telemetry = False
     litellm.modify_params = True
+    litellm.add_function_to_prompt = False
 
 
 # TODO: We might not need to register ollama_chat in addition to ollama but let's just do it for good measure for now.

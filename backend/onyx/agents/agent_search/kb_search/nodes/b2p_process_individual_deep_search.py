@@ -137,7 +137,7 @@ def process_individual_deep_search(
     try:
         llm_response = run_with_timeout(
             KG_OBJECT_SOURCE_RESEARCH_TIMEOUT,
-            primary_llm.invoke,
+            primary_llm.invoke_langchain,
             prompt=msg,
             timeout_override=KG_OBJECT_SOURCE_RESEARCH_TIMEOUT,
             max_tokens=300,

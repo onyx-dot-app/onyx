@@ -18,6 +18,8 @@ export enum PacketType {
   SEARCH_TOOL_DELTA = "internal_search_tool_delta",
   IMAGE_GENERATION_TOOL_START = "image_generation_tool_start",
   IMAGE_GENERATION_TOOL_DELTA = "image_generation_tool_delta",
+  PYTHON_TOOL_START = "python_tool_start",
+  PYTHON_TOOL_DELTA = "python_tool_delta",
   FETCH_TOOL_START = "fetch_tool_start",
 
   // Custom tool packets
@@ -91,6 +93,18 @@ export interface ImageGenerationToolDelta extends BaseObj {
   images: GeneratedImage[];
 }
 
+export interface PythonToolStart extends BaseObj {
+  type: "python_tool_start";
+  code: string;
+}
+
+export interface PythonToolDelta extends BaseObj {
+  type: "python_tool_delta";
+  stdout: string;
+  stderr: string;
+  file_ids: string[];
+}
+
 export interface FetchToolStart extends BaseObj {
   type: "fetch_tool_start";
   queries: string[] | null;
@@ -148,11 +162,13 @@ export type ImageGenerationToolObj =
   | ImageGenerationToolStart
   | ImageGenerationToolDelta
   | SectionEnd;
+export type PythonToolObj = PythonToolStart | PythonToolDelta | SectionEnd;
 export type FetchToolObj = FetchToolStart | SectionEnd;
 export type CustomToolObj = CustomToolStart | CustomToolDelta | SectionEnd;
 export type NewToolObj =
   | SearchToolObj
   | ImageGenerationToolObj
+  | PythonToolObj
   | FetchToolObj
   | CustomToolObj;
 
@@ -199,6 +215,11 @@ export interface SearchToolPacket {
 export interface ImageGenerationToolPacket {
   ind: number;
   obj: ImageGenerationToolObj;
+}
+
+export interface PythonToolPacket {
+  ind: number;
+  obj: PythonToolObj;
 }
 
 export interface FetchToolPacket {

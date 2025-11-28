@@ -117,7 +117,7 @@ export default function BillingInformationPage() {
         <CardContent>
           <Button
             onClick={handleManageSubscription}
-            className="w-full justify-center"
+            className="w-full"
             leftIcon={ClipboardIcon}
           >
             Manage Subscription

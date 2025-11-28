@@ -1,0 +1,17 @@
+name: "Setup Playwright"
+description: "Sets up Playwright and system deps (assumes Python and Playwright are installed)"
+runs:
+  using: "composite"
+  steps:
+    - name: Cache playwright cache
+      uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ hashFiles('backend/requirements/default.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-playwright-
+
+    - name: Install playwright
+      shell: bash
+      run: |
+        playwright install chromium --with-deps

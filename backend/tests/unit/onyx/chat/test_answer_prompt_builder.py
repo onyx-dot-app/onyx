@@ -12,7 +12,6 @@ from onyx.chat.prompt_builder.answer_prompt_builder import (
 )
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
-from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
 from onyx.prompts.chat_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.prompts.chat_prompts import INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE
 from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
@@ -50,8 +49,9 @@ def llm_config() -> LLMConfig:
 @pytest.fixture
 def prompt_config() -> PromptConfig:
     return PromptConfig(
-        system_prompt="You are helpful.",
-        task_prompt="",
+        default_behavior_system_prompt="You are a helpful assistant.",
+        custom_instructions="You are helpful.",
+        reminder="",
         datetime_aware=False,
     )
 
@@ -62,8 +62,9 @@ def make_prompt_config() -> Callable:
         system_prompt: str, task_prompt: str, datetime_aware: bool
     ) -> PromptConfig:
         return PromptConfig(
-            system_prompt=system_prompt,
-            task_prompt=task_prompt,
+            default_behavior_system_prompt="You are a helpful assistant.",
+            custom_instructions=system_prompt,
+            reminder=task_prompt,
             datetime_aware=datetime_aware,
         )
 
@@ -245,43 +246,6 @@ def test_tools_section_empty_when_no_tools_given(
     content = cast(str, msg.content)
 
     _assert_section(content, "Tools", False)
-
-
-# TODO: Can remove the custom instruction ignore when equal to default
-# after we do our cloud migration to set them all to empty where equal to default
-def test_custom_instructions_gone_when_empty_or_default(
-    make_prompt_config: Callable,
-    llm_config: LLMConfig,
-) -> None:
-    msg = default_build_system_message_v2(
-        make_prompt_config("", "", False), llm_config, memories=None
-    )
-    content = cast(str, msg.content)
-    _assert_section(content, "Custom Instructions", False)
-
-    msg = default_build_system_message_v2(
-        make_prompt_config(DEFAULT_SYSTEM_PROMPT, "", False),
-        llm_config,
-        memories=None,
-    )
-    content = cast(str, msg.content)
-    _assert_section(content, "Custom Instructions", False)
-
-
-def test_custom_instructions_present_when_set(
-    make_prompt_config: Callable,
-    llm_config: LLMConfig,
-) -> None:
-    msg = default_build_system_message_v2(
-        make_prompt_config("You are helpful.", "", False),
-        llm_config,
-        memories=None,
-    )
-    content = cast(str, msg.content)
-    _assert_section(content, "Custom Instructions", True)
-    body = _section(content, "Custom Instructions")
-    assert body is not None
-    assert "You are helpful." in body
 
 
 # TODO: Clean this up with a ToolV2 class that handles this instead of custom logic

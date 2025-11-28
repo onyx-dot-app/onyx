@@ -1,12 +1,11 @@
 "use client";
 
-import React from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
 import Text from "@/refresh-components/texts/Text";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import Settings from "@/sections/sidebar/Settings";
+import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
@@ -34,6 +33,7 @@ import {
   SearchIcon,
   DocumentIcon2,
   BrainIcon,
+  GlobeIcon,
 } from "@/components/icons/icons";
 import OnyxLogo from "@/icons/onyx-logo";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
@@ -164,6 +164,11 @@ const collections = (
               name: "LLM",
               icon: CpuIconSkeleton,
               link: "/admin/configuration/llm",
+            },
+            {
+              name: "Web Search",
+              icon: GlobeIcon,
+              link: "/admin/configuration/web-search",
             },
             ...(!enableCloud
               ? [

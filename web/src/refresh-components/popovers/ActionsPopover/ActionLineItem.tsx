@@ -58,7 +58,7 @@ export default function ActionLineItem({
             if (onToggle && disabled) onToggle();
             onForceToggle();
           }}
-          forced={isForced}
+          selected={isForced}
           strikethrough={disabled}
           icon={Icon}
           rightChildren={
@@ -92,7 +92,6 @@ export default function ActionLineItem({
                   className={cn(
                     !disabled && "invisible group-hover/LineItem:visible"
                   )}
-                  transient={disabled}
                   tooltip={disabled ? "Enable" : "Disable"}
                 />
               )}

@@ -1,18 +1,25 @@
-import json
 from collections.abc import Sequence
 
 from agents import function_tool
 from agents import RunContextWrapper
-from pydantic import BaseModel
+from pydantic import TypeAdapter
 
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import IterationInstructions
-from onyx.agents.agent_search.dr.sub_agents.web_search.models import WebSearchResult
-from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    get_default_provider,
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
+    WebContentProvider,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
+    WebSearchProvider,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
+    WebSearchResult,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    WebSearchProvider,
+    get_default_content_provider,
+)
+from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
+    get_default_provider,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
     dummy_inference_section_from_internet_content,
@@ -21,10 +28,11 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
     dummy_inference_section_from_internet_search_result,
 )
 from onyx.agents.agent_search.dr.sub_agents.web_search.utils import (
-    llm_doc_from_web_content,
+    truncate_search_result_content,
 )
-from onyx.chat.models import LlmDoc
+from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.turn.models import ChatTurnContext
+from onyx.chat.turn.models import FetchedDocumentCacheEntry
 from onyx.db.tools import get_tool_by_name
 from onyx.server.query_and_chat.streaming_models import FetchToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -33,11 +41,9 @@ from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
+from onyx.tools.tool_implementations_v2.tool_result_models import LlmOpenUrlResult
+from onyx.tools.tool_implementations_v2.tool_result_models import LlmWebSearchResult
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
-
-
-class WebSearchResponse(BaseModel):
-    results: Sequence[WebSearchResult]
 
 
 @tool_accounting
@@ -45,7 +51,7 @@ def _web_search_core(
     run_context: RunContextWrapper[ChatTurnContext],
     queries: list[str],
     search_provider: WebSearchProvider,
-) -> WebSearchResponse:
+) -> list[LlmWebSearchResult]:
     from onyx.utils.threadpool_concurrency import FunctionCall
 
     index = run_context.context.current_run_step
@@ -57,11 +63,15 @@ def _web_search_core(
             ),
         )
     )
+
+    # Emit a packet in the beginning to communicate queries to the frontend
     run_context.context.run_dependencies.emitter.emit(
         Packet(
             ind=index,
             obj=SearchToolDelta(
-                type="internal_search_tool_delta", queries=queries, documents=[]
+                type="internal_search_tool_delta",
+                queries=queries,
+                documents=[],
             ),
         )
     )
@@ -89,23 +99,49 @@ def _web_search_core(
         if hits:
             all_hits.extend(hits)
 
-    # Convert hits to WebSearchResult objects
-    results = []
-    for r in all_hits:
-        results.append(
-            WebSearchResult(
-                title=r.title,
-                link=r.link,
-                snippet=r.snippet or "",
-                author=r.author,
-                published_date=r.published_date,
-            )
-        )
-
-    # Create inference sections from search results and add to cited documents
     inference_sections = [
         dummy_inference_section_from_internet_search_result(r) for r in all_hits
     ]
+
+    from onyx.agents.agent_search.dr.utils import (
+        convert_inference_sections_to_search_docs,
+    )
+
+    saved_search_docs = convert_inference_sections_to_search_docs(
+        inference_sections, is_internet=True
+    )
+
+    run_context.context.run_dependencies.emitter.emit(
+        Packet(
+            ind=index,
+            obj=SearchToolDelta(
+                type="internal_search_tool_delta",
+                queries=queries,
+                documents=saved_search_docs,
+            ),
+        )
+    )
+
+    results = []
+    for r in all_hits:
+        results.append(
+            LlmWebSearchResult(
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                url=r.link,
+                title=r.title,
+                snippet=r.snippet or "",
+                unique_identifier_to_strip_away=r.link,
+            )
+        )
+        if r.link not in run_context.context.fetched_documents_cache:
+            run_context.context.fetched_documents_cache[r.link] = (
+                FetchedDocumentCacheEntry(
+                    inference_section=dummy_inference_section_from_internet_search_result(
+                        r
+                    ),
+                    document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                )
+            )
 
     run_context.context.global_iteration_responses.append(
         IterationAnswer(
@@ -126,7 +162,8 @@ def _web_search_core(
             queries=queries,
         )
     )
-    return WebSearchResponse(results=results)
+    run_context.context.should_cite_documents = True
+    return results
 
 
 @function_tool
@@ -140,7 +177,8 @@ def web_search(
     if search_provider is None:
         raise ValueError("No search provider found")
     response = _web_search_core(run_context, queries, search_provider)
-    return response.model_dump_json()
+    adapter = TypeAdapter(list[LlmWebSearchResult])
+    return adapter.dump_json(response).decode()
 
 
 # TODO: Make a ToolV2 class to encapsulate all of this
@@ -158,8 +196,8 @@ changing or evolving.
 def _open_url_core(
     run_context: RunContextWrapper[ChatTurnContext],
     urls: Sequence[str],
-    search_provider: WebSearchProvider,
-) -> list[LlmDoc]:
+    content_provider: WebContentProvider,
+) -> list[LlmOpenUrlResult]:
     # TODO: Find better way to track index that isn't so implicit
     # based on number of tool calls
     index = run_context.context.current_run_step
@@ -174,8 +212,25 @@ def _open_url_core(
         )
     )
 
-    docs = search_provider.contents(urls)
-    llm_docs = [llm_doc_from_web_content(d) for d in docs]
+    docs = content_provider.contents(urls)
+    results = [
+        LlmOpenUrlResult(
+            document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            content=truncate_search_result_content(doc.full_content),
+            unique_identifier_to_strip_away=doc.link,
+        )
+        for doc in docs
+    ]
+    for doc in docs:
+        cache = run_context.context.fetched_documents_cache
+        entry = cache.setdefault(
+            doc.link,
+            FetchedDocumentCacheEntry(
+                inference_section=dummy_inference_section_from_internet_content(doc),
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+            ),
+        )
+        entry.inference_section = dummy_inference_section_from_internet_content(doc)
     run_context.context.iteration_instructions.append(
         IterationInstructions(
             iteration_nr=index,
@@ -183,9 +238,6 @@ def _open_url_core(
             purpose="Fetching content from URLs",
             reasoning=f"I am now using Web Fetch to gather information on {', '.join(urls)}",
         )
-    )
-    run_context.context.unordered_fetched_inference_sections.extend(
-        [dummy_inference_section_from_internet_content(d) for d in docs]
     )
     run_context.context.global_iteration_responses.append(
         IterationAnswer(
@@ -211,7 +263,7 @@ def _open_url_core(
     # Set flag to include citation requirements since we fetched documents
     run_context.context.should_cite_documents = True
 
-    return llm_docs
+    return results
 
 
 @function_tool
@@ -221,11 +273,12 @@ def open_url(
     """
     Tool for fetching and extracting full content from web pages.
     """
-    search_provider = get_default_provider()
-    if search_provider is None:
-        raise ValueError("No search provider found")
-    retrieved_docs = _open_url_core(run_context, urls, search_provider)
-    return json.dumps([doc.model_dump(mode="json") for doc in retrieved_docs])
+    content_provider = get_default_content_provider()
+    if content_provider is None:
+        raise ValueError("No web content provider found")
+    retrieved_docs = _open_url_core(run_context, urls, content_provider)
+    adapter = TypeAdapter(list[LlmOpenUrlResult])
+    return adapter.dump_json(retrieved_docs).decode()
 
 
 # TODO: Make a ToolV2 class to encapsulate all of this

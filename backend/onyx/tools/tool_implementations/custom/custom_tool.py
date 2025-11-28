@@ -152,7 +152,7 @@ class CustomTool(BaseTool):
         force_run: bool = False,
     ) -> dict[str, Any] | None:
         if not force_run:
-            should_use_result = llm.invoke(
+            should_use_result = llm.invoke_langchain(
                 [
                     SystemMessage(content=SHOULD_USE_CUSTOM_TOOL_SYSTEM_PROMPT),
                     HumanMessage(
@@ -168,7 +168,7 @@ class CustomTool(BaseTool):
             if cast(str, should_use_result.content).strip() != USE_TOOL:
                 return None
 
-        args_result = llm.invoke(
+        args_result = llm.invoke_langchain(
             [
                 SystemMessage(content=TOOL_ARG_SYSTEM_PROMPT),
                 HumanMessage(

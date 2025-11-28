@@ -86,6 +86,19 @@ class ImageGenerationToolHeartbeat(BaseObj):
     type: Literal["image_generation_tool_heartbeat"] = "image_generation_tool_heartbeat"
 
 
+class PythonToolStart(BaseObj):
+    type: Literal["python_tool_start"] = "python_tool_start"
+    code: str
+
+
+class PythonToolDelta(BaseObj):
+    type: Literal["python_tool_delta"] = "python_tool_delta"
+
+    stdout: str = ""
+    stderr: str = ""
+    file_ids: list[str] = []
+
+
 class CustomToolStart(BaseObj):
     type: Literal["custom_tool_start"] = "custom_tool_start"
 
@@ -188,6 +201,8 @@ PacketObj = Annotated[
         ImageGenerationToolStart,
         ImageGenerationToolDelta,
         ImageGenerationToolHeartbeat,
+        PythonToolStart,
+        PythonToolDelta,
         CustomToolStart,
         CustomToolDelta,
         ReasoningStart,
@@ -218,6 +233,8 @@ class StreamingType(Enum):
     INTERNAL_SEARCH_TOOL_DELTA = "internal_search_tool_delta"
     IMAGE_GENERATION_TOOL_START = "image_generation_tool_start"
     IMAGE_GENERATION_TOOL_DELTA = "image_generation_tool_delta"
+    PYTHON_TOOL_START = "python_tool_start"
+    PYTHON_TOOL_DELTA = "python_tool_delta"
     REASONING_START = "reasoning_start"
     REASONING_DELTA = "reasoning_delta"
     CITATION_START = "citation_start"

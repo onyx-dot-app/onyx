@@ -370,14 +370,19 @@ def test_validate_connector_settings_success(
 ) -> None:
     """Test successful validation"""
     low_client = confluence_connector.low_timeout_confluence_client
-    with patch.object(
-        low_client, "retrieve_confluence_spaces", return_value=iter([{"key": "TEST"}])
-    ) as mock_retrieve, patch.object(
-        low_client,
-        "get_space",
-        return_value={"key": "TEST"},
-        create=True,
-    ) as mock_get_space:
+    with (
+        patch.object(
+            low_client,
+            "retrieve_confluence_spaces",
+            return_value=iter([{"key": "TEST"}]),
+        ) as mock_retrieve,
+        patch.object(
+            low_client,
+            "get_space",
+            return_value={"key": "TEST"},
+            create=True,
+        ) as mock_get_space,
+    ):
         confluence_connector.validate_connector_settings()
         mock_retrieve.assert_called_once()
         mock_get_space.assert_called_once_with(confluence_connector.space)

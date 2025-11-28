@@ -141,9 +141,7 @@ test.describe("Message Edit and Regenerate Tests", () => {
 
   test("Message regeneration with model selection", async ({ page }) => {
     // make sure we're using something other than GPT 4o Mini, otherwise the below
-    // will fail since
-    // `const gpt4oMiniOption = page.locator("text=/.*GPT.?4o.?Mini.*/i").first();`
-    // will find the currently selected model
+    // will fail since we need to switch to a different model for the test
     await switchModel(page, "GPT 4o");
 
     // Send initial message

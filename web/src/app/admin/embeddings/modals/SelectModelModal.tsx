@@ -1,4 +1,3 @@
-import React from "react";
 import { Modal } from "@/components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/components/ui/text";

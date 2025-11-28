@@ -4,6 +4,7 @@ import { ChatSession } from "../interfaces";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 export function useAssistantController({
   selectedChatSession,
@@ -15,6 +16,7 @@ export function useAssistantController({
   const searchParams = useSearchParams();
   const { agents: availableAssistants, pinnedAgents: pinnedAssistants } =
     useAgentsContext();
+  const combinedSettings = useSettingsContext();
 
   const defaultAssistantIdRaw = searchParams?.get(
     SEARCH_PARAM_NAMES.PERSONA_ID
@@ -44,12 +46,26 @@ export function useAssistantController({
   // Current assistant is decided based on this ordering
   // 1. Alternative assistant (assistant selected explicitly by user)
   // 2. Selected assistant (assistant default in this chat session)
-  // 3. Unified assistant (ID 0) if available
+  // 3. Unified assistant (ID 0) if available (unless disabled)
   // 4. First pinned assistants (ordered list of pinned assistants)
   // 5. Available assistants (ordered list of available assistants)
   // Relevant test: `live_assistant.spec.ts`
   const liveAssistant: MinimalPersonaSnapshot | undefined = useMemo(() => {
     if (selectedAssistant) return selectedAssistant;
+
+    const disableDefaultAssistant =
+      combinedSettings?.settings?.disable_default_assistant ?? false;
+
+    if (disableDefaultAssistant) {
+      // Skip unified assistant (ID 0), go straight to pinned/available
+      // Filter out ID 0 from both pinned and available assistants
+      const nonDefaultPinned = pinnedAssistants.filter((a) => a.id !== 0);
+      const nonDefaultAvailable = availableAssistants.filter((a) => a.id !== 0);
+
+      return (
+        nonDefaultPinned[0] || nonDefaultAvailable[0] || availableAssistants[0] // Last resort fallback
+      );
+    }
 
     // Try to use the unified assistant (ID 0) as default
     const unifiedAssistant = availableAssistants.find((a) => a.id === 0);
@@ -57,7 +73,12 @@ export function useAssistantController({
 
     // Fall back to pinned or available assistants
     return pinnedAssistants[0] || availableAssistants[0];
-  }, [selectedAssistant, pinnedAssistants, availableAssistants]);
+  }, [
+    selectedAssistant,
+    pinnedAssistants,
+    availableAssistants,
+    combinedSettings,
+  ]);
 
   const setSelectedAssistantFromId = useCallback(
     (assistantId: number | null | undefined) => {

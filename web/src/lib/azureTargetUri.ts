@@ -1,0 +1,55 @@
+const getApiVersionParam = (url: URL): string => {
+  const directApiVersion = url.searchParams.get("api-version");
+  if (directApiVersion?.trim()) {
+    return directApiVersion.trim();
+  }
+
+  let normalized: string | null = null;
+  url.searchParams.forEach((value, key) => {
+    if (normalized) {
+      return;
+    }
+    if (key.toLowerCase() === "api-version" && value?.trim()) {
+      normalized = value.trim();
+    }
+  });
+
+  return normalized ?? "";
+};
+
+const getDeploymentNameParam = (url: URL): string => {
+  const match = url.pathname.match(/\/openai\/deployments\/([^/]+)/i);
+  const deployment = match?.[1] ?? "";
+  return deployment ? deployment.toLowerCase() : "";
+};
+
+const isResponsesPath = (url: URL): boolean =>
+  /\/openai\/responses/i.test(url.pathname);
+
+export const parseAzureTargetUri = (
+  rawUri: string
+): {
+  url: URL;
+  apiVersion: string;
+  deploymentName: string;
+  isResponsesPath: boolean;
+} => {
+  const url = new URL(rawUri);
+  return {
+    url,
+    apiVersion: getApiVersionParam(url),
+    deploymentName: getDeploymentNameParam(url),
+    isResponsesPath: isResponsesPath(url),
+  };
+};
+
+export const isValidAzureTargetUri = (rawUri: string): boolean => {
+  try {
+    const { apiVersion, deploymentName, isResponsesPath } =
+      parseAzureTargetUri(rawUri);
+
+    return Boolean(apiVersion) && (Boolean(deploymentName) || isResponsesPath);
+  } catch {
+    return false;
+  }
+};

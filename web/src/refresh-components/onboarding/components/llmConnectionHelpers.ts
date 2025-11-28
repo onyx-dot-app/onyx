@@ -3,6 +3,7 @@ import {
   WellKnownLLMProviderDescriptor,
 } from "@/app/admin/configuration/llm/interfaces";
 import { dynamicProviderConfigs } from "@/app/admin/configuration/llm/utils";
+import { parseAzureTargetUri } from "@/lib/azureTargetUri";
 
 export const buildInitialValues = (
   llmDescriptor?: WellKnownLLMProviderDescriptor,
@@ -83,7 +84,6 @@ export type TestApiKeyResult =
   | { ok: true }
   | { ok: false; errorMessage: string };
 
-// Reusable helper to POST to the LLM test endpoint
 const submitLlmTestRequest = async (
   payload: any,
   fallbackErrorMessage: string
@@ -122,11 +122,16 @@ export const testApiKeyHelper = async (
   let finalDeploymentName = formValues?.deployment_name;
 
   if (llmDescriptor.name === "azure" && formValues?.target_uri) {
-    const url = new URL(formValues.target_uri);
-    finalApiBase = url.origin;
-    finalApiVersion = url.searchParams.get("api-version") || "";
-    const pathMatch = url.pathname.match(/\/openai\/deployments\/([^\/]+)/);
-    finalDeploymentName = pathMatch?.[1] || "";
+    try {
+      const { url, apiVersion, deploymentName } = parseAzureTargetUri(
+        formValues.target_uri
+      );
+      finalApiBase = url.origin;
+      finalApiVersion = apiVersion;
+      finalDeploymentName = deploymentName || "";
+    } catch {
+      // leave defaults so validation can surface errors upstream
+    }
   }
 
   const payload = {

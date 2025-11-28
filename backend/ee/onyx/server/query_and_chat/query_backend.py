@@ -46,7 +46,6 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 basic_router = APIRouter(prefix="/query")
 
@@ -268,6 +267,7 @@ def stream_answer_with_citation(
     user: User | None = Depends(current_user),
 ) -> StreamingResponse:
     # Catch HTTPException before creating StreamingResponse to preserve status code
+    # (for errors that occur before generator creation)
     try:
         answer_stream = get_answer_stream(request, user, db_session)
     except HTTPException:
@@ -278,6 +278,10 @@ def stream_answer_with_citation(
             for packet in answer_stream:
                 serialized = get_json_line(packet.model_dump())
                 yield serialized
+        except HTTPException:
+            # Re-raise HTTPException to preserve status code (e.g., 403 for blocked queries)
+            # Errors during generator consumption need to be caught here
+            raise
         except Exception as e:
             logger.exception("Error in answer streaming")
             yield json.dumps({"error": str(e)})

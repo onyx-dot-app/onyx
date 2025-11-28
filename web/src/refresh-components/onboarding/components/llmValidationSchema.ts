@@ -1,4 +1,5 @@
 import * as Yup from "yup";
+import { isValidAzureTargetUri } from "@/lib/azureTargetUri";
 
 export const getValidationSchema = (
   providerName: string | undefined,
@@ -81,27 +82,8 @@ export const getValidationSchema = (
           .required("Target URI is required")
           .test(
             "valid-target-uri",
-            "Target URI must be a valid URL with api-version query parameter and the deployment name in the path",
-            (value) => {
-              if (!value) return false;
-              try {
-                const url = new URL(value);
-                const hasApiVersion = !!url.searchParams
-                  .get("api-version")
-                  ?.trim();
-
-                // Check if the path contains a deployment name in the format:
-                // /openai/deployments/{deployment-name}/...
-                const pathMatch = url.pathname.match(
-                  /\/openai\/deployments\/([^\/]+)/
-                );
-                const hasDeploymentName = pathMatch && pathMatch[1];
-
-                return hasApiVersion && !!hasDeploymentName;
-              } catch {
-                return false;
-              }
-            }
+            "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path (/openai/deployments/{name}/...) or /openai/responses for realtime",
+            (value) => (value ? isValidAzureTargetUri(value) : false)
           ),
       });
 

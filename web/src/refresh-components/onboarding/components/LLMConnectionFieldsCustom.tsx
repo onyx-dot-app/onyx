@@ -3,7 +3,7 @@ import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
@@ -136,7 +136,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
                 placeholder="https://"
                 showClearButton={false}
                 disabled={disabled}
-                isError={
+                error={
                   typeof field.value === "string" &&
                   field.value.trim() !== "" &&
                   apiStatus === "error"
@@ -182,7 +182,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
                 placeholder=""
                 showClearButton={false}
                 disabled={disabled}
-                isError={apiStatus === "error"}
+                error={apiStatus === "error"}
               />
             </FormField.Control>
             {showApiMessage && (

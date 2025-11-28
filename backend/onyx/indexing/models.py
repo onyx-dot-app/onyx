@@ -10,6 +10,7 @@ from pydantic import Field
 from onyx.access.models import DocumentAccess
 from onyx.connectors.models import Document
 from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import SwitchoverType
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.model_server_models import Embedding
@@ -173,7 +174,7 @@ class IndexingSetting(EmbeddingModelDetail):
     embedding_precision: EmbeddingPrecision
     reduced_dimension: int | None = None
 
-    background_reindex_enabled: bool = True
+    switchover_type: SwitchoverType = SwitchoverType.REINDEX
     enable_contextual_rag: bool
     contextual_rag_llm_name: str | None = None
     contextual_rag_llm_provider: str | None = None
@@ -200,7 +201,7 @@ class IndexingSetting(EmbeddingModelDetail):
             multipass_indexing=search_settings.multipass_indexing,
             embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
-            background_reindex_enabled=search_settings.background_reindex_enabled,
+            switchover_type=search_settings.switchover_type,
             enable_contextual_rag=search_settings.enable_contextual_rag,
         )
 

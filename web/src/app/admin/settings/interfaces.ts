@@ -36,6 +36,9 @@ export interface Settings {
 
   // Connector settings
   show_extra_connectors?: boolean;
+
+  // Default Assistant settings
+  disable_default_assistant?: boolean;
 }
 
 export enum NotificationType {

@@ -19,6 +19,7 @@ from onyx.db.tools import get_tools
 from onyx.db.tools import update_tool
 from onyx.server.features.tool.models import CustomToolCreate
 from onyx.server.features.tool.models import CustomToolUpdate
+from onyx.server.features.tool.models import should_expose_tool_to_fe
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
@@ -186,6 +187,9 @@ def list_tools(
 
     filtered_tools: list[ToolSnapshot] = []
     for tool in tools:
+        if not should_expose_tool_to_fe(tool):
+            continue
+
         # Check if it's a built-in tool and if it's available
         if tool.in_code_tool_id:
             try:

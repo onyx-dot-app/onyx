@@ -2,7 +2,7 @@ import json
 
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import AZURE_DALLE_API_KEY
+from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.db.connector import check_connectors_exist
 from onyx.db.document import check_docs_exist
 from onyx.db.models import LLMProvider
@@ -40,7 +40,7 @@ def is_image_generation_available(db_session: Session) -> bool:
         if provider.provider == "openai":
             return True
 
-    return bool(AZURE_DALLE_API_KEY)
+    return bool(AZURE_IMAGE_API_KEY)
 
 
 def is_document_search_available(db_session: Session) -> bool:

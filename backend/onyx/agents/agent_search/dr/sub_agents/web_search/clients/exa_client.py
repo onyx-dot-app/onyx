@@ -12,13 +12,12 @@ from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
 from onyx.agents.agent_search.dr.sub_agents.web_search.models import (
     WebSearchResult,
 )
-from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.utils.retry_wrapper import retry_builder
 
 
 class ExaClient(WebSearchProvider):
-    def __init__(self, api_key: str | None = EXA_API_KEY) -> None:
+    def __init__(self, api_key: str) -> None:
         self.exa = Exa(api_key=api_key)
 
     @retry_builder(tries=3, delay=1, backoff=2)

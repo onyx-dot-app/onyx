@@ -7,26 +7,22 @@ import {
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
 import { useState } from "react";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
-const UserRoleDropdown = ({
-  user,
-  onSuccess,
-  onError,
-}: {
+export interface UserRoleDropdownProps {
   user: User;
   onSuccess: () => void;
   onError: (message: string) => void;
-}) => {
+}
+
+export default function UserRoleDropdown({
+  user,
+  onSuccess,
+  onError,
+}: UserRoleDropdownProps) {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingRole, setPendingRole] = useState<string | null>(null);
 
@@ -63,15 +59,30 @@ const UserRoleDropdown = ({
 
   return (
     <>
-      <Select
+      {showConfirmModal && (
+        <GenericConfirmModal
+          title="Change Curator Role"
+          message={`Warning: Switching roles from Curator to ${
+            USER_ROLE_LABELS[pendingRole as UserRole] ??
+            USER_ROLE_LABELS[user.role]
+          } will remove their status as individual curators from all groups.`}
+          confirmText={`Switch Role to ${
+            USER_ROLE_LABELS[pendingRole as UserRole] ??
+            USER_ROLE_LABELS[user.role]
+          }`}
+          onClose={() => setShowConfirmModal(false)}
+          onConfirm={handleConfirm}
+        />
+      )}
+
+      <InputSelect
         value={user.role}
         onValueChange={handleChange}
         disabled={isSettingRole}
       >
-        <SelectTrigger data-testid={`user-role-dropdown-trigger-${user.email}`}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
+        <InputSelect.Trigger />
+
+        <InputSelect.Content>
           {(Object.entries(USER_ROLE_LABELS) as [UserRole, string][]).map(
             ([role, label]) => {
               // Don't want to ever show external permissioned users because it's scary
@@ -90,40 +101,20 @@ const UserRoleDropdown = ({
               const isCurrentRole = user.role === role;
 
               return isNotVisibleRole && !isCurrentRole ? null : (
-                <SelectItem
+                <InputSelect.Item
                   key={role}
-                  onClick={() => {
-                    console.log("clicked");
-                  }}
                   value={role}
                   data-testid={`user-role-dropdown-${role}`}
                   title={INVALID_ROLE_HOVER_TEXT[role] ?? ""}
                   data-tooltip-delay="0"
                 >
                   {label}
-                </SelectItem>
+                </InputSelect.Item>
               );
             }
           )}
-        </SelectContent>
-      </Select>
-      {showConfirmModal && (
-        <GenericConfirmModal
-          title="Change Curator Role"
-          message={`Warning: Switching roles from Curator to ${
-            USER_ROLE_LABELS[pendingRole as UserRole] ??
-            USER_ROLE_LABELS[user.role]
-          } will remove their status as individual curators from all groups.`}
-          confirmText={`Switch Role to ${
-            USER_ROLE_LABELS[pendingRole as UserRole] ??
-            USER_ROLE_LABELS[user.role]
-          }`}
-          onClose={() => setShowConfirmModal(false)}
-          onConfirm={handleConfirm}
-        />
-      )}
+        </InputSelect.Content>
+      </InputSelect>
     </>
   );
-};
-
-export default UserRoleDropdown;
+}

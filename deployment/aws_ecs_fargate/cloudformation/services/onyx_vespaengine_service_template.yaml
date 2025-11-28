@@ -131,7 +131,7 @@ Resources:
         OperatingSystemFamily: LINUX
       ContainerDefinitions:
         - Name: vespaengine
-          Image: vespaengine/vespa:8.526.15
+          Image: vespaengine/vespa:8.609.39
           Cpu: 0
           Essential: true
           PortMappings:

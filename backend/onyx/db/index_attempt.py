@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.models import ConnectorCredentialPair
@@ -795,6 +796,29 @@ def count_unique_cc_pairs_with_successful_index_attempts(
         .filter(
             IndexAttempt.search_settings_id == search_settings_id,
             IndexAttempt.status == IndexingStatus.SUCCESS,
+        )
+        .distinct()
+        .count()
+    )
+
+    return unique_pairs_count
+
+
+def count_unique_active_cc_pairs_with_successful_index_attempts(
+    search_settings_id: int | None,
+    db_session: Session,
+) -> int:
+    """Collect all of the Index Attempts that are successful and for the specified embedding model,
+    but only for non-paused connector-credential pairs. Then do distinct by connector_id and credential_id
+    which is equivalent to the cc-pair. Finally, do a count to get the total number of unique non-paused
+    cc-pairs with successful attempts."""
+    unique_pairs_count = (
+        db_session.query(IndexAttempt.connector_credential_pair_id)
+        .join(ConnectorCredentialPair)
+        .filter(
+            IndexAttempt.search_settings_id == search_settings_id,
+            IndexAttempt.status == IndexingStatus.SUCCESS,
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.PAUSED,
         )
         .distinct()
         .count()

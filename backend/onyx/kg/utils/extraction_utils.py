@@ -420,7 +420,7 @@ def kg_classify_document(
     primary_llm, _ = get_default_llms()
     msg = [HumanMessage(content=prompt)]
     try:
-        raw_classification_result = primary_llm.invoke(msg)
+        raw_classification_result = primary_llm.invoke_langchain(msg)
         classification_result = (
             message_to_string(raw_classification_result)
             .replace("```json", "")
@@ -488,7 +488,7 @@ def kg_deep_extract_chunks(
     _, fast_llm = get_default_llms()
     msg = [HumanMessage(content=prompt)]
     try:
-        raw_extraction_result = fast_llm.invoke(msg)
+        raw_extraction_result = fast_llm.invoke_langchain(msg)
         cleaned_response = (
             message_to_string(raw_extraction_result)
             .replace("{{", "{")

@@ -154,6 +154,14 @@ def upload_files_to_user_files_with_indexing(
 def check_project_ownership(
     project_id: int, user_id: UUID | None, db_session: Session
 ) -> bool:
+    # In no-auth mode, all projects are accessible
+    if user_id is None:
+        # Verify project exists
+        return (
+            db_session.query(UserProject).filter(UserProject.id == project_id).first()
+            is not None
+        )
+
     return (
         db_session.query(UserProject)
         .filter(UserProject.id == project_id, UserProject.user_id == user_id)

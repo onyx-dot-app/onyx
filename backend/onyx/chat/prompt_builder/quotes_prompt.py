@@ -31,10 +31,10 @@ def _build_strong_llm_quotes_prompt(
         history_block = HISTORY_BLOCK.format(history_str=history_str)
 
     full_prompt = JSON_PROMPT.format(
-        system_prompt=prompt.system_prompt,
+        system_prompt=prompt.default_behavior_system_prompt,
         context_block=context_block,
         history_block=history_block,
-        task_prompt=prompt.task_prompt,
+        task_prompt=prompt.reminder,
         user_query=question,
         language_hint_or_none=LANGUAGE_HINT.strip() if use_language_hint else "",
     ).strip()

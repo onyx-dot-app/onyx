@@ -76,6 +76,34 @@ class UserGroupManager:
         response.raise_for_status()
 
     @staticmethod
+    def add_users(
+        user_group: DATestUserGroup,
+        user_ids: list[str],
+        user_performing_action: DATestUser | None = None,
+    ) -> DATestUserGroup:
+        request = {
+            "user_ids": user_ids,
+        }
+
+        response = requests.post(
+            f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/add-users",
+            json=request,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+        response.raise_for_status()
+
+        user_group.user_ids = [user["id"] for user in response.json()["users"]]
+        user_group.cc_pair_ids = [
+            cc_pair["id"] for cc_pair in response.json()["cc_pairs"]
+        ]
+        user_group.name = response.json()["name"]
+        return user_group
+
+    @staticmethod
     def set_curator_status(
         test_user_group: DATestUserGroup,
         user_to_set_as_curator: DATestUser,

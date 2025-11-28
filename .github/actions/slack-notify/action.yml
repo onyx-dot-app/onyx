@@ -1,0 +1,102 @@
+name: "Slack Notify on Failure"
+description: "Sends a Slack notification when a workflow fails"
+inputs:
+  webhook-url:
+    description: "Slack webhook URL (can also use SLACK_WEBHOOK_URL env var)"
+    required: false
+  failed-jobs:
+    description: "List of failed job names (newline-separated)"
+    required: false
+  title:
+    description: "Title for the notification"
+    required: false
+    default: "🚨 Workflow Failed"
+  ref-name:
+    description: "Git ref name (tag/branch)"
+    required: false
+runs:
+  using: "composite"
+  steps:
+    - name: Send Slack notification
+      shell: bash
+      env:
+        SLACK_WEBHOOK_URL: ${{ inputs.webhook-url }}
+        FAILED_JOBS: ${{ inputs.failed-jobs }}
+        TITLE: ${{ inputs.title }}
+        REF_NAME: ${{ inputs.ref-name }}
+        REPO: ${{ github.repository }}
+        WORKFLOW: ${{ github.workflow }}
+        RUN_NUMBER: ${{ github.run_number }}
+        RUN_ID: ${{ github.run_id }}
+        SERVER_URL: ${{ github.server_url }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+      run: |
+        if [ -z "$SLACK_WEBHOOK_URL" ]; then
+          echo "webhook-url input or SLACK_WEBHOOK_URL env var is not set, skipping notification"
+          exit 0
+        fi
+
+        # Build workflow URL
+        WORKFLOW_URL="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
+
+        # Use ref_name from input or fall back to github.ref_name
+        if [ -z "$REF_NAME" ]; then
+          REF_NAME="$GITHUB_REF_NAME"
+        fi
+
+        # Escape JSON special characters
+        escape_json() {
+          local input="$1"
+          # Escape backslashes first (but preserve \n sequences)
+          # Protect \n sequences temporarily
+          input=$(printf '%s' "$input" | sed 's/\\n/\x01NL\x01/g')
+          # Escape remaining backslashes
+          input=$(printf '%s' "$input" | sed 's/\\/\\\\/g')
+          # Restore \n sequences (single backslash, will be correct in JSON)
+          input=$(printf '%s' "$input" | sed 's/\x01NL\x01/\\n/g')
+          # Escape quotes
+          printf '%s' "$input" | sed 's/"/\\"/g'
+        }
+
+        REF_NAME_ESC=$(escape_json "$REF_NAME")
+        FAILED_JOBS_ESC=$(escape_json "$FAILED_JOBS")
+        WORKFLOW_URL_ESC=$(escape_json "$WORKFLOW_URL")
+        TITLE_ESC=$(escape_json "$TITLE")
+
+        # Build JSON payload piece by piece
+        # Note: FAILED_JOBS_ESC already contains \n sequences that should remain as \n in JSON
+        PAYLOAD="{"
+        PAYLOAD="${PAYLOAD}\"text\":\"${TITLE_ESC}\","
+        PAYLOAD="${PAYLOAD}\"blocks\":[{"
+        PAYLOAD="${PAYLOAD}\"type\":\"header\","
+        PAYLOAD="${PAYLOAD}\"text\":{\"type\":\"plain_text\",\"text\":\"${TITLE_ESC}\"}"
+        PAYLOAD="${PAYLOAD}},{"
+        PAYLOAD="${PAYLOAD}\"type\":\"section\","
+        PAYLOAD="${PAYLOAD}\"fields\":["
+        if [ -n "$REF_NAME" ]; then
+          PAYLOAD="${PAYLOAD}{\"type\":\"mrkdwn\",\"text\":\"*Ref:*\\n${REF_NAME_ESC}\"},"
+        fi
+        PAYLOAD="${PAYLOAD}{\"type\":\"mrkdwn\",\"text\":\"*Run ID:*\\n#${RUN_NUMBER}\"}"
+        PAYLOAD="${PAYLOAD}]"
+        PAYLOAD="${PAYLOAD}}"
+        if [ -n "$FAILED_JOBS" ]; then
+          PAYLOAD="${PAYLOAD},{"
+          PAYLOAD="${PAYLOAD}\"type\":\"section\","
+          PAYLOAD="${PAYLOAD}\"text\":{\"type\":\"mrkdwn\",\"text\":\"*Failed Jobs:*\\n${FAILED_JOBS_ESC}\"}"
+          PAYLOAD="${PAYLOAD}}"
+        fi
+        PAYLOAD="${PAYLOAD},{"
+        PAYLOAD="${PAYLOAD}\"type\":\"actions\","
+        PAYLOAD="${PAYLOAD}\"elements\":[{"
+        PAYLOAD="${PAYLOAD}\"type\":\"button\","
+        PAYLOAD="${PAYLOAD}\"text\":{\"type\":\"plain_text\",\"text\":\"View Workflow Run\"},"
+        PAYLOAD="${PAYLOAD}\"url\":\"${WORKFLOW_URL_ESC}\""
+        PAYLOAD="${PAYLOAD}}]"
+        PAYLOAD="${PAYLOAD}}"
+        PAYLOAD="${PAYLOAD}]"
+        PAYLOAD="${PAYLOAD}}"
+
+        curl -X POST -H 'Content-type: application/json' \
+          --data "$PAYLOAD" \
+          "$SLACK_WEBHOOK_URL"
+

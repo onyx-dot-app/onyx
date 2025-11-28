@@ -7,6 +7,7 @@ from uuid import UUID
 import requests
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import FileOrigin
 from onyx.db.models import ChatMessage
 from onyx.db.models import UserFile
@@ -211,7 +212,7 @@ def get_user_files(
     return user_files
 
 
-def get_user_files_as_user(
+def validate_user_files_ownership(
     user_file_ids: list[UUID],
     user_id: UUID | None,
     db_session: Session,
@@ -302,3 +303,7 @@ def save_files(urls: list[str], base64_files: list[str]) -> list[str]:
 
 def build_frontend_file_url(file_id: str) -> str:
     return f"/api/chat/file/{file_id}"
+
+
+def build_full_frontend_file_url(file_id: str) -> str:
+    return f"{WEB_DOMAIN}/api/chat/file/{file_id}"

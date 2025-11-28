@@ -805,18 +805,22 @@ def test_load_from_checkpoint_cursor_pagination_completion(
     type(mock_empty_issues_list)._PaginatedList__nextUrl = None
     mock_repo1.get_issues.return_value = mock_empty_issues_list
     mock_repo2.get_issues.return_value = mock_empty_issues_list
-    with patch.object(
-        github_connector, "get_all_repos", return_value=[mock_repo1, mock_repo2]
-    ), patch.object(
-        github_connector,
-        "_pull_requests_func",
-        side_effect=replacement_pull_requests_func,
-    ), patch.object(
-        SerializedRepository,
-        "to_Repository",
-        side_effect=to_repository_side_effect,
-        autospec=True,
-    ) as mock_to_repository:
+    with (
+        patch.object(
+            github_connector, "get_all_repos", return_value=[mock_repo1, mock_repo2]
+        ),
+        patch.object(
+            github_connector,
+            "_pull_requests_func",
+            side_effect=replacement_pull_requests_func,
+        ),
+        patch.object(
+            SerializedRepository,
+            "to_Repository",
+            side_effect=to_repository_side_effect,
+            autospec=True,
+        ) as mock_to_repository,
+    ):
         end_time = time.time()
         outputs = list(
             load_everything_from_checkpoint_connector_from_checkpoint(

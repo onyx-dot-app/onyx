@@ -1,12 +1,7 @@
 "use client";
 
 import { ArrayHelpers } from "formik";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useMemo } from "react";
 import { StarterMessage } from "./interfaces";
 import Button from "@/refresh-components/buttons/Button";
@@ -81,45 +76,36 @@ export default function StarterMessagesList({
         </div>
       ))}
 
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              onClick={() => {
-                const shouldSubmit =
-                  values.filter((msg) => msg.message.trim() !== "").length <
-                    4 &&
-                  !isRefreshing &&
-                  autoStarterMessageEnabled;
-                if (shouldSubmit) {
-                  debouncedRefreshPrompts();
-                }
-              }}
-              disabled={isRefreshing || maxMessagesReached}
-              leftIcon={({ className }) => (
-                <SvgRefreshCw
-                  className={cn(className, isRefreshing && "animate-spin")}
-                />
-              )}
-            >
-              Generate
-            </Button>
-          </TooltipTrigger>
-          {!autoStarterMessageEnabled && (
-            <TooltipContent side="top" align="center">
-              <Text inverted>
-                No LLM providers configured. Generation is not available.
-              </Text>
-            </TooltipContent>
+      <SimpleTooltip
+        tooltip={
+          !autoStarterMessageEnabled
+            ? "No LLM providers configured. Generation is not available."
+            : maxMessagesReached
+              ? "Max four starter messages"
+              : undefined
+        }
+        side="top"
+      >
+        <Button
+          onClick={() => {
+            const shouldSubmit =
+              values.filter((msg) => msg.message.trim() !== "").length < 4 &&
+              !isRefreshing &&
+              autoStarterMessageEnabled;
+            if (shouldSubmit) {
+              debouncedRefreshPrompts();
+            }
+          }}
+          disabled={isRefreshing || maxMessagesReached}
+          leftIcon={({ className }) => (
+            <SvgRefreshCw
+              className={cn(className, isRefreshing && "animate-spin")}
+            />
           )}
-          {maxMessagesReached && (
-            <TooltipContent side="top" align="center">
-              <Text inverted>Max four starter messages</Text>
-            </TooltipContent>
-          )}
-        </Tooltip>
-      </TooltipProvider>
+        >
+          Generate
+        </Button>
+      </SimpleTooltip>
     </div>
   );
 }

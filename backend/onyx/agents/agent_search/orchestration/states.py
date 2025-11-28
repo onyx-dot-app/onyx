@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from pydantic import ConfigDict
 
 from onyx.chat.prompt_builder.schemas import PromptSnapshot
 from onyx.tools.message import ToolCallSummary
@@ -38,8 +39,7 @@ class ToolChoice(BaseModel):
     id: str | None
     search_tool_override_kwargs: SearchToolOverrideKwargs = SearchToolOverrideKwargs()
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class ToolChoiceUpdate(BaseModel):
