@@ -11,9 +11,6 @@ from sqlalchemy.orm import Session
 from ee.onyx.onyxbot.slack.handlers.handle_standard_answers import (
     oneoff_standard_answers,
 )
-from ee.onyx.server.query_and_chat.models import DocumentSearchRequest
-from ee.onyx.server.query_and_chat.models import OneShotQARequest
-from ee.onyx.server.query_and_chat.models import OneShotQAResponse
 from ee.onyx.server.query_and_chat.models import StandardAnswerRequest
 from ee.onyx.server.query_and_chat.models import StandardAnswerResponse
 from onyx.auth.users import current_user
@@ -39,6 +36,9 @@ from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.server.query_and_chat.models import DocumentSearchRequest
+from onyx.server.query_and_chat.models import OneShotQARequest
+from onyx.server.query_and_chat.models import OneShotQAResponse
 from onyx.server.query_and_chat.question_qualification import (
     QuestionQualificationService,
 )
@@ -183,7 +183,7 @@ def get_answer_stream(
             is_for_edit=False,
         )
 
-    llm = get_main_llm_from_tuple(get_llms_for_persona(persona_info))
+    llm = get_main_llm_from_tuple(get_llms_for_persona(persona_info, user))
 
     llm_tokenizer = get_tokenizer(
         model_name=llm.config.model_name,
