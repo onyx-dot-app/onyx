@@ -21,7 +21,9 @@ class QuestionQualificationResponse(BaseModel):
 
     blocked: bool = Field(description="Whether the question should be blocked")
     confidence: float = Field(
-        description="Confidence score between 0.0 and 1.0, where 1.0 means 'should block'", ge=0.0, le=1.0
+        description="Confidence score between 0.0 and 1.0, where 1.0 means 'should block'",
+        ge=0.0,
+        le=1.0,
     )
     matched_index: int = Field(
         description="Index of matched blocked question, -1 if no match", ge=-1
@@ -197,7 +199,7 @@ class QuestionQualificationService:
             )
 
             # Get response using LangChain Pydantic output parser
-            response = fast_llm.invoke(
+            response = fast_llm.invoke_langchain(
                 prompt,
                 max_tokens=200,  # Increased for structured JSON output with schema
             )
