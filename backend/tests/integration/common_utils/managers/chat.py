@@ -15,6 +15,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.streaming_models import StreamingType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestChatMessage
@@ -185,14 +186,14 @@ class ChatSessionManager:
                 and (packet_type := data_obj.get("type"))
                 and (ind := data.get("ind")) is not None
             ):
-                if packet_type == "message_start":
+                if packet_type == StreamingType.MESSAGE_START.value:
                     final_docs = data_obj.get("final_documents")
                     if isinstance(final_docs, list):
                         top_documents = [SavedSearchDoc(**doc) for doc in final_docs]
                     full_message += data_obj.get("content", "")
-                elif packet_type == "message_delta":
+                elif packet_type == StreamingType.MESSAGE_DELTA.value:
                     full_message += data_obj["content"]
-                elif packet_type == "search_tool_start":
+                elif packet_type == StreamingType.SEARCH_TOOL_START.value:
                     tool_name = (
                         ToolName.INTERNET_SEARCH
                         if data_obj.get("is_internet_search", False)
@@ -201,14 +202,14 @@ class ChatSessionManager:
                     ind_to_tool_use[ind] = ToolResult(
                         tool_name=tool_name,
                     )
-                elif packet_type == "image_generation_start":
+                elif packet_type == StreamingType.IMAGE_GENERATION_START.value:
                     ind_to_tool_use[ind] = ToolResult(
                         tool_name=ToolName.IMAGE_GENERATION,
                     )
-                elif packet_type == "image_generation_heartbeat":
+                elif packet_type == StreamingType.IMAGE_GENERATION_HEARTBEAT.value:
                     # Track heartbeat packets for debugging/testing
                     heartbeat_packets.append(data)
-                elif packet_type == "image_generation_delta":
+                elif packet_type == StreamingType.IMAGE_GENERATION_DELTA.value:
                     from tests.integration.common_utils.test_models import (
                         GeneratedImage,
                     )
@@ -217,12 +218,11 @@ class ChatSessionManager:
                     ind_to_tool_use[ind].images.extend(
                         [GeneratedImage(**img) for img in images]
                     )
-                elif packet_type == "search_tool_delta":
+                elif packet_type == StreamingType.SEARCH_TOOL_QUERIES_DELTA.value:
                     ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
-
-                    documents = data_obj.get("documents", [])
+                elif packet_type == StreamingType.SEARCH_TOOL_DOCUMENTS_DELTA.value:
                     ind_to_tool_use[ind].documents.extend(
-                        [SavedSearchDoc(**doc) for doc in documents]
+                        [SavedSearchDoc(**doc) for doc in data_obj.get("documents", [])]
                     )
         # If there's an error, assistant_message_id might not be present
         if not assistant_message_id and not error:

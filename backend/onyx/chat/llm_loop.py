@@ -4,8 +4,9 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from onyx.chat.chat_state import ChatStateContainer
+from onyx.chat.chat_state import Emitter
 from onyx.chat.citation_processor import DynamicCitationProcessor
-from onyx.chat.infra import Emitter
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmStepResult
@@ -14,11 +15,9 @@ from onyx.chat.prompt_builder.answer_prompt_builder import build_system_prompt
 from onyx.chat.prompt_builder.answer_prompt_builder import (
     get_default_base_system_prompt,
 )
-from onyx.chat.state import LLMLoopStateContainer
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
-from onyx.db.models import ChatMessage
 from onyx.db.models import Persona
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LanguageModelInput
@@ -463,7 +462,7 @@ def run_llm_step(
     llm: LLM,
     turn_index: int,
     citation_processor: DynamicCitationProcessor,
-    state_container: LLMLoopStateContainer,
+    state_container: ChatStateContainer,
     final_documents: list[SearchDoc] | None = None,
 ) -> tuple[LlmStepResult, int]:
     # The second return value is for the turn index because reasoning counts on the frontend as a turn
@@ -679,6 +678,7 @@ def _update_tool_call_with_delta(
 
 def run_llm_loop(
     emitter: Emitter,
+    state_container: ChatStateContainer,
     simple_chat_history: list[ChatMessageSimple],
     tools: list[Tool],
     custom_agent_prompt: str | None,
@@ -687,9 +687,7 @@ def run_llm_loop(
     memories: list[str] | None,
     llm: LLM,
     tokenizer_func: Callable[[str], list[int]],
-    assistant_response: ChatMessage,
     db_session: Session,
-    state_container: LLMLoopStateContainer,
     force_use_tool_name: str | None = None,
 ) -> None:
     # Fix some LiteLLM issues,

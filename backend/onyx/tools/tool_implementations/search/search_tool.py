@@ -5,7 +5,7 @@ from typing import cast
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
-from onyx.chat.infra import Emitter
+from onyx.chat.chat_state import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkSearchRequest

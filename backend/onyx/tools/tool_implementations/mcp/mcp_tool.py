@@ -1,7 +1,7 @@
 import json
 from typing import Any
 
-from onyx.chat.infra import Emitter
+from onyx.chat.chat_state import Emitter
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer

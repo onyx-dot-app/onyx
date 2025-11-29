@@ -105,8 +105,9 @@ def _get_active_content_provider(
         provider_type = WebContentProviderType(provider_model.provider_type)
 
         config = provider_model.config or {}
-        if config.get("timeout_seconds") is not None:
-            timeout_seconds = int(config.get("timeout_seconds"))
+        timeout_conf = config.get("timeout_seconds")
+        if timeout_conf is not None:
+            timeout_seconds = int(timeout_conf)
         else:
             timeout_seconds = None
         base_url = config.get("base_url")

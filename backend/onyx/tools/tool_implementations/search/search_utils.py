@@ -390,9 +390,13 @@ def expand_section_with_context(
     Returns:
         Expanded InferenceSection with appropriate context, or None if NOT_RELEVANT
     """
+    chunks_above_for_prompt: list[InferenceChunk] = []
+    chunks_below_for_prompt: list[InferenceChunk] = []
+
     # If expand_override is True, skip LLM classification and use FULL_DOCUMENT
     if expand_override:
         classification = ContextExpansionType.FULL_DOCUMENT
+        # These are not used, but need to be defined to avoid type errors
     else:
         # Retrieve 2 chunks above and below for the LLM classification prompt
         chunks_above_for_prompt, chunks_below_for_prompt = _retrieve_adjacent_chunks(
@@ -445,9 +449,7 @@ def expand_section_with_context(
             f"LLM classified section as INCLUDE_ADJACENT_SECTIONS: {section.center_chunk.semantic_identifier}"
         )
 
-        # Combine chunks: 2 above + section + 2 below
         all_chunks = chunks_above_for_prompt + section.chunks + chunks_below_for_prompt
-
         if not all_chunks:
             return section
 

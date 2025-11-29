@@ -469,7 +469,7 @@ def create_temporary_persona(
 
     persona.tools = []
     if persona_config.custom_tools_openapi:
-        from onyx.chat.infra import get_default_emitter
+        from onyx.chat.chat_state import get_default_emitter
 
         for schema in persona_config.custom_tools_openapi:
             tools = cast(

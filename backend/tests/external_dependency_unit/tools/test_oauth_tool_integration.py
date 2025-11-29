@@ -14,9 +14,9 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from backend.onyx.chat.infra import get_default_emitter
 from sqlalchemy.orm import Session
 
+from onyx.chat.chat_state import get_default_emitter
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.models import OAuthAccount
 from onyx.db.models import OAuthConfig
@@ -556,6 +556,7 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
+            emitter=get_default_emitter(),
             user=user,
             llm=llm,
             fast_llm=fast_llm,

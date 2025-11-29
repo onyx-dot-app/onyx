@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from typing import cast
 
 from sqlalchemy.orm import Session
 
@@ -76,7 +77,7 @@ def create_message_packets(
         Packet(
             turn_index=turn_index,
             obj=AgentResponseStart(
-                final_documents=SearchDoc.from_saved_search_docs(final_documents),
+                final_documents=SearchDoc.from_saved_search_docs(final_documents or []),
             ),
         )
     )
@@ -273,10 +274,11 @@ def translate_db_message_to_packets_simple(
     Translates ChatMessage with tool_calls to packet format.
     """
     packet_list: list[Packet] = []
+    citation_info_list: list[CitationInfo] = []
 
     if chat_message.message_type == MessageType.ASSISTANT:
         citations = chat_message.citations
-        citation_info_list: list[CitationInfo] = []
+        citation_info_list = []
 
         if citations:
             for citation_num, search_doc_id in citations.items():
@@ -320,21 +322,32 @@ def translate_db_message_to_packets_simple(
                         # Handle different tool types
                         if tool_name == SearchTool.NAME:
                             # Extract queries from tool_call_arguments
-                            queries = tool_call.tool_call_arguments.get("queries", [])
-                            if isinstance(queries, str):
-                                queries = [queries]
+                            queries_raw = tool_call.tool_call_arguments.get(
+                                "queries", []
+                            )
+                            if isinstance(queries_raw, str):
+                                queries: list[str] = [queries_raw]
+                            else:
+                                queries = cast(list[str], queries_raw)
 
                             packet_list.extend(
                                 create_search_packets(
-                                    queries, saved_search_docs, False, turn_num
+                                    search_queries=queries,
+                                    saved_search_docs=saved_search_docs,
+                                    is_internet_search=False,
+                                    turn_index=turn_num,
                                 )
                             )
 
                         elif tool_name == "WebSearchTool":
                             # Extract queries from tool_call_arguments
-                            queries = tool_call.tool_call_arguments.get("queries", [])
-                            if isinstance(queries, str):
-                                queries = [queries]
+                            queries_raw = tool_call.tool_call_arguments.get(
+                                "queries", []
+                            )
+                            if isinstance(queries_raw, str):
+                                queries = [queries_raw]
+                            else:
+                                queries = cast(list[str], queries_raw)
 
                             # Check if this is a fetch operation (has URLs in response)
                             if saved_search_docs and any(
@@ -346,7 +359,10 @@ def translate_db_message_to_packets_simple(
                             else:
                                 packet_list.extend(
                                     create_search_packets(
-                                        queries, saved_search_docs, True, turn_num
+                                        search_queries=queries,
+                                        saved_search_docs=saved_search_docs,
+                                        is_internet_search=True,
+                                        turn_index=turn_num,
                                     )
                                 )
 
@@ -404,7 +420,7 @@ def translate_db_message_to_packets_simple(
         )
 
         if len(citation_info_list) > 0:
-            saved_search_docs: list[SavedSearchDoc] = []
+            saved_search_docs = []
             for citation_info in citation_info_list:
                 cited_doc = get_db_search_doc_by_document_id(
                     citation_info.document_id, db_session
@@ -415,7 +431,12 @@ def translate_db_message_to_packets_simple(
                     )
 
             packet_list.extend(
-                create_search_packets([], saved_search_docs, False, citation_turn_index)
+                create_search_packets(
+                    search_queries=[],
+                    saved_search_docs=saved_search_docs,
+                    is_internet_search=False,
+                    turn_index=citation_turn_index,
+                )
             )
 
             packet_list.extend(
@@ -463,7 +484,6 @@ def translate_db_message_to_packets(
         return translate_db_message_to_packets_simple(
             chat_message=chat_message,
             db_session=db_session,
-            start_step_nr=start_step_nr,
         )
 
     step_nr = start_step_nr
@@ -634,7 +654,12 @@ def translate_db_message_to_packets(
                     )
 
             packet_list.extend(
-                create_search_packets([], saved_search_docs, False, turn_index)
+                create_search_packets(
+                    search_queries=[],
+                    saved_search_docs=saved_search_docs,
+                    is_internet_search=False,
+                    turn_index=turn_index,
+                )
             )
 
             step_nr += 1
