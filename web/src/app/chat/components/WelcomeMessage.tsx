@@ -38,11 +38,11 @@ export default function WelcomeMessage({ liveAssistant }: WelcomeMessageProps) {
           <Text headingH2>{greeting}</Text>
         </div>
       ) : (
-        <div
-          data-testid="assistant-name-display"
-          className="flex flex-col items-center gap-3 w-full max-w-[50rem]"
-        >
-          <div className="flex flex-row items-center gap-3">
+        <div className="flex flex-col items-center gap-3 w-full max-w-[50rem]">
+          <div
+            data-testid="assistant-name-display"
+            className="flex flex-row items-center gap-3"
+          >
             <AgentIcon agent={liveAssistant} />
             <Text headingH2>{liveAssistant.name}</Text>
           </div>
