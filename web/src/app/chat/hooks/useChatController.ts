@@ -8,7 +8,14 @@ import {
 
 import { StreamStopInfo } from "@/lib/search/interfaces";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { usePostHog } from "posthog-js/react";
 import { stopChatSession } from "../chat_search/utils";
 import {
@@ -75,6 +82,7 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "../services/fileUtils";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -144,6 +152,8 @@ export function useChatController({
   const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const posthog = usePostHog();
+  const settings = useContext(SettingsContext);
+  const enterpriseSettings = settings?.enterpriseSettings;
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(

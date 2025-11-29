@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useContext } from "react";
 import {
   Popover,
   PopoverContent,
@@ -9,7 +9,8 @@ import {
 } from "@/components/ui/popover";
 import { getDisplayNameForModel, LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { structureValue, modelSupportsImageInput } from "@/lib/llm/utils";
-import { ImageOff } from "lucide-react";
+import { ImageOff, Image } from "lucide-react";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/components/user/UserProvider";
@@ -43,6 +44,8 @@ export default function LLMPopover({
 
   const [open, setOpen] = useState(false);
   const { user } = useUser();
+  const settings = useContext(SettingsContext);
+  const showSupportIcons = settings?.settings?.show_llm_support_icons ?? true;
   const [localTemperature, setLocalTemperature] = useState(
     llmManager.temperature ?? 0.5
   );
@@ -178,6 +181,8 @@ export default function LLMPopover({
                       rightChildren={
                         isDisabledForVision ? (
                           <ImageOff size={14} className="text-text-500" />
+                        ) : showSupportIcons && supportsVision ? (
+                          <Image size={14} className="text-text-500" />
                         ) : undefined
                       }
                     >

@@ -26,6 +26,7 @@ const SHAPE_CLASSES: Record<ImageShape, { container: string; image: string }> =
 
 interface InMessageImageProps {
   fileId: string;
+  fileName?: string;
   shape?: ImageShape;
   compact?: boolean;
   onImageClick?: (fileId: string) => void;
@@ -33,6 +34,7 @@ interface InMessageImageProps {
 
 export function InMessageImage({
   fileId,
+  fileName,
   shape = DEFAULT_SHAPE,
   compact = false,
   onImageClick,
@@ -60,7 +62,7 @@ export function InMessageImage({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `image-${fileId}.png`; // You can adjust the filename/extension as needed
+      a.download = fileName || `image-${fileId}.png`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -86,7 +88,7 @@ export function InMessageImage({
         <img
           width={1200}
           height={1200}
-          alt="Chat Message Image"
+          alt={fileName || "Chat Message Image"}
           onLoad={() => setImageLoaded(true)}
           className={cn(
             "object-contain object-left overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",

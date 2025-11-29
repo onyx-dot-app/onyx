@@ -105,11 +105,13 @@ function ImageFileCard({
 export function FileCard({
   file,
   removeFile,
+  hideProcessingState = false,
   onFileClick,
   compactImages = false,
 }: {
   file: ProjectFile;
   removeFile: (fileId: string) => void;
+  hideProcessingState?: boolean;
   onFileClick?: (file: ProjectFile) => void;
   compactImages?: boolean;
 }) {
@@ -133,9 +135,12 @@ export function FileCard({
     return null;
   }, [isImage, file.file_id]);
 
-  const isProcessing =
+  const isActuallyProcessing =
     String(file.status) === UserFileStatus.UPLOADING ||
     String(file.status) === UserFileStatus.PROCESSING;
+
+  // When hideProcessingState is true, treat processing files as completed for display purposes
+  const isProcessing = hideProcessingState ? false : isActuallyProcessing;
 
   const handleRemoveFile = async (e: React.MouseEvent) => {
     e.stopPropagation();

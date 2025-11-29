@@ -8,7 +8,7 @@ import React, {
 import { FiPlus } from "react-icons/fi";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { InputPrompt } from "@/app/chat/interfaces";
+import { ChatFileType, InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { DocumentIcon2, FileIcon } from "@/components/icons/icons";
@@ -21,7 +21,7 @@ import { truncateString, cn, hasNonImageFiles, isImageFile } from "@/lib/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { FileCard, ImageGrid } from "./FileCard";
+import { FileCard } from "./FileCard";
 import {
   ProjectFile,
   UserFileStatus,
@@ -142,15 +142,28 @@ function ChatInputBarInner({
     allCurrentProjectFiles,
   } = useProjectsContext();
 
-  const hasFilesProcessing = useMemo(() => {
-    const isProcessing = (file: ProjectFile) =>
-      file.status === UserFileStatus.UPLOADING ||
-      file.status === UserFileStatus.PROCESSING;
+  // Helper to check if file is image or plaintext (doesn't need backend processing)
+  const isSimpleFile = useCallback((file: ProjectFile) => {
     return (
-      currentMessageFiles.some(isProcessing) ||
-      allCurrentProjectFiles.some(isProcessing)
+      isImageFile(file.name) || file.chat_file_type === ChatFileType.PLAIN_TEXT
     );
-  }, [currentMessageFiles, allCurrentProjectFiles]);
+  }, []);
+
+  // Only block send for files that NEED processing (PDFs, documents)
+  // Images and plaintext can be sent immediately
+  const hasFilesProcessing = useMemo(() => {
+    const needsProcessingAndIsProcessing = (file: ProjectFile) => {
+      const isProcessing =
+        file.status === UserFileStatus.UPLOADING ||
+        file.status === UserFileStatus.PROCESSING;
+      // Only count as blocking if it's a file that needs processing (not image/plaintext)
+      return isProcessing && !isSimpleFile(file);
+    };
+    return (
+      currentMessageFiles.some(needsProcessingAndIsProcessing) ||
+      allCurrentProjectFiles.some(needsProcessingAndIsProcessing)
+    );
+  }, [currentMessageFiles, allCurrentProjectFiles, isSimpleFile]);
 
   // Convert ProjectFile to MinimalOnyxDocument format for viewing
   const handleFileClick = useCallback(
@@ -293,23 +306,6 @@ function ChatInputBarInner({
     return hasNonImageFiles(currentMessageFiles);
   }, [currentMessageFiles]);
 
-  // Separate images from non-image files for different display layouts
-  const { imageFiles, nonImageFiles } = useMemo(() => {
-    const images: ProjectFile[] = [];
-    const others: ProjectFile[] = [];
-    currentMessageFiles.forEach((file) => {
-      if (isImageFile(file.name)) {
-        images.push(file);
-      } else {
-        others.push(file);
-      }
-    });
-    return { imageFiles: images, nonImageFiles: others };
-  }, [currentMessageFiles]);
-
-  // Use grid layout when 3+ images
-  const useImageGrid = imageFiles.length >= 3;
-
   // Check if the assistant has search tools available (internal search or web search)
   // AND if deep research is globally enabled in admin settings
   const showDeepResearch = useMemo(() => {
@@ -413,33 +409,16 @@ function ChatInputBarInner({
       <div className="w-full h-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
         {currentMessageFiles.length > 0 && (
           <div className="p-1 rounded-t-16 flex flex-wrap gap-2">
-            {useImageGrid ? (
-              <>
-                <ImageGrid
-                  files={imageFiles}
-                  removeFile={handleRemoveMessageFile}
-                  onFileClick={handleFileClick}
-                />
-                {nonImageFiles.map((file) => (
-                  <FileCard
-                    key={file.id}
-                    file={file}
-                    removeFile={handleRemoveMessageFile}
-                    onFileClick={handleFileClick}
-                  />
-                ))}
-              </>
-            ) : (
-              currentMessageFiles.map((file) => (
-                <FileCard
-                  key={file.id}
-                  file={file}
-                  removeFile={handleRemoveMessageFile}
-                  onFileClick={handleFileClick}
-                  compactImages={shouldCompactImages}
-                />
-              ))
-            )}
+            {currentMessageFiles.map((file) => (
+              <FileCard
+                key={file.id}
+                file={file}
+                removeFile={handleRemoveMessageFile}
+                hideProcessingState={isSimpleFile(file)}
+                onFileClick={handleFileClick}
+                compactImages={shouldCompactImages}
+              />
+            ))}
           </div>
         )}
 

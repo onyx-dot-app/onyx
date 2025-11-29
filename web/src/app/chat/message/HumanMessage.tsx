@@ -69,6 +69,7 @@ function FileDisplay({ files, alignBubble, onImageClick }: FileDisplayProps) {
               <InMessageImage
                 key={file.id}
                 fileId={file.id}
+                fileName={file.name ?? undefined}
                 compact={imageFiles.length >= 3}
                 onImageClick={onImageClick}
               />

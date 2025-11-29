@@ -39,6 +39,9 @@ export interface Settings {
 
   // Default Assistant settings
   disable_default_assistant?: boolean;
+
+  // Show LLM support icons (e.g., image support)
+  show_llm_support_icons?: boolean;
 }
 
 export enum NotificationType {
