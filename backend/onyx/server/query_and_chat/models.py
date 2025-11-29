@@ -247,8 +247,8 @@ class ChatMessageDetail(BaseModel):
     tool_call: ToolCallFinalResult | None = None
     message_type: MessageType
     context_docs: RetrievalDocs | None = None
-    # Dict mapping citation number to db_doc_id
-    citations: dict[int, int] | None = None
+    # Dict mapping document_id to citation number (matches streaming format)
+    citations: dict[str, int] | None = None
     time_sent: datetime
     files: list[FileDescriptor]
     error: str | None = None

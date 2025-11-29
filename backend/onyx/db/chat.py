@@ -896,6 +896,20 @@ def translate_db_message_to_chat_message_detail(
         if latest_feedback.is_positive is not None:
             current_feedback = "like" if latest_feedback.is_positive else "dislike"
 
+    # Convert citations from {citation_num: db_doc_id} to {document_id: citation_num}
+    # to match the streaming format
+    converted_citations = None
+    if chat_message.citations and chat_message.search_docs:
+        converted_citations = {}
+        for citation_num, db_doc_id in chat_message.citations.items():
+            # Find the search doc with this db_doc_id
+            matching_doc = next(
+                (doc for doc in chat_message.search_docs if doc.id == db_doc_id),
+                None,
+            )
+            if matching_doc:
+                converted_citations[matching_doc.document_id] = citation_num
+
     chat_msg_detail = ChatMessageDetail(
         chat_session_id=chat_message.chat_session_id,
         message_id=chat_message.id,
@@ -908,7 +922,7 @@ def translate_db_message_to_chat_message_detail(
         context_docs=get_retrieval_docs_from_search_docs(
             chat_message.search_docs, remove_doc_content=remove_doc_content
         ),
-        citations=chat_message.citations,
+        citations=converted_citations,
         time_sent=chat_message.time_sent,
         files=chat_message.files or [],
         error=chat_message.error,
