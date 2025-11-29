@@ -34,7 +34,7 @@ export function useIsDefaultAgent({
 
     // If URL has an assistantId, it's explicitly selected, not default
     if (
-      urlAssistantId !== undefined &&
+      urlAssistantId !== null &&
       urlAssistantId !== DEFAULT_ASSISTANT_ID.toString()
     ) {
       return false;
