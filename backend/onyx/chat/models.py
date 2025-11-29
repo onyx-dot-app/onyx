@@ -415,7 +415,7 @@ class ChatMessageSimple(BaseModel):
 class ExtractedProjectFiles(BaseModel):
     project_file_texts: list[str]
     project_image_files: list[ChatLoadedFile]
-    project_as_filter: int | bool
+    project_as_filter: bool
     total_token_count: int
 
 

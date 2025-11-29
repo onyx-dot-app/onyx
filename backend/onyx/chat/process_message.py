@@ -221,9 +221,6 @@ def _extract_project_file_texts_and_images(
         db_session=db_session,
     )
 
-    if project_tokens == 0:
-        project_as_filter = True
-
     project_file_texts: list[str] = []
     project_image_files: list[ChatLoadedFile] = []
     total_token_count = 0

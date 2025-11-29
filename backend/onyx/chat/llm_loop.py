@@ -714,6 +714,11 @@ def run_llm_loop(
     tool_choice: ToolChoiceOptions = "auto"
     collected_tool_calls: list[ToolCallInfo] = []
     gathered_documents: list[SearchDoc] | None = None
+    # TODO allow citing of images in Projects. Since it's attached to the last user message, it has no text associated with it.
+    # One future workaround is to include the images as separate user messages with citation information and process those.
+    always_cite_documents: bool = bool(
+        project_files.project_as_filter or project_files.project_file_texts
+    )
     should_cite_documents: bool = False
     ran_image_gen: bool = False
     just_ran_web_search: bool = False
@@ -760,7 +765,7 @@ def run_llm_loop(
                 datetime_aware=persona.datetime_aware if persona else True,
                 memories=memories,
                 tools=tools,
-                should_cite_documents=should_cite_documents,
+                should_cite_documents=should_cite_documents or always_cite_documents,
                 open_ai_formatting_enabled=open_ai_formatting_enabled,
             )
             system_prompt = ChatMessageSimple(
@@ -794,7 +799,8 @@ def run_llm_loop(
                 reminder_text=(
                     persona.task_prompt if persona and persona.task_prompt else None
                 ),
-                include_citation_reminder=should_cite_documents,
+                include_citation_reminder=should_cite_documents
+                or always_cite_documents,
             )
 
         reminder_msg = (
