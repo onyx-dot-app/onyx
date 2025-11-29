@@ -22,7 +22,6 @@ from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.factory import get_llm_tokenizer_encode_func
 from onyx.llm.interfaces import LLM
-from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.document_filter import select_chunks_for_relevance
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
@@ -190,8 +189,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # If the chat is part of a project
         project_id: int | None,
         bypass_acl: bool = False,
-        # Needed to help the Slack Federated search
-        slack_context: SlackContext | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -203,7 +200,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.user_selected_filters = user_selected_filters
         self.project_id = project_id
         self.bypass_acl = bypass_acl
-        self.slack_context = slack_context
 
         # Store session factory instead of session for thread-safety
         # When tools are called in parallel, each thread needs its own session

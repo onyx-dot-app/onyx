@@ -408,11 +408,12 @@ def stream_chat_message_objects(
     is_connected: Callable[[], bool] | None = None,
     enforce_chat_session_id_for_search_docs: bool = True,
     bypass_acl: bool = False,
-    # a string which represents the history of a conversation. Used in cases like
+    # Additional context that should be included in the chat history, for example:
     # Slack threads where the conversation cannot be represented by a chain of User/Assistant
     # messages.
-    # NOTE: is not stored in the database at all.
-    single_message_history: str | None = None,
+    # NOTE: is not stored in the database, only passed in to the LLM as context
+    additional_context: str | None = None,
+    bypass_translation: bool = False,
 ) -> AnswerStream:
     tenant_id = get_current_tenant_id()
     use_existing_user_message = new_msg_req.use_existing_user_message
@@ -556,7 +557,6 @@ def stream_chat_message_objects(
                     else None
                 ),
                 bypass_acl=bypass_acl,
-                slack_context=new_msg_req.slack_context,
             ),
             custom_tool_config=CustomToolConfig(
                 chat_session_id=chat_session_id,
@@ -598,6 +598,8 @@ def stream_chat_message_objects(
             chat_history=chat_history,
             files=files,
             project_image_files=extracted_project_files.project_image_files,
+            additional_context=additional_context,
+            tokenizer_encode_func=tokenizer_encode_func,
         )
 
         redis_client = get_redis_client()
@@ -635,15 +637,16 @@ def stream_chat_message_objects(
         )
 
         # TODO: Slack doesn't need the translation later, later handle these all the same
-        if single_message_history:
+        if bypass_translation:
             yield from llm_loop_packets
 
         # Translate packets to frontend-expected format
         # this doesn't use the correct backend packet types and is a temporary fix
-        yield from translate_llm_loop_packets(
-            packet_stream=llm_loop_packets,
-            message_id=assistant_response.id,
-        )  # type: ignore
+        else:
+            yield from translate_llm_loop_packets(
+                packet_stream=llm_loop_packets,
+                message_id=assistant_response.id,
+            )  # type: ignore
 
         # Determine if stopped by user
         completed_normally = check_is_connected()
@@ -805,7 +808,7 @@ def remove_answer_citations(answer: str) -> str:
 def gather_stream(
     packets: AnswerStream,
 ) -> ChatBasicResponse:
-    answer = ""
+    answer: str | None = None
     citations: list[CitationInfo] = []
     error_msg: str | None = None
     message_id: int | None = None
@@ -820,6 +823,8 @@ def gather_stream(
                     top_documents = packet.obj.final_documents
             elif isinstance(packet.obj, AgentResponseDelta):
                 # AgentResponseDelta contains incremental content updates
+                if answer is None:
+                    answer = ""
                 if packet.obj.content:
                     answer += packet.obj.content
             elif isinstance(packet.obj, CitationInfo):
@@ -832,6 +837,10 @@ def gather_stream(
 
     if message_id is None:
         raise ValueError("Message ID is required")
+
+    if answer is None:
+        # This should never be the case as these non-streamed flows do not have a stop-generation signal
+        raise RuntimeError("Answer was not generated")
 
     return ChatBasicResponse(
         answer=answer,

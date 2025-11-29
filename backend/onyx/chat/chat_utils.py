@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from typing import cast
 from uuid import UUID
 
@@ -51,7 +52,7 @@ from onyx.kg.setup.kg_default_entity_definitions import (
 from onyx.llm.models import PreviousMessage
 from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.onyxbot.slack.models import SlackContext
+from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
@@ -78,7 +79,6 @@ def prepare_chat_message_request(
     skip_gen_ai_answer_generation: bool = False,
     llm_override: LLMOverride | None = None,
     allowed_tool_ids: list[int] | None = None,
-    slack_context: SlackContext | None = None,
 ) -> CreateChatMessageRequest:
     # Typically used for one shot flows like SlackBot or non-chat API endpoint use cases
     new_chat_session = create_chat_session(
@@ -106,7 +106,6 @@ def prepare_chat_message_request(
         skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
         llm_override=llm_override,
         allowed_tool_ids=allowed_tool_ids,
-        slack_context=slack_context,  # Pass Slack context
     )
 
 
@@ -621,6 +620,8 @@ def convert_chat_history(
     chat_history: list[ChatMessage],
     files: list[ChatLoadedFile],
     project_image_files: list[ChatLoadedFile],
+    additional_context: str | None,
+    tokenizer_encode_func: Callable[[str], list[int]],
 ) -> list[ChatMessageSimple]:
     """Convert ChatMessage history to ChatMessageSimple format.
 
@@ -675,8 +676,22 @@ def convert_chat_history(
             # Add the user message with image files attached
             # If this is the last USER message, also include project_image_files
             # Note: project image file tokens are NOT counted in the token count
-            if idx == last_user_message_idx and project_image_files:
-                image_files.extend(project_image_files)
+            if idx == last_user_message_idx:
+                if project_image_files:
+                    image_files.extend(project_image_files)
+
+                if additional_context:
+                    simple_messages.append(
+                        ChatMessageSimple(
+                            message=ADDITIONAL_CONTEXT_PROMPT.format(
+                                additional_context=additional_context
+                            ),
+                            token_count=len(tokenizer_encode_func(additional_context)),
+                            message_type=MessageType.USER,
+                            image_files=None,
+                        )
+                    )
+
             simple_messages.append(
                 ChatMessageSimple(
                     message=chat_message.message,
