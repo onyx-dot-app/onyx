@@ -8,7 +8,7 @@ import React, { memo, JSX } from "react";
 import isEqual from "lodash/isEqual";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import { SubQuestionDetail } from "../interfaces";
+import { SubQuestionDetail, CitationMap } from "../interfaces";
 import { ValidSources } from "@/lib/types";
 import { ProjectFile } from "../projects/projectsService";
 import { BlinkingDot } from "./BlinkingDot";
@@ -30,7 +30,7 @@ export const MemoizedAnchor = memo(
     openQuestion?: (question: SubQuestionDetail) => void;
     docs?: OnyxDocument[] | null;
     userFiles?: ProjectFile[] | null;
-    citations?: { [key: string]: number };
+    citations?: CitationMap;
     updatePresentingDocument: (doc: OnyxDocument) => void;
     href?: string;
     children: React.ReactNode;
@@ -48,14 +48,11 @@ export const MemoizedAnchor = memo(
           const citation_num = parseInt(match_item, 10);
 
           // Use citation map to find the correct document
-          // Citations map format: {document_id: citation_num}
-          // e.g., {"doc_abc": 1, "doc_xyz": 2, "doc_123": 3}
+          // Citations map format: {citation_num: document_id}
+          // e.g., {1: "doc_abc", 2: "doc_xyz", 3: "doc_123"}
           let associatedDoc: OnyxDocument | null = null;
           if (isDocument && docs && citations) {
-            // Find the document_id where citations[document_id] === citation_num
-            const document_id = Object.keys(citations).find(
-              (id) => citations[id] === citation_num
-            );
+            const document_id = citations[citation_num];
             if (document_id) {
               associatedDoc =
                 docs.find((d) => d.document_id === document_id) || null;

@@ -896,8 +896,7 @@ def translate_db_message_to_chat_message_detail(
         if latest_feedback.is_positive is not None:
             current_feedback = "like" if latest_feedback.is_positive else "dislike"
 
-    # Convert citations from {citation_num: db_doc_id} to {document_id: citation_num}
-    # to match the streaming format
+    # Convert citations from {citation_num: db_doc_id} to {citation_num: document_id}
     converted_citations = None
     if chat_message.citations and chat_message.search_docs:
         # Build lookup map: db_doc_id -> document_id
@@ -909,7 +908,7 @@ def translate_db_message_to_chat_message_detail(
         for citation_num, db_doc_id in chat_message.citations.items():
             document_id = db_doc_id_to_document_id.get(db_doc_id)
             if document_id:
-                converted_citations[document_id] = citation_num
+                converted_citations[citation_num] = document_id
 
     chat_msg_detail = ChatMessageDetail(
         chat_session_id=chat_message.chat_session_id,
