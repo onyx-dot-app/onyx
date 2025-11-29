@@ -5,6 +5,7 @@ import {
   sendMessage,
   startNewChat,
   verifyAssistantIsChosen,
+  verifyDefaultAssistantIsChosen,
 } from "@tests/e2e/utils/chatActions";
 import {
   TOOL_IDS,
@@ -179,10 +180,7 @@ test.describe("Default Assistant Tests", () => {
       page,
     }) => {
       // Verify the input placeholder indicates default assistant (Onyx)
-      const inputPlaceholder = await page
-        .locator("#onyx-chat-input-textarea")
-        .getAttribute("placeholder");
-      expect(inputPlaceholder).toContain("Onyx");
+      await verifyDefaultAssistantIsChosen(page);
     });
 
     test("default assistant should NOT appear in assistant selector", async ({
@@ -233,10 +231,7 @@ test.describe("Default Assistant Tests", () => {
       await startNewChat(page);
 
       // Should be back to default assistant
-      await expect(page.locator("#onyx-chat-input-textarea")).toHaveAttribute(
-        "placeholder",
-        /Onyx/
-      );
+      await verifyDefaultAssistantIsChosen(page);
     });
   });
 

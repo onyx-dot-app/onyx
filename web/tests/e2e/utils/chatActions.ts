@@ -1,6 +1,10 @@
 import { Page } from "@playwright/test";
 import { expect } from "@chromatic-com/playwright";
 
+export async function verifyDefaultAssistantIsChosen(page: Page) {
+  await expect(page.getByTestId("onyx-logo")).toBeVisible({ timeout: 5000 });
+}
+
 export async function verifyAssistantIsChosen(
   page: Page,
   assistantName: string,
