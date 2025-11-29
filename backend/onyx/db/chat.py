@@ -900,15 +900,16 @@ def translate_db_message_to_chat_message_detail(
     # to match the streaming format
     converted_citations = None
     if chat_message.citations and chat_message.search_docs:
+        # Build lookup map: db_doc_id -> document_id
+        db_doc_id_to_document_id = {
+            doc.id: doc.document_id for doc in chat_message.search_docs
+        }
+
         converted_citations = {}
         for citation_num, db_doc_id in chat_message.citations.items():
-            # Find the search doc with this db_doc_id
-            matching_doc = next(
-                (doc for doc in chat_message.search_docs if doc.id == db_doc_id),
-                None,
-            )
-            if matching_doc:
-                converted_citations[matching_doc.document_id] = citation_num
+            document_id = db_doc_id_to_document_id.get(db_doc_id)
+            if document_id:
+                converted_citations[document_id] = citation_num
 
     chat_msg_detail = ChatMessageDetail(
         chat_session_id=chat_message.chat_session_id,
