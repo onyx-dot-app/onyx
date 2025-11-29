@@ -6,7 +6,7 @@ from typing import Generic
 from typing import TYPE_CHECKING
 from typing import TypeVar
 
-from onyx.chat.chat_state import Emitter
+from onyx.chat.emitter import Emitter
 
 
 if TYPE_CHECKING:

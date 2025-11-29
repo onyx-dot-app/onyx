@@ -15,13 +15,13 @@ from sqlalchemy.orm import Session
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.chat.chat_milestones import process_multi_assistant_milestone
 from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.chat_state import get_default_emitter
 from onyx.chat.chat_state import run_chat_llm_with_state_containers
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import create_temporary_persona
 from onyx.chat.chat_utils import get_custom_agent_prompt
 from onyx.chat.chat_utils import load_all_chat_files
+from onyx.chat.emitter import get_default_emitter
 from onyx.chat.llm_loop import run_llm_loop
 from onyx.chat.memories import get_memories
 from onyx.chat.models import AnswerStream

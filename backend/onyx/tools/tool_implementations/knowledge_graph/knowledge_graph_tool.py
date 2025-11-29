@@ -2,7 +2,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_state import Emitter
+from onyx.chat.emitter import Emitter
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool

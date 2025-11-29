@@ -33,11 +33,12 @@ class StreamPacketObj(TypedDict, total=False):
     type: Literal[
         "message_start",
         "message_delta",
-        "internal_search_tool_start",
-        "internal_search_tool_delta",
-        "image_generation_tool_start",
-        "image_generation_tool_heartbeat",
-        "image_generation_tool_delta",
+        "search_tool_start",
+        "search_tool_queries_delta",
+        "search_tool_documents_delta",
+        "image_generation_start",
+        "image_generation_heartbeat",
+        "image_generation_final",
     ]
     content: str
     final_documents: list[dict[str, Any]]
@@ -186,14 +187,15 @@ class ChatSessionManager:
                 and (packet_type := data_obj.get("type"))
                 and (ind := data.get("ind")) is not None
             ):
-                if packet_type == StreamingType.MESSAGE_START.value:
+                packet_type_str = str(packet_type)
+                if packet_type_str == StreamingType.MESSAGE_START.value:
                     final_docs = data_obj.get("final_documents")
                     if isinstance(final_docs, list):
                         top_documents = [SavedSearchDoc(**doc) for doc in final_docs]
                     full_message += data_obj.get("content", "")
-                elif packet_type == StreamingType.MESSAGE_DELTA.value:
+                elif packet_type_str == StreamingType.MESSAGE_DELTA.value:
                     full_message += data_obj["content"]
-                elif packet_type == StreamingType.SEARCH_TOOL_START.value:
+                elif packet_type_str == StreamingType.SEARCH_TOOL_START.value:
                     tool_name = (
                         ToolName.INTERNET_SEARCH
                         if data_obj.get("is_internet_search", False)
@@ -202,14 +204,14 @@ class ChatSessionManager:
                     ind_to_tool_use[ind] = ToolResult(
                         tool_name=tool_name,
                     )
-                elif packet_type == StreamingType.IMAGE_GENERATION_START.value:
+                elif packet_type_str == StreamingType.IMAGE_GENERATION_START.value:
                     ind_to_tool_use[ind] = ToolResult(
                         tool_name=ToolName.IMAGE_GENERATION,
                     )
-                elif packet_type == StreamingType.IMAGE_GENERATION_HEARTBEAT.value:
+                elif packet_type_str == StreamingType.IMAGE_GENERATION_HEARTBEAT.value:
                     # Track heartbeat packets for debugging/testing
                     heartbeat_packets.append(data)
-                elif packet_type == StreamingType.IMAGE_GENERATION_DELTA.value:
+                elif packet_type_str == StreamingType.IMAGE_GENERATION_FINAL.value:
                     from tests.integration.common_utils.test_models import (
                         GeneratedImage,
                     )
@@ -218,9 +220,9 @@ class ChatSessionManager:
                     ind_to_tool_use[ind].images.extend(
                         [GeneratedImage(**img) for img in images]
                     )
-                elif packet_type == StreamingType.SEARCH_TOOL_QUERIES_DELTA.value:
+                elif packet_type_str == StreamingType.SEARCH_TOOL_QUERIES_DELTA.value:
                     ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
-                elif packet_type == StreamingType.SEARCH_TOOL_DOCUMENTS_DELTA.value:
+                elif packet_type_str == StreamingType.SEARCH_TOOL_DOCUMENTS_DELTA.value:
                     ind_to_tool_use[ind].documents.extend(
                         [SavedSearchDoc(**doc) for doc in data_obj.get("documents", [])]
                     )

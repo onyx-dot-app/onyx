@@ -10,8 +10,8 @@ from typing import List
 import requests
 from requests import JSONDecodeError
 
-from onyx.chat.chat_state import Emitter
-from onyx.chat.chat_state import get_default_emitter
+from onyx.chat.emitter import Emitter
+from onyx.chat.emitter import get_default_emitter
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta

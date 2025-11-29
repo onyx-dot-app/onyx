@@ -6,7 +6,7 @@ from pydantic import Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
-from onyx.chat.chat_state import Emitter
+from onyx.chat.emitter import Emitter
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import DocumentPruningConfig

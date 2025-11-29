@@ -7,7 +7,7 @@ import requests
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.chat_state import Emitter
+from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.db.llm import fetch_existing_llm_providers

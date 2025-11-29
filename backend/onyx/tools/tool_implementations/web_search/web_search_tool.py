@@ -4,7 +4,7 @@ from typing import cast
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.chat_state import Emitter
+from onyx.chat.emitter import Emitter
 from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant

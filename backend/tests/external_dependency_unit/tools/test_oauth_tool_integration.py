@@ -16,7 +16,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_state import get_default_emitter
+from onyx.chat.emitter import get_default_emitter
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.models import OAuthAccount
 from onyx.db.models import OAuthConfig

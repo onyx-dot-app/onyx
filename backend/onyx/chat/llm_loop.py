@@ -5,8 +5,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.chat_state import Emitter
 from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmStepResult
