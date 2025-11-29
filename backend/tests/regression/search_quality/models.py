@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import SavedSearchDoc
 
 
 class GroundTruth(BaseModel):
@@ -31,7 +31,7 @@ class EvalConfig(BaseModel):
 
 class OneshotQAResult(BaseModel):
     time_taken: float
-    top_documents: list[SearchDoc]
+    top_documents: list[SavedSearchDoc]
     answer: str | None
 
 
