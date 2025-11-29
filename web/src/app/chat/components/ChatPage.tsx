@@ -47,6 +47,7 @@ import { useChatController } from "@/app/chat/hooks/useChatController";
 import { useAssistantController } from "@/app/chat/hooks/useAssistantController";
 import { useChatSessionController } from "@/app/chat/hooks/useChatSessionController";
 import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
+import { useIsDefaultAgent } from "@/app/chat/hooks/useIsDefaultAgent";
 import {
   useChatSessionStore,
   useMaxTokens,
@@ -283,6 +284,13 @@ export default function ChatPage({
 
   const filterManager = useFilters();
   const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
+
+  const isDefaultAgent = useIsDefaultAgent({
+    liveAssistant,
+    existingChatSessionId,
+    selectedChatSession,
+    settings,
+  });
 
   const [aboveHorizon, setAboveHorizon] = useState(false);
 
@@ -900,7 +908,10 @@ export default function ChatPage({
                         )}
                       >
                         {currentProjectId == null && showCenteredInput && (
-                          <WelcomeMessage liveAssistant={liveAssistant} />
+                          <WelcomeMessage
+                            agent={liveAssistant}
+                            isDefaultAgent={isDefaultAgent}
+                          />
                         )}
                         <div
                           className={cn(
