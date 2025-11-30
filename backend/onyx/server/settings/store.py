@@ -1,6 +1,7 @@
 from onyx.configs.app_configs import DISABLE_USER_KNOWLEDGE
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.app_configs import SHOW_EXTRA_CONNECTORS
+from onyx.configs.app_configs import ANONYMOUS_USER_ENABLED
 from onyx.configs.constants import KV_SETTINGS_KEY
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.key_value_store.factory import get_kv_store
@@ -38,14 +39,14 @@ def load_settings() -> Settings:
             assert isinstance(value, bytes)
             anonymous_user_enabled = int(value.decode("utf-8")) == 1
         else:
-            # Default to False
-            anonymous_user_enabled = False
-            # Optionally store the default back to Redis
-            redis_client.set(OnyxRedisLocks.ANONYMOUS_USER_ENABLED, "0")
+            # Default to environment variable value, fallback to False
+            anonymous_user_enabled = ANONYMOUS_USER_ENABLED
+            # Store the default back to Redis
+            redis_client.set(OnyxRedisLocks.ANONYMOUS_USER_ENABLED, "1" if anonymous_user_enabled else "0")
     except Exception as e:
-        # Log the error and reset to default
+        # Log the error and reset to environment variable or default
         logger.error(f"Error loading anonymous user setting from Redis: {str(e)}")
-        anonymous_user_enabled = False
+        anonymous_user_enabled = ANONYMOUS_USER_ENABLED
 
     settings.anonymous_user_enabled = anonymous_user_enabled
     settings.query_history_type = ONYX_QUERY_HISTORY_TYPE

@@ -36,6 +36,9 @@ DISABLE_GENERATIVE_AI = os.environ.get("DISABLE_GENERATIVE_AI", "").lower() == "
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
 
+# Controls whether anonymous user access is enabled when auth is disabled
+ANONYMOUS_USER_ENABLED = os.environ.get("ANONYMOUS_USER_ENABLED", "").lower() == "true"
+
 # If set to true, will show extra/uncommon connectors in the "Other" category
 SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"
 
