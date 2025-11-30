@@ -21,13 +21,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Setup uv
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # ratchet:astral-sh/setup-uv@v3
-        # TODO: Enable caching once there is a uv.lock file checked in.
-        # with:
-        #   enable-cache: true
+        with:
+          enable-cache: true
 
       - name: Validate requirements lock files
         run: ./backend/scripts/compile_requirements.py --check

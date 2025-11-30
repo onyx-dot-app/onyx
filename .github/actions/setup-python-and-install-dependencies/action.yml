@@ -9,9 +9,8 @@ runs:
   steps:
     - name: Setup uv
       uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # ratchet:astral-sh/setup-uv@v3
-      # TODO: Enable caching once there is a uv.lock file checked in.
-      # with:
-      #   enable-cache: true
+      with:
+        enable-cache: true
 
     - name: Compute requirements hash
       id: req-hash
