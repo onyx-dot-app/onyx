@@ -797,8 +797,8 @@ export function useChatController({
                 if (citationDelta.citations) {
                   citations = Object.fromEntries(
                     citationDelta.citations.map((c) => [
-                      c.document_id,
                       c.citation_num,
+                      c.document_id,
                     ])
                   );
                 }
