@@ -15,8 +15,8 @@ from starlette.types import Receive
 from starlette.types import Scope
 from starlette.types import Send
 
-from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
 from onyx.mcp_server.auth import OnyxTokenVerifier
+from onyx.mcp_server.config import MCP_SERVER_CORS_ORIGINS
 from onyx.mcp_server.utils import shutdown_http_client
 from onyx.utils.logger import setup_logger
 
