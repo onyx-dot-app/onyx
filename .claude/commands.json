@@ -1,0 +1,20 @@
+{
+  "commands": [
+    {
+      "name": "address-comments",
+      "description": "Address PR review comments by making code changes"
+    },
+    {
+      "name": "create-plan",
+      "description": "Create a detailed implementation plan with optional Linear issue integration"
+    },
+    {
+      "name": "run-tests",
+      "description": "Run Onyx test suites (unit, integration, playwright) with proper environment"
+    },
+    {
+      "name": "check-logs",
+      "description": "Check Onyx service logs for debugging and troubleshooting"
+    }
+  ]
+}
