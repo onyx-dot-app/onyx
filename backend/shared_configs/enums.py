@@ -25,6 +25,7 @@ class WebSearchProviderType(str, Enum):
     GOOGLE_PSE = "google_pse"
     SERPER = "serper"
     EXA = "exa"
+    YOU_COM = "you_com"
 
 
 class WebContentProviderType(str, Enum):
