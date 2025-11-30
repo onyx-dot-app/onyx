@@ -77,6 +77,10 @@ spec:
                 name: {{ .Values.config.envConfigMapName }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- if .Values.codeInterpreter.enabled }}
+            - name: CODE_INTERPRETER_BETA_ENABLED
+              value: "true"
+            {{- end }}
           {{- with .Values.api.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}
