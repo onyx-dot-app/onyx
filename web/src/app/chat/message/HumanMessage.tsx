@@ -217,6 +217,8 @@ export default function HumanMessage({
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
+  const hasImages = files?.some((file) => file.type === ChatFileType.IMAGE);
+
   const handleImageClick = (fileId: string) => {
     setPresentingDocument?.({
       document_id: `project_file__${fileId}`,
@@ -286,7 +288,7 @@ export default function HumanMessage({
                 ) : typeof content === "string" ? (
                   <>
                     <div className="ml-auto flex items-center mr-1 h-fit mb-auto">
-                      {onEdit && isHovered && !isEditing ? (
+                      {onEdit && isHovered && !isEditing && !hasImages ? (
                         <div className="flex flex-row items-center justify-center gap-1">
                           <CopyIconButton
                             getCopyText={() => content}
@@ -312,7 +314,8 @@ export default function HumanMessage({
                     <div
                       className={cn(
                         "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3",
-                        !(onEdit && isHovered && !isEditing) && "ml-auto"
+                        !(onEdit && isHovered && !isEditing && !hasImages) &&
+                          "ml-auto"
                       )}
                     >
                       <Text mainContentBody>{content}</Text>
@@ -320,7 +323,7 @@ export default function HumanMessage({
                   </>
                 ) : (
                   <>
-                    {onEdit && isHovered && !isEditing ? (
+                    {onEdit && isHovered && !isEditing && !hasImages ? (
                       <div className="my-auto">
                         <IconButton
                           icon={SvgEdit}
