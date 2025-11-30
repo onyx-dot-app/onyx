@@ -126,6 +126,11 @@ Here is some additional context which may be relevant to the user query:
 {additional_context}
 """.strip()
 
+
+TOOL_CALL_RESPONSE_CROSS_MESSAGE = """
+This tool call completed but the results are no longer accessible.
+""".strip()
+
 # ruff: noqa: E501, W605 end
 
 

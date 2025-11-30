@@ -1,3 +1,4 @@
+import json
 import re
 from collections.abc import Callable
 from typing import cast
@@ -53,6 +54,7 @@ from onyx.llm.models import PreviousMessage
 from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
+from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
@@ -622,6 +624,7 @@ def convert_chat_history(
     project_image_files: list[ChatLoadedFile],
     additional_context: str | None,
     tokenizer_encode_func: Callable[[str], list[int]],
+    tool_id_to_name_map: dict[int, str],
 ) -> list[ChatMessageSimple]:
     """Convert ChatMessage history to ChatMessageSimple format.
 
@@ -721,13 +724,31 @@ def convert_chat_history(
                     # Add each tool call as a separate message with the tool arguments
                     for tool_call in turn_tool_calls:
                         # Create a message containing the tool call information
-                        tool_call_message = f"{tool_call.tool_call_arguments}"  # TODO ensure this is a valid dict string
+                        tool_name = tool_id_to_name_map.get(
+                            tool_call.tool_id, "unknown"
+                        )
+                        tool_call_data = {
+                            "function_name": tool_name,
+                            "arguments": tool_call.tool_call_arguments,
+                        }
+                        tool_call_message = json.dumps(tool_call_data)
                         simple_messages.append(
                             ChatMessageSimple(
                                 message=tool_call_message,
                                 token_count=tool_call.tool_call_tokens,
                                 message_type=MessageType.TOOL_CALL,
                                 image_files=None,
+                                tool_call_id=tool_call.tool_call_id,
+                            )
+                        )
+
+                        simple_messages.append(
+                            ChatMessageSimple(
+                                message=TOOL_CALL_RESPONSE_CROSS_MESSAGE,
+                                token_count=20,  # Tiny overestimate
+                                message_type=MessageType.TOOL_CALL_RESPONSE,
+                                image_files=None,
+                                tool_call_id=tool_call.tool_call_id,
                             )
                         )
 
