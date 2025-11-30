@@ -8,8 +8,10 @@ from retry import retry
 from slack_sdk import WebClient
 from slack_sdk.models.blocks import SectionBlock
 
+from onyx.chat.chat_utils import combine_message_thread
 from onyx.chat.chat_utils import prepare_chat_message_request
 from onyx.chat.models import ChatBasicResponse
+from onyx.chat.models import ThreadMessage
 from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
@@ -23,6 +25,7 @@ from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import RetrievalDetails
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import Persona
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
@@ -36,6 +39,9 @@ from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import SlackRateLimiter
 from onyx.onyxbot.slack.utils import update_emote_react
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.llm.factory import get_llms_for_persona
+from onyx.llm.factory import get_main_llm_from_tuple
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import OnyxLoggingAdapter
 
 srl = SlackRateLimiter()
@@ -60,6 +66,42 @@ def rate_limits(
         return wrapper
 
     return decorator
+
+
+def _build_thread_context(
+    history_messages: list[ThreadMessage],
+    persona: Persona,
+    user: User | None,
+    thread_context_percent: float,
+    logger: OnyxLoggingAdapter,
+) -> str | None:
+    if not history_messages:
+        return None
+
+    try:
+        llm = get_main_llm_from_tuple(get_llms_for_persona(persona=persona, user=user))
+        if llm.config.max_input_tokens is None:
+            raise ValueError("LLM missing max_input_tokens")
+
+        max_history_tokens = max(
+            1, int(llm.config.max_input_tokens * thread_context_percent)
+        )
+        llm_tokenizer = get_tokenizer(
+            model_name=llm.config.model_name,
+            provider_type=llm.config.model_provider,
+        )
+        combined_history = combine_message_thread(
+            messages=history_messages,
+            max_tokens=max_history_tokens,
+            llm_tokenizer=llm_tokenizer,
+        )
+        if combined_history:
+            return combined_history
+    except Exception:
+        logger.exception("Failed to build token-limited Slack thread context")
+
+    fallback_history = slackify_message_thread(history_messages)
+    return fallback_history or None
 
 
 def handle_regular_answer(
@@ -130,6 +172,19 @@ def handle_regular_answer(
     with get_session_with_current_tenant() as db_session:
         expecting_search_result = persona_has_search_tool(persona.id, db_session)
 
+    # NOTE: only the message history will contain the person asking. This is likely
+    # fine since the most common use case for this info is when referring to a user
+    # who previously posted in the thread.
+    user_message = messages[-1]
+    history_messages = messages[:-1]
+    single_message_history = _build_thread_context(
+        history_messages=history_messages,
+        persona=persona,
+        user=user,
+        thread_context_percent=thread_context_percent,
+        logger=logger,
+    )
+
     # TODO: Add in support for Slack to truncate messages based on max LLM context
     # llm, _ = get_llms_for_persona(persona)
 
@@ -147,13 +202,6 @@ def handle_regular_answer(
     # combined_message = combine_message_thread(
     #     messages, max_tokens=max_history_tokens, llm_tokenizer=llm_tokenizer
     # )
-
-    # NOTE: only the message history will contain the person asking. This is likely
-    # fine since the most common use case for this info is when referring to a user
-    # who previously posted in the thread.
-    user_message = messages[-1]
-    history_messages = messages[:-1]
-    single_message_history = slackify_message_thread(history_messages) or None
 
     # Always check for ACL permissions, also for documnt sets that were explicitly added
     # to the Bot by the Administrator. (Change relative to earlier behavior where all documents
