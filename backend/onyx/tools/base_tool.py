@@ -42,7 +42,7 @@ class BaseTool(Tool[None]):
         run_context: RunContextWrapper[Any],
         *args: Any,
         **kwargs: Any,
-    ) -> Any:
+    ) -> str:  # we expect JSON format returned to the model
         raise NotImplementedError("BaseTool.run_v2 is not implemented.")
 
     def build_next_prompt(

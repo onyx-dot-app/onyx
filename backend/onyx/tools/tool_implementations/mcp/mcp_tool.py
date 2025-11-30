@@ -6,18 +6,25 @@ from typing import cast
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 
+from onyx.agents.agent_search.dr.models import IterationAnswer
+from onyx.agents.agent_search.dr.models import IterationInstructions
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
+from onyx.server.query_and_chat.streaming_models import CustomToolDelta
+from onyx.server.query_and_chat.streaming_models import CustomToolStart
+from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.base_tool import BaseTool
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import RunContextWrapper
 from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
 from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
 from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
+from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 
@@ -166,6 +173,72 @@ Return ONLY a valid JSON object with the extracted arguments. If no arguments ar
                     f"Failed to parse args for MCP tool '{self._name}'. Received: {args_result_str}"
                 )
                 return {}
+
+    @tool_accounting
+    def run_v2(self, run_context: RunContextWrapper[Any], **args: Any) -> str:
+        index = run_context.context.current_run_step
+        run_context.context.run_dependencies.emitter.emit(
+            Packet(
+                ind=index,
+                obj=CustomToolStart(type="custom_tool_start", tool_name=self.name),
+            )
+        )
+        results = []
+        run_context.context.iteration_instructions.append(
+            IterationInstructions(
+                iteration_nr=index,
+                plan=f"Running {self.name}",
+                purpose=f"Running {self.name}",
+                reasoning=f"Running {self.name}",
+            )
+        )
+        for result in self.run(**args):
+            results.append(result)
+            # Extract data from CustomToolCallSummary within the ToolResponse
+            custom_summary = result.response
+            data = None
+            file_ids = None
+
+            # Handle different response types
+            if custom_summary.response_type in ["image", "csv"] and hasattr(
+                custom_summary.tool_result, "file_ids"
+            ):
+                file_ids = custom_summary.tool_result.file_ids
+            else:
+                data = custom_summary.tool_result
+            run_context.context.global_iteration_responses.append(
+                IterationAnswer(
+                    tool=self.name,
+                    tool_id=self.id,
+                    iteration_nr=index,
+                    parallelization_nr=0,
+                    question=json.dumps(args) if args else "",
+                    reasoning=f"Running {self.name}",
+                    data=data,
+                    file_ids=file_ids,
+                    cited_documents={},
+                    additional_data=None,
+                    response_type=custom_summary.response_type,
+                    answer=str(data) if data else str(file_ids),
+                )
+            )
+            run_context.context.run_dependencies.emitter.emit(
+                Packet(
+                    ind=index,
+                    obj=CustomToolDelta(
+                        type="custom_tool_delta",
+                        tool_name=self.name,
+                        response_type=custom_summary.response_type,
+                        data=data,
+                        file_ids=file_ids,
+                    ),
+                )
+            )
+        # Return the last result's data as JSON string
+        if results:
+            last_summary = results[-1].response
+            return json.dumps(last_summary.tool_result)
+        return json.dumps({})
 
     def run(
         self, override_kwargs: dict[str, Any] | None = None, **kwargs: Any

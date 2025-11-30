@@ -47,6 +47,7 @@ from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
+from onyx.llm.utils import is_anthropic_model
 from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
@@ -466,15 +467,22 @@ class LitellmLLM(LLM):
         from litellm.exceptions import Timeout, RateLimitError
 
         tool_choice_formatted: dict[str, Any] | str | None
+        function_tool_choice = (
+            tool_choice and tool_choice not in STANDARD_TOOL_CHOICE_OPTIONS
+        )
         if not tools:
             tool_choice_formatted = None
-        elif tool_choice and tool_choice not in STANDARD_TOOL_CHOICE_OPTIONS:
+        elif function_tool_choice:
             tool_choice_formatted = {
                 "type": "function",
                 "function": {"name": tool_choice},
             }
         else:
             tool_choice_formatted = tool_choice
+        exclude_reasoning_config_for_anthropic = (
+            is_anthropic_model(self.config.model_name, self.config.model_provider)
+            and function_tool_choice
+        )
 
         is_reasoning = model_is_reasoning_model(
             self.config.model_name, self.config.model_provider
@@ -531,12 +539,16 @@ class LitellmLLM(LLM):
                 ),
                 **(
                     {"thinking": {"type": "enabled", "budget_tokens": 10000}}
-                    if reasoning_effort and is_reasoning
+                    if reasoning_effort
+                    and is_reasoning
+                    and not exclude_reasoning_config_for_anthropic
                     else {}
                 ),
                 **(
                     {"reasoning_effort": reasoning_effort}
-                    if reasoning_effort and is_reasoning
+                    if reasoning_effort
+                    and is_reasoning
+                    and not exclude_reasoning_config_for_anthropic
                     else {}
                 ),
                 **(

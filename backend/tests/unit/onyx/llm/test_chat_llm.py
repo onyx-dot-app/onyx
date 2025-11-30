@@ -300,3 +300,70 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             mock_response=MOCK_LLM_RESPONSE,
             stream_options={"include_usage": True},
         )
+
+
+def test_exclude_reasoning_config_for_anthropic_with_function_tool_choice() -> None:
+    """Test that reasoning config is excluded for Anthropic models when using function tool choice."""
+    # Create an Anthropic LLM
+    anthropic_llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider="anthropic",
+        model_name="claude-3-5-sonnet-20241022",
+        max_input_tokens=200000,
+    )
+
+    # Mock the litellm.completion function
+    with patch("litellm.completion") as mock_completion:
+        mock_response = litellm.ModelResponse(
+            id="msg-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="tool_use",
+                    index=0,
+                    message=litellm.Message(
+                        content=None,
+                        role="assistant",
+                        tool_calls=[
+                            litellm.ChatCompletionMessageToolCall(
+                                id="call_1",
+                                function=LiteLLMFunction(
+                                    name="search",
+                                    arguments='{"query": "test"}',
+                                ),
+                                type="function",
+                            ),
+                        ],
+                    ),
+                )
+            ],
+            model="claude-3-5-sonnet-20241022",
+            usage=litellm.Usage(
+                prompt_tokens=50, completion_tokens=30, total_tokens=80
+            ),
+        )
+        mock_completion.return_value = mock_response
+
+        messages = [HumanMessage(content="Test message")]
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "search",
+                    "description": "Search for information",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"],
+                    },
+                },
+            },
+        ]
+
+        # Call with a specific function tool choice
+        anthropic_llm.invoke(messages, tools, tool_choice="search")
+
+        # Verify that reasoning_effort and thinking are NOT passed to litellm.completion
+        call_kwargs = mock_completion.call_args[1]
+        assert "reasoning_effort" not in call_kwargs
+        assert "thinking" not in call_kwargs

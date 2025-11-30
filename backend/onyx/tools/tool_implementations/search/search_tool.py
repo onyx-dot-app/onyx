@@ -6,11 +6,16 @@ from typing import Any
 from typing import cast
 from typing import TypeVar
 
+from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.dr.models import IterationAnswer
+from onyx.agents.agent_search.dr.models import IterationInstructions
+from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.chat.chat_utils import llm_doc_from_inference_section
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ContextualPruningConfig
+from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.chat.models import DocumentPruningConfig
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PromptConfig
@@ -19,6 +24,7 @@ from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.citations_prompt import compute_max_llm_input_tokens
 from onyx.chat.prune_and_merge import prune_and_merge_sections
 from onyx.chat.prune_and_merge import prune_sections
+from onyx.chat.stop_signal_checker import is_connected
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
@@ -35,6 +41,7 @@ from onyx.context.search.pipeline import SearchPipeline
 from onyx.context.search.pipeline import section_relevance_list_impl
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import check_federated_connectors_exist
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.interfaces import LLM
@@ -42,6 +49,9 @@ from onyx.llm.models import PreviousMessage
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.choose_search import check_if_need_search
 from onyx.secondary_llm_flows.query_expansion import history_based_query_rephrase
+from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import SearchToolDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import SearchQueryInfo
 from onyx.tools.models import SearchToolOverrideKwargs
@@ -55,6 +65,8 @@ from onyx.tools.tool_implementations.search_like_tool_utils import (
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
+from onyx.tools.tool_implementations_v2.tool_accounting import tool_accounting
+from onyx.tools.tool_result_models import LlmInternalSearchResult
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 
@@ -86,7 +98,7 @@ web pages. If very ambiguious, prioritize internal search or call both tools.
 
 
 class SearchTool(Tool[SearchToolOverrideKwargs]):
-    _NAME = "run_search"
+    _NAME = "internal_search"
     _DISPLAY_NAME = "Internal Search"
     _DESCRIPTION = SEARCH_TOOL_DESCRIPTION
 
@@ -112,6 +124,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         bypass_acl: bool = False,
         rerank_settings: RerankingDetails | None = None,
         slack_context: SlackContext | None = None,
+        # just doing this for now since we lack dependency injection
+        search_pipeline_override_for_testing: SearchPipeline | None = None,
     ) -> None:
         self.user = user
         self.persona = persona
@@ -177,6 +191,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
 
         self._id = tool_id
+        self.search_pipeline_override_for_testing = search_pipeline_override_for_testing
 
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
@@ -260,13 +275,136 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     """Actual tool execution"""
 
+    @tool_accounting
     def run_v2(
         self,
         run_context: RunContextWrapper[Any],
         *args: Any,
         **kwargs: Any,
-    ) -> Any:
-        raise NotImplementedError("SearchTool.run_v2 is not implemented.")
+    ) -> str:
+        index = run_context.context.current_run_step
+        query = kwargs[QUERY_FIELD]
+        run_context.context.run_dependencies.emitter.emit(
+            Packet(
+                ind=index,
+                obj=SearchToolStart(
+                    type="internal_search_tool_start", is_internet_search=False
+                ),
+            )
+        )
+        run_context.context.run_dependencies.emitter.emit(
+            Packet(
+                ind=index,
+                obj=SearchToolDelta(
+                    type="internal_search_tool_delta", queries=[query], documents=[]
+                ),
+            )
+        )
+        run_context.context.iteration_instructions.append(
+            IterationInstructions(
+                iteration_nr=index,
+                plan="plan",
+                purpose="Searching internally for information",
+                reasoning=f"I am now using Internal Search to gather information on {query}",
+            )
+        )
+
+        retrieved_sections: list[InferenceSection] = []
+
+        with get_session_with_current_tenant() as search_db_session:
+            for tool_response in self.run(
+                query=query,
+                override_kwargs=SearchToolOverrideKwargs(
+                    force_no_rerank=True,
+                    alternate_db_session=search_db_session,
+                    skip_query_analysis=True,
+                    original_query=query,
+                ),
+            ):
+                if not is_connected(
+                    run_context.context.chat_session_id,
+                    run_context.context.run_dependencies.redis_client,
+                ):
+                    break
+                # get retrieved docs to send to the rest of the graph
+                if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:
+                    search_response_summary = cast(
+                        SearchResponseSummary, tool_response.response
+                    )
+                    retrieved_sections = search_response_summary.top_sections
+                    break
+
+        # Aggregate all results from all queries
+        # Use the current input token count from context for pruning
+        # This includes system prompt, history, user message, and any agent turns so far
+        existing_input_tokens = run_context.context.current_input_tokens
+
+        pruned_sections: list[InferenceSection] = prune_and_merge_sections(
+            sections=retrieved_sections,
+            section_relevance_list=None,
+            llm_config=self.llm.config,
+            existing_input_tokens=existing_input_tokens,
+            contextual_pruning_config=self.contextual_pruning_config,
+        )
+
+        search_results_for_query = [
+            LlmInternalSearchResult(
+                document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                title=section.center_chunk.semantic_identifier,
+                excerpt=section.combined_content,
+                metadata=section.center_chunk.metadata,
+                unique_identifier_to_strip_away=section.center_chunk.document_id,
+            )
+            for section in pruned_sections
+        ]
+
+        from onyx.chat.turn.models import FetchedDocumentCacheEntry
+
+        for section in pruned_sections:
+            unique_id = section.center_chunk.document_id
+            if unique_id not in run_context.context.fetched_documents_cache:
+                run_context.context.fetched_documents_cache[unique_id] = (
+                    FetchedDocumentCacheEntry(
+                        inference_section=section,
+                        document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                    )
+                )
+
+        run_context.context.run_dependencies.emitter.emit(
+            Packet(
+                ind=index,
+                obj=SearchToolDelta(
+                    type="internal_search_tool_delta",
+                    queries=[],
+                    documents=convert_inference_sections_to_search_docs(
+                        pruned_sections, is_internet=False
+                    ),
+                ),
+            )
+        )
+        run_context.context.global_iteration_responses.append(
+            IterationAnswer(
+                tool=SearchTool.__name__,
+                tool_id=self.id,
+                iteration_nr=index,
+                parallelization_nr=0,
+                question=query[0] if query else "",
+                reasoning=f"I am now using Internal Search to gather information on {query[0] if query else ''}",
+                answer="",
+                cited_documents={
+                    i: inference_section
+                    for i, inference_section in enumerate(pruned_sections)
+                },
+                queries=[query],
+            )
+        )
+        # Set flag to include citation requirements since we retrieved documents
+        run_context.context.should_cite_documents = (
+            run_context.context.should_cite_documents or bool(pruned_sections)
+        )
+
+        adapter = TypeAdapter(list[LlmInternalSearchResult])
+        return adapter.dump_json(search_results_for_query).decode()
 
     def _build_response_for_specified_sections(
         self, query: str
@@ -402,7 +540,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         if kg_chunk_id_zero_only:
             retrieval_options.filters.kg_chunk_id_zero_only = kg_chunk_id_zero_only
 
-        search_pipeline = SearchPipeline(
+        search_pipeline = self.search_pipeline_override_for_testing or SearchPipeline(
             search_request=SearchRequest(
                 query=query,
                 evaluation_type=(
