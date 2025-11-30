@@ -62,6 +62,7 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import get_user_files_from_project
+from onyx.db.tools import get_tools
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
@@ -589,6 +590,10 @@ def stream_chat_message_objects(
             reserved_assistant_message_id=assistant_response.id,
         )
 
+        # Build a mapping of tool_id to tool_name for history reconstruction
+        all_tools = get_tools(db_session)
+        tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
+
         # Convert the chat history into a simple format that is free of any DB objects
         # and is easy to parse for the agent loop
         simple_chat_history = convert_chat_history(
@@ -597,6 +602,7 @@ def stream_chat_message_objects(
             project_image_files=extracted_project_files.project_image_files,
             additional_context=additional_context,
             tokenizer_encode_func=tokenizer_encode_func,
+            tool_id_to_name_map=tool_id_to_name_map,
         )
 
         redis_client = get_redis_client()
