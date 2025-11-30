@@ -43,6 +43,7 @@ export interface LineItemProps extends React.HTMLAttributes<HTMLButtonElement> {
   emphasized?: boolean;
 
   selected?: boolean;
+  disabled?: boolean;
   icon?: React.FunctionComponent<SvgProps>;
   description?: string;
   rightChildren?: React.ReactNode;
@@ -103,6 +104,7 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
       strikethrough,
       danger,
       emphasized,
+      disabled,
       icon: Icon,
       description,
       className,
@@ -127,11 +129,13 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
         ref={ref}
         className={cn(
           "flex flex-col w-full justify-center items-start p-2 rounded-08 group/LineItem",
+          disabled ? "cursor-not-allowed opacity-50" : "",
           buttonClassNames[variant][emphasisKey],
           className
         )}
         type="button"
         data-selected={selected}
+        disabled={disabled}
         {...props}
       >
         <div className="flex flex-row items-center justify-start w-full gap-2">

@@ -12,6 +12,7 @@ interface BaseMemoizedHumanMessageProps {
   shared?: boolean;
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
+  setPresentingDocument?: (doc: MinimalOnyxDocument | null) => void;
 }
 
 interface InternalMemoizedHumanMessageProps
@@ -32,6 +33,7 @@ const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
   shared,
   stopGenerating,
   disableSwitchingForStreaming,
+  setPresentingDocument,
   onEdit,
 }: InternalMemoizedHumanMessageProps) {
   return (
@@ -44,6 +46,7 @@ const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
       shared={shared}
       stopGenerating={stopGenerating}
       disableSwitchingForStreaming={disableSwitchingForStreaming}
+      setPresentingDocument={setPresentingDocument}
       onEdit={onEdit}
     />
   );
@@ -58,6 +61,7 @@ export const MemoizedHumanMessage = ({
   shared,
   stopGenerating,
   disableSwitchingForStreaming,
+  setPresentingDocument,
   handleEditWithMessageId,
 }: MemoizedHumanMessageProps) => {
   const onEdit = useCallback(
@@ -84,6 +88,7 @@ export const MemoizedHumanMessage = ({
       shared={shared}
       stopGenerating={stopGenerating}
       disableSwitchingForStreaming={disableSwitchingForStreaming}
+      setPresentingDocument={setPresentingDocument}
       onEdit={onEdit}
     />
   );

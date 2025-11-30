@@ -108,6 +108,21 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
     # Determine appropriate chat file type based on the original file's MIME type
     chat_file_type = mime_type_to_chat_file_type(file_record.file_type)
 
+    # Preserve images for regeneration
+    if chat_file_type == ChatFileType.IMAGE:
+        file_io = file_store.read_file(user_file.file_id, mode="b")
+        chat_file = InMemoryChatFile(
+            file_id=str(user_file.file_id),
+            content=file_io.read(),
+            file_type=ChatFileType.IMAGE,
+            filename=user_file.name,
+        )
+        logger.debug(
+            f"load_user_file finished (image): file_id={user_file.file_id} "
+            f"chat_file_type={chat_file_type}"
+        )
+        return chat_file
+
     # Try to load plaintext version first
     plaintext_file_name = user_file_id_to_plaintext_file_name(file_id)
 

@@ -8,7 +8,7 @@ import React, {
 import { FiPlus } from "react-icons/fi";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { InputPrompt } from "@/app/chat/interfaces";
+import { ChatFileType, InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { DocumentIcon2, FileIcon } from "@/components/icons/icons";
@@ -17,7 +17,7 @@ import { ChatState } from "@/app/chat/interfaces";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { CalendarIcon, XIcon } from "lucide-react";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
-import { truncateString, cn, hasNonImageFiles } from "@/lib/utils";
+import { truncateString, cn, hasNonImageFiles, isImageFile } from "@/lib/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -104,6 +104,8 @@ export interface ChatInputBarProps {
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
   disabled: boolean;
+  conversationHasImages?: boolean;
+  validateImageUpload?: () => boolean;
 }
 
 function ChatInputBarInner({
@@ -129,22 +131,52 @@ function ChatInputBarInner({
   toggleDeepResearch,
   setPresentingDocument,
   disabled,
+  conversationHasImages,
+  validateImageUpload,
 }: ChatInputBarProps) {
   const { user } = useUser();
   const { forcedToolIds, setForcedToolIds } = useAgentsContext();
-  const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
+  const {
+    currentMessageFiles,
+    setCurrentMessageFiles,
+    allCurrentProjectFiles,
+  } = useProjectsContext();
 
-  const currentIndexingFiles = useMemo(() => {
-    return currentMessageFiles.filter(
-      (file) => file.status === UserFileStatus.PROCESSING
-    );
-  }, [currentMessageFiles]);
+  // Helper to check if file is image or plaintext within token limits
+  const isSimpleFile = useCallback(
+    (file: ProjectFile) => {
+      // Images are always "simple" - sent as base64, don't need backend processing
+      if (isImageFile(file.name)) {
+        return true;
+      }
 
-  const hasUploadingFiles = useMemo(() => {
-    return currentMessageFiles.some(
-      (file) => file.status === UserFileStatus.UPLOADING
+      // Plaintext files are "simple" only if within token limits
+      if (file.chat_file_type === ChatFileType.PLAIN_TEXT) {
+        const fileTokens = file.token_count || 0;
+        const totalTokens = (currentSessionFileTokenCount || 0) + fileTokens;
+        return totalTokens < availableContextTokens;
+      }
+
+      return false;
+    },
+    [currentSessionFileTokenCount, availableContextTokens]
+  );
+
+  // Only block send for files that NEED processing (PDFs, documents)
+  // Images and plaintext can be sent immediately
+  const hasFilesProcessing = useMemo(() => {
+    const needsProcessingAndIsProcessing = (file: ProjectFile) => {
+      const isProcessing =
+        file.status === UserFileStatus.UPLOADING ||
+        file.status === UserFileStatus.PROCESSING;
+      // Only count as blocking if it's a file that needs processing (not image/plaintext)
+      return isProcessing && !isSimpleFile(file);
+    };
+    return (
+      currentMessageFiles.some(needsProcessingAndIsProcessing) ||
+      allCurrentProjectFiles.some(needsProcessingAndIsProcessing)
     );
-  }, [currentMessageFiles]);
+  }, [currentMessageFiles, allCurrentProjectFiles, isSimpleFile]);
 
   // Convert ProjectFile to MinimalOnyxDocument format for viewing
   const handleFileClick = useCallback(
@@ -282,26 +314,6 @@ function ChatInputBarInner({
     [inputPrompts, startFilterSlash]
   );
 
-  // Determine if we should hide processing state based on context limits
-  const hideProcessingState = useMemo(() => {
-    if (currentMessageFiles.length > 0 && currentIndexingFiles.length > 0) {
-      const currentFilesTokenTotal = currentMessageFiles.reduce(
-        (acc, file) => acc + (file.token_count || 0),
-        0
-      );
-      const totalTokens =
-        (currentSessionFileTokenCount || 0) + currentFilesTokenTotal;
-      // Hide processing state when files are within context limits
-      return totalTokens < availableContextTokens;
-    }
-    return false;
-  }, [
-    currentMessageFiles,
-    currentSessionFileTokenCount,
-    currentIndexingFiles,
-    availableContextTokens,
-  ]);
-
   // Detect if there are any non-image files to determine if images should be compact
   const shouldCompactImages = useMemo(() => {
     return hasNonImageFiles(currentMessageFiles);
@@ -360,7 +372,7 @@ function ChatInputBarInner({
     <div
       id="onyx-chat-input"
       className={cn(
-        "max-w-full w-[50rem]",
+        "max-w-full w-[50rem] relative",
         disabled && "opacity-50 cursor-not-allowed pointer-events-none"
       )}
       aria-disabled={disabled}
@@ -415,7 +427,7 @@ function ChatInputBarInner({
                 key={file.id}
                 file={file}
                 removeFile={handleRemoveMessageFile}
-                hideProcessingState={hideProcessingState}
+                hideProcessingState={isSimpleFile(file)}
                 onFileClick={handleFileClick}
                 compactImages={shouldCompactImages}
               />
@@ -527,6 +539,14 @@ function ChatInputBarInner({
             <FilePickerPopover
               onFileClick={handleFileClick}
               onPickRecent={(file: ProjectFile) => {
+                // Check if file is an image and model doesn't support images
+                if (
+                  isImageFile(file.name) &&
+                  validateImageUpload &&
+                  !validateImageUpload()
+                ) {
+                  return;
+                }
                 // Check if file with same ID already exists
                 if (
                   !currentMessageFiles.some(
@@ -610,6 +630,10 @@ function ChatInputBarInner({
               <LLMPopover
                 llmManager={llmManager}
                 requiresImageGeneration={false}
+                hasUploadedImages={
+                  conversationHasImages ||
+                  currentMessageFiles.some((file) => isImageFile(file.name))
+                }
                 disabled={disabled}
               />
             </div>
@@ -617,7 +641,7 @@ function ChatInputBarInner({
               id="onyx-chat-input-send-button"
               icon={chatState === "input" ? SvgArrowUp : SvgStop}
               disabled={
-                (chatState === "input" && !message) || hasUploadingFiles
+                chatState === "input" && (!message || hasFilesProcessing)
               }
               onClick={() => {
                 if (chatState == "streaming") {

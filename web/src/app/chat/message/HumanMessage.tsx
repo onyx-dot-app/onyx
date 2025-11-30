@@ -9,6 +9,7 @@ import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import SvgEdit from "@/icons/edit";
@@ -18,6 +19,7 @@ import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrappe
 interface FileDisplayProps {
   files: FileDescriptor[];
   alignBubble?: boolean;
+  onImageClick?: (fileId: string) => void;
 }
 
 interface MessageEditingProps {
@@ -26,7 +28,7 @@ interface MessageEditingProps {
   onCancelEdit: () => void;
 }
 
-function FileDisplay({ files, alignBubble }: FileDisplayProps) {
+function FileDisplay({ files, alignBubble, onImageClick }: FileDisplayProps) {
   const [close, setClose] = useState(true);
   const textFiles = files.filter(
     (file) =>
@@ -56,9 +58,21 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
           id="onyx-image"
           className={cn("mt-2 auto", alignBubble && "ml-auto")}
         >
-          <div className="flex flex-col gap-2">
+          <div
+            className={
+              imageFiles.length >= 3
+                ? "grid grid-cols-3 gap-1"
+                : "flex flex-col gap-2"
+            }
+          >
             {imageFiles.map((file) => (
-              <InMessageImage key={file.id} fileId={file.id} />
+              <InMessageImage
+                key={file.id}
+                fileId={file.id}
+                fileName={file.name ?? undefined}
+                compact={imageFiles.length >= 3}
+                onImageClick={onImageClick}
+              />
             ))}
           </div>
         </div>
@@ -174,6 +188,9 @@ interface HumanMessageProps {
   // Editing functionality
   onEdit?: (editedContent: string) => void;
 
+  // Document viewer
+  setPresentingDocument?: (doc: MinimalOnyxDocument | null) => void;
+
   // Streaming and generation
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
@@ -187,6 +204,7 @@ export default function HumanMessage({
   onEdit,
   onMessageSelection,
   shared,
+  setPresentingDocument,
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
 }: HumanMessageProps) {
@@ -198,6 +216,15 @@ export default function HumanMessage({
 
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  const hasImages = files?.some((file) => file.type === ChatFileType.IMAGE);
+
+  const handleImageClick = (fileId: string) => {
+    setPresentingDocument?.({
+      document_id: `project_file__${fileId}`,
+      semantic_identifier: `image-${fileId}`,
+    });
+  };
 
   const currentMessageInd = messageId
     ? otherMessagesCanSwitchTo?.indexOf(messageId)
@@ -240,7 +267,11 @@ export default function HumanMessage({
       >
         <div className="xl:ml-8">
           <div className="flex flex-col desktop:mr-4">
-            <FileDisplay alignBubble files={files || []} />
+            <FileDisplay
+              alignBubble
+              files={files || []}
+              onImageClick={handleImageClick}
+            />
 
             <div className="flex justify-end mt-1">
               <div className="w-full ml-8 flex w-full w-[800px] break-words">
@@ -257,10 +288,7 @@ export default function HumanMessage({
                 ) : typeof content === "string" ? (
                   <>
                     <div className="ml-auto flex items-center mr-1 h-fit mb-auto">
-                      {onEdit &&
-                      isHovered &&
-                      !isEditing &&
-                      (!files || files.length === 0) ? (
+                      {onEdit && isHovered && !isEditing && !hasImages ? (
                         <div className="flex flex-row items-center justify-center gap-1">
                           <CopyIconButton
                             getCopyText={() => content}
@@ -286,12 +314,8 @@ export default function HumanMessage({
                     <div
                       className={cn(
                         "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3",
-                        !(
-                          onEdit &&
-                          isHovered &&
-                          !isEditing &&
-                          (!files || files.length === 0)
-                        ) && "ml-auto"
+                        !(onEdit && isHovered && !isEditing && !hasImages) &&
+                          "ml-auto"
                       )}
                     >
                       <Text mainContentBody>{content}</Text>
@@ -299,10 +323,7 @@ export default function HumanMessage({
                   </>
                 ) : (
                   <>
-                    {onEdit &&
-                    isHovered &&
-                    !isEditing &&
-                    (!files || files.length === 0) ? (
+                    {onEdit && isHovered && !isEditing && !hasImages ? (
                       <div className="my-auto">
                         <IconButton
                           icon={SvgEdit}

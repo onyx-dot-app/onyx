@@ -43,6 +43,7 @@ import FeedbackModal, {
 } from "../../components/modal/FeedbackModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFeedbackController } from "../../hooks/useFeedbackController";
+import { cn } from "@/lib/utils";
 
 export interface AIMessageProps {
   rawPackets: Packet[];
@@ -53,6 +54,7 @@ export interface AIMessageProps {
   llmManager: LlmManager | null;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
+  conversationHasImages?: boolean;
 }
 
 export default function AIMessage({
@@ -64,6 +66,7 @@ export default function AIMessage({
   llmManager,
   otherMessagesCanSwitchTo,
   onMessageSelection,
+  conversationHasImages,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const { popup, setPopup } = usePopup();
@@ -98,10 +101,11 @@ export default function AIMessage({
         return;
       }
 
-      // Toggle logic
-      if (currentFeedback === clickedFeedback) {
+      const isRemoving = currentFeedback === clickedFeedback;
+
+      if (isRemoving) {
         // Clicking same button - remove feedback
-        await handleFeedbackChange(nodeId, null);
+        await handleFeedbackChange(messageId, null);
       }
 
       // Clicking like (will automatically clear dislike if it was active).
@@ -113,12 +117,12 @@ export default function AIMessage({
           // Open modal for positive feedback
           setFeedbackModalProps({
             feedbackType: "like",
-            messageId: nodeId,
+            messageId,
           });
           modal.toggle(true);
         } else {
           // No modal needed - just submit like (this replaces any existing feedback)
-          await handleFeedbackChange(nodeId, "like");
+          await handleFeedbackChange(messageId, "like");
         }
       }
 
@@ -516,6 +520,10 @@ export default function AIMessage({
                               onClick={() => handleFeedbackClick("like")}
                               tertiary
                               transient={isFeedbackTransient("like")}
+                              className={cn(
+                                currentFeedback === "like" &&
+                                  "bg-[color:var(--status-success-01)]"
+                              )}
                               tooltip={
                                 currentFeedback === "like"
                                   ? "Remove Like"
@@ -528,6 +536,10 @@ export default function AIMessage({
                               onClick={() => handleFeedbackClick("dislike")}
                               tertiary
                               transient={isFeedbackTransient("dislike")}
+                              className={cn(
+                                currentFeedback === "dislike" &&
+                                  "bg-[color:var(--action-danger-01)]"
+                              )}
                               tooltip={
                                 currentFeedback === "dislike"
                                   ? "Remove Dislike"
@@ -541,6 +553,7 @@ export default function AIMessage({
                                 <LLMPopover
                                   llmManager={llmManager}
                                   currentModelName={chatState.overriddenModel}
+                                  hasUploadedImages={conversationHasImages}
                                   onSelect={(modelName) => {
                                     const llmDescriptor =
                                       parseLlmDescriptor(modelName);

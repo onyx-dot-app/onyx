@@ -1021,7 +1021,6 @@ export default function AssistantEditor({
                                         <div key={fileData.id}>
                                           <FileCard
                                             file={fileData as ProjectFile}
-                                            hideProcessingState
                                             removeFile={() => {
                                               setFieldValue(
                                                 "user_file_ids",
