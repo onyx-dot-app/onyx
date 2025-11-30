@@ -57,22 +57,21 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _convert_db_doc_id_to_document_ids(
-    citation_dict: dict[int, int], top_documents: list[SavedSearchDoc]
+def _convert_document_ids_to_citation_info(
+    citation_dict: dict[int, str], top_documents: list[SavedSearchDoc]
 ) -> list[CitationInfo]:
     citation_list_with_document_id = []
-    for citation_num, db_doc_id in citation_dict.items():
-        if db_doc_id is not None:
-            matching_doc = next(
-                (d for d in top_documents if d.db_doc_id == db_doc_id), None
-            )
-            if matching_doc:
-                citation_list_with_document_id.append(
-                    CitationInfo(
-                        citation_number=citation_num,
-                        document_id=matching_doc.document_id,
-                    )
+    # Build a set of valid document_ids from top_documents for validation
+    valid_document_ids = {doc.document_id for doc in top_documents}
+
+    for citation_num, document_id in citation_dict.items():
+        if document_id is not None and document_id in valid_document_ids:
+            citation_list_with_document_id.append(
+                CitationInfo(
+                    citation_number=citation_num,
+                    document_id=document_id,
                 )
+            )
     return citation_list_with_document_id
 
 
@@ -86,7 +85,9 @@ def _build_citation_list(chat_message_detail: ChatMessageDetail) -> list[Citatio
             if chat_message_detail.context_docs
             else []
         )
-        citation_list = _convert_db_doc_id_to_document_ids(citation_dict, top_documents)
+        citation_list = _convert_document_ids_to_citation_info(
+            citation_dict, top_documents
+        )
         return citation_list
 
 

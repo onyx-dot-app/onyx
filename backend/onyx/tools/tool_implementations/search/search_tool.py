@@ -245,7 +245,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 chunk_search_request=ChunkSearchRequest(
                     query=query,
                     hybrid_alpha=hybrid_alpha,
-                    user_selected_filters=self.user_selected_filters,
+                    # For projects, the search scope is the project and has no other limits
+                    user_selected_filters=(
+                        self.user_selected_filters if self.project_id is None else None
+                    ),
                     bypass_acl=self.bypass_acl,
                     limit=num_hits,
                 ),
