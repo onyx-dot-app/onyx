@@ -198,6 +198,16 @@ test.describe("Default Assistant MCP Integration", () => {
     expect(serverId).toBeGreaterThan(0);
     console.log(`[test] Server ID: ${serverId}`);
 
+    // Manually update status to CONNECTED to simulate a successful connection flow
+    // (since backend doesn't auto-update on list tools anymore)
+    await page.request.patch(
+      `${APP_BASE_URL}/api/admin/mcp/server/${serverId}/status`,
+      {
+        params: { status: "CONNECTED" },
+      }
+    );
+    console.log(`[test] Manually updated server status to CONNECTED`);
+
     // Select all tools
     const selectAllCheckbox = page.getByLabel("tool-checkbox-select-all");
     await expect(selectAllCheckbox).toBeVisible({ timeout: 5000 });

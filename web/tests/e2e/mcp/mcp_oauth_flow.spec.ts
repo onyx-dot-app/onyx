@@ -1266,6 +1266,15 @@ test.describe("MCP OAuth flows", () => {
       );
     }
 
+    // Manually update status to CONNECTED
+    await page.request.patch(
+      `${APP_BASE_URL}/api/admin/mcp/server/${serverId}/status`,
+      {
+        params: { status: "CONNECTED" },
+      }
+    );
+    logStep("Manually updated server status to CONNECTED");
+
     const toolSearchInput = page.getByPlaceholder("Search tools...");
     await toolSearchInput.fill(TOOL_NAMES.admin);
     await page.waitForTimeout(500); // allow filtering to apply
@@ -1593,6 +1602,15 @@ test.describe("MCP OAuth flows", () => {
       if (Number.isNaN(serverId)) {
         throw new Error(`Invalid server_id ${serverIdParam}`);
       }
+
+      // Manually update status to CONNECTED
+      await page.request.patch(
+        `${APP_BASE_URL}/api/admin/mcp/server/${serverId}/status`,
+        {
+          params: { status: "CONNECTED" },
+        }
+      );
+      logStep("Manually updated server status to CONNECTED (curator)");
 
       // Click the checkbox and wait for it to be checked
       const curatorCheckbox = page.getByLabel(

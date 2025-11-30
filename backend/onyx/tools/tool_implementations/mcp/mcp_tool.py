@@ -8,6 +8,7 @@ from langchain_core.messages import SystemMessage
 
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
 from onyx.llm.interfaces import LLM
@@ -213,7 +214,7 @@ Return ONLY a valid JSON object with the extracted arguments. If no arguments ar
                 self._name,
                 kwargs,
                 connection_headers=headers,
-                transport=self.mcp_server.transport,
+                transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
             )
 
             logger.info(f"MCP tool '{self._name}' executed successfully")
