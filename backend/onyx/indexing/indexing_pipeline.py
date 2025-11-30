@@ -10,6 +10,7 @@ from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_NAME
 from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
+from onyx.configs.app_configs import MAX_IMAGES_PER_DOCUMENT
 from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
 from onyx.configs.app_configs import USE_CHUNK_SUMMARY
 from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
@@ -458,6 +459,29 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
     for document in documents:
         processed_sections: list[Section] = []
 
+        # Count images in this document and determine if we should limit processing
+        image_sections = [s for s in document.sections if isinstance(s, ImageSection)]
+        total_images = len(image_sections)
+
+        # Determine how many images to process based on MAX_IMAGES_PER_DOCUMENT
+        # -1 means unlimited, 0 means no images, positive number is the limit
+        if MAX_IMAGES_PER_DOCUMENT == -1:
+            images_to_process = total_images
+        elif MAX_IMAGES_PER_DOCUMENT == 0:
+            images_to_process = 0
+        else:
+            images_to_process = min(total_images, MAX_IMAGES_PER_DOCUMENT)
+
+        # Log if we're limiting image processing
+        if total_images > images_to_process:
+            logger.warning(
+                f"Document {document.id} ({document.semantic_identifier}) has {total_images} images. "
+                f"Processing only {images_to_process} images due to MAX_IMAGES_PER_DOCUMENT={MAX_IMAGES_PER_DOCUMENT} limit. "
+                f"Skipping {total_images - images_to_process} images to prevent OOM."
+            )
+
+        images_processed = 0
+
         for section in document.sections:
             # For ImageSection, process and create base Section with both text and image_file_id
             if isinstance(section, ImageSection):
@@ -468,38 +492,53 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                     text="",  # Initialize with empty string
                 )
 
-                # Try to get image summary
-                try:
-                    file_store = get_default_file_store()
+                # Only process images if we haven't hit the limit
+                if images_processed < images_to_process:
+                    # Try to get image summary
+                    try:
+                        file_store = get_default_file_store()
 
-                    file_record = file_store.read_file_record(
-                        file_id=section.image_file_id
-                    )
-                    if not file_record:
-                        logger.warning(
-                            f"Image file {section.image_file_id} not found in FileStore"
-                        )
-
-                        processed_section.text = "[Image could not be processed]"
-                    else:
-                        # Get the image data
-                        image_data_io = file_store.read_file(
+                        file_record = file_store.read_file_record(
                             file_id=section.image_file_id
                         )
-                        image_data = image_data_io.read()
-                        summary = summarize_image_with_error_handling(
-                            llm=llm,
-                            image_data=image_data,
-                            context_name=file_record.display_name or "Image",
-                        )
+                        if not file_record:
+                            logger.warning(
+                                f"Image file {section.image_file_id} not found in FileStore"
+                            )
 
-                        if summary:
-                            processed_section.text = summary
+                            processed_section.text = "[Image could not be processed]"
                         else:
-                            processed_section.text = "[Image could not be summarized]"
-                except Exception as e:
-                    logger.error(f"Error processing image section: {e}")
-                    processed_section.text = "[Error processing image]"
+                            # Get the image data
+                            image_data_io = file_store.read_file(
+                                file_id=section.image_file_id
+                            )
+                            image_data = image_data_io.read()
+                            summary = summarize_image_with_error_handling(
+                                llm=llm,
+                                image_data=image_data,
+                                context_name=file_record.display_name or "Image",
+                            )
+
+                            if summary:
+                                processed_section.text = summary
+                            else:
+                                processed_section.text = (
+                                    "[Image could not be summarized]"
+                                )
+                    except Exception as e:
+                        logger.error(f"Error processing image section: {e}")
+                        processed_section.text = "[Error processing image]"
+
+                    images_processed += 1
+                else:
+                    # Image limit reached - skip processing but preserve the ImageSection
+                    processed_section.text = (
+                        "[Image skipped - document exceeds image processing limit]"
+                    )
+                    logger.debug(
+                        f"Skipping image {images_processed + 1} in document {document.id} "
+                        f"due to MAX_IMAGES_PER_DOCUMENT limit"
+                    )
 
                 processed_sections.append(processed_section)
 
@@ -517,6 +556,27 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
             **document.model_dump(), processed_sections=processed_sections
         )
         indexed_documents.append(indexed_document)
+
+    # Log summary metrics for image processing
+    total_docs = len(documents)
+    total_images_in_batch = sum(
+        len([s for s in doc.sections if isinstance(s, ImageSection)])
+        for doc in documents
+    )
+    docs_with_limited_images = sum(
+        1
+        for doc in documents
+        if len([s for s in doc.sections if isinstance(s, ImageSection)])
+        > MAX_IMAGES_PER_DOCUMENT
+        and MAX_IMAGES_PER_DOCUMENT != -1
+    )
+
+    if total_images_in_batch > 0:
+        logger.info(
+            f"Image processing summary: {total_docs} documents, {total_images_in_batch} total images. "
+            f"{docs_with_limited_images} documents had image processing limited due to "
+            f"MAX_IMAGES_PER_DOCUMENT={MAX_IMAGES_PER_DOCUMENT}."
+        )
 
     return indexed_documents
 
