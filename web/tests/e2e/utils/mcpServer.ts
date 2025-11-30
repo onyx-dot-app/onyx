@@ -210,3 +210,61 @@ export async function startMcpApiKeyServer(
 
   return new McpServerProcess(proc, bindHost, publicHost, port);
 }
+
+/**
+ * Start the MCP Google OAuth Pass-Through test server.
+ *
+ * This server validates Google OAuth tokens that are passed through from Onyx.
+ * It calls Google's tokeninfo endpoint to verify the token is valid.
+ *
+ * For testing pass-through OAuth scenarios where Onyx forwards the user's
+ * Google OAuth access token to an MCP server.
+ */
+export async function startMcpGoogleOAuthServer(
+  options: StartServerOptions & { requiredScopes?: string[] } = {}
+): Promise<McpServerProcess> {
+  const bindHost = options.bindHost || DEFAULT_BIND_HOST;
+  const publicHost = options.publicHost || DEFAULT_PUBLIC_HOST;
+  const port = options.port ?? 8006; // Default to 8006 to not conflict with other MCP servers
+  const pythonBinary = options.pythonBinary || "python3";
+  const readyTimeout = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
+  const requiredScopes = options.requiredScopes || [];
+
+  const scriptPath =
+    options.scriptPath ||
+    path.resolve(
+      __dirname,
+      "../../../..",
+      "backend/tests/integration/mock_services/mcp_test_server/run_mcp_server_google_oauth.py"
+    );
+  const scriptDir = path.dirname(scriptPath);
+
+  const proc = spawn(pythonBinary, [scriptPath, port.toString()], {
+    cwd: scriptDir,
+    stdio: ["pipe", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      MCP_SERVER_PORT: port.toString(),
+      MCP_SERVER_HOST: bindHost,
+      MCP_SERVER_PUBLIC_HOST: publicHost,
+      MCP_GOOGLE_REQUIRED_SCOPES: requiredScopes.join(","),
+    },
+  });
+
+  proc.stdout.on("data", (chunk) => {
+    const message = chunk.toString();
+    console.log(`[mcp-google-oauth-server] ${message.trimEnd()}`);
+  });
+  proc.stderr.on("data", (chunk) => {
+    const message = chunk.toString();
+    console.error(`[mcp-google-oauth-server:stderr] ${message.trimEnd()}`);
+  });
+
+  proc.on("error", (err) => {
+    console.error("[mcp-google-oauth-server] failed to start", err);
+  });
+
+  await waitForPort(bindHost, port, proc, readyTimeout);
+
+  return new McpServerProcess(proc, bindHost, publicHost, port);
+}

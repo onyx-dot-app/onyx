@@ -15,6 +15,8 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Label } from "@/components/ui/label";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/components/ui/text";
+import { useAuthType } from "@/lib/hooks";
+import { AuthType } from "@/lib/constants";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
@@ -46,10 +48,13 @@ const validationSchema = Yup.object().shape({
       MCPAuthenticationType.NONE,
       MCPAuthenticationType.API_TOKEN,
       MCPAuthenticationType.OAUTH,
+      MCPAuthenticationType.PT_OAUTH,
     ])
     .required("Authentication type is required"),
   auth_performer: Yup.string().when("auth_type", {
-    is: (auth_type: string) => auth_type !== MCPAuthenticationType.NONE,
+    is: (auth_type: string) =>
+      auth_type !== MCPAuthenticationType.NONE &&
+      auth_type !== MCPAuthenticationType.PT_OAUTH,
     then: (schema) =>
       schema
         .oneOf([
@@ -80,6 +85,11 @@ export default function NewMCPToolPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { popup, setPopup } = usePopup();
+
+  // Check if OAuth is enabled for the Onyx instance
+  const authType = useAuthType();
+  const isOAuthEnabled =
+    authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
 
   const [loading, setLoading] = useState(false);
 
@@ -442,6 +452,13 @@ export default function NewMCPToolPage() {
                                 >
                                   OAuth
                                 </InputSelect.Item>
+                                {isOAuthEnabled && (
+                                  <InputSelect.Item
+                                    value={MCPAuthenticationType.PT_OAUTH}
+                                  >
+                                    Pass-through OAuth
+                                  </InputSelect.Item>
+                                )}
                               </InputSelect.Content>
                             </InputSelect>
                             {errors.auth_type && touched.auth_type && (
@@ -449,11 +466,21 @@ export default function NewMCPToolPage() {
                                 {errors.auth_type}
                               </div>
                             )}
+                            {values.auth_type ===
+                              MCPAuthenticationType.PT_OAUTH && (
+                              <Text className="text-sm text-subtle mt-2">
+                                The user&apos;s OAuth token from their Onyx
+                                login will be passed to the MCP server as the
+                                Authorization header.
+                              </Text>
+                            )}
                           </div>
                         </div>
 
                         {values.auth_type !== MCPAuthenticationType.NONE &&
-                          values.auth_type !== MCPAuthenticationType.OAUTH && (
+                          values.auth_type !== MCPAuthenticationType.OAUTH &&
+                          values.auth_type !==
+                            MCPAuthenticationType.PT_OAUTH && (
                             <div>
                               <Label htmlFor="auth_performer">
                                 Who performs authentication?

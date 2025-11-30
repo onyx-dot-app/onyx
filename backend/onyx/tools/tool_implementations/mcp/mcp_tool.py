@@ -46,11 +46,13 @@ class MCPTool(BaseTool):
         tool_definition: dict[str, Any],
         connection_config: MCPConnectionConfig | None = None,
         user_email: str = "",
+        user_oauth_token: str | None = None,
     ) -> None:
         self._id = tool_id
         self.mcp_server = mcp_server
         self.connection_config = connection_config
         self.user_email = user_email
+        self._user_oauth_token = user_oauth_token
 
         self._name = tool_name
         self._tool_definition = tool_definition
@@ -179,12 +181,21 @@ Return ONLY a valid JSON object with the extracted arguments. If no arguments ar
                 else {}
             )
 
+            # For pass-through OAuth, use the user's login OAuth token
+            if self._user_oauth_token:
+                headers["Authorization"] = f"Bearer {self._user_oauth_token}"
+
             # Check if this is an authentication issue before making the call
+            is_passthrough_oauth = (
+                self.mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH
+            )
             requires_auth = (
                 self.mcp_server.auth_type != MCPAuthenticationType.NONE
                 and self.mcp_server.auth_type is not None
             )
-            has_auth_config = self.connection_config is not None and bool(headers)
+            has_auth_config = (
+                self.connection_config is not None and bool(headers)
+            ) or (is_passthrough_oauth and self._user_oauth_token is not None)
 
             if requires_auth and not has_auth_config:
                 # Authentication required but not configured

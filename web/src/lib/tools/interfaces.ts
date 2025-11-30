@@ -2,6 +2,7 @@ export enum MCPAuthenticationType {
   NONE = "NONE",
   API_TOKEN = "API_TOKEN",
   OAUTH = "OAUTH",
+  PT_OAUTH = "PT_OAUTH",
 }
 
 export enum MCPAuthenticationPerformer {

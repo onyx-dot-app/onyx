@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
+  AuthType,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   SERVER_SIDE_ONLY__AUTH_TYPE,
 } from "./lib/constants";
@@ -57,7 +58,7 @@ export async function proxy(request: NextRequest) {
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)
   // Note: Layouts still do full verification (token validity, roles, etc.)
   // Skip auth checks entirely if auth is disabled
-  if (SERVER_SIDE_ONLY__AUTH_TYPE !== "disabled") {
+  if (SERVER_SIDE_ONLY__AUTH_TYPE !== AuthType.DISABLED) {
     const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
       pathname.startsWith(route)
     );
