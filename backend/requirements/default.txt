@@ -524,7 +524,7 @@ mcp==1.19.0
     #   openai-agents
 mdurl==0.1.2
     # via markdown-it-py
-mistune==0.8.4
+mistune==3.1.4
 more-itertools==10.8.0
     # via
     #   jaraco-classes
