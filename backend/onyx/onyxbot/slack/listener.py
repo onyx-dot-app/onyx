@@ -33,7 +33,6 @@ from onyx.configs.constants import MessageType
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
 from onyx.configs.onyxbot_configs import ONYX_BOT_REPHRASE_MESSAGE
-from onyx.configs.onyxbot_configs import ONYX_BOT_RESPOND_EVERY_CHANNEL
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.context.search.retrieval.search_runner import (
     download_nltk_data,
@@ -969,7 +968,6 @@ def apologize_for_fail(
 def process_message(
     req: SocketModeRequest,
     client: TenantSocketModeClient,
-    respond_every_channel: bool = ONYX_BOT_RESPOND_EVERY_CHANNEL,
     notify_no_answer: bool = NOTIFY_SLACKBOT_NO_ANSWER,
 ) -> None:
     tenant_id = get_current_tenant_id()

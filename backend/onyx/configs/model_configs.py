@@ -18,10 +18,6 @@ DOCUMENT_ENCODER_MODEL = (
 )
 # If the below is changed, Vespa deployment must also be changed
 DOC_EMBEDDING_DIM = int(os.environ.get("DOC_EMBEDDING_DIM") or 768)
-# Model should be chosen with 512 context size, ideally don't change this
-# If multipass_indexing is enabled, the max context size would be set to
-# DOC_EMBEDDING_CONTEXT_SIZE * LARGE_CHUNK_RATIO
-DOC_EMBEDDING_CONTEXT_SIZE = 512
 NORMALIZE_EMBEDDINGS = (
     os.environ.get("NORMALIZE_EMBEDDINGS") or "true"
 ).lower() == "true"

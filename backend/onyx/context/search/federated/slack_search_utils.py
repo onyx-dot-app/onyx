@@ -11,7 +11,7 @@ from langchain_core.messages import HumanMessage
 from pydantic import ValidationError
 
 from onyx.configs.app_configs import MAX_SLACK_QUERY_EXPANSIONS
-from onyx.context.search.models import SearchQuery
+from onyx.context.search.models import ChunkIndexRequest
 from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
@@ -621,7 +621,7 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
 
 
 def build_slack_queries(
-    query: SearchQuery,
+    query: ChunkIndexRequest,
     llm: LLM,
     entities: dict[str, Any] | None = None,
     available_channels: list[str] | None = None,
@@ -636,7 +636,9 @@ def build_slack_queries(
             logger.warning(f"Invalid entities in build_slack_queries: {e}")
 
     days_back = extract_date_range_from_query(
-        query.original_query or query.query, llm, default_search_days
+        query=query.query,
+        llm=llm,
+        default_search_days=default_search_days,
     )
 
     # get time filter
@@ -648,10 +650,8 @@ def build_slack_queries(
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
             time_filter = f" after:{cutoff_date.strftime('%Y-%m-%d')}"
 
-    original_query_text = query.original_query or query.query
-
     # ALWAYS extract channel references from the query (not just for recency queries)
-    channel_references = extract_channel_references_from_query(original_query_text)
+    channel_references = extract_channel_references_from_query(query.query)
 
     # Validate channel references against available channels and entity config
     # This will raise ValueError if channels are invalid
@@ -673,15 +673,15 @@ def build_slack_queries(
             channel_references = set()
 
     # use llm to generate slack queries (use original query to use same keywords as the user)
-    if is_recency_query(original_query_text):
+    if is_recency_query(query.query):
         # For recency queries, extract content words (excluding channel names and stop words)
         content_words = extract_content_words_from_recency_query(
-            original_query_text, channel_references
+            query.query, channel_references
         )
         rephrased_queries = [" ".join(content_words)] if content_words else [""]
     else:
         # For other queries, use LLM to expand into multiple variations
-        rephrased_queries = expand_query_with_llm(original_query_text, llm)
+        rephrased_queries = expand_query_with_llm(query.query, llm)
 
     # Build final query strings with time filters
     return [

@@ -15,6 +15,7 @@ from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import ONYX_BOT_FOLLOWUP_EMOJI
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.chat import get_chat_message
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -68,7 +69,8 @@ def _convert_db_doc_id_to_document_ids(
             if matching_doc:
                 citation_list_with_document_id.append(
                     CitationInfo(
-                        citation_num=citation_num, document_id=matching_doc.document_id
+                        citation_number=citation_num,
+                        document_id=matching_doc.document_id,
                     )
                 )
     return citation_list_with_document_id
@@ -249,20 +251,21 @@ def handle_publish_ephemeral_message_button(
         # we need to construct the blocks.
         citation_list = _build_citation_list(chat_message_detail)
 
+        if chat_message_detail.context_docs:
+            top_documents: list[SearchDoc] = [
+                SearchDoc.from_saved_search_doc(doc)
+                for doc in chat_message_detail.context_docs.top_documents
+            ]
+        else:
+            top_documents = []
+
         onyx_bot_answer = ChatBasicResponse(
             answer=chat_message_detail.message,
             answer_citationless=remove_answer_citations(chat_message_detail.message),
-            cited_documents={
-                citation_info.citation_num: citation_info.document_id
-                for citation_info in citation_list
-            },
-            top_documents=(
-                chat_message_detail.context_docs.top_documents
-                if chat_message_detail.context_docs
-                else []
-            ),
+            top_documents=top_documents,
             message_id=chat_message_id,
             error_msg=None,
+            citation_info=citation_list,
         )
 
     # Note: we need to use the webhook and the respond_url to update/delete ephemeral messages
@@ -284,7 +287,6 @@ def handle_publish_ephemeral_message_button(
             answer=onyx_bot_answer,
             message_info=slack_message_info,
             channel_conf=channel_conf,
-            use_citations=True,
             feedback_reminder_id=feedback_reminder_id,
             skip_ai_feedback=False,
             offer_ephemeral_publication=False,
@@ -314,7 +316,6 @@ def handle_publish_ephemeral_message_button(
             answer=onyx_bot_answer,
             message_info=slack_message_info,
             channel_conf=channel_conf,
-            use_citations=True,
             feedback_reminder_id=feedback_reminder_id,
             skip_ai_feedback=False,
             offer_ephemeral_publication=False,

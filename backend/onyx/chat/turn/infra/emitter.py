@@ -3,7 +3,7 @@ from queue import Queue
 from onyx.server.query_and_chat.streaming_models import Packet
 
 
-class Emitter:
+class EmitterOld:
     """Use this inside tools to emit arbitrary UI progress."""
 
     def __init__(self, bus: Queue):
@@ -15,7 +15,7 @@ class Emitter:
         self.packet_history.append(packet)
 
 
-def get_default_emitter() -> Emitter:
+def get_default_emitter() -> EmitterOld:
     bus: Queue[Packet] = Queue()
-    emitter = Emitter(bus)
+    emitter = EmitterOld(bus)
     return emitter

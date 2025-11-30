@@ -4,17 +4,17 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
+from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.context.search.enums import SearchType
+from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import MAX_METRICS_CONTENT
+from onyx.context.search.models import QueryExpansionType
 from onyx.context.search.models import RetrievalMetricsContainer
 from onyx.context.search.models import SearchQuery
-from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
 from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA
 from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA_KEYWORD
 from onyx.context.search.utils import get_query_embedding
@@ -43,9 +43,9 @@ logger = setup_logger()
 
 
 def _dedupe_chunks(
-    chunks: list[InferenceChunkUncleaned],
-) -> list[InferenceChunkUncleaned]:
-    used_chunks: dict[tuple[str, int], InferenceChunkUncleaned] = {}
+    chunks: list[InferenceChunk],
+) -> list[InferenceChunk]:
+    used_chunks: dict[tuple[str, int], InferenceChunk] = {}
     for chunk in chunks:
         key = (chunk.document_id, chunk.chunk_id)
         if key not in used_chunks:
@@ -137,17 +137,15 @@ def doc_index_retrieval(
     keyword_embeddings_thread: TimeoutThread[list[Embedding]] | None = None
     semantic_embeddings_thread: TimeoutThread[list[Embedding]] | None = None
     top_base_chunks_standard_ranking_thread: (
-        TimeoutThread[list[InferenceChunkUncleaned]] | None
+        TimeoutThread[list[InferenceChunk]] | None
     ) = None
 
-    top_semantic_chunks_thread: TimeoutThread[list[InferenceChunkUncleaned]] | None = (
-        None
-    )
+    top_semantic_chunks_thread: TimeoutThread[list[InferenceChunk]] | None = None
 
     keyword_embeddings: list[Embedding] | None = None
     semantic_embeddings: list[Embedding] | None = None
 
-    top_semantic_chunks: list[InferenceChunkUncleaned] | None = None
+    top_semantic_chunks: list[InferenceChunk] | None = None
 
     # original retrieveal method
     top_base_chunks_standard_ranking_thread = run_in_background(
@@ -251,7 +249,7 @@ def doc_index_retrieval(
     logger.info(f"Overall number of top initial retrieval chunks: {len(top_chunks)}")
 
     retrieval_requests: list[VespaChunkRequest] = []
-    normal_chunks: list[InferenceChunkUncleaned] = []
+    normal_chunks: list[InferenceChunk] = []
     referenced_chunk_scores: dict[tuple[str, int], float] = {}
     for chunk in top_chunks:
         if chunk.large_chunk_reference_ids:
@@ -274,7 +272,7 @@ def doc_index_retrieval(
 
     # If there are no large chunks, just return the normal chunks
     if not retrieval_requests:
-        return cleanup_chunks(normal_chunks)
+        return normal_chunks
 
     # Retrieve and return the referenced normal chunks from the large chunks
     retrieved_inference_chunks = document_index.id_based_retrieval(
@@ -298,7 +296,7 @@ def doc_index_retrieval(
     for reference in referenced_chunk_scores.keys():
         logger.error(f"Chunk {reference} not found in retrieved chunks")
 
-    unique_chunks: dict[tuple[str, int], InferenceChunkUncleaned] = {
+    unique_chunks: dict[tuple[str, int], InferenceChunk] = {
         (chunk.document_id, chunk.chunk_id): chunk for chunk in normal_chunks
     }
 
@@ -314,7 +312,7 @@ def doc_index_retrieval(
     # Deduplicate the chunks
     deduped_chunks = list(unique_chunks.values())
     deduped_chunks.sort(key=lambda chunk: chunk.score or 0, reverse=True)
-    return cleanup_chunks(deduped_chunks)
+    return deduped_chunks
 
 
 def _simplify_text(text: str) -> str:
@@ -323,6 +321,7 @@ def _simplify_text(text: str) -> str:
     ).lower()
 
 
+# TODO delete this
 def retrieve_chunks(
     query: SearchQuery,
     user_id: UUID | None,
@@ -346,7 +345,7 @@ def retrieve_chunks(
     federated_retrieval_infos = get_federated_retrieval_functions(
         db_session,
         user_id,
-        query.filters.source_type,
+        list(query.filters.source_type) if query.filters.source_type else None,
         query.filters.document_set,
         slack_context,
     )
@@ -426,6 +425,92 @@ def retrieve_chunks(
     return top_chunks
 
 
+def _embed_and_search(
+    query_request: ChunkIndexRequest,
+    document_index: DocumentIndex,
+    db_session: Session,
+) -> list[InferenceChunk]:
+    query_embedding = get_query_embedding(query_request.query, db_session)
+
+    hybrid_alpha = query_request.hybrid_alpha or HYBRID_ALPHA
+
+    top_chunks = document_index.hybrid_retrieval(
+        query=query_request.query,
+        query_embedding=query_embedding,
+        final_keywords=query_request.query_keywords,
+        filters=query_request.filters,
+        hybrid_alpha=hybrid_alpha,
+        time_decay_multiplier=query_request.recency_bias_multiplier,
+        num_to_retrieve=query_request.limit or NUM_RETURNED_HITS,
+        ranking_profile_type=(
+            QueryExpansionType.KEYWORD
+            if hybrid_alpha <= 0.3
+            else QueryExpansionType.SEMANTIC
+        ),
+        offset=query_request.offset or 0,
+    )
+
+    return top_chunks
+
+
+def search_chunks(
+    query_request: ChunkIndexRequest,
+    user_id: UUID | None,
+    document_index: DocumentIndex,
+    db_session: Session,
+    slack_context: SlackContext | None = None,
+) -> list[InferenceChunk]:
+    run_queries: list[tuple[Callable, tuple]] = []
+
+    source_filters = (
+        set(query_request.filters.source_type)
+        if query_request.filters.source_type
+        else None
+    )
+
+    # Federated retrieval
+    federated_retrieval_infos = get_federated_retrieval_functions(
+        db_session=db_session,
+        user_id=user_id,
+        source_types=list(source_filters) if source_filters else None,
+        document_set_names=query_request.filters.document_set,
+        slack_context=slack_context,
+    )
+
+    federated_sources = set(
+        federated_retrieval_info.source.to_non_federated_source()
+        for federated_retrieval_info in federated_retrieval_infos
+    )
+    for federated_retrieval_info in federated_retrieval_infos:
+        run_queries.append(
+            (federated_retrieval_info.retrieval_function, (query_request,))
+        )
+
+    # Don't run normal hybrid search if there are no indexed sources to
+    # search over
+    normal_search_enabled = (source_filters is None) or (
+        len(set(source_filters) - federated_sources) > 0
+    )
+
+    if normal_search_enabled:
+        run_queries.append(
+            (_embed_and_search, (query_request, document_index, db_session))
+        )
+
+    parallel_search_results = run_functions_tuples_in_parallel(run_queries)
+    # TODO revisit this one, does this make sense?
+    top_chunks = combine_retrieval_results(parallel_search_results)
+
+    if not top_chunks:
+        logger.debug(
+            f"Hybrid search returned no results for query: {query_request.query}"
+            f"with filters: {query_request.filters}"
+        )
+        return []
+
+    return top_chunks
+
+
 def inference_sections_from_ids(
     doc_identifiers: list[tuple[str, int]],
     document_index: DocumentIndex,
@@ -445,13 +530,12 @@ def inference_sections_from_ids(
         filters=filters,
     )
 
-    cleaned_chunks = cleanup_chunks(retrieved_chunks)
-    if not cleaned_chunks:
+    if not retrieved_chunks:
         return []
 
     # Group chunks by document ID
     chunks_by_doc_id: dict[str, list[InferenceChunk]] = {}
-    for chunk in cleaned_chunks:
+    for chunk in retrieved_chunks:
         chunks_by_doc_id.setdefault(chunk.document_id, []).append(chunk)
 
     inference_sections = [

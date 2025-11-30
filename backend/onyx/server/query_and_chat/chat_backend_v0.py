@@ -4,7 +4,6 @@ Provides backwards compatibility with older response formats.
 """
 
 import json
-from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
 
@@ -25,23 +24,21 @@ from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import User
-from onyx.server.query_and_chat.chat_backend import is_connected
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.streaming_models import CitationDelta
-from onyx.server.query_and_chat.streaming_models import CitationStart
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseStart
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
+from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
-from onyx.server.query_and_chat.streaming_models import SearchToolDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
@@ -67,8 +64,6 @@ def transform_packet_to_v0_format(packet: Any) -> dict[str, Any] | None:
     # Handle QADocsResponse
     if isinstance(packet, QADocsResponse):
         response = {
-            "level": packet.level,
-            "level_question_num": packet.level_question_num,
             "top_documents": [doc.model_dump() for doc in packet.top_documents],
             "rephrased_query": packet.rephrased_query,
             "predicted_flow": packet.predicted_flow,
@@ -105,12 +100,10 @@ def transform_packet_to_v0_format(packet: Any) -> dict[str, Any] | None:
     if isinstance(packet, Packet):
         obj = packet.obj
 
-        # Handle MessageStart
-        if isinstance(obj, MessageStart):
+        # Handle AgentResponseStart (formerly MessageStart)
+        if isinstance(obj, AgentResponseStart):
             # First message piece
-            result = {}
-            if obj.content:
-                result["answer_piece"] = obj.content
+            result: dict[str, Any] = {}
             if obj.final_documents:
                 # Return final context docs separately
                 return {
@@ -120,8 +113,8 @@ def transform_packet_to_v0_format(packet: Any) -> dict[str, Any] | None:
                 }
             return result if result else None
 
-        # Handle MessageDelta
-        if isinstance(obj, MessageDelta):
+        # Handle AgentResponseDelta (formerly MessageDelta)
+        if isinstance(obj, AgentResponseDelta):
             return {"answer_piece": obj.content}
 
         # Handle SearchToolStart
@@ -129,9 +122,9 @@ def transform_packet_to_v0_format(packet: Any) -> dict[str, Any] | None:
             # We'll capture the tool info in the delta
             return None
 
-        # Handle SearchToolDelta
-        if isinstance(obj, SearchToolDelta):
-            tool_response = {
+        # Handle SearchToolQueriesDelta
+        if isinstance(obj, SearchToolQueriesDelta):
+            tool_response: dict[str, Any] = {
                 "tool_name": "run_search",
                 "tool_args": {},
             }
@@ -141,11 +134,16 @@ def transform_packet_to_v0_format(packet: Any) -> dict[str, Any] | None:
                 query = obj.queries[0]
                 tool_response["tool_args"] = {"query": query}
 
-            # If documents are returned, we need to format them
-            if obj.documents:
-                # Return the tool call first
-                return tool_response
+            return tool_response
 
+        # Handle SearchToolDocumentsDelta
+        if isinstance(obj, SearchToolDocumentsDelta):
+            # Documents are returned - this is the tool result
+            tool_response = {
+                "tool_name": "run_search",
+                "tool_args": {},
+                "tool_result": [doc.model_dump() for doc in obj.documents],
+            }
             return tool_response
 
         # Handle CustomToolStart
@@ -173,32 +171,24 @@ def transform_packet_to_v0_format(packet: Any) -> dict[str, Any] | None:
                 "tool_args": {},
             }
 
-        # Handle ImageGenerationToolDelta
-        if isinstance(obj, ImageGenerationToolDelta):
+        # Handle ImageGenerationFinal
+        if isinstance(obj, ImageGenerationFinal):
             return {
                 "tool_name": "generate_image",
                 "tool_result": [img.model_dump() for img in obj.images],
             }
 
-        # Handle CitationStart
-        if isinstance(obj, CitationStart):
-            return None
-
-        # Handle CitationDelta
-        if isinstance(obj, CitationDelta):
-            if obj.citations:
-                citations_data = []
-                for citation in obj.citations:
-                    citations_data.append(
-                        {
-                            "level": citation.level,
-                            "level_question_num": citation.level_question_num,
-                            "citation_num": citation.citation_num,
-                            "document_id": citation.document_id,
-                        }
-                    )
-                return {"citations": citations_data}
-            return None
+        # Handle CitationInfo
+        if isinstance(obj, CitationInfo):
+            # CitationInfo is a single citation, not a list
+            return {
+                "citations": [
+                    {
+                        "citation_num": obj.citation_number,
+                        "document_id": obj.document_id,
+                    }
+                ]
+            }
 
         # Handle ReasoningStart
         if isinstance(obj, ReasoningStart):
@@ -213,10 +203,6 @@ def transform_packet_to_v0_format(packet: Any) -> dict[str, Any] | None:
             # This signals the end of streaming
             return None
 
-        # Handle SectionEnd
-        if isinstance(obj, SectionEnd):
-            return None
-
     # Unknown packet type - log and skip
     logger.debug(f"Unknown packet type in v0 transformation: {type(packet)}")
     return None
@@ -228,7 +214,6 @@ def handle_new_chat_message_v0(
     request: Request,
     user: User | None = Depends(current_chat_accessible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
-    is_connected_func: Callable[[], bool] = Depends(is_connected),
 ) -> StreamingResponse:
     """
     TODO: deprecate this shortly.
@@ -240,7 +225,8 @@ def handle_new_chat_message_v0(
     - {"user_message_id": int, "reserved_assistant_message_id": int}
     - {"answer_piece": str}
     - {"tool_name": str, "tool_args": dict}
-    - {"level": int, "level_question_num": int, "top_documents": list}
+    - {"tool_name": str, "tool_args": dict, "tool_result": list}
+    - {"top_documents": list, "rephrased_query": str, ...}
     - {"llm_selected_doc_indices": list}
     - {"final_context_docs": list}
     - {"citations": list}
@@ -272,7 +258,6 @@ def handle_new_chat_message_v0(
                     custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                         request.headers
                     ),
-                    is_connected=is_connected_func,
                 )
 
                 # Transform and yield each packet
@@ -289,10 +274,15 @@ def handle_new_chat_message_v0(
                             final_message_info.update(v0_response)
                             yield json.dumps(v0_response) + "\n"
                         elif "tool_name" in v0_response:
-                            # Store tool call to emit later with result
-                            pending_tool_call = v0_response
-                            # Emit tool call immediately
-                            yield json.dumps(v0_response) + "\n"
+                            # Check if this is a tool result (has tool_result) or a tool call
+                            if "tool_result" in v0_response:
+                                # This is a complete tool result (e.g., from SearchToolDocumentsDelta)
+                                yield json.dumps(v0_response) + "\n"
+                            else:
+                                # This is a tool call - store it to potentially combine with QADocsResponse
+                                pending_tool_call = v0_response
+                                # Emit tool call immediately
+                                yield json.dumps(v0_response) + "\n"
                         elif "top_documents" in v0_response:
                             # This is a QADocsResponse - emit it
                             yield json.dumps(v0_response) + "\n"
@@ -307,10 +297,6 @@ def handle_new_chat_message_v0(
                                     "tool_name": "run_search",
                                     "tool_args": pending_tool_call.get("tool_args", {}),
                                     "tool_result": v0_response.get("top_documents", []),
-                                    "level": v0_response.get("level"),
-                                    "level_question_num": v0_response.get(
-                                        "level_question_num"
-                                    ),
                                 }
                                 yield json.dumps(tool_result_response) + "\n"
                                 pending_tool_call = None

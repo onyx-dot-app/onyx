@@ -6,10 +6,10 @@ from copy import copy
 from tokenizers import Encoding  # type: ignore
 from tokenizers import Tokenizer  # type: ignore
 
-from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
 from onyx.context.search.models import InferenceChunk
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 from shared_configs.enums import EmbeddingProvider
 
 TRIM_SEP_PAT = "\n... {n} tokens removed...\n"

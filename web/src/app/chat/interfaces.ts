@@ -46,8 +46,8 @@ export interface RetrievalDetails {
   enable_auto_detect_filters?: boolean | null;
 }
 
-// Document ID -> Citation number
-export type CitationMap = { [key: string]: number };
+// Citation number -> Document ID (allows O(1) lookup when rendering citations)
+export type CitationMap = { [citation_num: number]: string };
 
 export enum ChatFileType {
   IMAGE = "image",

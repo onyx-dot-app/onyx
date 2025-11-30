@@ -55,18 +55,7 @@ def get_empty_chat_messages_entries__paginated(
 
             # Get assistant name (from session persona, or alternate if specified)
             assistant_name = None
-            if message.alternate_assistant_id:
-                # If there's an alternate assistant, we need to fetch it
-                from onyx.db.models import Persona
-
-                alternate_persona = (
-                    db_session.query(Persona)
-                    .filter(Persona.id == message.alternate_assistant_id)
-                    .first()
-                )
-                if alternate_persona:
-                    assistant_name = alternate_persona.name
-            elif chat_session.persona:
+            if chat_session.persona:
                 assistant_name = chat_session.persona.name
 
             message_skeletons.append(

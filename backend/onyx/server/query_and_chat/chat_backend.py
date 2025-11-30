@@ -1,8 +1,6 @@
-import asyncio
 import datetime
 import json
 import os
-from collections.abc import Callable
 from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
@@ -20,13 +18,14 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
-from onyx.chat.chat_utils import create_chat_chain
+from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import extract_headers
 from onyx.chat.process_message import stream_chat_message
 from onyx.chat.prompt_builder.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
 from onyx.chat.stop_signal_checker import set_fence
+from onyx.chat.temp_translation import translate_session_packets_to_frontend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
@@ -85,9 +84,10 @@ from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
-from onyx.server.query_and_chat.streaming_models import OverallStop
+from onyx.server.query_and_chat.session_loading import (
+    translate_assistant_message_to_packets,
+)
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_utils import translate_db_message_to_packets
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
@@ -228,7 +228,7 @@ def get_chat_session(
         # `get_chat_session_by_id`, so we can skip it here
         skip_permission_check=True,
         # we need the tool call objs anyways, so just fetch them in a single call
-        prefetch_tool_calls=True,
+        prefetch_top_two_level_tool_calls=True,
     )
 
     # Convert messages to ChatMessageDetail format
@@ -236,18 +236,17 @@ def get_chat_session(
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
-    simplified_packet_lists: list[list[Packet]] = []
-    end_step_nr = 1
+    # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
+    # Each list is the set of tool calls for the given assistant message.
+    replay_packet_lists: list[list[Packet]] = []
     for msg in session_messages:
         if msg.message_type == MessageType.ASSISTANT:
-            msg_packet_object = translate_db_message_to_packets(
-                msg, db_session=db_session, start_step_nr=end_step_nr
+            replay_packet_lists.append(
+                translate_assistant_message_to_packets(
+                    chat_message=msg, db_session=db_session
+                )
             )
-            end_step_nr = msg_packet_object.end_step_nr
-            msg_packet_list = msg_packet_object.packet_list
-
-            msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
-            simplified_packet_lists.append(msg_packet_list)
+            # msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
 
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
@@ -266,8 +265,10 @@ def get_chat_session(
         shared_status=chat_session.shared_status,
         current_temperature_override=chat_session.temperature_override,
         deleted=chat_session.deleted,
-        # specifically for the Onyx Chat UI
-        packets=simplified_packet_lists,
+        packets=[
+            translate_session_packets_to_frontend(packet_list)
+            for packet_list in replay_packet_lists
+        ],
     )
 
 
@@ -324,10 +325,9 @@ def rename_chat_session(
         )
         return RenameChatSessionResponse(new_name=name)
 
-    final_msg, history_msgs = create_chat_chain(
+    full_history = create_chat_history_chain(
         chat_session_id=chat_session_id, db_session=db_session
     )
-    full_history = history_msgs + [final_msg]
 
     try:
         llm, _ = get_default_llms(
@@ -400,36 +400,12 @@ def delete_chat_session_by_id(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-async def is_connected(request: Request) -> Callable[[], bool]:
-    main_loop = asyncio.get_event_loop()
-
-    def is_connected_sync() -> bool:
-        future = asyncio.run_coroutine_threadsafe(request.is_disconnected(), main_loop)
-        try:
-            is_connected = not future.result(timeout=0.05)
-            return is_connected
-        except asyncio.TimeoutError:
-            logger.warning(
-                "Asyncio timed out (potentially missed request to stop streaming)"
-            )
-            return True
-        except Exception as e:
-            error_msg = str(e)
-            logger.critical(
-                f"An unexpected error occured with the disconnect check coroutine: {error_msg}"
-            )
-            return True
-
-    return is_connected_sync
-
-
 @router.post("/send-message")
 def handle_new_chat_message(
     chat_message_req: CreateChatMessageRequest,
     request: Request,
     user: User | None = Depends(current_chat_accessible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
-    is_connected_func: Callable[[], bool] = Depends(is_connected),
 ) -> StreamingResponse:
     """
     This endpoint is both used for all the following purposes:
@@ -445,8 +421,6 @@ def handle_new_chat_message(
         request (Request): The current HTTP request context.
         user (User | None): The current user, obtained via dependency injection.
         _ (None): Rate limit check is run if user/group/global rate limits are enabled.
-        is_connected_func (Callable[[], bool]): Function to check client disconnection,
-            used to stop the streaming response if the client disconnects.
 
     Returns:
         StreamingResponse: Streams the response to the new chat message.
@@ -477,7 +451,6 @@ def handle_new_chat_message(
                 custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                     request.headers
                 ),
-                is_connected=is_connected_func,
             ):
                 yield packet
 

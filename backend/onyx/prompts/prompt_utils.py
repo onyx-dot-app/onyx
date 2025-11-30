@@ -12,12 +12,12 @@ from onyx.context.search.models import InferenceChunk
 from onyx.db.models import Persona
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CITATION_REMINDER
+from onyx.prompts.chat_prompts import COMPANY_DESCRIPTION_BLOCK
+from onyx.prompts.chat_prompts import COMPANY_NAME_BLOCK
 from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_TAG_CLOSED
 from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_TAG_OPEN
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.prompts.constants import CODE_BLOCK_PAT
-from onyx.prompts.direct_qa_prompts import COMPANY_DESCRIPTION_BLOCK
-from onyx.prompts.direct_qa_prompts import COMPANY_NAME_BLOCK
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -30,11 +30,17 @@ _BASIC_TIME_STR = "The current date is {datetime_info}."
 
 
 def get_current_llm_day_time(
-    include_day_of_week: bool = True, full_sentence: bool = True
+    include_day_of_week: bool = True,
+    full_sentence: bool = True,
+    include_hour_min: bool = False,
 ) -> str:
     current_datetime = datetime.now()
-    # Format looks like: "October 16, 2023 14:30"
-    formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M")
+    # Format looks like: "October 16, 2023 14:30" if include_hour_min, otherwise "October 16, 2023"
+    formatted_datetime = (
+        current_datetime.strftime("%B %d, %Y %H:%M")
+        if include_hour_min
+        else current_datetime.strftime("%B %d, %Y")
+    )
     day_of_week = current_datetime.strftime("%A")
     if full_sentence:
         return f"The current day and time is {day_of_week} {formatted_datetime}"
@@ -69,8 +75,9 @@ def build_date_time_string() -> str:
 
 def handle_onyx_date_awareness(
     prompt_str: str,
-    prompt_config: PromptConfig,
-    add_additional_info_if_no_tag: bool = False,
+    # We always replace the pattern [[CURRENT_DATETIME]] if it shows up
+    # but if it doesn't show up and the prompt is datetime aware, add it to the prompt at the end.
+    datetime_aware: bool = False,
 ) -> str:
     """
     If there is a [[CURRENT_DATETIME]] tag, replace it with the current date and time no matter what.
@@ -86,26 +93,24 @@ def handle_onyx_date_awareness(
     )
     if prompt_with_datetime != prompt_str:
         return prompt_with_datetime
-    any_tag_present = any(
-        _DANSWER_DATETIME_REPLACEMENT_PAT in text
-        for text in [
-            prompt_str,
-            prompt_config.default_behavior_system_prompt,
-            prompt_config.custom_instructions,
-            prompt_config.reminder,
-        ]
-        if text
-    )
-    if add_additional_info_if_no_tag and not any_tag_present:
+
+    if datetime_aware:
         return prompt_str + build_date_time_string()
+
     return prompt_str
 
 
-def handle_company_awareness(prompt_str: str) -> str:
+def get_company_context() -> str | None:
+    prompt_str = None
     try:
         workspace_settings = load_settings()
         company_name = workspace_settings.company_name
         company_description = workspace_settings.company_description
+
+        if not company_name and not company_description:
+            return None
+
+        prompt_str = ""
         if company_name:
             prompt_str += COMPANY_NAME_BLOCK.format(company_name=company_name)
         if company_description:
@@ -115,15 +120,7 @@ def handle_company_awareness(prompt_str: str) -> str:
         return prompt_str
     except Exception as e:
         logger.error(f"Error handling company awareness: {e}")
-        return prompt_str
-
-
-def handle_memories(prompt_str: str, memories: list[str]) -> str:
-    if not memories:
-        return prompt_str
-    memories_str = "\n".join(memories)
-    prompt_str += f"Information about the user asking the question:\n{memories_str}\n"
-    return prompt_str
+        return None
 
 
 def build_task_prompt_reminders(

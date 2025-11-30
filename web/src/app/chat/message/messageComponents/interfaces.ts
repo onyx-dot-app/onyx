@@ -6,6 +6,7 @@ import { ProjectFile } from "../../projects/projectsService";
 import { LlmDescriptor } from "@/lib/hooks";
 import { IconType } from "react-icons";
 import { OnyxIconType } from "@/components/icons/icons";
+import { CitationMap } from "../../interfaces";
 
 export enum RenderType {
   HIGHLIGHT = "highlight",
@@ -17,7 +18,7 @@ export interface FullChatState {
   // Document-related context for citations
   docs?: OnyxDocument[] | null;
   userFiles?: ProjectFile[];
-  citations?: { [key: string]: number };
+  citations?: CitationMap;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   // Regenerate functionality
   regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;

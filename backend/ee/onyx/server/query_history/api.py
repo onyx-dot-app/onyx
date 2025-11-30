@@ -24,7 +24,7 @@ from onyx.auth.users import current_admin_user
 from onyx.auth.users import get_display_email
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.task_utils import construct_query_history_report_name
-from onyx.chat.chat_utils import create_chat_chain
+from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import FileType
@@ -123,10 +123,9 @@ def snapshot_from_chat_session(
 ) -> ChatSessionSnapshot | None:
     try:
         # Older chats may not have the right structure
-        last_message, messages = create_chat_chain(
+        messages = create_chat_history_chain(
             chat_session_id=chat_session.id, db_session=db_session
         )
-        messages.append(last_message)
     except RuntimeError:
         return None
 
