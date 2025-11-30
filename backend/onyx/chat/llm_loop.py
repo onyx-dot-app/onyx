@@ -10,11 +10,13 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmStepResult
+from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.prompt_builder.answer_prompt_builder import build_reminder_message
 from onyx.chat.prompt_builder.answer_prompt_builder import build_system_prompt
 from onyx.chat.prompt_builder.answer_prompt_builder import (
     get_default_base_system_prompt,
 )
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
@@ -66,6 +68,42 @@ MAX_LLM_CYCLES = 5
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"
+
+
+def _build_project_file_citation_mapping(
+    project_file_metadata: list[ProjectFileMetadata],
+) -> dict[int, SearchDoc]:
+    """Build citation mapping for project files.
+
+    Converts project file metadata into SearchDoc objects that can be cited.
+    Citation numbers start from 1 and correspond to document indices.
+
+    Args:
+        project_file_metadata: List of project file metadata
+
+    Returns:
+        Dictionary mapping citation numbers (1, 2, 3, ...) to SearchDoc objects
+    """
+    citation_mapping: dict[int, SearchDoc] = {}
+
+    for idx, file_meta in enumerate(project_file_metadata, start=1):
+        # Create a SearchDoc for each project file
+        search_doc = SearchDoc(
+            document_id=file_meta.file_id,
+            chunk_ind=0,
+            semantic_identifier=file_meta.filename,
+            link=None,
+            blurb=file_meta.file_content,
+            source_type=DocumentSource.FILE,
+            boost=1,
+            hidden=False,
+            metadata={},
+            score=0.0,
+            match_highlights=[file_meta.file_content],
+        )
+        citation_mapping[idx] = search_doc
+
+    return citation_mapping
 
 
 def construct_message_history(
@@ -707,13 +745,24 @@ def run_llm_loop(
     # Initialize citation processor for handling citations dynamically
     citation_processor = DynamicCitationProcessor()
 
+    # Add project file citation mappings if project files are present
+    project_citation_mapping: dict[int, SearchDoc] = {}
+    if project_files.project_file_metadata:
+        project_citation_mapping = _build_project_file_citation_mapping(
+            project_files.project_file_metadata
+        )
+        citation_processor.update_citation_mapping(project_citation_mapping)
+
     llm_step_result: LlmStepResult | None = None
 
     # Pass the total budget to construct_message_history, which will handle token allocation
     available_tokens = llm.config.max_input_tokens
     tool_choice: ToolChoiceOptions = "auto"
     collected_tool_calls: list[ToolCallInfo] = []
-    gathered_documents: list[SearchDoc] | None = None
+    # Initialize gathered_documents with project files if present
+    gathered_documents: list[SearchDoc] | None = (
+        list(project_citation_mapping.values()) if project_citation_mapping else None
+    )
     # TODO allow citing of images in Projects. Since it's attached to the last user message, it has no text associated with it.
     # One future workaround is to include the images as separate user messages with citation information and process those.
     always_cite_documents: bool = bool(
