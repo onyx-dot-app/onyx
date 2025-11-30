@@ -412,11 +412,21 @@ class ChatMessageSimple(BaseModel):
     tool_call_id: str | None = None
 
 
+class ProjectFileMetadata(BaseModel):
+    """Metadata for a project file to enable citation support."""
+
+    file_id: str
+    filename: str
+    file_content: str
+
+
 class ExtractedProjectFiles(BaseModel):
     project_file_texts: list[str]
     project_image_files: list[ChatLoadedFile]
     project_as_filter: bool
     total_token_count: int
+    # Metadata for project files to enable citations
+    project_file_metadata: list[ProjectFileMetadata]
 
 
 class LlmStepResult(BaseModel):

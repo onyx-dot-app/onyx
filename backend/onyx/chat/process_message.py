@@ -31,6 +31,7 @@ from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import MessageSpecificCitations
+from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import StreamingError
@@ -209,6 +210,7 @@ def _extract_project_file_texts_and_images(
             project_image_files=[],
             project_as_filter=False,
             total_token_count=0,
+            project_file_metadata=[],
         )
 
     max_actual_tokens = (
@@ -224,6 +226,7 @@ def _extract_project_file_texts_and_images(
 
     project_file_texts: list[str] = []
     project_image_files: list[ChatLoadedFile] = []
+    project_file_metadata: list[ProjectFileMetadata] = []
     total_token_count = 0
     if project_tokens < max_actual_tokens:
         # Load project files into memory using cached plaintext when available
@@ -251,6 +254,14 @@ def _extract_project_file_texts_and_images(
                         text_content = text_content.replace("\x00", "")
                         if text_content:
                             project_file_texts.append(text_content)
+                            # Add metadata for citation support
+                            project_file_metadata.append(
+                                ProjectFileMetadata(
+                                    file_id=str(file.file_id),
+                                    filename=file.filename or f"file_{file.file_id}",
+                                    file_content=text_content,
+                                )
+                            )
                             # Add token count for text file
                             user_file = user_file_map.get(str(file.file_id))
                             if user_file and user_file.token_count:
@@ -284,6 +295,7 @@ def _extract_project_file_texts_and_images(
         project_image_files=project_image_files,
         project_as_filter=project_as_filter,
         total_token_count=total_token_count,
+        project_file_metadata=project_file_metadata,
     )
 
 

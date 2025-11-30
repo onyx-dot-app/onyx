@@ -6,6 +6,7 @@ from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
+from onyx.chat.models import ProjectFileMetadata
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
 
@@ -29,6 +30,14 @@ def create_project_files(
 ) -> ExtractedProjectFiles:
     """Helper to create ExtractedProjectFiles for testing."""
     project_file_texts = [f"Project file {i} content" for i in range(num_files)]
+    project_file_metadata = [
+        ProjectFileMetadata(
+            file_id=f"file_{i}",
+            filename=f"file_{i}.txt",
+            file_content=f"Project file {i} content",
+        )
+        for i in range(num_files)
+    ]
     project_image_files = [
         ChatLoadedFile(
             file_id=f"image_{i}",
@@ -45,6 +54,7 @@ def create_project_files(
         project_image_files=project_image_files,
         project_as_filter=False,
         total_token_count=num_files * tokens_per_file,
+        project_file_metadata=project_file_metadata,
     )
 
 
@@ -525,8 +535,8 @@ class TestConstructMessageHistory:
         # Verify it's formatted as JSON
         assert "Here are some documents provided for context" in project_message.message
         assert '"documents"' in project_message.message
-        assert '"citation_id": 1' in project_message.message
-        assert '"citation_id": 2' in project_message.message
+        assert '"document": 1' in project_message.message
+        assert '"document": 2' in project_message.message
         assert '"contents"' in project_message.message
         assert "Project file 0 content" in project_message.message
         assert "Project file 1 content" in project_message.message

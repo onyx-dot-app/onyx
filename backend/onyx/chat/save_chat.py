@@ -6,6 +6,7 @@ import json
 
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import CitationDocInfo
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import add_search_docs_to_chat_message
@@ -228,7 +229,6 @@ def save_chat_turn(
     all_search_doc_ids_set: set[int] = set()
     for search_doc_ids in tool_call_to_search_doc_ids.values():
         all_search_doc_ids_set.update(search_doc_ids)
-    final_search_doc_ids: list[int] = list(all_search_doc_ids_set)
 
     # 4. Build citation mapping from citation_docs_info
     citation_number_to_search_doc_id: dict[int, int] = {}
@@ -244,12 +244,22 @@ def save_chat_turn(
         if search_doc_key in search_doc_key_to_id:
             db_search_doc_id = search_doc_key_to_id[search_doc_key]
         else:
-            # This shouldn't happen if citation_docs are a subset of tool call search_docs
-            # But handle it gracefully by creating the SearchDoc
-            logger.warning(
-                f"Citation doc {search_doc_py.document_id} not found in tool call search_docs, creating it"
-            )
-            # NOTE it is important that this maps to the saved DB Document ID, this is because
+            # Citation doc not found in tool call search_docs
+            # Expected case: Project files (source_type=FILE) are cited but don't come from tool calls
+            # Unexpected case: Other citation-only docs (indicates a potential issue upstream)
+            is_project_file = search_doc_py.source_type == DocumentSource.FILE
+
+            if is_project_file:
+                logger.info(
+                    f"Project file citation {search_doc_py.document_id} not in tool calls, creating it"
+                )
+            else:
+                logger.warning(
+                    f"Citation doc {search_doc_py.document_id} not found in tool call search_docs, creating it"
+                )
+
+            # Create the SearchDoc in the database
+            # NOTE: It's important that this maps to the saved DB Document ID, because
             # the match-highlights are specific to this saved version, not any document that has
             # the same document_id.
             db_search_doc = create_db_search_doc(
@@ -260,13 +270,18 @@ def save_chat_turn(
             db_search_doc_id = db_search_doc.id
             search_doc_key_to_id[search_doc_key] = db_search_doc_id
 
+            # Link project files to ChatMessage to enable frontend preview
+            if is_project_file:
+                all_search_doc_ids_set.add(db_search_doc_id)
+
         # Build mapping from citation number to search doc ID
         if citation_doc_info.citation_number is not None:
             citation_number_to_search_doc_id[citation_doc_info.citation_number] = (
                 db_search_doc_id
             )
 
-    # 5. Link all unique SearchDocs from tool calls to ChatMessage
+    # 5. Link all unique SearchDocs (from both tool calls and citations) to ChatMessage
+    final_search_doc_ids: list[int] = list(all_search_doc_ids_set)
     if final_search_doc_ids:
         add_search_docs_to_chat_message(
             chat_message_id=assistant_message.id,
