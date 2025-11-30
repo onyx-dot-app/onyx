@@ -14,7 +14,7 @@ import { ProjectFile } from "../projects/projectsService";
 interface MessagesDisplayProps {
   messageHistory: Message[];
   completeMessageTree: Map<number, Message> | null | undefined;
-  liveAssistant: MinimalPersonaSnapshot;
+  liveAssistant: MinimalPersonaSnapshot | undefined;
   llmManager: LlmManager;
   deepResearchEnabled: boolean;
   currentMessageFiles: ProjectFile[];
@@ -108,6 +108,11 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
     },
     [onSubmit, deepResearchEnabled]
   );
+
+  // require assistant to be present before rendering
+  if (!liveAssistant) {
+    return null;
+  }
 
   return (
     <div

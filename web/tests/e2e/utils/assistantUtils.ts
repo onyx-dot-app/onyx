@@ -1,5 +1,6 @@
 import { Page } from "@playwright/test";
 import { expect } from "@chromatic-com/playwright";
+import { verifyAssistantIsChosen } from "./chatActions";
 
 export type AssistantParams = {
   name: string;
@@ -32,9 +33,7 @@ export async function createAssistant(page: Page, params: AssistantParams) {
   await page.getByRole("button", { name: "Create" }).click();
 
   // Verify it is selected in chat (placeholder contains assistant name)
-  await expect(
-    page.getByPlaceholder(`How can ${name} help you today`)
-  ).toBeVisible({ timeout: 10000 });
+  await verifyAssistantIsChosen(page, name);
 }
 
 // Pin an assistant by its visible name in the sidebar list.

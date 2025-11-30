@@ -10,7 +10,6 @@ import {
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/components/user/UserProvider";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 
@@ -18,14 +17,20 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
   state: OnboardingState;
   llmDescriptors: WellKnownLLMProviderDescriptor[];
   actions: OnboardingActions;
+  isLoading: boolean;
 } {
   const [state, dispatch] = useReducer(onboardingReducer, initialState);
   const { user, refreshUser } = useUser();
-  const { llmProviders, refreshLlmProviders } = useChatContext();
+  // Use the SWR hook for LLM providers - no persona ID for the general providers list
+  const {
+    llmProviders,
+    isLoading: isLoadingProviders,
+    refetch: refreshLlmProviders,
+  } = useLLMProviders();
   const { refetch: refreshPersonaProviders } = useLLMProviders(
     liveAssistant?.id
   );
-  const hasLlmProviders = llmProviders?.length > 0;
+  const hasLlmProviders = (llmProviders?.length ?? 0) > 0;
   const userName = user?.personalization?.name;
   const [llmDescriptors, setLlmDescriptors] = useState<
     WellKnownLLMProviderDescriptor[]
@@ -54,7 +59,13 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
   }, []);
 
   // If there are any configured LLM providers already present, skip to the final step
+  // Wait until providers have loaded before making this decision
   useEffect(() => {
+    // Don't run logic until data has loaded
+    if (isLoadingProviders) {
+      return;
+    }
+
     if (hasLlmProviders) {
       if (userName) {
         dispatch({
@@ -64,7 +75,7 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
       }
       dispatch({
         type: OnboardingActionType.UPDATE_DATA,
-        payload: { llmProviders: llmProviders.map((p) => p.provider) },
+        payload: { llmProviders: (llmProviders ?? []).map((p) => p.provider) },
       });
       dispatch({
         type: OnboardingActionType.GO_TO_STEP,
@@ -93,7 +104,7 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
         step: OnboardingStep.LlmSetup,
       });
     }
-  }, [llmProviders]);
+  }, [llmProviders, isLoadingProviders]);
 
   const nextStep = useCallback(() => {
     dispatch({
@@ -234,5 +245,6 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
       setError,
       reset,
     },
+    isLoading: isLoadingProviders || !!liveAssistant,
   };
 }

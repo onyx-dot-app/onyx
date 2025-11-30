@@ -11,7 +11,7 @@ import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import OnyxLogo from "@/icons/onyx-logo";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useAgents } from "@/lib/hooks/useAgents";
 import Separator from "@/refresh-components/Separator";
 import { SubLabel } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
@@ -36,7 +36,7 @@ interface DefaultAssistantUpdateRequest {
 function DefaultAssistantConfig() {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
-  const { refreshAgents } = useAgentsContext();
+  const { refresh: refreshAgents } = useAgents();
   const combinedSettings = useSettingsContext();
 
   const {

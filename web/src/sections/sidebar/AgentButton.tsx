@@ -2,7 +2,7 @@
 
 import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
 import { useAppRouter } from "@/hooks/appNavigation";
 import SvgPin from "@/icons/pin";
 import { cn, noProp } from "@/lib/utils";
@@ -52,7 +52,7 @@ interface AgentButtonProps {
 function AgentButtonInner({ agent }: AgentButtonProps) {
   const route = useAppRouter();
   const activeSidebarTab = useAppFocus();
-  const { pinnedAgents, togglePinnedAgent } = useAgentsContext();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgentsWithDetails();
   const pinned = pinnedAgents.some(
     (pinnedAgent) => pinnedAgent.id === agent.id
   );

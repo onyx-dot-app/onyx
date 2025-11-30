@@ -4,6 +4,7 @@ import {
   sendMessage,
   startNewChat,
   verifyAssistantIsChosen,
+  verifyDefaultAssistantIsChosen,
 } from "../utils/chatActions";
 
 test("Chat workflow", async ({ page }) => {
@@ -27,7 +28,7 @@ test("Chat workflow", async ({ page }) => {
   await startNewChat(page);
 
   // Verify the presence of the expected text
-  await verifyAssistantIsChosen(page, "Onyx");
+  await verifyDefaultAssistantIsChosen(page);
 
   // Test creation of a new assistant
   await page.getByTestId("AppSidebar/more-agents").click();
@@ -48,5 +49,5 @@ test("Chat workflow", async ({ page }) => {
   await page.waitForLoadState("networkidle");
 
   // Verify the presence of the default assistant text
-  await verifyAssistantIsChosen(page, "Onyx");
+  await verifyDefaultAssistantIsChosen(page);
 });

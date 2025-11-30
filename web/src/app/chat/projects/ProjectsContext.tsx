@@ -42,6 +42,7 @@ import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { ChatFileType } from "../interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { useProjects } from "@/lib/hooks/useProjects";
 
 export type { Project, ProjectFile } from "./projectsService";
 
@@ -126,14 +127,13 @@ const ProjectsContext = createContext<ProjectsContextType | undefined>(
 
 interface ProjectsProviderProps {
   children: ReactNode;
-  initialProjects?: Project[];
 }
 
 export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   children,
-  initialProjects = [],
 }) => {
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
+  // Use SWR hook for projects list - no more SSR initial data
+  const { projects, refreshProjects } = useProjects();
   const [recentFiles, setRecentFiles] = useState<ProjectFile[]>([]);
   const [currentProjectDetails, setCurrentProjectDetails] =
     useState<ProjectDetails | null>(null);
@@ -161,17 +161,15 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   );
   const route = useAppRouter();
 
+  // Use SWR's mutate to refresh projects - returns the new data
   const fetchProjects = useCallback(async (): Promise<Project[]> => {
     try {
-      const data: Project[] = await svcFetchProjects();
-      setProjects(data);
-      return data;
+      const result = await refreshProjects();
+      return result ?? [];
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to fetch projects";
       return [];
     }
-  }, []);
+  }, [refreshProjects]);
 
   // Load full details for current project
   const refreshCurrentProjectDetails = useCallback(async () => {
@@ -230,11 +228,7 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
   const renameProject = useCallback(
     async (projectId: number, name: string): Promise<Project> => {
-      // Optimistically update the UI immediately
-      setProjects((prev) =>
-        prev.map((p) => (p.id === projectId ? { ...p, name } : p))
-      );
-
+      // Optimistically update project details UI if this is the current project
       if (currentProjectId === projectId) {
         setCurrentProjectDetails((prev) =>
           prev ? { ...prev, project: { ...prev.project, name } } : prev
@@ -243,14 +237,14 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
       try {
         const updated = await svcRenameProject(projectId, name);
-        // Refresh to get canonical state from server
+        // Refresh to get canonical state from server (SWR handles projects list)
         await fetchProjects();
         if (currentProjectId === projectId) {
           await refreshCurrentProjectDetails();
         }
         return updated;
       } catch (err) {
-        // Rollback optimistic update on failure
+        // Refresh to restore on failure
         await fetchProjects();
         if (currentProjectId === projectId) {
           await refreshCurrentProjectDetails();

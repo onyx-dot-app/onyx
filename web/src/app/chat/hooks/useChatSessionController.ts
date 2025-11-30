@@ -23,7 +23,7 @@ import {
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
 import { getAvailableContextTokens } from "../services/lib";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile } from "../projects/projectsService";
 import { getSessionProjectTokenCount } from "../projects/projectsService";
 import { getProjectFilesForSession } from "../projects/projectsService";
@@ -116,7 +116,7 @@ export function useChatSessionController({
   );
   const currentChatHistory = useCurrentMessageHistory();
   const chatSessions = useChatSessionStore((state) => state.sessions);
-  const { setForcedToolIds } = useAgentsContext();
+  const { setForcedToolIds } = useForcedTools();
 
   // Fetch chat messages for the chat session
   useEffect(() => {

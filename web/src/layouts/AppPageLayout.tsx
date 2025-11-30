@@ -15,7 +15,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import SvgFolderIn from "@/icons/folder-in";
 import SvgTrash from "@/icons/trash";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useChatSessions } from "@/lib/hooks/useChatSessions";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
   handleMoveOperation,
@@ -71,7 +71,7 @@ export default function AppPageLayout({
     refreshCurrentProjectDetails,
     currentProjectId,
   } = useProjectsContext();
-  const { refreshChatSessions } = useChatContext();
+  const { refreshChatSessions } = useChatSessions();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
 

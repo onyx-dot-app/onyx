@@ -103,7 +103,7 @@ import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import SvgTrash from "@/icons/trash";
 import SvgEditBig from "@/icons/edit-big";
 import SvgFiles from "@/icons/files";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useAgents } from "@/lib/hooks/useAgents";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -156,7 +156,7 @@ export default function AssistantEditor({
 }: AssistantEditorProps) {
   // NOTE: assistants = agents
   // TODO: rename everything to agents
-  const { refreshAgents } = useAgentsContext();
+  const { refresh: refreshAgents } = useAgents();
 
   const router = useRouter();
   const searchParams = useSearchParams();
