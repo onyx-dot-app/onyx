@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
@@ -82,6 +83,7 @@ def run_tool_calls(
     memories: list[str] | None,
     user_info: str | None,
     citation_mapping: dict[int, str],
+    citation_processor: DynamicCitationProcessor,
 ) -> tuple[
     list[ToolResponse], dict[int, str]
 ]:  # return also the updated citation mapping
@@ -91,8 +93,8 @@ def run_tool_calls(
     tools_by_name = {tool.name: tool for tool in tools}
     tool_responses: list[ToolResponse] = []
 
-    # Calculate starting citation number from existing mapping
-    starting_citation_num = max(citation_mapping.keys()) + 1 if citation_mapping else 1
+    # Get starting citation number from citation processor to avoid conflicts with project files
+    starting_citation_num = citation_processor.get_next_citation_number()
 
     # TODO needs to handle parallel tool calls
     for tool_call in merged_tool_calls:
@@ -166,8 +168,8 @@ def run_tool_calls(
             if new_citations:
                 # Merge new citations into the existing mapping
                 citation_mapping.update(new_citations)
-                # Update starting citation number for next tool
-                starting_citation_num = max(citation_mapping.keys()) + 1
+                # Update starting citation number for next tool using citation processor
+                starting_citation_num = citation_processor.get_next_citation_number()
 
         tool_responses.append(tool_response)
 

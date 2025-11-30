@@ -380,3 +380,17 @@ class DynamicCitationProcessor:
         without being filtered out by the deduplication logic.
         """
         self.recent_cited_documents.clear()
+
+    def get_next_citation_number(self) -> int:
+        """
+        Get the next available citation number.
+
+        This method returns the next citation number that should be used for new documents.
+        If no citations exist yet, it returns 1. Otherwise, it returns max + 1.
+
+        Returns:
+            The next available citation number (1-indexed)
+        """
+        if not self.citation_to_doc:
+            return 1
+        return max(self.citation_to_doc.keys()) + 1

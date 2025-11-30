@@ -72,21 +72,23 @@ TOOL_CALL_MSG_ARGUMENTS = "arguments"
 
 def _build_project_file_citation_mapping(
     project_file_metadata: list[ProjectFileMetadata],
+    starting_citation_num: int = 1,
 ) -> dict[int, SearchDoc]:
     """Build citation mapping for project files.
 
     Converts project file metadata into SearchDoc objects that can be cited.
-    Citation numbers start from 1 and correspond to document indices.
+    Citation numbers start from the provided starting number.
 
     Args:
         project_file_metadata: List of project file metadata
+        starting_citation_num: Starting citation number (default: 1)
 
     Returns:
-        Dictionary mapping citation numbers (1, 2, 3, ...) to SearchDoc objects
+        Dictionary mapping citation numbers to SearchDoc objects
     """
     citation_mapping: dict[int, SearchDoc] = {}
 
-    for idx, file_meta in enumerate(project_file_metadata, start=1):
+    for idx, file_meta in enumerate(project_file_metadata, start=starting_citation_num):
         # Create a SearchDoc for each project file
         search_doc = SearchDoc(
             document_id=file_meta.file_id,
@@ -906,6 +908,7 @@ def run_llm_loop(
                 memories=memories,
                 user_info=None,  # TODO, this is part of memories right now, might want to separate it out
                 citation_mapping=citation_mapping,
+                citation_processor=citation_processor,
             )
 
             # Build a mapping of tool names to tool objects for getting tool_id

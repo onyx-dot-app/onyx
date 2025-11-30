@@ -199,10 +199,14 @@ def test_update_citation_mapping_merges(mock_search_docs: dict[int, SearchDoc]) 
     assert processor.citation_to_doc[2] == mock_search_docs[2]
 
 
-def test_update_citation_mapping_updates_existing(
+def test_update_citation_mapping_ignores_duplicate_keys(
     mock_search_docs: dict[int, SearchDoc],
 ) -> None:
-    """Test that update_citation_mapping can update existing citation numbers."""
+    """Test that update_citation_mapping ignores duplicate citation numbers.
+
+    This behavior is intentional to handle cases like OpenURL reusing the same
+    citation number as a Web Search result - we keep the first one registered.
+    """
     processor = DynamicCitationProcessor()
     doc1 = mock_search_docs[1]
     doc2 = create_test_search_doc(
@@ -212,9 +216,10 @@ def test_update_citation_mapping_updates_existing(
     processor.update_citation_mapping({1: doc1})
     processor.update_citation_mapping({1: doc2})
 
+    # First citation should be kept, second one ignored
     assert len(processor.citation_to_doc) == 1
-    assert processor.citation_to_doc[1].document_id == "doc_1_updated"
-    assert processor.citation_to_doc[1].link == "https://updated.com"
+    assert processor.citation_to_doc[1].document_id == "doc_1"
+    assert processor.citation_to_doc[1].link == "https://example.com/doc1"
 
 
 # ============================================================================
@@ -1077,15 +1082,16 @@ def test_multiple_mapping_updates_during_processing(
     output2, citations2 = process_tokens(processor, ["[", "2", "]"])
     assert len(citations2) == 1
 
-    # Update existing - this changes the document_id, so it's treated as a new document
+    # Try to update existing citation number (should be ignored due to duplicate filtering)
     doc1_updated = create_test_search_doc(
         document_id="doc_1_updated", link="https://updated.com"
     )
     processor.update_citation_mapping({1: doc1_updated})
     output3, citations3 = process_tokens(processor, ["[", "1", "]"])
-    # New document_id means it's a new citation
-    assert len(citations3) == 1
-    assert citations3[0].document_id == "doc_1_updated"
+    # No new citation because citation 1 already exists and was already cited
+    assert len(citations3) == 0
+    # Original doc_1 should still be mapped
+    assert processor.citation_to_doc[1].document_id == "doc_1"
 
 
 # ============================================================================
@@ -1185,3 +1191,203 @@ def test_real_world_citation_patterns(mock_search_docs: dict[int, SearchDoc]) ->
     assert "doc_1" in doc_ids
     assert "doc_2" in doc_ids
     assert "doc_3" in doc_ids
+
+
+# ============================================================================
+# get_next_citation_number Tests
+# ============================================================================
+
+
+def test_get_next_citation_number_empty() -> None:
+    """Test get_next_citation_number returns 1 when no citations exist."""
+    processor = DynamicCitationProcessor()
+
+    assert processor.get_next_citation_number() == 1
+
+
+def test_get_next_citation_number_with_citations(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test get_next_citation_number returns max + 1 when citations exist."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1], 2: mock_search_docs[2]})
+
+    assert processor.get_next_citation_number() == 3
+
+
+def test_get_next_citation_number_non_sequential(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test get_next_citation_number with non-sequential citation numbers."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping(
+        {1: mock_search_docs[1], 5: mock_search_docs[2], 10: mock_search_docs[3]}
+    )
+
+    # Should return max + 1 = 11
+    assert processor.get_next_citation_number() == 11
+
+
+def test_project_files_then_search_tool_citations(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """
+    Test that project file citations don't conflict with search tool citations.
+
+    """
+    processor = DynamicCitationProcessor()
+
+    # Simulate project files being added (numbered 1, 2, 3)
+    project_file_1 = create_test_search_doc(
+        document_id="project_file_1",
+        link=None,
+        semantic_identifier="ProjectFile1.txt",
+        source_type=DocumentSource.FILE,
+    )
+    project_file_2 = create_test_search_doc(
+        document_id="project_file_2",
+        link=None,
+        semantic_identifier="ProjectFile2.txt",
+        source_type=DocumentSource.FILE,
+    )
+    project_file_3 = create_test_search_doc(
+        document_id="project_file_3",
+        link=None,
+        semantic_identifier="ProjectFile3.txt",
+        source_type=DocumentSource.FILE,
+    )
+
+    processor.update_citation_mapping(
+        {1: project_file_1, 2: project_file_2, 3: project_file_3}
+    )
+
+    # Verify project files are registered
+    assert processor.get_next_citation_number() == 4
+    assert len(processor.citation_to_doc) == 3
+
+    # Simulate search tool results starting at the next available number (4)
+    starting_citation = processor.get_next_citation_number()
+    search_result_1 = mock_search_docs[1]  # Will be citation 4
+    search_result_2 = mock_search_docs[2]  # Will be citation 5
+
+    processor.update_citation_mapping(
+        {starting_citation: search_result_1, starting_citation + 1: search_result_2}
+    )
+
+    # Verify both project files and search results are registered
+    assert len(processor.citation_to_doc) == 5
+    assert processor.citation_to_doc[1].document_id == "project_file_1"
+    assert processor.citation_to_doc[2].document_id == "project_file_2"
+    assert processor.citation_to_doc[3].document_id == "project_file_3"
+    assert processor.citation_to_doc[4].document_id == "doc_1"
+    assert processor.citation_to_doc[5].document_id == "doc_2"
+
+    # Verify all citations work
+    output, citations = process_tokens(
+        processor,
+        [
+            "Project [1], [2], [3] and search results [4], [5]",
+        ],
+    )
+
+    assert "[[1]]" in output
+    assert "[[2]]" in output
+    assert "[[3]]" in output
+    assert "[[4]](https://example.com/doc1)" in output
+    assert "[[5]](https://example.com/doc2)" in output
+    assert len(citations) == 5
+
+
+def test_adding_project_files_across_messages(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test that adding more project files in subsequent messages works correctly.
+
+    Architecture note: Each message gets a fresh citation processor, so project files
+    always start from citation 1. Each message maintains its own independent citation
+    space, and old messages use their saved citation mappings for display.
+
+    This test simulates:
+    - Message 1: User has 3 project files + runs search
+    - Message 2: User adds 2 MORE project files (now 5 total) + runs search
+    Both messages should work independently without citation conflicts.
+    """
+    # ===== MESSAGE 1: 3 project files + search =====
+    message1_processor = DynamicCitationProcessor()
+
+    # Add 3 project files (citations 1, 2, 3)
+    project_files_msg1 = {
+        1: create_test_search_doc(
+            document_id="project_file_1", link=None, source_type=DocumentSource.FILE
+        ),
+        2: create_test_search_doc(
+            document_id="project_file_2", link=None, source_type=DocumentSource.FILE
+        ),
+        3: create_test_search_doc(
+            document_id="project_file_3", link=None, source_type=DocumentSource.FILE
+        ),
+    }
+    message1_processor.update_citation_mapping(project_files_msg1)
+
+    # Run search tool (citations 4, 5)
+    search_start_msg1 = message1_processor.get_next_citation_number()
+    assert search_start_msg1 == 4
+    message1_processor.update_citation_mapping(
+        {
+            4: mock_search_docs[1],
+            5: mock_search_docs[2],
+        }
+    )
+
+    # Verify Message 1 citations
+    assert len(message1_processor.citation_to_doc) == 5
+    assert message1_processor.citation_to_doc[1].document_id == "project_file_1"
+    assert message1_processor.citation_to_doc[4].document_id == "doc_1"
+
+    # ===== MESSAGE 2: 5 project files + search =====
+    # Fresh processor for new message (simulates new run_llm_loop() call)
+    message2_processor = DynamicCitationProcessor()
+
+    # Add 5 project files (citations 1, 2, 3, 4, 5) - includes 2 NEW files
+    project_files_msg2 = {
+        1: create_test_search_doc(
+            document_id="project_file_1", link=None, source_type=DocumentSource.FILE
+        ),
+        2: create_test_search_doc(
+            document_id="project_file_2", link=None, source_type=DocumentSource.FILE
+        ),
+        3: create_test_search_doc(
+            document_id="project_file_3", link=None, source_type=DocumentSource.FILE
+        ),
+        4: create_test_search_doc(
+            document_id="project_file_4", link=None, source_type=DocumentSource.FILE
+        ),  # NEW
+        5: create_test_search_doc(
+            document_id="project_file_5", link=None, source_type=DocumentSource.FILE
+        ),  # NEW
+    }
+    message2_processor.update_citation_mapping(project_files_msg2)
+
+    # Run search tool (citations 6, 7)
+    search_start_msg2 = message2_processor.get_next_citation_number()
+    assert search_start_msg2 == 6  # Starts after 5 project files
+    message2_processor.update_citation_mapping(
+        {
+            6: mock_search_docs[3],
+            7: mock_search_docs[4],
+        }
+    )
+
+    # Verify Message 2 citations
+    assert len(message2_processor.citation_to_doc) == 7
+    assert message2_processor.citation_to_doc[1].document_id == "project_file_1"
+    assert message2_processor.citation_to_doc[4].document_id == "project_file_4"  # NEW
+    assert message2_processor.citation_to_doc[5].document_id == "project_file_5"  # NEW
+    assert message2_processor.citation_to_doc[6].document_id == "doc_3"
+
+    # Verify both messages maintain independent citation spaces
+    # Message 1: Citation 4 = search result (doc_1)
+    # Message 2: Citation 4 = project file (project_file_4)
+    # This is correct - each message has its own citation space
+    assert message1_processor.citation_to_doc[4].document_id == "doc_1"
+    assert message2_processor.citation_to_doc[4].document_id == "project_file_4"
