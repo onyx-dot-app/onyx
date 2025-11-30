@@ -45,6 +45,12 @@ def blob_connector(request: pytest.FixtureRequest) -> BlobStorageConnector:
     if not isinstance(bucket_type, BlobType):
         bucket_type = BlobType(bucket_type)
 
+    # For S3_COMPATIBLE, endpoint_url must be in init_kwargs (not credentials)
+    if bucket_type == BlobType.S3_COMPATIBLE and "endpoint_url" not in init_kwargs:
+        init_kwargs["endpoint_url"] = os.environ[
+            "S3_COMPATIBLE_ENDPOINT_URL_DAILY_CONNECTOR_TESTS"
+        ]
+
     connector = BlobStorageConnector(
         bucket_type=bucket_type, bucket_name=bucket_name, **init_kwargs
     )
@@ -71,8 +77,17 @@ def blob_connector(request: pytest.FixtureRequest) -> BlobStorageConnector:
                 "GCS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS"
             ],
         }
+    elif bucket_type == BlobType.S3_COMPATIBLE:
+        creds = {
+            "s3_compatible_access_key_id": os.environ[
+                "S3_COMPATIBLE_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS"
+            ],
+            "s3_compatible_secret_access_key": os.environ[
+                "S3_COMPATIBLE_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS"
+            ],
+        }
     else:
-        # Until we figure out the Oracle log in, this fixture only supports S3, R2, and GCS.
+        # Until we figure out the Oracle log in, this fixture only supports S3, R2, GCS, and S3-compatible.
         raise AssertionError(f"Unsupported bucket type: {bucket_type}")
 
     connector.load_credentials(creds)
@@ -237,3 +252,93 @@ def test_blob_gcs_connector(
     assert len(all_docs) >= 1
     doc = all_docs[0]
     assert len(doc.sections) >= 1
+
+
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+@pytest.mark.parametrize(
+    "blob_connector",
+    [(BlobType.S3_COMPATIBLE, "onyx-s3-compatible-tests")],
+    indirect=True,
+)
+def test_blob_s3_compatible_connector(
+    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector
+) -> None:
+    """Validate basic S3-compatible connector creation and document loading.
+
+    Tests that the connector can:
+    - Connect to any S3-compatible service (MinIO, Wasabi, etc.) using custom endpoint
+    - Load documents from the bucket
+    - Use path-style addressing for compatibility
+    """
+    all_docs: list[Document] = []
+    for doc_batch in blob_connector.load_from_state():
+        all_docs.extend(doc_batch)
+
+    # At least one object from the test bucket
+    assert len(all_docs) >= 1
+    doc = all_docs[0]
+    assert len(doc.sections) >= 1
+
+
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+@pytest.mark.parametrize(
+    "blob_connector",
+    [(BlobType.S3_COMPATIBLE, "onyx-s3-compatible-tests")],
+    indirect=True,
+)
+def test_blob_s3_compatible_direct_url_citation(
+    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector
+) -> None:
+    """Validate that S3-compatible connector uses direct object URLs for citations.
+
+    This is the key distinguishing feature of the S3-compatible connector:
+    - Returns direct object URLs: {endpoint}/{bucket}/{key}
+    - NOT dashboard URLs like S3/R2/GCS connectors use
+
+    This enables direct file access when bucket/object permissions allow.
+    """
+    all_docs: list[Document] = []
+    for doc_batch in blob_connector.load_from_state():
+        all_docs.extend(doc_batch)
+
+    assert len(all_docs) >= 1
+    doc = all_docs[0]
+
+    # Validate link exists
+    assert len(doc.sections) >= 1
+    link = doc.sections[0].link
+    assert link is not None and isinstance(link, str) and len(link) > 0
+
+    # Parse the link
+    parsed = urlparse(link)
+
+    # For S3-compatible storage, the link should be a direct object URL
+    # Format: {endpoint}/{bucket}/{key}
+    # NOT a dashboard URL (like s3.console.aws.amazon.com or dash.cloudflare.com)
+
+    # Verify it's not a dashboard URL
+    assert "console" not in parsed.netloc.lower()
+    assert "dash" not in parsed.netloc.lower()
+
+    # The path should contain both bucket name and object key
+    # Format: /{bucket_name}/{object_key}
+    path_parts = parsed.path.strip("/").split("/", 1)
+    assert len(path_parts) >= 2, "Path should contain bucket and key"
+
+    bucket_from_path = path_parts[0]
+    key_from_path = unquote("/".join(path_parts[1:]))
+
+    # Verify bucket name matches
+    assert bucket_from_path == "onyx-s3-compatible-tests"
+
+    # Verify the key matches the document identifier
+    # (or ends with it, in case of prefixes)
+    assert key_from_path == doc.semantic_identifier or key_from_path.endswith(
+        f"/{doc.semantic_identifier}"
+    )
