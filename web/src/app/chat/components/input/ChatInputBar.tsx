@@ -142,12 +142,25 @@ function ChatInputBarInner({
     allCurrentProjectFiles,
   } = useProjectsContext();
 
-  // Helper to check if file is image or plaintext (doesn't need backend processing)
-  const isSimpleFile = useCallback((file: ProjectFile) => {
-    return (
-      isImageFile(file.name) || file.chat_file_type === ChatFileType.PLAIN_TEXT
-    );
-  }, []);
+  // Helper to check if file is image or plaintext within token limits
+  const isSimpleFile = useCallback(
+    (file: ProjectFile) => {
+      // Images are always "simple" - sent as base64, don't need backend processing
+      if (isImageFile(file.name)) {
+        return true;
+      }
+
+      // Plaintext files are "simple" only if within token limits
+      if (file.chat_file_type === ChatFileType.PLAIN_TEXT) {
+        const fileTokens = file.token_count || 0;
+        const totalTokens = (currentSessionFileTokenCount || 0) + fileTokens;
+        return totalTokens < availableContextTokens;
+      }
+
+      return false;
+    },
+    [currentSessionFileTokenCount, availableContextTokens]
+  );
 
   // Only block send for files that NEED processing (PDFs, documents)
   // Images and plaintext can be sent immediately
