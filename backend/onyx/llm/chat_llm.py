@@ -1,6 +1,7 @@
 import json
 import os
 import traceback
+import uuid
 from collections.abc import Iterator
 from collections.abc import Sequence
 from typing import Any
@@ -27,7 +28,10 @@ from langchain_core.messages import SystemMessageChunk
 from langchain_core.messages.tool import ToolCallChunk
 from langchain_core.messages.tool import ToolMessage
 from langchain_core.prompt_values import PromptValue
+from langfuse import Langfuse
 
+from onyx.configs.app_configs import LANGFUSE_PUBLIC_KEY
+from onyx.configs.app_configs import LANGFUSE_SECRET_KEY
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.configs.chat_configs import QA_TIMEOUT
@@ -373,6 +377,58 @@ class LitellmLLM(LLM):
 
     def log_model_configs(self) -> None:
         logger.debug(f"Config: {self._safe_model_config()}")
+
+    def _maybe_start_langfuse_trace(
+        self, prompt: LanguageModelInput | LangChainLanguageModelInput
+    ) -> tuple[Langfuse | None, Any]:
+        """Start a Langfuse trace for this request if credentials are set."""
+        if not LANGFUSE_SECRET_KEY or not LANGFUSE_PUBLIC_KEY:
+            return None, None
+        host = (
+            os.environ.get("LANGFUSE_HOST")
+            or os.environ.get("LANGFUSE_BASE_URL")
+            or "https://cloud.langfuse.com"
+        )
+        try:
+            client = Langfuse(
+                public_key=LANGFUSE_PUBLIC_KEY,
+                secret_key=LANGFUSE_SECRET_KEY,
+                host=host,
+            )
+            trace = client.trace(
+                id=str(uuid.uuid4()),
+                name="chat-message",
+                input=prompt,
+                metadata={"model": self.config.model_name},
+            )
+            logger.info(
+                "Langfuse trace started trace_id=%s host=%s model=%s",
+                getattr(trace, "id", None),
+                host,
+                self.config.model_name,
+            )
+            return client, trace
+        except Exception as exc:
+            logger.warning("Langfuse trace init failed: %s", exc)
+            return None, None
+
+    @staticmethod
+    def _maybe_finish_langfuse_trace(
+        client: Langfuse | None,
+        trace: Any,
+        output: Any,
+    ) -> None:
+        if not client or trace is None:
+            return
+        try:
+            trace.update(output=output)
+            client.flush()
+            logger.info(
+                "Langfuse trace finished trace_id=%s",
+                getattr(trace, "id", None),
+            )
+        except Exception as exc:
+            logger.warning("Langfuse trace finish failed: %s", exc)
 
     def _record_call(
         self,
@@ -720,25 +776,36 @@ class LitellmLLM(LLM):
 
         from onyx.llm.model_response import from_litellm_model_response
 
+        lf_client, lf_trace = self._maybe_start_langfuse_trace(prompt)
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()
 
-        response = cast(
-            LiteLLMModelResponse,
-            self._completion(
-                prompt=prompt,
-                tools=tools,
-                tool_choice=tool_choice,
-                stream=False,
-                structured_response_format=structured_response_format,
-                timeout_override=timeout_override,
-                max_tokens=max_tokens,
-                parallel_tool_calls=True,
-                reasoning_effort=reasoning_effort,
-            ),
-        )
-
-        return from_litellm_model_response(response)
+        try:
+            response = cast(
+                LiteLLMModelResponse,
+                self._completion(
+                    prompt=prompt,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=False,
+                    structured_response_format=structured_response_format,
+                    timeout_override=timeout_override,
+                    max_tokens=max_tokens,
+                    parallel_tool_calls=True,
+                    reasoning_effort=reasoning_effort,
+                ),
+            )
+            return from_litellm_model_response(response)
+        finally:
+            if lf_trace:
+                try:
+                    self._maybe_finish_langfuse_trace(
+                        lf_client,
+                        lf_trace,
+                        response if "response" in locals() else None,
+                    )
+                except Exception:
+                    pass
 
     def _stream_implementation(
         self,
@@ -753,6 +820,8 @@ class LitellmLLM(LLM):
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from onyx.llm.model_response import from_litellm_model_response_stream
 
+        lf_client, lf_trace = self._maybe_start_langfuse_trace(prompt)
+        accumulated_output: list[str] = []
         if LOG_ONYX_MODEL_INTERACTIONS:
             self.log_model_configs()
 
@@ -771,5 +840,21 @@ class LitellmLLM(LLM):
             ),
         )
 
-        for chunk in response:
-            yield from_litellm_model_response_stream(chunk)
+        try:
+            for chunk in response:
+                parsed = from_litellm_model_response_stream(chunk)
+                try:
+                    delta = parsed.choice.delta.content
+                    if delta:
+                        accumulated_output.append(delta)
+                except Exception:
+                    pass
+                yield parsed
+        finally:
+            if lf_trace:
+                try:
+                    self._maybe_finish_langfuse_trace(
+                        lf_client, lf_trace, "".join(accumulated_output)
+                    )
+                except Exception:
+                    pass
