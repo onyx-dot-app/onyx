@@ -40,3 +40,7 @@ dependencies:
     version: 5.4.0
     repository: https://charts.min.io/
     condition: minio.enabled
+  - name: code-interpreter
+    version: 0.2.0
+    repository: https://onyx-dot-app.github.io/code-interpreter/
+    condition: codeInterpreter.enabled
