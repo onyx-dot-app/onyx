@@ -201,7 +201,7 @@ class CitationProcessor:
                 self.cited_documents.add(llm_docid)
                 final_citation_info.append(
                     CitationInfo(
-                        citation_num=displayed_citation_num,
+                        citation_number=displayed_citation_num,
                         document_id=llm_docid,
                     )
                 )
@@ -350,10 +350,6 @@ class CitationProcessorGraph:
                 continue
             self.recent_cited_documents.add(llm_docid)
 
-            # format the citation string
-            # if formatted:
-            #     final_processed_str += f"[[{num}]]({link})"
-            # else:
             link = context_llm_doc.link or ""
             final_processed_str += f"[[{num}]]({link})"
 
@@ -362,7 +358,7 @@ class CitationProcessorGraph:
                 self.cited_documents.add(llm_docid)
                 final_citation_info.append(
                     CitationInfo(
-                        citation_num=num,
+                        citation_number=num,
                         document_id=llm_docid,
                     )
                 )

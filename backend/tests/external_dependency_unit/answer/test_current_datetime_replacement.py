@@ -12,7 +12,7 @@ from onyx.db.chat import create_chat_session
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.streaming_models import MessageDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -61,7 +61,7 @@ def test_stream_chat_current_date_response(
 
     for pkt in gen:
         raw.append(pkt)
-        if hasattr(pkt, "obj") and isinstance(pkt.obj, MessageDelta):
+        if hasattr(pkt, "obj") and isinstance(pkt.obj, AgentResponseDelta):
             if pkt.obj.content:
                 content += pkt.obj.content
         if hasattr(pkt, "obj") and isinstance(pkt.obj, StreamingError):

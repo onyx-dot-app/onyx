@@ -14,7 +14,7 @@ from onyx.db.models import RecencyBiasSetting
 from onyx.db.models import User
 from onyx.db.persona import upsert_persona
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.streaming_models import MessageDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import Packet
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.conftest import create_test_user
@@ -122,7 +122,7 @@ def test_stream_chat_message_objects_without_web_search(
     for packet in response_generator:
         raw_answer_stream.append(packet)
         if isinstance(packet, Packet):
-            if isinstance(packet.obj, MessageDelta):
+            if isinstance(packet.obj, AgentResponseDelta):
                 # Direct MessageDelta (if not wrapped)
                 if packet.obj.content:
                     message_content += packet.obj.content
