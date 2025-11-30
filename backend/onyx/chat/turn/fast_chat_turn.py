@@ -11,19 +11,15 @@ from agents import ToolCallItem
 from agents.tracing import trace
 
 from onyx.agents.agent_sdk.message_types import AgentSDKMessage
-from onyx.agents.agent_sdk.message_types import InputTextContent
 from onyx.agents.agent_sdk.message_types import SystemMessage
 from onyx.agents.agent_sdk.message_types import UserMessage
 from onyx.agents.agent_sdk.monkey_patches import (
     monkey_patch_convert_tool_choice_to_ignore_openai_hosted_web_search,
 )
 from onyx.agents.agent_sdk.sync_agent_stream_adapter import SyncAgentStream
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.chat_utils import llm_docs_from_fetched_documents_cache
-from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.memories import get_memories
 from onyx.chat.models import PromptConfig
-from onyx.chat.packet_sniffing import has_had_message_start
 from onyx.chat.prompt_builder.answer_prompt_builder import (
     default_build_system_message_v2,
 )
@@ -40,14 +36,10 @@ from onyx.chat.turn.models import AgentToolType
 from onyx.chat.turn.models import ChatTurnContext
 from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.chat.turn.prompts.custom_instruction import build_custom_instructions
-from onyx.chat.turn.save_turn import extract_final_answer_from_packets
-from onyx.chat.turn.save_turn import save_turn
 from onyx.file_store.models import InMemoryChatFile
-from onyx.server.query_and_chat.streaming_models import CitationDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import CitationStart
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketObj
@@ -66,24 +58,13 @@ if TYPE_CHECKING:
 MAX_ITERATIONS = 10
 
 
-# TODO: We should be able to do this a bit more cleanly since we know the schema
-# ahead of time. I'll make sure to do that for when we replace AgentSDKMessage.
-def _extract_tokens_from_messages(messages: list[AgentSDKMessage]) -> int:
-    from onyx.llm.utils import check_number_of_tokens
-
-    total_input_text_parts: list[str] = []
-    for msg in messages:
-        if isinstance(msg, dict):
-            content = msg.get("content") or msg.get("output")
-            if isinstance(content, list):
-                for item in content:
-                    if isinstance(item, dict):
-                        text = item.get("text")
-                        if text:
-                            total_input_text_parts.append(text)
-            elif isinstance(content, str):
-                total_input_text_parts.append(content)
-    return check_number_of_tokens("\n".join(total_input_text_parts))
+def _extract_final_answer_from_packets(packet_history: list[Packet]) -> str:
+    """Extract the final answer by concatenating all AgentResponseDelta content."""
+    final_answer = ""
+    for packet in packet_history:
+        if isinstance(packet.obj, AgentResponseDelta):
+            final_answer += packet.obj.content
+    return final_answer
 
 
 # TODO -- this can be refactored out and played with in evals + normal demo
@@ -119,7 +100,7 @@ def _run_agent_loop(
         # TODO: The system is rather prompt-cache efficient except for rebuilding the system prompt.
         # The biggest offender is when we hit max iterations and then all the tool calls cannot
         # be cached anymore since the system message will be differ in that it will have no tools.
-        langchain_system_message = default_build_system_message_v2(
+        default_build_system_message_v2(
             dependencies.prompt_config,
             dependencies.llm.config,
             memories,
@@ -128,11 +109,7 @@ def _run_agent_loop(
         )
         new_system_prompt = SystemMessage(
             role="system",
-            content=[
-                InputTextContent(
-                    type="input_text", text=str(langchain_system_message.content)
-                )
-            ],
+            content=[],
         )
         custom_instructions = build_custom_instructions(prompt_config)
         previous_messages = (
@@ -142,7 +119,7 @@ def _run_agent_loop(
             + [current_user_message]
         )
         current_messages = previous_messages + agent_turn_messages
-        ctx.current_input_tokens = _extract_tokens_from_messages(current_messages)
+        ctx.current_input_tokens = 0
 
         if not available_tools:
             tool_choice = None
@@ -216,13 +193,15 @@ def _run_agent_loop(
             last_call_is_final = True
         iteration_count += 1
 
+    # Store the final agent_turn_messages in context for save_turn to use
+    ctx.agent_turn_messages = agent_turn_messages
+
 
 def _fast_chat_turn_core(
     messages: list[AgentSDKMessage],
     dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     message_id: int,
-    research_type: ResearchType,
     prompt_config: PromptConfig,
     force_use_tool: ForceUseTool | None = None,
     # Dependency injectable argument for testing
@@ -236,7 +215,7 @@ def _fast_chat_turn_core(
         dependencies: Chat turn dependencies
         chat_session_id: Chat session ID
         message_id: Message ID
-        research_type: Research type
+        use_agentic_search: Whether to use agentic search
         global_iteration_responses: Optional list of iteration answers to inject for testing
         cited_documents: Optional list of cited documents to inject for testing
     """
@@ -249,7 +228,6 @@ def _fast_chat_turn_core(
         run_dependencies=dependencies,
         chat_session_id=chat_session_id,
         message_id=message_id,
-        chat_files=latest_query_files or [],
     )
     with trace("fast_chat_turn"):
         _run_agent_loop(
@@ -264,13 +242,13 @@ def _fast_chat_turn_core(
         dependencies=dependencies,
         ctx=ctx,
     )
-    final_answer = extract_final_answer_from_packets(
+    final_answer = _extract_final_answer_from_packets(
         dependencies.emitter.packet_history
     )
     # TODO: Make this error handling more robust and not so specific to the qwen ollama cloud case
     # where if it happens to any cloud questions, it hangs on read url
     has_image_generation = any(
-        packet.obj.type == "image_generation_tool_delta"
+        packet.obj.type == "image_generation_final"
         for packet in dependencies.emitter.packet_history
     )
     # Allow empty final answer if image generation tool was used (it produces images, not text)
@@ -280,20 +258,21 @@ def _fast_chat_turn_core(
             content packets.
             """
         )
-    save_turn(
-        db_session=dependencies.db_session,
-        message_id=message_id,
-        chat_session_id=chat_session_id,
-        research_type=research_type,
-        model_name=dependencies.llm.config.model_name,
-        model_provider=dependencies.llm.config.model_provider,
-        iteration_instructions=ctx.iteration_instructions,
-        global_iteration_responses=ctx.global_iteration_responses,
-        final_answer=final_answer,
-        fetched_documents_cache=ctx.fetched_documents_cache,
-    )
+    # save_chat_turn(
+    #     db_session=dependencies.db_session,
+    #     message_id=message_id,
+    #     chat_session_id=chat_session_id,
+    #     model_name=dependencies.llm.config.model_name,
+    #     model_provider=dependencies.llm.config.model_provider,
+    #     final_answer=final_answer,
+    #     fetched_documents_cache=ctx.fetched_documents_cache,
+    #     agent_turn_messages=ctx.agent_turn_messages,
+    # )
     dependencies.emitter.emit(
-        Packet(ind=ctx.current_run_step, obj=OverallStop(type="stop"))
+        Packet(
+            turn_index=ctx.message_id,
+            obj=OverallStop(type="stop"),
+        )
     )
 
 
@@ -303,19 +282,17 @@ def fast_chat_turn(
     dependencies: ChatTurnDependencies,
     chat_session_id: UUID,
     message_id: int,
-    research_type: ResearchType,
     prompt_config: PromptConfig,
     force_use_tool: ForceUseTool | None = None,
     latest_query_files: list[InMemoryChatFile] | None = None,
 ) -> None:
     """Main fast chat turn function that calls the core logic with default parameters."""
     _fast_chat_turn_core(
-        messages,
-        dependencies,
-        chat_session_id,
-        message_id,
-        research_type,
-        prompt_config,
+        messages=messages,
+        dependencies=dependencies,
+        chat_session_id=chat_session_id,
+        message_id=message_id,
+        prompt_config=prompt_config,
         force_use_tool=force_use_tool,
         latest_query_files=latest_query_files,
     )
@@ -371,14 +348,15 @@ def _emit_clean_up_packets(
     ):
         dependencies.emitter.emit(
             Packet(
-                ind=ctx.current_run_step,
-                obj=MessageStart(
-                    type="message_start", content="Cancelled", final_documents=None
-                ),
+                turn_index=ctx.message_id,
+                obj=AgentResponseStart(type="message_start", final_documents=None),
             )
         )
     dependencies.emitter.emit(
-        Packet(ind=ctx.current_run_step, obj=SectionEnd(type="section_end"))
+        Packet(
+            turn_index=ctx.message_id,
+            obj=SectionEnd(type="section_end"),
+        )
     )
 
 
@@ -388,14 +366,20 @@ def _emit_citations_for_final_answer(
 ) -> None:
     index = ctx.current_run_step + 1
     if ctx.citations:
-        dependencies.emitter.emit(Packet(ind=index, obj=CitationStart()))
+        # Emit each citation as a CitationInfo packet
+        for citation in ctx.citations:
+            dependencies.emitter.emit(
+                Packet(
+                    turn_index=ctx.message_id,
+                    obj=citation,
+                )
+            )
         dependencies.emitter.emit(
             Packet(
-                ind=index,
-                obj=CitationDelta(citations=ctx.citations),
+                turn_index=ctx.message_id,
+                obj=SectionEnd(type="section_end"),
             )
         )
-        dependencies.emitter.emit(Packet(ind=index, obj=SectionEnd(type="section_end")))
     ctx.current_run_step = index
 
 
@@ -425,23 +409,34 @@ def _default_packet_translation(
         # Reasoning packets
         # ------------------------------------------------------------
         if isinstance(ev.data, ResponseReasoningSummaryPartAddedEvent):
-            packets.append(Packet(ind=ctx.current_run_step, obj=ReasoningStart()))
+            packets.append(
+                Packet(
+                    turn_index=ctx.message_id,
+                    obj=ReasoningStart(),
+                )
+            )
             ctx.current_output_index = output_index
         elif isinstance(ev.data, ResponseReasoningSummaryTextDeltaEvent):
             packets.append(
                 Packet(
-                    ind=ctx.current_run_step,
+                    turn_index=ctx.message_id,
                     obj=ReasoningDelta(reasoning=ev.data.delta),
                 )
             )
         elif isinstance(ev.data, ResponseReasoningSummaryPartDoneEvent):
             # only do anything if we haven't already "gone past" this step
-            # (e.g. if we've already sent the MessageStart / MessageDelta packets, then we
+            # (e.g. if we've already sent the AgentResponseStart / AgentResponseDelta packets, then we
             # shouldn't do anything)
             if ctx.current_output_index == output_index:
-                packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
+                packets.append(Packet(turn_index=ctx.message_id, obj=SectionEnd()))
                 ctx.current_run_step += 1
                 ctx.current_output_index = None
+                packets.append(
+                    Packet(
+                        turn_index=ctx.message_id,
+                        obj=SectionEnd(),
+                    )
+                )
 
         # ------------------------------------------------------------
         # Message packets
@@ -463,31 +458,28 @@ def _default_packet_translation(
                         ctx.citations.append(response_part)
                     else:
                         final_answer_piece += response_part.answer_piece or ""
-                obj = MessageDelta(content=final_answer_piece)
+                obj = AgentResponseDelta(content=final_answer_piece)
             else:
-                obj = MessageDelta(content=ev.data.delta)
+                obj = AgentResponseDelta(content=ev.data.delta)
 
-            needs_start = has_had_message_start(packet_history, ctx.current_run_step)
+            needs_start = False
             if needs_start:
                 ctx.current_run_step += 1
-                llm_docs_for_message_start = llm_docs_from_fetched_documents_cache(
-                    ctx.fetched_documents_cache
-                )
-                retrieved_search_docs = saved_search_docs_from_llm_docs(
-                    llm_docs_for_message_start
-                )
+
+            if obj is not None:
                 packets.append(
                     Packet(
-                        ind=ctx.current_run_step,
-                        obj=MessageStart(
-                            content="", final_documents=retrieved_search_docs
-                        ),
+                        turn_index=ctx.message_id,
+                        obj=obj,
                     )
                 )
-
-            packets.append(Packet(ind=ctx.current_run_step, obj=obj))
         elif ev.data.type == "response.content_part.done":
-            packets.append(Packet(ind=ctx.current_run_step, obj=SectionEnd()))
+            packets.append(
+                Packet(
+                    turn_index=ctx.message_id,
+                    obj=SectionEnd(),
+                )
+            )
             ctx.current_output_index = None
 
     return packets

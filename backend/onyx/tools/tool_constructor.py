@@ -6,25 +6,19 @@ from pydantic import Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
+from onyx.chat.emitter import Emitter
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import DocumentPruningConfig
-from onyx.chat.models import PromptConfig
 from onyx.configs.app_configs import AZURE_IMAGE_API_BASE
 from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.configs.app_configs import AZURE_IMAGE_API_VERSION
 from onyx.configs.app_configs import AZURE_IMAGE_DEPLOYMENT_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
-from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.enums import OptionalSearchSetting
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import RerankingDetails
-from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import BaseFilters
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
-from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.mcp import get_all_mcp_tools_for_server
 from onyx.db.mcp import get_mcp_server_by_id
@@ -32,11 +26,11 @@ from onyx.db.mcp import get_user_connection_config
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.oauth_config import get_oauth_config
-from onyx.file_store.models import InMemoryChatFile
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.factory import get_default_document_index
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool import Tool
@@ -46,12 +40,9 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
-from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
-    KnowledgeGraphTool,
-)
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
-from onyx.tools.tool_implementations.python.python_tool import (
-    PythonTool,
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OpenURLTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
@@ -66,21 +57,10 @@ logger = setup_logger()
 
 
 class SearchToolConfig(BaseModel):
-    answer_style_config: AnswerStyleConfig = Field(
-        default_factory=lambda: AnswerStyleConfig(citation_config=CitationConfig())
-    )
-    document_pruning_config: DocumentPruningConfig = Field(
-        default_factory=DocumentPruningConfig
-    )
-    retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
-    rerank_settings: RerankingDetails | None = None
-    selected_sections: list[InferenceSection] | None = None
-    chunks_above: int = 0
-    chunks_below: int = 0
-    full_doc: bool = False
-    latest_query_files: list[InMemoryChatFile] | None = None
-    # Use with care, should only be used for OnyxBot in channels with multiple users
+    user_selected_filters: BaseFilters | None = None
+    project_id: int | None = None
     bypass_acl: bool = False
+    additional_context: str | None = None
 
 
 class WebSearchToolConfig(BaseModel):
@@ -159,7 +139,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 # Note: this is not very clear / not the way things should generally be done. (+impure function)
 # TODO: refactor the tool config flow to be easier
 def _configure_document_pruning_for_tool_config(
-    tool_config: SearchToolConfig | WebSearchToolConfig,
+    tool_config: WebSearchToolConfig,
     tools: list[Tool],
     llm: LLM,
 ) -> None:
@@ -180,18 +160,15 @@ def _configure_document_pruning_for_tool_config(
 
 def construct_tools(
     persona: Persona,
-    prompt_config: PromptConfig,
     db_session: Session,
+    emitter: Emitter,
     user: User | None,
     llm: LLM,
     fast_llm: LLM,
-    run_search_setting: OptionalSearchSetting,
     search_tool_config: SearchToolConfig | None = None,
-    internet_search_tool_config: WebSearchToolConfig | None = None,
-    image_generation_tool_config: ImageGenerationToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
-    slack_context: SlackContext | None = None,
+    disable_internal_search: bool = False,
 ) -> dict[int, list[Tool]]:
     """Constructs tools based on persona configuration and available APIs.
 
@@ -227,45 +204,36 @@ def construct_tools(
                 )
                 continue
 
-            # Handle Search Tool
-            if (
-                tool_cls.__name__ == SearchTool.__name__
-                and run_search_setting != OptionalSearchSetting.NEVER
-            ):
+            # Handle Internal Search Tool
+            if tool_cls.__name__ == SearchTool.__name__:
+                if disable_internal_search:
+                    continue
+
                 if not search_tool_config:
                     search_tool_config = SearchToolConfig()
 
+                search_settings = get_current_search_settings(db_session)
+                document_index = get_default_document_index(search_settings, None)
+
+                # TODO concerning passing the db_session here.
                 search_tool = SearchTool(
                     tool_id=db_tool_model.id,
                     db_session=db_session,
+                    emitter=emitter,
                     user=user,
                     persona=persona,
-                    retrieval_options=search_tool_config.retrieval_options,
-                    prompt_config=prompt_config,
                     llm=llm,
                     fast_llm=fast_llm,
-                    document_pruning_config=search_tool_config.document_pruning_config,
-                    answer_style_config=search_tool_config.answer_style_config,
-                    selected_sections=search_tool_config.selected_sections,
-                    chunks_above=search_tool_config.chunks_above,
-                    chunks_below=search_tool_config.chunks_below,
-                    full_doc=search_tool_config.full_doc,
-                    evaluation_type=(
-                        LLMEvaluationType.BASIC
-                        if persona.llm_relevance_filter
-                        else LLMEvaluationType.SKIP
-                    ),
-                    rerank_settings=search_tool_config.rerank_settings,
+                    document_index=document_index,
+                    user_selected_filters=search_tool_config.user_selected_filters,
+                    project_id=search_tool_config.project_id,
                     bypass_acl=search_tool_config.bypass_acl,
-                    slack_context=slack_context,  # Pass the Slack context
                 )
+
                 tool_dict[db_tool_model.id] = [search_tool]
 
             # Handle Image Generation Tool
             elif tool_cls.__name__ == ImageGenerationTool.__name__:
-                if not image_generation_tool_config:
-                    image_generation_tool_config = ImageGenerationToolConfig()
-
                 img_generation_llm_config = _get_image_generation_config(
                     llm, db_session
                 )
@@ -277,17 +245,15 @@ def construct_tools(
                         api_version=img_generation_llm_config.api_version,
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
+                        emitter=emitter,
                     )
                 ]
 
-            # Handle Internet Search Tool
+            # Handle Web Search Tool
             elif tool_cls.__name__ == WebSearchTool.__name__:
-                if not internet_search_tool_config:
-                    internet_search_tool_config = WebSearchToolConfig()
-
                 try:
                     tool_dict[db_tool_model.id] = [
-                        WebSearchTool(tool_id=db_tool_model.id)
+                        WebSearchTool(tool_id=db_tool_model.id, emitter=emitter)
                     ]
                 except ValueError as e:
                     logger.error(f"Failed to initialize Internet Search Tool: {e}")
@@ -295,27 +261,36 @@ def construct_tools(
                         "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
                     )
 
-            # Handle KG Tool
-            elif tool_cls.__name__ == KnowledgeGraphTool.__name__:
-
-                # skip the knowledge graph tool if KG is not enabled/exposed
-                kg_config = get_kg_config_settings()
-                if not kg_config.KG_ENABLED or not kg_config.KG_EXPOSED:
-                    logger.debug("Knowledge Graph Tool is not enabled/exposed")
-                    continue
-
-                if persona.name != TMP_DRALPHA_PERSONA_NAME:
-                    # TODO: remove this after the beta period
+            # Handle Open URL Tool
+            elif tool_cls.__name__ == OpenURLTool.__name__:
+                try:
+                    tool_dict[db_tool_model.id] = [
+                        OpenURLTool(tool_id=db_tool_model.id, emitter=emitter)
+                    ]
+                except RuntimeError as e:
+                    logger.error(f"Failed to initialize Open URL Tool: {e}")
                     raise ValueError(
-                        f"The Knowledge Graph Tool should only be used by the '{TMP_DRALPHA_PERSONA_NAME}' Agent."
+                        "Open URL tool requires a web content provider, please contact your Onyx admin to get it configured!"
                     )
-                tool_dict[db_tool_model.id] = [
-                    KnowledgeGraphTool(tool_id=db_tool_model.id)
-                ]
 
-            # Handle Python Tool
-            elif tool_cls.__name__ == "PythonTool":
-                tool_dict[db_tool_model.id] = [PythonTool(tool_id=db_tool_model.id)]
+            # Handle KG Tool
+            # TODO: disabling for now because it's broken in the refactor
+            # elif tool_cls.__name__ == KnowledgeGraphTool.__name__:
+
+            #     # skip the knowledge graph tool if KG is not enabled/exposed
+            #     kg_config = get_kg_config_settings()
+            #     if not kg_config.KG_ENABLED or not kg_config.KG_EXPOSED:
+            #         logger.debug("Knowledge Graph Tool is not enabled/exposed")
+            #         continue
+
+            #     if persona.name != TMP_DRALPHA_PERSONA_NAME:
+            #         # TODO: remove this after the beta period
+            #         raise ValueError(
+            #             f"The Knowledge Graph Tool should only be used by the '{TMP_DRALPHA_PERSONA_NAME}' Agent."
+            #         )
+            #     tool_dict[db_tool_model.id] = [
+            #         KnowledgeGraphTool(tool_id=db_tool_model.id)
+            #     ]
 
         # Handle custom tools
         elif db_tool_model.openapi_schema:
@@ -348,6 +323,7 @@ def construct_tools(
                 build_custom_tools_from_openapi_schema_and_headers(
                     tool_id=db_tool_model.id,
                     openapi_schema=db_tool_model.openapi_schema,
+                    emitter=emitter,
                     dynamic_schema_info=DynamicSchemaInfo(
                         chat_session_id=custom_tool_config.chat_session_id,
                         message_id=custom_tool_config.message_id,
@@ -401,6 +377,7 @@ def construct_tools(
                 # Create MCPTool instance for this specific tool
                 mcp_tool = MCPTool(
                     tool_id=saved_tool.id,
+                    emitter=emitter,
                     mcp_server=mcp_server,
                     tool_name=saved_tool.name,
                     tool_description=saved_tool.description,
@@ -420,14 +397,5 @@ def construct_tools(
     tools: list[Tool] = []
     for tool_list in tool_dict.values():
         tools.extend(tool_list)
-
-    # factor in tool definition size when pruning
-    if search_tool_config:
-        _configure_document_pruning_for_tool_config(search_tool_config, tools, llm)
-
-    if internet_search_tool_config:
-        _configure_document_pruning_for_tool_config(
-            internet_search_tool_config, tools, llm
-        )
 
     return tool_dict

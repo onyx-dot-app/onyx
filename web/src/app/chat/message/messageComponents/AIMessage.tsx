@@ -422,11 +422,6 @@ export default function AIMessage({
                                   )
                                 : [];
 
-                            const lastDisplayGroup =
-                              displayGroups.length > 0
-                                ? displayGroups[displayGroups.length - 1]
-                                : null;
-
                             return (
                               <>
                                 {/* Render tool groups in multi-tool renderer */}
@@ -445,17 +440,21 @@ export default function AIMessage({
                                   />
                                 )}
 
-                                {/* Render non-tool groups (messages + image generation) in main area */}
-                                {lastDisplayGroup && (
+                                {/* Render all display groups (messages + image generation) in main area */}
+                                {displayGroups.map((displayGroup, index) => (
                                   <RendererComponent
-                                    key={lastDisplayGroup.ind}
-                                    packets={lastDisplayGroup.packets}
+                                    key={displayGroup.ind}
+                                    packets={displayGroup.packets}
                                     chatState={chatState}
                                     onComplete={() => {
                                       // if we've reverted to final answer not coming, don't set display complete
                                       // this happens when using claude and a tool calling packet comes after
                                       // some message packets
-                                      if (finalAnswerComingRef.current) {
+                                      // Only mark complete on the last display group
+                                      if (
+                                        finalAnswerComingRef.current &&
+                                        index === displayGroups.length - 1
+                                      ) {
                                         setDisplayComplete(true);
                                       }
                                     }}
@@ -464,7 +463,7 @@ export default function AIMessage({
                                   >
                                     {({ content }) => <div>{content}</div>}
                                   </RendererComponent>
-                                )}
+                                ))}
                               </>
                             );
                           })()
