@@ -14,6 +14,7 @@ from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.configs.onyxbot_configs import ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER
 from onyx.configs.onyxbot_configs import ONYX_BOT_DISPLAY_ERROR_MSGS
@@ -28,6 +29,9 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import persona_has_search_tool
 from onyx.db.users import get_user_by_email
+from onyx.llm.factory import get_llms_for_persona
+from onyx.llm.models import PreviousMessage
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.handlers.utils import send_team_member_message
 from onyx.onyxbot.slack.handlers.utils import slackify_message_thread
@@ -155,6 +159,47 @@ def handle_regular_answer(
     history_messages = messages[:-1]
     single_message_history = slackify_message_thread(history_messages) or None
 
+    # Convert ThreadMessage objects to PreviousMessage for query rephrasing
+    thread_previous_messages: list[PreviousMessage] | None = None
+    if history_messages:
+        llm, _ = get_llms_for_persona(persona, user)
+        llm_tokenizer = get_tokenizer(
+            model_name=llm.config.model_name,
+            provider_type=llm.config.model_provider,
+        )
+
+        # Work backwards from most recent messages, only keeping what fits in max token count
+        temp_messages = []
+        total_token_count = 0
+
+        for thread_msg in reversed(history_messages):
+            token_count = len(llm_tokenizer.encode(thread_msg.message))
+
+            # Stop if adding this message would exceed the max token count
+            if total_token_count + token_count > GEN_AI_HISTORY_CUTOFF:
+                break
+
+            temp_messages.append(
+                PreviousMessage(
+                    message=thread_msg.message,
+                    token_count=token_count,
+                    message_type=thread_msg.role,
+                    files=[],
+                    tool_call=None,
+                    refined_answer_improvement=None,
+                    research_answer_purpose=None,
+                )
+            )
+            total_token_count += token_count
+
+        # Reverse back to chronological order (oldest to newest)
+        thread_previous_messages = list(reversed(temp_messages))
+
+        logger.info(
+            f"Converted {len(thread_previous_messages)} of {len(history_messages)} "
+            f"thread messages ({total_token_count} tokens) for query rephrasing"
+        )
+
     # Always check for ACL permissions, also for documnt sets that were explicitly added
     # to the Bot by the Administrator. (Change relative to earlier behavior where all documents
     # in an attached document set were available to all users in the channel.)
@@ -184,6 +229,7 @@ def handle_regular_answer(
                 db_session=db_session,
                 bypass_acl=bypass_acl,
                 single_message_history=single_message_history,
+                thread_message_history=thread_previous_messages,
             )
             answer = gather_stream(packets)
 
