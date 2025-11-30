@@ -93,6 +93,7 @@ const LLMFormikEffects = ({
         if (isEmpty(values.api_key) || isEmpty(values.api_base))
           shouldReset = true;
         break;
+      case LLMProviderName.GOOGLE_GENAI:
       case LLMProviderName.VERTEX_AI:
         if (isEmpty(values?.custom_config?.vertex_credentials))
           shouldReset = true;

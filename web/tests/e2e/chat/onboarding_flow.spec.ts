@@ -155,7 +155,7 @@ test.describe("First user onboarding flow", () => {
       { title: "Claude", subtitle: "Anthropic" },
       { title: "Azure OpenAI", subtitle: "Microsoft Azure Cloud" },
       { title: "Amazon Bedrock", subtitle: "AWS" },
-      { title: "Gemini", subtitle: "Google Cloud Vertex AI" },
+      { title: "Gemini", subtitle: "Google Gen AI" },
       { title: "OpenRouter", subtitle: "OpenRouter" },
       { title: "Ollama", subtitle: "Ollama" },
       { title: "Custom LLM Provider", subtitle: "LiteLLM Compatible APIs" },

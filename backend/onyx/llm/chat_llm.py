@@ -42,6 +42,7 @@ from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import STANDARD_TOOL_CHOICE_OPTIONS
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
+from onyx.llm.llm_provider_options import GOOGLE_GENAI_PROVIDER_ALIASES
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
@@ -326,10 +327,10 @@ class LitellmLLM(LLM):
         # env variables)
         if custom_config:
             # Specifically pass in "vertex_credentials" / "vertex_location" as a
-            # model_kwarg to the completion call for vertex AI. More details here:
+            # model_kwarg to the completion call for Google Gen AI (Vertex AI). More details here:
             # https://docs.litellm.ai/docs/providers/vertex
             for k, v in custom_config.items():
-                if model_provider == "vertex_ai":
+                if model_provider in GOOGLE_GENAI_PROVIDER_ALIASES:
                     if k == VERTEX_CREDENTIALS_FILE_KWARG:
                         model_kwargs[k] = v
                         continue
