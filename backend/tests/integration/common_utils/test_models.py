@@ -12,6 +12,7 @@ from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from onyx.server.documents.models import IndexAttemptSnapshot
@@ -199,7 +200,7 @@ class ErrorResponse(BaseModel):
 class StreamedResponse(BaseModel):
     full_message: str
     assistant_message_id: int
-    top_documents: list[SavedSearchDoc]
+    top_documents: list[SearchDoc]
     used_tools: list[ToolResult]
     error: ErrorResponse | None = None
 

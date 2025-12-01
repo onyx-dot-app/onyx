@@ -10,6 +10,7 @@ from requests.models import Response
 
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
@@ -168,7 +169,7 @@ class ChatSessionManager:
             ],
         )
         ind_to_tool_use: dict[int, ToolResult] = {}
-        top_documents: list[SavedSearchDoc] = []
+        top_documents: list[SearchDoc] = []
         heartbeat_packets: list[StreamPacketData] = []
         full_message = ""
         assistant_message_id: int | None = None
@@ -190,7 +191,7 @@ class ChatSessionManager:
                 if packet_type_str == StreamingType.MESSAGE_START.value:
                     final_docs = data_obj.get("final_documents")
                     if isinstance(final_docs, list):
-                        top_documents = [SavedSearchDoc(**doc) for doc in final_docs]
+                        top_documents = [SearchDoc(**doc) for doc in final_docs]
                     full_message += data_obj.get("content", "")
                 elif packet_type_str == StreamingType.MESSAGE_DELTA.value:
                     full_message += data_obj["content"]
