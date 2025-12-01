@@ -451,6 +451,7 @@ def handle_new_chat_message(
                 custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                     request.headers
                 ),
+                bypass_translation=chat_message_req.bypass_translation,
             ):
                 yield packet
 

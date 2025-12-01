@@ -142,6 +142,8 @@ class CreateChatMessageRequest(ChunkContext):
     # TODO: make this a single one since unclear how to force this for multiple at a time.
     forced_tool_ids: list[int] | None = None
 
+    bypass_translation: bool = False
+
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
         if self.search_doc_ids is None and self.retrieval_options is None:

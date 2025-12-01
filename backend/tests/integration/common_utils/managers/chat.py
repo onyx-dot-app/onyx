@@ -119,6 +119,7 @@ class ChatSessionManager:
             use_existing_user_message=use_existing_user_message,
             use_agentic_search=use_agentic_search,
             forced_tool_ids=forced_tool_ids,
+            bypass_translation=True,
         )
 
         headers = (
