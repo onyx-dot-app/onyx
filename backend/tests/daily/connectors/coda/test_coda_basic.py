@@ -10,11 +10,8 @@ Prerequisites:
 import os
 import sys
 
-# Add backend to path
-sys.path.insert(0, "/Users/no/Documents/0xmoner/onyx/backend")
-
-from onyx.connectors.coda.connector import CodaConnector
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.coda.connector import CodaConnector
 
 
 def test_import():
@@ -135,6 +132,55 @@ def test_fetch_pages():
         raise
 
 
+def test_doc_ids_filtering():
+    """Test that doc_ids filtering works"""
+    api_token = os.environ.get("CODA_API_TOKEN")
+    if not api_token:
+        print("⚠ CODA_API_TOKEN not set, skipping doc_ids filtering test")
+        return
+
+    # First fetch all docs to get a valid ID
+    connector = CodaConnector()
+    connector.load_credentials({"coda_api_token": api_token})
+    docs_response = connector._fetch_docs()
+    docs = docs_response.get("items", [])
+
+    if not docs:
+        print("⚠ No docs found in Coda workspace, skipping doc_ids filtering test")
+        return
+
+    target_doc = docs[0]
+    target_doc_id = target_doc["id"]
+    print(f"  Testing filtering with doc: '{target_doc['name']}' (ID: {target_doc_id})")
+
+    # Initialize connector with specific doc_id
+    filtered_connector = CodaConnector(doc_ids=[target_doc_id])
+    filtered_connector.load_credentials({"coda_api_token": api_token})
+
+    # Test load_from_state
+    gen = filtered_connector.load_from_state()
+
+    # We just want to verify that we only process the target doc
+    # Since load_from_state yields documents (pages), we can't directly check the docs list
+    # But we can check the metadata of the yielded documents
+
+    processed_doc_ids = set()
+    try:
+        for doc_batch in gen:
+            for doc in doc_batch:
+                processed_doc_ids.add(doc.metadata.get("doc_id"))
+    except Exception as e:
+        print(f"✗ Error during filtered load: {e}")
+        raise
+
+    if not processed_doc_ids:
+        print("⚠ No pages found in target doc")
+    else:
+        assert len(processed_doc_ids) == 1
+        assert target_doc_id in processed_doc_ids
+        print("✓ Filtering successful: Only target doc was processed")
+
+
 if __name__ == "__main__":
     print("Testing Coda Connector Implementation\n")
     print("=" * 60)
@@ -155,6 +201,10 @@ if __name__ == "__main__":
             print("\n3. Page Fetch Tests")
             print("-" * 60)
             test_fetch_pages()
+
+            print("\n4. Doc IDs Filtering Tests")
+            print("-" * 60)
+            test_doc_ids_filtering()
 
             print("\n" + "=" * 60)
             print("✅ All tests passed!")
