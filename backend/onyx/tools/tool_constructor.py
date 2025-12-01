@@ -31,6 +31,7 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool import Tool
@@ -61,6 +62,7 @@ class SearchToolConfig(BaseModel):
     project_id: int | None = None
     bypass_acl: bool = False
     additional_context: str | None = None
+    slack_context: SlackContext | None = None
 
 
 class WebSearchToolConfig(BaseModel):
@@ -228,6 +230,7 @@ def construct_tools(
                     user_selected_filters=search_tool_config.user_selected_filters,
                     project_id=search_tool_config.project_id,
                     bypass_acl=search_tool_config.bypass_acl,
+                    slack_context=search_tool_config.slack_context,
                 )
 
                 tool_dict[db_tool_model.id] = [search_tool]

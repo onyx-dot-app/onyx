@@ -510,9 +510,9 @@ def run_llm_step(
     llm_msg_history = translate_history_to_llm_format(history)
 
     # Uncomment the line below to log the entire message history to the console
-    logger.info(
-        f"Message history:\n{_format_message_history_for_logging(llm_msg_history)}"
-    )
+    # logger.info(
+    #     f"Message history:\n{_format_message_history_for_logging(llm_msg_history)}"
+    # )
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
     reasoning_start = False
@@ -669,8 +669,8 @@ def run_llm_step(
             )
 
     # Uncomment the lines below to log the LLM call results
-    logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
-    logger.debug(f"Accumulated answer: {accumulated_answer}")
+    # logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
+    # logger.debug(f"Accumulated answer: {accumulated_answer}")
     if tool_calls:
         tool_calls_str = "\n".join(
             f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"

@@ -63,6 +63,7 @@ from onyx.llm.factory import get_llm_tokenizer_encode_func
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import litellm_exception_to_error_msg
+from onyx.onyxbot.slack.models import SlackContext
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
@@ -382,6 +383,8 @@ def stream_chat_message_objects(
     # NOTE: is not stored in the database, only passed in to the LLM as context
     additional_context: str | None = None,
     bypass_translation: bool = False,
+    # Slack context for federated Slack search
+    slack_context: SlackContext | None = None,
 ) -> AnswerStream:
     tenant_id = get_current_tenant_id()
     use_existing_user_message = new_msg_req.use_existing_user_message
@@ -525,6 +528,7 @@ def stream_chat_message_objects(
                     else None
                 ),
                 bypass_acl=bypass_acl,
+                slack_context=slack_context,
             ),
             custom_tool_config=CustomToolConfig(
                 chat_session_id=chat_session_id,
