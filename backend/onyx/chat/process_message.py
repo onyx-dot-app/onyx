@@ -341,6 +341,9 @@ def stream_chat_message_objects(
     # messages.
     # NOTE: is not stored in the database at all.
     single_message_history: str | None = None,
+    # Thread messages as PreviousMessage objects for proper query rephrasing
+    # Used in Slack bot flow to enable contextual search
+    thread_message_history: list[PreviousMessage] | None = None,
 ) -> AnswerStream:
     """Streams in order:
     1. [conditional] Retrieved documents if a search needs to be run
@@ -757,6 +760,13 @@ def stream_chat_message_objects(
             PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
         ]
 
+        # If thread messages are provided (e.g., from Slack), use them for query rephrasing
+        if thread_message_history:
+            message_history = thread_message_history + message_history
+            logger.info(
+                f"Added {len(thread_message_history)} thread messages to history for query rephrasing"
+            )
+
         if not search_tool_override_kwargs_for_user_files and in_memory_user_files:
             # we only want to send the user files attached to the current message
             yield UserKnowledgeFilePacket(
@@ -781,6 +791,7 @@ def stream_chat_message_objects(
             user_query=final_msg.message,
             prompt_config=prompt_config,
             files=latest_query_files,
+            single_message_history=single_message_history,
         )
         memories = get_memories(user, db_session)
         system_message = (

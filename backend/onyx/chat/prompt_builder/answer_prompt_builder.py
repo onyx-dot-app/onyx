@@ -171,7 +171,7 @@ def default_build_user_message(
             task_prompt=prompt_config.reminder,
             user_query=user_query,
         )
-        if prompt_config.reminder
+        if prompt_config.reminder or single_message_history
         else user_query
     )
 
