@@ -221,10 +221,10 @@ export function personaComparator(
   return closerToZeroNegativesFirstComparator(a.id, b.id);
 }
 
-export const togglePersonaDefault = async (
+export async function togglePersonaDefault(
   personaId: number,
   isDefault: boolean
-) => {
+) {
   const response = await fetch(`/api/admin/persona/${personaId}/default`, {
     method: "PATCH",
     headers: {
@@ -235,12 +235,12 @@ export const togglePersonaDefault = async (
     }),
   });
   return response;
-};
+}
 
-export const togglePersonaVisibility = async (
+export async function togglePersonaVisibility(
   personaId: number,
   isVisible: boolean
-) => {
+) {
   const response = await fetch(`/api/admin/persona/${personaId}/visible`, {
     method: "PATCH",
     headers: {
@@ -251,4 +251,4 @@ export const togglePersonaVisibility = async (
     }),
   });
   return response;
-};
+}
