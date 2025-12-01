@@ -29,7 +29,7 @@ import {
 import { useMessageSwitching } from "@/app/chat/message/messageComponents/hooks/useMessageSwitching";
 import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRenderer";
 import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
-import { AgentIcon } from "@/refresh-components/AgentIcon";
+import { AgentIcon } from "@/refresh-components/avatars/AgentAvatar";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import SvgThumbsUp from "@/icons/thumbs-up";

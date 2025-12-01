@@ -1,8 +1,9 @@
-// import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+"use client";
+
 import { Logo } from "@/components/logo/Logo";
 import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import { cn } from "@/lib/utils";
-import { AgentIcon } from "@/refresh-components/AgentIcon";
+import { AgentIcon } from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useMemo } from "react";

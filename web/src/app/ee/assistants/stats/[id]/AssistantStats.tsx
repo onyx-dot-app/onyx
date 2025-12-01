@@ -1,4 +1,5 @@
 "use client";
+
 import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
 import { useEffect, useState, useMemo } from "react";
@@ -7,7 +8,7 @@ import {
   DateRange,
 } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import { AgentIcon } from "@/refresh-components/AgentIcon";
+import { AgentIcon } from "@/refresh-components/avatars/AgentAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
 

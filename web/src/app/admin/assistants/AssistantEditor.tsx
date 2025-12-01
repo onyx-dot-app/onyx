@@ -66,7 +66,7 @@ import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
 import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
-import { CustomAgentIcon } from "@/refresh-components/AgentIcon";
+import { CustomAgentIcon } from "@/refresh-components/avatars/AgentAvatar";
 import { BackButton } from "@/components/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
