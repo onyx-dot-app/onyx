@@ -1,9 +1,8 @@
-import React from "react";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
@@ -19,7 +18,7 @@ import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/texts/Text";
 import { cn, noProp } from "@/lib/utils";
 
-type Props = {
+export interface LLMConnectionFieldsBasicProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   modalContent?: any;
   modelOptions: Array<{ label: string; value: string }>;
@@ -38,9 +37,9 @@ type Props = {
     customConfig: Record<string, any>
   ) => Promise<void> | void;
   disabled?: boolean;
-};
+}
 
-export const LLMConnectionFieldsBasic: React.FC<Props> = ({
+export default function LLMConnectionFieldsBasic({
   llmDescriptor,
   modalContent,
   modelOptions,
@@ -57,7 +56,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
   showModelsApiErrorMessage,
   testFileInputChange,
   disabled = false,
-}) => {
+}: LLMConnectionFieldsBasicProps) {
   const handleApiKeyInteraction = (apiKey: string) => {
     if (!apiKey) return;
     if (llmDescriptor?.name === "openrouter") {
@@ -154,7 +153,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                 <PasswordInputTypeIn
                   {...field}
                   placeholder=""
-                  isError={apiStatus === "error"}
+                  error={apiStatus === "error"}
                   onBlur={(e) => {
                     field.onBlur(e);
                     if (llmDescriptor?.name !== "azure") {
@@ -230,23 +229,28 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                   <FormField.Control>
                     {customConfigKey.key_type === "select" ? (
                       <InputSelect
-                        name={field.name}
                         value={
                           (field.value as string) ??
                           (customConfigKey.default_value as string) ??
                           ""
                         }
                         onValueChange={(value) => helper.setValue(value)}
-                        onBlur={field.onBlur}
-                        options={
-                          customConfigKey.options?.map((opt) => ({
-                            label: opt.label,
-                            value: opt.value,
-                            description: opt?.description ?? undefined,
-                          })) ?? []
-                        }
                         disabled={disabled}
-                      />
+                      >
+                        <InputSelect.Trigger onBlur={field.onBlur} />
+
+                        <InputSelect.Content>
+                          {customConfigKey.options?.map((opt) => (
+                            <InputSelect.Item
+                              key={opt.value}
+                              value={opt.value}
+                              description={opt?.description ?? undefined}
+                            >
+                              {opt.label}
+                            </InputSelect.Item>
+                          ))}
+                        </InputSelect.Content>
+                      </InputSelect>
                     ) : customConfigKey.key_type === "file_input" ? (
                       <InputFile
                         placeholder={customConfigKey.default_value || ""}
@@ -254,7 +258,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                         onValueSet={(value) =>
                           testFileInputChange({ [customConfigKey.name]: value })
                         }
-                        isError={apiStatus === "error"}
+                        error={apiStatus === "error"}
                         onBlur={(e) => {
                           field.onBlur(e);
                           if (field.value) {
@@ -272,7 +276,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                         placeholder={customConfigKey.default_value || ""}
                         showClearButton={false}
                         disabled={disabled}
-                        isError={apiStatus === "error"}
+                        error={apiStatus === "error"}
                       />
                     ) : (
                       <InputTypeIn
@@ -280,7 +284,7 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
                         placeholder={customConfigKey.default_value || ""}
                         showClearButton={false}
                         disabled={disabled}
-                        isError={apiStatus === "error"}
+                        error={apiStatus === "error"}
                       />
                     )}
                   </FormField.Control>
@@ -418,4 +422,4 @@ export const LLMConnectionFieldsBasic: React.FC<Props> = ({
       />
     </>
   );
-};
+}

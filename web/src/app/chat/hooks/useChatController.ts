@@ -288,15 +288,15 @@ export function useChatController({
 
   const upsertToCompleteMessageTree = ({
     messages,
-    completeMessageTreeOverride,
     chatSessionId,
+    completeMessageTreeOverride,
     makeLatestChildMessage = false,
   }: {
     messages: Message[];
+    chatSessionId: string;
     // if calling this function repeatedly with short delay, stay may not update in time
     // and result in weird behavipr
     completeMessageTreeOverride?: MessageTreeState | null;
-    chatSessionId?: string;
     oldIds?: number[] | null;
     makeLatestChildMessage?: boolean;
   }) => {
@@ -313,13 +313,9 @@ export function useChatController({
       makeLatestChildMessage
     );
 
-    const sessionId = chatSessionId || getCurrentSessionId();
-    updateSessionMessageTree(sessionId, newCompleteMessageTree);
+    updateSessionMessageTree(chatSessionId, newCompleteMessageTree);
 
-    return {
-      sessionId,
-      messageTree: newCompleteMessageTree,
-    };
+    return newCompleteMessageTree;
   };
 
   const stopGenerating = useCallback(async () => {
@@ -623,13 +619,12 @@ export function useChatController({
       const messagesToUpsert = regenerationRequest
         ? [initialAssistantNode] // Only upsert the new assistant for regeneration
         : [initialUserNode, initialAssistantNode]; // Upsert both for normal/edit flow
-      const newMessageDetails = upsertToCompleteMessageTree({
+      currentMessageTreeLocal = upsertToCompleteMessageTree({
         messages: messagesToUpsert,
         completeMessageTreeOverride: currentMessageTreeLocal,
         chatSessionId: frozenSessionId,
       });
       resetInputBar();
-      currentMessageTreeLocal = newMessageDetails.messageTree;
 
       let answer = "";
 
@@ -797,15 +792,31 @@ export function useChatController({
               // Check if the packet contains document information
               const packetObj = (packet as Packet).obj;
 
-              if (packetObj.type === "citation_delta") {
+              if (packetObj.type === "citation_info") {
+                // Individual citation packet from backend streaming
+                const citationInfo = packetObj as {
+                  type: "citation_info";
+                  citation_number: number;
+                  document_id: string;
+                };
+                // Incrementally build citations map
+                citations = {
+                  ...(citations || {}),
+                  [citationInfo.citation_number]: citationInfo.document_id,
+                };
+              } else if (packetObj.type === "citation_delta") {
+                // Batched citation packet (for backwards compatibility)
                 const citationDelta = packetObj as CitationDelta;
                 if (citationDelta.citations) {
-                  citations = Object.fromEntries(
-                    citationDelta.citations.map((c) => [
-                      c.document_id,
-                      c.citation_num,
-                    ])
-                  );
+                  citations = {
+                    ...(citations || {}),
+                    ...Object.fromEntries(
+                      citationDelta.citations.map((c) => [
+                        c.citation_num,
+                        c.document_id,
+                      ])
+                    ),
+                  };
                 }
               } else if (packetObj.type === "message_start") {
                 const messageStart = packetObj as MessageStart;
@@ -826,7 +837,7 @@ export function useChatController({
             parentMessage =
               parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
 
-            const newMessageDetails = upsertToCompleteMessageTree({
+            currentMessageTreeLocal = upsertToCompleteMessageTree({
               messages: [
                 {
                   ...initialUserNode,
@@ -854,13 +865,12 @@ export function useChatController({
               completeMessageTreeOverride: currentMessageTreeLocal,
               chatSessionId: frozenSessionId!,
             });
-            currentMessageTreeLocal = newMessageDetails.messageTree;
           }
         }
       } catch (e: any) {
         console.log("Error:", e);
         const errorMsg = e.message;
-        const newMessageDetails = upsertToCompleteMessageTree({
+        currentMessageTreeLocal = upsertToCompleteMessageTree({
           messages: [
             {
               nodeId: initialUserNode.nodeId,
@@ -887,8 +897,8 @@ export function useChatController({
             },
           ],
           completeMessageTreeOverride: currentMessageTreeLocal,
+          chatSessionId: frozenSessionId,
         });
-        currentMessageTreeLocal = newMessageDetails.messageTree;
       }
 
       resetRegenerationState(frozenSessionId);

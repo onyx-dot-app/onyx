@@ -140,6 +140,12 @@ function ChatInputBarInner({
     );
   }, [currentMessageFiles]);
 
+  const hasUploadingFiles = useMemo(() => {
+    return currentMessageFiles.some(
+      (file) => file.status === UserFileStatus.UPLOADING
+    );
+  }, [currentMessageFiles]);
+
   // Convert ProjectFile to MinimalOnyxDocument format for viewing
   const handleFileClick = useCallback(
     (file: ProjectFile) => {
@@ -557,7 +563,8 @@ function ChatInputBarInner({
                 disabled={disabled}
               />
             )}
-            {showDeepResearch && (
+            {/* Temporarily disabled - to re-enable, change false to showDeepResearch */}
+            {false && showDeepResearch && (
               <SelectButton
                 leftIcon={SvgHourglass}
                 onClick={toggleDeepResearch}
@@ -610,7 +617,9 @@ function ChatInputBarInner({
             <IconButton
               id="onyx-chat-input-send-button"
               icon={chatState === "input" ? SvgArrowUp : SvgStop}
-              disabled={chatState === "input" && !message}
+              disabled={
+                (chatState === "input" && !message) || hasUploadingFiles
+              }
               onClick={() => {
                 if (chatState == "streaming") {
                   stopGenerating();

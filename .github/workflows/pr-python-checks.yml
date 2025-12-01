@@ -10,17 +10,58 @@ on:
       - main
       - 'release/**'
 
+permissions:
+  contents: read
+
 jobs:
+  validate-requirements:
+    runs-on: ubuntu-slim
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # ratchet:astral-sh/setup-uv@v3
+        # TODO: Enable caching once there is a uv.lock file checked in.
+        # with:
+        #   enable-cache: true
+
+      - name: Validate requirements lock files
+        run: ./backend/scripts/compile_requirements.py --check
+
   mypy-check:
     # See https://runs-on.com/runners/linux/
     # Note: Mypy seems quite optimized for x64 compared to arm64.
     # Similarly, mypy is single-threaded and incremental, so 2cpu is sufficient.
     runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}-mypy-check", "extras=s3-cache"]
+    timeout-minutes: 45
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Python and Install Dependencies
+        uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
+            backend/requirements/model_server.txt
+            backend/requirements/ee.txt
+
+      - name: Generate OpenAPI schema
+        shell: bash
+        working-directory: backend
+        env:
+          PYTHONPATH: "."
+        run: |
+          python scripts/onyx_openapi_schema.py --filename generated/openapi.json
 
       # needed for pulling openapitools/openapi-generator-cli
       # otherwise, we hit the "Unauthenticated users" limit
@@ -31,11 +72,18 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Prepare build
-        uses: ./.github/actions/prepare-build
-        with:
-          docker-username: ${{ secrets.DOCKER_USERNAME }}
-          docker-password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Generate OpenAPI Python client
+        shell: bash
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/backend/generated:/local" \
+            openapitools/openapi-generator-cli generate \
+            -i /local/openapi.json \
+            -g python \
+            -o /local/onyx_openapi_client \
+            --package-name onyx_openapi_client \
+            --skip-validate-spec \
+            --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
 
       - name: Cache mypy cache
         if: ${{ vars.DISABLE_MYPY_CACHE != 'true' }}

@@ -503,7 +503,7 @@ async def _connect_oauth(
 
     # always make a http request for the initial probe
     transport = mcp_server.transport if is_connected else MCPTransport.STREAMABLE_HTTP
-    probe_url = mcp_server.server_url.rstrip("/") + "/"
+    probe_url = mcp_server.server_url
     logger.info(f"Probing OAuth server at: {probe_url}")
 
     oauth_auth = make_oauth_provider(
@@ -798,8 +798,7 @@ def save_user_credentials(
                 for k, v in config_data["headers"].items():
                     config_data["headers"][k] = v.replace(f"{{{key}}}", value)
 
-        # Normalize URL to include trailing slash to avoid redirect/slow path handling
-        server_url = mcp_server.server_url.rstrip("/") + "/"
+        server_url = mcp_server.server_url
         is_valid, test_message = test_mcp_server_credentials(
             server_url,
             config_data["headers"],
@@ -1176,8 +1175,7 @@ def _list_mcp_tools_by_id(
 
     t1 = time.time()
     logger.info(f"Discovering tools for MCP server: {mcp_server.name}: {t1}")
-    # Normalize URL to include trailing slash to avoid redirect/slow path handling
-    server_url = mcp_server.server_url.rstrip("/") + "/"
+    server_url = mcp_server.server_url
     discovered_tools = discover_mcp_tools(
         server_url,
         connection_config.config.get("headers", {}) if connection_config else {},

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { Formik, Form } from "formik";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useRouter } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -11,15 +12,16 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import OnyxLogo from "@/icons/onyx-logo";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import Switch from "@/refresh-components/inputs/Switch";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import { SubLabel } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import Link from "next/link";
 import { Callout } from "@/components/ui/callout";
+import { ToolSnapshot, MCPServersResponse } from "@/lib/tools/interfaces";
+import { ToolSelector } from "@/components/admin/assistants/ToolSelector";
+import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 
 interface DefaultAssistantConfiguration {
   tool_ids: number[];
@@ -31,32 +33,12 @@ interface DefaultAssistantUpdateRequest {
   system_prompt?: string;
 }
 
-interface AvailableTool {
-  id: number;
-  in_code_tool_id: string;
-  display_name: string;
-  description: string;
-  is_available: boolean;
-}
-
-// Tools are now fetched from the backend dynamically
-
 function DefaultAssistantConfig() {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const { refreshAgents } = useAgentsContext();
   const combinedSettings = useSettingsContext();
-  const [savingTools, setSavingTools] = useState<Set<number>>(new Set());
-  const [savingPrompt, setSavingPrompt] = useState(false);
-  const [enabledTools, setEnabledTools] = useState<Set<number>>(new Set());
-  const [systemPrompt, setSystemPrompt] = useState<string>("");
-  const [originalPrompt, setOriginalPrompt] = useState<string>("");
-  const { data: availableTools } = useSWR<AvailableTool[]>(
-    "/api/admin/default-assistant/available-tools",
-    errorHandlingFetcher
-  );
 
-  // Fetch default assistant configuration
   const {
     data: config,
     isLoading,
@@ -66,90 +48,30 @@ function DefaultAssistantConfig() {
     errorHandlingFetcher
   );
 
-  // Initialize state when config loads
-  useEffect(() => {
-    if (config) {
-      setEnabledTools(new Set(config.tool_ids));
-      setSystemPrompt(config.system_prompt);
-      setOriginalPrompt(config.system_prompt);
-    }
-  }, [config]);
+  // Use the same endpoint as regular assistant editor
+  const { data: tools } = useSWR<ToolSnapshot[]>(
+    "/api/tool",
+    errorHandlingFetcher
+  );
+
+  const { data: mcpServersResponse } = useSWR<MCPServersResponse>(
+    "/api/admin/mcp/servers",
+    errorHandlingFetcher
+  );
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const persistConfiguration = async (
     updates: DefaultAssistantUpdateRequest
   ) => {
-    // Avoid trailing slash to prevent 307 redirect (breaks CORS in CI)
     const response = await fetch("/api/admin/default-assistant", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
     });
     if (!response.ok) {
-      throw new Error("Failed to update assistant");
-    }
-  };
-
-  const handleToggleTool = async (toolId: number) => {
-    const next = new Set(enabledTools);
-    if (next.has(toolId)) {
-      next.delete(toolId);
-    } else {
-      next.add(toolId);
-    }
-    setEnabledTools(next);
-    setSavingTools((prev) => new Set(prev).add(toolId));
-
-    try {
-      await persistConfiguration({ tool_ids: Array.from(next) });
-      await mutate("/api/admin/default-assistant/configuration");
-      router.refresh();
-      await refreshAgents();
-    } catch (e) {
-      const rollback = new Set(enabledTools);
-      if (rollback.has(toolId)) {
-        rollback.delete(toolId);
-      } else {
-        rollback.add(toolId);
-      }
-      setEnabledTools(rollback);
-      setPopup({ message: "Failed to save. Please try again.", type: "error" });
-    } finally {
-      setSavingTools((prev) => {
-        const updated = new Set(prev);
-        updated.delete(toolId);
-        return updated;
-      });
-    }
-  };
-
-  const handleSystemPromptChange = (value: string) => {
-    setSystemPrompt(value);
-  };
-
-  const handleSaveSystemPrompt = async () => {
-    if (systemPrompt === originalPrompt) return;
-
-    setSavingPrompt(true);
-    const currentPrompt = systemPrompt;
-
-    try {
-      await persistConfiguration({ system_prompt: currentPrompt });
-      await mutate("/api/admin/default-assistant/configuration");
-      router.refresh();
-      await refreshAgents();
-      setOriginalPrompt(currentPrompt);
-      setPopup({
-        message: "Instructions updated successfully!",
-        type: "success",
-      });
-    } catch (error) {
-      setSystemPrompt(originalPrompt);
-      setPopup({
-        message: "Failed to update instructions",
-        type: "error",
-      });
-    } finally {
-      setSavingPrompt(false);
+      const errorText = await response.text();
+      throw new Error(errorText || "Failed to update assistant");
     }
   };
 
@@ -166,7 +88,6 @@ function DefaultAssistantConfig() {
     );
   }
 
-  // Show message if default assistant is disabled
   if (combinedSettings?.settings?.disable_default_assistant) {
     return (
       <div>
@@ -188,139 +109,111 @@ function DefaultAssistantConfig() {
     );
   }
 
+  if (!config || !tools) {
+    return <ThreeDotsLoader />;
+  }
+
+  const enabledToolsMap: { [key: number]: boolean } = {};
+  tools.forEach((tool) => {
+    enabledToolsMap[tool.id] = config.tool_ids.includes(tool.id);
+  });
+
   return (
     <div>
       {popup}
-      <div className="space-y-6">
-        <div className="mt-4">
-          <Text className="text-text-dark">
-            Configure which capabilities are enabled for the default assistant
-            in chat. These settings apply to all users who haven&apos;t
-            customized their assistant preferences.
-          </Text>
-        </div>
+      <Formik
+        enableReinitialize
+        initialValues={{
+          enabled_tools_map: enabledToolsMap,
+          system_prompt: config.system_prompt,
+        }}
+        onSubmit={async (values) => {
+          setIsSubmitting(true);
+          try {
+            const enabledToolIds = Object.keys(values.enabled_tools_map)
+              .map((id) => Number(id))
+              .filter((id) => values.enabled_tools_map[id]);
 
-        <Separator />
+            await persistConfiguration({
+              tool_ids: enabledToolIds,
+              system_prompt: values.system_prompt,
+            });
 
-        <div className="max-w-4xl">
-          <div className="flex gap-x-2 items-center">
-            <Text mainUiBody text04 className="font-medium text-sm">
-              Instructions
-            </Text>
-          </div>
-          <SubLabel>
-            Add instructions to tailor the behavior of the assistant.
-          </SubLabel>
-          <div>
-            <textarea
-              className={cn(
-                "w-full",
-                "p-3",
-                "border",
-                "border-border",
-                "rounded-lg",
-                "text-sm",
-                "[&::placeholder]:text-text-muted/50"
-              )}
-              rows={8}
-              value={systemPrompt}
-              onChange={(e) => handleSystemPromptChange(e.target.value)}
-              placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
-            />
-            <div className="flex justify-between items-center mt-2">
-              <Text mainUiMuted text03 className="text-sm">
-                {systemPrompt.length} characters
-              </Text>
-              <Button
-                onClick={handleSaveSystemPrompt}
-                disabled={savingPrompt || systemPrompt === originalPrompt}
-              >
-                {savingPrompt ? "Saving..." : "Save Instructions"}
-              </Button>
-            </div>
-          </div>
-        </div>
+            await mutate("/api/admin/default-assistant/configuration");
+            router.refresh();
+            await refreshAgents();
 
-        <Separator />
-
-        <div>
-          <Text mainUiBody text04 className="font-medium text-sm mb-2">
-            Actions
-          </Text>
-          <div className="space-y-3">
-            {(availableTools || [])
-              .slice()
-              .sort((a, b) => {
-                // Show enabled (available) tools first; not enabled at bottom
-                if (a.is_available === b.is_available) return 0;
-                return a.is_available ? -1 : 1;
-              })
-              .map((tool) => (
-                <ToolToggle
-                  key={tool.id}
-                  tool={tool}
-                  enabled={enabledTools.has(tool.id)}
-                  onToggle={() => handleToggleTool(tool.id)}
-                  disabled={savingTools.has(tool.id)}
-                />
-              ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ToolToggle({
-  tool,
-  enabled,
-  onToggle,
-  disabled,
-}: {
-  tool: {
-    id: number;
-    in_code_tool_id: string;
-    display_name: string;
-    description: string;
-    is_available: boolean;
-  };
-  enabled: boolean;
-  onToggle: () => void;
-  disabled?: boolean;
-}) {
-  const notEnabledReason = (() => {
-    if (tool.in_code_tool_id === "WebSearchTool") {
-      return "Set EXA_API_KEY on the server and restart to enable Web Search.";
-    }
-    if (tool.in_code_tool_id === "ImageGenerationTool") {
-      return "Add an OpenAI LLM provider with an API key under Admin → Configuration → LLM.";
-    }
-    return "Not configured.";
-  })();
-  return (
-    <div className="flex items-center justify-between p-3 rounded-lg border border-border">
-      <div className="flex-1 pr-4">
-        <div className="text-sm font-medium flex items-center gap-2">
-          <span>{tool.display_name}</span>
-          {!tool.is_available && (
-            <SimpleTooltip tooltip={notEnabledReason}>
-              <span className="text-xs text-text-400 border border-border rounded px-1 py-0.5 cursor-help">
-                Not enabled
-              </span>
-            </SimpleTooltip>
-          )}
-        </div>
-        <Text className="text-sm text-text-600 mt-1">{tool.description}</Text>
-      </div>
-      <Switch
-        checked={enabled}
-        onCheckedChange={() => {
-          if (tool.is_available) {
-            onToggle();
+            setPopup({
+              message: "Default assistant updated successfully!",
+              type: "success",
+            });
+          } catch (error: any) {
+            setPopup({
+              message: error.message || "Failed to update assistant",
+              type: "error",
+            });
+          } finally {
+            setIsSubmitting(false);
           }
         }}
-        disabled={disabled || !tool.is_available}
-      />
+      >
+        {({ values, setFieldValue }) => (
+          <Form>
+            <div className="space-y-6">
+              <div className="mt-4">
+                <Text className="text-text-dark">
+                  Configure which capabilities are enabled for the default
+                  assistant in chat. These settings apply to all users who
+                  haven&apos;t customized their assistant preferences.
+                </Text>
+              </div>
+
+              <Separator />
+
+              <div className="max-w-4xl">
+                <div className="flex gap-x-2 items-center">
+                  <Text mainUiBody text04 className="font-medium text-sm">
+                    Instructions
+                  </Text>
+                </div>
+                <SubLabel>
+                  Add instructions to tailor the behavior of the assistant.
+                </SubLabel>
+                <div>
+                  <InputTextArea
+                    rows={8}
+                    value={values.system_prompt}
+                    onChange={(event) =>
+                      setFieldValue("system_prompt", event.target.value)
+                    }
+                    placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
+                  />
+                  <div className="flex justify-end items-center mt-2">
+                    <Text mainUiMuted text03 className="text-sm mr-4">
+                      {values.system_prompt.length} characters
+                    </Text>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <ToolSelector
+                tools={tools}
+                mcpServers={mcpServersResponse?.mcp_servers}
+                enabledToolsMap={values.enabled_tools_map}
+                setFieldValue={setFieldValue}
+              />
+
+              <div className="flex justify-end pt-4">
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </div>
+          </Form>
+        )}
+      </Formik>
     </div>
   );
 }

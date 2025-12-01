@@ -13,7 +13,7 @@ import {
   testCustomProvider,
 } from "./llmConnectionHelpers";
 import { LLMConnectionFieldsWithTabs } from "./LLMConnectionFieldsWithTabs";
-import { LLMConnectionFieldsBasic } from "./LLMConnectionFieldsBasic";
+import LLMConnectionFieldsBasic from "./LLMConnectionFieldsBasic";
 import { LLMConnectionFieldsCustom } from "./LLMConnectionFieldsCustom";
 import { getValidationSchema } from "./llmValidationSchema";
 import { OnboardingActions, OnboardingState } from "../types";
@@ -309,7 +309,7 @@ export default function LLMConnectionModal({
             onOpenChange={modal.toggle}
             title={title}
             description={modalContent?.description}
-            startAdornment={icon}
+            icon={() => icon}
             onSubmit={formikProps.submitForm}
             submitDisabled={
               isCustomProvider

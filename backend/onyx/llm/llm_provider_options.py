@@ -163,8 +163,14 @@ IGNORABLE_ANTHROPIC_MODELS = [
 ANTHROPIC_PROVIDER_NAME = "anthropic"
 
 ANTHROPIC_VISIBLE_MODEL_NAMES = [
+    "claude-opus-4-5-20251101",
+    "claude-opus-4-1",
+    "claude-opus-4-20250514",
     "claude-sonnet-4-5-20250929",
+    "claude-sonnet-4-5",
     "claude-sonnet-4-20250514",
+    "claude-haiku-4-5",
+    "claude-3-7-sonnet-latest",
 ]
 
 AZURE_PROVIDER_NAME = "azure"
@@ -176,6 +182,8 @@ VERTEX_LOCATION_KWARG = "vertex_location"
 VERTEXAI_DEFAULT_MODEL = "gemini-2.5-flash"
 VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.5-flash-lite"
 VERTEXAI_MODEL_NAMES = [
+    # 3.0 pro models
+    "gemini-3-pro-preview",
     # 2.5 pro models
     "gemini-2.5-pro",
     VERTEXAI_DEFAULT_MODEL,
@@ -191,6 +199,7 @@ VERTEXAI_MODEL_NAMES = [
     # "gemini-2.0-flash-exp-image-generation",
     # "gemini-2.0-flash-thinking-exp-01-21",
     # Anthropic models
+    "claude-opus-4-5",
     "claude-sonnet-4-5",
     "claude-haiku-4-5",
     "claude-opus-4-1@20250805",

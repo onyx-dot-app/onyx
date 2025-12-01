@@ -9,7 +9,7 @@ from ee.onyx.server.query_and_chat.models import (
 )
 from onyx.auth.users import current_user
 from onyx.chat.chat_utils import combine_message_thread
-from onyx.chat.chat_utils import create_chat_chain
+from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
@@ -69,9 +69,9 @@ def handle_simplified_chat_message(
         chat_session_id = chat_message_req.chat_session_id
 
     try:
-        parent_message, _ = create_chat_chain(
+        parent_message = create_chat_history_chain(
             chat_session_id=chat_session_id, db_session=db_session
-        )
+        )[-1]
     except Exception:
         parent_message = get_or_create_root_message(
             chat_session_id=chat_session_id, db_session=db_session
@@ -111,6 +111,7 @@ def handle_simplified_chat_message(
         user=user,
         db_session=db_session,
         enforce_chat_session_id_for_search_docs=False,
+        bypass_translation=True,
     )
 
     return gather_stream(packets)

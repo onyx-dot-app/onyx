@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Popover,
@@ -6,8 +8,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { getDisplayNameForModel, LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { modelSupportsImageInput, structureValue } from "@/lib/llm/utils";
+import { structureValue } from "@/lib/llm/utils";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/components/user/UserProvider";
@@ -16,6 +17,7 @@ import SelectButton from "@/refresh-components/buttons/SelectButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+
 export interface LLMPopoverProps {
   llmManager: LlmManager;
   requiresImageGeneration?: boolean;
@@ -27,7 +29,6 @@ export interface LLMPopoverProps {
 
 export default function LLMPopover({
   llmManager,
-  requiresImageGeneration,
   folded,
   onSelect,
   currentModelName,

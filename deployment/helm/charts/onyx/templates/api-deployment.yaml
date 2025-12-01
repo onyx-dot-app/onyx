@@ -5,6 +5,9 @@ metadata:
   name: {{ include "onyx.fullname" . }}-api-server
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.api.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   {{- if not .Values.api.autoscaling.enabled }}
   replicas: {{ .Values.api.replicaCount }}
@@ -24,6 +27,9 @@ spec:
       {{- end }}
       labels:
         {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.api.deploymentLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .Values.api.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -37,6 +43,14 @@ spec:
         {{- toYaml .Values.api.podSecurityContext | nindent 8 }}
       {{- with .Values.api.nodeSelector }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:

@@ -611,6 +611,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             request=request,
         )
 
+        user_count = None
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
@@ -632,6 +633,57 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        # Fetch EE PostHog functions if available
+        get_marketing_posthog_cookie_name = fetch_ee_implementation_or_noop(
+            module="onyx.utils.posthog_client",
+            attribute="get_marketing_posthog_cookie_name",
+            noop_return_value=None,
+        )
+        parse_marketing_cookie = fetch_ee_implementation_or_noop(
+            module="onyx.utils.posthog_client",
+            attribute="parse_marketing_cookie",
+            noop_return_value=None,
+        )
+        capture_and_sync_with_alternate_posthog = fetch_ee_implementation_or_noop(
+            module="onyx.utils.posthog_client",
+            attribute="capture_and_sync_with_alternate_posthog",
+            noop_return_value=None,
+        )
+
+        if (
+            request
+            and user_count is not None
+            and (marketing_cookie_name := get_marketing_posthog_cookie_name())
+            and (marketing_cookie_value := request.cookies.get(marketing_cookie_name))
+            and (parsed_cookie := parse_marketing_cookie(marketing_cookie_value))
+        ):
+            marketing_anonymous_id = parsed_cookie["distinct_id"]
+
+            # Technically, USER_SIGNED_UP is only fired from the cloud site when
+            # it is the first user in a tenant. However, it is semantically correct
+            # for the marketing site and should probably be refactored for the cloud site
+            # to also be semantically correct.
+            properties = {
+                "email": user.email,
+                "onyx_cloud_user_id": str(user.id),
+                "tenant_id": str(tenant_id) if tenant_id else None,
+                "role": user.role.value,
+                "is_first_user": user_count == 1,
+                "source": "marketing_site_signup",
+                "conversion_timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+
+            # Add all other values from the marketing cookie (featureFlags, etc.)
+            for key, value in parsed_cookie.items():
+                if key != "distinct_id":
+                    properties.setdefault(key, value)
+
+            capture_and_sync_with_alternate_posthog(
+                alternate_distinct_id=marketing_anonymous_id,
+                event=MilestoneRecordType.USER_SIGNED_UP,
+                properties=properties,
+            )
 
         logger.debug(f"User {user.id} has registered.")
         optional_telemetry(
@@ -1063,6 +1115,107 @@ fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
 optional_fastapi_current_user = fastapi_users.current_user(active=True, optional=True)
 
 
+_JWT_EMAIL_CLAIM_KEYS = ("email", "preferred_username", "upn")
+
+
+def _extract_email_from_jwt(payload: dict[str, Any]) -> str | None:
+    """Return the best-effort email/username from a decoded JWT payload."""
+    for key in _JWT_EMAIL_CLAIM_KEYS:
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            try:
+                email_info = validate_email(value, check_deliverability=False)
+            except EmailNotValidError:
+                continue
+            normalized_email = email_info.normalized or email_info.email
+            return normalized_email.lower()
+    return None
+
+
+async def _sync_jwt_oidc_expiry(
+    user_manager: UserManager, user: User, payload: dict[str, Any]
+) -> None:
+    if TRACK_EXTERNAL_IDP_EXPIRY:
+        expires_at = payload.get("exp")
+        if expires_at is None:
+            return
+        try:
+            expiry_timestamp = int(expires_at)
+        except (TypeError, ValueError):
+            logger.warning("Invalid exp claim on JWT for user %s", user.email)
+            return
+
+        oidc_expiry = datetime.fromtimestamp(expiry_timestamp, tz=timezone.utc)
+        if user.oidc_expiry == oidc_expiry:
+            return
+
+        await user_manager.user_db.update(user, {"oidc_expiry": oidc_expiry})
+        user.oidc_expiry = oidc_expiry  # type: ignore
+        return
+
+    if user.oidc_expiry is not None:
+        await user_manager.user_db.update(user, {"oidc_expiry": None})
+        user.oidc_expiry = None  # type: ignore
+
+
+async def _get_or_create_user_from_jwt(
+    payload: dict[str, Any],
+    request: Request,
+    async_db_session: AsyncSession,
+) -> User | None:
+    email = _extract_email_from_jwt(payload)
+    if email is None:
+        logger.warning(
+            "JWT token decoded successfully but no email claim found; skipping auth"
+        )
+        return None
+
+    # Enforce the same allowlist/domain policies as other auth flows
+    verify_email_is_invited(email)
+    verify_email_domain(email)
+
+    user_db: SQLAlchemyUserAdminDB[User, uuid.UUID] = SQLAlchemyUserAdminDB(
+        async_db_session, User, OAuthAccount
+    )
+    user_manager = UserManager(user_db)
+
+    try:
+        user = await user_manager.get_by_email(email)
+        if not user.is_active:
+            logger.warning("Inactive user %s attempted JWT login; skipping", email)
+            return None
+        if not user.role.is_web_login():
+            raise exceptions.UserNotExists()
+    except exceptions.UserNotExists:
+        logger.info("Provisioning user %s from JWT login", email)
+        try:
+            user = await user_manager.create(
+                UserCreate(
+                    email=email,
+                    password=generate_password(),
+                    is_verified=True,
+                ),
+                request=request,
+            )
+        except exceptions.UserAlreadyExists:
+            user = await user_manager.get_by_email(email)
+            if not user.is_active:
+                logger.warning(
+                    "Inactive user %s attempted JWT login during provisioning race; skipping",
+                    email,
+                )
+                return None
+            if not user.role.is_web_login():
+                logger.warning(
+                    "Non-web-login user %s attempted JWT login during provisioning race; skipping",
+                    email,
+                )
+                return None
+
+    await _sync_jwt_oidc_expiry(user_manager, user, payload)
+    return user
+
+
 async def _check_for_saml_and_jwt(
     request: Request,
     user: User | None,
@@ -1073,7 +1226,11 @@ async def _check_for_saml_and_jwt(
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[len("Bearer ") :].strip()
-            user = await verify_jwt_token(token, async_db_session)
+            payload = await verify_jwt_token(token)
+            if payload is not None:
+                user = await _get_or_create_user_from_jwt(
+                    payload, request, async_db_session
+                )
 
     return user
 

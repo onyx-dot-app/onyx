@@ -1,4 +1,3 @@
-import React from "react";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
@@ -35,7 +34,7 @@ interface DynamicProviderFieldsProps {
   disabled?: boolean;
 }
 
-export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
+export default function DynamicProviderFields({
   llmDescriptor,
   fields,
   modelOptions,
@@ -50,7 +49,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
   modelsErrorMessage = "",
   showModelsApiErrorMessage = false,
   disabled = false,
-}) => {
+}: DynamicProviderFieldsProps) {
   const modalContent = MODAL_CONTENT_MAP[llmDescriptor.name];
   const handleApiKeyInteraction = (apiKey: string) => {
     if (!apiKey) return;
@@ -74,7 +73,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
               <FormField.Control>
                 <InputTypeIn
                   {...field}
-                  isError={apiStatus === "error"}
+                  error={apiStatus === "error"}
                   placeholder={
                     override?.placeholder ||
                     llmDescriptor.default_api_base ||
@@ -142,7 +141,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                       field.onBlur(e);
                       handleApiKeyInteraction(field.value);
                     }}
-                    isError={apiStatus === "error"}
+                    error={apiStatus === "error"}
                   />
                 ) : (
                   <InputTypeIn
@@ -150,7 +149,7 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
                     placeholder={override?.placeholder || ""}
                     disabled={disabled}
                     showClearButton={false}
-                    isError={apiStatus === "error"}
+                    error={apiStatus === "error"}
                     onBlur={(e) => {
                       field.onBlur(e);
                       handleApiKeyInteraction(field.value);
@@ -271,4 +270,4 @@ export const DynamicProviderFields: React.FC<DynamicProviderFieldsProps> = ({
   };
 
   return <>{fields.map(renderField)}</>;
-};
+}

@@ -1,4 +1,5 @@
-from onyx.configs.app_configs import LANGFUSE_HOST
+from langfuse import get_client
+
 from onyx.configs.app_configs import LANGFUSE_PUBLIC_KEY
 from onyx.configs.app_configs import LANGFUSE_SECRET_KEY
 from onyx.utils.logger import setup_logger
@@ -13,16 +14,23 @@ def setup_langfuse_if_creds_available() -> None:
         return
 
     import nest_asyncio  # type: ignore
-    from langfuse import get_client
-    from openinference.instrumentation.openai_agents import OpenAIAgentsInstrumentor
 
     nest_asyncio.apply()
+
+    from openinference.instrumentation.openai_agents import OpenAIAgentsInstrumentor
+
     OpenAIAgentsInstrumentor().instrument()
-    langfuse = get_client()
-    try:
-        if langfuse.auth_check():
-            logger.notice(f"Langfuse authentication successful (host: {LANGFUSE_HOST})")
-        else:
-            logger.warning("Langfuse authentication failed")
-    except Exception as e:
-        logger.error(f"Error setting up Langfuse: {e}")
+    # This is poorly named -- it actually is a get or create client for langfuse.
+    # Langfuse with silently fail without this function call.
+    get_client()
+    # TODO: this is how the tracing processor will look once we migrate over to new framework
+    # config = TraceConfig()
+    # tracer_provider = trace_api.get_tracer_provider()
+    # tracer = OITracer(
+    #     trace_api.get_tracer(__name__, __version__, tracer_provider),
+    #     config=config,
+    # )
+
+    # set_trace_processors(
+    #     [OpenInferenceTracingProcessor(cast(trace_api.Tracer, tracer))]
+    # )

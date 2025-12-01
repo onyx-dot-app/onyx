@@ -149,6 +149,7 @@ module.exports = {
         "**/src/app/**/*.test.tsx",
         "**/src/components/**/*.test.tsx",
         "**/src/lib/**/*.test.tsx",
+        "**/src/refresh-components/**/*.test.tsx",
         // Add more patterns here as you add more integration tests
       ],
     },

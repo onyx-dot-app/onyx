@@ -9,17 +9,14 @@ from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 
 from onyx.chat.models import SectionRelevancePiece
-from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.app_configs import IMAGE_ANALYSIS_SYSTEM_PROMPT
 from onyx.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
-from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.configs.llm_configs import get_search_time_image_analysis_enabled
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MAX
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MIN
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import MAX_METRICS_CONTENT
 from onyx.context.search.models import RerankingDetails
@@ -169,51 +166,6 @@ def _log_top_section_links(search_flow: str, sections: list[InferenceSection]) -
         for section in sections
     ]
     logger.debug(f"Top links from {search_flow} search: {', '.join(top_links)}")
-
-
-def cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk]:
-    def _remove_title(chunk: InferenceChunkUncleaned) -> str:
-        if not chunk.title or not chunk.content:
-            return chunk.content
-
-        if chunk.content.startswith(chunk.title):
-            return chunk.content[len(chunk.title) :].lstrip()
-
-        # BLURB SIZE is by token instead of char but each token is at least 1 char
-        # If this prefix matches the content, it's assumed the title was prepended
-        if chunk.content.startswith(chunk.title[:BLURB_SIZE]):
-            return (
-                chunk.content.split(RETURN_SEPARATOR, 1)[-1]
-                if RETURN_SEPARATOR in chunk.content
-                else chunk.content
-            )
-
-        return chunk.content
-
-    def _remove_metadata_suffix(chunk: InferenceChunkUncleaned) -> str:
-        if not chunk.metadata_suffix:
-            return chunk.content
-        return chunk.content.removesuffix(chunk.metadata_suffix).rstrip(
-            RETURN_SEPARATOR
-        )
-
-    def _remove_contextual_rag(chunk: InferenceChunkUncleaned) -> str:
-        # remove document summary
-        if chunk.content.startswith(chunk.doc_summary):
-            chunk.content = chunk.content[len(chunk.doc_summary) :].lstrip()
-        # remove chunk context
-        if chunk.content.endswith(chunk.chunk_context):
-            chunk.content = chunk.content[
-                : len(chunk.content) - len(chunk.chunk_context)
-            ].rstrip()
-        return chunk.content
-
-    for chunk in chunks:
-        chunk.content = _remove_title(chunk)
-        chunk.content = _remove_metadata_suffix(chunk)
-        chunk.content = _remove_contextual_rag(chunk)
-
-    return [chunk.to_inference_chunk() for chunk in chunks]
 
 
 @log_function_time(print_only=True)

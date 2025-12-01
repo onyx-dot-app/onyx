@@ -11,6 +11,9 @@ on:
     # This cron expression runs the job daily at 16:00 UTC (9am PT)
     - cron: "0 16 * * *"
 
+permissions:
+  contents: read
+
 env:
   # AWS
   AWS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS: ${{ secrets.AWS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS }}
@@ -123,6 +126,7 @@ jobs:
   connectors-check:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-connectors-check", "extras=s3-cache"]
+    timeout-minutes: 45
 
     env:
       PYTHONPATH: ./backend
@@ -131,10 +135,16 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Setup Python and Install Dependencies
         uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
@@ -214,8 +224,10 @@ jobs:
         if: failure() && github.event_name == 'schedule'
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data '{"text":"Scheduled Connector Tests failed! Check the run at: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            --data "{\"text\":\"Scheduled Connector Tests failed! Check the run at: https://github.com/${REPO}/actions/runs/${RUN_ID}\"}" \
             $SLACK_WEBHOOK

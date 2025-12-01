@@ -32,14 +32,14 @@ def unified_event_stream(
         messages: List[Dict[str, Any]],
         dependencies: ChatTurnDependencies,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Generator[Packet, None]:
         def run_with_exception_capture() -> None:
             try:
                 turn_func(messages, dependencies, *args, **kwargs)
             except Exception as e:
                 dependencies.emitter.emit(
-                    Packet(ind=0, obj=PacketException(type="error", exception=e))
+                    Packet(turn_index=0, obj=PacketException(type="error", exception=e))
                 )
 
         thread = run_in_background(run_with_exception_capture)

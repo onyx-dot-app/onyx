@@ -1,21 +1,15 @@
 "use client";
 
-import React from "react";
-import * as SwitchPrimitives from "@radix-ui/react-switch";
+import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 
-const rootClasses = {
-  main: [
-    "data-[state=checked]:bg-action-link-05",
-    "data-[state=checked]:hover:bg-action-link-04",
-    "data-[state=unchecked]:bg-background-tint-03",
-    "data-[state=unchecked]:hover:bg-background-tint-04",
-  ],
-  disabled: [
-    "data-[state=checked]:bg-action-link-03",
-    "data-[state=unchecked]:bg-background-neutral-04",
-  ],
-} as const;
+const rootClasses = (checked?: boolean) =>
+  ({
+    main: checked
+      ? ["bg-action-link-05", "hover:bg-action-link-04"]
+      : ["bg-background-tint-03", "hover:bg-background-tint-04"],
+    disabled: checked ? ["bg-action-link-03"] : ["bg-background-neutral-04"],
+  }) as const;
 
 const thumbClasses = {
   main: ["bg-background-neutral-light-00"],
@@ -23,37 +17,77 @@ const thumbClasses = {
 } as const;
 
 export interface SwitchProps
-  extends React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root> {
+  extends Omit<React.ComponentPropsWithoutRef<"button">, "onChange"> {
+  // Switch variants
   disabled?: boolean;
+
+  checked?: boolean;
+  defaultChecked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
 }
+const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
+  (
+    {
+      disabled,
 
-function SwitchInner(
-  { className, disabled, ...props }: SwitchProps,
-  ref: React.ForwardedRef<React.ElementRef<typeof SwitchPrimitives.Root>>
-) {
-  const variant = disabled ? "disabled" : "main";
+      checked: controlledChecked,
+      defaultChecked,
+      onCheckedChange,
 
-  return (
-    <SwitchPrimitives.Root
-      ref={ref}
-      className={cn(
-        "peer inline-flex h-[1.125rem] w-[2rem] shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none disabled:cursor-not-allowed",
-        rootClasses[variant],
-        className
-      )}
-      disabled={disabled}
-      {...props}
-    >
-      <SwitchPrimitives.Thumb
+      className,
+      onClick,
+      ...props
+    },
+    ref
+  ) => {
+    const [uncontrolledChecked, setUncontrolledChecked] = useState(
+      defaultChecked ?? false
+    );
+
+    const isControlled = controlledChecked !== undefined;
+    const checked = isControlled ? controlledChecked : uncontrolledChecked;
+
+    function handleClick(event: React.MouseEvent<HTMLButtonElement>) {
+      if (disabled) return;
+
+      const newChecked = !checked;
+
+      if (!isControlled) setUncontrolledChecked(newChecked);
+      onClick?.(event);
+      onCheckedChange?.(newChecked);
+    }
+
+    const variant = disabled ? "disabled" : "main";
+
+    return (
+      <button
+        ref={ref}
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        data-state={checked ? "checked" : "unchecked"}
         className={cn(
-          "pointer-events-none block h-[0.875rem] w-[0.875rem] rounded-full ring-0 transition-transform data-[state=checked]:translate-x-[1rem] data-[state=unchecked]:translate-x-[0.125rem]",
-          thumbClasses[variant]
+          "peer inline-flex h-[1.125rem] w-[2rem] shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none disabled:cursor-not-allowed",
+          rootClasses(checked)[variant],
+          "border border-transparent",
+          "focus-within:focus-shadow focus-within:hover:!border-border-01",
+          className
         )}
-      />
-    </SwitchPrimitives.Root>
-  );
-}
-
-const Switch = React.forwardRef(SwitchInner);
+        disabled={disabled}
+        onClick={handleClick}
+        {...props}
+      >
+        <span
+          data-state={checked ? "checked" : "unchecked"}
+          className={cn(
+            "pointer-events-none block h-[0.875rem] w-[0.875rem] rounded-full ring-0 transition-transform data-[state=checked]:translate-x-[15px] data-[state=unchecked]:translate-x-[1px]",
+            thumbClasses[variant]
+          )}
+        />
+      </button>
+    );
+  }
+);
 Switch.displayName = "Switch";
+
 export default Switch;

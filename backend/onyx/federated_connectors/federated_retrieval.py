@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
+from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import SearchQuery
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
 )
@@ -28,7 +28,7 @@ logger = setup_logger()
 class FederatedRetrievalInfo(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    retrieval_function: Callable[[SearchQuery], list[InferenceChunk]]
+    retrieval_function: Callable[[ChunkIndexRequest], list[InferenceChunk]]
     source: FederatedConnectorSource
 
 
@@ -42,6 +42,29 @@ def get_federated_retrieval_functions(
     # Check for Slack bot context first (regardless of user_id)
     if slack_context:
         logger.info("Slack context detected, checking for Slack bot setup...")
+
+        # If document_set_names is specified, check if any Slack federated connector
+        # is associated with those document sets before enabling Slack federated search
+        if document_set_names:
+            slack_federated_mappings = (
+                get_federated_connector_document_set_mappings_by_document_set_names(
+                    db_session, document_set_names
+                )
+            )
+            # Check if any of the mappings are for a Slack federated connector
+            has_slack_federated_connector = any(
+                mapping.federated_connector.source
+                == FederatedConnectorSource.FEDERATED_SLACK
+                for mapping in slack_federated_mappings
+                if mapping.federated_connector is not None
+            )
+            if not has_slack_federated_connector:
+                logger.info(
+                    f"Skipping Slack federated search: document sets {document_set_names} "
+                    "are not associated with any Slack federated connector"
+                )
+                # Return empty list - no Slack federated search for this context
+                return []
 
         try:
             slack_bots = fetch_slack_bots(db_session)
@@ -95,8 +118,8 @@ def get_federated_retrieval_functions(
                     token: str,
                     ctx: SlackContext,
                     bot_tok: str,
-                ) -> Callable[[SearchQuery], list[InferenceChunk]]:
-                    def retrieval_fn(query: SearchQuery) -> list[InferenceChunk]:
+                ) -> Callable[[ChunkIndexRequest], list[InferenceChunk]]:
+                    def retrieval_fn(query: ChunkIndexRequest) -> list[InferenceChunk]:
                         return conn.search(
                             query,
                             {},  # Empty entities for Slack context
@@ -190,7 +213,7 @@ def get_federated_retrieval_functions(
             conn: FederatedConnector,
             ent: dict[str, Any],
             token: str,
-        ) -> Callable[[SearchQuery], list[InferenceChunk]]:
+        ) -> Callable[[ChunkIndexRequest], list[InferenceChunk]]:
             return lambda query: conn.search(
                 query,
                 ent,

@@ -2,178 +2,202 @@
 # modular so easily testable in unit tests and evals [likely injecting some higher
 # level session manager and span sink], potentially has some robustness off the critical path,
 # and promotes clean separation of concerns.
-import re
-from uuid import UUID
+import json
+import logging
 
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
-from onyx.agents.agent_search.dr.enums import ResearchType
-from onyx.agents.agent_search.dr.models import IterationAnswer
-from onyx.agents.agent_search.dr.models import IterationInstructions
-from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
-    GeneratedImageFullResult,
-)
-from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
-from onyx.chat.turn.models import FetchedDocumentCacheEntry
-from onyx.configs.constants import DocumentSource
-from onyx.db.chat import create_search_doc_from_inference_section
-from onyx.db.chat import update_db_session_with_messages
-from onyx.db.models import ChatMessage__SearchDoc
-from onyx.db.models import ResearchAgentIteration
-from onyx.db.models import ResearchAgentIterationSubStep
+from onyx.context.search.models import CitationDocInfo
+from onyx.db.chat import add_search_docs_to_chat_message
+from onyx.db.chat import create_db_search_doc
+from onyx.db.models import ChatMessage
+from onyx.db.models import ToolCall
+from onyx.db.tools import create_tool_call_no_commit
+from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.models import ToolCallInfo
+
+logger = logging.getLogger(__name__)
 
 
-def save_turn(
+def _create_and_link_tool_calls(
+    tool_calls: list[ToolCallInfo],
+    assistant_message: ChatMessage,
     db_session: Session,
-    message_id: int,
-    chat_session_id: UUID,
-    research_type: ResearchType,
-    final_answer: str,
-    fetched_documents_cache: dict[str, FetchedDocumentCacheEntry],
-    iteration_instructions: list[IterationInstructions],
-    global_iteration_responses: list[IterationAnswer],
-    # TODO: figure out better way to pass these dependencies
-    model_name: str,
-    model_provider: str,
+    default_tokenizer: BaseTokenizer,
 ) -> None:
-    # Create search docs from inference sections and build mapping
+    """
+    Create ToolCall entries and link parent references.
+
+    This function handles the logic of:
+    1. Creating all ToolCall objects (with temporary parent references)
+    2. Flushing to get DB IDs
+    3. Building mappings and updating parent references
+
+    Args:
+        tool_calls: List of tool call information to create
+        assistant_message: The ChatMessage these tool calls belong to
+        db_session: Database session
+        default_tokenizer: Tokenizer for calculating token counts
+    """
+    # Create all ToolCall objects first (without parent_tool_call_id set)
+    # We'll update parent references after flushing to get IDs
+    tool_call_objects: list[ToolCall] = []
+    tool_call_info_map: dict[str, ToolCallInfo] = {}
+
+    for tool_call_info in tool_calls:
+        tool_call_info_map[tool_call_info.tool_call_id] = tool_call_info
+
+        # Calculate tool_call_tokens from arguments
+        try:
+            arguments_json_str = json.dumps(tool_call_info.tool_call_arguments)
+            tool_call_tokens = len(default_tokenizer.encode(arguments_json_str))
+        except Exception as e:
+            logger.warning(
+                f"Failed to tokenize tool call arguments for {tool_call_info.tool_call_id}: {e}. "
+                f"Using length as (over) estimate."
+            )
+            arguments_json_str = json.dumps(tool_call_info.tool_call_arguments)
+            tool_call_tokens = len(arguments_json_str)
+
+        parent_message_id = (
+            assistant_message.id if tool_call_info.parent_tool_call_id is None else None
+        )
+
+        # Create ToolCall DB entry (parent_tool_call_id will be set after flush)
+        # This is needed to get the IDs for the parent pointers
+        tool_call = create_tool_call_no_commit(
+            chat_session_id=assistant_message.chat_session_id,
+            parent_chat_message_id=parent_message_id,
+            turn_number=tool_call_info.turn_index,
+            tool_id=tool_call_info.tool_id,
+            tool_call_id=tool_call_info.tool_call_id,
+            tool_call_arguments=tool_call_info.tool_call_arguments,
+            tool_call_response=tool_call_info.tool_call_response,
+            tool_call_tokens=tool_call_tokens,
+            db_session=db_session,
+            parent_tool_call_id=None,  # Will be updated after flush
+            reasoning_tokens=tool_call_info.reasoning_tokens,
+            generated_images=(
+                [img.model_dump() for img in tool_call_info.generated_images]
+                if tool_call_info.generated_images
+                else None
+            ),
+            add_only=True,
+        )
+
+        # Flush to get all of the IDs
+        db_session.flush()
+
+        tool_call_objects.append(tool_call)
+
+    # Build mapping of tool calls (tool_call_id string -> DB id int)
+    tool_call_map: dict[str, int] = {}
+    for tool_call_obj in tool_call_objects:
+        tool_call_map[tool_call_obj.tool_call_id] = tool_call_obj.id
+
+    # Update parent_tool_call_id for all tool calls
+    for tool_call_obj in tool_call_objects:
+        tool_call_info = tool_call_info_map[tool_call_obj.tool_call_id]
+        if tool_call_info.parent_tool_call_id is not None:
+            parent_id = tool_call_map.get(tool_call_info.parent_tool_call_id)
+            if parent_id is not None:
+                tool_call_obj.parent_tool_call_id = parent_id
+            else:
+                # This would cause chat sessions to fail if this function is miscalled with
+                # tool calls that have bad parent pointers but this falls under "fail loudly"
+                raise ValueError(
+                    f"Parent tool call with tool_call_id '{tool_call_info.parent_tool_call_id}' "
+                    f"not found for tool call '{tool_call_obj.tool_call_id}'"
+                )
+
+
+def save_chat_turn(
+    message_text: str,
+    reasoning_tokens: str | None,
+    tool_calls: list[ToolCallInfo],
+    citation_docs_info: list[CitationDocInfo],
+    db_session: Session,
+    assistant_message: ChatMessage,
+) -> None:
+    """
+    Save a chat turn by populating the assistant_message and creating related entities.
+
+    Args:
+        message_text: The message content to save
+        reasoning_tokens: Optional reasoning tokens for the message
+        tool_calls: List of tool call information to create ToolCall entries
+        citation_docs_info: List of citation document information to create SearchDoc entries
+        db_session: Database session for persistence
+        assistant_message: The ChatMessage object to populate (should already exist in DB)
+    """
+    # 1. Update ChatMessage with message content, reasoning tokens, and token count
+    assistant_message.message = message_text
+    assistant_message.reasoning_tokens = reasoning_tokens
+
+    # Calculate token count using default tokenizer
+    default_tokenizer = get_tokenizer(None, None)
+    if message_text:
+        assistant_message.token_count = len(default_tokenizer.encode(message_text))
+    else:
+        assistant_message.token_count = 0
+
+    # 2. Create SearchDoc entries from citation_docs_info
     citation_number_to_search_doc_id: dict[int, int] = {}
-    search_docs = []
-    for cache_entry in fetched_documents_cache.values():
-        search_doc = create_search_doc_from_inference_section(
-            inference_section=cache_entry.inference_section,
-            is_internet=cache_entry.inference_section.center_chunk.source_type
-            == DocumentSource.WEB,
+    search_doc_ids: list[int] = []
+
+    for citation_doc_info in citation_docs_info:
+        # Extract SearchDoc pydantic model
+        search_doc_py = citation_doc_info.search_doc
+
+        # Create DB SearchDoc entry using db function
+        db_search_doc = create_db_search_doc(
+            server_search_doc=search_doc_py,
             db_session=db_session,
             commit=False,
         )
-        search_docs.append(search_doc)
-        citation_number_to_search_doc_id[cache_entry.document_citation_number] = (
-            search_doc.id
+
+        search_doc_ids.append(db_search_doc.id)
+
+        # Build mapping from citation number to search doc ID
+        if citation_doc_info.citation_number is not None:
+            citation_number_to_search_doc_id[citation_doc_info.citation_number] = (
+                db_search_doc.id
+            )
+
+    # 3. Link SearchDocs to ChatMessage
+    if search_doc_ids:
+        add_search_docs_to_chat_message(
+            chat_message_id=assistant_message.id,
+            search_doc_ids=search_doc_ids,
+            db_session=db_session,
         )
 
-    # Map search_docs to message
-    _insert_chat_message_search_doc_pair(
-        message_id, [doc.id for doc in search_docs], db_session
-    )
-
-    # Build citations dict using cited doc numbers from the final answer
-    cited_doc_nrs = _extract_citation_numbers(final_answer)
-    citation_dict: dict[int, int] = {
-        cited_doc_nr: citation_number_to_search_doc_id[cited_doc_nr]
-        for cited_doc_nr in cited_doc_nrs
-        if cited_doc_nr in citation_number_to_search_doc_id
-    }
-    llm_tokenizer = get_tokenizer(
-        model_name=model_name,
-        provider_type=model_provider,
-    )
-    num_tokens = len(llm_tokenizer.encode(final_answer or ""))
-    # Update the chat message and its parent message in database
-    update_db_session_with_messages(
+    # 4. Create ToolCall entries
+    _create_and_link_tool_calls(
+        tool_calls=tool_calls,
+        assistant_message=assistant_message,
         db_session=db_session,
-        chat_message_id=message_id,
-        chat_session_id=chat_session_id,
-        is_agentic=research_type == ResearchType.DEEP,
-        message=final_answer,
-        citations=citation_dict,
-        research_type=research_type,
-        research_plan={},
-        final_documents=search_docs,
-        update_parent_message=True,
-        research_answer_purpose=ResearchAnswerPurpose.ANSWER,
-        token_count=num_tokens,
+        default_tokenizer=default_tokenizer,
     )
 
-    # TODO: I don't think this is the ideal schema for all use cases
-    # find a better schema to store tool and reasoning calls
-    for iteration_preparation in iteration_instructions:
-        research_agent_iteration_step = ResearchAgentIteration(
-            primary_question_id=message_id,
-            reasoning=iteration_preparation.reasoning,
-            purpose=iteration_preparation.purpose,
-            iteration_nr=iteration_preparation.iteration_nr,
-        )
-        db_session.add(research_agent_iteration_step)
+    # 5. Build citations mapping from citation_docs_info
+    # Any citation_doc_info with a citation_number appeared in the text and should be mapped
+    citations: dict[int, int] = {}
+    for citation_doc_info in citation_docs_info:
+        if citation_doc_info.citation_number is not None:
+            search_doc_id = citation_number_to_search_doc_id.get(
+                citation_doc_info.citation_number
+            )
+            if search_doc_id is not None:
+                citations[citation_doc_info.citation_number] = search_doc_id
+            else:
+                logger.warning(
+                    f"Citation number {citation_doc_info.citation_number} found in citation_docs_info "
+                    f"but no matching search doc ID in mapping"
+                )
 
-    for iteration_answer in global_iteration_responses:
+    assistant_message.citations = citations if citations else None
 
-        retrieved_search_docs = convert_inference_sections_to_search_docs(
-            list(iteration_answer.cited_documents.values())
-        )
-
-        # Convert SavedSearchDoc objects to JSON-serializable format
-        serialized_search_docs = [doc.model_dump() for doc in retrieved_search_docs]
-
-        research_agent_iteration_sub_step = ResearchAgentIterationSubStep(
-            primary_question_id=message_id,
-            iteration_nr=iteration_answer.iteration_nr,
-            iteration_sub_step_nr=iteration_answer.parallelization_nr,
-            sub_step_instructions=iteration_answer.question,
-            sub_step_tool_id=iteration_answer.tool_id,
-            sub_answer=iteration_answer.answer,
-            reasoning=iteration_answer.reasoning,
-            claims=iteration_answer.claims,
-            cited_doc_results=serialized_search_docs,
-            generated_images=(
-                GeneratedImageFullResult(images=iteration_answer.generated_images)
-                if iteration_answer.generated_images
-                else None
-            ),
-            additional_data=iteration_answer.additional_data,
-            is_web_fetch=iteration_answer.is_web_fetch,
-            queries=iteration_answer.queries,
-        )
-        db_session.add(research_agent_iteration_sub_step)
-
+    # Finally save the messages, tool calls, and docs
     db_session.commit()
-
-
-def _insert_chat_message_search_doc_pair(
-    message_id: int, search_doc_ids: list[int], db_session: Session
-) -> None:
-    """
-    Insert a pair of message_id and search_doc_id into the chat_message__search_doc table.
-
-    Args:
-        message_id: The ID of the chat message
-        search_doc_id: The ID of the search document
-        db_session: The database session
-    """
-    for search_doc_id in search_doc_ids:
-        chat_message_search_doc = ChatMessage__SearchDoc(
-            chat_message_id=message_id, search_doc_id=search_doc_id
-        )
-        db_session.add(chat_message_search_doc)
-
-
-def _extract_citation_numbers(text: str) -> list[int]:
-    """
-    Extract all citation numbers from text in the format [[<number>]] or [[<number_1>, <number_2>, ...]].
-    Returns a list of all unique citation numbers found.
-    """
-    # Pattern to match [[number]] or [[number1, number2, ...]]
-    pattern = r"\[\[(\d+(?:,\s*\d+)*)\]\]"
-    matches = re.findall(pattern, text)
-
-    cited_numbers = []
-    for match in matches:
-        # Split by comma and extract all numbers
-        numbers = [int(num.strip()) for num in match.split(",")]
-        cited_numbers.extend(numbers)
-
-    return list(set(cited_numbers))  # Return unique numbers
-
-
-def extract_final_answer_from_packets(packet_history: list[Packet]) -> str:
-    """Extract the final answer by concatenating all MessageDelta content."""
-    final_answer = ""
-    for packet in packet_history:
-        if isinstance(packet.obj, MessageDelta) or isinstance(packet.obj, MessageStart):
-            final_answer += packet.obj.content
-    return final_answer

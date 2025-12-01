@@ -17,14 +17,13 @@ from onyx.configs.constants import MessageType
 from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.enums import SearchType
-from onyx.context.search.models import RetrievalDocs
-from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import SubQuestionIdentifier
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
@@ -58,7 +57,8 @@ class LlmDoc(BaseModel):
 
 
 # First chunk of info for streaming QA
-class QADocsResponse(RetrievalDocs, SubQuestionIdentifier):
+class QADocsResponse(BaseModel):
+    top_documents: list[SearchDoc]
     rephrased_query: str | None = None
     predicted_flow: QueryFlow | None
     predicted_search: SearchType | None
@@ -87,7 +87,7 @@ class StreamType(Enum):
     MAIN_ANSWER = "main_answer"
 
 
-class StreamStopInfo(SubQuestionIdentifier):
+class StreamStopInfo(BaseModel):
     stop_reason: StreamStopReason
 
     stream_type: StreamType = StreamType.MAIN_ANSWER
@@ -328,36 +328,28 @@ class PromptConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
-class SubQueryPiece(SubQuestionIdentifier):
+class SubQueryPiece(BaseModel):
     sub_query: str
     query_id: int
 
 
-class AgentAnswerPiece(SubQuestionIdentifier):
+class AgentAnswerPiece(BaseModel):
     answer_piece: str
     answer_type: Literal["agent_sub_answer", "agent_level_answer"]
 
 
-class SubQuestionPiece(SubQuestionIdentifier):
+class SubQuestionPiece(BaseModel):
     """Refined sub questions generated from the initial user question."""
 
     sub_question: str
 
 
-class ExtendedToolResponse(ToolResponse, SubQuestionIdentifier):
+class ExtendedToolResponse(ToolResponse):
     pass
 
 
-class RefinedAnswerImprovement(BaseModel):
-    refined_answer_improvement: bool
-
-
 AgentSearchPacket = Union[
-    SubQuestionPiece
-    | AgentAnswerPiece
-    | SubQueryPiece
-    | ExtendedToolResponse
-    | RefinedAnswerImprovement
+    SubQuestionPiece | AgentAnswerPiece | SubQueryPiece | ExtendedToolResponse
 ]
 
 
@@ -398,9 +390,46 @@ class ChatBasicResponse(BaseModel):
     answer: str
     answer_citationless: str
 
-    top_documents: list[SavedSearchDoc]
+    top_documents: list[SearchDoc]
 
     error_msg: str | None
     message_id: int
-    # this is a map of the citation number to the document id
-    cited_documents: dict[int, str]
+    citation_info: list[CitationInfo]
+
+
+class ChatLoadedFile(InMemoryChatFile):
+    content_text: str | None
+    token_count: int
+
+
+class ChatMessageSimple(BaseModel):
+    message: str
+    token_count: int
+    message_type: MessageType
+    # Only for USER type messages
+    image_files: list[ChatLoadedFile] | None = None
+    # Only for TOOL_CALL_RESPONSE type messages
+    tool_call_id: str | None = None
+
+
+class ProjectFileMetadata(BaseModel):
+    """Metadata for a project file to enable citation support."""
+
+    file_id: str
+    filename: str
+    file_content: str
+
+
+class ExtractedProjectFiles(BaseModel):
+    project_file_texts: list[str]
+    project_image_files: list[ChatLoadedFile]
+    project_as_filter: bool
+    total_token_count: int
+    # Metadata for project files to enable citations
+    project_file_metadata: list[ProjectFileMetadata]
+
+
+class LlmStepResult(BaseModel):
+    reasoning: str | None
+    answer: str | None
+    tool_calls: list[ToolCallKickoff] | None

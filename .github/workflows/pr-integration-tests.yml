@@ -10,6 +10,9 @@ on:
       - main
       - "release/**"
 
+permissions:
+  contents: read
+
 env:
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -32,11 +35,14 @@ jobs:
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
+    timeout-minutes: 45
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Discover test directories
         id: set-matrix
@@ -61,10 +67,13 @@ jobs:
 
   build-backend-image:
     runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
+    timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -85,17 +94,23 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
+            type=registry,ref=onyxdotapp/onyx-backend:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
 
   build-model-server-image:
     runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
+    timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -116,16 +131,21 @@ jobs:
           file: ./backend/Dockerfile.model_server
           push: true
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}
-          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-cache
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-cache,mode=max
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
+            type=registry,ref=onyxdotapp/onyx-model-server:latest
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
 
 
   build-integration-image:
     runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-build-integration-image", "extras=ecr-cache"]
+    timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -141,9 +161,16 @@ jobs:
 
       - name: Build and push integration test image with Docker Bake
         env:
-          REPOSITORY: ${{ env.RUNS_ON_ECR_CACHE }}
+          INTEGRATION_REPOSITORY: ${{ env.RUNS_ON_ECR_CACHE }}
           TAG: integration-test-${{ github.run_id }}
-        run: cd backend && docker buildx bake --push integration
+        run: |
+          cd backend && docker buildx bake --push \
+            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
+            --set backend.cache-from=type=registry,ref=onyxdotapp/onyx-backend:latest \
+            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache,mode=max \
+            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache \
+            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache,mode=max \
+            integration
 
   integration-tests:
     needs:
@@ -158,6 +185,7 @@ jobs:
       - runner=4cpu-linux-arm64
       - ${{ format('run-id={0}-integration-tests-job-{1}', github.run_id, strategy['job-index']) }}
       - extras=ecr-cache
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false
@@ -167,7 +195,9 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
@@ -181,6 +211,9 @@ jobs:
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
       - name: Start Docker containers
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
@@ -189,10 +222,11 @@ jobs:
           POSTGRES_USE_NULL_POOL=true \
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
-          ONYX_BACKEND_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }} \
-          ONYX_MODEL_SERVER_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }} \
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           INTEGRATION_TESTS_MODE=true \
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001 \
+          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
@@ -201,43 +235,56 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
+            mcp_server \
             background \
             -d
         id: start_docker
 
-      - name: Wait for service to be ready
+      - name: Wait for services to be ready
         run: |
           echo "Starting wait-for-service script..."
 
-          docker logs -f onyx-api_server-1 &
+          wait_for_service() {
+            local url=$1
+            local label=$2
+            local timeout=${3:-300}  # default 5 minutes
+            local start_time
+            start_time=$(date +%s)
 
-          start_time=$(date +%s)
-          timeout=300  # 5 minutes in seconds
+            while true; do
+              local current_time
+              current_time=$(date +%s)
+              local elapsed_time=$((current_time - start_time))
 
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
+              if [ $elapsed_time -ge $timeout ]; then
+                echo "Timeout reached. ${label} did not become ready in $timeout seconds."
+                exit 1
+              fi
 
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. Service did not become ready in 5 minutes."
-              exit 1
-            fi
+              local response
+              response=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "curl_error")
 
-            # Use curl with error handling to ignore specific exit code 56
-            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
+              if [ "$response" = "200" ]; then
+                echo "${label} is ready!"
+                break
+              elif [ "$response" = "curl_error" ]; then
+                echo "Curl encountered an error while checking ${label}. Retrying in 5 seconds..."
+              else
+                echo "${label} not ready yet (HTTP status $response). Retrying in 5 seconds..."
+              fi
 
-            if [ "$response" = "200" ]; then
-              echo "Service is ready!"
-              break
-            elif [ "$response" = "curl_error" ]; then
-              echo "Curl encountered an error, possibly exit code 56. Continuing to retry..."
-            else
-              echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
-            fi
+              sleep 5
+            done
+          }
 
-            sleep 5
-          done
-          echo "Finished waiting for service."
+          wait_for_service "http://localhost:8080/health" "API server"
+          test_dir="${{ matrix.test-dir.path }}"
+          if [ "$test_dir" = "tests/mcp" ]; then
+            wait_for_service "http://localhost:8090/health" "MCP server"
+          else
+            echo "Skipping MCP server wait for non-MCP suite: $test_dir"
+          fi
+          echo "Finished waiting for services."
 
       - name: Start Mock Services
         run: |
@@ -266,7 +313,10 @@ jobs:
               -e VESPA_HOST=index \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
+              -e MCP_SERVER_HOST=mcp_server \
+              -e MCP_SERVER_PORT=8090 \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+              -e EXA_API_KEY=${EXA_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
               -e CONFLUENCE_TEST_SPACE_URL=${CONFLUENCE_TEST_SPACE_URL} \
               -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
@@ -317,11 +367,14 @@ jobs:
         build-integration-image,
       ]
     runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-multitenant-tests", "extras=ecr-cache"]
+    timeout-minutes: 45
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Login to Docker Hub
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
@@ -330,6 +383,9 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Start Docker containers for multi-tenant tests
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
@@ -337,9 +393,10 @@ jobs:
           AUTH_TYPE=cloud \
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
-          ONYX_BACKEND_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }} \
-          ONYX_MODEL_SERVER_IMAGE=${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }} \
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           DEV_MODE=true \
+          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.multitenant-dev.yml up \
             relational_db \
             index \
@@ -348,6 +405,7 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
+            mcp_server \
             background \
             -d
         id: start_docker_multi_tenant
@@ -379,6 +437,9 @@ jobs:
           echo "Finished waiting for service."
 
       - name: Run Multi-Tenant Integration Tests
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           echo "Running multi-tenant integration tests..."
           docker run --rm --network onyx_default \
@@ -393,7 +454,10 @@ jobs:
             -e VESPA_HOST=index \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
+            -e MCP_SERVER_HOST=mcp_server \
+            -e MCP_SERVER_PORT=8090 \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+            -e EXA_API_KEY=${EXA_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
             -e TEST_WEB_HOSTNAME=test-runner \
             -e AUTH_TYPE=cloud \
@@ -402,7 +466,7 @@ jobs:
             -e REQUIRE_EMAIL_VERIFICATION=false \
             -e DISABLE_TELEMETRY=true \
             -e DEV_MODE=true \
-            ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
+            ${ECR_CACHE}:integration-test-${RUN_ID} \
             /app/tests/integration/multitenant_tests
 
       - name: Dump API server logs (multi-tenant)
@@ -433,16 +497,10 @@ jobs:
   required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
+    timeout-minutes: 45
     needs: [integration-tests, multitenant-tests]
     if: ${{ always() }}
     steps:
-      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # ratchet:actions/github-script@v8
-        with:
-          script: |
-            const needs = ${{ toJSON(needs) }};
-            const failed = Object.values(needs).some(n => n.result !== 'success');
-            if (failed) {
-              core.setFailed('One or more upstream jobs failed or were cancelled.');
-            } else {
-              core.notice('All required jobs succeeded.');
-            }
+      - name: Check job status
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1

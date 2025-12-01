@@ -1,7 +1,8 @@
 @import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400&display=swap");
 
-@import "figma/colors.css";
+@import "css/colors.css";
+@import "css/line-item.css";
 
 @tailwind base;
 @tailwind components;
@@ -128,6 +129,9 @@
     box-shadow:
       0px 2px 24px 0px var(--shadow-03),
       0px 0px 12px 1px var(--shadow-03);
+  }
+  .focus-shadow {
+    box-shadow: 0px 0px 0px 2px var(--background-tint-04);
   }
 
   /* DEBUGGING UTILITIES
@@ -456,7 +460,7 @@ textarea {
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: shimmerTransition 2.5s ease-out infinite;
+  animation: shimmerTransition 1.8s ease-out infinite;
 }
 
 .dark .loading-text {

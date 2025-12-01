@@ -435,16 +435,18 @@ export function getCitedDocumentsFromMessage(message: Message) {
     return [];
   }
 
-  const documentsWithCitationKey: [string, OnyxDocument][] = [];
-  Object.entries(message.citations).forEach(([citationKey, documentDbId]) => {
+  const documentsWithCitationKey: [number, OnyxDocument][] = [];
+  Object.entries(message.citations).forEach(([citationNumStr, documentId]) => {
+    const citationNum = parseInt(citationNumStr, 10);
     const matchingDocument = message.documents!.find(
-      (document) => document.db_doc_id === documentDbId
+      (document) => document.document_id === documentId
     );
     if (matchingDocument) {
-      documentsWithCitationKey.push([citationKey, matchingDocument]);
+      documentsWithCitationKey.push([citationNum, matchingDocument]);
     }
   });
-  return documentsWithCitationKey;
+  // Sort by citation number
+  return documentsWithCitationKey.sort((a, b) => a[0] - b[0]);
 }
 
 export function groupSessionsByDateRange(chatSessions: ChatSession[]) {

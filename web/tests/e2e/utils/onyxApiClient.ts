@@ -25,6 +25,11 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * - `createUserGroup(name)` - Creates a user group
  * - `deleteUserGroup(id)` - Deletes a user group
  *
+ * **Tool Providers:**
+ * - `createWebSearchProvider(type, name)` - Creates and activates a web search provider
+ * - `deleteWebSearchProvider(id)` - Deletes a web search provider
+ * - `createImageGenProvider(name)` - Creates an OpenAI LLM provider for image generation
+ *
  * **Usage Example:**
  * ```typescript
  * const client = new OnyxApiClient(page);
@@ -72,6 +77,19 @@ export class OnyxApiClient {
    */
   private async delete(endpoint: string): Promise<APIResponse> {
     return await this.page.request.delete(`${this.baseUrl}${endpoint}`);
+  }
+
+  /**
+   * Generic PUT request to the API.
+   *
+   * @param endpoint - API endpoint path (e.g., "/manage/admin/cc-pair/123/status")
+   * @param data - Optional request body data
+   * @returns The API response
+   */
+  private async put(endpoint: string, data?: any): Promise<APIResponse> {
+    return await this.page.request.put(`${this.baseUrl}${endpoint}`, {
+      data,
+    });
   }
 
   /**
@@ -194,7 +212,28 @@ export class OnyxApiClient {
       `Created file connector: ${connectorName} (CC Pair ID: ${ccPairId})`
     );
 
+    // Pause the connector immediately to prevent indexing during tests
+    await this.pauseConnector(ccPairId);
+
     return ccPairId;
+  }
+
+  /**
+   * Pauses a connector-credential pair to prevent indexing.
+   *
+   * @param ccPairId - The connector-credential pair ID to pause
+   * @throws Error if the pause operation fails
+   */
+  async pauseConnector(ccPairId: number): Promise<void> {
+    const response = await this.put(
+      `/manage/admin/cc-pair/${ccPairId}/status`,
+      {
+        status: "PAUSED",
+      }
+    );
+
+    await this.handleResponse(response, "Failed to pause connector");
+    this.log(`Paused connector CC Pair ID: ${ccPairId}`);
   }
 
   /**
@@ -557,5 +596,93 @@ export class OnyxApiClient {
       response,
       `Failed to update curator status for ${userId}`
     );
+  }
+
+  /**
+   * Create and activate a web search provider for testing.
+   * Uses a dummy API key that won't actually work, but allows the tool to be available.
+   *
+   * @param providerType - Type of provider: "exa", "serper", or "google_pse"
+   * @param name - Optional name for the provider (defaults to "Test Provider")
+   * @returns The created provider ID
+   */
+  async createWebSearchProvider(
+    providerType: "exa" | "serper" | "google_pse" = "exa",
+    name: string = "Test Provider"
+  ): Promise<number> {
+    const config: Record<string, string> = {};
+    if (providerType === "google_pse") {
+      config.search_engine_id = "test-engine-id";
+    }
+
+    const response = await this.post("/admin/web-search/search-providers", {
+      name,
+      provider_type: providerType,
+      api_key: "test-api-key-12345",
+      api_key_changed: true,
+      config: Object.keys(config).length > 0 ? config : undefined,
+      activate: true,
+    });
+
+    const data = await this.handleResponse<{ id: number }>(
+      response,
+      `Failed to create web search provider ${providerType}`
+    );
+    return data.id;
+  }
+
+  /**
+   * Delete a web search provider.
+   *
+   * @param providerId - ID of the provider to delete
+   */
+  async deleteWebSearchProvider(providerId: number): Promise<void> {
+    const response = await this.delete(
+      `/admin/web-search/search-providers/${providerId}`
+    );
+    if (!response.ok()) {
+      const errorText = await response.text();
+      console.warn(
+        `Failed to delete web search provider ${providerId}: ${response.status()} - ${errorText}`
+      );
+    }
+  }
+
+  /**
+   * Create an OpenAI LLM provider to enable image generation.
+   * Image generation requires an OpenAI provider with an API key.
+   *
+   * @param name - Optional name for the provider (defaults to "Test Image Gen Provider")
+   * @returns The provider ID
+   * @throws Error if the provider creation fails
+   */
+  async createImageGenProvider(
+    name: string = "Test Image Gen Provider"
+  ): Promise<number> {
+    const response = await this.page.request.put(
+      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      {
+        data: {
+          name,
+          provider: "openai",
+          api_key: "test-image-gen-key",
+          default_model_name: "gpt-4o",
+          fast_default_model_name: "gpt-4o-mini",
+          is_public: true,
+          groups: [],
+          personas: [],
+        },
+      }
+    );
+
+    const responseData = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create image generation provider"
+    );
+
+    this.log(
+      `Created image generation provider: ${name} (ID: ${responseData.id})`
+    );
+    return responseData.id;
   }
 }
