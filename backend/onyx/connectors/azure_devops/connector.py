@@ -395,7 +395,11 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
                             try:
                                 content = content_bytes.decode("utf-8")
                             except UnicodeDecodeError:
-                                content = content_bytes.decode("latin-1")
+                                # Skip binary or non-UTF-8 files
+                                logger.warning(
+                                    f"Skipping non-UTF-8 file: {item_path}"
+                                )
+                                continue
 
                             # Extract commit date from latest_processed_change
                             commit_date = None
