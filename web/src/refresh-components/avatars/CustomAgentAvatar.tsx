@@ -7,6 +7,7 @@ import SvgTwoLineSmall from "@/icons/two-line-small";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import SvgSearch from "@/icons/search";
 import { SvgProps } from "@/icons";
+import Text from "@/refresh-components/texts/Text";
 
 interface IconConfig {
   Icon: React.FunctionComponent<SvgProps>;
@@ -26,15 +27,11 @@ interface SvgOctagonWrapperProps {
 
 function SvgOctagonWrapper({ size, children }: SvgOctagonWrapperProps) {
   return (
-    <div
-      className="relative flex flex-col items-center justify-center"
-      style={{ width: size, height: size }}
-    >
-      <SvgOnyxOctagon
-        className="absolute inset-0 stroke-text-04"
-        style={{ width: size, height: size }}
-      />
-      {children}
+    <div className="relative flex flex-col items-center justify-center">
+      <div className="absolute inset-0 flex items-center justify-center">
+        {children}
+      </div>
+      <SvgOnyxOctagon className="stroke-text-04" height={size} width={size} />
     </div>
   );
 }
@@ -89,12 +86,9 @@ export default function CustomAgentAvatar({
   if (firstLetter) {
     return (
       <SvgOctagonWrapper size={size}>
-        <span
-          className="text-text-04 font-bold"
-          style={{ fontSize: size * 0.5 }}
-        >
+        <Text as="span" style={{ fontSize: size * 0.5 }}>
           {firstLetter}
-        </span>
+        </Text>
       </SvgOctagonWrapper>
     );
   }
