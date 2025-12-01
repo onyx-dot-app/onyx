@@ -1,12 +1,17 @@
-import React, { JSX } from "react";
+import { JSX } from "react";
 import crypto from "crypto";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
-import { ArtAsistantIcon, OnyxIcon } from "@/components/icons/icons";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { OnyxIcon } from "@/components/icons/icons";
 import { cn } from "@/lib/utils";
-import Text from "@/refresh-components/texts/Text";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { DEFAULT_ASSISTANT_ID } from "@/lib/constants";
+import SvgCheck from "@/icons/check";
+import SvgCode from "@/icons/code";
+import SvgTwoLineSmall from "@/icons/two-line-small";
+import SvgOnyxOctagon from "@/icons/onyx-octagon";
+import SvgSearch from "@/icons/search";
+import { SvgProps } from "@/icons";
 
 function md5ToBits(str: string): number[] {
   const md5hex = crypto.createHash("md5").update(str).digest("hex");
@@ -80,54 +85,113 @@ export function generateIdenticon(str: string, size: number) {
   );
 }
 
+interface IconConfig {
+  Icon: React.FunctionComponent<SvgProps>;
+  className?: string;
+}
+
+const iconMap: Record<string, IconConfig> = {
+  search: { Icon: SvgSearch, className: "stroke-green-500" },
+  check: { Icon: SvgCheck, className: "stroke-green-500" },
+  code: { Icon: SvgCode, className: "stroke-orange-500" },
+};
+
+export interface AgentIcon2Props {
+  id?: number;
+  name?: string;
+  imageId?: string;
+  iconName?: string;
+
+  size?: number;
+}
+
+export function AgentIcon2({
+  id,
+  name,
+  imageId,
+  iconName,
+
+  size = 18,
+}: AgentIcon2Props) {
+  const settings = useSettingsContext();
+
+  if (id === DEFAULT_ASSISTANT_ID) {
+    return settings.enterpriseSettings?.use_custom_logo ? (
+      <img
+        alt="Logo"
+        src="/api/enterprise-settings/logo"
+        loading="lazy"
+        className="rounded-full object-cover object-center"
+        width={size}
+        height={size}
+        style={{ objectFit: "contain" }}
+      />
+    ) : (
+      <OnyxIcon size={size} />
+    );
+  } else if (imageId) {
+    return (
+      <img
+        alt={name}
+        src={buildImgUrl(imageId)}
+        loading="lazy"
+        className={cn(
+          "rounded-full object-cover object-center transition-opacity duration-300"
+        )}
+        width={size}
+        height={size}
+      />
+    );
+  } else {
+    const iconConfig = iconName && iconMap[iconName];
+
+    if (iconConfig) {
+      const { Icon, className } = iconConfig;
+      return (
+        <div
+          className="relative flex flex-col items-center justify-center"
+          style={{ width: size, height: size }}
+        >
+          <SvgOnyxOctagon
+            className="absolute inset-0 stroke-text-04"
+            style={{ width: size, height: size }}
+          />
+          <Icon
+            className={cn("stroke-text-04", className)}
+            style={{ width: size * 0.4, height: size * 0.4 }}
+          />
+        </div>
+      );
+    } else {
+      // Default icon: two-line-small
+      return (
+        <div
+          className="relative flex flex-col items-center justify-center"
+          style={{ width: size, height: size }}
+        >
+          <SvgOnyxOctagon
+            className="absolute inset-0 stroke-text-04"
+            style={{ width: size, height: size }}
+          />
+          <SvgTwoLineSmall className="stroke-text-04 h-8 w-8" />
+        </div>
+      );
+    }
+  }
+}
+
 export interface AgentIconProps {
   agent: MinimalPersonaSnapshot;
   size?: number;
 }
 
-export default function AgentIcon({ agent, size = 24 }: AgentIconProps) {
-  const settings = useSettingsContext();
-
-  // Check if whitelabeling is enabled for the default assistant
-  const shouldUseWhitelabelLogo =
-    agent.id === 0 && settings?.enterpriseSettings?.use_custom_logo === true;
-
+export function AgentIcon({ agent, ...props }: AgentIconProps) {
   return (
-    <SimpleTooltip tooltip={agent.description} side="top">
-      <div className="text-text-04">
-        {agent.id === -3 ? (
-          <ArtAsistantIcon size={size} />
-        ) : agent.id === 0 ? (
-          shouldUseWhitelabelLogo ? (
-            <img
-              alt="Logo"
-              src="/api/enterprise-settings/logo"
-              loading="lazy"
-              className={cn(
-                "rounded-full object-cover object-center transition-opacity duration-300"
-              )}
-              width={size}
-              height={size}
-              style={{ objectFit: "contain" }}
-            />
-          ) : (
-            <OnyxIcon size={size} />
-          )
-        ) : agent.uploaded_image_id ? (
-          <img
-            alt={agent.name}
-            src={buildImgUrl(agent.uploaded_image_id)}
-            loading="lazy"
-            className={cn(
-              "rounded-full object-cover object-center transition-opacity duration-300"
-            )}
-            width={size}
-            height={size}
-          />
-        ) : (
-          generateIdenticon((agent.icon_shape || 0).toString(), size)
-        )}
-      </div>
-    </SimpleTooltip>
+    <AgentIcon2
+      id={agent.id}
+      name={agent.name}
+      imageId={agent.uploaded_image_id}
+      {...props}
+    />
   );
 }

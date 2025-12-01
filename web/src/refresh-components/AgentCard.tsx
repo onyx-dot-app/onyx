@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import AgentIcon from "@/refresh-components/AgentIcon";
+import { AgentIcon } from "@/refresh-components/AgentIcon";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import SvgBubbleText from "@/icons/bubble-text";

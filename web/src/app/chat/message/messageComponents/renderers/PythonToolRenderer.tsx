@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import SvgCode from "@/icons/code";
 import {
   PacketType,
@@ -8,7 +8,7 @@ import {
   SectionEnd,
 } from "../../../services/streamingModels";
 import { MessageRenderer, RenderType } from "../interfaces";
-import { IconProps } from "@/icons";
+import { SvgProps } from "@/icons";
 import { CodeBlock } from "@/app/chat/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import python from "highlight.js/lib/languages/python";
@@ -71,7 +71,7 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
   };
 }
 
-function CodeIcon({ size = 16, ...props }: IconProps) {
+function CodeIcon({ size = 16, ...props }: SvgProps) {
   return <SvgCode width={size} height={size} {...props} />;
 }
 
@@ -140,7 +140,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
           <div className="flex flex-col my-1 space-y-2">
             {code && (
               <div className="prose max-w-full">
-                {/* NOTE: note that we need to trim since otherwise there's a huge 
+                {/* NOTE: note that we need to trim since otherwise there's a huge
                 "space" at the start of the code block */}
                 <CodeBlock className="language-python" codeText={code.trim()}>
                   <HighlightedPythonCode code={code.trim()} />

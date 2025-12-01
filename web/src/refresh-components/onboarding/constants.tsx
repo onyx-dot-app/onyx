@@ -96,8 +96,12 @@ export const PROVIDER_ICON_MAP: Record<
 > = {
   [LLMProviderName.ANTHROPIC]: SvgClaude,
   [LLMProviderName.BEDROCK]: SvgAws,
+
+  // TODO (@raunakab)
+  // Convert these to our internal icons instead.
   [LLMProviderName.AZURE]: AzureIcon,
   [LLMProviderName.VERTEX_AI]: GeminiIcon,
+
   [LLMProviderName.OPENAI]: SvgOpenai,
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
   [LLMProviderName.OPENROUTER]: SvgOpenrouter,
