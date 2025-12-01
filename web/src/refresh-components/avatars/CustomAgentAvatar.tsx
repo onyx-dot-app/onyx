@@ -39,7 +39,7 @@ function SvgOctagonWrapper({ size, children }: SvgOctagonWrapperProps) {
   );
 }
 
-export interface CustomAgentIconProps {
+export interface CustomAgentAvatarProps {
   name?: string;
   src?: string;
   iconName?: string;
@@ -53,7 +53,7 @@ export default function CustomAgentAvatar({
   iconName,
 
   size = 18,
-}: CustomAgentIconProps) {
+}: CustomAgentAvatarProps) {
   if (src) {
     return (
       <img

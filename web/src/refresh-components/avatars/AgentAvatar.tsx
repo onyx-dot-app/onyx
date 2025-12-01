@@ -7,12 +7,12 @@ import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { DEFAULT_ASSISTANT_ID } from "@/lib/constants";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
 
-export interface AgentIconProps {
+export interface AgentAvatarProps {
   agent: MinimalPersonaSnapshot;
   size?: number;
 }
 
-export default function AgentAvatar({ agent, ...props }: AgentIconProps) {
+export default function AgentAvatar({ agent, ...props }: AgentAvatarProps) {
   const settings = useSettingsContext();
 
   if (agent.id === DEFAULT_ASSISTANT_ID) {
