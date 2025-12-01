@@ -13,6 +13,7 @@ This test:
 All external HTTP calls are mocked, but Postgres and Redis are running.
 """
 
+import json
 from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
@@ -422,6 +423,8 @@ class TestMCPPassThroughOAuth:
         # Mock the call_mcp_tool function to capture the headers
         captured_headers: dict[str, str] = {}
 
+        mocked_response = {"result": "mocked_response"}
+
         def mock_call_mcp_tool(
             server_url: str,
             tool_name: str,
@@ -430,7 +433,7 @@ class TestMCPPassThroughOAuth:
             transport: MCPTransport,
         ) -> dict[str, Any]:
             captured_headers.update(connection_headers)
-            return {"result": "mocked_response"}
+            return mocked_response
 
         with patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
@@ -439,7 +442,12 @@ class TestMCPPassThroughOAuth:
             # Run the tool
             responses = list(mcp_tool.run(input="test"))
             assert len(responses) == 1
-            assert responses[0].response["result"] == "mocked_response"
+            print(responses[0].response)
+            print(responses[0].response.tool_result)
+            assert (
+                json.loads(responses[0].response.tool_result)["tool_result"]
+                == mocked_response
+            )
 
         # Verify Authorization header was set with the user's OAuth token
         assert "Authorization" in captured_headers
