@@ -8,7 +8,7 @@ import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import PageHeader from "@/refresh-components/headers/PageHeader";
+import PageHeader from "@/refresh-components/layouts/PageHeader";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import PageLayout from "@/refresh-components/layouts/PageLayout";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
