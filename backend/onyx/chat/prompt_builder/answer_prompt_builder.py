@@ -145,12 +145,13 @@ def build_system_prompt(
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
     """
+    system_prompt = handle_onyx_date_awareness(base_system_prompt, datetime_aware)
+
     # See https://simonwillison.net/tags/markdown/ for context on why this is needed
     # for OpenAI reasoning models to have correct markdown generation
     if open_ai_formatting_enabled:
-        system_prompt = CODE_BLOCK_MARKDOWN + base_system_prompt
+        system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
 
-    system_prompt = handle_onyx_date_awareness(base_system_prompt, datetime_aware)
     try:
         citation_guidance = (
             REQUIRE_CITATION_GUIDANCE

@@ -169,12 +169,24 @@ class DynamicCitationProcessor:
         if self.stop_stream:
             next_hold = self.hold + token
             if self.stop_stream in next_hold:
-                return
-            if next_hold == self.stop_stream[: len(next_hold)]:
+                # Extract text before the stop pattern
+                stop_pos = next_hold.find(self.stop_stream)
+                text_before_stop = next_hold[:stop_pos]
+                # Process the text before stop pattern if any exists
+                if text_before_stop:
+                    # Process text_before_stop through normal flow
+                    self.hold = ""
+                    token = text_before_stop
+                    # Continue to normal processing below
+                else:
+                    # Stop pattern at the beginning, nothing to yield
+                    return
+            elif next_hold == self.stop_stream[: len(next_hold)]:
                 self.hold = next_hold
                 return
-            token = next_hold
-            self.hold = ""
+            else:
+                token = next_hold
+                self.hold = ""
 
         self.curr_segment += token
         self.llm_out += token

@@ -69,9 +69,9 @@ def handle_simplified_chat_message(
         chat_session_id = chat_message_req.chat_session_id
 
     try:
-        parent_message, _ = create_chat_history_chain(
+        parent_message = create_chat_history_chain(
             chat_session_id=chat_session_id, db_session=db_session
-        )
+        )[-1]
     except Exception:
         parent_message = get_or_create_root_message(
             chat_session_id=chat_session_id, db_session=db_session
