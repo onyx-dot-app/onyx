@@ -53,14 +53,17 @@ export default function CustomAgentAvatar({
 }: CustomAgentAvatarProps) {
   if (src) {
     return (
-      <img
-        alt={name}
-        src={src}
-        loading="lazy"
-        className="aspect-square rounded-full object-cover object-center"
-        width={size}
-        height={size}
-      />
+      <div
+        className="aspect-square rounded-full overflow-hidden"
+        style={{ height: size, width: size }}
+      >
+        <img
+          alt={name}
+          src={src}
+          loading="lazy"
+          className="h-full w-full object-cover object-center"
+        />
+      </div>
     );
   }
 

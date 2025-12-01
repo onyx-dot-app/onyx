@@ -17,15 +17,17 @@ export default function AgentAvatar({ agent, ...props }: AgentAvatarProps) {
 
   if (agent.id === DEFAULT_ASSISTANT_ID) {
     return settings.enterpriseSettings?.use_custom_logo ? (
-      <img
-        alt="Logo"
-        src="/api/enterprise-settings/logo"
-        loading="lazy"
-        className="rounded-full object-cover object-center"
-        width={props.size}
-        height={props.size}
-        style={{ objectFit: "contain" }}
-      />
+      <div
+        className="aspect-square rounded-full overflow-hidden"
+        style={{ height: props.size, width: props.size }}
+      >
+        <img
+          alt="Logo"
+          src="/api/enterprise-settings/logo"
+          loading="lazy"
+          className="h-full w-full object-contain object-center"
+        />
+      </div>
     ) : (
       <OnyxIcon size={props.size} />
     );
