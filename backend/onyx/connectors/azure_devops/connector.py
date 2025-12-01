@@ -14,6 +14,7 @@ from azure.devops.connection import Connection
 from azure.devops.v7_1.git import GitClient
 from azure.devops.v7_1.git.models import (
     GitPullRequest,
+    GitPullRequestSearchCriteria,
     GitRepository,
     GitItem,
     GitVersionDescriptor,
@@ -40,10 +41,39 @@ logger = setup_logger()
 
 # File extensions to index for code files
 CODE_EXTENSIONS = {
-    ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".cs", ".cpp", ".c", ".h",
-    ".go", ".rs", ".rb", ".php", ".swift", ".kt", ".scala", ".sql", ".sh",
-    ".bash", ".ps1", ".yaml", ".yml", ".json", ".xml", ".html", ".css",
-    ".md", ".rst", ".txt", ".dockerfile", ".tf", ".bicep",
+    ".py",
+    ".js",
+    ".ts",
+    ".jsx",
+    ".tsx",
+    ".java",
+    ".cs",
+    ".cpp",
+    ".c",
+    ".h",
+    ".go",
+    ".rs",
+    ".rb",
+    ".php",
+    ".swift",
+    ".kt",
+    ".scala",
+    ".sql",
+    ".sh",
+    ".bash",
+    ".ps1",
+    ".yaml",
+    ".yml",
+    ".json",
+    ".xml",
+    ".html",
+    ".css",
+    ".md",
+    ".rst",
+    ".txt",
+    ".dockerfile",
+    ".tf",
+    ".bicep",
 }
 
 # Directories/files to exclude from indexing
@@ -80,7 +110,7 @@ def _should_exclude(path: str) -> bool:
     """Check if a path matches any of the exclude patterns."""
     # Normalize path: remove leading slash if present
     normalized_path = path.lstrip("/")
-    
+
     for pattern in EXCLUDE_PATTERNS:
         # Check if pattern appears anywhere in the path
         if pattern.endswith("/"):
@@ -94,7 +124,11 @@ def _should_exclude(path: str) -> bool:
             if fnmatch.fnmatch(normalized_path, pattern):
                 return True
             # Also check just the filename
-            filename = normalized_path.split("/")[-1] if "/" in normalized_path else normalized_path
+            filename = (
+                normalized_path.split("/")[-1]
+                if "/" in normalized_path
+                else normalized_path
+            )
             if fnmatch.fnmatch(filename, pattern):
                 return True
     return False
@@ -138,24 +172,34 @@ def _convert_pr_to_document(
     closed_date = pr.closed_date
     creation_date = pr.creation_date
     created_by = pr.created_by
-    
+
     pr_url = f"https://dev.azure.com/{organization}/{project}/_git/{repo_name}/pullrequest/{pr_id}"
-    
+
     # Get creator info - created_by is IdentityRef object
     creator = None
     if created_by:
         creator = BasicExpertInfo(
             display_name=created_by.display_name,
-            email=created_by.unique_name if hasattr(created_by, 'unique_name') else None,
+            email=(
+                created_by.unique_name if hasattr(created_by, "unique_name") else None
+            ),
         )
-    
+
     # Parse dates - API returns datetime objects
     doc_date = None
     if closed_date:
-        doc_date = closed_date.replace(tzinfo=timezone.utc) if closed_date.tzinfo is None else closed_date
+        doc_date = (
+            closed_date.replace(tzinfo=timezone.utc)
+            if closed_date.tzinfo is None
+            else closed_date
+        )
     elif creation_date:
-        doc_date = creation_date.replace(tzinfo=timezone.utc) if creation_date.tzinfo is None else creation_date
-    
+        doc_date = (
+            creation_date.replace(tzinfo=timezone.utc)
+            if creation_date.tzinfo is None
+            else creation_date
+        )
+
     return Document(
         id=pr_url,
         sections=[TextSection(link=pr_url, text=description)],
@@ -186,11 +230,11 @@ def _convert_code_file_to_document(
 ) -> Document:
     """Convert a code file to an Onyx Document."""
     item_path = item.path
-    
+
     file_path = item_path.lstrip("/")
     file_url = f"https://dev.azure.com/{organization}/{project}/_git/{repo_name}?path={item_path}&version=GB{default_branch}"
     file_name = file_path.split("/")[-1] if "/" in file_path else file_path
-    
+
     return Document(
         id=f"{organization}/{project}/{repo_name}/{file_path}",
         sections=[TextSection(link=file_url, text=content)],
@@ -208,7 +252,7 @@ def _convert_code_file_to_document(
 
 class AzureDevOpsConnector(LoadConnector, PollConnector):
     """Connector for indexing Azure DevOps Git repositories and Pull Requests."""
-    
+
     def __init__(
         self,
         organization: str,
@@ -226,31 +270,31 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
         self.include_code_files = include_code_files
         self.include_prs = include_prs
         self.state_filter = state_filter
-        
+
         self._connection: Connection | None = None
         self._git_client: GitClient | None = None
-    
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load Azure DevOps credentials (Personal Access Token)."""
         pat = credentials.get("azure_devops_pat")
         if not pat:
             raise ConnectorMissingCredentialError("Azure DevOps")
-        
+
         # Create connection to Azure DevOps
         organization_url = f"https://dev.azure.com/{self.organization}"
         credentials_auth = BasicAuthentication("", pat)
         self._connection = Connection(base_url=organization_url, creds=credentials_auth)
         self._git_client = self._connection.clients.get_git_client()
-        
+
         return None
-    
+
     def _get_repositories(self) -> list[GitRepository]:
         """Get list of repositories to index."""
         if self._git_client is None:
             raise ConnectorMissingCredentialError("Azure DevOps")
-        
+
         repos = []
-        
+
         if self.repositories:
             # Specific repositories requested
             repo_names = [r.strip() for r in self.repositories.split(",")]
@@ -271,9 +315,9 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
                 repos = list(all_repos) if all_repos else []
             except Exception as e:
                 logger.error(f"Error fetching repositories: {e}")
-        
+
         return repos
-    
+
     def _fetch_code_files(
         self,
         repo: GitRepository,
@@ -281,31 +325,31 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
         """Fetch and yield code files from a repository."""
         if self._git_client is None:
             raise ConnectorMissingCredentialError("Azure DevOps")
-        
+
         project_name = repo.project.name if repo.project else self.project
         if not project_name:
             logger.warning(f"No project name for repo {repo.name}, skipping code files")
             return
-        
+
         default_branch = repo.default_branch
         if default_branch:
             # Remove refs/heads/ prefix if present
             default_branch = default_branch.replace("refs/heads/", "")
         else:
             default_branch = "main"
-        
+
         # Create version descriptor for branch
         version_desc = GitVersionDescriptor(
             version=default_branch,
             version_type="branch",
         )
-        
+
         # Use BFS to traverse repository tree
         queue: deque[str] = deque([""])
-        
+
         while queue:
             current_path = queue.popleft()
-            
+
             try:
                 items = self._git_client.get_items(
                     repository_id=repo.id,
@@ -314,21 +358,21 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
                     recursion_level="OneLevel",
                     version_descriptor=version_desc,
                 )
-                
+
                 if not items:
                     continue
-                
+
                 for item in items:
                     # GitClient.get_items returns GitItem objects
                     item_path = item.path
                     is_folder = item.is_folder
-                    
+
                     if not item_path or item_path == current_path:
                         continue
-                    
+
                     if _should_exclude(item_path):
                         continue
-                    
+
                     if is_folder:
                         queue.append(item_path)
                     elif _should_index_file(item_path):
@@ -340,14 +384,14 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
                                 path=item_path,
                                 version_descriptor=version_desc,
                             )
-                            
+
                             # Read content
                             content_bytes = b"".join(content_stream)
                             try:
                                 content = content_bytes.decode("utf-8")
                             except UnicodeDecodeError:
                                 content = content_bytes.decode("latin-1")
-                            
+
                             yield _convert_code_file_to_document(
                                 item=item,
                                 content=content,
@@ -358,10 +402,10 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
                             )
                         except Exception as e:
                             logger.warning(f"Error fetching file {item_path}: {e}")
-                            
+
             except Exception as e:
                 logger.warning(f"Error listing items in {current_path}: {e}")
-    
+
     def _fetch_pull_requests(
         self,
         repo: GitRepository,
@@ -371,12 +415,12 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
         """Fetch and yield pull requests from a repository."""
         if self._git_client is None:
             raise ConnectorMissingCredentialError("Azure DevOps")
-        
+
         project_name = repo.project.name if repo.project else self.project
         if not project_name:
             logger.warning(f"No project name for repo {repo.name}, skipping PRs")
             return
-        
+
         # Map state filter to Azure DevOps status
         status_map = {
             "all": "all",
@@ -385,44 +429,49 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
             "abandoned": "abandoned",
         }
         status = status_map.get(self.state_filter, "all")
-        
+
+        # Create search criteria object
+        search_criteria = GitPullRequestSearchCriteria(status=status)
+
         try:
             pull_requests = self._git_client.get_pull_requests(
                 repository_id=repo.id,
                 project=project_name,
-                search_criteria={
-                    "status": status,
-                },
+                search_criteria=search_criteria,
             )
-            
+
             if not pull_requests:
                 return
-            
+
             for pr in pull_requests:
                 # GitClient.get_pull_requests returns GitPullRequest objects
                 closed_date = pr.closed_date
                 creation_date = pr.creation_date
-                
+
                 # API returns datetime objects
                 pr_date = closed_date or creation_date
                 if pr_date:
-                    pr_date = pr_date.replace(tzinfo=timezone.utc) if pr_date.tzinfo is None else pr_date
-                    
+                    pr_date = (
+                        pr_date.replace(tzinfo=timezone.utc)
+                        if pr_date.tzinfo is None
+                        else pr_date
+                    )
+
                     if start and pr_date < start:
                         continue
                     if end and pr_date > end:
                         continue
-                
+
                 yield _convert_pr_to_document(
                     pr=pr,
                     organization=self.organization,
                     project=project_name,
                     repo_name=repo.name,
                 )
-                
+
         except Exception as e:
             logger.error(f"Error fetching pull requests for {repo.name}: {e}")
-    
+
     def _fetch_from_azure_devops(
         self,
         start: datetime | None = None,
@@ -431,12 +480,12 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
         """Fetch documents from Azure DevOps."""
         if self._git_client is None:
             raise ConnectorMissingCredentialError("Azure DevOps")
-        
+
         repos = self._get_repositories()
-        
+
         for repo in repos:
             logger.info(f"Processing repository: {repo.name}")
-            
+
             # Fetch code files
             if self.include_code_files:
                 doc_batch: list[Document] = []
@@ -447,7 +496,7 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
                         doc_batch = []
                 if doc_batch:
                     yield doc_batch
-            
+
             # Fetch pull requests
             if self.include_prs:
                 doc_batch = []
@@ -458,11 +507,11 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
                         doc_batch = []
                 if doc_batch:
                     yield doc_batch
-    
+
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Load all documents (full sync)."""
         return self._fetch_from_azure_devops()
-    
+
     def poll_source(
         self,
         start: SecondsSinceUnixEpoch,
@@ -498,10 +547,15 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
                     yield doc
         except Exception as e:
             # Wrap unexpected errors as ConnectorFailure so the runner can handle them
-            yield ConnectorFailure(failure_message=str(e), failed_document=None, failed_entity=None, exception=e)
+            yield ConnectorFailure(
+                failure_message=str(e),
+                failed_document=None,
+                failed_entity=None,
+                exception=e,
+            )
 
         # Final checkpoint indicates no more data
-        return ConnectorCheckpoint(has_more=False)
+        return ConnectorCheckpoint(has_more=False)  # type: ignore[return-value]
 
     def load_from_checkpoint_with_perm_sync(
         self,
@@ -526,7 +580,7 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
 
 if __name__ == "__main__":
     import os
-    
+
     connector = AzureDevOpsConnector(
         organization=os.environ["AZURE_DEVOPS_ORG"],
         project=os.environ.get("AZURE_DEVOPS_PROJECT"),
@@ -534,11 +588,13 @@ if __name__ == "__main__":
         include_code_files=True,
         include_prs=True,
     )
-    
-    connector.load_credentials({
-        "azure_devops_pat": os.environ["AZURE_DEVOPS_PAT"],
-    })
-    
+
+    connector.load_credentials(
+        {
+            "azure_devops_pat": os.environ["AZURE_DEVOPS_PAT"],
+        }
+    )
+
     for doc_batch in connector.load_from_state():
         print(f"Got {len(doc_batch)} documents")
         for doc in doc_batch[:2]:  # Print first 2 of each batch

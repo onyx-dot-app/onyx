@@ -294,7 +294,8 @@ export const connectorConfigs: Record<
         label: "Organization",
         name: "organization",
         optional: false,
-        description: "The name of your Azure DevOps organization (e.g., 'myorg' from dev.azure.com/myorg)",
+        description:
+          "The name of your Azure DevOps organization (e.g., 'myorg' from dev.azure.com/myorg)",
       },
       {
         type: "text",
@@ -302,7 +303,8 @@ export const connectorConfigs: Record<
         label: "Project",
         name: "project",
         optional: true,
-        description: "Specific project to index. Leave empty to index all accessible projects.",
+        description:
+          "Specific project to index. Leave empty to index all accessible projects.",
       },
       {
         type: "text",
@@ -310,7 +312,8 @@ export const connectorConfigs: Record<
         label: "Repositories",
         name: "repositories",
         optional: true,
-        description: "Comma-separated repository names (e.g., repo1,repo2). Leave empty to index all repositories in the project.",
+        description:
+          "Comma-separated repository names (e.g., repo1,repo2). Leave empty to index all repositories in the project.",
       },
       {
         type: "checkbox",
