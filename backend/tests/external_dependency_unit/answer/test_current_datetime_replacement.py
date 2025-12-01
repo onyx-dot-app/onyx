@@ -1,7 +1,6 @@
 import re
 from datetime import datetime
 
-import pytest
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import AnswerStreamPart
@@ -18,7 +17,6 @@ from tests.external_dependency_unit.answer.conftest import ensure_default_llm_pr
 from tests.external_dependency_unit.conftest import create_test_user
 
 
-@pytest.mark.skip(reason="Temporarily disabled")
 def test_stream_chat_current_date_response(
     db_session: Session, full_deployment_setup: None, mock_external_deps: None
 ) -> None:
@@ -54,7 +52,10 @@ def test_stream_chat_current_date_response(
     )
 
     gen = stream_chat_message_objects(
-        new_msg_req=chat_request, user=test_user, db_session=db_session
+        new_msg_req=chat_request,
+        user=test_user,
+        db_session=db_session,
+        bypass_translation=True,
     )
 
     raw: list[AnswerStreamPart] = []

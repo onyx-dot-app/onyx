@@ -1,5 +1,4 @@
 import re
-import time
 import traceback
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -26,7 +25,6 @@ from onyx.chat.models import LlmDoc
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import MessageSpecificCitations
 from onyx.chat.models import ProjectFileMetadata
-from onyx.chat.models import QADocsResponse
 from onyx.chat.models import StreamingError
 from onyx.chat.prompt_builder.answer_prompt_builder import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
@@ -706,8 +704,8 @@ def stream_chat_message(
     user: User | None,
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
+    bypass_translation: bool = False,
 ) -> Iterator[str]:
-    start_time = time.time()
     with get_session_with_current_tenant() as db_session:
         objects = stream_chat_message_objects(
             new_msg_req=new_msg_req,
@@ -715,13 +713,9 @@ def stream_chat_message(
             db_session=db_session,
             litellm_additional_headers=litellm_additional_headers,
             custom_tool_additional_headers=custom_tool_additional_headers,
+            bypass_translation=bypass_translation,
         )
         for obj in objects:
-            # Check if this is a QADocsResponse with document results
-            if isinstance(obj, QADocsResponse):
-                document_retrieval_latency = time.time() - start_time
-                logger.debug(f"First doc time: {document_retrieval_latency}")
-
             # Handle both Pydantic objects and plain dicts (from translation layer)
             if isinstance(obj, dict):
                 yield get_json_line(obj)
