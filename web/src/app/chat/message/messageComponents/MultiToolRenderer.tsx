@@ -233,7 +233,7 @@ export default function MultiToolRenderer({
 
                           <div
                             className={cn(
-                              "text-base flex items-center gap-1 loading-text mb-2",
+                              "text-base flex items-center gap-1 mb-2",
                               toolsToDisplay.length > 1 &&
                                 isLastItem &&
                                 "cursor-pointer hover:text-text-900 transition-colors"
