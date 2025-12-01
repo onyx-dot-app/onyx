@@ -5,7 +5,6 @@ actual Azure DevOps credentials or network access.
 """
 
 from datetime import datetime
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -66,7 +65,7 @@ class MockGitPullRequest:
         self.source_ref_name = "refs/heads/feature-branch"
         self.target_ref_name = "refs/heads/main"
         self.merge_status = "succeeded"
-        self.reviewers = []
+        self.reviewers: list[MockIdentityRef] = []
 
 
 class TestAzureDevOpsConnectorInit:
@@ -194,6 +193,7 @@ class TestAzureDevOpsDocumentConversion:
         )
 
         assert doc is not None
+        assert doc.id is not None
         assert doc.source == DocumentSource.AZURE_DEVOPS
         assert "42" in doc.id
         assert doc.metadata["object_type"] == "PullRequest"
@@ -201,7 +201,9 @@ class TestAzureDevOpsDocumentConversion:
         assert doc.metadata["status"] == "active"
         assert doc.metadata["repo"] == "test-repo"
         assert len(doc.sections) == 1
-        assert "This PR adds" in doc.sections[0].text
+        section_text = doc.sections[0].text
+        assert section_text is not None
+        assert "This PR adds" in section_text
 
     def test_convert_code_file_to_document(self, mock_git_item: MockGitItem) -> None:
         """Test converting a code file to a Document."""
@@ -228,7 +230,9 @@ class TestAzureDevOpsDocumentConversion:
         assert doc.metadata["file_path"] == "src/main.py"
         assert doc.metadata["repo"] == "test-repo"
         assert len(doc.sections) == 1
-        assert "def hello():" in doc.sections[0].text
+        section_text = doc.sections[0].text
+        assert section_text is not None
+        assert "def hello():" in section_text
 
     def test_convert_code_file_with_commit_date(
         self, mock_git_item: MockGitItem

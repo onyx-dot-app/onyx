@@ -10,29 +10,28 @@ from datetime import timezone
 from typing import Any
 from typing import TypeVar
 
-from azure.devops.connection import Connection
-from azure.devops.v7_1.git import GitClient
-from azure.devops.v7_1.git.models import (
-    GitPullRequest,
-    GitPullRequestSearchCriteria,
-    GitRepository,
-    GitItem,
-    GitVersionDescriptor,
-)
-from msrest.authentication import BasicAuthentication
-
+from azure.devops.connection import Connection  # type: ignore[import-untyped]
+from azure.devops.v7_1.git import GitClient  # type: ignore[import-untyped]
+from azure.devops.v7_1.git.models import GitItem  # type: ignore[import-untyped]
+from azure.devops.v7_1.git.models import GitPullRequest  # type: ignore[import-untyped]
+from azure.devops.v7_1.git.models import GitPullRequestSearchCriteria  # type: ignore[import-untyped]
+from azure.devops.v7_1.git.models import GitRepository  # type: ignore[import-untyped]
+from azure.devops.v7_1.git.models import GitVersionDescriptor  # type: ignore[import-untyped]
+from msrest.authentication import BasicAuthentication  # type: ignore[import-untyped]
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.models import ConnectorCheckpoint
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
 from onyx.utils.logger import setup_logger
 
 T = TypeVar("T")
@@ -254,7 +253,11 @@ def _convert_code_file_to_document(
     )
 
 
-class AzureDevOpsConnector(LoadConnector, PollConnector):
+class AzureDevOpsConnector(
+    LoadConnector,
+    PollConnector,
+    CheckpointedConnector[ConnectorCheckpoint],
+):
     """Connector for indexing Azure DevOps Git repositories and Pull Requests."""
 
     def __init__(
@@ -395,7 +398,9 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
                             try:
                                 content = content_bytes.decode("utf-8")
                             except UnicodeDecodeError:
-                                content = content_bytes.decode("latin-1")
+                                # Skip binary or non-UTF-8 files
+                                logger.warning(f"Skipping non-UTF-8 file: {item_path}")
+                                continue
 
                             # Extract commit date from latest_processed_change
                             commit_date = None
@@ -541,7 +546,7 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: ConnectorCheckpoint,
-    ) -> Iterator[Document | ConnectorFailure]:
+    ) -> CheckpointOutput[ConnectorCheckpoint]:
         """Checkpointed loading interface expected by the test harness.
 
         This implementation maps to the existing polling/load logic. It yields
@@ -568,27 +573,15 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
             )
 
         # Final checkpoint indicates no more data
-        yield ConnectorCheckpoint(has_more=False)
-
-    def load_from_checkpoint_with_perm_sync(
-        self,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
-        checkpoint: ConnectorCheckpoint,
-    ) -> Iterator[Document | ConnectorFailure]:
-        """For now, permission sync is not implemented; behave like load_from_checkpoint."""
-        yield from self.load_from_checkpoint(start, end, checkpoint)
+        return ConnectorCheckpoint(has_more=False)
 
     def build_dummy_checkpoint(self) -> ConnectorCheckpoint:
         """Return an initial checkpoint object for the test harness."""
         return ConnectorCheckpoint(has_more=True)
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> ConnectorCheckpoint:
-        """Simple validator that returns a ConnectorCheckpoint. This can be extended if
-        we store checkpoints with more structure later.
-        """
-        # Best-effort: ignore contents and return a checkpoint with has_more=True
-        return ConnectorCheckpoint(has_more=True)
+        """Validate the checkpoint json and return the checkpoint object."""
+        return ConnectorCheckpoint.model_validate_json(checkpoint_json)
 
 
 if __name__ == "__main__":
