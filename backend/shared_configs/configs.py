@@ -69,14 +69,16 @@ DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true
 LOG_LEVEL = os.environ.get("LOG_LEVEL") or "info"
 
 # Timeout for API-based embedding models
-# NOTE: does not apply for Google VertexAI, since the python client doesn't
+# NOTE: does not apply for Google Gen AI, since the python client doesn't
 # allow us to specify a custom timeout
 API_BASED_EMBEDDING_TIMEOUT = int(os.environ.get("API_BASED_EMBEDDING_TIMEOUT", "600"))
 
-# Local batch size for VertexAI embedding models currently calibrated for item size of 512 tokens
+# Local batch size for Google Gen AI (formerly VertexAI) embedding models currently calibrated for item size of 512 tokens
 # NOTE: increasing this value may lead to API errors due to token limit exhaustion per call.
-VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE = int(
-    os.environ.get("VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", "25")
+GOOGLE_GENAI_EMBEDDING_LOCAL_BATCH_SIZE = int(
+    os.environ.get("GOOGLE_GENAI_EMBEDDING_LOCAL_BATCH_SIZE")
+    or os.environ.get("VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE")
+    or "25"
 )
 
 # Only used for OpenAI

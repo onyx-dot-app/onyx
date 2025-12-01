@@ -176,16 +176,19 @@ ANTHROPIC_VISIBLE_MODEL_NAMES = [
 AZURE_PROVIDER_NAME = "azure"
 
 
-VERTEXAI_PROVIDER_NAME = "vertex_ai"
+# Google Gen AI (formerly Vertex AI) Gemini models
+GOOGLE_GENAI_PROVIDER_NAME = "google_genai"
+# Backwards compatibility for existing provider entries named vertex_ai
+LEGACY_VERTEX_PROVIDER_NAME = "vertex_ai"
 VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
 VERTEX_LOCATION_KWARG = "vertex_location"
-VERTEXAI_DEFAULT_MODEL = "gemini-2.5-flash"
-VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.5-flash-lite"
-VERTEXAI_MODEL_NAMES = [
+GOOGLE_GENAI_DEFAULT_MODEL = "gemini-2.5-flash"
+GOOGLE_GENAI_DEFAULT_FAST_MODEL = "gemini-2.5-flash-lite"
+GOOGLE_GENAI_MODEL_NAMES = [
     # 2.5 pro models
     "gemini-2.5-pro",
-    VERTEXAI_DEFAULT_MODEL,
-    VERTEXAI_DEFAULT_FAST_MODEL,
+    GOOGLE_GENAI_DEFAULT_MODEL,
+    GOOGLE_GENAI_DEFAULT_FAST_MODEL,
     # "gemini-2.5-pro-preview-06-05",
     # "gemini-2.5-pro-preview-05-06",
     # 2.0 flash-lite models
@@ -204,10 +207,24 @@ VERTEXAI_MODEL_NAMES = [
     "claude-opus-4",
     "claude-3-7-sonnet@20250219",
 ]
-VERTEXAI_VISIBLE_MODEL_NAMES = [
-    VERTEXAI_DEFAULT_MODEL,
-    VERTEXAI_DEFAULT_FAST_MODEL,
+GOOGLE_GENAI_VISIBLE_MODEL_NAMES = [
+    GOOGLE_GENAI_DEFAULT_MODEL,
+    GOOGLE_GENAI_DEFAULT_FAST_MODEL,
 ]
+
+
+GOOGLE_GENAI_PROVIDER_ALIASES = {
+    GOOGLE_GENAI_PROVIDER_NAME,
+    LEGACY_VERTEX_PROVIDER_NAME,
+}
+
+
+def _normalize_provider_name(provider_name: str) -> str:
+    return (
+        GOOGLE_GENAI_PROVIDER_NAME
+        if provider_name in GOOGLE_GENAI_PROVIDER_ALIASES
+        else provider_name
+    )
 
 
 def _get_provider_to_models_map() -> dict[str, list[str]]:
@@ -216,7 +233,8 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         OPENAI_PROVIDER_NAME: OPEN_AI_MODEL_NAMES,
         BEDROCK_PROVIDER_NAME: get_bedrock_model_names(),
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
-        VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
+        GOOGLE_GENAI_PROVIDER_NAME: GOOGLE_GENAI_MODEL_NAMES,
+        LEGACY_VERTEX_PROVIDER_NAME: GOOGLE_GENAI_MODEL_NAMES,
         OLLAMA_PROVIDER_NAME: [],
         OPENROUTER_PROVIDER_NAME: [],
     }
@@ -248,7 +266,8 @@ _PROVIDER_TO_VISIBLE_MODELS_MAP = {
     OPENAI_PROVIDER_NAME: OPEN_AI_VISIBLE_MODEL_NAMES,
     BEDROCK_PROVIDER_NAME: [],
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
-    VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
+    GOOGLE_GENAI_PROVIDER_NAME: GOOGLE_GENAI_VISIBLE_MODEL_NAMES,
+    LEGACY_VERTEX_PROVIDER_NAME: GOOGLE_GENAI_VISIBLE_MODEL_NAMES,
     OLLAMA_PROVIDER_NAME: [],
     OPENROUTER_PROVIDER_NAME: [],
 }
@@ -391,14 +410,14 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             default_fast_model=None,
         ),
         WellKnownLLMProviderDescriptor(
-            name=VERTEXAI_PROVIDER_NAME,
-            display_name="Google Cloud Vertex AI",
+            name=GOOGLE_GENAI_PROVIDER_NAME,
+            display_name="Google Gemini (Google Gen AI)",
             title="Gemini",
             api_key_required=False,
             api_base_required=False,
             api_version_required=False,
             model_configurations=fetch_model_configurations_for_provider(
-                VERTEXAI_PROVIDER_NAME
+                GOOGLE_GENAI_PROVIDER_NAME
             ),
             custom_config_keys=[
                 CustomConfigKey(
@@ -412,16 +431,17 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 CustomConfigKey(
                     name=VERTEX_LOCATION_KWARG,
                     display_name="Location",
-                    description="The location of the Vertex AI model. Please refer to the "
-                    "[Vertex AI configuration docs](https://docs.onyx.app/admin/ai_models/google_ai) for all possible values.",
+                    description="The location of the Gemini model. Please refer to the "
+                    "[Google Gen AI configuration docs](https://docs.onyx.app/admin/ai_models/google_ai) "
+                    "for all possible values.",
                     is_required=False,
                     is_secret=False,
                     key_type=CustomConfigKeyType.TEXT_INPUT,
                     default_value="us-east1",
                 ),
             ],
-            default_model=VERTEXAI_DEFAULT_MODEL,
-            default_fast_model=VERTEXAI_DEFAULT_FAST_MODEL,
+            default_model=GOOGLE_GENAI_DEFAULT_MODEL,
+            default_fast_model=GOOGLE_GENAI_DEFAULT_FAST_MODEL,
         ),
         WellKnownLLMProviderDescriptor(
             name=OPENROUTER_PROVIDER_NAME,
@@ -442,7 +462,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
 
 
 def fetch_models_for_provider(provider_name: str) -> list[str]:
-    return _get_provider_to_models_map().get(provider_name, [])
+    normalized_name = _normalize_provider_name(provider_name)
+    return _get_provider_to_models_map().get(normalized_name, [])
 
 
 def fetch_model_names_for_provider_as_set(provider_name: str) -> set[str] | None:
@@ -453,8 +474,9 @@ def fetch_model_names_for_provider_as_set(provider_name: str) -> set[str] | None
 def fetch_visible_model_names_for_provider_as_set(
     provider_name: str,
 ) -> set[str] | None:
+    normalized_name = _normalize_provider_name(provider_name)
     visible_model_names: list[str] | None = _PROVIDER_TO_VISIBLE_MODELS_MAP.get(
-        provider_name
+        normalized_name
     )
     return set(visible_model_names) if visible_model_names else None
 
@@ -465,8 +487,9 @@ def fetch_model_configurations_for_provider(
     # if there are no explicitly listed visible model names,
     # then we won't mark any of them as "visible". This will get taken
     # care of by the logic to make default models visible.
+    normalized_provider_name = _normalize_provider_name(provider_name)
     visible_model_names = (
-        fetch_visible_model_names_for_provider_as_set(provider_name) or set()
+        fetch_visible_model_names_for_provider_as_set(normalized_provider_name) or set()
     )
 
     return [
@@ -476,8 +499,8 @@ def fetch_model_configurations_for_provider(
             max_input_tokens=None,
             supports_image_input=model_supports_image_input(
                 model_name=model_name,
-                model_provider=provider_name,
+                model_provider=normalized_provider_name,
             ),
         )
-        for model_name in fetch_models_for_provider(provider_name)
+        for model_name in fetch_models_for_provider(normalized_provider_name)
     ]

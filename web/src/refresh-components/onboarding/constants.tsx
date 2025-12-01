@@ -97,6 +97,7 @@ export const PROVIDER_ICON_MAP: Record<
   [LLMProviderName.ANTHROPIC]: SvgClaude,
   [LLMProviderName.BEDROCK]: SvgAws,
   [LLMProviderName.AZURE]: AzureIcon,
+  [LLMProviderName.GOOGLE_GENAI]: GeminiIcon,
   [LLMProviderName.VERTEX_AI]: GeminiIcon,
   [LLMProviderName.OPENAI]: SvgOpenai,
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
@@ -156,9 +157,9 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
         "This model will be used by Onyx by default for Ollama.",
     },
   },
-  [LLMProviderName.VERTEX_AI]: {
+  [LLMProviderName.GOOGLE_GENAI]: {
     description:
-      "Connect to Google Cloud Vertex AI and set up your Gemini models.",
+      "Connect to Google Gemini (Google Gen AI) and set up your Gemini models.",
     display_name: "Gemini",
     field_metadata: {
       vertex_credentials: (
@@ -167,7 +168,25 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
           <InlineExternalLink href="https://console.cloud.google.com/projectselector2/iam-admin/serviceaccounts?supportedpurview=project">
             API key
           </InlineExternalLink>
-          {" from Google Cloud Vertex AI to access your models."}
+          {" from Google Cloud to access your models."}
+        </>
+      ),
+      default_model_name:
+        "This model will be used by Onyx by default for Gemini.",
+    },
+  },
+  [LLMProviderName.VERTEX_AI]: {
+    description:
+      "Connect to Google Gemini (formerly Vertex AI) and set up your Gemini models.",
+    display_name: "Gemini",
+    field_metadata: {
+      vertex_credentials: (
+        <>
+          {"Paste your "}
+          <InlineExternalLink href="https://console.cloud.google.com/projectselector2/iam-admin/serviceaccounts?supportedpurview=project">
+            API key
+          </InlineExternalLink>
+          {" from Google Cloud to access your models."}
         </>
       ),
       default_model_name:
@@ -285,6 +304,7 @@ export const PROVIDER_TAB_CONFIG: Record<string, ProviderTabConfig> = {
 };
 
 export const PROVIDER_SKIP_FIELDS: Record<string, string[]> = {
+  [LLMProviderName.GOOGLE_GENAI]: ["vertex_location"],
   [LLMProviderName.VERTEX_AI]: ["vertex_location"],
 };
 
