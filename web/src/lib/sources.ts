@@ -10,6 +10,7 @@ import {
   GithubIcon,
   GitlabIcon,
   BitbucketIcon,
+  AzureDevOpsIcon,
   GlobeIcon,
   GmailIcon,
   GongIcon,
@@ -375,6 +376,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Bitbucket",
     category: SourceCategory.CodeRepository,
     docs: "https://docs.onyx.app/connectors/bitbucket",
+  },
+  azure_devops: {
+    icon: AzureDevOpsIcon,
+    displayName: "Azure DevOps",
+    category: SourceCategory.CodeRepository,
   },
 
   // Others
