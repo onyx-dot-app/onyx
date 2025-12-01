@@ -70,6 +70,9 @@ class Settings(BaseModel):
     # Default Assistant settings
     disable_default_assistant: bool | None = False
 
+    # Show LLM support icons (e.g., image support)
+    show_llm_support_icons: bool | None = True
+
 
 class UserSettings(Settings):
     notifications: list[Notification]

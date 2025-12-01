@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useContext } from "react";
 import {
   Popover,
   PopoverContent,
@@ -8,7 +8,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { getDisplayNameForModel, LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { structureValue } from "@/lib/llm/utils";
+import { structureValue, modelSupportsImageInput } from "@/lib/llm/utils";
+import { ImageOff, Image } from "lucide-react";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/components/user/UserProvider";
@@ -21,6 +23,7 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 export interface LLMPopoverProps {
   llmManager: LlmManager;
   requiresImageGeneration?: boolean;
+  hasUploadedImages?: boolean;
   folded?: boolean;
   onSelect?: (value: string) => void;
   currentModelName?: string;
@@ -29,6 +32,8 @@ export interface LLMPopoverProps {
 
 export default function LLMPopover({
   llmManager,
+  requiresImageGeneration,
+  hasUploadedImages,
   folded,
   onSelect,
   currentModelName,
@@ -39,6 +44,8 @@ export default function LLMPopover({
 
   const [open, setOpen] = useState(false);
   const { user } = useUser();
+  const settings = useContext(SettingsContext);
+  const showSupportIcons = settings?.settings?.show_llm_support_icons ?? true;
   const [localTemperature, setLocalTemperature] = useState(
     llmManager.temperature ?? 0.5
   );
@@ -143,10 +150,25 @@ export default function LLMPopover({
               ]
             : llmOptionsToChooseFrom.map(
                 ({ modelName, provider, name, icon }, index) => {
+                  const supportsVision = modelSupportsImageInput(
+                    llmProviders || [],
+                    modelName
+                  );
+                  const isDisabledForVision =
+                    hasUploadedImages && !supportsVision;
+
+                  if (requiresImageGeneration && !supportsVision) return null;
+
                   return (
                     <LineItem
                       key={index}
                       icon={({ className }) => icon({ size: 16, className })}
+                      disabled={isDisabledForVision}
+                      title={
+                        isDisabledForVision
+                          ? "This model does not support image understanding"
+                          : undefined
+                      }
                       onClick={() => {
                         llmManager.updateCurrentLlm({
                           modelName,
@@ -156,6 +178,13 @@ export default function LLMPopover({
                         onSelect?.(structureValue(name, provider, modelName));
                         setOpen(false);
                       }}
+                      rightChildren={
+                        isDisabledForVision ? (
+                          <ImageOff size={14} className="text-text-500" />
+                        ) : showSupportIcons && supportsVision ? (
+                          <Image size={14} className="text-text-500" />
+                        ) : undefined
+                      }
                     >
                       {getDisplayNameForModel(modelName)}
                     </LineItem>

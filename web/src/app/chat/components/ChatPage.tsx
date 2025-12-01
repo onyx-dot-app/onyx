@@ -68,7 +68,7 @@ import {
   getMaxSelectedDocumentTokens,
 } from "@/app/chat/projects/projectsService";
 import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSessionList";
-import { cn } from "@/lib/utils";
+import { cn, isImageFile } from "@/lib/utils";
 import { Suggestions } from "@/sections/Suggestions";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
 import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
@@ -423,6 +423,14 @@ export default function ChatPage({
   const { showCenteredInput, loadingError, messageHistory } =
     useChatPageLayout();
 
+  const conversationHasImages = useMemo(() => {
+    return messageHistory.some(
+      (msg) =>
+        msg.files &&
+        msg.files.some((file) => isImageFile(file.name || file.id || ""))
+    );
+  }, [messageHistory]);
+
   const clientScrollToBottom = useCallback(
     (fast?: boolean) => {
       waitForScrollRef.current = true;
@@ -457,20 +465,24 @@ export default function ChatPage({
     [updateHasPerformedInitialScroll]
   );
 
-  const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
-    useChatController({
-      filterManager,
-      llmManager,
-      availableAssistants,
-      liveAssistant,
-      existingChatSessionId,
-      selectedDocuments,
-      searchParams,
-      setPopup,
-      clientScrollToBottom,
-      resetInputBar,
-      setSelectedAssistantFromId,
-    });
+  const {
+    onSubmit,
+    stopGenerating,
+    handleMessageSpecificFileUpload,
+    validateImageUpload,
+  } = useChatController({
+    filterManager,
+    llmManager,
+    availableAssistants,
+    liveAssistant,
+    existingChatSessionId,
+    selectedDocuments,
+    searchParams,
+    setPopup,
+    clientScrollToBottom,
+    resetInputBar,
+    setSelectedAssistantFromId,
+  });
 
   const { onMessageSelection, currentSessionFileTokenCount, projectFiles } =
     useChatSessionController({
@@ -845,6 +857,7 @@ export default function ChatPage({
                           hasPerformedInitialScroll={hasPerformedInitialScroll}
                           chatSessionId={chatSessionId}
                           enterpriseSettings={enterpriseSettings}
+                          conversationHasImages={conversationHasImages}
                         />
                       </div>
 
@@ -940,6 +953,8 @@ export default function ChatPage({
                                 onboardingState.currentStep !==
                                   OnboardingStep.Complete
                               }
+                              conversationHasImages={conversationHasImages}
+                              validateImageUpload={validateImageUpload}
                             />
                           </div>
 

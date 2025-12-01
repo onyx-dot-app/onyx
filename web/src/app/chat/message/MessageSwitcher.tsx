@@ -38,7 +38,7 @@ export default function MessageSwitcher({
         icon={SvgChevronLeft}
         onClick={previous}
         tertiary
-        disabled={disableForStreaming}
+        disabled={disableForStreaming || currentPage === 1}
         tooltip={disableForStreaming ? DISABLED_MESSAGE : "Previous"}
       />
 
@@ -58,7 +58,7 @@ export default function MessageSwitcher({
         icon={SvgChevronRight}
         onClick={next}
         tertiary
-        disabled={disableForStreaming}
+        disabled={disableForStreaming || currentPage === totalPages}
         tooltip={disableForStreaming ? DISABLED_MESSAGE : "Next"}
       />
     </div>
