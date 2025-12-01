@@ -140,6 +140,8 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
           <div className="flex flex-col my-1 space-y-2">
             {code && (
               <div className="prose max-w-full">
+                {/* NOTE: note that we need to trim since otherwise there's a huge 
+                "space" at the start of the code block */}
                 <CodeBlock className="language-python" codeText={code.trim()}>
                   <HighlightedPythonCode code={code.trim()} />
                 </CodeBlock>
