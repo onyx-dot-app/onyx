@@ -40,6 +40,8 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.adapter_v1_to_v2 import force_use_tool_to_function_tool_names
+from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (

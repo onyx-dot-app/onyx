@@ -541,14 +541,11 @@ class TestHubSpotConnector:
         mock_api_client = MagicMock()
 
         # Mock the API calls and associated object methods
-        with patch(
-            "onyx.connectors.hubspot.connector.HubSpot"
-        ) as MockHubSpot, patch.object(
-            connector, "_paginated_results"
-        ) as mock_paginated, patch.object(
-            connector, "_get_associated_objects", return_value=[]
-        ), patch.object(
-            connector, "_get_associated_notes", return_value=[]
+        with (
+            patch("onyx.connectors.hubspot.connector.HubSpot") as MockHubSpot,
+            patch.object(connector, "_paginated_results") as mock_paginated,
+            patch.object(connector, "_get_associated_objects", return_value=[]),
+            patch.object(connector, "_get_associated_notes", return_value=[]),
         ):
             MockHubSpot.return_value = mock_api_client
             mock_paginated.return_value = iter([mock_ticket])

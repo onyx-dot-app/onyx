@@ -11,12 +11,14 @@ Requirements:
 """
 
 import asyncio
+import io
 import json
 from unittest.mock import Mock
 from unittest.mock import patch
 
 import pytest
 from agents import RunContextWrapper
+from openpyxl import load_workbook
 from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
@@ -34,6 +36,10 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
 from onyx.tools.tool_implementations.python.python_tool import _python_execution_core
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_result_models import LlmPythonExecutionResult
+
+
+# Apply initialize_file_store fixture to all tests in this module
+pytestmark = pytest.mark.usefixtures("initialize_file_store")
 
 
 @pytest.fixture
@@ -674,15 +680,14 @@ print(f"Excel file created with {len(df)} rows")
     assert file_content[:4] == b"PK\x03\x04"
     assert len(file_content) > 1000  # Excel file should be substantial
 
-    # Verify we can parse the Excel file with pandas
-    import io
-    import pandas as pd
-
+    # Verify we can parse the Excel file with openpyxl directly
     file_io = io.BytesIO(file_content)
-    df = pd.read_excel(file_io, sheet_name="Financial Data")
+    workbook = load_workbook(file_io)
+    sheet = workbook["Financial Data"]
 
-    # Verify data structure
-    assert len(df) == 5
+    # Verify data structure - get headers from first row
+    first_row = list(sheet.iter_rows(min_row=1, max_row=1, values_only=True))[0]
+    headers = list(first_row) if first_row else []
     expected_columns = [
         "Segment",
         "Country",
@@ -697,13 +702,28 @@ print(f"Excel file created with {len(df)} rows")
         "Profit",
         "Month",
     ]
-    assert list(df.columns) == expected_columns
+    assert headers == expected_columns
+
+    # Verify row count (excluding header)
+    assert sheet.max_row == 6  # 1 header + 5 data rows
+
+    # Read data rows
+    rows = []
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        rows.append(row)
+
+    assert len(rows) == 5
 
     # Verify some sample data
-    assert "Government" in df["Segment"].values
-    assert "Canada" in df["Country"].values
-    assert df["Units Sold"].sum() > 8000  # Total units sold
-    assert df["Profit"].sum() > 155000  # Total profit
+    segments = [row[0] for row in rows]
+    countries = [row[1] for row in rows]
+    units_sold = [float(row[3]) if row[3] is not None else 0.0 for row in rows]  # type: ignore
+    profits = [float(row[10]) if row[10] is not None else 0.0 for row in rows]  # type: ignore
+
+    assert "Government" in segments
+    assert "Canada" in countries
+    assert sum(units_sold) > 8000  # Total units sold
+    assert sum(profits) > 155000  # Total profit
 
 
 def test_python_execution_with_excel_file_input(
@@ -739,9 +759,19 @@ import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from openpyxl import load_workbook
 
-# Read the uploaded Excel file
-df = pd.read_excel('financial-sample.xlsx')
+# Read the uploaded Excel file using openpyxl directly
+workbook = load_workbook('financial-sample.xlsx')
+sheet = workbook.active
+
+# Convert to pandas DataFrame
+data = []
+headers = [cell.value for cell in sheet[1]]
+for row in sheet.iter_rows(min_row=2, values_only=True):
+    data.append(row)
+
+df = pd.DataFrame(data, columns=headers)
 
 print(f"Loaded Excel file with {len(df)} rows and {len(df.columns)} columns")
 print(f"\\nColumns: {', '.join(df.columns.tolist())}")
@@ -860,17 +890,23 @@ print(f"Summary report saved as financial_summary.xlsx")
     xlsx_content = xlsx_io.read()
     assert xlsx_content[:4] == b"PK\x03\x04"  # ZIP/Excel magic bytes
 
-    # Parse and verify the summary Excel file
-    import io
-    import pandas as pd
-
+    # Parse and verify the summary Excel file using openpyxl directly
     xlsx_io_obj = io.BytesIO(xlsx_content)
-    summary_df = pd.read_excel(xlsx_io_obj, sheet_name="Summary")
+    workbook = load_workbook(xlsx_io_obj)
+    sheet = workbook["Summary"]
 
-    # Verify summary contains expected metrics
-    assert "Metric" in summary_df.columns
-    assert "Value" in summary_df.columns
-    metrics = summary_df["Metric"].tolist()
+    # Read headers from first row
+    first_row = list(sheet.iter_rows(min_row=1, max_row=1, values_only=True))[0]
+    headers = list(first_row) if first_row else []
+    assert "Metric" in headers
+    assert "Value" in headers
+
+    # Read all rows and extract metrics
+    metrics = []
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        if row[0]:  # Metric column
+            metrics.append(row[0])
+
     assert "Total Sales" in metrics
     assert "Total Profit" in metrics
     assert "Profit Margin %" in metrics

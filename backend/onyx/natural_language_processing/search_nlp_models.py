@@ -278,7 +278,8 @@ class CloudEmbedding:
 
         service_account_info = json.loads(self.api_key)
         credentials = service_account.Credentials.from_service_account_info(
-            service_account_info
+            service_account_info,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
         )
         project_id = service_account_info["project_id"]
         location = (

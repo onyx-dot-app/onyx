@@ -446,9 +446,12 @@ def test_custom_tool_csv_response_with_file_ids(
     mock_request.return_value = mock_response
 
     # Mock the file storage and UUID generation
-    with patch(
-        "onyx.tools.tool_implementations.custom.custom_tool.get_default_file_store"
-    ) as mock_file_store, patch("uuid.uuid4") as mock_uuid:
+    with (
+        patch(
+            "onyx.tools.tool_implementations.custom.custom_tool.get_default_file_store"
+        ) as mock_file_store,
+        patch("uuid.uuid4") as mock_uuid,
+    ):
 
         # Mock UUID to return a predictable ID
         mock_uuid.return_value = uuid.UUID("12345678-1234-5678-9abc-123456789012")
