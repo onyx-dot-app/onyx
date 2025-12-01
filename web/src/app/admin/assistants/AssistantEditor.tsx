@@ -66,7 +66,7 @@ import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
 import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
-import { generateIdenticon } from "@/refresh-components/AgentIcon";
+import { CustomAgentIcon } from "@/refresh-components/AgentIcon";
 import { BackButton } from "@/components/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
@@ -693,29 +693,15 @@ export default function AssistantEditor({
             values.llm_model_version_override || defaultModelName || ""
           );
 
-          const iconElement = (() => {
-            if (uploadedImagePreview) {
-              return (
-                <img
-                  src={uploadedImagePreview}
-                  alt="Uploaded agent icon"
-                  className="w-12 h-12 rounded-full object-cover"
-                />
-              );
-            }
+          const src =
+            uploadedImagePreview ??
+            (existingPersona?.uploaded_image_id && !removePersonaImage
+              ? existingPersona?.uploaded_image_id
+              : undefined);
 
-            if (existingPersona?.uploaded_image_id && !removePersonaImage) {
-              return (
-                <img
-                  src={buildImgUrl(existingPersona?.uploaded_image_id)}
-                  alt="Uploaded agent icon"
-                  className="w-12 h-12 rounded-full object-cover"
-                />
-              );
-            }
-
-            return generateIdenticon((values.icon_shape || 0).toString(), 36);
-          })();
+          const iconElement = (
+            <CustomAgentIcon name={values.name} src={src} size={48} />
+          );
 
           return (
             <>
@@ -751,6 +737,7 @@ export default function AssistantEditor({
 
               <Form className="w-full text-text-950 assistant-editor">
                 <FormErrorFocus />
+
                 {/* Refresh starter messages when name or description changes */}
                 <p className="text-base font-normal text-2xl">
                   {existingPersona ? (
@@ -761,6 +748,7 @@ export default function AssistantEditor({
                     "Create an Agent"
                   )}
                 </p>
+
                 <div className="max-w-4xl w-full">
                   <Separator />
                   <div className="flex gap-x-2 items-center">
@@ -890,44 +878,38 @@ export default function AssistantEditor({
 
                 <div className="w-full max-w-4xl">
                   <div className="flex flex-col">
-                    <>
-                      <Separator />
-                      <div className="flex gap-x-2 py-2 justify-start">
-                        <div>
-                          <div className="flex items-start gap-x-2">
-                            <p className="block font-medium text-sm">
-                              Knowledge
-                            </p>
-                            <div className="flex items-center">
-                              <SimpleTooltip
-                                tooltip="To use Knowledge, you need to have at least one Connector configured. You can still upload user files to the agent below."
-                                side="top"
-                                align="center"
-                                disabled={connectorsExist}
-                              >
-                                <div
-                                  className={`${
-                                    !connectorsExist || !searchTool
-                                      ? "opacity-70 cursor-not-allowed"
-                                      : ""
-                                  }`}
-                                >
-                                  <UnlabeledSwitchField
-                                    onCheckedChange={() =>
-                                      toggleToolInValues(searchTool?.id || -1)
-                                    }
-                                    name={`enabled_tools_map.${
-                                      searchTool?.id || -1
-                                    }`}
-                                    disabled={!connectorsExist || !searchTool}
-                                  />
-                                </div>
-                              </SimpleTooltip>
+                    <Separator />
+                    <div className="flex gap-x-2 py-2 justify-start">
+                      <div className="flex items-start gap-x-2">
+                        <p className="block font-medium text-sm">Knowledge</p>
+                        <div className="flex items-center">
+                          <SimpleTooltip
+                            tooltip="To use Knowledge, you need to have at least one Connector configured. You can still upload user files to the agent below."
+                            side="top"
+                            align="center"
+                            disabled={connectorsExist}
+                          >
+                            <div
+                              className={`${
+                                !connectorsExist || !searchTool
+                                  ? "opacity-70 cursor-not-allowed"
+                                  : ""
+                              }`}
+                            >
+                              <UnlabeledSwitchField
+                                onCheckedChange={() =>
+                                  toggleToolInValues(searchTool?.id || -1)
+                                }
+                                name={`enabled_tools_map.${
+                                  searchTool?.id || -1
+                                }`}
+                                disabled={!connectorsExist || !searchTool}
+                              />
                             </div>
-                          </div>
+                          </SimpleTooltip>
                         </div>
                       </div>
-                    </>
+                    </div>
 
                     {((searchTool && values.enabled_tools_map[searchTool.id]) ||
                       !connectorsExist) && (
@@ -1263,8 +1245,8 @@ export default function AssistantEditor({
                     </div>
                   </div>
                 </div>
-                <Separator className="max-w-4xl mt-0" />
 
+                <Separator className="max-w-4xl mt-0" />
                 <div className="-mt-2">
                   <div className="flex gap-x-2 mb-2 items-center">
                     <div className="block font-medium text-sm">
@@ -1318,6 +1300,7 @@ export default function AssistantEditor({
                   showAdvancedOptions={showAdvancedOptions}
                   setShowAdvancedOptions={setShowAdvancedOptions}
                 />
+
                 {showAdvancedOptions && (
                   <>
                     <div className="max-w-4xl w-full">
@@ -1644,8 +1627,8 @@ export default function AssistantEditor({
                         </div>
                       </div>
                     </div>
-                    <Separator />
 
+                    <Separator />
                     <div className="flex flex-col gap-y-4">
                       <div className="flex flex-col gap-y-4">
                         <h3 className="font-medium text-sm">
@@ -1684,8 +1667,8 @@ export default function AssistantEditor({
                         </div>
                       </div>
                     </div>
-                    <Separator />
 
+                    <Separator />
                     <BooleanFormField
                       small
                       removeIndent
@@ -1695,19 +1678,17 @@ export default function AssistantEditor({
                     />
 
                     <Separator />
-
                     <TaskPromptField />
                   </>
                 )}
 
                 <div className="mt-12 w-full flex justify-between items-center">
-                  <div>
-                    {existingPersona && (
-                      <Button danger onClick={openDeleteModal}>
-                        Delete
-                      </Button>
-                    )}
-                  </div>
+                  {existingPersona && (
+                    <Button danger onClick={openDeleteModal}>
+                      Delete
+                    </Button>
+                  )}
+
                   <div className="flex gap-x-2 items-center">
                     <Button
                       disabled={
