@@ -461,7 +461,8 @@ def get_minimal_persona_snapshots_paginated(
 ) -> list[MinimalPersonaSnapshot]:
     """Gets a single page of minimal persona snapshots with ordering.
 
-    Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC).
+    Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC
+    distance from 0).
 
     Args:
         user: The user to filter personas for. If None and auth is disabled,
@@ -513,7 +514,8 @@ def get_persona_snapshots_paginated(
 ) -> list[PersonaSnapshot]:
     """Gets a single page of persona snapshots (admin view) with ordering.
 
-    Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC).
+    Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC
+    distance from 0).
 
     This function returns PersonaSnapshot objects which contain more detailed
     information than MinimalPersonaSnapshot, used for admin views.
@@ -569,6 +571,9 @@ def _get_paginated_persona_query(
 ) -> Select[tuple[Persona]]:
     """Builds a paginated query on personas ordered on display_priority and id.
 
+    Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC
+    distance from 0) to match the frontend personaComparator() logic.
+
     Args:
         user: The user to filter personas for. If None and auth is disabled,
             assumes the user is an admin. Otherwise, if None shows only public
@@ -591,10 +596,13 @@ def _get_paginated_persona_query(
         include_slack_bot_personas=include_slack_bot_personas,
         include_deleted=include_deleted,
     )
+    # Add the abs(id) expression to the SELECT list (required for DISTINCT +
+    # ORDER BY).
+    stmt = stmt.add_columns(func.abs(Persona.id).label("abs_id"))
     # Apply ordering.
     stmt = stmt.order_by(
         Persona.display_priority.asc().nullslast(),
-        Persona.id.asc(),
+        func.abs(Persona.id).asc(),
     )
     # Apply pagination.
     stmt = stmt.offset(page_num * page_size).limit(page_size)
