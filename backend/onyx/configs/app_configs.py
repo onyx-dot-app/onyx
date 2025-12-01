@@ -631,7 +631,7 @@ ENABLE_MULTIPASS_INDEXING = (
 # Enable contextual retrieval
 ENABLE_CONTEXTUAL_RAG = os.environ.get("ENABLE_CONTEXTUAL_RAG", "").lower() == "true"
 
-SHOW_LLM_SUPPORT_ICONS = os.getenv("SHOW_LLM_SUPPORT_ICONS", "false").lower() != "false"
+SHOW_LLM_SUPPORT_ICONS = os.getenv("SHOW_LLM_SUPPORT_ICONS", "false").lower() == "true"
 
 DEFAULT_CONTEXTUAL_RAG_LLM_NAME = "gpt-4o-mini"
 DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER = "DevEnvPresetOpenAI"
