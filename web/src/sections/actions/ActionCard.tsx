@@ -7,9 +7,9 @@ import MCPActions from "@/sections/actions/MCPActions";
 import ToolsSection from "@/sections/actions/ToolsSection";
 import ToolsList from "@/sections/actions/ToolsList";
 import { cn } from "@/lib/utils";
-import { MCPActionStatus } from "@/sections/actions/types";
+import { MCPActionStatus } from "@/lib/tools/types";
 import { useServerTools } from "@/sections/actions/useServerTools";
-import { MCPServerStatus, MCPServerWithStatus } from "@/sections/actions/types";
+import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { KeyedMutator } from "swr";
 

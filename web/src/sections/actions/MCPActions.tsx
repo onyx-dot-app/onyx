@@ -1,5 +1,5 @@
 "use client";
-import { MCPActionStatus } from "@/sections/actions/types";
+import { MCPActionStatus } from "@/lib/tools/types";
 import React from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgUnplug from "@/icons/unplug";

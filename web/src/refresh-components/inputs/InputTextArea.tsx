@@ -49,9 +49,13 @@ export interface InputTextAreaProps
   internal?: boolean;
   error?: boolean;
   disabled?: boolean;
+  action?: React.ReactNode;
 }
 const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
-  ({ main, internal, error, disabled, className, rows = 4, ...props }, ref) => {
+  (
+    { main, internal, error, disabled, action, className, rows = 4, ...props },
+    ref
+  ) => {
     const variant = main
       ? "main"
       : internal
@@ -62,6 +66,8 @@ const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
             ? "disabled"
             : "main";
 
+    const paddingClasses = action ? "pl-0.5 pr-16 py-0.5" : "p-0.5";
+
     return (
       <div
         className={cn(
@@ -70,12 +76,18 @@ const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
           className
         )}
       >
+        {action ? (
+          <div className="absolute top-2 right-2 z-[1] flex items-center gap-2">
+            {action}
+          </div>
+        ) : null}
         <textarea
           ref={ref}
           disabled={disabled}
           className={cn(
             innerClasses[variant],
-            "w-full min-h-[3rem] bg-transparent p-0.5 focus:outline-none resize-y"
+            "w-full min-h-[3rem] bg-transparent focus:outline-none resize-y",
+            paddingClasses
           )}
           rows={rows}
           {...props}

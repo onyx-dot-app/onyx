@@ -5,7 +5,7 @@ import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import SvgUnplug from "@/icons/unplug";
-import { MCPServerWithStatus } from "@/sections/actions/types";
+import { MCPServerWithStatus } from "@/lib/tools/types";
 
 interface DisconnectMCPModalProps {
   isOpen: boolean;

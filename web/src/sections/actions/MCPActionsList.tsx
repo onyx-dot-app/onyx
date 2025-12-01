@@ -1,11 +1,11 @@
 "use client";
 import ActionCard from "@/sections/actions/ActionCard";
-import { getMCPServerIcon } from "@/lib/mcpUtils";
+import { getMCPServerIcon } from "@/lib/tools/mcpUtils";
 import {
   MCPActionStatus,
   MCPServerStatus,
   MCPServerWithStatus,
-} from "@/sections/actions/types";
+} from "@/lib/tools/types";
 import MCPAuthenticationModal from "@/sections/actions/modals/MCPAuthenticationModal";
 import DisconnectMCPModal from "@/sections/actions/modals/DisconnectMCPModal";
 import { useMCPActions } from "@/sections/actions/MCPActionsContext";

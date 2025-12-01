@@ -46,3 +46,14 @@ export interface MCPTool {
   isAvailable: boolean;
   isEnabled: boolean;
 }
+
+export interface MethodSpec {
+  /* Defines a single method that is part of a custom tool. Each method maps to a single
+  action that the LLM can choose to take. */
+  name: string;
+  summary: string;
+  path: string;
+  method: string;
+  spec: Record<string, any>;
+  custom_headers: { key: string; value: string }[];
+}
