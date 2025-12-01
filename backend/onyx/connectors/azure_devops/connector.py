@@ -227,6 +227,7 @@ def _convert_code_file_to_document(
     project: str,
     repo_name: str,
     default_branch: str,
+    commit_date: datetime | None = None,
 ) -> Document:
     """Convert a code file to an Onyx Document."""
     item_path = item.path
@@ -235,12 +236,15 @@ def _convert_code_file_to_document(
     file_url = f"https://dev.azure.com/{organization}/{project}/_git/{repo_name}?path={item_path}&version=GB{default_branch}"
     file_name = file_path.split("/")[-1] if "/" in file_path else file_path
 
+    # Use commit date if available, otherwise fall back to current time
+    doc_date = commit_date if commit_date else datetime.now(timezone.utc)
+
     return Document(
         id=f"{organization}/{project}/{repo_name}/{file_path}",
         sections=[TextSection(link=file_url, text=content)],
         source=DocumentSource.AZURE_DEVOPS,
         semantic_identifier=file_name,
-        doc_updated_at=datetime.now(timezone.utc),
+        doc_updated_at=doc_date,
         metadata={
             "object_type": "CodeFile",
             "file_path": file_path,
@@ -357,6 +361,7 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
                     scope_path=current_path if current_path else None,
                     recursion_level="OneLevel",
                     version_descriptor=version_desc,
+                    latest_processed_change=True,
                 )
 
                 if not items:
@@ -392,6 +397,13 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
                             except UnicodeDecodeError:
                                 content = content_bytes.decode("latin-1")
 
+                            # Extract commit date from latest_processed_change
+                            commit_date = None
+                            if item.latest_processed_change:
+                                committer = item.latest_processed_change.committer
+                                if committer and committer.date:
+                                    commit_date = committer.date
+
                             yield _convert_code_file_to_document(
                                 item=item,
                                 content=content,
@@ -399,6 +411,7 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
                                 project=project_name,
                                 repo_name=repo.name,
                                 default_branch=default_branch,
+                                commit_date=commit_date,
                             )
                         except Exception as e:
                             logger.warning(f"Error fetching file {item_path}: {e}")
@@ -555,7 +568,7 @@ class AzureDevOpsConnector(LoadConnector, PollConnector):
             )
 
         # Final checkpoint indicates no more data
-        return ConnectorCheckpoint(has_more=False)  # type: ignore[return-value]
+        yield ConnectorCheckpoint(has_more=False)
 
     def load_from_checkpoint_with_perm_sync(
         self,

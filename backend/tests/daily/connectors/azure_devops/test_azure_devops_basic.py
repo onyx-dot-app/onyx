@@ -157,8 +157,8 @@ def test_azure_devops_connector_basic(
         assert isinstance(section.link, str)
         assert isinstance(section.text, str)
 
-        # Verify Azure DevOps-specific URL
-        assert "dev.azure.com" in doc.id or "visualstudio.com" in doc.id
+        # Verify Azure DevOps-specific URL in section link
+        assert "dev.azure.com" in section.link or "visualstudio.com" in section.link
 
 
 def test_azure_devops_code_files(
@@ -179,7 +179,7 @@ def test_azure_devops_code_files(
         assert doc.metadata is not None
         assert doc.metadata.get("object_type") == "CodeFile"
         assert "file_path" in doc.metadata
-        assert "repository" in doc.metadata
+        assert "repo" in doc.metadata
 
         # Verify sections contain code content
         assert len(doc.sections) >= 1
@@ -207,10 +207,11 @@ def test_azure_devops_pull_requests(
 
         # Verify PR-specific metadata
         assert "id" in doc.metadata
-        assert "title" in doc.metadata
         assert "status" in doc.metadata
-        assert "repository" in doc.metadata
-        assert "created_by" in doc.metadata
+        assert "repo" in doc.metadata
+
+        # Title is in semantic_identifier, creator in primary_owners
+        assert doc.semantic_identifier is not None
 
         # Verify sections
         assert len(doc.sections) >= 1
