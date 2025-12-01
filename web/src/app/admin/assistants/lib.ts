@@ -1,5 +1,8 @@
-import { LLMProviderView } from "../configuration/llm/interfaces";
-import { MinimalPersonaSnapshot, Persona, StarterMessage } from "./interfaces";
+import {
+  MinimalPersonaSnapshot,
+  Persona,
+  StarterMessage,
+} from "@/app/admin/assistants/interfaces";
 
 interface PersonaUpsertRequest {
   name: string;
@@ -51,40 +54,6 @@ export interface PersonaUpsertParameters {
   label_ids: number[] | null;
   user_file_ids: string[];
 }
-
-export const createPersonaLabel = (name: string) => {
-  return fetch("/api/persona/labels", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ name }),
-  });
-};
-
-export const deletePersonaLabel = (labelId: number) => {
-  return fetch(`/api/admin/persona/label/${labelId}`, {
-    method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-};
-
-export const updatePersonaLabel = (
-  id: number,
-  name: string
-): Promise<Response> => {
-  return fetch(`/api/admin/persona/label/${id}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      label_name: name,
-    }),
-  });
-};
 
 function buildPersonaUpsertRequest(
   creationRequest: PersonaUpsertParameters,
@@ -283,34 +252,3 @@ export const togglePersonaVisibility = async (
   });
   return response;
 };
-
-export const togglePersonaPublicStatus = async (
-  personaId: number,
-  isPublic: boolean
-) => {
-  const response = await fetch(`/api/persona/${personaId}/public`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      is_public: isPublic,
-    }),
-  });
-  return response;
-};
-
-export function checkPersonaRequiresImageGeneration(persona: Persona) {
-  for (const tool of persona.tools) {
-    if (tool.name === "ImageGenerationTool") {
-      return true;
-    }
-  }
-  return false;
-}
-
-export function providersContainImageGeneratingSupport(
-  providers: LLMProviderView[]
-) {
-  return providers.some((provider) => provider.provider === "openai");
-}
