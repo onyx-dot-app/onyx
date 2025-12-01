@@ -178,6 +178,7 @@ class DocumentSource(str, Enum):
     PRODUCTBOARD = "productboard"
     FILE = "file"
     NOTION = "notion"
+    CODA = "coda"
     ZULIP = "zulip"
     LINEAR = "linear"
     HUBSPOT = "hubspot"
@@ -589,6 +590,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.FILE: "files",
     DocumentSource.NOTION: "notion data - a workspace that combines note-taking, \
 project management, and collaboration tools into a single, customizable platform",
+    DocumentSource.CODA: "coda - collaborative workspace with docs, tables, and pages",
     DocumentSource.ZULIP: "zulip data",
     DocumentSource.LINEAR: "linear data - project management tool, including tickets etc.",
     DocumentSource.HUBSPOT: "hubspot data - CRM and marketing automation data",

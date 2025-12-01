@@ -72,6 +72,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.notion.connector",
         class_name="NotionConnector",
     ),
+    DocumentSource.CODA: ConnectorMapping(
+        module_path="onyx.connectors.coda.connector",
+        class_name="CodaConnector",
+    ),
     DocumentSource.ZULIP: ConnectorMapping(
         module_path="onyx.connectors.zulip.connector",
         class_name="ZulipConnector",
