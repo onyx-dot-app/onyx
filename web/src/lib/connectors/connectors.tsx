@@ -284,6 +284,54 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  azure_devops: {
+    description: "Configure Azure DevOps connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Azure DevOps organization name:",
+        label: "Organization",
+        name: "organization",
+        optional: false,
+        description: "The name of your Azure DevOps organization (e.g., 'myorg' from dev.azure.com/myorg)",
+      },
+      {
+        type: "text",
+        query: "Enter the project name:",
+        label: "Project",
+        name: "project",
+        optional: true,
+        description: "Specific project to index. Leave empty to index all accessible projects.",
+      },
+      {
+        type: "text",
+        query: "Enter repository names:",
+        label: "Repositories",
+        name: "repositories",
+        optional: true,
+        description: "Comma-separated repository names (e.g., repo1,repo2). Leave empty to index all repositories in the project.",
+      },
+      {
+        type: "checkbox",
+        query: "Include code files?",
+        label: "Include Code Files",
+        name: "include_code_files",
+        description: "Index source code files from repositories",
+        optional: true,
+        default: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include pull requests?",
+        label: "Include Pull Requests",
+        name: "include_prs",
+        description: "Index pull requests from repositories",
+        optional: true,
+        default: true,
+      },
+    ],
+    advanced_values: [],
+  },
   gitlab: {
     description: "Configure GitLab connector",
     values: [
@@ -1609,6 +1657,8 @@ const buildInitialValuesForFields = (
         acc[field.name] = field.default || [];
       } else if (field.type === "checkbox") {
         acc[field.name] = field.default ?? false;
+      } else if (field.type === "text") {
+        acc[field.name] = field.default ?? "";
       } else if (field.default !== undefined) {
         acc[field.name] = field.default;
       }

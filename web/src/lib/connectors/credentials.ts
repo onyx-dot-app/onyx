@@ -62,6 +62,10 @@ export interface BitbucketCredentialJson {
   bitbucket_api_token: string;
 }
 
+export interface AzureDevOpsCredentialJson {
+  azure_devops_pat: string;
+}
+
 export interface BookstackCredentialJson {
   bookstack_base_url: string;
   bookstack_api_token_id: string;
@@ -283,6 +287,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
     bitbucket_email: "",
     bitbucket_api_token: "",
   } as BitbucketCredentialJson,
+  azure_devops: {
+    azure_devops_pat: "",
+  } as AzureDevOpsCredentialJson,
   slack: { slack_bot_token: "" } as SlackCredentialJson,
   bookstack: {
     bookstack_base_url: "",
@@ -636,6 +643,9 @@ export const credentialDisplayNames: Record<string, string> = {
   // Bitbucket
   bitbucket_email: "Bitbucket Account Email",
   bitbucket_api_token: "Bitbucket API Token",
+
+  // Azure DevOps
+  azure_devops_pat: "Azure DevOps Personal Access Token",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {

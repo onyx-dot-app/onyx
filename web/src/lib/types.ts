@@ -503,6 +503,7 @@ export enum ValidSources {
   Imap = "imap",
   Bitbucket = "bitbucket",
   TestRail = "testrail",
+  AzureDevOps = "azure_devops",
 
   // Federated Connectors
   FederatedSlack = "federated_slack",
