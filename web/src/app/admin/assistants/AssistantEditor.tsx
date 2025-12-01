@@ -161,29 +161,11 @@ export default function AssistantEditor({
   const { labels, refreshLabels, createLabel, deleteLabel } = useLabels();
   const settings = useContext(SettingsContext);
 
-  const colorOptions = [
-    "#FF6FBF",
-    "#6FB1FF",
-    "#B76FFF",
-    "#FFB56F",
-    "#6FFF8D",
-    "#FF6F6F",
-    "#6FFFFF",
-  ];
-
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const userFilesModal = useCreateModal();
 
-  // both `defautIconColor` and `defaultIconShape` are state so that they
-  // persist across formik reformatting
-  const [defautIconColor, _setDeafultIconColor] = useState(
-    colorOptions[Math.floor(Math.random() * colorOptions.length)]
-  );
-  const [defaultIconShape] = useState<any>(
-    () => generateRandomIconShape().encodedGrid
-  );
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [removePersonaImage, setRemovePersonaImage] = useState(false);
@@ -269,8 +251,6 @@ export default function AssistantEditor({
       ? existingPersona.starter_messages
       : [{ message: "", name: "" }],
     enabled_tools_map: enabledToolsMap,
-    icon_color: existingPersona?.icon_color ?? defautIconColor,
-    icon_shape: existingPersona?.icon_shape ?? defaultIconShape,
     uploaded_image: null,
     labels: existingPersona?.labels ?? null,
 
@@ -489,8 +469,6 @@ export default function AssistantEditor({
               })
             ),
             search_start_date: Yup.date().nullable(),
-            icon_color: Yup.string(),
-            icon_shape: Yup.number(),
             uploaded_image: Yup.mixed().nullable(),
             // EE Only
             label_ids: Yup.array().of(Yup.number()),
@@ -575,7 +553,6 @@ export default function AssistantEditor({
 
           const submissionData: PersonaUpsertParameters = {
             ...values,
-            icon_color: values.icon_color ?? null,
             starter_messages: starterMessages,
             groups: groups,
             users: values.is_public
