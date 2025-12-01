@@ -20,6 +20,8 @@ def setup_langfuse_if_creds_available() -> None:
     from openinference.instrumentation.openai_agents import OpenAIAgentsInstrumentor
 
     OpenAIAgentsInstrumentor().instrument()
+    # This is poorly named -- it actually is a get or create client for langfuse.
+    # Langfuse with silently fail without this function call.
     get_client()
     # TODO: this is how the tracing processor will look once we migrate over to new framework
     # config = TraceConfig()
