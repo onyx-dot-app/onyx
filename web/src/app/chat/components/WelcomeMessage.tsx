@@ -44,7 +44,7 @@ export default function WelcomeMessage({ liveAssistant }: WelcomeMessageProps) {
           className="flex flex-col items-center gap-3 w-full max-w-[50rem]"
         >
           <div className="flex flex-row items-center gap-3">
-            <AgentAvatar agent={liveAssistant} />
+            <AgentAvatar agent={liveAssistant} size={32} />
             <Text headingH2>{liveAssistant.name}</Text>
           </div>
           {liveAssistant.description && (

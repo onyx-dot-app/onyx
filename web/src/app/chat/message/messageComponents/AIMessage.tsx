@@ -383,7 +383,7 @@ export default function AIMessage({
         <div className="mx-auto w-[90%] max-w-message-max">
           <div className="lg:mr-12 mobile:ml-0 md:ml-8">
             <div className="flex items-start">
-              <AgentAvatar agent={chatState.assistant} />
+              <AgentAvatar agent={chatState.assistant} size={24} />
               <div className="w-full">
                 <div className="max-w-message-max break-words">
                   <div className="w-full desktop:ml-4">
