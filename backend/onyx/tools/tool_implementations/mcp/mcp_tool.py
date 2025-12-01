@@ -223,7 +223,7 @@ Return ONLY a valid JSON object with the extracted arguments. If no arguments ar
                 response=CustomToolCallSummary(
                     tool_name=self._name,
                     response_type="json",
-                    tool_result=json.dumps({"tool_result": tool_result}),
+                    tool_result=json.dumps({"tool_result": tool_result}, ensure_ascii=False),
                 ),
             )
 
