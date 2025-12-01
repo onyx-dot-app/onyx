@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.chat_configs import DOC_TIME_DECAY
-from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import TextSection
 from onyx.context.search.federated.models import SlackMessage
@@ -25,6 +24,7 @@ from onyx.context.search.federated.slack_search_utils import (
 )
 from onyx.context.search.federated.slack_search_utils import is_recency_query
 from onyx.context.search.federated.slack_search_utils import should_include_message
+from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import SearchQuery
 from onyx.db.document import DocumentSource
@@ -44,6 +44,7 @@ from onyx.server.federated.models import FederatedConnectorDetail
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
+from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
 logger = setup_logger()
 
@@ -616,7 +617,7 @@ def convert_slack_score(slack_score: float) -> float:
 
 @log_function_time(print_only=True)
 def slack_retrieval(
-    query: SearchQuery,
+    query: ChunkIndexRequest,
     access_token: str,
     db_session: Session,
     connector: FederatedConnectorDetail | None = None,
