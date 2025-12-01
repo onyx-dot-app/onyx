@@ -57,6 +57,7 @@ class StreamPacketData(TypedDict, total=False):
     stack_trace: str
     obj: StreamPacketObj
     ind: int
+    turn_index: int  # Used when bypass_translation=True
 
 
 class ChatSessionManager:
@@ -186,7 +187,14 @@ class ChatSessionManager:
             elif (
                 (data_obj := data.get("obj"))
                 and (packet_type := data_obj.get("type"))
-                and (ind := data.get("ind")) is not None
+                and (
+                    ind := (
+                        data.get("ind")
+                        if data.get("ind") is not None
+                        else data.get("turn_index")
+                    )
+                )
+                is not None
             ):
                 packet_type_str = str(packet_type)
                 if packet_type_str == StreamingType.MESSAGE_START.value:
@@ -224,9 +232,19 @@ class ChatSessionManager:
                 elif packet_type_str == StreamingType.SEARCH_TOOL_QUERIES_DELTA.value:
                     ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
                 elif packet_type_str == StreamingType.SEARCH_TOOL_DOCUMENTS_DELTA.value:
-                    ind_to_tool_use[ind].documents.extend(
-                        [SavedSearchDoc(**doc) for doc in data_obj.get("documents", [])]
-                    )
+                    docs = []
+                    for doc in data_obj.get("documents", []):
+                        if "db_doc_id" in doc:
+                            # Already a SavedSearchDoc format
+                            docs.append(SavedSearchDoc(**doc))
+                        else:
+                            # SearchDoc format (from bypass_translation=True)
+                            # Convert to SavedSearchDoc using from_search_doc
+                            search_doc = SearchDoc(**doc)
+                            docs.append(
+                                SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
+                            )
+                    ind_to_tool_use[ind].documents.extend(docs)
         # If there's an error, assistant_message_id might not be present
         if not assistant_message_id and not error:
             raise ValueError("Assistant message id not found")
