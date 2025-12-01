@@ -55,6 +55,14 @@ class CodaDoc(BaseModel):
     published: Optional[dict[str, Any]] = None
 
 
+class CodaPageReference(BaseModel):
+    id: str
+    type: str
+    href: str
+    browserLink: str
+    name: str
+
+
 class CodaPage(BaseModel):
     """Represents a Coda Page object"""
 
@@ -70,8 +78,8 @@ class CodaPage(BaseModel):
     isHidden: bool
     createdAt: str
     updatedAt: str
-    parent: Optional[dict[str, Any]] = None
-    children: list[dict[str, Any]] = []
+    parent: CodaPageReference | None = None
+    children: list[CodaPageReference]
 
 
 class CodaConnector(LoadConnector, PollConnector):
@@ -112,7 +120,12 @@ class CodaConnector(LoadConnector, PollConnector):
         try:
             res.raise_for_status()
         except Exception as e:
-            logger.exception(f"Error fetching docs: {res.json()}")
+            try:
+                error_body = res.json()
+            except Exception:
+                error_body = res.text
+
+            logger.exception(f"Error fetching docs: {error_body}")
             raise e
         return res.json()
 
@@ -132,10 +145,16 @@ class CodaConnector(LoadConnector, PollConnector):
             params=params,
             timeout=_CODA_CALL_TIMEOUT,
         )
+
         try:
             res.raise_for_status()
         except Exception as e:
-            logger.exception(f"Error fetching pages for doc '{doc_id}': {res.json()}")
+            try:
+                error_body = res.json()
+            except Exception:
+                error_body = res.text
+
+            logger.exception(f"Error fetching pages for doc '{doc_id}': {error_body}")
             raise e
         return res.json()
 
@@ -206,8 +225,21 @@ class CodaConnector(LoadConnector, PollConnector):
         logger.warning(f"Export timed out for page '{page_id}'")
         return ""
 
+    def _get_page_path(self, page: CodaPage, page_map: dict[str, CodaPage]) -> str:
+        """Constructs the breadcrumb path for a page."""
+        path_parts = [page.name]
+        current_page = page
+        while current_page.parent:
+            parent_id = current_page.parent.id
+            if not parent_id or parent_id not in page_map:
+                break
+            current_page = page_map[parent_id]
+            path_parts.append(current_page.name)
+
+        return " / ".join(reversed(path_parts))
+
     def _read_pages(
-        self, doc: CodaDoc, pages: list[CodaPage]
+        self, doc: CodaDoc, pages: list[CodaPage], page_map: dict[str, CodaPage]
     ) -> Generator[Document, None, None]:
         """Reads pages and generates Documents"""
         for page in pages:
@@ -232,6 +264,20 @@ class CodaConnector(LoadConnector, PollConnector):
             # Build the text content
             text = f"{page_title}\n\n{content}" if content else page_title
 
+            # Build metadata
+            metadata: dict[str, str | list[str]] = {
+                "doc_name": doc.name,
+                "doc_id": doc.id,
+                "page_id": page.id,
+                "path": self._get_page_path(page, page_map),
+            }
+
+            if page.parent:
+                metadata["parent_page_id"] = page.parent.id
+
+            if page.icon:
+                metadata["icon"] = str(page.icon)
+
             sections: list[TextSection | ImageSection] = [
                 TextSection(
                     link=page.browserLink,
@@ -247,11 +293,7 @@ class CodaConnector(LoadConnector, PollConnector):
                 doc_updated_at=datetime.fromisoformat(
                     page.updatedAt.replace("Z", "+00:00")
                 ).astimezone(timezone.utc),
-                metadata={
-                    "doc_name": doc.name,
-                    "doc_id": doc.id,
-                    "page_id": page.id,
-                },
+                metadata=metadata,
             )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -280,23 +322,26 @@ class CodaConnector(LoadConnector, PollConnector):
             for doc in docs:
                 logger.info(f"Processing doc: {doc.name}")
 
-                # Fetch all pages for this doc
-                page_page_token = None
+                # Fetch all pages for this doc to build hierarchy
+                all_pages: list[CodaPage] = []
+                next_page_token = None
                 while True:
-                    pages_response = self._fetch_pages(doc.id, page_page_token)
-                    pages = [
-                        CodaPage(**page) for page in pages_response.get("items", [])
-                    ]
-
-                    # Generate documents from pages
-                    yield from batch_generator(
-                        self._read_pages(doc, pages), self.batch_size
+                    pages_response = self._fetch_pages(doc.id, next_page_token)
+                    all_pages.extend(
+                        [CodaPage(**page) for page in pages_response.get("items", [])]
                     )
 
-                    # Check for more pages
-                    page_page_token = pages_response.get("nextPageToken")
-                    if not page_page_token:
+                    next_page_token = pages_response.get("nextPageToken")
+                    if not next_page_token:
                         break
+
+                # Build map for hierarchy
+                page_map = {p.id: p for p in all_pages}
+
+                # Generate documents from pages
+                yield from batch_generator(
+                    self._read_pages(doc, all_pages, page_map), self.batch_size
+                )
 
             # Check for more docs
             page_token = docs_response.get("nextPageToken")
@@ -328,33 +373,36 @@ class CodaConnector(LoadConnector, PollConnector):
 
                 logger.info(f"Processing updated doc: {doc.name}")
 
-                # Fetch all pages for this doc
+                # Fetch all pages for this doc to build hierarchy
+                # We need all pages even if we only index some, to build the full path
+                all_pages: list[CodaPage] = []
                 page_page_token = None
                 while True:
                     pages_response = self._fetch_pages(doc.id, page_page_token)
-                    pages = [
-                        CodaPage(**page) for page in pages_response.get("items", [])
-                    ]
+                    all_pages.extend(
+                        [CodaPage(**page) for page in pages_response.get("items", [])]
+                    )
 
-                    # Filter pages by update time
-                    updated_pages = []
-                    for page in pages:
-                        page_updated_at = datetime.fromisoformat(
-                            page.updatedAt.replace("Z", "+00:00")
-                        ).timestamp()
-                        if start < page_updated_at <= end:
-                            updated_pages.append(page)
-
-                    if updated_pages:
-                        # Generate documents from updated pages
-                        yield from batch_generator(
-                            self._read_pages(doc, updated_pages), self.batch_size
-                        )
-
-                    # Check for more pages
                     page_page_token = pages_response.get("nextPageToken")
                     if not page_page_token:
                         break
+
+                page_map = {p.id: p for p in all_pages}
+
+                # Filter pages by update time
+                updated_pages = []
+                for page in all_pages:
+                    page_updated_at = datetime.fromisoformat(
+                        page.updatedAt.replace("Z", "+00:00")
+                    ).timestamp()
+                    if start < page_updated_at <= end:
+                        updated_pages.append(page)
+
+                if updated_pages:
+                    # Generate documents from updated pages
+                    yield from batch_generator(
+                        self._read_pages(doc, updated_pages, page_map), self.batch_size
+                    )
 
             # Check for more docs
             page_token = docs_response.get("nextPageToken")
