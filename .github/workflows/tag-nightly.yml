@@ -11,6 +11,7 @@ permissions:
 jobs:
   create-and-push-tag:
     runs-on: ubuntu-slim
+    timeout-minutes: 45
 
     steps:
       # actions using GITHUB_TOKEN cannot trigger another workflow, but we do want this to trigger docker pushes

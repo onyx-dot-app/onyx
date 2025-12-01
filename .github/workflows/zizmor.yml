@@ -12,6 +12,7 @@ jobs:
   zizmor:
     name: zizmor
     runs-on: ubuntu-slim
+    timeout-minutes: 45
     permissions:
       security-events: write # needed for SARIF uploads
     steps:

@@ -306,7 +306,7 @@ def _apply_pruning(
             # less than 75 tokens are available to try and avoid this situation
             # from occurring in the first place
             if final_doc_content_length <= 0:
-                logger.error(
+                logger.debug(
                     f"Final section ({sections[final_section_ind].center_chunk.semantic_identifier}) content "
                     "length is less than 0. Removing this section from the final prompt."
                 )
