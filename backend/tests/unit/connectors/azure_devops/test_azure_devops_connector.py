@@ -5,9 +5,7 @@ actual Azure DevOps credentials or network access.
 """
 
 from datetime import datetime
-from datetime import timezone
 from typing import Any
-from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
@@ -16,7 +14,9 @@ import pytest
 class MockGitRepository:
     """Mock Azure DevOps Git Repository."""
 
-    def __init__(self, id: str, name: str, web_url: str, default_branch: str = "refs/heads/main"):
+    def __init__(
+        self, id: str, name: str, web_url: str, default_branch: str = "refs/heads/main"
+    ):
         self.id = id
         self.name = name
         self.web_url = web_url
@@ -37,7 +37,9 @@ class MockIdentityRef:
 
     def __init__(self, display_name: str, unique_name: str = ""):
         self.display_name = display_name
-        self.unique_name = unique_name or f"{display_name.lower().replace(' ', '.')}@example.com"
+        self.unique_name = (
+            unique_name or f"{display_name.lower().replace(' ', '.')}@example.com"
+        )
 
 
 class MockGitPullRequest:
@@ -155,7 +157,9 @@ class TestAzureDevOpsDocumentConversion:
         )
 
     @pytest.fixture
-    def mock_pull_request(self, mock_repository: MockGitRepository) -> MockGitPullRequest:
+    def mock_pull_request(
+        self, mock_repository: MockGitRepository
+    ) -> MockGitPullRequest:
         """Create a mock pull request."""
         return MockGitPullRequest(
             pull_request_id=42,
@@ -175,7 +179,9 @@ class TestAzureDevOpsDocumentConversion:
             git_object_type="blob",
         )
 
-    def test_convert_pr_to_document(self, mock_pull_request: MockGitPullRequest) -> None:
+    def test_convert_pr_to_document(
+        self, mock_pull_request: MockGitPullRequest
+    ) -> None:
         """Test converting a PR to a Document."""
         from onyx.configs.constants import DocumentSource
         from onyx.connectors.azure_devops.connector import _convert_pr_to_document
@@ -200,7 +206,9 @@ class TestAzureDevOpsDocumentConversion:
     def test_convert_code_file_to_document(self, mock_git_item: MockGitItem) -> None:
         """Test converting a code file to a Document."""
         from onyx.configs.constants import DocumentSource
-        from onyx.connectors.azure_devops.connector import _convert_code_file_to_document
+        from onyx.connectors.azure_devops.connector import (
+            _convert_code_file_to_document,
+        )
 
         file_content = "def hello():\n    print('Hello, World!')"
 
@@ -221,6 +229,34 @@ class TestAzureDevOpsDocumentConversion:
         assert doc.metadata["repo"] == "test-repo"
         assert len(doc.sections) == 1
         assert "def hello():" in doc.sections[0].text
+
+    def test_convert_code_file_with_commit_date(
+        self, mock_git_item: MockGitItem
+    ) -> None:
+        """Test converting a code file with explicit commit date."""
+        from datetime import timezone
+
+        from onyx.configs.constants import DocumentSource
+        from onyx.connectors.azure_devops.connector import (
+            _convert_code_file_to_document,
+        )
+
+        file_content = "# Test file"
+        commit_date = datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+
+        doc = _convert_code_file_to_document(
+            item=mock_git_item,
+            content=file_content,
+            organization="test-org",
+            project="test-project",
+            repo_name="test-repo",
+            default_branch="main",
+            commit_date=commit_date,
+        )
+
+        assert doc is not None
+        assert doc.source == DocumentSource.AZURE_DEVOPS
+        assert doc.doc_updated_at == commit_date
 
 
 class TestAzureDevOpsFileFiltering:

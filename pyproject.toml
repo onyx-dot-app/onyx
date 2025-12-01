@@ -32,6 +32,7 @@ backend = [
     "alembic==1.10.4",
     "asyncpg==0.30.0",
     "atlassian-python-api==3.41.16",
+    # azure-devops: Beta is the only available version (since 2019). This is Microsoft's official SDK.
     "azure-devops==7.1.0b4",
     "beautifulsoup4==4.12.3",
     "boto3==1.39.11",
