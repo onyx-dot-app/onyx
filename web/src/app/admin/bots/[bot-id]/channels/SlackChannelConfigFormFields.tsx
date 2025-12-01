@@ -28,7 +28,7 @@ import {
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
-import { AgentAvatar } from "@/refresh-components/avatars/AgentAvatar";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Badge } from "@/components/ui/badge";
 import {
   Accordion,

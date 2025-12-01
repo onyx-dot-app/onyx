@@ -13,7 +13,7 @@ import { CSS } from "@dnd-kit/utilities";
 import SvgX from "@/icons/x";
 import useAppFocus from "@/hooks/useAppFocus";
 import useIsMounted from "@/hooks/useIsMounted";
-import { AgentAvatar } from "@/refresh-components/avatars/AgentAvatar";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 
 interface SortableItemProps {
   id: number;

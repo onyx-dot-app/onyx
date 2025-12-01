@@ -3,7 +3,7 @@
 import { Logo } from "@/components/logo/Logo";
 import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import { cn } from "@/lib/utils";
-import { AgentAvatar } from "@/refresh-components/avatars/AgentAvatar";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useMemo } from "react";

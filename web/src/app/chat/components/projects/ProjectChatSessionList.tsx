@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
-import { AgentAvatar } from "@/refresh-components/avatars/AgentAvatar";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import SvgBubbleText from "@/icons/bubble-text";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { formatRelativeTime } from "./project_utils";

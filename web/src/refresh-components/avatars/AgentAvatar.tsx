@@ -12,7 +12,7 @@ export interface AgentIconProps {
   size?: number;
 }
 
-export function AgentAvatar({ agent, ...props }: AgentIconProps) {
+export default function AgentAvatar({ agent, ...props }: AgentIconProps) {
   const settings = useSettingsContext();
 
   if (agent.id === DEFAULT_ASSISTANT_ID) {
