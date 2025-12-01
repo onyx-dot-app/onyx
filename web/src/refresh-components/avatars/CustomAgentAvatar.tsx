@@ -57,7 +57,7 @@ export default function CustomAgentAvatar({
         alt={name}
         src={src}
         loading="lazy"
-        className="rounded-full object-cover object-center"
+        className="aspect-square rounded-full object-cover object-center"
         width={size}
         height={size}
       />
