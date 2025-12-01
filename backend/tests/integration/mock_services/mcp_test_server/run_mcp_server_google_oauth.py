@@ -49,7 +49,7 @@ class GoogleOAuthTokenVerifier(TokenVerifier):
     def __init__(
         self,
         required_scopes: list[str] | None = None,
-        resource_server_url: str | None = None,
+        base_url: str | None = None,
     ):
         """
         Initialize the Google OAuth token verifier.
@@ -57,10 +57,10 @@ class GoogleOAuthTokenVerifier(TokenVerifier):
         Args:
             required_scopes: Optional list of scopes that must be present in the token.
                             Google tokens have scopes like 'openid', 'email', 'profile'.
-            resource_server_url: URL of this resource server (for RFC 8707)
+            base_url: URL of this resource server (for RFC 8707)
         """
         super().__init__(
-            resource_server_url=resource_server_url,
+            base_url=base_url,
             required_scopes=required_scopes,
         )
         self._http_client: httpx.AsyncClient | None = None

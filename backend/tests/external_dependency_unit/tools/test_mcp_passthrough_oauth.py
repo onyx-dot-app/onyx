@@ -13,7 +13,6 @@ This test:
 All external HTTP calls are mocked, but Postgres and Redis are running.
 """
 
-import json
 from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
@@ -21,13 +20,8 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import CitationConfig
-from onyx.chat.models import DocumentPruningConfig
-from onyx.chat.models import PromptConfig
-from onyx.context.search.enums import OptionalSearchSetting
+from onyx.chat.emitter import get_default_emitter
 from onyx.context.search.enums import RecencyBiasSetting
-from onyx.context.search.models import RetrievalDetails
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
@@ -38,6 +32,7 @@ from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llms
 from onyx.llm.interfaces import LLM
+from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
@@ -150,28 +145,15 @@ class TestMCPPassThroughOAuth:
         llm, fast_llm = _get_test_llms()
 
         # Construct tools
-        prompt_config = PromptConfig(
-            default_behavior_system_prompt="Test",
-            custom_instructions=None,
-            reminder="Test",
-            datetime_aware=False,
-        )
-        search_tool_config = SearchToolConfig(
-            answer_style_config=AnswerStyleConfig(
-                citation_config=CitationConfig(all_docs_useful=False)
-            ),
-            document_pruning_config=DocumentPruningConfig(),
-            retrieval_options=RetrievalDetails(),
-        )
+        search_tool_config = SearchToolConfig()
 
         tool_dict = construct_tools(
             persona=persona,
-            prompt_config=prompt_config,
             db_session=db_session,
+            emitter=get_default_emitter(),
             user=user,
             llm=llm,
             fast_llm=fast_llm,
-            run_search_setting=OptionalSearchSetting.ALWAYS,
             search_tool_config=search_tool_config,
         )
 
@@ -229,22 +211,14 @@ class TestMCPPassThroughOAuth:
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
         llm, fast_llm = _get_test_llms()
 
-        # Construct tools
-        prompt_config = PromptConfig(
-            default_behavior_system_prompt="Test",
-            custom_instructions=None,
-            reminder="Test",
-            datetime_aware=False,
-        )
-
         tool_dict = construct_tools(
             persona=persona,
-            prompt_config=prompt_config,
             db_session=db_session,
+            emitter=get_default_emitter(),
             user=user,
             llm=llm,
             fast_llm=fast_llm,
-            run_search_setting=OptionalSearchSetting.ALWAYS,
+            search_tool_config=SearchToolConfig(),
         )
 
         # Verify MCP tool was constructed
@@ -313,24 +287,15 @@ class TestMCPPassThroughOAuth:
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
         llm, fast_llm = _get_test_llms()
 
-        # Construct tools
-        prompt_config = PromptConfig(
-            default_behavior_system_prompt="Test",
-            custom_instructions=None,
-            reminder="Test",
-            datetime_aware=False,
-        )
-
         tool_dict = construct_tools(
             persona=persona,
-            prompt_config=prompt_config,
             db_session=db_session,
+            emitter=get_default_emitter(),
             user=user,
             llm=llm,
             fast_llm=fast_llm,
-            run_search_setting=OptionalSearchSetting.ALWAYS,
+            search_tool_config=SearchToolConfig(),
         )
-
         # Verify MCP tool was constructed
         assert mcp_tool_db.id in tool_dict
         constructed_tools = tool_dict[mcp_tool_db.id]
@@ -398,22 +363,14 @@ class TestMCPPassThroughOAuth:
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
         llm, fast_llm = _get_test_llms()
 
-        # Construct tools
-        prompt_config = PromptConfig(
-            default_behavior_system_prompt="Test",
-            custom_instructions=None,
-            reminder="Test",
-            datetime_aware=False,
-        )
-
         tool_dict = construct_tools(
             persona=persona,
-            prompt_config=prompt_config,
             db_session=db_session,
+            emitter=get_default_emitter(),
             user=user,
             llm=llm,
             fast_llm=fast_llm,
-            run_search_setting=OptionalSearchSetting.ALWAYS,
+            search_tool_config=SearchToolConfig(),
         )
 
         # Get the constructed MCPTool
@@ -440,14 +397,11 @@ class TestMCPPassThroughOAuth:
             side_effect=mock_call_mcp_tool,
         ):
             # Run the tool
-            responses = list(mcp_tool.run(input="test"))
-            assert len(responses) == 1
-            print(responses[0].response)
-            print(responses[0].response.tool_result)
-            assert (
-                json.loads(responses[0].response.tool_result)["tool_result"]
-                == mocked_response
-            )
+            response = mcp_tool.run(turn_index=0, override_kwargs=None, input="test")
+            print(response.rich_response)
+            assert isinstance(response.rich_response, CustomToolCallSummary)
+            print(response.rich_response.tool_result)
+            assert response.rich_response.tool_result == mocked_response
 
         # Verify Authorization header was set with the user's OAuth token
         assert "Authorization" in captured_headers
@@ -513,23 +467,15 @@ class TestMCPPassThroughOAuth:
         llm, fast_llm = _get_test_llms()
 
         # Construct tools
-        prompt_config = PromptConfig(
-            default_behavior_system_prompt="Test",
-            custom_instructions=None,
-            reminder="Test",
-            datetime_aware=False,
-        )
-
         tool_dict = construct_tools(
             persona=persona,
-            prompt_config=prompt_config,
             db_session=db_session,
+            emitter=get_default_emitter(),
             user=user,
             llm=llm,
             fast_llm=fast_llm,
-            run_search_setting=OptionalSearchSetting.ALWAYS,
+            search_tool_config=SearchToolConfig(),
         )
-
         # Verify MCP tool was constructed
         assert mcp_tool_db.id in tool_dict
         constructed_tools = tool_dict[mcp_tool_db.id]
@@ -605,21 +551,14 @@ class TestMCPPassThroughOAuth:
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
         llm, fast_llm = _get_test_llms()
 
-        prompt_config = PromptConfig(
-            default_behavior_system_prompt="Test",
-            custom_instructions=None,
-            reminder="Test",
-            datetime_aware=False,
-        )
-
         tool_dict = construct_tools(
             persona=persona,
-            prompt_config=prompt_config,
             db_session=db_session,
+            emitter=get_default_emitter(),
             user=user,
             llm=llm,
             fast_llm=fast_llm,
-            run_search_setting=OptionalSearchSetting.ALWAYS,
+            search_tool_config=SearchToolConfig(),
         )
 
         mcp_tool = tool_dict[mcp_tool_db.id][0]
