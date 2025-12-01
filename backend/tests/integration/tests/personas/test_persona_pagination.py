@@ -90,22 +90,29 @@ def test_persona_pagination_ordering(reset: None, admin_user: DATestUser) -> Non
     """Test ordering - display_priority ASC nulls last, then ID ASC."""
     # Preconditions
     # Create personas with specific display_priority values.
-    # NOTE: We can't easily set display_priority via PersonaManager.create,
-    # so we'll verify the ordering of personas we create from id.
     persona_a = PersonaManager.create(
         name="Persona A",
-        description="Priority will be null",
+        description="This should be second",
         user_performing_action=admin_user,
+        display_priority=2,
     )
     persona_b = PersonaManager.create(
         name="Persona B",
-        description="Priority will be null",
+        description="This should be first",
         user_performing_action=admin_user,
+        display_priority=1,
     )
     persona_c = PersonaManager.create(
         name="Persona C",
-        description="Priority will be null",
+        description="This should be third",
         user_performing_action=admin_user,
+        display_priority=3,
+    )
+    persona_d = PersonaManager.create(
+        name="Persona D",
+        description="This should be fourth",
+        user_performing_action=admin_user,
+        display_priority=3,  # Note the same prio as above, should sort by id
     )
 
     # Under test
@@ -113,14 +120,19 @@ def test_persona_pagination_ordering(reset: None, admin_user: DATestUser) -> Non
 
     # Postconditions
     # Find our personas in the results.
-    our_persona_ids = {persona_a.id, persona_b.id, persona_c.id}
-    our_personas_in_results = [p for p in page_0["items"] if p["id"] in our_persona_ids]
-    # Verify they appear in ID ascending order (since all have null priority).
-    assert len(our_personas_in_results) == 3
-    ids_in_order = [p["id"] for p in our_personas_in_results]
-    assert ids_in_order == sorted(
-        ids_in_order
-    ), "Personas should be sorted by ID when priority is null."
+    our_expected_ordered_persona_ids = [
+        persona_b.id,
+        persona_a.id,
+        persona_c.id,
+        persona_d.id,
+    ]
+    our_personas_in_results = [
+        p for p in page_0["items"] if p["id"] in our_expected_ordered_persona_ids
+    ]
+    assert len(our_personas_in_results) == 4
+    # Verify ordering.
+    for i in range(len(our_expected_ordered_persona_ids)):
+        assert our_expected_ordered_persona_ids[i] == our_personas_in_results[i]["id"]
 
 
 def test_persona_pagination_admin_endpoint(reset: None, admin_user: DATestUser) -> None:
