@@ -30,7 +30,6 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.tools.models import ToolCallFinalResult
 
 
 if TYPE_CHECKING:
@@ -244,7 +243,6 @@ class ChatMessageDetail(BaseModel):
     latest_child_message: int | None = None
     message: str
     reasoning_tokens: str | None = None
-    tool_call: ToolCallFinalResult | None = None
     message_type: MessageType
     context_docs: RetrievalDocs | None = None
     # Dict mapping citation number to document_id

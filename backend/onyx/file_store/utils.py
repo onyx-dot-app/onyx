@@ -63,7 +63,6 @@ def store_user_file_plaintext(user_file_id: UUID, plaintext_content: str) -> boo
 
 
 def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
-    # TODO this needs a second look
     status = "not_loaded"
 
     user_file = db_session.query(UserFile).filter(UserFile.id == file_id).first()

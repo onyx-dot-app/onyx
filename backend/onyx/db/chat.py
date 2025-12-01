@@ -929,7 +929,6 @@ def translate_db_message_to_chat_message_detail(
         latest_child_message=chat_message.latest_child_message_id,
         message=chat_message.message,
         reasoning_tokens=chat_message.reasoning_tokens,
-        tool_call=None,  # TODO
         message_type=chat_message.message_type,
         context_docs=get_retrieval_docs_from_search_docs(
             chat_message.search_docs, remove_doc_content=remove_doc_content
@@ -942,39 +941,6 @@ def translate_db_message_to_chat_message_detail(
     )
 
     return chat_msg_detail
-
-
-# def log_agent_metrics(
-#     db_session: Session,
-#     user_id: UUID | None,
-#     persona_id: int | None,  # Can be none if temporary persona is used
-#     agent_type: str,
-#     start_time: datetime | None,
-#     agent_metrics: CombinedAgentMetrics,
-# ) -> AgentSearchMetrics:
-#     agent_timings = agent_metrics.timings
-#     agent_base_metrics = agent_metrics.base_metrics
-#     agent_refined_metrics = agent_metrics.refined_metrics
-#     agent_additional_metrics = agent_metrics.additional_metrics
-
-#     agent_metric_tracking = AgentSearchMetrics(
-#         user_id=user_id,
-#         persona_id=persona_id,
-#         agent_type=agent_type,
-#         start_time=start_time,
-#         base_duration_s=agent_timings.base_duration_s,
-#         full_duration_s=agent_timings.full_duration_s,
-#         base_metrics=vars(agent_base_metrics) if agent_base_metrics else None,
-#         refined_metrics=vars(agent_refined_metrics) if agent_refined_metrics else None,
-#         all_metrics=(
-#             vars(agent_additional_metrics) if agent_additional_metrics else None
-#         ),
-#     )
-
-#     db_session.add(agent_metric_tracking)
-#     db_session.flush()
-
-#     return agent_metric_tracking
 
 
 def update_chat_session_updated_at_timestamp(

@@ -498,7 +498,6 @@ def search_chunks(
         )
 
     parallel_search_results = run_functions_tuples_in_parallel(run_queries)
-    # TODO revisit this one, does this make sense?
     top_chunks = combine_retrieval_results(parallel_search_results)
 
     if not top_chunks:
