@@ -1,7 +1,3 @@
-# TODO: Figure out a way to persist information is robust to cancellation,
-# modular so easily testable in unit tests and evals [likely injecting some higher
-# level session manager and span sink], potentially has some robustness off the critical path,
-# and promotes clean separation of concerns.
 import json
 
 from sqlalchemy.orm import Session

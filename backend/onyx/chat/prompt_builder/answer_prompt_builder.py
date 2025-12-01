@@ -35,6 +35,7 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.timing import log_function_time
@@ -144,8 +145,6 @@ def build_system_prompt(
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
     """
-    base_system_prompt = DEFAULT_SYSTEM_PROMPT  # TODO remove this
-
     # See https://simonwillison.net/tags/markdown/ for context on why this is needed
     # for OpenAI reasoning models to have correct markdown generation
     if open_ai_formatting_enabled:
@@ -196,8 +195,7 @@ def build_system_prompt(
 
         has_web_search = any(isinstance(tool, WebSearchTool) for tool in tools)
         has_internal_search = any(isinstance(tool, SearchTool) for tool in tools)
-        # TODO: This needs to be refactored out as a separate tool
-        has_open_urls = has_web_search
+        has_open_urls = any(isinstance(tool, OpenURLTool) for tool in tools)
         has_generate_image = any(
             isinstance(tool, ImageGenerationTool) for tool in tools
         )

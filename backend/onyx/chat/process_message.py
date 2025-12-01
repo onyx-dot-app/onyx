@@ -2,23 +2,17 @@ import re
 import time
 import traceback
 from collections.abc import Callable
-from collections.abc import Generator
 from collections.abc import Iterator
 from typing import Protocol
 from uuid import UUID
 
-from agents import Model
-from agents import ModelSettings
-from redis.client import Redis
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 from onyx.chat.chat_milestones import process_multi_assistant_milestone
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_state import run_chat_llm_with_state_containers
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.chat_utils import create_chat_history_chain
-from onyx.chat.chat_utils import create_temporary_persona
 from onyx.chat.chat_utils import get_custom_agent_prompt
 from onyx.chat.chat_utils import load_all_chat_files
 from onyx.chat.emitter import get_default_emitter
@@ -32,7 +26,6 @@ from onyx.chat.models import LlmDoc
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import MessageSpecificCitations
 from onyx.chat.models import ProjectFileMetadata
-from onyx.chat.models import PromptConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import StreamingError
 from onyx.chat.prompt_builder.answer_prompt_builder import calculate_reserved_tokens
@@ -40,8 +33,6 @@ from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.temp_translation import translate_llm_loop_packets
-from onyx.chat.turn import fast_chat_turn
-from onyx.chat.turn.models import ChatTurnDependencies
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.constants import DEFAULT_PERSONA_ID
@@ -56,11 +47,9 @@ from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
-from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
-from onyx.db.persona import get_persona_by_id
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
@@ -319,37 +308,6 @@ def _translate_citations(
     return MessageSpecificCitations(citation_map=citation_to_saved_doc_id_map)
 
 
-def _get_persona_for_chat_session(
-    new_msg_req: CreateChatMessageRequest,
-    user: User | None,
-    db_session: Session,
-    default_persona: Persona,
-) -> Persona:
-    if new_msg_req.alternate_assistant_id is not None:
-        # Allows users to specify a temporary persona (assistant) in the chat session
-        # this takes highest priority since it's user specified
-        persona = get_persona_by_id(
-            new_msg_req.alternate_assistant_id,
-            user=user,
-            db_session=db_session,
-            is_for_edit=False,
-        )
-    elif new_msg_req.persona_override_config:
-        # Certain endpoints allow users to specify arbitrary persona settings
-        # this should never conflict with the alternate_assistant_id
-        persona = create_temporary_persona(
-            db_session=db_session,
-            persona_config=new_msg_req.persona_override_config,
-            user=user,
-        )
-    else:
-        persona = default_persona
-
-    if not persona:
-        raise RuntimeError("No persona specified or found for chat session")
-    return persona
-
-
 def _initialize_chat_session(
     message_text: str,
     files: list[FileDescriptor],
@@ -581,8 +539,6 @@ def stream_chat_message_objects(
             tools.extend(tool_list)
 
         # TODO Once summarization is done, we don't need to load all the files from the beginning anymore.
-
-        # TODO There is likely a more efficient/standard way to load the files here.
         # load all files needed for this chat chain in memory
         files = load_all_chat_files(chat_history, db_session)
 
@@ -596,7 +552,6 @@ def stream_chat_message_objects(
             message_type=MessageType.ASSISTANT,
         )
 
-        # TODO this may not be needed by the frontend anymore, look into removing potentially
         yield MessageResponseIDInfo(
             user_message_id=user_message.id,
             reserved_assistant_message_id=assistant_response.id,
@@ -736,52 +691,6 @@ def stream_chat_message_objects(
 
         db_session.rollback()
         return
-
-
-def _fast_message_stream(
-    messages: list[AgentSDKMessage],
-    tools: list[Tool],
-    db_session: Session,
-    redis_client: Redis,
-    chat_session_id: UUID,
-    reserved_message_id: int,
-    prompt_config: PromptConfig,
-    llm_model: Model,
-    llm: LLM,  # TODO remove this duplication nonsense
-    model_settings: ModelSettings,
-    user_or_none: User | None,
-) -> Generator[Packet, None, None]:
-    # TODO: clean up this jank
-    # is_responses_api = isinstance(llm_model, OpenAIResponsesModel)
-    # prompt_builder = answer.graph_inputs.prompt_builder
-    # primary_llm = answer.graph_tooling.primary_llm
-    # if prompt_builder and primary_llm:
-    #     _reserve_prompt_tokens_for_agent_overhead(
-    #         prompt_builder, primary_llm, tools, prompt_config
-    #     )
-    # messages = base_messages_to_agent_sdk_msgs(
-    #     answer.graph_inputs.prompt_builder.build(), is_responses_api=is_responses_api
-    # )
-    emitter = get_default_emitter()
-    return fast_chat_turn.fast_chat_turn(
-        messages=messages,
-        # TODO: Maybe we can use some DI framework here?
-        dependencies=ChatTurnDependencies(
-            llm_model=llm_model,
-            model_settings=model_settings,
-            llm=llm,
-            tools=tools,
-            db_session=db_session,
-            redis_client=redis_client,
-            emitter=emitter,
-            user_or_none=user_or_none,
-            prompt_config=prompt_config,
-        ),
-        chat_session_id=chat_session_id,
-        message_id=reserved_message_id,
-        prompt_config=prompt_config,
-        force_use_tool=None,
-    )
 
 
 @log_generator_function_time()

@@ -601,6 +601,7 @@ def load_all_chat_files(
     chat_messages: list[ChatMessage],
     db_session: Session,
 ) -> list[ChatLoadedFile]:
+    # TODO There is likely a more efficient/standard way to load the files here.
     file_descriptors_for_history: list[FileDescriptor] = []
     for chat_message in chat_messages:
         if chat_message.files:
