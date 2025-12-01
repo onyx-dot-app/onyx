@@ -728,7 +728,7 @@ def run_llm_loop(
     llm: LLM,
     tokenizer_func: Callable[[str], list[int]],
     db_session: Session,
-    force_use_tool_name: str | None = None,
+    forced_tool_id: int | None = None,
 ) -> None:
     # Fix some LiteLLM issues,
     from onyx.llm.litellm_singleton.config import (
@@ -781,12 +781,13 @@ def run_llm_loop(
 
     for llm_cycle_count in range(MAX_LLM_CYCLES):
 
-        if force_use_tool_name:
-            final_tools = [tool for tool in tools if tool.name == force_use_tool_name]
+        if forced_tool_id:
+            # Needs to be just the single one because the "required" currently doesn't have a specified tool, just a binary
+            final_tools = [tool for tool in tools if tool.id == forced_tool_id]
             if not final_tools:
-                raise ValueError(f"Tool {force_use_tool_name} not found in tools")
+                raise ValueError(f"Tool {forced_tool_id} not found in tools")
             tool_choice = "required"
-            force_use_tool_name = None
+            forced_tool_id = None
         elif llm_cycle_count == MAX_LLM_CYCLES - 1 or ran_image_gen:
             # Last cycle, no tools allowed, just answer!
             tool_choice = "none"

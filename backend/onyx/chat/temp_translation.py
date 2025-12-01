@@ -47,15 +47,12 @@ def translate_llm_loop_packets(
         - SearchTool: search_tool_start → internal_search_tool_start
         - SearchTool: Combine queries + documents → internal_search_tool_delta
         - ReasoningDone → reasoning_end (kept as separate packet in old format)
-        - CitationInfo → Accumulate and emit as CitationStart + CitationDelta
+        - CitationInfo → Emitted immediately as citation_info packets for real-time rendering
         - Add SectionEnd packets after tool completions
     """
     # Track search tool state
     search_tool_active = False
     # search_tool_turn_index: int | None = None
-
-    # Track citations to batch them (emitted AFTER message with different ind)
-    accumulated_citations: list[dict[str, Any]] = []
 
     # Track the last seen turn_index for sections
     last_turn_index = 0
@@ -184,15 +181,16 @@ def translate_llm_loop_packets(
             }
             continue
 
-        # Accumulate CitationInfo packets (emitted individually in new backend, batched in old)
+        # Emit CitationInfo packets immediately for real-time citation rendering
         if isinstance(obj, CitationInfo):
-            accumulated_citations.append(
-                {
-                    "citation_num": obj.citation_number,
+            yield {
+                "ind": turn_index,
+                "obj": {
+                    "type": "citation_info",
+                    "citation_number": obj.citation_number,
                     "document_id": obj.document_id,
-                }
-            )
-            # Don't yield anything yet - citations are batched at the end
+                },
+            }
             continue
 
         # Translate ImageGenerationToolStart
@@ -280,40 +278,19 @@ def translate_llm_loop_packets(
 
         # Translate OverallStop
         if isinstance(obj, OverallStop):
-            # First emit section_end to close the message section
+            # Emit section_end to close the message section
             # (Frontend looks for SECTION_END to determine if final answer is complete)
             yield {
                 "ind": turn_index,
                 "obj": {"type": "section_end"},
             }
 
-            # Then emit any accumulated citations AFTER the message
-            # Citations use a DIFFERENT ind (turn_index + 1) to separate them from the message
-            has_citations = len(accumulated_citations) > 0
-            if has_citations:
-                citation_ind = turn_index + 1
+            # Citations are now emitted immediately as citation_info packets,
+            # so no need to batch them here
 
-                yield {
-                    "ind": citation_ind,
-                    "obj": {"type": "citation_start"},
-                }
-
-                yield {
-                    "ind": citation_ind,
-                    "obj": {
-                        "type": "citation_delta",
-                        "citations": accumulated_citations,
-                    },
-                }
-
-                yield {
-                    "ind": citation_ind,
-                    "obj": {"type": "section_end"},
-                }
-
-            # Finally emit stop with the last ind used
+            # Emit stop packet
             yield {
-                "ind": turn_index + 1 if has_citations else turn_index,
+                "ind": turn_index,
                 "obj": {"type": "stop"},
             }
             # Don't continue - we want to exit the loop after stop
@@ -339,32 +316,12 @@ def translate_llm_loop_packets(
             "obj": {"type": "section_end"},
         }
 
-    # Emit any remaining citations before final stop (in case stream ended without OverallStop)
-    has_citations = len(accumulated_citations) > 0
-    if has_citations:
-        citation_ind = last_turn_index + 1
-
-        yield {
-            "ind": citation_ind,
-            "obj": {"type": "citation_start"},
-        }
-
-        yield {
-            "ind": citation_ind,
-            "obj": {
-                "type": "citation_delta",
-                "citations": accumulated_citations,
-            },
-        }
-
-        yield {
-            "ind": citation_ind,
-            "obj": {"type": "section_end"},
-        }
+    # Citations are now emitted immediately as citation_info packets,
+    # so no need to batch them here
 
     # Emit final stop packet (only if we didn't already return from OverallStop)
     yield {
-        "ind": last_turn_index + 1 if has_citations else last_turn_index,
+        "ind": last_turn_index,
         "obj": {"type": "stop"},
     }
 
@@ -392,17 +349,13 @@ def translate_session_packets_to_frontend(
         - SearchToolStart → internal_search_tool_start
         - SearchToolQueriesDelta → internal_search_tool_delta (with empty documents)
         - SearchToolDocumentsDelta → internal_search_tool_delta (with empty queries)
-        - CitationInfo → Accumulate and emit as citation_start + citation_delta
+        - CitationInfo → Emitted immediately as citation_info packets
         - OpenUrl → fetch_tool_start
         - SectionEnd packets are passed through
     """
     from onyx.server.query_and_chat.streaming_models import SectionEnd
 
     result: list[dict[str, Any]] = []
-
-    # Track citations to batch them
-    accumulated_citations: list[dict[str, Any]] = []
-    citation_turn_index: int | None = None
 
     # Track the last seen turn_index
     last_turn_index = 0
@@ -530,15 +483,18 @@ def translate_session_packets_to_frontend(
             )
             continue
 
-        # Accumulate CitationInfo packets
+        # Emit CitationInfo packets immediately
         if isinstance(obj, CitationInfo):
-            accumulated_citations.append(
+            result.append(
                 {
-                    "citation_num": obj.citation_number,
-                    "document_id": obj.document_id,
+                    "ind": turn_index,
+                    "obj": {
+                        "type": "citation_info",
+                        "citation_number": obj.citation_number,
+                        "document_id": obj.document_id,
+                    },
                 }
             )
-            citation_turn_index = turn_index
             continue
 
         # Translate ImageGenerationToolStart
@@ -652,34 +608,7 @@ def translate_session_packets_to_frontend(
                 }
             )
 
-    # Emit accumulated citations at the end (if any)
-    if accumulated_citations:
-        ind = (
-            citation_turn_index if citation_turn_index is not None else last_turn_index
-        )
-
-        result.append(
-            {
-                "ind": ind,
-                "obj": {"type": "citation_start"},
-            }
-        )
-
-        result.append(
-            {
-                "ind": ind,
-                "obj": {
-                    "type": "citation_delta",
-                    "citations": accumulated_citations,
-                },
-            }
-        )
-
-        result.append(
-            {
-                "ind": ind,
-                "obj": {"type": "section_end"},
-            }
-        )
+    # Citations are now emitted immediately as citation_info packets,
+    # so no need to batch them here
 
     return result

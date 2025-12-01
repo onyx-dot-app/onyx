@@ -139,6 +139,7 @@ class CreateChatMessageRequest(ChunkContext):
     allowed_tool_ids: list[int] | None = None
 
     # List of tool IDs we MUST use.
+    # TODO: make this a single one since unclear how to force this for multiple at a time.
     forced_tool_ids: list[int] | None = None
 
     @model_validator(mode="after")

@@ -2,9 +2,11 @@ import {
   Packet,
   PacketType,
   CitationDelta,
+  CitationInfo,
   SearchToolDelta,
   StreamingCitation,
 } from "@/app/chat/services/streamingModels";
+import { CitationMap } from "@/app/chat/interfaces";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -163,6 +165,8 @@ export default function AIMessage({
   const lastProcessedIndexRef = useRef<number>(0);
   const citationsRef = useRef<StreamingCitation[]>([]);
   const seenCitationDocIdsRef = useRef<Set<string>>(new Set());
+  // CitationMap for immediate rendering: citation_num -> document_id
+  const citationMapRef = useRef<CitationMap>({});
   const documentMapRef = useRef<Map<string, OnyxDocument>>(new Map());
   const groupedPacketsMapRef = useRef<Map<number, Packet[]>>(new Map());
   const groupedPacketsRef = useRef<{ ind: number; packets: Packet[] }[]>([]);
@@ -178,6 +182,7 @@ export default function AIMessage({
     lastProcessedIndexRef.current = 0;
     citationsRef.current = [];
     seenCitationDocIdsRef.current = new Set();
+    citationMapRef.current = {};
     documentMapRef.current = new Map();
     groupedPacketsMapRef.current = new Map();
     groupedPacketsRef.current = [];
@@ -264,11 +269,29 @@ export default function AIMessage({
         groupedPacketsMapRef.current.set(packet.ind, [packet]);
       }
 
-      // Citations
-      if (packet.obj.type === PacketType.CITATION_DELTA) {
+      // Citations - handle both CITATION_INFO (individual) and CITATION_DELTA (batched)
+      if (packet.obj.type === PacketType.CITATION_INFO) {
+        // Individual citation packet from backend streaming
+        const citationInfo = packet.obj as CitationInfo;
+        // Add to citation map immediately for rendering
+        citationMapRef.current[citationInfo.citation_number] =
+          citationInfo.document_id;
+        // Also add to citations array for CitedSourcesToggle
+        if (!seenCitationDocIdsRef.current.has(citationInfo.document_id)) {
+          seenCitationDocIdsRef.current.add(citationInfo.document_id);
+          citationsRef.current.push({
+            citation_num: citationInfo.citation_number,
+            document_id: citationInfo.document_id,
+          });
+        }
+      } else if (packet.obj.type === PacketType.CITATION_DELTA) {
+        // Batched citation packet (for backwards compatibility)
         const citationDelta = packet.obj as CitationDelta;
         if (citationDelta.citations) {
           for (const citation of citationDelta.citations) {
+            // Add to citation map for rendering
+            citationMapRef.current[citation.citation_num] =
+              citation.document_id;
             if (!seenCitationDocIdsRef.current.has(citation.document_id)) {
               seenCitationDocIdsRef.current.add(citation.document_id);
               citationsRef.current.push(citation);
@@ -341,6 +364,18 @@ export default function AIMessage({
 
   const citations = citationsRef.current;
   const documentMap = documentMapRef.current;
+  // Get the incrementally built citation map for immediate rendering
+  const streamingCitationMap = citationMapRef.current;
+
+  // Create a chatState that uses streaming citations for immediate rendering
+  // This merges the prop citations with streaming citations, preferring streaming ones
+  const effectiveChatState: FullChatState = {
+    ...chatState,
+    citations: {
+      ...chatState.citations,
+      ...streamingCitationMap,
+    },
+  };
 
   // Use store for document sidebar
   const documentSidebarVisible = useDocumentSidebarVisible();
@@ -428,7 +463,7 @@ export default function AIMessage({
                                 {toolGroups.length > 0 && (
                                   <MultiToolRenderer
                                     packetGroups={toolGroups}
-                                    chatState={chatState}
+                                    chatState={effectiveChatState}
                                     isComplete={finalAnswerComing}
                                     isFinalAnswerComing={
                                       finalAnswerComingRef.current
@@ -445,7 +480,7 @@ export default function AIMessage({
                                   <RendererComponent
                                     key={displayGroup.ind}
                                     packets={displayGroup.packets}
-                                    chatState={chatState}
+                                    chatState={effectiveChatState}
                                     onComplete={() => {
                                       // if we've reverted to final answer not coming, don't set display complete
                                       // this happens when using claude and a tool calling packet comes after

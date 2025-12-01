@@ -241,12 +241,14 @@ class DynamicCitationProcessor:
                 citation_text, citation_info_list = self._process_citation(
                     match, has_leading_space
                 )
-                # Yield the formatted citation text
-                if citation_text:
-                    yield citation_text
-                # Then yield the CitationInfo objects
+                # Yield CitationInfo objects BEFORE the citation text
+                # This allows the frontend to receive citation metadata before the token
+                # that contains [[n]](link), enabling immediate rendering
                 for citation in citation_info_list:
                     yield citation
+                # Then yield the formatted citation text
+                if citation_text:
+                    yield citation_text
                 self.non_citation_count = 0
 
             # Leftover text could be part of next citation

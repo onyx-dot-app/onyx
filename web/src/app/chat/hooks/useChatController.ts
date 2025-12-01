@@ -792,15 +792,31 @@ export function useChatController({
               // Check if the packet contains document information
               const packetObj = (packet as Packet).obj;
 
-              if (packetObj.type === "citation_delta") {
+              if (packetObj.type === "citation_info") {
+                // Individual citation packet from backend streaming
+                const citationInfo = packetObj as {
+                  type: "citation_info";
+                  citation_number: number;
+                  document_id: string;
+                };
+                // Incrementally build citations map
+                citations = {
+                  ...(citations || {}),
+                  [citationInfo.citation_number]: citationInfo.document_id,
+                };
+              } else if (packetObj.type === "citation_delta") {
+                // Batched citation packet (for backwards compatibility)
                 const citationDelta = packetObj as CitationDelta;
                 if (citationDelta.citations) {
-                  citations = Object.fromEntries(
-                    citationDelta.citations.map((c) => [
-                      c.citation_num,
-                      c.document_id,
-                    ])
-                  );
+                  citations = {
+                    ...(citations || {}),
+                    ...Object.fromEntries(
+                      citationDelta.citations.map((c) => [
+                        c.citation_num,
+                        c.document_id,
+                      ])
+                    ),
+                  };
                 }
               } else if (packetObj.type === "message_start") {
                 const messageStart = packetObj as MessageStart;

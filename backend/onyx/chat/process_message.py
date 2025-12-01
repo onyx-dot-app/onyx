@@ -604,6 +604,9 @@ def stream_chat_message_objects(
             llm=llm,
             tokenizer_func=tokenizer_encode_func,
             db_session=db_session,
+            forced_tool_id=(
+                new_msg_req.forced_tool_ids[0] if new_msg_req.forced_tool_ids else None
+            ),
         )
 
         # TODO: Slack doesn't need the translation later, later handle these all the same
