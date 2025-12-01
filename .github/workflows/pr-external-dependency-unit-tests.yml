@@ -162,7 +162,7 @@ jobs:
 
       - name: Upload Docker logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: docker-logs-${{ matrix.test-dir }}
           path: docker-logs/
