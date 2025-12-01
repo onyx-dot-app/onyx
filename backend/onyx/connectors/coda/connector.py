@@ -85,6 +85,7 @@ class CodaConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
+        doc_ids: list[str] | None = None,
     ) -> None:
         """Initialize with parameters."""
         self.batch_size = batch_size
@@ -92,6 +93,7 @@ class CodaConnector(LoadConnector, PollConnector):
             "Content-Type": "application/json",
         }
         self.indexed_pages: set[str] = set()
+        self.doc_ids = set(doc_ids) if doc_ids else None
 
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_docs(self, page_token: str | None = None) -> dict[str, Any]:
@@ -271,6 +273,10 @@ class CodaConnector(LoadConnector, PollConnector):
             docs_response = self._fetch_docs(page_token)
             docs = [CodaDoc(**doc) for doc in docs_response.get("items", [])]
 
+            # Filter by doc_ids if specified
+            if self.doc_ids:
+                docs = [doc for doc in docs if doc.id in self.doc_ids]
+
             for doc in docs:
                 logger.info(f"Processing doc: {doc.name}")
 
@@ -397,7 +403,13 @@ class CodaConnector(LoadConnector, PollConnector):
 if __name__ == "__main__":
     import os
 
-    connector = CodaConnector()
+    connector = CodaConnector(
+        doc_ids=(
+            os.environ.get("CODA_DOC_IDS", "").split(",")
+            if os.environ.get("CODA_DOC_IDS")
+            else None
+        )
+    )
     connector.load_credentials({"coda_api_token": os.environ.get("CODA_API_TOKEN")})
     connector.validate_connector_settings()
     print("Coda connector validation successful!")
