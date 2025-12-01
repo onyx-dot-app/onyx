@@ -139,9 +139,11 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
         content: (
           <div className="flex flex-col my-1 space-y-2">
             {code && (
-              <CodeBlock className="language-python" codeText={code}>
-                <HighlightedPythonCode code={code} />
-              </CodeBlock>
+              <div className="prose max-w-full">
+                <CodeBlock className="language-python" codeText={code.trim()}>
+                  <HighlightedPythonCode code={code.trim()} />
+                </CodeBlock>
+              </div>
             )}
             {stdout && (
               <div className="rounded-md bg-gray-100 dark:bg-gray-800 p-3">
