@@ -1,6 +1,6 @@
 "use client";
 
-import React, { JSX } from "react";
+import React from "react";
 import { Option } from "@/components/Dropdown";
 import { generateRandomIconShape } from "@/lib/assistantIconUtils";
 import {
@@ -12,14 +12,7 @@ import {
 } from "@/lib/types";
 import Separator from "@/refresh-components/Separator";
 import Button from "@/refresh-components/buttons/Button";
-import {
-  ArrayHelpers,
-  FieldArray,
-  Form,
-  Formik,
-  FormikProps,
-  FastField,
-} from "formik";
+import { ArrayHelpers, FieldArray, Form, Formik, FormikProps } from "formik";
 import { BooleanFormField, Label, TextFormField } from "@/components/Field";
 import {
   NameField,
@@ -41,7 +34,7 @@ import { ToolSnapshot, MCPServer } from "@/lib/tools/interfaces";
 import { checkUserIsNoAuthUser } from "@/lib/user";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import * as Yup from "yup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import {
@@ -61,7 +54,6 @@ import {
   SwapIcon,
   TrashIcon,
 } from "@/components/icons/icons";
-import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
@@ -101,7 +93,6 @@ import {
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import SvgTrash from "@/icons/trash";
-import SvgEditBig from "@/icons/edit-big";
 import SvgFiles from "@/icons/files";
 import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import Text from "@/refresh-components/texts/Text";
@@ -122,7 +113,11 @@ function findWebSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID);
 }
 
-function SubLabel({ children }: { children: string | JSX.Element }) {
+interface SubLabelProps {
+  children: React.ReactNode;
+}
+
+function SubLabel({ children }: SubLabelProps) {
   return (
     <div
       className="text-sm text-description font-description mb-2"
@@ -809,29 +804,6 @@ export default function AssistantEditor({
                           } Image`}
                         </Button>
                       )}
-
-                      {!values.uploaded_image &&
-                        (!existingPersona?.uploaded_image_id ||
-                          removePersonaImage) && (
-                          <Button
-                            secondary
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const newShape = generateRandomIconShape();
-                              const randomColor =
-                                colorOptions[
-                                  Math.floor(
-                                    Math.random() * colorOptions.length
-                                  )
-                                ];
-                              setFieldValue("icon_shape", newShape.encodedGrid);
-                              setFieldValue("icon_color", randomColor);
-                            }}
-                            leftIcon={SvgEditBig}
-                          >
-                            Generate Icon
-                          </Button>
-                        )}
 
                       {existingPersona?.uploaded_image_id &&
                         removePersonaImage &&
