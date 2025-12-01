@@ -84,7 +84,7 @@ export const CodeBlock = memo(function CodeBlock({
     if (!language) {
       return (
         <pre className="!p-2 m-0 overflow-x-auto w-0 min-w-full hljs">
-          <code className={`text-sm whitespace-pre hljs ${className}`}>
+          <code className={`text-sm hljs ${className}`}>
             {Array.isArray(children)
               ? children.map((child, index) => (
                   <MemoizedCodeLine key={index} content={child} />
@@ -97,7 +97,7 @@ export const CodeBlock = memo(function CodeBlock({
 
     return (
       <pre className="!p-2 m-0 overflow-x-auto w-0 min-w-full hljs">
-        <code className="text-xs whitespace-pre">
+        <code className="text-xs">
           {Array.isArray(children)
             ? children.map((child, index) => (
                 <MemoizedCodeLine key={index} content={child} />
