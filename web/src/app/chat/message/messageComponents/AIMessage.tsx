@@ -29,7 +29,7 @@ import {
 import { useMessageSwitching } from "@/app/chat/message/messageComponents/hooks/useMessageSwitching";
 import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRenderer";
 import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
-import { AgentIcon } from "@/refresh-components/avatars/AgentAvatar";
+import { AgentAvatar } from "@/refresh-components/avatars/AgentAvatar";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import SvgThumbsUp from "@/icons/thumbs-up";
@@ -383,7 +383,7 @@ export default function AIMessage({
         <div className="mx-auto w-[90%] max-w-message-max">
           <div className="lg:mr-12 mobile:ml-0 md:ml-8">
             <div className="flex items-start">
-              <AgentIcon agent={chatState.assistant} />
+              <AgentAvatar agent={chatState.assistant} />
               <div className="w-full">
                 <div className="max-w-message-max break-words">
                   <div className="w-full desktop:ml-4">

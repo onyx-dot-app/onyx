@@ -47,7 +47,7 @@ export interface CustomAgentIconProps {
   size?: number;
 }
 
-export default function CustomAgentIcon({
+export default function CustomAgentAvatar({
   name,
   src,
   iconName,

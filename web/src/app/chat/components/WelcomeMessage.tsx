@@ -3,7 +3,7 @@
 import { Logo } from "@/components/logo/Logo";
 import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import { cn } from "@/lib/utils";
-import { AgentIcon } from "@/refresh-components/avatars/AgentAvatar";
+import { AgentAvatar } from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useMemo } from "react";
@@ -44,7 +44,7 @@ export default function WelcomeMessage({ liveAssistant }: WelcomeMessageProps) {
           className="flex flex-col items-center gap-3 w-full max-w-[50rem]"
         >
           <div className="flex flex-row items-center gap-3">
-            <AgentIcon agent={liveAssistant} />
+            <AgentAvatar agent={liveAssistant} />
             <Text headingH2>{liveAssistant.name}</Text>
           </div>
           {liveAssistant.description && (

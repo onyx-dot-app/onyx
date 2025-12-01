@@ -58,7 +58,7 @@ import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
 import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
-import CustomAgentIcon from "@/refresh-components/avatars/CustomAgentAvatar";
+import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
 import { BackButton } from "@/components/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
@@ -672,7 +672,7 @@ export default function AssistantEditor({
               : undefined);
 
           const iconElement = (
-            <CustomAgentIcon name={values.name} src={src} size={48} />
+            <CustomAgentAvatar name={values.name} src={src} size={48} />
           );
 
           return (

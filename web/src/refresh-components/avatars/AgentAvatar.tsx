@@ -5,14 +5,14 @@ import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { OnyxIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { DEFAULT_ASSISTANT_ID } from "@/lib/constants";
-import CustomAgentIcon from "@/refresh-components/avatars/CustomAgentAvatar";
+import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
 
 export interface AgentIconProps {
   agent: MinimalPersonaSnapshot;
   size?: number;
 }
 
-export function AgentIcon({ agent, ...props }: AgentIconProps) {
+export function AgentAvatar({ agent, ...props }: AgentIconProps) {
   const settings = useSettingsContext();
 
   if (agent.id === DEFAULT_ASSISTANT_ID) {
@@ -32,7 +32,7 @@ export function AgentIcon({ agent, ...props }: AgentIconProps) {
   }
 
   return (
-    <CustomAgentIcon
+    <CustomAgentAvatar
       name={agent.name}
       src={
         agent.uploaded_image_id

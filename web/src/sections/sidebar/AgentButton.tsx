@@ -13,7 +13,7 @@ import { CSS } from "@dnd-kit/utilities";
 import SvgX from "@/icons/x";
 import useAppFocus from "@/hooks/useAppFocus";
 import useIsMounted from "@/hooks/useIsMounted";
-import { AgentIcon } from "@/refresh-components/avatars/AgentAvatar";
+import { AgentAvatar } from "@/refresh-components/avatars/AgentAvatar";
 
 interface SortableItemProps {
   id: number;
@@ -62,7 +62,7 @@ function AgentButtonInner({ agent }: AgentButtonProps) {
       <div className="flex flex-col w-full h-full">
         <SidebarTab
           key={agent.id}
-          leftIcon={() => <AgentIcon agent={agent} />}
+          leftIcon={() => <AgentAvatar agent={agent} />}
           onClick={() => route({ agentId: agent.id })}
           active={
             typeof activeSidebarTab === "object" &&
