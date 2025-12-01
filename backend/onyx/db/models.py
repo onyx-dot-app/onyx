@@ -438,10 +438,10 @@ class ChatMessage__SearchDoc(Base):
     __tablename__ = "chat_message__search_doc"
 
     chat_message_id: Mapped[int] = mapped_column(
-        ForeignKey("chat_message.id"), primary_key=True
+        ForeignKey("chat_message.id", ondelete="CASCADE"), primary_key=True
     )
     search_doc_id: Mapped[int] = mapped_column(
-        ForeignKey("search_doc.id"), primary_key=True
+        ForeignKey("search_doc.id", ondelete="CASCADE"), primary_key=True
     )
 
 
@@ -449,10 +449,10 @@ class ToolCall__SearchDoc(Base):
     __tablename__ = "tool_call__search_doc"
 
     tool_call_id: Mapped[int] = mapped_column(
-        ForeignKey("tool_call.id"), primary_key=True
+        ForeignKey("tool_call.id", ondelete="CASCADE"), primary_key=True
     )
     search_doc_id: Mapped[int] = mapped_column(
-        ForeignKey("search_doc.id"), primary_key=True
+        ForeignKey("search_doc.id", ondelete="CASCADE"), primary_key=True
     )
 
 
@@ -2233,17 +2233,17 @@ class ToolCall(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     chat_session_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("chat_session.id")
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id", ondelete="CASCADE")
     )
 
     # If this is not None, it's a top level tool call from the user message
     # If this is None, it's a lower level call from another tool/agent
     parent_chat_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id"), nullable=True
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True
     )
     # If this is not None, this tool call is a child of another tool call
     parent_tool_call_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tool_call.id"), nullable=True
+        ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True
     )
     # The tools with the same turn number (and parent) were called in parallel
     # Ones with different turn numbers (and same parent) were called sequentially

@@ -314,14 +314,26 @@ def delete_all_chat_sessions_for_user(
 ) -> None:
     user_id = user.id if user is not None else None
 
-    query = db_session.query(ChatSession).filter(
-        ChatSession.user_id == user_id, ChatSession.onyxbot_flow.is_(False)
+    chat_sessions = (
+        db_session.query(ChatSession)
+        .filter(ChatSession.user_id == user_id, ChatSession.onyxbot_flow.is_(False))
+        .all()
     )
 
     if hard_delete:
-        query.delete(synchronize_session=False)
+        for chat_session in chat_sessions:
+            delete_messages_and_files_from_chat_session(chat_session.id, db_session)
+        db_session.execute(
+            delete(ChatSession).where(
+                ChatSession.user_id == user_id, ChatSession.onyxbot_flow.is_(False)
+            )
+        )
     else:
-        query.update({ChatSession.deleted: True}, synchronize_session=False)
+        db_session.execute(
+            update(ChatSession)
+            .where(ChatSession.user_id == user_id, ChatSession.onyxbot_flow.is_(False))
+            .values(deleted=True)
+        )
 
     db_session.commit()
 
