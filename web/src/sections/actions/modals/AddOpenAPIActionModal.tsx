@@ -10,7 +10,7 @@ import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Text from "@/refresh-components/texts/Text";
-import SvgLinkedDots from "@/icons/linked-dots";
+import SvgActions from "@/icons/actions";
 import { FormField } from "@/refresh-components/form/FormField";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Separator from "@/refresh-components/Separator";
@@ -20,11 +20,10 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgBracketCurly from "@/icons/bracket-curly";
 import { MethodSpec } from "@/lib/tools/types";
 import { validateToolDefinition } from "@/lib/tools/openApiService";
+import ToolItem from "@/sections/actions/ToolItem";
 import debounce from "lodash/debounce";
-
+import { useModal } from "@/refresh-components/contexts/ModalContext";
 interface AddOpenAPIActionModalProps {
-  isOpen: boolean;
-  onClose: () => void;
   skipOverlay?: boolean;
 }
 
@@ -51,12 +50,14 @@ interface SchemaActionsProps {
 
 function SchemaActions({ definition, onFormat }: SchemaActionsProps) {
   return (
-    <div className="flex flex-row gap-2">
+    <div className="flex flex-col">
       <CopyIconButton
+        tertiary
         getCopyText={() => definition}
         tooltip="Copy definition"
       />
       <IconButton
+        tertiary
         icon={SvgBracketCurly}
         tooltip="Format definition"
         onClick={onFormat}
@@ -65,10 +66,12 @@ function SchemaActions({ definition, onFormat }: SchemaActionsProps) {
   );
 }
 export default function AddOpenAPIActionModal({
-  isOpen,
-  onClose,
   skipOverlay = false,
 }: AddOpenAPIActionModalProps) {
+  const { isOpen, toggle } = useModal();
+  const handleClose = useCallback(() => {
+    toggle(false);
+  }, [toggle]);
   const [definition, setDefinition] = useState("");
   const [definitionError, setDefinitionError] = useState<string | null>(null);
   const [methodSpecs, setMethodSpecs] = useState<MethodSpec[] | null>(null);
@@ -141,16 +144,16 @@ export default function AddOpenAPIActionModal({
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) {
-          onClose();
+          handleClose();
         }
       }}
     >
-      <Modal.Content mini skipOverlay={skipOverlay}>
+      <Modal.Content tall skipOverlay={skipOverlay}>
         <Modal.Header
-          icon={SvgLinkedDots}
+          icon={SvgActions}
           title="Add OpenAPI action"
           description="Add OpenAPI schema to add custom actions."
-          onClose={onClose}
+          onClose={handleClose}
           className="p-4"
         />
 
@@ -168,91 +171,81 @@ export default function AddOpenAPIActionModal({
               <InputTextArea
                 value={definition}
                 onChange={(e) => setDefinition(e.target.value)}
-                rows={8}
+                rows={14}
                 placeholder="Enter your OpenAPI schema here"
                 className="text-text-04 font-main-ui-mono"
                 action={
-                  <SchemaActions
-                    definition={definition}
-                    onFormat={handleFormat}
-                  />
+                  definition.trim() ? (
+                    <SchemaActions
+                      definition={definition}
+                      onFormat={handleFormat}
+                    />
+                  ) : null
                 }
               />
             </FormField.Control>
             <FormField.Description>
               Specify an OpenAPI schema that defines the APIs you want to make
               available as part of this action. Learn more about{" "}
-              <SimpleTooltip
-                tooltip="Open https://docs.onyx.app/admins/actions/openapi"
-                side="top"
-              >
-                <Link
-                  href="https://docs.onyx.app/admins/actions/openapi"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-action-text-link-05 underline underline-offset-2"
+              <span className="inline-flex">
+                <SimpleTooltip
+                  tooltip="Open https://docs.onyx.app/admins/actions/openapi"
+                  side="top"
                 >
-                  OpenAPI actions
-                </Link>
-              </SimpleTooltip>
+                  <Link
+                    href="https://docs.onyx.app/admins/actions/openapi"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >
+                    OpenAPI actions
+                  </Link>
+                </SimpleTooltip>
+              </span>
               .
             </FormField.Description>
             <FormField.Message messages={{ error: definitionError }} />
           </FormField>
 
-          <Separator />
-
-          <section className="border border-border-01 border-dashed rounded-08 p-4 flex flex-col gap-3">
-            {methodSpecs && methodSpecs.length > 0 ? (
-              <div className="flex flex-col gap-3">
-                {methodSpecs.map((method) => (
-                  <div
-                    key={`${method.method}-${method.path}-${method.name}`}
-                    className="rounded-08 border border-border-01 bg-background-tint-00 p-3 flex flex-col gap-1"
-                  >
-                    <div className="flex items-center justify-between">
-                      <Text mainUiAction text03 className="font-semibold">
-                        {method.name}
-                      </Text>
-                      <Text className="font-main-ui-mono uppercase text-text-03">
-                        {method.method}
-                      </Text>
-                    </div>
-                    {method.summary && (
-                      <Text secondaryBody text03>
-                        {method.summary}
-                      </Text>
-                    )}
-                    <Text className="font-main-ui-mono text-text-04">
-                      {method.path}
-                    </Text>
-                  </div>
-                ))}
+          <Separator className="my-0 py-0" />
+          {methodSpecs && methodSpecs.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {methodSpecs.map((method) => (
+                <ToolItem
+                  key={`${method.method}-${method.path}-${method.name}`}
+                  name={method.name}
+                  description={method.summary || "No summary provided"}
+                  variant="openapi"
+                  openApiMetadata={{
+                    method: method.method,
+                    path: method.path,
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-row gap-3 items-start p-1.5 rounded-08 border border-border-01 border-dashed">
+              <div className="rounded-08 bg-background-tint-01 p-1 flex items-center justify-center">
+                <SvgActions className="size-4 stroke-text-03" />
               </div>
-            ) : (
-              <div className="flex flex-row gap-3 items-start">
-                <div className="rounded-08 border border-border-01 bg-background-tint-01 p-1.5 flex items-center justify-center">
-                  <SvgLinkedDots className="size-4 stroke-text-03" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Text mainUiAction text03>
-                    No actions found
-                  </Text>
-                  <Text secondaryBody text03>
-                    Provide OpenAPI schema to preview actions here.
-                  </Text>
-                </div>
+              <div className="flex flex-col gap-1">
+                <Text mainUiAction text03>
+                  No actions found
+                </Text>
+                <Text secondaryBody text03>
+                  Provide OpenAPI schema to preview actions here.
+                </Text>
               </div>
-            )}
-          </section>
+            </div>
+          )}
         </Modal.Body>
 
         <Modal.Footer className="p-4 gap-2 bg-background-tint-00">
-          <Button main secondary type="button" onClick={onClose}>
+          <Button main secondary type="button" onClick={handleClose}>
             Cancel
           </Button>
           <Button main primary type="button">
-            Add Server
+            Add Action
           </Button>
         </Modal.Footer>
       </Modal.Content>

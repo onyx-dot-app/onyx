@@ -6,6 +6,10 @@ import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import SvgAlertTriangle from "@/icons/alert-triangle";
 import Truncated from "@/refresh-components/texts/Truncated";
+import SvgArrowLeftDot from "@/icons/arrow-left-dot";
+import SvgArrowRightDot from "@/icons/arrow-right-dot";
+import SvgCornerRightUpDot from "@/icons/corner-right-up-dot";
+import SvgMinusCircle from "@/icons/minus-circle";
 
 type ToolItemVariant = "mcp" | "openapi";
 
@@ -14,6 +18,13 @@ interface OpenApiMetadata {
   path?: string;
 }
 
+const METHOD_ICON_MAP: Record<string, React.ReactNode> = {
+  GET: <SvgArrowLeftDot className="size-4 stroke-status-success-05" />,
+  POST: <SvgArrowRightDot className="size-4 stroke-status-info-05" />,
+  PUT: <SvgCornerRightUpDot className="size-4 stroke-status-info-05" />,
+  PATCH: <SvgCornerRightUpDot className="size-4 stroke-status-warning-05" />,
+  DELETE: <SvgMinusCircle className="size-4 stroke-status-error-05" />,
+};
 const METHOD_STYLE_MAP: Record<string, { bg: string; text: string }> = {
   GET: { bg: "bg-status-success-00", text: "text-status-success-05" },
   POST: { bg: "bg-status-info-00", text: "text-status-info-05" },
@@ -50,7 +61,7 @@ export interface ToolItemProps {
   icon?: React.ReactNode;
 
   // Tool state
-  isAvailable: boolean;
+  isAvailable?: boolean;
   isEnabled?: boolean;
 
   // Variant
@@ -68,7 +79,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
   name,
   description,
   icon,
-  isAvailable,
+  isAvailable = true,
   isEnabled = true,
   variant = "mcp",
   openApiMetadata,
@@ -103,7 +114,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
       {/* Left Section: Icon and Content */}
       <div className="flex gap-1 items-start flex-1 min-w-0 pr-2">
         {/* Icon Container */}
-        {icon && (
+        {icon ? (
           <div
             className={cn(
               "flex items-center justify-center shrink-0",
@@ -111,6 +122,10 @@ const ToolItem: React.FC<ToolItemProps> = ({
             )}
           >
             {icon}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-5 w-5">
+            {METHOD_ICON_MAP[openApiMetadata?.method?.toUpperCase() ?? ""]}
           </div>
         )}
 
@@ -173,18 +188,14 @@ const ToolItem: React.FC<ToolItemProps> = ({
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-1 items-end justify-center shrink-0">
+        <div className="flex flex-col items-end justify-center">
           {methodLabel && (
             <div
-              className={cn(
-                "rounded-04 px-2 py-0.5 border border-transparent",
-                methodBg
-              )}
+              className={cn("rounded-04 border border-transparent", methodBg)}
             >
               <Text
                 figureSmallLabel
-                className={cn("uppercase tracking-wide", methodText)}
-                as="span"
+                className={cn("uppercase tracking-wide p-0.5 ", methodText)}
               >
                 {methodLabel}
               </Text>
