@@ -256,3 +256,20 @@ def list_tools(
         filtered_tools.append(ToolSnapshot.from_model(tool))
 
     return filtered_tools
+
+
+@router.get("/openapi")
+def list_openapi_tools(
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_user),
+) -> list[ToolSnapshot]:
+    tools = get_tools(db_session, only_openapi=True)
+
+    openapi_tools: list[ToolSnapshot] = []
+    for tool in tools:
+        if not should_expose_tool_to_fe(tool):
+            continue
+
+        openapi_tools.append(ToolSnapshot.from_model(tool))
+
+    return openapi_tools

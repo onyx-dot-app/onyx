@@ -9,6 +9,7 @@ import Link from "next/link";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
 import SvgActions from "@/icons/actions";
 import { FormField } from "@/refresh-components/form/FormField";
@@ -19,13 +20,34 @@ import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgBracketCurly from "@/icons/bracket-curly";
 import { MethodSpec } from "@/lib/tools/types";
-import { validateToolDefinition } from "@/lib/tools/openApiService";
+import {
+  validateToolDefinition,
+  createCustomTool,
+} from "@/lib/tools/openApiService";
 import ToolItem from "@/sections/actions/ToolItem";
 import debounce from "lodash/debounce";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { Formik, Form } from "formik";
+import * as Yup from "yup";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
+
 interface AddOpenAPIActionModalProps {
   skipOverlay?: boolean;
+  onSuccess?: () => void;
+  setPopup: (popup: PopupSpec) => void;
 }
+
+interface OpenAPIActionFormValues {
+  name: string;
+  description: string;
+  definition: string;
+}
+
+const validationSchema = Yup.object().shape({
+  name: Yup.string().required("Action name is required"),
+  description: Yup.string(),
+  definition: Yup.string().required("OpenAPI schema definition is required"),
+});
 
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
@@ -67,30 +89,45 @@ function SchemaActions({ definition, onFormat }: SchemaActionsProps) {
 }
 export default function AddOpenAPIActionModal({
   skipOverlay = false,
+  onSuccess,
+  setPopup,
 }: AddOpenAPIActionModalProps) {
   const { isOpen, toggle } = useModal();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [methodSpecs, setMethodSpecs] = useState<MethodSpec[] | null>(null);
+  const [definitionError, setDefinitionError] = useState<string | null>(null);
+
   const handleClose = useCallback(() => {
     toggle(false);
   }, [toggle]);
-  const [definition, setDefinition] = useState("");
-  const [definitionError, setDefinitionError] = useState<string | null>(null);
-  const [methodSpecs, setMethodSpecs] = useState<MethodSpec[] | null>(null);
 
-  const handleFormat = useCallback(() => {
-    if (!definition.trim()) {
-      return;
-    }
+  const initialValues: OpenAPIActionFormValues = {
+    name: "",
+    description: "",
+    definition: "",
+  };
 
-    try {
-      const formatted = prettifyDefinition(
-        parseJsonWithTrailingCommas(definition)
-      );
-      setDefinition(formatted);
-      setDefinitionError(null);
-    } catch {
-      setDefinitionError("Invalid JSON format");
-    }
-  }, [definition]);
+  const handleFormat = useCallback(
+    (
+      definition: string,
+      setFieldValue: (field: string, value: any) => void
+    ) => {
+      if (!definition.trim()) {
+        return;
+      }
+
+      try {
+        const formatted = prettifyDefinition(
+          parseJsonWithTrailingCommas(definition)
+        );
+        setFieldValue("definition", formatted);
+        setDefinitionError(null);
+      } catch {
+        setDefinitionError("Invalid JSON format");
+      }
+    },
+    []
+  );
 
   const validateDefinition = useCallback(async (rawDefinition: string) => {
     if (!rawDefinition.trim()) {
@@ -123,132 +160,277 @@ export default function AddOpenAPIActionModal({
     [validateDefinition]
   );
 
-  useEffect(() => {
-    if (!definition.trim()) {
-      setMethodSpecs(null);
-      setDefinitionError(null);
-      debouncedValidateDefinition.cancel();
-      return () => {
-        debouncedValidateDefinition.cancel();
-      };
-    }
+  const handleSubmit = async (values: OpenAPIActionFormValues) => {
+    setIsSubmitting(true);
 
-    debouncedValidateDefinition(definition);
-    return () => {
-      debouncedValidateDefinition.cancel();
-    };
-  }, [definition, debouncedValidateDefinition]);
+    try {
+      const parsedDefinition = parseJsonWithTrailingCommas(values.definition);
+      const response = await createCustomTool({
+        name: values.name,
+        description: values.description || undefined,
+        definition: parsedDefinition,
+        custom_headers: [],
+        passthrough_auth: false,
+      });
+
+      if (response.error) {
+        setPopup({
+          message: response.error,
+          type: "error",
+        });
+      } else {
+        setPopup({
+          message: "OpenAPI action created successfully",
+          type: "success",
+        });
+        handleClose();
+        if (onSuccess) {
+          onSuccess();
+        }
+      }
+    } catch (error) {
+      console.error("Error creating OpenAPI action:", error);
+      setPopup({
+        message: "Failed to create OpenAPI action",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleModalClose = (open: boolean) => {
+    toggle(open);
+  };
 
   return (
-    <Modal
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) {
-          handleClose();
-        }
-      }}
-    >
-      <Modal.Content tall skipOverlay={skipOverlay}>
-        <Modal.Header
-          icon={SvgActions}
-          title="Add OpenAPI action"
-          description="Add OpenAPI schema to add custom actions."
-          onClose={handleClose}
-          className="p-4"
-        />
-
-        <Modal.Body className="bg-background-tint-01 p-4 flex flex-col gap-4 overflow-y-auto">
-          <FormField
-            id="openapi-schema"
-            name="definition"
-            className="gap-2"
-            state={definitionError ? "error" : "idle"}
+    <>
+      <Modal open={isOpen} onOpenChange={handleModalClose}>
+        <Modal.Content tall skipOverlay={skipOverlay}>
+          <Formik
+            initialValues={initialValues}
+            validationSchema={validationSchema}
+            onSubmit={handleSubmit}
           >
-            <FormField.Label className="tracking-tight">
-              OpenAPI Schema Definition
-            </FormField.Label>
-            <FormField.Control asChild>
-              <InputTextArea
-                value={definition}
-                onChange={(e) => setDefinition(e.target.value)}
-                rows={14}
-                placeholder="Enter your OpenAPI schema here"
-                className="text-text-04 font-main-ui-mono"
-                action={
-                  definition.trim() ? (
-                    <SchemaActions
-                      definition={definition}
-                      onFormat={handleFormat}
-                    />
-                  ) : null
+            {({
+              values,
+              errors,
+              touched,
+              handleChange,
+              handleBlur,
+              setFieldValue,
+            }) => {
+              // Effect for validating definition
+              useEffect(() => {
+                if (!values.definition.trim()) {
+                  setMethodSpecs(null);
+                  setDefinitionError(null);
+                  debouncedValidateDefinition.cancel();
+                  return () => {
+                    debouncedValidateDefinition.cancel();
+                  };
                 }
-              />
-            </FormField.Control>
-            <FormField.Description>
-              Specify an OpenAPI schema that defines the APIs you want to make
-              available as part of this action. Learn more about{" "}
-              <span className="inline-flex">
-                <SimpleTooltip
-                  tooltip="Open https://docs.onyx.app/admins/actions/openapi"
-                  side="top"
-                >
-                  <Link
-                    href="https://docs.onyx.app/admins/actions/openapi"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline"
-                  >
-                    OpenAPI actions
-                  </Link>
-                </SimpleTooltip>
-              </span>
-              .
-            </FormField.Description>
-            <FormField.Message messages={{ error: definitionError }} />
-          </FormField>
 
-          <Separator className="my-0 py-0" />
-          {methodSpecs && methodSpecs.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {methodSpecs.map((method) => (
-                <ToolItem
-                  key={`${method.method}-${method.path}-${method.name}`}
-                  name={method.name}
-                  description={method.summary || "No summary provided"}
-                  variant="openapi"
-                  openApiMetadata={{
-                    method: method.method,
-                    path: method.path,
-                  }}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-row gap-3 items-start p-1.5 rounded-08 border border-border-01 border-dashed">
-              <div className="rounded-08 bg-background-tint-01 p-1 flex items-center justify-center">
-                <SvgActions className="size-4 stroke-text-03" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <Text mainUiAction text03>
-                  No actions found
-                </Text>
-                <Text secondaryBody text03>
-                  Provide OpenAPI schema to preview actions here.
-                </Text>
-              </div>
-            </div>
-          )}
-        </Modal.Body>
+                debouncedValidateDefinition(values.definition);
+                return () => {
+                  debouncedValidateDefinition.cancel();
+                };
+              }, [values.definition]);
 
-        <Modal.Footer className="p-4 gap-2 bg-background-tint-00">
-          <Button main secondary type="button" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button main primary type="button">
-            Add Action
-          </Button>
-        </Modal.Footer>
-      </Modal.Content>
-    </Modal>
+              return (
+                <Form className="gap-0">
+                  <Modal.Header
+                    icon={SvgActions}
+                    title="Add OpenAPI action"
+                    description="Add OpenAPI schema to add custom actions."
+                    onClose={handleClose}
+                    className="p-4 w-full"
+                  />
+
+                  <Modal.Body className="bg-background-tint-01 p-4 flex flex-col gap-4 overflow-y-auto">
+                    <FormField
+                      id="name"
+                      name="name"
+                      state={
+                        errors.name && touched.name
+                          ? "error"
+                          : touched.name
+                            ? "success"
+                            : "idle"
+                      }
+                    >
+                      <FormField.Label>Action Name</FormField.Label>
+                      <FormField.Control asChild>
+                        <InputTypeIn
+                          id="name"
+                          name="name"
+                          placeholder="Name your OpenAPI action"
+                          value={values.name}
+                          onChange={handleChange}
+                          onBlur={handleBlur}
+                          autoFocus
+                        />
+                      </FormField.Control>
+                      <FormField.Message
+                        messages={{
+                          error: errors.name,
+                        }}
+                      />
+                    </FormField>
+
+                    <FormField
+                      id="description"
+                      name="description"
+                      state={
+                        errors.description && touched.description
+                          ? "error"
+                          : touched.description
+                            ? "success"
+                            : "idle"
+                      }
+                    >
+                      <FormField.Label optional>Description</FormField.Label>
+                      <FormField.Control asChild>
+                        <InputTextArea
+                          id="description"
+                          name="description"
+                          placeholder="More details about the OpenAPI action"
+                          value={values.description}
+                          onChange={handleChange}
+                          onBlur={handleBlur}
+                          rows={3}
+                        />
+                      </FormField.Control>
+                      <FormField.Message
+                        messages={{
+                          error: errors.description,
+                        }}
+                      />
+                    </FormField>
+
+                    <Separator className="-my-2" />
+
+                    <FormField
+                      id="openapi-schema"
+                      name="definition"
+                      className="gap-2"
+                      state={
+                        (errors.definition && touched.definition) ||
+                        definitionError
+                          ? "error"
+                          : touched.definition
+                            ? "success"
+                            : "idle"
+                      }
+                    >
+                      <FormField.Label className="tracking-tight">
+                        OpenAPI Schema Definition
+                      </FormField.Label>
+                      <FormField.Control asChild>
+                        <InputTextArea
+                          id="definition"
+                          name="definition"
+                          value={values.definition}
+                          onChange={handleChange}
+                          onBlur={handleBlur}
+                          rows={14}
+                          placeholder="Enter your OpenAPI schema here"
+                          className="text-text-04 font-main-ui-mono"
+                          action={
+                            values.definition.trim() ? (
+                              <SchemaActions
+                                definition={values.definition}
+                                onFormat={() =>
+                                  handleFormat(values.definition, setFieldValue)
+                                }
+                              />
+                            ) : null
+                          }
+                        />
+                      </FormField.Control>
+                      <FormField.Description>
+                        Specify an OpenAPI schema that defines the APIs you want
+                        to make available as part of this action. Learn more
+                        about{" "}
+                        <span className="inline-flex">
+                          <SimpleTooltip
+                            tooltip="Open https://docs.onyx.app/admins/actions/openapi"
+                            side="top"
+                          >
+                            <Link
+                              href="https://docs.onyx.app/admins/actions/openapi"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline"
+                            >
+                              OpenAPI actions
+                            </Link>
+                          </SimpleTooltip>
+                        </span>
+                        .
+                      </FormField.Description>
+                      <FormField.Message
+                        messages={{
+                          error: definitionError || errors.definition,
+                        }}
+                      />
+                    </FormField>
+
+                    <Separator className="my-0 py-0" />
+                    {methodSpecs && methodSpecs.length > 0 ? (
+                      <div className="flex flex-col gap-2">
+                        {methodSpecs.map((method) => (
+                          <ToolItem
+                            key={`${method.method}-${method.path}-${method.name}`}
+                            name={method.name}
+                            description={
+                              method.summary || "No summary provided"
+                            }
+                            variant="openapi"
+                            openApiMetadata={{
+                              method: method.method,
+                              path: method.path,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-row gap-3 items-start p-1.5 rounded-08 border border-border-01 border-dashed">
+                        <div className="rounded-08 bg-background-tint-01 p-1 flex items-center justify-center">
+                          <SvgActions className="size-4 stroke-text-03" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Text mainUiAction text03>
+                            No actions found
+                          </Text>
+                          <Text secondaryBody text03>
+                            Provide OpenAPI schema to preview actions here.
+                          </Text>
+                        </div>
+                      </div>
+                    )}
+                  </Modal.Body>
+
+                  <Modal.Footer className="p-4 gap-2 bg-background-tint-00">
+                    <Button
+                      main
+                      secondary
+                      type="button"
+                      onClick={handleClose}
+                      disabled={isSubmitting}
+                    >
+                      Cancel
+                    </Button>
+                    <Button main primary type="submit" disabled={isSubmitting}>
+                      {isSubmitting ? "Adding..." : "Add Action"}
+                    </Button>
+                  </Modal.Footer>
+                </Form>
+              );
+            }}
+          </Formik>
+        </Modal.Content>
+      </Modal>
+    </>
   );
 }

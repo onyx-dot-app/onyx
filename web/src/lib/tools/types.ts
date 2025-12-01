@@ -57,3 +57,34 @@ export interface MethodSpec {
   spec: Record<string, any>;
   custom_headers: { key: string; value: string }[];
 }
+
+export interface ToolSnapshot {
+  id: number;
+  name: string;
+  display_name: string;
+  description: string;
+
+  // only specified for Custom Tools. OpenAPI schema which represents
+  // the tool's API.
+  definition: Record<string, any> | null;
+
+  // only specified for Custom Tools. Custom headers to add to the tool's API requests.
+  custom_headers: { key: string; value: string }[];
+
+  // only specified for Custom Tools. ID of the tool in the codebase.
+  in_code_tool_id: string | null;
+
+  // whether to pass through the user's OAuth token as Authorization header
+  passthrough_auth: boolean;
+
+  // OAuth configuration for this tool
+  oauth_config_id?: number | null;
+  oauth_config_name?: string | null;
+
+  // If this is an MCP tool, which server it belongs to
+  mcp_server_id?: number | null;
+  user_id?: string | null;
+
+  // Whether the tool is enabled
+  enabled: boolean;
+}

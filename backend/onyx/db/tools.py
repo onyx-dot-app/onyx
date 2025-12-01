@@ -29,6 +29,7 @@ def get_tools(
     *,
     only_enabled: bool = False,
     only_connected_mcp: bool = False,
+    only_openapi: bool = False,
 ) -> list[Tool]:
     query = select(Tool)
 
@@ -45,6 +46,9 @@ def get_tools(
 
     if only_enabled:
         query = query.where(Tool.enabled.is_(True))
+
+    if only_openapi:
+        query = query.where(Tool.openapi_schema.is_not(None))
 
     return list(db_session.scalars(query).all())
 
