@@ -226,7 +226,8 @@ class ImageGenerationTool(Tool[None]):
                         "revised_prompt": image_generation.revised_prompt,
                     }
                     for image_generation in image_generations
-                ]
+                ],
+                ensure_ascii=False
             ),
         )
 

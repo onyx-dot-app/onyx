@@ -140,7 +140,7 @@ class CustomTool(BaseTool):
             return json.dumps({"file_ids": image_response.file_ids})
 
         # For JSON or other responses, return as-is
-        return json.dumps(response.tool_result)
+        return json.dumps(response.tool_result, ensure_ascii=False)
 
     """For LLMs which do NOT support explicit tool calling"""
 
