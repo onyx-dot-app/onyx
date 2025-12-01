@@ -208,7 +208,7 @@ docstring-parser==0.17.0
     #   google-cloud-aiplatform
 docutils==0.22.3
     # via rich-rst
-dropbox==11.36.2
+dropbox==12.0.2
 email-validator==2.2.0
     # via
     #   fastapi-users
@@ -408,7 +408,6 @@ jinja2==3.1.6
     # via
     #   distributed
     #   litellm
-    #   stone
 jira==3.10.5
 jiter==0.12.0
     # via openai
@@ -657,7 +656,6 @@ packaging==24.2
     #   opentelemetry-instrumentation
     #   pytest
     #   pywikibot
-    #   stone
     #   unstructured-client
 pandas==2.2.3
     # via markitdown
@@ -948,8 +946,6 @@ secretstorage==3.5.0 ; sys_platform == 'linux'
 sendgrid==6.11.0
 sentry-sdk==2.14.0
     # via onyx
-setuptools==80.9.0
-    # via supervisor
 shapely==2.0.6
     # via google-cloud-aiplatform
 shellingham==1.5.4
@@ -995,10 +991,10 @@ starlette==0.47.2
     #   fastapi
     #   mcp
     #   prometheus-fastapi-instrumentator
-stone==3.3.9
+stone==3.3.1
     # via dropbox
 stripe==10.12.0
-supervisor==4.2.5
+supervisor==4.3.0
 sympy==1.13.1
     # via onnxruntime
 tabulate==0.9.0

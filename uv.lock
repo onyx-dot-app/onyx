@@ -1215,16 +1215,16 @@ wheels = [
 
 [[package]]
 name = "dropbox"
-version = "11.36.2"
+version = "12.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "requests" },
     { name = "six" },
     { name = "stone" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8d/0f/2059c5ef8669e625a533661a2054a82241696954df6662aeee51a34b1022/dropbox-11.36.2.tar.gz", hash = "sha256:d48d3d16d486c78b11c14a1c4a28a2611fbf5a0d0a358b861bfd9482e603c500", size = 585092, upload-time = "2023-06-12T23:39:46.394Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9e/56/ac085f58e8e0d0bcafdf98c2605e454ac946e3d0c72679669ae112dc30be/dropbox-12.0.2.tar.gz", hash = "sha256:50057fd5ad5fcf047f542dfc6747a896e7ef982f1b5f8500daf51f3abd609962", size = 560236, upload-time = "2024-06-03T16:45:30.448Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/86/96/1cd39be567d8e361fc06a4135e40ddbf1410f99524771a7f3e5807a26a35/dropbox-11.36.2-py3-none-any.whl", hash = "sha256:a21e4d2bcbeb1d8067ff87969aea48792c9a8266182491153feff2be9c1b9c8f", size = 594038, upload-time = "2023-06-12T23:39:44.245Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/de/95d8204d9a20fbdb353c5f8e4229b0fcb90f22b96f8246ff1f47c8a45fd5/dropbox-12.0.2-py3-none-any.whl", hash = "sha256:c5b7e9c2668adb6b12dcecd84342565dc50f7d35ab6a748d155cb79040979d1c", size = 572076, upload-time = "2024-06-03T16:45:28.153Z" },
 ]
 
 [[package]]
@@ -3665,7 +3665,7 @@ backend = [
     { name = "ddtrace", specifier = "==3.10.0" },
     { name = "discord-py", specifier = "==2.4.0" },
     { name = "distributed", specifier = "==2023.8.1" },
-    { name = "dropbox", specifier = "==11.36.2" },
+    { name = "dropbox", specifier = "==12.0.2" },
     { name = "exa-py", specifier = "==1.15.4" },
     { name = "fastapi-limiter", specifier = "==0.1.6" },
     { name = "fastapi-users", specifier = "==14.0.1" },
@@ -3738,7 +3738,7 @@ backend = [
     { name = "sqlalchemy", extras = ["mypy"], specifier = "==2.0.15" },
     { name = "starlette", specifier = "==0.47.2" },
     { name = "stripe", specifier = "==10.12.0" },
-    { name = "supervisor", specifier = "==4.2.5" },
+    { name = "supervisor", specifier = "==4.3.0" },
     { name = "tiktoken", specifier = "==0.7.0" },
     { name = "timeago", specifier = "==1.0.16" },
     { name = "trafilatura", specifier = "==1.12.2" },
@@ -5929,17 +5929,15 @@ wheels = [
 
 [[package]]
 name = "stone"
-version = "3.3.9"
+version = "3.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "jinja2" },
-    { name = "packaging" },
     { name = "ply" },
     { name = "six" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/68/f0/efe39177ad1415ce277160e3186d74e3446d5c47d0b53de089448b7976de/stone-3.3.9.tar.gz", hash = "sha256:8f1298683f60ffa9e43edbfd55beb0a20993235d5c751e7adb3030dc16d17fad", size = 194103, upload-time = "2025-04-01T02:25:07.028Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/99/6f/ef25bbc1aefeb9c905d527f1d3cd3f41f22f40566d33001b8bb14ae0cdaf/stone-3.3.1.tar.gz", hash = "sha256:4ef0397512f609757975f7ec09b35639d72ba7e3e17ce4ddf399578346b4cb50", size = 190888, upload-time = "2022-01-25T21:32:16.729Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/53/abeff3103fc2e21f37d0081d5d9693fa7a32ad688553cf4760da5e0ef17d/stone-3.3.9-py3-none-any.whl", hash = "sha256:2008318b8eed65bbf38f8c20dbebb4823dc92a813a2b61c3a09d8b9743a7b14e", size = 162989, upload-time = "2025-04-01T02:25:05.614Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/92/d0c83f63d3518e5f0b8a311937c31347349ec9a47b209ddc17f7566f58fc/stone-3.3.1-py3-none-any.whl", hash = "sha256:e15866fad249c11a963cce3bdbed37758f2e88c8ff4898616bc0caeb1e216047", size = 162257, upload-time = "2022-01-25T21:32:15.155Z" },
 ]
 
 [[package]]
@@ -5957,14 +5955,11 @@ wheels = [
 
 [[package]]
 name = "supervisor"
-version = "4.2.5"
+version = "4.3.0"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "setuptools" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ce/37/517989b05849dd6eaa76c148f24517544704895830a50289cbbf53c7efb9/supervisor-4.2.5.tar.gz", hash = "sha256:34761bae1a23c58192281a5115fb07fbf22c9b0133c08166beffc70fed3ebc12", size = 466073, upload-time = "2022-12-24T01:02:43.705Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a9/b5/37e7a3706de436a8a2d75334711dad1afb4ddffab09f25e31d89e467542f/supervisor-4.3.0.tar.gz", hash = "sha256:4a2bf149adf42997e1bb44b70c43b613275ec9852c3edacca86a9166b27e945e", size = 468912, upload-time = "2025-08-23T18:25:02.418Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2c/7a/0ad3973941590c040475046fef37a2b08a76691e61aa59540828ee235a6e/supervisor-4.2.5-py2.py3-none-any.whl", hash = "sha256:2ecaede32fc25af814696374b79e42644ecaba5c09494c51016ffda9602d0f08", size = 319561, upload-time = "2022-12-24T01:02:40.814Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/65/5e726c372da8a5e35022a94388b12252710aad0c2351699c3d76ae8dba78/supervisor-4.3.0-py2.py3-none-any.whl", hash = "sha256:0bcb763fddafba410f35cbde226aa7f8514b9fb82eb05a0c85f6588d1c13f8db", size = 320736, upload-time = "2025-08-23T18:25:00.767Z" },
 ]
 
 [[package]]

@@ -3,8 +3,8 @@ from abc import abstractmethod
 from typing import Any
 from typing import Dict
 
+from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import SearchQuery
 from onyx.federated_connectors.models import CredentialField
 from onyx.federated_connectors.models import EntityField
 from onyx.federated_connectors.models import OAuthResult
@@ -101,7 +101,7 @@ class FederatedConnector(ABC):
     @abstractmethod
     def search(
         self,
-        query: SearchQuery,
+        query: ChunkIndexRequest,
         entities: dict[str, Any],
         access_token: str,
         limit: int | None = None,

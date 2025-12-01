@@ -576,7 +576,8 @@ function ChatInputBarInner({
                   disabled={disabled}
                 />
               )}
-              {showDeepResearch && (
+              {/* Temporarily disabled - to re-enable, change false to showDeepResearch */}
+              {false && showDeepResearch && (
                 <SelectButton
                   leftIcon={SvgHourglass}
                   onClick={toggleDeepResearch}

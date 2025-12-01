@@ -7,7 +7,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
-from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
@@ -18,16 +18,15 @@ logger = setup_logger()
 
 
 BUILT_IN_TOOL_TYPES = Union[
-    SearchTool, ImageGenerationTool, WebSearchTool, KnowledgeGraphTool, PythonTool
+    SearchTool, ImageGenerationTool, WebSearchTool, KnowledgeGraphTool, OpenURLTool
 ]
 
-# same as d09fc20a3c66_seed_builtin_tools.py
 BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
     SearchTool.__name__: SearchTool,
     ImageGenerationTool.__name__: ImageGenerationTool,
     WebSearchTool.__name__: WebSearchTool,
     KnowledgeGraphTool.__name__: KnowledgeGraphTool,
-    PythonTool.__name__: PythonTool,
+    OpenURLTool.__name__: OpenURLTool,
 }
 
 
