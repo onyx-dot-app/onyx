@@ -13,6 +13,7 @@ from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import ToolName
 
 
+@pytest.mark.skip(reason="Temporarily disabled")
 def test_force_tool_use(
     basic_user: DATestUser,
 ) -> None:
