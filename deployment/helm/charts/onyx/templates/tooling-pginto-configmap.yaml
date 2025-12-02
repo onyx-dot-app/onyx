@@ -22,26 +22,6 @@ data:
       exit 1
     fi
 
-    if [ -z "${PGPASSWORD:-}" ] && [ -n "${POSTGRES_PASSWORD:-}" ]; then
-      export PGPASSWORD="${POSTGRES_PASSWORD}"
-    fi
-
-    if [ -z "${PGPASSWORD:-}" ]; then
-      printf "Postgres password: " >&2
-      if command -v stty >/dev/null 2>&1; then
-        stty -echo || true
-      fi
-      if ! read -r PGPASSWORD; then
-        echo "failed to read password" >&2
-        exit 1
-      fi
-      if command -v stty >/dev/null 2>&1; then
-        stty echo || true
-      fi
-      printf "\n" >&2
-      export PGPASSWORD
-    fi
-
     if [ "${USE_IAM}" = "true" ]; then
       REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-${AWS_REGION_NAME:-}}}"
       if [ -z "${REGION}" ]; then
@@ -92,6 +72,26 @@ PY
         exit 1
       fi
       export PGPASSWORD
+    else
+      if [ -z "${PGPASSWORD:-}" ] && [ -n "${POSTGRES_PASSWORD:-}" ]; then
+        export PGPASSWORD="${POSTGRES_PASSWORD}"
+      fi
+
+      if [ -z "${PGPASSWORD:-}" ]; then
+        printf "Postgres password: " >&2
+        if command -v stty >/dev/null 2>&1; then
+          stty -echo || true
+        fi
+        if ! read -r PGPASSWORD; then
+          echo "failed to read password" >&2
+          exit 1
+        fi
+        if command -v stty >/dev/null 2>&1; then
+          stty echo || true
+        fi
+        printf "\n" >&2
+        export PGPASSWORD
+      fi
     fi
 
     if [ -n "${POSTGRES_SSLMODE:-}" ] && [ -z "${PGSSLMODE:-}" ]; then
