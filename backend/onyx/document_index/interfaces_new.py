@@ -21,6 +21,26 @@ from shared_configs.model_server_models import Embedding
 # to happen in the background while the primary index still serves the main traffic.
 
 
+__all__ = [
+    # Main interfaces - these are what you should inherit from
+    "DocumentIndex",
+    "BaseIndex",
+    # Data models - used in method signatures
+    "DocumentInsertionRecord",
+    "DocumentSectionRequest",
+    "IndexingMetadata",
+    "MetadataUpdateRequest",
+    # Capability mixins - for custom compositions or type checking
+    "SchemaVerifiable",
+    "Indexable",
+    "Deletable",
+    "Updatable",
+    "IdRetrievalCapable",
+    "HybridCapable",
+    "RandomCapable",
+]
+
+
 class DocumentInsertionRecord(BaseModel):
     """
     Result of indexing a document
@@ -133,8 +153,7 @@ class Indexable(abc.ABC):
         m chunks of a document in the next index call.
 
         Parameters:
-        - chunks: Document chunks with all of the information needed for indexing to the document
-                index.
+        - chunks: Document chunks with all of the information needed for indexing to the document index.
         - indexing_metadata: Information about chunk counts for efficient cleaning / updating
 
         Returns:
