@@ -5,6 +5,7 @@ from typing import Any
 from typing import Optional
 
 import requests
+from dateutil import parser as date_parser
 from pydantic import BaseModel
 from retry import retry
 
@@ -260,6 +261,11 @@ class CodaConnector(LoadConnector, PollConnector):
         )
         return None
 
+    def _parse_timestamp(self, timestamp_str: str) -> datetime:
+        """Robustly parse ISO 8601 timestamps."""
+        dt = date_parser.isoparse(timestamp_str)
+        return dt.astimezone(timezone.utc)
+
     def _get_page_path(self, page: CodaPage, page_map: dict[str, CodaPage]) -> str:
         """Constructs the breadcrumb path for a page."""
         path_parts = [page.name]
@@ -293,18 +299,23 @@ class CodaConnector(LoadConnector, PollConnector):
             content = self._export_page_content(doc.id, page.id)
             if content is None:
                 logger.warning(f"Skipping page {page.id}: export failed")
-            continue
+                continue
+
+            if not content.strip():
+                logger.debug(f"Skipping page '{page.name}': no content")
+                continue
+
+            page_title = page.name or f"Untitled Page {page.id}"
 
             # Mark as indexed
             self.indexed_pages.add(page_key)
 
             # Create document title
-            page_title = page.name or f"Untitled Page {page.id}"
             if page.subtitle:
                 page_title = f"{page_title} - {page.subtitle}"
 
             # Build the text content
-            text = f"{page_title}\n\n{content}" if content else page_title
+            text = f"{page_title}\n\n{content}"
 
             # Build metadata
             metadata: dict[str, str | list[str]] = {
@@ -332,9 +343,9 @@ class CodaConnector(LoadConnector, PollConnector):
                 sections=sections,
                 source=DocumentSource.CODA,
                 semantic_identifier=page_title,
-                doc_updated_at=datetime.fromisoformat(
+                doc_updated_at=self._parse_timestamp(
                     page.updatedAt.replace("Z", "+00:00")
-                ).astimezone(timezone.utc),
+                ),
                 metadata=metadata,
             )
 
@@ -405,11 +416,12 @@ class CodaConnector(LoadConnector, PollConnector):
 
             for doc in docs:
                 # Check if doc was updated in the time range
-                doc_updated_at = datetime.fromisoformat(
-                    doc.updatedAt.replace("Z", "+00:00")
-                ).timestamp()
+                doc_updated_at = self._parse_timestamp(doc.updatedAt)
 
-                if doc_updated_at < start or doc_updated_at > end:
+                if (
+                    doc_updated_at.timestamp() < start
+                    or doc_updated_at.timestamp() > end
+                ):
                     continue
 
                 logger.info(f"Processing updated doc: {doc.name}")
