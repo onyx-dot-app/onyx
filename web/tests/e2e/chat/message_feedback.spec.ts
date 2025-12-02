@@ -14,8 +14,16 @@ test.describe("Message feedback thumbs controls", () => {
   test("allows submitting and clearing thumbs up/down feedback", async ({
     page,
   }) => {
-    const createFeedbackRequests: any[] = [];
-    const removeFeedbackRequests: any[] = [];
+    const createFeedbackRequests: {
+      is_positive: boolean;
+      chat_message_id: number;
+      feedback_text?: string;
+      predefined_feedback?: string;
+    }[] = [];
+    const removeFeedbackRequests: {
+      url: string;
+      query: Record<string, string>;
+    }[] = [];
 
     await page.route(
       "**/api/chat/create-chat-message-feedback",
