@@ -98,7 +98,10 @@ export default function CustomAgentAvatar({
 
   return (
     <SvgOctagonWrapper size={size}>
-      <SvgTwoLineSmall className="stroke-text-04 h-8 w-8" />
+      <SvgTwoLineSmall
+        className="stroke-text-04"
+        style={{ width: size * 0.8, height: size * 0.8 }}
+      />
     </SvgOctagonWrapper>
   );
 }
