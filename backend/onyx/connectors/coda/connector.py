@@ -362,7 +362,6 @@ class CodaConnector(LoadConnector, PollConnector):
             docs_response = self._fetch_docs(next_docs_page_token)
             docs = [CodaDoc(**doc) for doc in docs_response.get("items", [])]
 
-            # Filter by doc_ids if specified
             if self.doc_ids:
                 docs = [doc for doc in docs if doc.id in self.doc_ids]
 
@@ -408,13 +407,16 @@ class CodaConnector(LoadConnector, PollConnector):
         logger.info(f"Polling Coda for updates between {start} and {end}")
 
         # Fetch all docs
-        page_token = None
+        next_docs_page_token = None
         while True:
-            docs_response = self._fetch_docs(page_token)
+            docs_response = self._fetch_docs(next_docs_page_token)
             docs = [CodaDoc(**doc) for doc in docs_response.get("items", [])]
 
+            # Filter by doc_ids if specified
+            if self.doc_ids:
+                docs = [doc for doc in docs if doc.id in self.doc_ids]
+
             for doc in docs:
-                # Check if doc was updated in the time range
                 doc_updated_at = self._parse_timestamp(doc.updatedAt)
 
                 if (
@@ -428,15 +430,15 @@ class CodaConnector(LoadConnector, PollConnector):
                 # Fetch all pages for this doc to build hierarchy
                 # We need all pages even if we only index some, to build the full path
                 all_pages: list[CodaPage] = []
-                page_page_token = None
+                next_pages_page_token = None
                 while True:
-                    pages_response = self._fetch_pages(doc.id, page_page_token)
+                    pages_response = self._fetch_pages(doc.id, next_pages_page_token)
                     all_pages.extend(
                         [CodaPage(**page) for page in pages_response.get("items", [])]
                     )
 
-                    page_page_token = pages_response.get("nextPageToken")
-                    if not page_page_token:
+                    next_pages_page_token = pages_response.get("nextPageToken")
+                    if not next_pages_page_token:
                         break
 
                 page_map = {p.id: p for p in all_pages}
@@ -444,10 +446,8 @@ class CodaConnector(LoadConnector, PollConnector):
                 # Filter pages by update time
                 updated_pages = []
                 for page in all_pages:
-                    page_updated_at = datetime.fromisoformat(
-                        page.updatedAt.replace("Z", "+00:00")
-                    ).timestamp()
-                    if start < page_updated_at <= end:
+                    page_updated_at = self._parse_timestamp(page.updatedAt)
+                    if start < page_updated_at.timestamp() < end:
                         updated_pages.append(page)
 
                 if updated_pages:
@@ -455,8 +455,8 @@ class CodaConnector(LoadConnector, PollConnector):
                     yield from self._read_pages(doc, updated_pages, page_map)
 
             # Check for more docs
-            page_token = docs_response.get("nextPageToken")
-            if not page_token:
+            next_docs_page_token = docs_response.get("nextPageToken")
+            if not next_docs_page_token:
                 break
 
     def poll_source(
