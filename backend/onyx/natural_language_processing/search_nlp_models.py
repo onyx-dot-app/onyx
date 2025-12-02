@@ -1066,6 +1066,17 @@ class InformationContentClassificationModel:
         self,
         queries: list[str],
     ) -> list[ContentClassificationPrediction]:
+        if os.environ.get("DISABLE_MODEL_SERVER", "").lower() == "true":
+            logger.info(
+                "DISABLE_MODEL_SERVER is set, returning default classifications"
+            )
+            return [
+                ContentClassificationPrediction(
+                    predicted_label=1, content_boost_factor=1.0
+                )
+                for _ in queries
+            ]
+
         response = requests.post(self.content_server_endpoint, json=queries)
         response.raise_for_status()
 
@@ -1092,6 +1103,14 @@ class ConnectorClassificationModel:
         query: str,
         available_connectors: list[str],
     ) -> list[str]:
+        # Check if model server is disabled
+        if os.environ.get("DISABLE_MODEL_SERVER", "").lower() == "true":
+            logger.info(
+                "DISABLE_MODEL_SERVER is set, returning all available connectors"
+            )
+            # Return all available connectors when model server is disabled
+            return available_connectors
+
         connector_classification_request = ConnectorClassificationRequest(
             available_connectors=available_connectors,
             query=query,
