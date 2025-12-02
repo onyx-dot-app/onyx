@@ -20,11 +20,9 @@ from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
 from onyx.prompts.chat_prompts import GENERATE_IMAGE_GUIDANCE
 from onyx.prompts.chat_prompts import INTERNAL_SEARCH_GUIDANCE
-from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_PROMPT
 from onyx.prompts.chat_prompts import OPEN_URLS_GUIDANCE
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
-from onyx.prompts.chat_prompts import TOOL_PERSISTENCE_PROMPT
 from onyx.prompts.chat_prompts import TOOL_SECTION_HEADER
 from onyx.prompts.chat_prompts import USER_INFO_HEADER
 from onyx.prompts.chat_prompts import WEB_SEARCH_GUIDANCE
@@ -218,80 +216,6 @@ def build_system_prompt(
             system_prompt += GENERATE_IMAGE_GUIDANCE
 
     return system_prompt
-
-
-def default_build_system_message_v2(
-    prompt_config: PromptConfig,
-    llm_config: LLMConfig,
-    memories: list[str] | None = None,
-    tools: Sequence[Tool] | None = None,
-    should_cite_documents: bool = False,
-) -> SystemMessage:
-    system_prompt = (
-        prompt_config.default_behavior_system_prompt or DEFAULT_SYSTEM_PROMPT
-    )
-
-    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
-    # for OpenAI reasoning models to have correct markdown generation
-    if model_needs_formatting_reenabled(llm_config.model_name):
-        system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
-
-    tag_handled_prompt = handle_onyx_date_awareness(
-        system_prompt,
-        datetime_aware=prompt_config.datetime_aware,
-    )
-
-    # tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
-
-    # if memories:
-    #     tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
-
-    if tools:
-        tag_handled_prompt += "\n\n# Tools\n"
-        tag_handled_prompt += TOOL_PERSISTENCE_PROMPT
-
-        has_web_search = any(type(tool).__name__ == "WebSearchTool" for tool in tools)
-        has_internal_search = any(type(tool).__name__ == "SearchTool" for tool in tools)
-
-        if has_web_search or has_internal_search:
-            from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
-
-            tag_handled_prompt += "\n" + TOOL_DESCRIPTION_SEARCH_GUIDANCE + "\n"
-
-        if has_internal_search:
-            from onyx.prompts.chat_prompts import INTERNAL_SEARCH_GUIDANCE
-
-            tag_handled_prompt += "\n" + INTERNAL_SEARCH_GUIDANCE + "\n"
-
-        if has_internal_search and has_web_search:
-            from onyx.prompts.chat_prompts import (
-                INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE,
-            )
-
-            tag_handled_prompt += "\n" + INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE + "\n"
-
-        for tool in tools:
-            if type(tool).__name__ == "WebSearchTool":
-                pass
-            else:
-                # TODO: ToolV2 should make this much cleaner
-                from onyx.tools.adapter_v1_to_v2 import tools_to_function_tools
-
-                if tools_to_function_tools([tool]):
-                    tag_handled_prompt += (
-                        f"\n## {tools_to_function_tools([tool])[0].name}\n"
-                    )
-                    tag_handled_prompt += tool.description
-
-    tag_handled_prompt += "\n# Reminders"
-    if should_cite_documents:
-        from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
-
-        tag_handled_prompt += "\n\n" + REQUIRE_CITATION_GUIDANCE
-
-    tag_handled_prompt += "\n\n" + LONG_CONVERSATION_REMINDER_PROMPT
-
-    return SystemMessage(role="system", content=tag_handled_prompt)
 
 
 def default_build_system_message(

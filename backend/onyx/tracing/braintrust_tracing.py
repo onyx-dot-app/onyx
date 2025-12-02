@@ -3,8 +3,6 @@ import re
 from typing import Any
 
 import braintrust
-from braintrust_langchain import set_global_handler  # type: ignore[import-untyped]
-from braintrust_langchain.callbacks import BraintrustCallbackHandler  # type: ignore[import-untyped]
 
 from onyx.configs.app_configs import BRAINTRUST_API_KEY
 from onyx.configs.app_configs import BRAINTRUST_PROJECT
@@ -81,10 +79,4 @@ def setup_braintrust_if_creds_available() -> None:
     )
     braintrust.set_masking_function(_mask)
     set_trace_processors([BraintrustTracingProcessor(braintrust_logger)])
-    _setup_legacy_langchain_tracing()
     logger.notice("Braintrust tracing initialized")
-
-
-def _setup_legacy_langchain_tracing() -> None:
-    handler = BraintrustCallbackHandler()
-    set_global_handler(handler)
