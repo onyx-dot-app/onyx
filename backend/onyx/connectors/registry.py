@@ -136,6 +136,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.clickup.connector",
         class_name="ClickupConnector",
     ),
+    DocumentSource.CODA: ConnectorMapping(
+        module_path="onyx.connectors.coda.coda_connector",
+        class_name="CodaConnector",
+    ),
     DocumentSource.MEDIAWIKI: ConnectorMapping(
         module_path="onyx.connectors.mediawiki.wiki",
         class_name="MediaWikiConnector",

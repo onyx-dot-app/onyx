@@ -193,6 +193,7 @@ class DocumentSource(str, Enum):
     DISCOURSE = "discourse"
     AXERO = "axero"
     CLICKUP = "clickup"
+    CODA = "coda"
     MEDIAWIKI = "mediawiki"
     WIKIPEDIA = "wikipedia"
     ASANA = "asana"
@@ -613,6 +614,7 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.DISCOURSE: "discourse - discussion forums",
     DocumentSource.AXERO: "axero - employee engagement data",
     DocumentSource.CLICKUP: "clickup - project management tool",
+    DocumentSource.CODA: "coda - collaborative workspace that combines docs, spreadsheets, and databases",
     DocumentSource.MEDIAWIKI: "mediawiki - wiki data",
     DocumentSource.WIKIPEDIA: "wikipedia - encyclopedia data",
     DocumentSource.ASANA: "asana",
