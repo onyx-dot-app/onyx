@@ -1332,7 +1332,7 @@ export default function Page() {
         </div>
 
         <div className="mt-1 flex w-full max-w-[960px] flex-col gap-8 px-4 py-6">
-          <Separator className="my-0 bg-border-01" />
+          <Separator className="py-0" />
 
           <div className="flex flex-col gap-3 self-stretch">
             <div className="flex flex-col gap-0.5">

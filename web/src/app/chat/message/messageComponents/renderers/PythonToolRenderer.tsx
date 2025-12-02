@@ -47,12 +47,8 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
   };
 }
 
-function CodeIcon(props: IconProps) {
-  return (
-    <div className="w-4 h-4">
-      <SvgCode />
-    </div>
-  );
+function CodeIcon({ size = 16, ...props }: IconProps) {
+  return <SvgCode width={size} height={size} {...props} />;
 }
 
 export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({

@@ -20,6 +20,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import ChatSession
+from onyx.db.models import Project__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserProject
@@ -139,9 +140,13 @@ def get_files_in_project(
     user_id = user.id if user is not None else None
     user_files = (
         db_session.query(UserFile)
-        .filter(UserFile.projects.any(id=project_id), UserFile.user_id == user_id)
-        .filter(UserFile.status != UserFileStatus.FAILED)
-        .order_by(UserFile.created_at.desc())
+        .join(Project__UserFile, UserFile.id == Project__UserFile.user_file_id)
+        .filter(
+            Project__UserFile.project_id == project_id,
+            UserFile.user_id == user_id,
+            UserFile.status != UserFileStatus.FAILED,
+        )
+        .order_by(Project__UserFile.created_at.desc())
         .all()
     )
     return [UserFileSnapshot.from_model(user_file) for user_file in user_files]

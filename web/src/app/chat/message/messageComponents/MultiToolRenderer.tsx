@@ -233,7 +233,7 @@ export default function MultiToolRenderer({
 
                           <div
                             className={cn(
-                              "text-base flex items-center gap-1 loading-text mb-2",
+                              "text-base flex items-center gap-1 mb-2",
                               toolsToDisplay.length > 1 &&
                                 isLastItem &&
                                 "cursor-pointer hover:text-text-900 transition-colors"
@@ -245,16 +245,20 @@ export default function MultiToolRenderer({
                                 : undefined
                             }
                           >
-                            {icon ? icon({ size: 14 }) : null}
-                            {status}
+                            {icon ? (
+                              <span className="text-shimmer-base">
+                                {icon({ size: 14 })}
+                              </span>
+                            ) : null}
+                            <span className="loading-text">{status}</span>
                             {toolsToDisplay.length > 1 && isLastItem && (
-                              <div className="ml-1">
+                              <span className="ml-1 text-shimmer-base">
                                 {isStreamingExpanded ? (
                                   <FiChevronDown size={14} />
                                 ) : (
                                   <FiChevronRight size={14} />
                                 )}
-                              </div>
+                              </span>
                             )}
                           </div>
 
