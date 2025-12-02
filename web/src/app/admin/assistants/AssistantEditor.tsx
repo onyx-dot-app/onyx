@@ -2,7 +2,6 @@
 
 import React from "react";
 import { Option } from "@/components/Dropdown";
-import { generateRandomIconShape } from "@/lib/assistantIconUtils";
 import {
   CCPairBasicInfo,
   DocumentSetSummary,

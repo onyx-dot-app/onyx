@@ -4,6 +4,7 @@ import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
 export interface StarterMessageBase {
   message: string;
 }
+
 export interface StarterMessage extends StarterMessageBase {
   name: string;
 }
@@ -19,8 +20,6 @@ export interface MinimalPersonaSnapshot {
   llm_model_provider_override?: string;
 
   uploaded_image_id?: string;
-  icon_shape?: number;
-  icon_color?: string;
 
   is_public: boolean;
   is_visible: boolean;
