@@ -52,8 +52,6 @@ class CodaDoc(CodaObjectBase):
     ownerName: str
     createdAt: str
     updatedAt: str
-    workspace: dict[str, Any]
-    folder: dict[str, Any]
     icon: Optional[dict[str, Any]] = None
     docSize: Optional[dict[str, Any]] = None
     sourceDoc: Optional[dict[str, Any]] = None
