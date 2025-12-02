@@ -1,6 +1,7 @@
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
+from time import sleep
 from typing import Any
 from typing import Optional
 
@@ -186,8 +187,6 @@ class CodaConnector(LoadConnector, PollConnector):
             return None
 
         # Poll for the export result with exponential backoff
-        import time
-
         for attempt in range(self.export_max_attempts):
             # Exponential backoff: 1s, 2s, 4s, 8s, etc.
             wait_time = self.export_poll_interval * (2**attempt)
@@ -250,7 +249,7 @@ class CodaConnector(LoadConnector, PollConnector):
 
                 # Wait before polling again (exponential backoff)
                 if attempt < self.export_max_attempts - 1:
-                    time.sleep(wait_time)
+                    sleep(wait_time)
 
             else:
                 logger.warning(f"Unknown export status '{status}' for page '{page_id}'")
