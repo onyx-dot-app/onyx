@@ -66,6 +66,7 @@
     "formik": "^2.2.9",
     "highlight.js": "^11.11.1",
     "js-cookie": "^3.0.5",
+    "jwt-decode": "^4.0.0",
     "katex": "^0.16.17",
     "lodash": "^4.17.21",
     "lowlight": "^3.3.0",
