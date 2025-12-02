@@ -139,8 +139,6 @@ def create_assistant(
         db_session=db_session,
         document_set_ids=[],
         tool_ids=tool_ids,
-        icon_color=None,
-        icon_shape=None,
         is_visible=True,
         system_prompt=request.instructions or "",
         task_prompt="",

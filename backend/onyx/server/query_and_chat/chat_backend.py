@@ -253,12 +253,6 @@ def get_chat_session(
         description=chat_session.description,
         persona_id=chat_session.persona_id,
         persona_name=chat_session.persona.name if chat_session.persona else None,
-        persona_icon_color=(
-            chat_session.persona.icon_color if chat_session.persona else None
-        ),
-        persona_icon_shape=(
-            chat_session.persona.icon_shape if chat_session.persona else None
-        ),
         current_alternate_model=chat_session.current_alternate_model,
         messages=chat_message_details,
         time_created=chat_session.time_created,

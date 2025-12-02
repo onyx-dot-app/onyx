@@ -69,8 +69,6 @@ class PersonaUpsertRequest(BaseModel):
     groups: list[int] = Field(default_factory=list)
     # e.g. ID of SearchTool or ImageGenerationTool or <USER_DEFINED_TOOL>
     tool_ids: list[int]
-    icon_color: str | None = None
-    icon_shape: int | None = None
     remove_image: bool | None = None
     uploaded_image_id: str | None = None  # New field for uploaded image
     search_start_date: datetime | None = None
@@ -106,8 +104,6 @@ class MinimalPersonaSnapshot(BaseModel):
     llm_model_provider_override: str | None
 
     uploaded_image_id: str | None
-    icon_shape: int | None
-    icon_color: str | None
 
     is_public: bool
     is_visible: bool
@@ -143,8 +139,6 @@ class MinimalPersonaSnapshot(BaseModel):
             llm_model_version_override=persona.llm_model_version_override,
             llm_model_provider_override=persona.llm_model_provider_override,
             uploaded_image_id=persona.uploaded_image_id,
-            icon_shape=persona.icon_shape,
-            icon_color=persona.icon_color,
             is_public=persona.is_public,
             is_visible=persona.is_visible,
             display_priority=persona.display_priority,
@@ -165,8 +159,6 @@ class PersonaSnapshot(BaseModel):
     description: str
     is_public: bool
     is_visible: bool
-    icon_shape: int | None
-    icon_color: str | None
     uploaded_image_id: str | None
     # Return string UUIDs to frontend for consistency
     user_file_ids: list[str]
@@ -199,8 +191,6 @@ class PersonaSnapshot(BaseModel):
             description=persona.description,
             is_public=persona.is_public,
             is_visible=persona.is_visible,
-            icon_shape=persona.icon_shape,
-            icon_color=persona.icon_color,
             uploaded_image_id=persona.uploaded_image_id,
             user_file_ids=[str(file.id) for file in persona.user_files],
             display_priority=persona.display_priority,
@@ -262,8 +252,6 @@ class FullPersonaSnapshot(PersonaSnapshot):
             description=persona.description,
             is_public=persona.is_public,
             is_visible=persona.is_visible,
-            icon_shape=persona.icon_shape,
-            icon_color=persona.icon_color,
             uploaded_image_id=persona.uploaded_image_id,
             user_file_ids=[str(file.id) for file in persona.user_files],
             display_priority=persona.display_priority,
