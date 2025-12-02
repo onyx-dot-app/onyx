@@ -11,6 +11,7 @@ runs:
       uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # ratchet:astral-sh/setup-uv@v3
       with:
         enable-cache: true
+        python-version: "3.11"
 
     - name: Compute requirements hash
       id: req-hash
