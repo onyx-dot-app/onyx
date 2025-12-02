@@ -6,6 +6,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 # Set environment variables to disable model server for testing
+os.environ["DISABLE_MODEL_SERVER"] = "true"
 os.environ["MODEL_SERVER_HOST"] = "disabled"
 os.environ["MODEL_SERVER_PORT"] = "9000"
 
