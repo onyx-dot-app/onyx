@@ -14,6 +14,8 @@ import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
+import { fetchEnterpriseSettingsSS } from "@/components/settings/lib";
+import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -32,14 +34,22 @@ const Page = async (props: {
   // will not render
   let authTypeMetadata: AuthTypeMetadata | null = null;
   let currentUser: User | null = null;
+  let enterpriseSettings: EnterpriseSettings | null = null;
   try {
     [authTypeMetadata, currentUser] = await Promise.all([
       getAuthTypeMetadataSS(),
       getCurrentUserSS(),
     ]);
+
+    const enterpriseSettingsResponse = await fetchEnterpriseSettingsSS();
+    if (enterpriseSettingsResponse.ok) {
+      enterpriseSettings = await enterpriseSettingsResponse.json();
+    }
   } catch (e) {
     console.log(`Some fetch failed for the login page - ${e}`);
   }
+
+  const applicationName = enterpriseSettings?.application_name || "Onyx";
 
   // simply take the user to the home page if Auth is disabled
   if (authTypeMetadata?.authType === "disabled") {
@@ -82,7 +92,7 @@ const Page = async (props: {
             <Text headingH2 text05>
               {cloud ? "Complete your sign up" : "Create account"}
             </Text>
-            <Text text03>Get started with Onyx</Text>
+            <Text text03>Get started with {applicationName}</Text>
           </div>
           {cloud && authUrl && (
             <div className="w-full justify-center mt-6">

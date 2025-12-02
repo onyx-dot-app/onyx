@@ -67,6 +67,7 @@ export interface NavigationItem {
 
 export interface EnterpriseSettings {
   application_name: string | null;
+  application_description: string | null;
   use_custom_logo: boolean;
   use_custom_logotype: boolean;
 

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import SvgCheckCircle from "@/icons/check-circle";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgEdit from "@/icons/edit";
+import { useApplicationName } from "@/lib/hooks/useApplicationName";
 
 type NameStepProps = {
   state: OnboardingState;
@@ -18,6 +19,7 @@ const NameStepInner = ({
   state: onboardingState,
   actions: onboardingActions,
 }: NameStepProps) => {
+  const applicationName = useApplicationName();
   const { userName } = onboardingState.data;
   const { updateName, goToStep, setButtonActive, nextStep } = onboardingActions;
 
@@ -46,7 +48,7 @@ const NameStepInner = ({
         </div>
         <div>
           <Text text04 mainUiAction>
-            What should Onyx call you?
+            What should {applicationName} call you?
           </Text>
           <Text text03 secondaryBody>
             We will display this name in the app.

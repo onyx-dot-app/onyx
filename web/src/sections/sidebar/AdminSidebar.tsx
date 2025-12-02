@@ -340,7 +340,9 @@ export default function AdminSidebar({
           <div className="flex flex-col gap-2">
             {settings.webVersion && (
               <Text text02 secondaryBody className="px-2">
-                {`Onyx version: ${settings.webVersion}`}
+                {`${
+                  settings.enterpriseSettings?.application_name || "Onyx"
+                } version: ${settings.webVersion}`}
               </Text>
             )}
             <Settings />
