@@ -87,6 +87,7 @@ export const getValidationSchema = (
           ),
       });
 
+    case "google_genai":
     case "vertex_ai":
       return Yup.object().shape({
         ...baseSchema,

@@ -262,7 +262,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     icon: GoogleIcon,
     docsLink: "https://docs.onyx.app/admin/advanced_configs/search_configs",
     description:
-      "Offers a wide range of AI services including language and vision models",
+      "Gemini (Google Gen AI) offers a wide range of language and vision models",
     apiLink: "https://console.cloud.google.com/apis/credentials",
     costslink: "https://cloud.google.com/vertex-ai/pricing",
     embedding_models: [
