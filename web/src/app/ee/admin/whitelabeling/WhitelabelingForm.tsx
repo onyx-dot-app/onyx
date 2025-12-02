@@ -57,6 +57,8 @@ export function WhitelabelingForm() {
         initialValues={{
           auto_scroll: settings?.settings?.auto_scroll || false,
           application_name: enterpriseSettings?.application_name || null,
+          application_description:
+            enterpriseSettings?.application_description || null,
           use_custom_logo: enterpriseSettings?.use_custom_logo || false,
           use_custom_logotype: enterpriseSettings?.use_custom_logotype || false,
           two_lines_for_chat_header:
@@ -77,6 +79,7 @@ export function WhitelabelingForm() {
             .trim()
             .min(1, "Application name cannot be empty")
             .nullable(),
+          application_description: Yup.string().nullable(),
           use_custom_logo: Yup.boolean().required(),
           use_custom_logotype: Yup.boolean().required(),
           custom_header_content: Yup.string().nullable(),
@@ -142,6 +145,13 @@ export function WhitelabelingForm() {
               name="application_name"
               subtext={`The custom name you are giving Onyx for your team. This will replace 'Onyx' everywhere in the UI.`}
               placeholder="Custom name which will replace 'Onyx'"
+              disabled={isSubmitting}
+            />
+            <TextFormField
+              label="Application Description"
+              name="application_description"
+              subtext={`A short tagline or description shown on the login page. Defaults to "Your open source AI platform for work" if not set.`}
+              placeholder="Your custom tagline..."
               disabled={isSubmitting}
             />
             <div>

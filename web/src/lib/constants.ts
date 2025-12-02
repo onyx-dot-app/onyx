@@ -43,6 +43,8 @@ export const NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN =
 export const TOGGLED_CONNECTORS_COOKIE_NAME = "toggled_connectors";
 
 /* Enterprise-only settings */
+export const DEFAULT_APPLICATION_NAME = "Onyx";
+
 export const NEXT_PUBLIC_CUSTOM_REFRESH_URL =
   process.env.NEXT_PUBLIC_CUSTOM_REFRESH_URL;
 
