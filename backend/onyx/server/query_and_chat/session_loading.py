@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import cast
 
-from agents import ImageGenerationTool
-from agents import WebSearchTool
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
@@ -30,8 +28,12 @@ from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
