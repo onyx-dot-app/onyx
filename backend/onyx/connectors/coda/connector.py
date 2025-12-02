@@ -227,7 +227,7 @@ class CodaConnector(LoadConnector, PollConnector):
                         logger.debug(
                             f"Page '{page_id}' exported but contains no content"
                         )
-                        return ""
+                        return None
 
                     logger.debug(
                         f"Successfully exported page '{page_id}' ({len(content)} chars)"
@@ -243,7 +243,7 @@ class CodaConnector(LoadConnector, PollConnector):
                 logger.warning(f"Export failed for page '{page_id}'")
                 return None
 
-            elif status == "in_progress":
+            elif status == "inProgress":
                 # Only log on first attempt to avoid spam
                 if attempt == 0:
                     logger.debug(f"Export in progress for page '{page_id}'")
@@ -354,12 +354,8 @@ class CodaConnector(LoadConnector, PollConnector):
         self.headers["Authorization"] = f'Bearer {credentials["coda_api_token"]}'
         return None
 
-    def load_from_state(self) -> GenerateDocumentsOutput:
-        """Loads all doc and page data from a Coda workspace.
-
-        Returns:
-            list[Document]: list of documents.
-        """
+    def _load_all_documents(self) -> Generator[Document, None, None]:
+        """Generator that yields all documents from Coda workspace."""
         logger.info("Starting full load of Coda docs and pages")
 
         next_docs_page_token = None
@@ -391,21 +387,25 @@ class CodaConnector(LoadConnector, PollConnector):
                 page_map = {p.id: p for p in all_pages}
 
                 # Generate documents from pages
-                yield from batch_generator(
-                    self._read_pages(doc, all_pages, page_map), self.batch_size
-                )
+                yield from self._read_pages(doc, all_pages, page_map)
 
             # Check for more docs
             next_docs_page_token = docs_response.get("nextPageToken")
             if not next_docs_page_token:
                 break
 
-    def poll_source(
-        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
-    ) -> GenerateDocumentsOutput:
-        """Uses the Coda API to fetch updated docs and pages
-        within a time period.
+    def load_from_state(self) -> GenerateDocumentsOutput:
+        """Loads all doc and page data from a Coda workspace.
+
+        Returns:
+            list[Document]: list of documents.
         """
+        yield from batch_generator(self._load_all_documents(), self.batch_size)
+
+    def _load_updated_documents(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> Generator[Document, None, None]:
+        """Generator that yields updated documents from Coda workspace."""
         logger.info(f"Polling Coda for updates between {start} and {end}")
 
         # Fetch all docs
@@ -453,14 +453,22 @@ class CodaConnector(LoadConnector, PollConnector):
 
                 if updated_pages:
                     # Generate documents from updated pages
-                    yield from batch_generator(
-                        self._read_pages(doc, updated_pages, page_map), self.batch_size
-                    )
+                    yield from self._read_pages(doc, updated_pages, page_map)
 
             # Check for more docs
             page_token = docs_response.get("nextPageToken")
             if not page_token:
                 break
+
+    def poll_source(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> GenerateDocumentsOutput:
+        """Uses the Coda API to fetch updated docs and pages
+        within a time period.
+        """
+        yield from batch_generator(
+            self._load_updated_documents(start, end), self.batch_size
+        )
 
     def validate_connector_settings(self) -> None:
         if not self.headers.get("Authorization"):
