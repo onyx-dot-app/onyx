@@ -984,7 +984,9 @@ def _db_mcp_server_to_api_mcp_server(
             )
 
     is_authenticated: bool = (
-        db_server.auth_type == MCPAuthenticationType.NONE
+        db_server.auth_type == MCPAuthenticationType.NONE.value
+        # Pass-through OAuth: user is authenticated via their login OAuth token
+        or db_server.auth_type == MCPAuthenticationType.PT_OAUTH
         or (
             auth_performer == MCPAuthenticationPerformer.ADMIN
             and db_server.auth_type != MCPAuthenticationType.OAUTH
@@ -1056,6 +1058,10 @@ def _get_connection_config(
 
     """
     if mcp_server.auth_type == MCPAuthenticationType.NONE:
+        return None
+
+    # Pass-through OAuth uses the user's login OAuth token, not a stored config
+    if mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
         return None
 
     if (
@@ -1231,7 +1237,11 @@ def _list_mcp_tools_by_id(
     # can of course put their own credentials in and list the tools.
     connection_config = _get_connection_config(mcp_server, is_admin, user, db)
 
-    if not connection_config and mcp_server.auth_type != MCPAuthenticationType.NONE:
+    # Allow access for NONE and PT_OAUTH (which use user's login token at runtime)
+    if not connection_config and mcp_server.auth_type not in (
+        MCPAuthenticationType.NONE,
+        MCPAuthenticationType.PT_OAUTH,
+    ):
         raise HTTPException(
             status_code=401,
             detail="This MCP server is not configured yet",
@@ -1240,6 +1250,8 @@ def _list_mcp_tools_by_id(
     user_id = str(user.id) if user else ""
     # Discover tools from the MCP server
     auth = None
+    headers: dict[str, str] = {}
+
     if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
         # TODO: just pass this in, but should work when auth is set already
         assert connection_config  # for mypy
@@ -1250,6 +1262,20 @@ def _list_mcp_tools_by_id(
             connection_config.id,
             None,
         )
+    elif mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
+        # Pass-through OAuth: use the user's login OAuth token
+        if user and user.oauth_accounts:
+            user_oauth_token = user.oauth_accounts[0].access_token
+            headers["Authorization"] = f"Bearer {user_oauth_token}"
+        else:
+            raise HTTPException(
+                status_code=401,
+                detail="Pass-through OAuth requires a user logged in with OAuth",
+            )
+
+    if connection_config:
+        headers.update(connection_config.config.get("headers", {}))
+
     import time
 
     t1 = time.time()
@@ -1261,12 +1287,11 @@ def _list_mcp_tools_by_id(
             status_code=400,
             detail="MCP server transport is not configured",
         )
-    transport: MCPTransport = mcp_server.transport
 
     discovered_tools = discover_mcp_tools(
         server_url,
-        connection_config.config.get("headers", {}) if connection_config else {},
-        transport=transport,
+        headers,
+        transport=mcp_server.transport,
         auth=auth,
     )
     logger.info(
@@ -1401,9 +1426,11 @@ def _upsert_mcp_server(
 
         logger.info(f"Created new MCP server '{request.name}' with ID {mcp_server.id}")
 
+    # PT_OAUTH doesn't need stored connection config (uses user's login token)
     if (
         not changing_connection_config
         or request.auth_type == MCPAuthenticationType.NONE
+        or request.auth_type == MCPAuthenticationType.PT_OAUTH
     ):
         return mcp_server
 
@@ -1696,7 +1723,8 @@ def upsert_mcp_server_with_tools(
         mcp_server = _upsert_mcp_server(request, db_session, user)
 
         if (
-            request.auth_type != MCPAuthenticationType.NONE
+            request.auth_type
+            not in (MCPAuthenticationType.NONE, MCPAuthenticationType.PT_OAUTH)
             and mcp_server.admin_connection_config_id is None
         ):
             raise HTTPException(
@@ -1754,9 +1782,9 @@ def update_mcp_server_with_tools(
 
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
-    if (
-        mcp_server.admin_connection_config_id is None
-        and mcp_server.auth_type != MCPAuthenticationType.NONE
+    if mcp_server.admin_connection_config_id is None and mcp_server.auth_type not in (
+        MCPAuthenticationType.NONE,
+        MCPAuthenticationType.PT_OAUTH,
     ):
         raise HTTPException(
             status_code=400, detail="MCP server has no admin connection config"

@@ -20,6 +20,7 @@ import Link from "next/link";
 import Separator from "@/refresh-components/Separator";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { useAuthType } from "@/lib/hooks";
+import { AuthType } from "@/lib/constants";
 import { InfoIcon } from "@/components/icons/icons";
 import {
   Table,
@@ -85,7 +86,8 @@ function ActionForm({
   const [methodSpecs, setMethodSpecs] = methodSpecsState;
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const authType = useAuthType();
-  const isOAuthEnabled = authType === "oidc" || authType === "google_oauth";
+  const isOAuthEnabled =
+    authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
 
   const debouncedValidateDefinition = useCallback(
     (definition: string) => {

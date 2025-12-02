@@ -1,5 +1,7 @@
 import os
+from collections.abc import Callable
 from typing import Any
+from typing import cast
 
 from agents import ModelSettings
 from agents.models.interface import Model
@@ -35,6 +37,7 @@ from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.llm.utils import model_supports_image_input
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
@@ -586,3 +589,22 @@ def _get_llm_model_and_settings(
     )
 
     return litellm_model, model_settings
+
+
+def get_llm_tokenizer_encode_func(llm: LLM) -> Callable[[str], list[int]]:
+    """Get the tokenizer encode function for an LLM.
+
+    Args:
+        llm: The LLM instance to get the tokenizer for
+
+    Returns:
+        A callable that encodes a string into a list of token IDs
+    """
+    llm_provider = llm.config.model_provider
+    llm_model_name = llm.config.model_name
+
+    llm_tokenizer = get_tokenizer(
+        model_name=llm_model_name,
+        provider_type=llm_provider,
+    )
+    return cast(Callable[[str], list[int]], llm_tokenizer.encode)

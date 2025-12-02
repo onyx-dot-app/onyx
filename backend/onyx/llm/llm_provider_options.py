@@ -182,6 +182,8 @@ VERTEX_LOCATION_KWARG = "vertex_location"
 VERTEXAI_DEFAULT_MODEL = "gemini-2.5-flash"
 VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.5-flash-lite"
 VERTEXAI_MODEL_NAMES = [
+    # 3.0 pro models
+    "gemini-3-pro-preview",
     # 2.5 pro models
     "gemini-2.5-pro",
     VERTEXAI_DEFAULT_MODEL,
@@ -197,6 +199,7 @@ VERTEXAI_MODEL_NAMES = [
     # "gemini-2.0-flash-exp-image-generation",
     # "gemini-2.0-flash-thinking-exp-01-21",
     # Anthropic models
+    "claude-opus-4-5",
     "claude-sonnet-4-5",
     "claude-haiku-4-5",
     "claude-opus-4-1@20250805",
