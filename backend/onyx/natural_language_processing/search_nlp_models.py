@@ -1072,8 +1072,7 @@ class InformationContentClassificationModel:
             )
             return [
                 ContentClassificationPrediction(
-                    predicted_label=1,
-                    content_boost_factor=1.0
+                    predicted_label=1, content_boost_factor=1.0
                 )
                 for _ in queries
             ]
