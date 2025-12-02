@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useContext } from "react";
 import { useUser } from "@/components/user/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { AuthType } from "@/lib/constants";
 import {
   Dialog,
   DialogContent,
@@ -314,9 +315,11 @@ export default function NRFPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {!user && authTypeMetadata.authType !== "disabled" && showLoginModal ? (
+      {!user &&
+      authTypeMetadata.authType !== AuthType.DISABLED &&
+      showLoginModal ? (
         <Modal className="max-w-md mx-auto">
-          {authTypeMetadata.authType === "basic" ? (
+          {authTypeMetadata.authType === AuthType.BASIC ? (
             <LoginPage
               authUrl={null}
               authTypeMetadata={authTypeMetadata}

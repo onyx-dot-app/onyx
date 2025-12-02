@@ -780,7 +780,7 @@ export function useAuthType(): AuthType | null {
   );
 
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    return "cloud";
+    return AuthType.CLOUD;
   }
 
   if (error || !data) {
