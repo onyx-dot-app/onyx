@@ -10,8 +10,11 @@ from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.coda.models import CodaColumn
 from onyx.connectors.coda.models import CodaDoc
 from onyx.connectors.coda.models import CodaPage
+from onyx.connectors.coda.models import CodaRow
+from onyx.connectors.coda.models import CodaTable
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rl_requests,
 )
@@ -49,6 +52,8 @@ class CodaConnector(LoadConnector, PollConnector):
         self,
         batch_size: int = INDEX_BATCH_SIZE,
         doc_ids: list[str] | None = None,
+        max_table_rows: int = 1000,
+        include_tables: bool = True,
     ) -> None:
         """Initialize with parameters."""
         self.batch_size = batch_size
@@ -58,7 +63,10 @@ class CodaConnector(LoadConnector, PollConnector):
         self.export_max_attempts = 10
         self.export_poll_interval = 1.0
         self.indexed_pages: set[str] = set()
+        self.indexed_tables: set[str] = set()
         self.doc_ids = set(doc_ids) if doc_ids else None
+        self.max_table_rows = max_table_rows
+        self.include_tables = include_tables
 
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_docs(self, page_token: str | None = None) -> dict[str, Any]:
@@ -112,6 +120,100 @@ class CodaConnector(LoadConnector, PollConnector):
                 error_body = res.text
 
             logger.exception(f"Error fetching pages for doc '{doc_id}': {error_body}")
+            raise e
+        return res.json()
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _fetch_tables(
+        self, doc_id: str, page_token: str | None = None
+    ) -> dict[str, Any]:
+        """Fetch all tables in a doc via the Coda API."""
+        logger.debug(f"Fetching tables for doc '{doc_id}'")
+        params: dict[str, Any] = {"limit": _CODA_PAGE_SIZE}
+        if page_token:
+            params["pageToken"] = page_token
+
+        res = rl_requests.get(
+            f"{_CODA_API_BASE}/docs/{doc_id}/tables",
+            headers=self.headers,
+            params=params,
+            timeout=_CODA_CALL_TIMEOUT,
+        )
+
+        try:
+            res.raise_for_status()
+        except Exception as e:
+            try:
+                error_body = res.json()
+            except Exception:
+                error_body = res.text
+
+            logger.exception(f"Error fetching tables for doc '{doc_id}': {error_body}")
+            raise e
+        return res.json()
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _fetch_table_columns(self, doc_id: str, table_id: str) -> dict[str, Any]:
+        """Fetch column definitions for a table via the Coda API."""
+        logger.debug(f"Fetching columns for table '{table_id}' in doc '{doc_id}'")
+        params: dict[str, Any] = {"limit": _CODA_PAGE_SIZE}
+
+        res = rl_requests.get(
+            f"{_CODA_API_BASE}/docs/{doc_id}/tables/{table_id}/columns",
+            headers=self.headers,
+            params=params,
+            timeout=_CODA_CALL_TIMEOUT,
+        )
+
+        try:
+            res.raise_for_status()
+        except Exception as e:
+            try:
+                error_body = res.json()
+            except Exception:
+                error_body = res.text
+
+            logger.exception(
+                f"Error fetching columns for table '{table_id}': {error_body}"
+            )
+            raise e
+        return res.json()
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _fetch_table_rows(
+        self,
+        doc_id: str,
+        table_id: str,
+        page_token: str | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Fetch rows from a table via the Coda API."""
+        logger.debug(f"Fetching rows for table '{table_id}' in doc '{doc_id}'")
+        params: dict[str, Any] = {
+            "limit": limit or _CODA_PAGE_SIZE,
+            "useColumnNames": False,
+        }
+        if page_token:
+            params["pageToken"] = page_token
+
+        res = rl_requests.get(
+            f"{_CODA_API_BASE}/docs/{doc_id}/tables/{table_id}/rows",
+            headers=self.headers,
+            params=params,
+            timeout=_CODA_CALL_TIMEOUT,
+        )
+
+        try:
+            res.raise_for_status()
+        except Exception as e:
+            try:
+                error_body = res.json()
+            except Exception:
+                error_body = res.text
+
+            logger.exception(
+                f"Error fetching rows for table '{table_id}': {error_body}"
+            )
             raise e
         return res.json()
 
@@ -237,6 +339,176 @@ class CodaConnector(LoadConnector, PollConnector):
 
         return " / ".join(reversed(path_parts))
 
+    def _format_cell_value(self, value: Any) -> str:
+        """Format a cell value for markdown table display."""
+        if value is None or value == "":
+            return ""
+
+        # Handle different value types
+        if isinstance(value, dict):
+            # Handle special Coda value types
+            if "name" in value:
+                return str(value["name"])
+            elif "url" in value:
+                return str(value["url"])
+            else:
+                return str(value)
+        elif isinstance(value, list):
+            # Join list items
+            return ", ".join(str(item) for item in value)
+        elif isinstance(value, bool):
+            return "✓" if value else ""
+        else:
+            # Escape pipe characters for markdown tables
+            return str(value).replace("|", "\\|").replace("\n", " ")
+
+    def _convert_table_to_markdown(
+        self,
+        table: CodaTable,
+        columns: list[CodaColumn],
+        rows: list[CodaRow],
+    ) -> str:
+        """Convert table data to markdown format.
+
+        Args:
+            table: The table metadata
+            columns: List of column definitions
+            rows: List of row data (may be truncated)
+
+        Returns:
+            Markdown formatted table string
+        """
+        if not columns:
+            return f"# {table.name}\n\n*Empty table - no columns defined*"
+
+        if not rows:
+            return f"# {table.name}\n\n*Empty table - no data*"
+
+        # Build column name to ID mapping
+        col_id_to_name = {col.id: col.name for col in columns if col.display}
+
+        if not col_id_to_name:
+            return f"# {table.name}\n\n*No displayable columns*"
+
+        # Build markdown table
+        lines = [f"# {table.name}\n"]
+
+        # Add row count info if truncated
+        if len(rows) < table.rowCount:
+            lines.append(f"*Showing {len(rows)} of {table.rowCount} rows*\n")
+
+        # Header row
+        header_cells = [col_id_to_name[col_id] for col_id in col_id_to_name.keys()]
+        lines.append("| " + " | ".join(header_cells) + " |")
+
+        # Separator row
+        lines.append("| " + " | ".join(["---"] * len(header_cells)) + " |")
+
+        # Data rows
+        for row in rows:
+            cells = []
+            for col_id in col_id_to_name.keys():
+                value = row.values.get(col_id, "")
+                cells.append(self._format_cell_value(value))
+            lines.append("| " + " | ".join(cells) + " |")
+
+        return "\n".join(lines)
+
+    def _read_tables(
+        self, doc: CodaDoc, tables: list[CodaTable]
+    ) -> Generator[Document, None, None]:
+        """Reads tables and generates Documents"""
+        for table in tables:
+            table_key = f"{doc.id}:table:{table.id}"
+            if table_key in self.indexed_tables:
+                logger.debug(f"Already indexed table '{table.name}'. Skipping.")
+                continue
+
+            logger.info(f"Reading table '{table.name}' in doc '{doc.name}'")
+
+            try:
+                # Fetch columns
+                columns_response = self._fetch_table_columns(doc.id, table.id)
+                columns = [
+                    CodaColumn(**col) for col in columns_response.get("items", [])
+                ]
+
+                if not columns:
+                    logger.debug(f"Skipping table '{table.name}': no columns")
+                    continue
+
+                # Fetch rows (with limit)
+                all_rows: list[CodaRow] = []
+                next_page_token = None
+                rows_fetched = 0
+
+                while rows_fetched < self.max_table_rows:
+                    remaining = self.max_table_rows - rows_fetched
+                    limit = min(remaining, _CODA_PAGE_SIZE)
+
+                    rows_response = self._fetch_table_rows(
+                        doc.id, table.id, next_page_token, limit
+                    )
+
+                    batch_rows = [
+                        CodaRow(**row) for row in rows_response.get("items", [])
+                    ]
+
+                    if not batch_rows:
+                        break
+
+                    all_rows.extend(batch_rows)
+                    rows_fetched += len(batch_rows)
+
+                    next_page_token = rows_response.get("nextPageToken")
+                    if not next_page_token:
+                        break
+
+                if not all_rows:
+                    logger.debug(f"Skipping table '{table.name}': no rows")
+                    continue
+
+                # Convert to markdown
+                content = self._convert_table_to_markdown(table, columns, all_rows)
+
+                # Mark as indexed
+                self.indexed_tables.add(table_key)
+
+                # Build metadata
+                metadata: dict[str, str | list[str]] = {
+                    "doc_name": doc.name,
+                    "doc_id": doc.id,
+                    "table_id": table.id,
+                    "table_name": table.name,
+                    "row_count": str(len(all_rows)),
+                    "total_rows": str(table.rowCount),
+                    "column_count": str(len(columns)),
+                }
+
+                sections: list[TextSection | ImageSection] = [
+                    TextSection(
+                        link=table.browserLink,
+                        text=content,
+                    )
+                ]
+
+                yield Document(
+                    id=table_key,
+                    sections=sections,
+                    source=DocumentSource.CODA,
+                    semantic_identifier=f"{doc.name} - {table.name}",
+                    doc_updated_at=self._parse_timestamp(
+                        doc.updatedAt.replace("Z", "+00:00")
+                    ),
+                    metadata=metadata,
+                )
+
+            except Exception as e:
+                logger.warning(
+                    f"Error processing table '{table.name}' in doc '{doc.name}': {e}"
+                )
+                continue
+
     def _read_pages(
         self, doc: CodaDoc, pages: list[CodaPage], page_map: dict[str, CodaPage]
     ) -> Generator[Document, None, None]:
@@ -346,6 +618,23 @@ class CodaConnector(LoadConnector, PollConnector):
                 # Generate documents from pages
                 yield from self._read_pages(doc, all_pages, page_map)
 
+                # Process tables if enabled
+                if self.include_tables:
+                    all_tables: list[CodaTable] = []
+                    next_table_token = None
+                    while True:
+                        tables_response = self._fetch_tables(doc.id, next_table_token)
+                        all_tables.extend(
+                            [CodaTable(**t) for t in tables_response.get("items", [])]
+                        )
+
+                        next_table_token = tables_response.get("nextPageToken")
+                        if not next_table_token:
+                            break
+
+                    if all_tables:
+                        yield from self._read_tables(doc, all_tables)
+
             # Check for more docs
             next_docs_page_token = docs_response.get("nextPageToken")
             if not next_docs_page_token:
@@ -412,6 +701,25 @@ class CodaConnector(LoadConnector, PollConnector):
                 if updated_pages:
                     # Generate documents from updated pages
                     yield from self._read_pages(doc, updated_pages, page_map)
+
+                # Process tables for updated docs if enabled
+                # Since tables don't have individual timestamps, we re-index all tables
+                # for any doc that has been updated
+                if self.include_tables:
+                    all_tables: list[CodaTable] = []
+                    next_table_token = None
+                    while True:
+                        tables_response = self._fetch_tables(doc.id, next_table_token)
+                        all_tables.extend(
+                            [CodaTable(**t) for t in tables_response.get("items", [])]
+                        )
+
+                        next_table_token = tables_response.get("nextPageToken")
+                        if not next_table_token:
+                            break
+
+                    if all_tables:
+                        yield from self._read_tables(doc, all_tables)
 
             # Check for more docs
             next_docs_page_token = docs_response.get("nextPageToken")
