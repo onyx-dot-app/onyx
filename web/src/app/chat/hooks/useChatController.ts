@@ -58,7 +58,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useChatSessions } from "@/lib/hooks/useChatSessions";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -71,7 +71,8 @@ import {
   MessageStart,
   PacketType,
 } from "../services/streamingModels";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "../services/fileUtils";
@@ -138,9 +139,9 @@ export function useChatController({
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useAppParams();
-  const { refreshChatSessions } = useChatContext();
-  const { agentPreferences: assistantPreferences, forcedToolIds } =
-    useAgentsContext();
+  const { refreshChatSessions } = useChatSessions();
+  const { assistantPreferences } = useAssistantPreferences();
+  const { forcedToolIds } = useForcedTools();
   const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const posthog = usePostHog();

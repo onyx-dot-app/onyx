@@ -28,7 +28,8 @@ it wants to read. This is done in parallel for all selected documents. Reason be
 job of this with all of the documents in the prompt at once. Keeping every LLM decision step as simple as possible is key for
 reliable performance.
 
-Step 5: We construct a response string back to the LLM as the result of the tool call. We also pass relevant richer objects back
+Step 5: Prompt Building
+We construct a response string back to the LLM as the result of the tool call. We also pass relevant richer objects back
 so that the rest of the code can persist it, render it in the UI, etc. The response is a json that makes it easy for the LLM to
 refer to by using matching keywords to other parts of the prompt and reminders.
 """

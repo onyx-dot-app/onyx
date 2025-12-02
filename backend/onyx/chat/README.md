@@ -45,7 +45,7 @@ rather than a user message.
 Here are some documents provided for context, they may not all be relevant:
 {
     "documents": [
-        {"document": 1, "title": "Hello", "contents": "Foo", "metadata": "status closed"},
+        {"document": 1, "title": "Hello", "metadata": "status closed", "contents": "Foo"},
         {"document": 2, "title": "World", "contents": "Bar"}
     ]
 }
