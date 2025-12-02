@@ -278,7 +278,8 @@ def get_answer_with_citation(
         answer = gather_stream(packets)
 
         if answer.error_msg:
-            raise RuntimeError(answer.error_msg)
+            # Return HTTP 403 for blocked questions (e.g., from question qualification)
+            raise HTTPException(status_code=403, detail=answer.error_msg)
 
         return OneShotQAResponse(
             answer=answer.answer,
@@ -294,6 +295,9 @@ def get_answer_with_citation(
                 recency_bias_multiplier=0.0,
             ),
         )
+    except HTTPException:
+        # Re-raise HTTPException to preserve status code (e.g., 403 for blocked queries)
+        raise
     except Exception as e:
         logger.error(f"Error in get_answer_with_citation: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal server error occurred")

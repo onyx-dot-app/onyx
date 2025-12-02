@@ -782,6 +782,19 @@ def gather_stream(
     if message_id is None and error_msg is None:
         raise ValueError("Message ID is required")
 
+    # If there's an error (e.g., question blocked), return response with error
+    if error_msg:
+        # For blocked questions, we may not have a message_id or answer
+        # Use a default message_id of 0 if not set (shouldn't happen, but safe fallback)
+        return ChatBasicResponse(
+            answer="",
+            answer_citationless="",
+            citation_info=[],
+            message_id=message_id if message_id is not None else 0,
+            error_msg=error_msg,
+            top_documents=[],
+        )
+
     if answer is None:
         # This should never be the case as these non-streamed flows do not have a stop-generation signal
         raise RuntimeError("Answer was not generated")
