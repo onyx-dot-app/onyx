@@ -1105,7 +1105,7 @@ websockets==15.0.1
     # via
     #   fastmcp
     #   google-genai
-werkzeug==3.1.1
+werkzeug==3.1.4
     # via openapi-core
 wrapt==1.17.3
     # via
