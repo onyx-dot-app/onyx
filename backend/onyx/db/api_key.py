@@ -168,17 +168,9 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
 
 def remove_api_key(db_session: Session, api_key_id: int) -> None:
     existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
+
     if existing_api_key is None:
         raise ValueError(f"API key with id {api_key_id} does not exist")
 
-    user_associated_with_key = db_session.scalar(
-        select(User).where(User.id == existing_api_key.user_id)  # type: ignore
-    )
-    if user_associated_with_key is None:
-        raise ValueError(
-            f"User associated with API key with id {api_key_id} does not exist. This should not happen."
-        )
-
     db_session.delete(existing_api_key)
-    db_session.delete(user_associated_with_key)
     db_session.commit()
