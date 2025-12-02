@@ -6,10 +6,13 @@ from telebot.states.asyncio import StateContext
 from telebot.types import Message
 
 from onyx.db.telegram import get_user_telegram_settings, get_user_telegram_api_key_by_tg_user_id
+from onyx.utils.logger import setup_logger
 from telegram.states.chat import ChatStates
 from telegram.utils.database import with_session
 from telegram.utils.telegram import request_answer_from_smartsearch
 from telegram.keyboard.settings import MENU_BUTTONS_TXT
+
+logger = setup_logger()
 
 
 def handler(bot: AsyncTeleBot):
@@ -44,18 +47,35 @@ def handler(bot: AsyncTeleBot):
         async with state.data() as data:
             chat_session_id = data.get("chat_session_id")
             parent_message_id = data.get("parent_message_id")
-        answer = request_answer_from_smartsearch(
-            message=text,
-            token=user_token.api_key,
-            chat_session_id=chat_session_id,
-            persona_id=user_settings.persona_id if user_settings.persona_id is not None else 1,
-            llm_model=user_settings.model or None,
-            parent_message_id=parent_message_id,
-            files=files
-        )
+        
+        # Если chat_session_id отсутствует (после смены ассистента/модели или restart), создаём новую сессию
+        if chat_session_id is None:
+            answer = request_answer_from_smartsearch(
+                message=text,
+                token=user_token.api_key,
+                persona_id=user_settings.persona_id if user_settings.persona_id is not None else 1,
+                llm_model=user_settings.model or None,
+                files=files
+            )
 
-        await bot.send_message(message.from_user.id, answer['message'])
-        await state.add_data(parent_message_id=answer['parent_message_id'])
+            await bot.send_message(message.from_user.id, answer['message'])
+            await state.set(ChatStates.MAIN)
+            await state.add_data(
+                chat_session_id=answer['chat_session_id'],
+                parent_message_id=answer['parent_message_id']
+            )
+        else:
+            answer = request_answer_from_smartsearch(
+                message=text,
+                token=user_token.api_key,
+                chat_session_id=chat_session_id,
+                persona_id=user_settings.persona_id if user_settings.persona_id is not None else 1,
+                llm_model=user_settings.model or None,
+                parent_message_id=parent_message_id,
+                files=files
+            )
+            await bot.send_message(message.from_user.id, answer['message'])
+            await state.add_data(parent_message_id=answer['parent_message_id'])
 
     @bot.message_handler(auth=True, content_types=['document', 'text'])
     @with_session
@@ -71,6 +91,12 @@ def handler(bot: AsyncTeleBot):
             files = None
         user_settings = get_user_telegram_settings(message.from_user.id, session)
         user_token = get_user_telegram_api_key_by_tg_user_id(message.from_user.id, session)
+        
+        logger.info(
+            f"Первое сообщение перед созданием новой чат сессии для пользователя {message.from_user.id}. "
+            f"persona_id={user_settings.persona_id}, model={user_settings.model}"
+        )
+        
         answer = request_answer_from_smartsearch(
             message=text,
             token=user_token.api_key,
