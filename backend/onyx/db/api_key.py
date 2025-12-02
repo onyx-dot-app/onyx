@@ -112,7 +112,9 @@ def insert_api_key(
 
 
 def update_api_key(
-    db_session: Session, api_key_id: int, api_key_args: APIKeyArgs
+    db_session: Session,
+    api_key_id: int,
+    api_key_args: APIKeyArgs
 ) -> ApiKeyDescriptor:
     existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
     if existing_api_key is None:
@@ -125,8 +127,6 @@ def update_api_key(
     if api_key_user is None:
         raise RuntimeError("API Key does not have associated user.")
 
-    email_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
-    api_key_user.email = get_api_key_fake_email(email_name, str(api_key_user.id))
     api_key_user.role = api_key_args.role
     db_session.commit()
 
