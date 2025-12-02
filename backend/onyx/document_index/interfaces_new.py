@@ -16,6 +16,10 @@ from shared_configs.model_server_models import Embedding
 # What is actually stored in the index is the document chunks. By the terminology of most search engines / vector
 # databases, the individual objects stored are called documents, but in this case it refers to a chunk.
 
+# Outside of searching and update capabilities, the document index must also implement the ability to port all of
+# the documents over to a secondary index. This allows for embedding models to be updated and for porting documents
+# to happen in the background while the primary index still serves the main traffic.
+
 
 class DocumentInsertionRecord(BaseModel):
     """
@@ -49,9 +53,8 @@ class IndexingMetadata(BaseModel):
     information allows us to only delete the extra "tail" chunks when the document has gotten shorter.
     """
 
-    doc_id_to_old_chunk_cnt: dict[str, int]
-    doc_id_to_new_chunk_cnt: dict[str, int]
-    large_chunks_enabled: bool  # Meaning larger chunks should also get deleted
+    # The tuple is (old_chunk_cnt, new_chunk_cnt)
+    doc_id_to_chunk_cnt_diff: dict[str, tuple[int, int]]
 
 
 class MetadataUpdateRequest(BaseModel):
@@ -60,7 +63,9 @@ class MetadataUpdateRequest(BaseModel):
     """
 
     document_ids: list[str]
+    # Passed in to help with potential optimizations of the implementation
     doc_id_to_chunk_cnt: dict[str, int]
+    # For the ones that are None, there is no update required to that field
     access: DocumentAccess | None = None
     document_sets: set[str] | None = None
     boost: float | None = None
@@ -149,7 +154,7 @@ class Deletable(abc.ABC):
     @abc.abstractmethod
     def delete(
         self,
-        doc_id: str,
+        db_doc_id: str,
         *,
         # Passed in in case it helps the efficiency of the delete implementation
         chunk_count: int | None,
@@ -268,14 +273,15 @@ class HybridCapable(abc.ABC):
 
 
 class RandomCapable(abc.ABC):
-    """Class must implement random document retrieval capability"""
+    """Class must implement random document retrieval capability.
+    This currently is just used for porting the documents to a secondary index."""
 
     @abc.abstractmethod
     def random_retrieval(
         self,
         filters: IndexFilters | None = None,
         num_to_retrieve: int = 100,
-        secondary_index_updated: bool | None = None,
+        dirty: bool | None = None,
     ) -> list[InferenceChunk]:
         """Retrieve random chunks matching the filters"""
         raise NotImplementedError
