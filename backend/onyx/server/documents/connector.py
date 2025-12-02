@@ -555,10 +555,7 @@ def _normalize_file_names_for_backwards_compatibility(
     In legacy data, file_names might not exist or be shorter than file_locations.
     If file_names is shorter, pads it with corresponding file_locations values.
     """
-    normalized_file_names = file_names.copy()
-    while len(normalized_file_names) < len(file_locations):
-        normalized_file_names.append(file_locations[len(normalized_file_names)])
-    return normalized_file_names
+    return file_names + file_locations[len(file_names):]
 
 
 @router.post("/admin/connector/file/upload")
