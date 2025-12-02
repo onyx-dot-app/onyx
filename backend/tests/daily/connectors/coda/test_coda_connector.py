@@ -1,0 +1,236 @@
+"""
+Pytest integration test for CodaConnector.load_from_state()
+
+Tests end-to-end document generation with correct batching.
+Run with: pytest test_load_from_state.py -v
+
+Prerequisites:
+- Set CODA_API_TOKEN environment variable
+- Have a Coda workspace with at least 1 doc and multiple pages
+"""
+
+import os
+from collections.abc import Generator
+
+import pytest
+
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.coda.connector import CodaConnector
+from onyx.connectors.models import Document
+
+
+@pytest.fixture
+def api_token():
+    """Fixture to get and validate API token."""
+    token = os.environ.get("CODA_API_TOKEN")
+    if not token:
+        pytest.skip("CODA_API_TOKEN not set")
+    return token
+
+
+@pytest.fixture
+def connector(api_token):
+    """Fixture to create and authenticate connector."""
+    conn = CodaConnector(batch_size=5)
+    conn.load_credentials({"coda_api_token": api_token})
+    return conn
+
+
+@pytest.fixture
+def reference_data(connector):
+    """Fixture to fetch reference data from API."""
+    all_docs_response = connector._fetch_docs()
+    all_docs = all_docs_response.get("items", [])
+
+    if not all_docs:
+        pytest.skip("No docs found in Coda workspace")
+
+    # Count expected non-hidden pages across all docs
+    expected_page_count = 0
+    expected_pages_by_doc = {}
+
+    for doc_data in all_docs:
+        doc_id = doc_data["id"]
+        pages_response = connector._fetch_pages(doc_id)
+        pages = pages_response.get("items", [])
+
+        # Only count non-hidden pages
+        non_hidden_pages = [p for p in pages if not p.get("isHidden", False)]
+        expected_pages_by_doc[doc_id] = non_hidden_pages
+        expected_page_count += len(non_hidden_pages)
+
+    if expected_page_count == 0:
+        pytest.skip("No visible pages found in Coda workspace")
+
+    return {
+        "docs": all_docs,
+        "total_pages": expected_page_count,
+        "pages_by_doc": expected_pages_by_doc,
+    }
+
+
+class TestLoadFromStateEndToEnd:
+    """Test suite for load_from_state end-to-end functionality."""
+
+    def test_returns_generator(self, connector):
+        """Test that load_from_state returns a generator."""
+        gen = connector.load_from_state()
+        assert isinstance(gen, Generator), "load_from_state should return a Generator"
+
+    def test_batch_sizes_respect_config(self, connector, reference_data):
+        """Test that batches respect the configured batch_size."""
+        batch_size = connector.batch_size
+        connector.indexed_pages.clear()
+        gen = connector.load_from_state()
+
+        batch_sizes = []
+        for batch in gen:
+            batch_sizes.append(len(batch))
+            # All batches should be <= batch_size
+            assert (
+                len(batch) <= batch_size
+            ), f"Batch size {len(batch)} exceeds configured {batch_size}"
+
+        # All non-final batches should be exactly batch_size
+        for i, size in enumerate(batch_sizes[:-1]):
+            assert (
+                size == batch_size
+            ), f"Non-final batch {i} has size {size}, expected {batch_size}"
+
+        # Last batch may be smaller
+        if batch_sizes:
+            assert batch_sizes[-1] <= batch_size
+
+    def test_document_count_matches_expected(self, connector, reference_data):
+        """Test that total documents match expected non-hidden pages."""
+        connector.indexed_pages.clear()
+        gen = connector.load_from_state()
+
+        total_documents = sum(len(batch) for batch in gen)
+        expected_count = reference_data["total_pages"]
+
+        assert (
+            total_documents == expected_count
+        ), f"Expected {expected_count} documents but got {total_documents}"
+
+    def test_document_required_fields(self, connector, reference_data):
+        """Test that all documents have required fields."""
+        connector.indexed_pages.clear()
+        gen = connector.load_from_state()
+
+        for batch in gen:
+            for doc in batch:
+                # Type check
+                assert isinstance(doc, Document)
+
+                # Required fields
+                assert doc.id is not None
+                assert doc.source == DocumentSource.CODA
+                assert doc.semantic_identifier is not None
+                assert doc.doc_updated_at is not None
+
+                # Sections with content
+                assert len(doc.sections) > 0
+                for section in doc.sections:
+                    assert section.text is not None
+                    assert len(section.text) > 0
+                    assert section.link is not None
+
+                # Metadata
+                assert "doc_id" in doc.metadata
+                assert "page_id" in doc.metadata
+                assert "path" in doc.metadata
+
+    def test_hidden_pages_excluded(self, connector, reference_data):
+        """Test that hidden pages are not included in results."""
+        connector.indexed_pages.clear()
+        gen = connector.load_from_state()
+
+        # Collect all yielded page IDs
+        yielded_page_ids = set()
+        for batch in gen:
+            for doc in batch:
+                page_id = doc.metadata.get("page_id")
+                yielded_page_ids.add(page_id)
+
+        # Get all hidden page IDs from reference data
+        all_hidden_page_ids = set()
+        for doc_id, pages in reference_data["pages_by_doc"].items():
+            for page_data in pages:
+                if page_data.get("isHidden", False):
+                    all_hidden_page_ids.add(page_data["id"])
+
+        # Verify no overlap
+        hidden_in_results = all_hidden_page_ids & yielded_page_ids
+        assert (
+            not hidden_in_results
+        ), f"Found {len(hidden_in_results)} hidden pages in results"
+
+    def test_no_duplicate_documents(self, connector, reference_data):
+        """Test that no documents are yielded twice."""
+        connector.indexed_pages.clear()
+        gen = connector.load_from_state()
+
+        document_ids = []
+        for batch in gen:
+            for doc in batch:
+                document_ids.append(doc.id)
+
+        unique_ids = set(document_ids)
+        assert len(document_ids) == len(
+            unique_ids
+        ), f"Found {len(document_ids) - len(unique_ids)} duplicate documents"
+
+    def test_all_docs_processed(self, connector, reference_data):
+        """Test that pages from all docs are included."""
+        connector.indexed_pages.clear()
+        gen = connector.load_from_state()
+
+        processed_doc_ids = set()
+        for batch in gen:
+            for doc in batch:
+                doc_id = doc.metadata.get("doc_id")
+                processed_doc_ids.add(doc_id)
+
+        expected_doc_ids = {doc["id"] for doc in reference_data["docs"]}
+        assert (
+            processed_doc_ids == expected_doc_ids
+        ), f"Not all docs were processed. Expected {expected_doc_ids}, got {processed_doc_ids}"
+
+    def test_document_content_not_empty(self, connector, reference_data):
+        """Test that all documents have meaningful content."""
+        connector.indexed_pages.clear()
+        gen = connector.load_from_state()
+
+        for batch in gen:
+            for doc in batch:
+                # Semantic identifier should not be just the ID
+                assert doc.semantic_identifier
+                assert not doc.semantic_identifier.startswith("Untitled Page")
+
+                # At least one section with content
+                total_text_length = sum(len(section.text) for section in doc.sections)
+                assert total_text_length > 0, f"Document {doc.id} has no content"
+
+    def test_metadata_contains_hierarchy_info(self, connector, reference_data):
+        """Test that metadata contains page hierarchy information."""
+        connector.indexed_pages.clear()
+        gen = connector.load_from_state()
+
+        for batch in gen:
+            for doc in batch:
+                metadata = doc.metadata
+
+                # Path should contain page name
+                assert metadata["path"]
+                assert (
+                    metadata["path"] == metadata["path"].strip()
+                )  # No leading/trailing spaces
+
+                # If page has a parent, it should be in metadata
+                if "parent_page_id" in metadata:
+                    assert metadata["parent_page_id"] is not None
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
