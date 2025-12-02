@@ -596,30 +596,23 @@ def list_connector_files(
     for file_id, file_name in zip(file_locations, file_names):
         try:
             file_record = file_store.read_file_record(file_id)
+            file_size = None
+            upload_date = None
             if file_record:
-                # Get file size using the public API
                 file_size = file_store.get_file_size(file_id)
-
-                files.append(
-                    ConnectorFileInfo(
-                        file_id=file_id,
-                        file_name=file_name,
-                        file_size=file_size,
-                        upload_date=(
-                            file_record.created_at.isoformat()
-                            if file_record.created_at
-                            else None
-                        ),
-                    )
+                upload_date = (
+                    file_record.created_at.isoformat()
+                    if file_record.created_at
+                    else None
                 )
-            else:
-                # File record not found, include basic info
-                files.append(
-                    ConnectorFileInfo(
-                        file_id=file_id,
-                        file_name=file_name,
-                    )
+            files.append(
+                ConnectorFileInfo(
+                    file_id=file_id,
+                    file_name=file_name,
+                    file_size=file_size,
+                    upload_date=upload_date,
                 )
+            )
         except Exception as e:
             logger.warning(f"Error reading file record for {file_id}: {e}")
             # Include file with basic info even if record fetch fails
