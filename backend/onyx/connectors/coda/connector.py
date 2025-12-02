@@ -94,6 +94,8 @@ class CodaConnector(LoadConnector, PollConnector):
         self.headers = {
             "Content-Type": "application/json",
         }
+        self.export_max_attempts = 10
+        self.export_poll_interval = 1.0
         self.indexed_pages: set[str] = set()
         self.doc_ids = set(doc_ids) if doc_ids else None
 
@@ -153,71 +155,110 @@ class CodaConnector(LoadConnector, PollConnector):
         return res.json()
 
     @retry(tries=3, delay=1, backoff=2)
-    def _export_page_content(self, doc_id: str, page_id: str) -> str:
-        """Export page content as markdown via the Coda API."""
+    def _export_page_content(self, doc_id: str, page_id: str) -> str | None:
+        """Export page content as markdown via the Coda API.
+
+        Returns:
+            str: Page content in markdown format
+            None: If export failed (API error, timeout, etc.)
+        """
         logger.debug(f"Exporting content for page '{page_id}' in doc '{doc_id}'")
 
         # Start the export
-        res = rl_requests.post(
-            f"{_CODA_API_BASE}/docs/{doc_id}/pages/{page_id}/export",
-            headers=self.headers,
-            json={"outputFormat": "markdown"},
-            timeout=_CODA_CALL_TIMEOUT,
-        )
         try:
+            res = rl_requests.post(
+                f"{_CODA_API_BASE}/docs/{doc_id}/pages/{page_id}/export",
+                headers=self.headers,
+                json={"outputFormat": "markdown"},
+                timeout=_CODA_CALL_TIMEOUT,
+            )
             res.raise_for_status()
         except Exception as e:
-            logger.warning(
-                f"Error starting export for page '{page_id}': {e}. Returning empty content."
-            )
-            return ""
+            logger.warning(f"Error starting export for page '{page_id}': {e}")
+            return None
 
         export_data = res.json()
         request_id = export_data.get("id")
 
         if not request_id:
-            logger.warning(f"No request ID returned for page '{page_id}' export")
-            return ""
+            logger.warning(f"No request ID returned for page '{page_id}'")
+            return None
 
-        # Poll for the export result
+        # Poll for the export result with exponential backoff
         import time
 
-        max_attempts = 10
-        for attempt in range(max_attempts):
-            status_res = rl_requests.get(
-                f"{_CODA_API_BASE}/docs/{doc_id}/pages/{page_id}/export/{request_id}",
-                headers=self.headers,
-                timeout=_CODA_CALL_TIMEOUT,
-            )
+        for attempt in range(self.export_max_attempts):
+            # Exponential backoff: 1s, 2s, 4s, 8s, etc.
+            wait_time = self.export_poll_interval * (2**attempt)
+
             try:
+                status_res = rl_requests.get(
+                    f"{_CODA_API_BASE}/docs/{doc_id}/pages/{page_id}/export/{request_id}",
+                    headers=self.headers,
+                    timeout=_CODA_CALL_TIMEOUT,
+                )
                 status_res.raise_for_status()
             except Exception as e:
-                logger.warning(f"Error checking export status: {e}")
-                return ""
+                logger.warning(
+                    f"Error checking export status for page '{page_id}': {e}"
+                )
+                return None
 
             status_data = status_res.json()
-            if status_data.get("status") == "complete":
+            status = status_data.get("status")
+
+            if status == "complete":
                 download_link = status_data.get("downloadLink")
-                if download_link:
-                    # Download the content
+                if not download_link:
+                    logger.warning(f"No download link for page '{page_id}'")
+                    return None
+
+                try:
                     content_res = rl_requests.get(
                         download_link,
                         timeout=_CODA_CALL_TIMEOUT,
                     )
                     content_res.raise_for_status()
-                    return content_res.text
-                else:
-                    logger.warning(f"No download link for page '{page_id}'")
-                    return ""
-            elif status_data.get("status") == "failed":
+                    content = content_res.text
+
+                    # Validate content is not empty
+                    if not content.strip():
+                        logger.debug(
+                            f"Page '{page_id}' exported but contains no content"
+                        )
+                        return ""
+
+                    logger.debug(
+                        f"Successfully exported page '{page_id}' ({len(content)} chars)"
+                    )
+                    return content
+                except Exception as e:
+                    logger.warning(
+                        f"Error downloading content for page '{page_id}': {e}"
+                    )
+                    return None
+
+            elif status == "failed":
                 logger.warning(f"Export failed for page '{page_id}'")
-                return ""
+                return None
 
-            # Wait before polling again
-            time.sleep(1)
+            elif status == "in_progress":
+                # Only log on first attempt to avoid spam
+                if attempt == 0:
+                    logger.debug(f"Export in progress for page '{page_id}'")
 
-        logger.warning(f"Export timed out for page '{page_id}'")
-        return ""
+                # Wait before polling again (exponential backoff)
+                if attempt < self.export_max_attempts - 1:
+                    time.sleep(wait_time)
+
+            else:
+                logger.warning(f"Unknown export status '{status}' for page '{page_id}'")
+                return None
+
+        logger.warning(
+            f"Export timed out for page '{page_id}' after {self.export_max_attempts} attempts"
+        )
+        return None
 
     def _get_page_path(self, page: CodaPage, page_map: dict[str, CodaPage]) -> str:
         """Constructs the breadcrumb path for a page."""
