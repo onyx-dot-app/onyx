@@ -1067,7 +1067,9 @@ class InformationContentClassificationModel:
         queries: list[str],
     ) -> list[ContentClassificationPrediction]:
         if os.environ.get("DISABLE_MODEL_SERVER", "").lower() == "true":
-            logger.info("DISABLE_MODEL_SERVER is set, returning default classifications")
+            logger.info(
+                "DISABLE_MODEL_SERVER is set, returning default classifications"
+            )
             return [
                 ContentClassificationPrediction(
                     predicted_label=1,
@@ -1104,7 +1106,9 @@ class ConnectorClassificationModel:
     ) -> list[str]:
         # Check if model server is disabled
         if os.environ.get("DISABLE_MODEL_SERVER", "").lower() == "true":
-            logger.info("DISABLE_MODEL_SERVER is set, returning all available connectors")
+            logger.info(
+                "DISABLE_MODEL_SERVER is set, returning all available connectors"
+            )
             # Return all available connectors when model server is disabled
             return available_connectors
 

@@ -163,7 +163,9 @@ class TestConnectorClassificationModel:
 
     @patch.dict(os.environ, {"DISABLE_MODEL_SERVER": "1"})
     @patch("requests.post")
-    def test_predict_with_disable_model_server_numeric(self, mock_post: MagicMock) -> None:
+    def test_predict_with_disable_model_server_numeric(
+        self, mock_post: MagicMock
+    ) -> None:
         """Test that predict makes request when DISABLE_MODEL_SERVER is 1 (not 'true')"""
         # "1" should NOT trigger disable (only "true" should)
         mock_response = MagicMock()
