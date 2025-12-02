@@ -5,8 +5,10 @@ import pytest
 import requests
 from requests.models import Response
 
+from onyx.llm.model_name_parser import parse_litellm_model_name
 from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import litellm_thinks_model_supports_image_input
+from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
@@ -43,19 +45,37 @@ def assert_response_is_equivalent(
     def fill_max_input_tokens_and_supports_image_input(
         req: ModelConfigurationUpsertRequest,
     ) -> dict[str, Any]:
+        provider_name = created_provider["provider"]
+        # Match how ModelConfigurationView.from_model builds the key for parsing
+        model_key = req.name
+        if provider_name and not model_key.startswith(f"{provider_name}/"):
+            model_key = f"{provider_name}/{model_key}"
+        parsed = parse_litellm_model_name(model_key)
+
+        # Include region in display name for Bedrock cross-region models (matches from_model)
+        display_name = (
+            f"{parsed.display_name} ({parsed.region})"
+            if parsed.region
+            else parsed.display_name
+        )
+
         filled_with_max_input_tokens = ModelConfigurationUpsertRequest(
             name=req.name,
             is_visible=req.is_visible,
             max_input_tokens=req.max_input_tokens
-            or get_max_input_tokens(
-                model_name=req.name, model_provider=default_model_name
-            ),
+            or get_max_input_tokens(model_name=req.name, model_provider=provider_name),
         )
         return {
             **filled_with_max_input_tokens.model_dump(),
-            "supports_image_input": model_supports_image_input(
-                req.name, created_provider["provider"]
+            "supports_image_input": litellm_thinks_model_supports_image_input(
+                req.name, provider_name
             ),
+            "supports_reasoning": model_is_reasoning_model(req.name, provider_name),
+            "display_name": display_name,
+            "provider_display_name": parsed.provider_display_name,
+            "vendor": parsed.vendor,
+            "region": parsed.region,
+            "version": parsed.version,
         }
 
     actual = set(

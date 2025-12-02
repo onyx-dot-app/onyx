@@ -1,0 +1,48 @@
+"""
+Unit tests for LiteLLM model name parser.
+
+Tests verify that enrichment data is correctly returned from the parser.
+"""
+
+from onyx.llm.model_name_parser import parse_litellm_model_name
+
+
+def test_bedrock_model_with_enrichment() -> None:
+    """Test parsing a Bedrock model - provider extracted, metadata from enrichment."""
+    result = parse_litellm_model_name(
+        "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
+    )
+
+    assert result.raw_name == "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
+    assert result.provider == "bedrock"
+    assert result.vendor == "anthropic"
+    assert result.display_name == "Claude Sonnet 3.5"
+    assert result.provider_display_name == "Claude (Bedrock - Anthropic)"
+
+
+def test_region_extraction() -> None:
+    """Test that region prefix is extracted from model key."""
+    result = parse_litellm_model_name(
+        "bedrock/eu.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    )
+
+    assert result.region == "eu"
+    assert result.provider == "bedrock"
+
+
+def test_direct_provider_inference() -> None:
+    """Test that provider is inferred from litellm.model_cost for unprefixed models."""
+    result = parse_litellm_model_name("gpt-4o")
+
+    assert result.provider == "openai"
+    assert result.display_name == "GPT-4o"
+    assert result.provider_display_name == "GPT (OpenAI)"
+
+
+def test_unknown_model_fallback() -> None:
+    """Test that unknown models fall back to raw name for display."""
+    result = parse_litellm_model_name("some-unknown-model-xyz")
+
+    assert result.raw_name == "some-unknown-model-xyz"
+    assert result.display_name == "some-unknown-model-xyz"
+    assert result.vendor is None

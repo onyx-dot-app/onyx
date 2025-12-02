@@ -113,7 +113,7 @@ def load_model_metadata_enrichments() -> None:
     """
     Load model metadata enrichments from JSON file and merge into litellm.model_cost.
 
-    This adds model_vendor, display_name, model_family, and release_date fields
+    This adds model_vendor, display_name, and model_version fields
     to litellm's model_cost dict. These fields are used by the UI to display
     models grouped by vendor with human-friendly names.
 
@@ -140,6 +140,15 @@ def load_model_metadata_enrichments() -> None:
                 litellm.model_cost[model_key] = metadata
 
         logger.info(f"Loaded model metadata enrichments for {len(enrichments)} models")
+
+        # Clear the model name parser cache since enrichments are now loaded
+        # This ensures any parsing done before enrichments were loaded gets refreshed
+        try:
+            from onyx.llm.model_name_parser import parse_litellm_model_name
+
+            parse_litellm_model_name.cache_clear()
+        except ImportError:
+            pass  # Parser not yet imported, no cache to clear
     except Exception as e:
         logger.error(f"Failed to load model metadata enrichments: {e}")
 

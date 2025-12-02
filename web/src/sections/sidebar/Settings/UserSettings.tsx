@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getDisplayNameForModel, useAuthType } from "@/lib/hooks";
+import { useAuthType } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/userSettings";
 import { usePathname, useRouter } from "next/navigation";
@@ -178,7 +178,7 @@ export default function UserSettings() {
   llmProviders?.forEach((llmProvider) => {
     const providerOptions = llmProvider.model_configurations.map(
       (model_configuration) => ({
-        name: getDisplayNameForModel(model_configuration.name),
+        name: model_configuration.display_name || model_configuration.name,
         value: model_configuration.name,
       })
     );

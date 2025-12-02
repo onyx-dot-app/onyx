@@ -34,6 +34,12 @@ export interface ModelConfiguration {
   is_visible: boolean;
   max_input_tokens: number | null;
   supports_image_input: boolean | null;
+  supports_reasoning?: boolean;
+  display_name?: string;
+  provider_display_name?: string;
+  vendor?: string;
+  version?: string;
+  region?: string;
 }
 
 export interface WellKnownLLMProviderDescriptor {
@@ -83,7 +89,6 @@ export interface LLMProvider {
 export interface LLMProviderView extends LLMProvider {
   id: number;
   is_default_provider: boolean | null;
-  icon?: React.FC<{ size?: number; className?: string }>;
 }
 
 export interface VisionProvider extends LLMProviderView {
@@ -93,12 +98,15 @@ export interface VisionProvider extends LLMProviderView {
 export interface LLMProviderDescriptor {
   name: string;
   provider: string;
+  provider_display_name?: string;
   default_model_name: string;
   fast_default_model_name: string | null;
   is_default_provider: boolean | null;
-  is_public: boolean;
-  groups: number[];
-  personas: number[];
+  is_default_vision_provider?: boolean | null;
+  default_vision_model?: string | null;
+  is_public?: boolean;
+  groups?: number[];
+  personas?: number[];
   model_configurations: ModelConfiguration[];
 }
 

@@ -2,6 +2,7 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import ModelConfigurationView
 
@@ -451,6 +452,32 @@ def fetch_models_for_provider(provider_name: str) -> list[str]:
 def fetch_model_names_for_provider_as_set(provider_name: str) -> set[str] | None:
     model_names = fetch_models_for_provider(provider_name)
     return set(model_names) if model_names else None
+
+
+# Display names for Onyx-supported LLM providers (used in admin UI provider selection).
+# These override PROVIDER_DISPLAY_NAMES for Onyx-specific branding.
+_ONYX_PROVIDER_DISPLAY_NAMES: dict[str, str] = {
+    OPENAI_PROVIDER_NAME: "ChatGPT (OpenAI)",
+    OLLAMA_PROVIDER_NAME: "Ollama",
+    ANTHROPIC_PROVIDER_NAME: "Claude (Anthropic)",
+    AZURE_PROVIDER_NAME: "Azure OpenAI",
+    BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
+    VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
+    OPENROUTER_PROVIDER_NAME: "OpenRouter",
+}
+
+
+def get_provider_display_name(provider_name: str) -> str:
+    """Get human-friendly display name for an Onyx-supported provider.
+
+    First checks Onyx-specific display names, then falls back to
+    PROVIDER_DISPLAY_NAMES from constants.
+    """
+    if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:
+        return _ONYX_PROVIDER_DISPLAY_NAMES[provider_name]
+    return PROVIDER_DISPLAY_NAMES.get(
+        provider_name.lower(), provider_name.replace("_", " ").title()
+    )
 
 
 def fetch_visible_model_names_for_provider_as_set(

@@ -29,7 +29,7 @@ import {
 } from "@/components/admin/assistants/FormSections";
 import { ToolSelector } from "@/components/admin/assistants/ToolSelector";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { getDisplayNameForModel, useLabels } from "@/lib/hooks";
+import { useLabels } from "@/lib/hooks";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
 import {
@@ -218,7 +218,7 @@ export default function AssistantEditor({
   llmProviders.forEach((llmProvider) => {
     const providerOptions = llmProvider.model_configurations.map(
       (modelConfiguration) => ({
-        name: getDisplayNameForModel(modelConfiguration.name),
+        name: modelConfiguration.display_name || modelConfiguration.name,
         value: modelConfiguration.name,
       })
     );

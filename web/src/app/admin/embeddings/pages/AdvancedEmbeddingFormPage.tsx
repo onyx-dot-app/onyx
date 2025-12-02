@@ -17,7 +17,6 @@ import NumberInput from "../../connectors/[connector]/pages/ConnectorInput/Numbe
 import { StringOrNumberOption } from "@/components/Dropdown";
 import useSWR from "swr";
 import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "../../configuration/llm/constants";
-import { getDisplayNameForModel } from "@/lib/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Button from "@/refresh-components/buttons/Button";
 import SvgPlusCircle from "@/icons/plus-circle";
@@ -67,7 +66,8 @@ const AdvancedEmbeddingFormPage = forwardRef<
       () =>
         (contextualCosts || []).map((cost) => {
           return {
-            name: getDisplayNameForModel(cost.model_name),
+            // Use model_name as display - contextual costs don't have display_name field
+            name: cost.model_name,
             value: cost.model_name,
           };
         }),

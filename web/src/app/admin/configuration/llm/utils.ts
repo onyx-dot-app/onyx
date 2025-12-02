@@ -15,6 +15,9 @@ import {
   OllamaIcon,
   ZAIIcon,
 } from "@/components/icons/icons";
+import SvgAws from "@/icons/aws";
+import SvgOpenrouter from "@/icons/openrouter";
+
 import {
   WellKnownLLMProviderDescriptor,
   LLMProviderView,
@@ -23,6 +26,14 @@ import {
   ModelConfiguration,
 } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+
+// Aggregator providers that host models from multiple vendors
+export const AGGREGATOR_PROVIDERS = new Set([
+  "bedrock",
+  "bedrock_converse",
+  "openrouter",
+  "vertex_ai",
+]);
 
 export const getProviderIcon = (
   providerName: string,
@@ -38,6 +49,7 @@ export const getProviderIcon = (
     ministral: MistralIcon,
     llama: MetaIcon,
     ollama_chat: OllamaIcon,
+    ollama: OllamaIcon,
     gemini: GeminiIcon,
     deepseek: DeepseekIcon,
     claude: AnthropicIcon,
@@ -51,10 +63,27 @@ export const getProviderIcon = (
     qwen: QwenIcon,
     qwq: QwenIcon,
     zai: ZAIIcon,
+    // Cloud providers - use AWS icon for Bedrock
+    bedrock: SvgAws,
+    bedrock_converse: SvgAws,
+    openrouter: SvgOpenrouter,
+    vertex_ai: GeminiIcon,
   };
 
-  // First check if provider name directly matches an icon
   const lowerProviderName = providerName.toLowerCase();
+
+  // For aggregator providers (bedrock, openrouter, vertex_ai), prioritize showing
+  // the vendor icon based on model name (e.g., show Claude icon for Bedrock Claude models)
+  if (AGGREGATOR_PROVIDERS.has(lowerProviderName) && modelName) {
+    const lowerModelName = modelName.toLowerCase();
+    for (const [key, icon] of Object.entries(iconMap)) {
+      if (lowerModelName.includes(key)) {
+        return icon;
+      }
+    }
+  }
+
+  // Check if provider name directly matches an icon
   if (lowerProviderName in iconMap) {
     const icon = iconMap[lowerProviderName];
     if (icon) {
@@ -62,7 +91,7 @@ export const getProviderIcon = (
     }
   }
 
-  // Then check if model name contains any of the keys
+  // For non-aggregator providers, check if model name contains any of the keys
   if (modelName) {
     const lowerModelName = modelName.toLowerCase();
     for (const [key, icon] of Object.entries(iconMap)) {

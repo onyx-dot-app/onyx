@@ -452,7 +452,7 @@ export function SlackChannelConfigFormFields({
               Search Configuration
             </AccordionTrigger>
             <AccordionContent>
-              <div className="space-y-4">
+              <div className="space-y-4 pb-3">
                 <div className="w-64">
                   <SelectorFormField
                     name="response_type"
