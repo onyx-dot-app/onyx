@@ -296,6 +296,15 @@ class MessageType(str, Enum):
     SYSTEM = "system"  # SystemMessage
     USER = "user"  # HumanMessage
     ASSISTANT = "assistant"  # AIMessage
+    TOOL_CALL = "tool_call"
+    TOOL_CALL_RESPONSE = "tool_call_response"
+
+
+class ChatMessageSimpleType(str, Enum):
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL_CALL = "tool_call"
+    FILE_TEXT = "file_text"
 
 
 class TokenRateLimitScope(str, Enum):

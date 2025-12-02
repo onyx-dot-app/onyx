@@ -1,3 +1,4 @@
+from onyx.chat.emitter import get_default_emitter
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 
@@ -25,6 +26,7 @@ class SimpleTestTool(CustomTool):
         )
         super().__init__(
             id=tool_id,
+            emitter=get_default_emitter(),
             method_spec=method_spec,
             base_url="http://test.local",
             custom_headers=None,
