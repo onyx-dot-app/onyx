@@ -250,6 +250,9 @@ class CodaConnector(LoadConnector, PollConnector):
 
             # Get page content
             content = self._export_page_content(doc.id, page.id)
+            if content is None:
+                logger.warning(f"Skipping page {page.id}: export failed")
+            continue
 
             # Mark as indexed
             self.indexed_pages.add(page_key)
