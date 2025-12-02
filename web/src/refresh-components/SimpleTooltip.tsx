@@ -35,6 +35,12 @@ export default function SimpleTooltip({
   // If no hover content, just render children without tooltip
   if (!hoverContent) return <>{children}</>;
 
+  const triggerChild = React.isValidElement(children) ? (
+    children
+  ) : (
+    <span className="inline-flex">{children}</span>
+  );
+
   return (
     <TooltipProvider>
       <Tooltip>
@@ -43,7 +49,7 @@ export default function SimpleTooltip({
           // Doesn't work for some reason.
           // disabled={disabled}
         >
-          <div>{children}</div>
+          {triggerChild}
         </TooltipTrigger>
         {!disabled && (
           <TooltipContent

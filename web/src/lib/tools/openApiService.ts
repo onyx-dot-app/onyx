@@ -1,6 +1,64 @@
 import { MethodSpec } from "@/lib/tools/types";
 import { ToolSnapshot } from "./types";
 
+const SUPPORTED_HTTP_METHODS = new Set([
+  "get",
+  "post",
+  "put",
+  "patch",
+  "delete",
+  "options",
+  "head",
+]);
+
+const isPlainRecord = (value: unknown): value is Record<string, any> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+export function extractMethodSpecsFromDefinition(
+  definition?: Record<string, any> | null
+): MethodSpec[] {
+  if (!isPlainRecord(definition) || !isPlainRecord(definition.paths)) {
+    return [];
+  }
+
+  const pathEntries = Object.entries(definition.paths as Record<string, any>);
+  const methods: MethodSpec[] = [];
+
+  for (const [path, operations] of pathEntries) {
+    if (!isPlainRecord(operations)) {
+      continue;
+    }
+
+    for (const [methodName, spec] of Object.entries(operations)) {
+      if (!isPlainRecord(spec)) {
+        continue;
+      }
+
+      if (!SUPPORTED_HTTP_METHODS.has(methodName.toLowerCase())) {
+        continue;
+      }
+
+      const name = spec.operationId ?? spec.operationID;
+      const summary = spec.summary ?? spec.description;
+
+      if (!name || !summary) {
+        continue;
+      }
+
+      methods.push({
+        name,
+        summary,
+        path,
+        method: methodName.toUpperCase(),
+        spec,
+        custom_headers: [],
+      });
+    }
+  }
+
+  return methods;
+}
+
 interface ApiResponse<T> {
   data: T | null;
   error: string | null;
@@ -60,15 +118,18 @@ export async function createCustomTool(toolData: {
   }
 }
 
+type ToolUpdatePayload = {
+  name?: string;
+  description?: string;
+  definition?: Record<string, any>;
+  custom_headers?: { key: string; value: string }[] | null;
+  passthrough_auth?: boolean;
+  oauth_config_id?: number | null;
+};
+
 export async function updateCustomTool(
   toolId: number,
-  toolData: {
-    name?: string;
-    description?: string;
-    definition?: Record<string, any>;
-    custom_headers: { key: string; value: string }[];
-    passthrough_auth: boolean;
-  }
+  toolData: ToolUpdatePayload
 ): Promise<ApiResponse<ToolSnapshot>> {
   try {
     const response = await fetch(`/api/admin/tool/custom/${toolId}`, {
@@ -89,5 +150,28 @@ export async function updateCustomTool(
   } catch (error) {
     console.error("Error updating tool:", error);
     return { data: null, error: "Error updating tool" };
+  }
+}
+
+export async function deleteCustomTool(
+  toolId: number
+): Promise<ApiResponse<boolean>> {
+  try {
+    const response = await fetch(`/api/admin/tool/custom/${toolId}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const errorDetail = (await response.json()).detail;
+      return { data: false, error: `Failed to delete tool: ${errorDetail}` };
+    }
+
+    return { data: true, error: null };
+  } catch (error) {
+    console.error("Error deleting tool:", error);
+    return { data: false, error: "Error deleting tool" };
   }
 }

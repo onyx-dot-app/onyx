@@ -9,7 +9,6 @@ import Link from "next/link";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
 import SvgActions from "@/icons/actions";
 import { FormField } from "@/refresh-components/form/FormField";
@@ -19,7 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgBracketCurly from "@/icons/bracket-curly";
-import { MethodSpec } from "@/lib/tools/types";
+import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
 import {
   validateToolDefinition,
   createCustomTool,
@@ -33,19 +32,15 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 interface AddOpenAPIActionModalProps {
   skipOverlay?: boolean;
-  onSuccess?: () => void;
+  onSuccess?: (tool: ToolSnapshot) => void;
   setPopup: (popup: PopupSpec) => void;
 }
 
 interface OpenAPIActionFormValues {
-  name: string;
-  description: string;
   definition: string;
 }
 
 const validationSchema = Yup.object().shape({
-  name: Yup.string().required("Action name is required"),
-  description: Yup.string(),
   definition: Yup.string().required("OpenAPI schema definition is required"),
 });
 
@@ -102,8 +97,6 @@ export default function AddOpenAPIActionModal({
   }, [toggle]);
 
   const initialValues: OpenAPIActionFormValues = {
-    name: "",
-    description: "",
     definition: "",
   };
 
@@ -165,9 +158,12 @@ export default function AddOpenAPIActionModal({
 
     try {
       const parsedDefinition = parseJsonWithTrailingCommas(values.definition);
+      const derivedName = parsedDefinition?.info?.title;
+      const derivedDescription = parsedDefinition?.info?.description;
+
       const response = await createCustomTool({
-        name: values.name,
-        description: values.description || undefined,
+        name: derivedName,
+        description: derivedDescription || undefined,
         definition: parsedDefinition,
         custom_headers: [],
         passthrough_auth: false,
@@ -184,8 +180,8 @@ export default function AddOpenAPIActionModal({
           type: "success",
         });
         handleClose();
-        if (onSuccess) {
-          onSuccess();
+        if (response.data && onSuccess) {
+          onSuccess(response.data);
         }
       }
     } catch (error) {
@@ -248,68 +244,6 @@ export default function AddOpenAPIActionModal({
                   />
 
                   <Modal.Body className="bg-background-tint-01 p-4 flex flex-col gap-4 overflow-y-auto">
-                    <FormField
-                      id="name"
-                      name="name"
-                      state={
-                        errors.name && touched.name
-                          ? "error"
-                          : touched.name
-                            ? "success"
-                            : "idle"
-                      }
-                    >
-                      <FormField.Label>Action Name</FormField.Label>
-                      <FormField.Control asChild>
-                        <InputTypeIn
-                          id="name"
-                          name="name"
-                          placeholder="Name your OpenAPI action"
-                          value={values.name}
-                          onChange={handleChange}
-                          onBlur={handleBlur}
-                          autoFocus
-                        />
-                      </FormField.Control>
-                      <FormField.Message
-                        messages={{
-                          error: errors.name,
-                        }}
-                      />
-                    </FormField>
-
-                    <FormField
-                      id="description"
-                      name="description"
-                      state={
-                        errors.description && touched.description
-                          ? "error"
-                          : touched.description
-                            ? "success"
-                            : "idle"
-                      }
-                    >
-                      <FormField.Label optional>Description</FormField.Label>
-                      <FormField.Control asChild>
-                        <InputTextArea
-                          id="description"
-                          name="description"
-                          placeholder="More details about the OpenAPI action"
-                          value={values.description}
-                          onChange={handleChange}
-                          onBlur={handleBlur}
-                          rows={3}
-                        />
-                      </FormField.Control>
-                      <FormField.Message
-                        messages={{
-                          error: errors.description,
-                        }}
-                      />
-                    </FormField>
-
-                    <Separator className="-my-2" />
-
                     <FormField
                       id="openapi-schema"
                       name="definition"
