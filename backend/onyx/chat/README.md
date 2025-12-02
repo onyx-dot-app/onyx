@@ -124,3 +124,33 @@ User Message further away. This tradeoff is accepted for Projects because of the
 
 ## Other related pointers
 - How messages, files, images are stored can be found in db/models.py
+
+
+# Appendix (just random tidbits for those interested)
+- Reminder messages are placed at the end of the prompt because all model fine tuning approaches cause the LLMs to attend very strongly to the tokens at the very
+back of the context closest to generation. This is the only way to get the LLMs to not miss critical information and for the product to be reliable. Specifically
+the built-in reminders are around citations and what tools it should call in certain situations.
+
+- LLMs are able to handle changes in topic best at message boundaries. There are special tokens under the hood for this. We also use this property to slice up
+the history in the way presented above.
+
+- Different LLMs vary in this but some now have a section that cannot be set via the API layer called the "System Prompt" (OpenAI terminology) which contains
+information like the model cutoff date, identity, and some other basic non-changing information. The System prompt described above is in that convention called
+the "Developer Prompt". It seems the distribution of the System Prompt, by which I mean the style of wording and terms used can also affect the behavior. This
+is different between different models and not necessarily scientific so the system prompt is built from an exploration across different models. It currently
+starts with: "You are a highly capable, thoughtful, and precise assistant. Your goal is to deeply understand the user's intent..."
+
+- The document json includes a field for the LLM to cite (it's a single number) to make citations reliable and avoid weird artifacts. It's called "document" so
+that the LLM does not create weird artifacts in reasoning like "I should reference citation_id: 5 for...". It is also strategically placed so that it is easy to
+reference. It is followed by a couple short sections like the metadata and title before the long content section. It seems LLMs are still better at local
+attention despite having global access.
+
+- In a similar concept, LLM instructions in the system prompt are structured specifically so that there are coherent sections for the LLM to attend to. This is
+fairly surprising actually but if there is a line of instructions effectively saying "If you try to use some tools and find that you need more information or
+need to call additional tools, you are encouraged to do this", having this in the Tool section of the System prompt makes all the LLMs follow it well but if it's
+even just a paragraph away like near the beginning of the prompt, it is often often ignored. The difference is as drastic as a 30% follow rate to a 90% follow
+rate even just moving the same statement a few sentences.
+
+- Custom Agent prompts are also completely separate from the system prompt. Having potentially orthogonal instructions in the system prompt (both the actual
+instructions and the writing style) can greatly deteriorate the quality of the responses. There is also a product motivation to keep it close to the end of
+generation so it's strongly followed.
