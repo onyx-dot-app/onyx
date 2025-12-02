@@ -17,7 +17,9 @@ async function uploadTestFile(
       await expect(addFilesButton).toBeVisible({ timeout: 5000 });
       await expect(addFilesButton).toBeEnabled({ timeout: 5000 });
 
-      const fileChooserPromise = page.waitForEvent("filechooser", { timeout: 5000 });
+      const fileChooserPromise = page.waitForEvent("filechooser", {
+        timeout: 5000,
+      });
       await addFilesButton.click();
       const fileChooser = await fileChooserPromise;
       await fileChooser.setFiles({

@@ -95,7 +95,8 @@ export function InlineFileManagement({
 
     if (remainingFiles === 0 && filesToAdd.length === 0) {
       setPopup({
-        message: "Cannot remove all files from a connector. Delete the connector if this is desired.",
+        message:
+          "Cannot remove all files from a connector. Delete the connector if this is desired.",
         type: "error",
       });
       return;
@@ -367,10 +368,16 @@ export function InlineFileManagement({
           <Modal.Body className="px-6 space-y-3">
             {selectedFilesToRemove.size > 0 && (
               <div className="p-3 bg-red-50 dark:bg-red-900/10 rounded-md">
-                <Text mainUiBody className="font-semibold text-red-800 dark:text-red-200">
+                <Text
+                  mainUiBody
+                  className="font-semibold text-red-800 dark:text-red-200"
+                >
                   🗑️ {selectedFilesToRemove.size} file(s) will be removed
                 </Text>
-                <Text secondaryBody className="text-red-700 dark:text-red-300 mt-1">
+                <Text
+                  secondaryBody
+                  className="text-red-700 dark:text-red-300 mt-1"
+                >
                   Documents from these files will be pruned from Vespa search
                   index
                 </Text>
@@ -379,12 +386,18 @@ export function InlineFileManagement({
 
             {filesToAdd.length > 0 && (
               <div className="p-3 bg-green-50 dark:bg-green-900/10 rounded-md">
-                <Text mainUiBody className="font-semibold text-green-800 dark:text-green-200">
+                <Text
+                  mainUiBody
+                  className="font-semibold text-green-800 dark:text-green-200"
+                >
                   ➕ {filesToAdd.length} file(s) will be added
                 </Text>
-                <Text secondaryBody className="text-green-700 dark:text-green-300 mt-1">
-                  New files will be uploaded, chunked, embedded, and indexed
-                  in Vespa
+                <Text
+                  secondaryBody
+                  className="text-green-700 dark:text-green-300 mt-1"
+                >
+                  New files will be uploaded, chunked, embedded, and indexed in
+                  Vespa
                 </Text>
               </div>
             )}

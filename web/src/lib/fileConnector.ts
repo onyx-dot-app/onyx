@@ -41,7 +41,9 @@ export async function updateConnectorFiles(
   if (!response.ok) {
     const error = await response.json();
     throw new Error(
-      `Failed to update connector files (${response.status}): ${error.detail || "Unknown error"}`
+      `Failed to update connector files (${response.status}): ${
+        error.detail || "Unknown error"
+      }`
     );
   }
 }
