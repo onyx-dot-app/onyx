@@ -25,7 +25,9 @@ import { useNightTime } from "@/lib/dateUtils";
 import { useFilters } from "@/lib/hooks";
 import { uploadFilesForChat } from "../services/lib";
 import { ChatFileType, FileDescriptor } from "../interfaces";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
+import { useTags } from "@/lib/hooks/useTags";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import Dropzone from "react-dropzone";
 import { useSendMessageToParent } from "@/lib/extension/utils";
@@ -57,7 +59,9 @@ export default function NRFPage({
   const filterManager = useFilters();
   const { isNight } = useNightTime();
   const { user, authTypeMetadata } = useUser();
-  const { ccPairs, documentSets, tags } = useChatContext();
+  const { ccPairs } = useCCPairs();
+  const { documentSets } = useDocumentSets();
+  const { tags } = useTags();
   const { llmProviders } = useLLMProviders();
   const settings = useContext(SettingsContext);
 
@@ -108,7 +112,7 @@ export default function NRFPage({
     }
   };
 
-  const availableSources = ccPairs.map((ccPair) => ccPair.source);
+  const availableSources = (ccPairs ?? []).map((ccPair) => ccPair.source);
 
   const [currentMessageFiles, setCurrentMessageFiles] = useState<
     FileDescriptor[]

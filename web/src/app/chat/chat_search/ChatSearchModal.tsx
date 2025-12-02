@@ -10,7 +10,7 @@ import { SearchInput } from "./components/SearchInput";
 import { ChatSearchSkeletonList } from "./components/ChatSearchSkeleton";
 import { useIntersectionObserver } from "./hooks/useIntersectionObserver";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useCurrentAgent } from "@/lib/hooks/useCurrentAgent";
 
 interface ChatSearchModalProps {
   open: boolean;
@@ -29,7 +29,7 @@ export function ChatSearchModal({ open, onCloseModal }: ChatSearchModalProps) {
   } = useChatSearch();
 
   const combinedSettings = useSettingsContext();
-  const { currentAgent } = useAgentsContext();
+  const { currentAgent } = useCurrentAgent();
 
   const onClose = () => {
     setSearchQuery("");
