@@ -38,7 +38,7 @@ from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.chat import get_search_docs_for_chat_message
 from onyx.db.chat import get_valid_messages_from_query_sessions
 from onyx.db.chat import translate_db_message_to_chat_message_detail
-from onyx.db.chat import translate_db_search_doc_to_server_search_doc
+from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
@@ -63,7 +63,6 @@ from onyx.server.query_and_chat.models import OneShotQAResponse
 from onyx.server.query_and_chat.models import SearchSessionDetailResponse
 from onyx.server.query_and_chat.models import SourceTag
 from onyx.server.query_and_chat.models import TagResponse
-from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -286,10 +285,7 @@ def get_answer_with_citation(
             answer=answer.answer,
             chat_message_id=answer.message_id,
             error_msg=answer.error_msg,
-            citations=[
-                CitationInfo(citation_num=i, document_id=doc_id)
-                for i, doc_id in answer.cited_documents.items()
-            ],
+            citations=answer.citation_info,
             docs=QADocsResponse(
                 top_documents=answer.top_documents,
                 predicted_flow=None,
@@ -482,7 +478,7 @@ def get_search_session(
         # `get_chat_session_by_id`, so we can skip it here
         skip_permission_check=True,
         # we need the tool call objs anyways, so just fetch them in a single call
-        prefetch_tool_calls=True,
+        prefetch_top_two_level_tool_calls=True,
     )
     docs_response: list[SearchDoc] = []
     for message in session_messages:
@@ -494,7 +490,7 @@ def get_search_session(
                 db_session=db_session, chat_message_id=message.id
             )
             for doc in docs:
-                server_doc = translate_db_search_doc_to_server_search_doc(doc)
+                server_doc = translate_db_search_doc_to_saved_search_doc(doc)
                 docs_response.append(server_doc)
 
     response = SearchSessionDetailResponse(

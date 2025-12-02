@@ -7,6 +7,7 @@ import time
 
 import pytest
 
+from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     HEARTBEAT_INTERVAL,
 )
@@ -69,8 +70,10 @@ def test_image_generation_streaming(
     # Verify the heartbeat packets have the expected structure
     for packet in analyzed_response.heartbeat_packets:
         assert "obj" in packet, "Heartbeat packet should have 'obj' field"
-        assert packet["obj"].get("type") == "image_generation_tool_heartbeat", (
-            f"Expected heartbeat type to be 'image_generation_tool_heartbeat', "
+        assert (
+            packet["obj"].get("type") == StreamingType.IMAGE_GENERATION_HEARTBEAT.value
+        ), (
+            f"Expected heartbeat type to be {StreamingType.IMAGE_GENERATION_HEARTBEAT.value}, "
             f"got {packet['obj'].get('type')}"
         )
     # 4. Verify image generation tool delta packets with actual image data

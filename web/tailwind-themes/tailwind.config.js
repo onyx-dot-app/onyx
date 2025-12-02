@@ -197,6 +197,10 @@ module.exports = {
         "code-number": "var(--code-number)",
         "code-definition": "var(--code-definition)",
 
+        // Shimmer colors for loading animations
+        "shimmer-base": "var(--shimmer-base)",
+        "shimmer-highlight": "var(--shimmer-highlight)",
+
         // Tailwind defaults
         background: "var(--background-tint-01)",
         foreground: "var(--background-tint-inverted-01)",
