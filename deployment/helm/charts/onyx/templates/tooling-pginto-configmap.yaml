@@ -15,6 +15,7 @@ data:
     USER="${POSTGRES_USER:-postgres}"
     DB="${POSTGRES_DB:-postgres}"
     PSQL_BIN="${PGINTO_PSQL_BIN:-{{ default "psql" .Values.tooling.pgInto.psqlBinary }}}"
+    USE_IAM="$(printf '%s' "${USE_IAM_AUTH:-false}" | tr '[:upper:]' '[:lower:]')"
 
     if ! command -v "${PSQL_BIN}" >/dev/null 2>&1; then
       echo "psql client '${PSQL_BIN}' not found in PATH" >&2
@@ -38,6 +39,58 @@ data:
         stty echo || true
       fi
       printf "\n" >&2
+      export PGPASSWORD
+    fi
+
+    if [ "${USE_IAM}" = "true" ]; then
+      REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-${AWS_REGION_NAME:-}}}"
+      if [ -z "${REGION}" ]; then
+        REGION="$(printf "%s\n" "${HOST}" | sed -n 's/.*\.\([a-z0-9-]*\)\.rds\.amazonaws\.com.*/\1/p')"
+      fi
+      if [ -z "${REGION}" ]; then
+        echo "USE_IAM_AUTH is true but AWS region is not set (AWS_REGION/AWS_DEFAULT_REGION/AWS_REGION_NAME)" >&2
+        exit 1
+      fi
+      PY_BIN="$(command -v python3 || command -v python || true)"
+      if [ -z "${PY_BIN}" ]; then
+        echo "python is required to generate RDS IAM auth token" >&2
+        exit 1
+      fi
+      if [ -z "${PGSSLMODE:-}" ]; then
+        export PGSSLMODE=require
+      fi
+      PGPASSWORD="$("${PY_BIN}" - "${HOST}" "${PORT}" "${USER}" "${REGION}" <<'PY')"
+import sys
+
+try:
+    import boto3
+except ImportError as exc:
+    sys.stderr.write(f"boto3 is required for IAM auth: {exc}\n")
+    sys.exit(1)
+
+host, port, user, region = sys.argv[1:]
+try:
+    port_int = int(port)
+except Exception:
+    port_int = 5432
+
+try:
+    client = boto3.client("rds", region_name=region)
+    token = client.generate_db_auth_token(
+        DBHostname=host,
+        Port=port_int,
+        DBUsername=user,
+    )
+    sys.stdout.write(token)
+except Exception as exc:
+    sys.stderr.write(f"failed to generate IAM auth token: {exc}\n")
+    sys.exit(1)
+PY
+"
+      if [ -z "${PGPASSWORD}" ]; then
+        echo "failed to generate IAM auth token" >&2
+        exit 1
+      fi
       export PGPASSWORD
     fi
 
