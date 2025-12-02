@@ -3,15 +3,15 @@ from datetime import datetime
 from datetime import timezone
 from time import sleep
 from typing import Any
-from typing import Optional
 
 import requests
 from dateutil import parser as date_parser
-from pydantic import BaseModel
 from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.coda.models import CodaDoc
+from onyx.connectors.coda.models import CodaPage
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rl_requests,
 )
@@ -35,45 +35,6 @@ logger = setup_logger()
 _CODA_API_BASE = "https://coda.io/apis/v1"
 _CODA_PAGE_SIZE = 100
 _CODA_CALL_TIMEOUT = 30  # 30 seconds
-
-
-class CodaObjectBase(BaseModel):
-    id: str
-    type: str
-    href: str
-    browserLink: str
-    name: str
-
-
-class CodaDoc(CodaObjectBase):
-    """Represents a Coda Doc object"""
-
-    owner: str
-    ownerName: str
-    createdAt: str
-    updatedAt: str
-    icon: Optional[dict[str, Any]] = None
-    docSize: Optional[dict[str, Any]] = None
-    sourceDoc: Optional[dict[str, Any]] = None
-    published: Optional[dict[str, Any]] = None
-
-
-class CodaPageReference(CodaObjectBase):
-    """Represents a Coda Page reference object"""
-
-
-class CodaPage(CodaObjectBase):
-    """Represents a Coda Page object"""
-
-    subtitle: Optional[str] = None
-    icon: Optional[dict[str, Any]] = None
-    image: Optional[dict[str, Any]] = None
-    contentType: str
-    isHidden: bool
-    createdAt: str
-    updatedAt: str
-    parent: CodaPageReference | None = None
-    children: list[CodaPageReference]
 
 
 class CodaConnector(LoadConnector, PollConnector):
