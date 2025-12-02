@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
-import { FiEye, FiEyeOff, FiExternalLink } from "react-icons/fi";
+import { EyeIcon, EyeSlashIcon, ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,7 +44,7 @@ export default function CodaConnector({
             rel="noopener noreferrer"
             className="text-blue-500 hover:text-blue-700"
           >
-            <FiExternalLink size={18} />
+           <ArrowTopRightOnSquareIcon className="h-4 w-4" />
           </a>
         </CardTitle>
         <CardDescription>
@@ -89,7 +89,7 @@ export default function CodaConnector({
                     type={showToken ? "text" : "password"}
                     id="coda_api_token"
                     name="coda_api_token"
-                    placeholder="001a1ae7-17d6-44af-b6d3-314b7e95ec13"
+                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                     className={`pr-10 ${
                       errors.coda_api_token && touched.coda_api_token
                         ? "border-red-500 focus:border-red-500"
@@ -101,7 +101,7 @@ export default function CodaConnector({
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     onClick={() => setShowToken(!showToken)}
                   >
-                    {showToken ? <FiEyeOff size={16} /> : <FiEye size={16} />}
+                    {showToken ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
                   </button>
                 </div>
                 <ErrorMessage
@@ -110,7 +110,7 @@ export default function CodaConnector({
                   className="text-red-500 text-sm mt-1"
                 />
                 <p className="text-sm text-gray-500 mt-1">
-                  Your API token should look like: 001a1ae7-17d6-44af-b6d3-314b7e95ec13
+                  Your API token should look like: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
                 </p>
               </div>
 
