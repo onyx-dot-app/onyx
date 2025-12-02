@@ -1263,7 +1263,7 @@ export default function AssistantEditor({
                     </div>
                   </div>
                 </div>
-                <Separator className="max-w-4xl mt-0" />
+                <Separator />
 
                 <div className="-mt-2">
                   <div className="flex gap-x-2 mb-2 items-center">
