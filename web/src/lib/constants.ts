@@ -93,19 +93,8 @@ export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
 export const NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY =
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 
-// Add support for custom URL protocols in markdown links
-export const ALLOWED_URL_PROTOCOLS = [
-  "http:",
-  "https:",
-  "mailto:",
-  "tel:",
-  "slack:",
-  "vscode:",
-  "file:",
-  "sms:",
-  "spotify:",
-  "zoommtg:",
-];
+// Restrict markdown links to safe protocols
+export const ALLOWED_URL_PROTOCOLS = ["http:", "https:", "mailto:"] as const;
 
 export const MAX_CHARACTERS_PERSONA_DESCRIPTION = 5000000;
 export const MAX_STARTER_MESSAGES = 4;
