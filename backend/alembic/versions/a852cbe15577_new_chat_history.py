@@ -409,6 +409,7 @@ def downgrade() -> None:
         sa.Column("queries", postgresql.JSONB(), nullable=True),
         sa.Column("generated_images", postgresql.JSONB(), nullable=True),
         sa.Column("additional_data", postgresql.JSONB(), nullable=True),
+        sa.Column("file_ids", postgresql.JSONB(), nullable=True),
         sa.ForeignKeyConstraint(
             ["primary_question_id", "iteration_nr"],
             [
