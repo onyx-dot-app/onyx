@@ -1297,6 +1297,12 @@ def _list_mcp_tools_by_id(
     logger.info(
         f"Discovered {len(discovered_tools)} tools for MCP server: {mcp_server.name}: {time.time() - t1}"
     )
+    update_mcp_server__no_commit(
+        server_id=server_id,
+        db_session=db,
+        status=MCPServerStatus.CONNECTED,
+    )
+    db.commit()
 
     if is_admin:
         existing_tools = get_tools_by_mcp_server_id(mcp_server.id, db)
