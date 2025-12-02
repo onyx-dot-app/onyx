@@ -518,7 +518,7 @@ marshmallow==3.26.1
     #   unstructured-client
 matrix-client==0.3.2
     # via zulip
-mcp==1.19.0
+mcp==1.23.0
     # via
     #   fastmcp
     #   openai-agents
