@@ -95,7 +95,7 @@ export function InlineFileManagement({
 
     if (remainingFiles === 0 && filesToAdd.length === 0) {
       setPopup({
-        message: "Cannot remove all files. At least one file must remain.",
+        message: "Cannot remove all files from a connector. Delete the connector if this is desired.",
         type: "error",
       });
       return;
@@ -117,7 +117,7 @@ export function InlineFileManagement({
 
       setPopup({
         message:
-          "Files updated successfully! Vespa index is being updated in the background. " +
+          "Files updated successfully! Document index is being updated in the background. " +
           "New files are being indexed and removed files will be pruned from the search results.",
         type: "success",
       });
