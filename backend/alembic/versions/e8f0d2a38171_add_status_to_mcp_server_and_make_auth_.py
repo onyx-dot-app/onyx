@@ -1,7 +1,7 @@
 """add status to mcp server and make auth fields nullable
 
 Revision ID: e8f0d2a38171
-Revises: 6436661d5b65
+Revises: 5e6f7a8b9c0d
 Create Date: 2025-11-28 11:15:37.667340
 
 """
@@ -17,7 +17,7 @@ from onyx.db.enums import (  # type: ignore[import-untyped]
 
 # revision identifiers, used by Alembic.
 revision = "e8f0d2a38171"
-down_revision = "6436661d5b65"
+down_revision = "5e6f7a8b9c0d"
 branch_labels = None
 depends_on = None
 

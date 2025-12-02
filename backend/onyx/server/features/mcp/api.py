@@ -1752,7 +1752,7 @@ def upsert_mcp_server_with_tools(
                 request.auth_performer.value if request.auth_performer else None
             ),
             is_authenticated=(
-                mcp_server.auth_type == MCPAuthenticationType.NONE
+                mcp_server.auth_type == MCPAuthenticationType.NONE.value
                 or request.auth_performer == MCPAuthenticationPerformer.ADMIN
             ),
         )
