@@ -542,8 +542,8 @@ def run_llm_step(
             tool_choice=tool_choice,
             structured_response_format=None,  # TODO
         ):
-            usage = getattr(packet, "usage", None)
-            if usage:
+            if packet.usage:
+                usage = packet.usage
                 span_generation.span_data.usage = {
                     "input_tokens": usage.prompt_tokens,
                     "output_tokens": usage.completion_tokens,
