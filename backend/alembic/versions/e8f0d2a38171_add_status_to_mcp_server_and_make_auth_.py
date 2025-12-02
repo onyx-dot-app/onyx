@@ -69,6 +69,8 @@ def upgrade() -> None:
             """
         UPDATE mcp_server
         SET status = 'CONNECTED'
+        WHERE status != 'CONNECTED'
+        and admin_connection_config_id IS NOT NULL
         """
         )
     )
