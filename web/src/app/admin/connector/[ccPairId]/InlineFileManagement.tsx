@@ -19,8 +19,8 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { Modal } from "@/components/Modal";
-import Text from "@/components/ui/text";
+import Modal from "@/refresh-components/Modal";
+import Text from "@/refresh-components/texts/Text";
 import SvgEdit from "@/icons/edit";
 import SvgCheck from "@/icons/check";
 import SvgX from "@/icons/x";
@@ -170,9 +170,9 @@ export function InlineFileManagement({
     <>
       {/* Header with Edit/Save buttons */}
       <div className="flex justify-between items-center mb-4">
-        <div className="text-sm font-medium">
+        <Text mainUiBody>
           Files ({totalFiles} file{totalFiles !== 1 ? "s" : ""})
-        </div>
+        </Text>
         <div className="flex gap-2">
           {!isEditing ? (
             <Button
@@ -210,9 +210,9 @@ export function InlineFileManagement({
 
       {/* File List */}
       {files.length === 0 && filesToAdd.length === 0 ? (
-        <div className="text-center py-8 text-text-500">
+        <Text mainUiMuted className="text-center py-8">
           No files in this connector
-        </div>
+        </Text>
       ) : (
         <div className="border rounded-lg overflow-hidden mb-4">
           {/* Scrollable container with max height */}
@@ -253,17 +253,23 @@ export function InlineFileManagement({
                         </TableCell>
                       )}
                       <TableCell className="font-medium">
-                        <span
+                        <Text
+                          as="span"
+                          mainUiBody
                           className={
                             isMarkedForRemoval ? "line-through opacity-60" : ""
                           }
                         >
                           {file.file_name}
-                        </span>
+                        </Text>
                         {isMarkedForRemoval && (
-                          <span className="ml-2 text-xs font-semibold text-red-600 dark:text-red-400">
+                          <Text
+                            as="span"
+                            secondaryBody
+                            className="ml-2 font-semibold text-red-600 dark:text-red-400"
+                          >
                             Removing
-                          </span>
+                          </Text>
                         )}
                       </TableCell>
                       <TableCell
@@ -306,9 +312,13 @@ export function InlineFileManagement({
                     )}
                     <TableCell className="font-medium">
                       {file.name}
-                      <span className="ml-2 text-xs text-green-600 dark:text-green-400">
+                      <Text
+                        as="span"
+                        secondaryBody
+                        className="ml-2 text-green-600 dark:text-green-400"
+                      >
                         New
-                      </span>
+                      </Text>
                     </TableCell>
                     <TableCell>{formatBytes(file.size)}</TableCell>
                     <TableCell>-</TableCell>
@@ -344,57 +354,56 @@ export function InlineFileManagement({
       )}
 
       {/* Confirmation Modal */}
-      {showSaveConfirm && (
-        <Modal onOutsideClick={() => setShowSaveConfirm(false)}>
-          <>
-            <div className="mb-4">
-              <h2 className="text-xl font-bold mb-2">Confirm File Changes</h2>
-              <Text className="text-sm">
-                When you save these changes, the following will happen:
-              </Text>
-            </div>
+      <Modal open={showSaveConfirm} onOpenChange={setShowSaveConfirm}>
+        <Modal.Content mini>
+          <Modal.Header className="p-6 pb-4">
+            <Modal.CloseButton />
+            <Modal.Title>Confirm File Changes</Modal.Title>
+            <Modal.Description>
+              When you save these changes, the following will happen:
+            </Modal.Description>
+          </Modal.Header>
 
-            <div className="mb-6 space-y-3">
-              {selectedFilesToRemove.size > 0 && (
-                <div className="p-3 bg-red-50 dark:bg-red-900/10 rounded-md">
-                  <Text className="text-sm font-semibold text-red-800 dark:text-red-200">
-                    🗑️ {selectedFilesToRemove.size} file(s) will be removed
-                  </Text>
-                  <Text className="text-xs text-red-700 dark:text-red-300 mt-1">
-                    Documents from these files will be pruned from Vespa search
-                    index
-                  </Text>
-                </div>
-              )}
+          <Modal.Body className="px-6 space-y-3">
+            {selectedFilesToRemove.size > 0 && (
+              <div className="p-3 bg-red-50 dark:bg-red-900/10 rounded-md">
+                <Text mainUiBody className="font-semibold text-red-800 dark:text-red-200">
+                  🗑️ {selectedFilesToRemove.size} file(s) will be removed
+                </Text>
+                <Text secondaryBody className="text-red-700 dark:text-red-300 mt-1">
+                  Documents from these files will be pruned from Vespa search
+                  index
+                </Text>
+              </div>
+            )}
 
-              {filesToAdd.length > 0 && (
-                <div className="p-3 bg-green-50 dark:bg-green-900/10 rounded-md">
-                  <Text className="text-sm font-semibold text-green-800 dark:text-green-200">
-                    ➕ {filesToAdd.length} file(s) will be added
-                  </Text>
-                  <Text className="text-xs text-green-700 dark:text-green-300 mt-1">
-                    New files will be uploaded, chunked, embedded, and indexed
-                    in Vespa
-                  </Text>
-                </div>
-              )}
-            </div>
+            {filesToAdd.length > 0 && (
+              <div className="p-3 bg-green-50 dark:bg-green-900/10 rounded-md">
+                <Text mainUiBody className="font-semibold text-green-800 dark:text-green-200">
+                  ➕ {filesToAdd.length} file(s) will be added
+                </Text>
+                <Text secondaryBody className="text-green-700 dark:text-green-300 mt-1">
+                  New files will be uploaded, chunked, embedded, and indexed
+                  in Vespa
+                </Text>
+              </div>
+            )}
+          </Modal.Body>
 
-            <div className="flex gap-3 justify-end">
-              <Button
-                onClick={() => setShowSaveConfirm(false)}
-                secondary
-                disabled={isSaving}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleConfirmSave} primary disabled={isSaving}>
-                {isSaving ? "Saving..." : "Confirm & Save"}
-              </Button>
-            </div>
-          </>
-        </Modal>
-      )}
+          <Modal.Footer className="p-6 pt-4">
+            <Button
+              onClick={() => setShowSaveConfirm(false)}
+              secondary
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmSave} primary disabled={isSaving}>
+              {isSaving ? "Saving..." : "Confirm & Save"}
+            </Button>
+          </Modal.Footer>
+        </Modal.Content>
+      </Modal>
     </>
   );
 }
