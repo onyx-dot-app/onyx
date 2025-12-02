@@ -39,35 +39,7 @@ data:
       if [ -z "${PGSSLMODE:-}" ]; then
         export PGSSLMODE=require
       fi
-      PGPASSWORD="$("${PY_BIN}" - "${HOST}" "${PORT}" "${USER}" "${REGION}" <<'PY')"
-import sys
-
-try:
-    import boto3
-except ImportError as exc:
-    sys.stderr.write(f"boto3 is required for IAM auth: {exc}\n")
-    sys.exit(1)
-
-host, port, user, region = sys.argv[1:]
-try:
-    port_int = int(port)
-except ValueError as exc:
-    sys.stderr.write(f"invalid port '{port}': {exc}\n")
-    sys.exit(1)
-
-try:
-    client = boto3.client("rds", region_name=region)
-    token = client.generate_db_auth_token(
-        DBHostname=host,
-        Port=port_int,
-        DBUsername=user,
-    )
-    sys.stdout.write(token)
-except Exception as exc:
-    sys.stderr.write(f"failed to generate IAM auth token: {exc}\n")
-    sys.exit(1)
-PY
-"
+      PGPASSWORD="$("${PY_BIN}" -c 'import sys,boto3; host,port,user,region=sys.argv[1:]; port_int=int(port); token=boto3.client("rds", region_name=region).generate_db_auth_token(DBHostname=host, Port=port_int, DBUsername=user); sys.stdout.write(token)' "${HOST}" "${PORT}" "${USER}" "${REGION}")"
       if [ -z "${PGPASSWORD}" ]; then
         echo "failed to generate IAM auth token" >&2
         exit 1
