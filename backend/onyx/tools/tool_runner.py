@@ -155,7 +155,7 @@ def run_tool_calls(
             )
 
         with function_span(tool.name) as span_fn:
-            span_fn.span_data.input = tool_call.tool_args
+            span_fn.span_data.input = str(tool_call.tool_args)
             try:
                 tool_response = tool.run(
                     turn_index=turn_index,
