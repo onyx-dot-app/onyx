@@ -37,7 +37,9 @@ function SeparatorInner(
   const isHorizontal = orientation === "horizontal";
 
   return (
-    <div className={cn(isHorizontal ? "py-4" : "px-4", className)}>
+    <div
+      className={cn(isHorizontal ? "py-4 w-full" : "px-4 h-full", className)}
+    >
       <SeparatorPrimitive.Root
         ref={ref}
         decorative={decorative}
