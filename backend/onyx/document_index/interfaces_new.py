@@ -162,8 +162,7 @@ class Indexable(abc.ABC):
         m chunks of a document in the next index call.
 
         Parameters:
-        - chunks: Document chunks with all of the information needed for indexing to the document
-                index.
+        - chunks: Document chunks with all of the information needed for indexing to the document index.
         - indexing_metadata: Information about chunk counts for efficient cleaning / updating
 
         Returns:
