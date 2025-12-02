@@ -649,6 +649,11 @@ def update_connector_files(
 
     # Get the connector-credential pair for indexing/pruning triggers
     cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
+    if cc_pair is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No Connector-Credential Pair found for this connector",
+        )
 
     # Parse file IDs to remove
     try:
@@ -733,43 +738,42 @@ def update_connector_files(
         )
 
     # Trigger re-indexing for new files and pruning for removed files
-    if cc_pair:
-        try:
-            tenant_id = get_current_tenant_id()
+    try:
+        tenant_id = get_current_tenant_id()
 
-            # If files were added, mark for UPDATE indexing (only new docs)
-            if new_file_paths:
-                mark_ccpair_with_indexing_trigger(
-                    cc_pair.id, IndexingMode.UPDATE, db_session
-                )
+        # If files were added, mark for UPDATE indexing (only new docs)
+        if new_file_paths:
+            mark_ccpair_with_indexing_trigger(
+                cc_pair.id, IndexingMode.UPDATE, db_session
+            )
 
-                # Send task to check for indexing immediately
-                client_app.send_task(
-                    OnyxCeleryTask.CHECK_FOR_INDEXING,
-                    kwargs={"tenant_id": tenant_id},
-                    priority=OnyxCeleryPriority.HIGH,
-                )
+            # Send task to check for indexing immediately
+            client_app.send_task(
+                OnyxCeleryTask.CHECK_FOR_INDEXING,
+                kwargs={"tenant_id": tenant_id},
+                priority=OnyxCeleryPriority.HIGH,
+            )
+            logger.info(
+                f"Marked cc_pair {cc_pair.id} for UPDATE indexing (new files) for connector {connector_id}"
+            )
+
+        # If files were removed, trigger pruning immediately
+        if file_ids_list:
+            r = get_redis_client()
+            payload_id = try_creating_prune_generator_task(
+                client_app, cc_pair, db_session, r, tenant_id
+            )
+            if payload_id:
                 logger.info(
-                    f"Marked cc_pair {cc_pair.id} for UPDATE indexing (new files) for connector {connector_id}"
+                    f"Triggered pruning for cc_pair {cc_pair.id} (removed files) for connector "
+                    f"{connector_id}, payload_id={payload_id}"
                 )
-
-            # If files were removed, trigger pruning immediately
-            if file_ids_list:
-                r = get_redis_client()
-                payload_id = try_creating_prune_generator_task(
-                    client_app, cc_pair, db_session, r, tenant_id
+            else:
+                logger.warning(
+                    f"Failed to trigger pruning for cc_pair {cc_pair.id} (removed files) for connector {connector_id}"
                 )
-                if payload_id:
-                    logger.info(
-                        f"Triggered pruning for cc_pair {cc_pair.id} (removed files) for connector "
-                        f"{connector_id}, payload_id={payload_id}"
-                    )
-                else:
-                    logger.warning(
-                        f"Failed to trigger pruning for cc_pair {cc_pair.id} (removed files) for connector {connector_id}"
-                    )
-        except Exception as e:
-            logger.error(f"Failed to trigger re-indexing after file update: {e}")
+    except Exception as e:
+        logger.error(f"Failed to trigger re-indexing after file update: {e}")
 
     return FileUploadResponse(
         file_paths=final_file_locations,
