@@ -1,0 +1,50 @@
+{{- if (include "onyx.pgInto.enabled" .) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "onyx.pgInto.configMapName" . }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+data:
+  pginto: |
+    #!/usr/bin/env sh
+    set -eu
+
+    HOST="${POSTGRES_HOST:-localhost}"
+    PORT="${POSTGRES_PORT:-5432}"
+    USER="${POSTGRES_USER:-postgres}"
+    DB="${POSTGRES_DB:-postgres}"
+    PSQL_BIN="${PGINTO_PSQL_BIN:-{{ default "psql" .Values.tooling.pgInto.psqlBinary }}}"
+
+    if ! command -v "${PSQL_BIN}" >/dev/null 2>&1; then
+      echo "psql client '${PSQL_BIN}' not found in PATH" >&2
+      exit 1
+    fi
+
+    if [ -z "${PGPASSWORD:-}" ] && [ -n "${POSTGRES_PASSWORD:-}" ]; then
+      export PGPASSWORD="${POSTGRES_PASSWORD}"
+    fi
+
+    if [ -z "${PGPASSWORD:-}" ]; then
+      printf "Postgres password: " >&2
+      if command -v stty >/dev/null 2>&1; then
+        stty -echo || true
+      fi
+      if ! read -r PGPASSWORD; then
+        echo "failed to read password" >&2
+        exit 1
+      fi
+      if command -v stty >/dev/null 2>&1; then
+        stty echo || true
+      fi
+      printf "\n" >&2
+      export PGPASSWORD
+    fi
+
+    if [ -n "${POSTGRES_SSLMODE:-}" ] && [ -z "${PGSSLMODE:-}" ]; then
+      export PGSSLMODE="${POSTGRES_SSLMODE}"
+    fi
+
+    echo "Connecting to ${DB} on ${HOST}:${PORT} as ${USER}"
+    exec "${PSQL_BIN}" -h "${HOST}" -p "${PORT}" -U "${USER}" "${DB}" "$@"
+{{- end }}

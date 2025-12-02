@@ -144,6 +144,15 @@ indexCapability:
 config:
   envConfigMapName: env-configmap
 
+tooling:
+  pgInto:
+    # -- Mounts a small helper script into app pods that opens psql using the pod's POSTGRES_* env vars.
+    enabled: false
+    # -- Where to place the helper inside the container.
+    mountPath: /usr/local/bin/pginto
+    # -- Which client binary to call; change if your image uses a non-default path.
+    psqlBinary: psql
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: false
