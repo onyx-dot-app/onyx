@@ -1,6 +1,9 @@
 import json
 from collections.abc import Callable
+from collections.abc import Mapping
+from collections.abc import Sequence
 from typing import Any
+from typing import cast
 
 from sqlalchemy.orm import Session
 
@@ -59,11 +62,11 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
-from onyx.tracing.framework.create import agent_span
 from onyx.tracing.framework.create import generation_span
 from onyx.tracing.framework.create import trace
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -508,20 +511,6 @@ def run_llm_step(
     state_container: ChatStateContainer,
     final_documents: list[SearchDoc] | None = None,
 ) -> tuple[LlmStepResult, int]:
-    current_span = agent_span(
-        name="agent_framework_query",
-        output_type="str",
-    )
-    current_span.start(mark_as_current=True)
-    # Extract tool names from OpenAI-spec tool definitions
-    current_span.span_data.tools = [
-        (
-            tool.get("function", {}).get("name", "unknown")
-            if isinstance(tool, dict)
-            else "unknown"
-        )
-        for tool in tool_definitions
-    ]
     # The second return value is for the turn index because reasoning counts on the frontend as a turn
     # TODO this is maybe ok but does not align well with the backend logic too well
     llm_msg_history = translate_history_to_llm_format(history)
@@ -544,7 +533,9 @@ def run_llm_step(
             "model_impl": "litellm",
         },
     ) as span_generation:
-        span_generation.span_data.input = llm_msg_history  # type: ignore[misc]
+        span_generation.span_data.input = cast(
+            Sequence[Mapping[str, Any]], llm_msg_history
+        )
         for packet in llm.stream(
             prompt=llm_msg_history,
             tools=tool_definitions,
@@ -639,7 +630,6 @@ def run_llm_step(
         span_generation.span_data.output = [
             {"role": "assistant", "content": accumulated_answer}
         ]
-    current_span.finish(reset_current=True)
     # Close reasoning block if still open (stream ended with reasoning content)
     if reasoning_start:
         emitter.emit(
@@ -762,7 +752,7 @@ def run_llm_loop(
     db_session: Session,
     forced_tool_id: int | None = None,
 ) -> None:
-    with trace("run_llm_loop"):
+    with trace("run_llm_loop", metadata={"tenant_id": get_current_tenant_id()}):
         # Fix some LiteLLM issues,
         from onyx.llm.litellm_singleton.config import (
             initialize_litellm,

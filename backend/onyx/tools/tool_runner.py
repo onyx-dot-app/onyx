@@ -1,5 +1,7 @@
+import traceback
 from collections import defaultdict
 
+import onyx.tracing.framework._error_tracing as _error_tracing
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
@@ -14,6 +16,8 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.tracing.framework.create import function_span
+from onyx.tracing.framework.spans import SpanError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -150,18 +154,31 @@ def run_tool_calls(
                 citation_mapping=url_to_citation,
             )
 
-        try:
-            tool_response = tool.run(
-                turn_index=turn_index,
-                override_kwargs=override_kwargs,
-                **tool_call.tool_args,
-            )
-        except Exception as e:
-            logger.error(f"Error running tool {tool.name}: {e}")
-            tool_response = ToolResponse(
-                rich_response=None,
-                llm_facing_response=str(e),
-            )
+        with function_span(tool.name) as span_fn:
+            span_fn.span_data.input = tool_call.tool_args
+            try:
+                tool_response = tool.run(
+                    turn_index=turn_index,
+                    override_kwargs=override_kwargs,
+                    **tool_call.tool_args,
+                )
+                span_fn.span_data.output = tool_response.llm_facing_response
+            except Exception as e:
+                logger.error(f"Error running tool {tool.name}: {e}")
+                tool_response = ToolResponse(
+                    rich_response=None,
+                    llm_facing_response=str(e),
+                )
+                _error_tracing.attach_error_to_current_span(
+                    SpanError(
+                        message="Error running tool",
+                        data={
+                            "tool_name": tool.name,
+                            "error": str(e),
+                            "stack_trace": traceback.format_exc(),
+                        },
+                    )
+                )
 
         if isinstance(tool_response.rich_response, SearchDocsResponse):
             new_citations = tool_response.rich_response.citation_mapping
