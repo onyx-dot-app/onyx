@@ -51,8 +51,9 @@ except ImportError as exc:
 host, port, user, region = sys.argv[1:]
 try:
     port_int = int(port)
-except Exception:
-    port_int = 5432
+except ValueError as exc:
+    sys.stderr.write(f"invalid port '{port}': {exc}\n")
+    sys.exit(1)
 
 try:
     client = boto3.client("rds", region_name=region)
