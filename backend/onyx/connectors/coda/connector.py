@@ -35,14 +35,17 @@ _CODA_PAGE_SIZE = 100
 _CODA_CALL_TIMEOUT = 30  # 30 seconds
 
 
-class CodaDoc(BaseModel):
-    """Represents a Coda Doc object"""
-
+class CodaObjectBase(BaseModel):
     id: str
     type: str
     href: str
     browserLink: str
     name: str
+
+
+class CodaDoc(CodaObjectBase):
+    """Represents a Coda Doc object"""
+
     owner: str
     ownerName: str
     createdAt: str
@@ -55,22 +58,13 @@ class CodaDoc(BaseModel):
     published: Optional[dict[str, Any]] = None
 
 
-class CodaPageReference(BaseModel):
-    id: str
-    type: str
-    href: str
-    browserLink: str
-    name: str
+class CodaPageReference(CodaObjectBase):
+    """Represents a Coda Page reference object"""
 
 
-class CodaPage(BaseModel):
+class CodaPage(CodaObjectBase):
     """Represents a Coda Page object"""
 
-    id: str
-    type: str
-    href: str
-    browserLink: str
-    name: str
     subtitle: Optional[str] = None
     icon: Optional[dict[str, Any]] = None
     image: Optional[dict[str, Any]] = None
@@ -243,6 +237,10 @@ class CodaConnector(LoadConnector, PollConnector):
     ) -> Generator[Document, None, None]:
         """Reads pages and generates Documents"""
         for page in pages:
+            if page.isHidden:
+                logger.debug(f"Skipping hidden page '{page.name}'.")
+                continue
+
             page_key = f"{doc.id}:{page.id}"
             if page_key in self.indexed_pages:
                 logger.debug(f"Already indexed page '{page.name}'. Skipping.")
@@ -309,10 +307,9 @@ class CodaConnector(LoadConnector, PollConnector):
         """
         logger.info("Starting full load of Coda docs and pages")
 
-        # Fetch all docs
-        page_token = None
+        next_docs_page_token = None
         while True:
-            docs_response = self._fetch_docs(page_token)
+            docs_response = self._fetch_docs(next_docs_page_token)
             docs = [CodaDoc(**doc) for doc in docs_response.get("items", [])]
 
             # Filter by doc_ids if specified
@@ -344,8 +341,8 @@ class CodaConnector(LoadConnector, PollConnector):
                 )
 
             # Check for more docs
-            page_token = docs_response.get("nextPageToken")
-            if not page_token:
+            next_docs_page_token = docs_response.get("nextPageToken")
+            if not next_docs_page_token:
                 break
 
     def poll_source(
