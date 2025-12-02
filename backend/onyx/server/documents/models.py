@@ -571,10 +571,6 @@ class FileUploadResponse(BaseModel):
     zip_metadata: dict[str, Any]
 
 
-class FileRemovalRequest(BaseModel):
-    file_ids: list[str]
-
-
 class ConnectorFileInfo(BaseModel):
     file_id: str
     file_name: str
