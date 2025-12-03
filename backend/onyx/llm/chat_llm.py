@@ -30,7 +30,7 @@ from langchain_core.prompt_values import PromptValue
 
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
-from onyx.configs.app_configs import SEND_USER_ID_TO_LLM
+from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.chat_configs import QA_TIMEOUT
 from onyx.configs.model_configs import (
     DISABLE_LITELLM_STREAMING,
@@ -496,7 +496,7 @@ class LitellmLLM(LLM):
         existing_metadata = self._model_kwargs.get("metadata")
         if isinstance(existing_metadata, dict):
             metadata.update(existing_metadata)
-        if SEND_USER_ID_TO_LLM and user_identity and user_identity.session_id:
+        if SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity and user_identity.session_id:
             metadata["session_id"] = user_identity.session_id
 
         model_kwargs_without_metadata = {
@@ -564,10 +564,10 @@ class LitellmLLM(LLM):
 
             if metadata:
                 litellm_args["metadata"] = metadata
-            if SEND_USER_ID_TO_LLM and user_identity and user_identity.user_id:
+            if SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity and user_identity.user_id:
                 litellm_args["user"] = user_identity.user_id
 
-            if SEND_USER_ID_TO_LLM and user_identity:
+            if SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity:
                 logger.debug(
                     "LLM call identifiers user_id=%s session_id=%s metadata=%s",
                     user_identity.user_id,
