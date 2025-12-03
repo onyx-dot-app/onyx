@@ -441,6 +441,38 @@ export default function AddOpenAPIActionModal({
 
                     <Separator className="my-0 py-0" />
 
+                    {methodSpecs && methodSpecs.length > 0 ? (
+                      <div className="flex flex-col gap-2">
+                        {methodSpecs.map((method) => (
+                          <ToolItem
+                            key={`${method.method}-${method.path}-${method.name}`}
+                            name={method.name}
+                            description={
+                              method.summary || "No summary provided"
+                            }
+                            variant="openapi"
+                            openApiMetadata={{
+                              method: method.method,
+                              path: method.path,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-row gap-3 items-start p-1.5 rounded-08 border border-border-01 border-dashed">
+                        <div className="rounded-08 bg-background-tint-01 p-1 flex items-center justify-center">
+                          <SvgActions className="size-4 stroke-text-03" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Text mainUiAction text03>
+                            No actions found
+                          </Text>
+                          <Text secondaryBody text03>
+                            Provide OpenAPI schema to preview actions here.
+                          </Text>
+                        </div>
+                      </div>
+                    )}
                     {showAuthenticationStatus && (
                       <FormField state="idle">
                         <div className="flex items-start justify-between w-full">
@@ -484,39 +516,6 @@ export default function AddOpenAPIActionModal({
                           </FormField.Control>
                         </div>
                       </FormField>
-                    )}
-
-                    {methodSpecs && methodSpecs.length > 0 ? (
-                      <div className="flex flex-col gap-2">
-                        {methodSpecs.map((method) => (
-                          <ToolItem
-                            key={`${method.method}-${method.path}-${method.name}`}
-                            name={method.name}
-                            description={
-                              method.summary || "No summary provided"
-                            }
-                            variant="openapi"
-                            openApiMetadata={{
-                              method: method.method,
-                              path: method.path,
-                            }}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex flex-row gap-3 items-start p-1.5 rounded-08 border border-border-01 border-dashed">
-                        <div className="rounded-08 bg-background-tint-01 p-1 flex items-center justify-center">
-                          <SvgActions className="size-4 stroke-text-03" />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <Text mainUiAction text03>
-                            No actions found
-                          </Text>
-                          <Text secondaryBody text03>
-                            Provide OpenAPI schema to preview actions here.
-                          </Text>
-                        </div>
-                      </div>
                     )}
                   </Modal.Body>
 

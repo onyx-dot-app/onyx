@@ -22,6 +22,7 @@ export interface OpenApiActionCardProps {
   onManage?: (tool: ToolSnapshot) => void;
   mutateOpenApiTools: () => Promise<unknown> | void;
   setPopup: (popup: PopupSpec | null) => void;
+  onOpenDisconnectModal?: (tool: ToolSnapshot) => void;
 }
 
 export default function OpenApiActionCard({
@@ -30,6 +31,7 @@ export default function OpenApiActionCard({
   onManage,
   mutateOpenApiTools,
   setPopup,
+  onOpenDisconnectModal,
 }: OpenApiActionCardProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -167,7 +169,7 @@ export default function OpenApiActionCard({
             toolCount={methodSpecs.length}
             isToolsExpanded={isToolsExpanded}
             onToggleTools={methodSpecs.length ? handleToggleTools : undefined}
-            onDisconnect={() => handleConnectionUpdate(false)}
+            onDisconnect={() => onOpenDisconnectModal?.(tool)}
             onManage={onManage ? () => onManage(tool) : undefined}
             onAuthenticate={() => {
               onAuthenticate(tool);

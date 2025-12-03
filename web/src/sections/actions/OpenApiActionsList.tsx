@@ -12,8 +12,9 @@ import Actionbar from "./Actionbar";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import OpenApiActionCard from "./OpenApiActionCard";
 import { createOAuthConfig, updateOAuthConfig } from "@/lib/oauth/api";
-import { updateCustomTool } from "@/lib/tools/openApiService";
+import { updateCustomTool, deleteCustomTool } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
+import DisconnectEntityModal from "./modals/DisconnectEntityModal";
 
 export default function OpenApiActionsList() {
   const { data: openApiTools, mutate: mutateOpenApiTools } = useSWR<
@@ -28,6 +29,11 @@ export default function OpenApiActionsList() {
   const [toolBeingEdited, setToolBeingEdited] = useState<ToolSnapshot | null>(
     null
   );
+  const [toolPendingDisconnect, setToolPendingDisconnect] =
+    useState<ToolSnapshot | null>(null);
+  const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleOpenAuthModal = useCallback(
     (tool: ToolSnapshot) => {
@@ -165,17 +171,6 @@ export default function OpenApiActionsList() {
         });
 
         await mutateOpenApiTools();
-
-        setToolBeingEdited((current) =>
-          current && current.id === tool.id
-            ? { ...current, enabled: false }
-            : current
-        );
-        setSelectedTool((current) =>
-          current && current.id === tool.id
-            ? { ...current, enabled: false }
-            : current
-        );
       } catch (error) {
         const message =
           error instanceof Error
@@ -192,6 +187,59 @@ export default function OpenApiActionsList() {
     },
     [mutateOpenApiTools, setPopup]
   );
+
+  const handleOpenDisconnectModal = useCallback((tool: ToolSnapshot) => {
+    setToolPendingDisconnect(tool);
+    setIsDisconnectModalOpen(true);
+  }, []);
+
+  const handleConfirmDisconnectFromModal = useCallback(async () => {
+    if (!toolPendingDisconnect) {
+      return;
+    }
+
+    try {
+      setIsDisconnecting(true);
+      await handleDisableTool(toolPendingDisconnect);
+    } finally {
+      setIsDisconnecting(false);
+      setIsDisconnectModalOpen(false);
+      setToolPendingDisconnect(null);
+    }
+  }, [handleDisableTool, toolPendingDisconnect]);
+
+  const handleDeleteToolFromModal = useCallback(async () => {
+    if (!toolPendingDisconnect || isDeleting) {
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      const response = await deleteCustomTool(toolPendingDisconnect.id);
+      if (response.data) {
+        setPopup({
+          message: `${toolPendingDisconnect.name} deleted successfully.`,
+          type: "success",
+        });
+        await mutateOpenApiTools();
+      } else {
+        setPopup({
+          message: response.error || "Failed to delete tool.",
+          type: "error",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to delete OpenAPI tool", error);
+      setPopup({
+        message: "An unexpected error occurred while deleting the tool.",
+        type: "error",
+      });
+    } finally {
+      setIsDeleting(false);
+      setIsDisconnectModalOpen(false);
+      setToolPendingDisconnect(null);
+    }
+  }, [isDeleting, mutateOpenApiTools, setPopup, toolPendingDisconnect]);
 
   const handleAddAction = useCallback(() => {
     setToolBeingEdited(null);
@@ -238,6 +286,7 @@ export default function OpenApiActionsList() {
           onManage={handleManageTool}
           mutateOpenApiTools={mutateOpenApiTools}
           setPopup={setPopup}
+          onOpenDisconnectModal={handleOpenDisconnectModal}
         />
       ))}
 
@@ -247,7 +296,14 @@ export default function OpenApiActionsList() {
           setPopup={setPopup}
           existingTool={toolBeingEdited}
           onEditAuthentication={handleEditAuthenticationFromModal}
-          onDisconnectTool={handleDisableTool}
+          onDisconnectTool={
+            selectedTool
+              ? () => {
+                  handleOpenDisconnectModal(selectedTool);
+                  resetAuthModal();
+                }
+              : undefined
+          }
           onSuccess={(tool) => {
             setSelectedTool(tool);
             openAPIAuthModal.toggle(true);
@@ -264,6 +320,7 @@ export default function OpenApiActionsList() {
           isOpen={openAPIAuthModal.isOpen}
           onClose={resetAuthModal}
           title={authenticationModalTitle}
+          entityName={selectedTool?.name ?? null}
           defaultMethod={authenticationDefaultMethod}
           oauthConfigId={selectedTool?.oauth_config_id ?? null}
           initialHeaders={selectedTool?.custom_headers ?? null}
@@ -271,6 +328,19 @@ export default function OpenApiActionsList() {
           onSkip={resetAuthModal}
         />
       </openAPIAuthModal.Provider>
+
+      <DisconnectEntityModal
+        isOpen={isDisconnectModalOpen}
+        onClose={() => {
+          setIsDisconnectModalOpen(false);
+          setToolPendingDisconnect(null);
+        }}
+        name={toolPendingDisconnect?.name ?? null}
+        onConfirmDisconnect={handleConfirmDisconnectFromModal}
+        onConfirmDisconnectAndDelete={handleDeleteToolFromModal}
+        isDisconnecting={isDisconnecting || isDeleting}
+        skipOverlay
+      />
     </>
   );
 }
