@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
@@ -269,7 +270,9 @@ def fetch_slack_channel_config_for_channel_or_default(
     # attempt to find channel-specific config first
     if channel_name is not None:
         sc_config = db_session.scalar(
-            select(SlackChannelConfig).where(
+            select(SlackChannelConfig)
+            .options(joinedload(SlackChannelConfig.persona))
+            .where(
                 SlackChannelConfig.slack_bot_id == slack_bot_id,
                 SlackChannelConfig.channel_config["channel_name"].astext
                 == channel_name,
@@ -283,7 +286,9 @@ def fetch_slack_channel_config_for_channel_or_default(
 
     # if none found, see if there is a default
     default_sc = db_session.scalar(
-        select(SlackChannelConfig).where(
+        select(SlackChannelConfig)
+        .options(joinedload(SlackChannelConfig.persona))
+        .where(
             SlackChannelConfig.slack_bot_id == slack_bot_id,
             SlackChannelConfig.is_default == True,  # noqa: E712
         )
