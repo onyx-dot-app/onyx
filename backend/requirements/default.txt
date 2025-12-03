@@ -467,7 +467,7 @@ langsmith==0.3.45
 lazy-imports==1.0.1
 lazy-object-proxy==1.12.0
     # via openapi-spec-validator
-litellm==1.79.0
+litellm==1.80.5
     # via onyx
 locket==1.0.0
     # via
