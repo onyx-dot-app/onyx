@@ -79,7 +79,7 @@ test.describe("Message feedback thumbs controls", () => {
       likeButton.click(),
     ]);
     expect(removeFeedbackRequests).toHaveLength(1);
-    expect(removeFeedbackRequests?.[0]?.query.chat_message_id).toBe(
+    expect(removeFeedbackRequests[0]?.query.chat_message_id).toBe(
       String(likedRequest?.chat_message_id)
     );
 

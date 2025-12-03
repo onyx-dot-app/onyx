@@ -50,7 +50,6 @@ from onyx.kg.models import KGException
 from onyx.kg.setup.kg_default_entity_definitions import (
     populate_missing_default_entity_types__commit,
 )
-from onyx.llm.models import PreviousMessage
 from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
@@ -292,7 +291,7 @@ def create_chat_history_chain(
 
 
 def combine_message_chain(
-    messages: list[ChatMessage] | list[PreviousMessage],
+    messages: list[ChatMessage],
     token_limit: int,
     msg_limit: int | None = None,
 ) -> str:
@@ -303,7 +302,7 @@ def combine_message_chain(
     if msg_limit is not None:
         messages = messages[-msg_limit:]
 
-    for message in cast(list[ChatMessage] | list[PreviousMessage], reversed(messages)):
+    for message in cast(list[ChatMessage], reversed(messages)):
         message_token_count = message.token_count
 
         if total_token_count + message_token_count > token_limit:
