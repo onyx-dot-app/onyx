@@ -31,7 +31,6 @@ import {
 } from "@/components/icons/icons";
 import OnyxLogo from "@/icons/onyx-logo";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
-import { FiActivity, FiBarChart2 } from "react-icons/fi";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import SvgSearch from "@/icons/search";
@@ -40,6 +39,11 @@ import SvgThumbsUp from "@/icons/thumbs-up";
 import SvgUsers from "@/icons/users";
 import SvgZoomIn from "@/icons/zoom-in";
 import SvgCpu from "@/icons/cpu";
+import SvgOnyxOctagon from "@/icons/onyx-octagon";
+import SvgGlobe from "@/icons/globe";
+import SvgActivity from "@/icons/activity";
+import SvgBarChart from "@/icons/bar-chart";
+import SvgSettings from "@/icons/settings";
 
 const connectors_items = () => [
   {
@@ -79,7 +83,7 @@ const custom_assistants_items = (
   const items = [
     {
       name: "Assistants",
-      icon: AssistantsIconSkeleton,
+      icon: SvgOnyxOctagon,
       link: "/admin/assistants",
     },
   ];
@@ -167,7 +171,7 @@ const collections = (
             },
             {
               name: "Web Search",
-              icon: GlobeIcon,
+              icon: SvgGlobe,
               link: "/admin/configuration/web-search",
             },
             ...(!enableCloud
@@ -232,7 +236,7 @@ const collections = (
                 items: [
                   {
                     name: "Usage Statistics",
-                    icon: FiActivity,
+                    icon: SvgActivity,
                     link: "/admin/performance/usage",
                   },
                   ...(settings?.settings.query_history_type !== "disabled"
@@ -248,7 +252,7 @@ const collections = (
                     ? [
                         {
                           name: "Custom Analytics",
-                          icon: FiBarChart2,
+                          icon: SvgBarChart,
                           link: "/admin/performance/custom-analytics",
                         },
                       ]
@@ -262,7 +266,7 @@ const collections = (
           items: [
             {
               name: "Workspace Settings",
-              icon: SettingsIconSkeleton,
+              icon: SvgSettings,
               link: "/admin/settings",
             },
             ...(enableEnterprise
