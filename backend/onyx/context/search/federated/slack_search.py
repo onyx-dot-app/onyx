@@ -52,6 +52,7 @@ HIGHLIGHT_START_CHAR = "\ue000"
 HIGHLIGHT_END_CHAR = "\ue001"
 
 CHANNEL_METADATA_CACHE_TTL = 60 * 60 * 24  # 24 hours
+USER_PROFILE_CACHE_TTL = 60 * 60 * 24  # 24 hours
 SLACK_THREAD_CONTEXT_WINDOW = 3  # Number of messages before matched message to include
 CHANNEL_METADATA_MAX_RETRIES = 3  # Maximum retry attempts for channel metadata fetching
 CHANNEL_METADATA_RETRY_DELAY = 1  # Initial retry delay in seconds (exponential backoff)
@@ -235,6 +236,90 @@ def get_available_channels(
     """Fetch list of available channel names using cached metadata."""
     metadata = fetch_and_cache_channel_metadata(access_token, team_id, include_private)
     return [meta["name"] for meta in metadata.values() if meta["name"]]
+
+
+def get_cached_user_profile(
+    access_token: str, team_id: str, user_id: str
+) -> str | None:
+    """
+    Get a user's display name from cache or fetch from Slack API.
+
+    Uses Redis caching to avoid repeated API calls and rate limiting.
+    Returns the user's real_name or email, or None if not found.
+    """
+    redis_client = get_redis_client()
+    cache_key = f"slack_federated_search:{team_id}:user:{user_id}"
+
+    # Check cache first
+    try:
+        cached = redis_client.get(cache_key)
+        if cached:
+            cached_str = (
+                cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
+            )
+            # Empty string means user was not found previously
+            return cached_str if cached_str else None
+    except Exception as e:
+        logger.debug(f"Error reading user profile cache: {e}")
+
+    # Cache miss - fetch from Slack API
+    slack_client = WebClient(token=access_token)
+    try:
+        response = slack_client.users_profile_get(user=user_id)
+        response.validate()
+        profile: dict[str, Any] = response.get("profile", {})
+        name: str | None = profile.get("real_name") or profile.get("email")
+
+        # Cache the result (empty string for not found)
+        try:
+            redis_client.set(
+                cache_key,
+                name or "",
+                ex=USER_PROFILE_CACHE_TTL,
+            )
+        except Exception as e:
+            logger.debug(f"Error caching user profile: {e}")
+
+        return name
+
+    except SlackApiError as e:
+        error_str = str(e)
+        if "user_not_found" in error_str:
+            logger.debug(
+                f"User {user_id} not found in Slack workspace (likely deleted/deactivated)"
+            )
+        elif "ratelimited" in error_str:
+            # Don't cache rate limit errors - we'll retry later
+            logger.debug(f"Rate limited fetching user {user_id}, will retry later")
+            return None
+        else:
+            logger.warning(f"Could not fetch profile for user {user_id}: {e}")
+
+        # Cache negative result to avoid repeated lookups for missing users
+        try:
+            redis_client.set(cache_key, "", ex=USER_PROFILE_CACHE_TTL)
+        except Exception:
+            pass
+
+        return None
+
+
+def batch_get_user_profiles(
+    access_token: str, team_id: str, user_ids: set[str]
+) -> dict[str, str]:
+    """
+    Batch fetch user profiles with caching.
+
+    Returns a dict mapping user_id -> display_name for users that were found.
+    """
+    result: dict[str, str] = {}
+
+    for user_id in user_ids:
+        name = get_cached_user_profile(access_token, team_id, user_id)
+        if name:
+            result[user_id] = name
+
+    return result
 
 
 def _extract_channel_data_from_entities(
@@ -496,7 +581,9 @@ def merge_slack_messages(
     return merged_messages, docid_to_message
 
 
-def get_contextualized_thread_text(message: SlackMessage, access_token: str) -> str:
+def get_contextualized_thread_text(
+    message: SlackMessage, access_token: str, team_id: str | None = None
+) -> str:
     """
     Retrieves the initial thread message as well as the text following the message
     and combines them into a single string. If the slack query fails, returns the
@@ -505,6 +592,11 @@ def get_contextualized_thread_text(message: SlackMessage, access_token: str) -> 
     The idea is that the message (the one that actually matched the search), the
     initial thread message, and the replies to the message are important in answering
     the user's query.
+
+    Args:
+        message: The SlackMessage to get context for
+        access_token: Slack OAuth access token
+        team_id: Slack team ID for caching user profiles (optional but recommended)
     """
     channel_id = message.channel_id
     thread_id = message.thread_id
@@ -582,26 +674,33 @@ def get_contextualized_thread_text(message: SlackMessage, access_token: str) -> 
             thread_text += "\n..."
             break
 
-    # replace user ids with names in the thread text
+    # replace user ids with names in the thread text using cached lookups
     userids: set[str] = set(re.findall(r"<@([A-Z0-9]+)>", thread_text))
-    for userid in userids:
-        try:
-            response = slack_client.users_profile_get(user=userid)
-            response.validate()
-            profile: dict[str, Any] = response.get("profile", {})
-            name: str | None = profile.get("real_name") or profile.get("email")
-        except SlackApiError as e:
-            # user_not_found is common for deleted users, bots, etc. - not critical
-            if "user_not_found" in str(e):
-                logger.debug(
-                    f"User {userid} not found in Slack workspace (likely deleted/deactivated)"
-                )
-            else:
-                logger.warning(f"Could not fetch profile for user {userid}: {e}")
-            continue
-        if not name:
-            continue
-        thread_text = thread_text.replace(f"<@{userid}>", name)
+
+    if team_id:
+        # Use cached batch lookup when team_id is available
+        user_profiles = batch_get_user_profiles(access_token, team_id, userids)
+        for userid, name in user_profiles.items():
+            thread_text = thread_text.replace(f"<@{userid}>", name)
+    else:
+        # Fallback to individual lookups (no caching) when team_id not available
+        for userid in userids:
+            try:
+                response = slack_client.users_profile_get(user=userid)
+                response.validate()
+                profile: dict[str, Any] = response.get("profile", {})
+                user_name: str | None = profile.get("real_name") or profile.get("email")
+            except SlackApiError as e:
+                if "user_not_found" in str(e):
+                    logger.debug(
+                        f"User {userid} not found in Slack workspace (likely deleted/deactivated)"
+                    )
+                else:
+                    logger.warning(f"Could not fetch profile for user {userid}: {e}")
+                continue
+            if not user_name:
+                continue
+            thread_text = thread_text.replace(f"<@{userid}>", user_name)
 
     return thread_text
 
@@ -801,7 +900,7 @@ def slack_retrieval(
 
     thread_texts: list[str] = run_functions_tuples_in_parallel(
         [
-            (get_contextualized_thread_text, (slack_message, access_token))
+            (get_contextualized_thread_text, (slack_message, access_token, team_id))
             for slack_message in slack_messages
         ]
     )
