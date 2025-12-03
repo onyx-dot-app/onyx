@@ -70,10 +70,7 @@ class BraintrustTracingProcessor(TracingProcessor):
 
     def on_trace_start(self, trace: Trace) -> None:
         trace_meta = trace.export() or {}
-        metadata = {
-            "group_id": trace_meta.get("group_id"),
-            **(trace_meta.get("metadata") or {}),
-        }
+        metadata = trace_meta.get("metadata") or {}
 
         current_context = braintrust.current_span()
         if current_context != NOOP_SPAN:

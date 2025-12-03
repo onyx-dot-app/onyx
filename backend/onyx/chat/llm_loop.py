@@ -1,6 +1,9 @@
 import json
 from collections.abc import Callable
+from collections.abc import Mapping
+from collections.abc import Sequence
 from typing import Any
+from typing import cast
 
 from sqlalchemy.orm import Session
 
@@ -59,8 +62,11 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
+from onyx.tracing.framework.create import generation_span
+from onyx.tracing.framework.create import trace
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -520,94 +526,110 @@ def run_llm_step(
     accumulated_reasoning = ""
     accumulated_answer = ""
 
-    for packet in llm.stream(
-        prompt=llm_msg_history,
-        tools=tool_definitions,
-        tool_choice=tool_choice,
-        structured_response_format=None,  # TODO
-    ):
-        delta = packet.choice.delta
-        finish_reason = packet.choice.finish_reason
+    with generation_span(
+        model=llm.config.model_name,
+        model_config={
+            "base_url": str(llm.config.api_base or ""),
+            "model_impl": "litellm",
+        },
+    ) as span_generation:
+        span_generation.span_data.input = cast(
+            Sequence[Mapping[str, Any]], llm_msg_history
+        )
+        for packet in llm.stream(
+            prompt=llm_msg_history,
+            tools=tool_definitions,
+            tool_choice=tool_choice,
+            structured_response_format=None,  # TODO
+        ):
+            usage = getattr(packet, "usage", None)
+            if usage:
+                span_generation.span_data.usage = {
+                    "input_tokens": usage.prompt_tokens,
+                    "output_tokens": usage.completion_tokens,
+                    "cache_read_input_tokens": usage.cache_read_input_tokens,
+                    "cache_creation_input_tokens": usage.cache_creation_input_tokens,
+                }
+            delta = packet.choice.delta
 
-        # Should only happen once, frontend does not expect multiple
-        # ReasoningStart or ReasoningDone packets.
-        if delta.reasoning_content:
-            accumulated_reasoning += delta.reasoning_content
-            # Save reasoning incrementally to state container
-            state_container.set_reasoning_tokens(accumulated_reasoning)
-            if not reasoning_start:
-                emitter.emit(
-                    Packet(
-                        turn_index=turn_index,
-                        obj=ReasoningStart(),
-                    )
-                )
-            emitter.emit(
-                Packet(
-                    turn_index=turn_index,
-                    obj=ReasoningDelta(reasoning=delta.reasoning_content),
-                )
-            )
-            reasoning_start = True
-
-        if delta.content:
-            if reasoning_start:
-                emitter.emit(
-                    Packet(
-                        turn_index=turn_index,
-                        obj=ReasoningDone(),
-                    )
-                )
-                turn_index += 1
-                reasoning_start = False
-
-            if not answer_start:
-                emitter.emit(
-                    Packet(
-                        turn_index=turn_index,
-                        obj=AgentResponseStart(
-                            final_documents=final_documents,
-                        ),
-                    )
-                )
-                answer_start = True
-
-            for result in citation_processor.process_token(delta.content):
-                if isinstance(result, str):
-                    accumulated_answer += result
-                    # Save answer incrementally to state container
-                    state_container.set_answer_tokens(accumulated_answer)
+            # Should only happen once, frontend does not expect multiple
+            # ReasoningStart or ReasoningDone packets.
+            if delta.reasoning_content:
+                accumulated_reasoning += delta.reasoning_content
+                # Save reasoning incrementally to state container
+                state_container.set_reasoning_tokens(accumulated_reasoning)
+                if not reasoning_start:
                     emitter.emit(
                         Packet(
                             turn_index=turn_index,
-                            obj=AgentResponseDelta(content=result),
+                            obj=ReasoningStart(),
                         )
                     )
-                elif isinstance(result, CitationInfo):
-                    emitter.emit(
-                        Packet(
-                            turn_index=turn_index,
-                            obj=result,
-                        )
-                    )
-
-        if delta.tool_calls:
-            if reasoning_start:
                 emitter.emit(
                     Packet(
                         turn_index=turn_index,
-                        obj=ReasoningDone(),
+                        obj=ReasoningDelta(reasoning=delta.reasoning_content),
                     )
                 )
-                turn_index += 1
-                reasoning_start = False
+                reasoning_start = True
 
-            for tool_call_delta in delta.tool_calls:
-                _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
+            if delta.content:
+                if reasoning_start:
+                    emitter.emit(
+                        Packet(
+                            turn_index=turn_index,
+                            obj=ReasoningDone(),
+                        )
+                    )
+                    turn_index += 1
+                    reasoning_start = False
 
-        if finish_reason:
-            break
+                if not answer_start:
+                    emitter.emit(
+                        Packet(
+                            turn_index=turn_index,
+                            obj=AgentResponseStart(
+                                final_documents=final_documents,
+                            ),
+                        )
+                    )
+                    answer_start = True
 
+                for result in citation_processor.process_token(delta.content):
+                    if isinstance(result, str):
+                        accumulated_answer += result
+                        # Save answer incrementally to state container
+                        state_container.set_answer_tokens(accumulated_answer)
+                        emitter.emit(
+                            Packet(
+                                turn_index=turn_index,
+                                obj=AgentResponseDelta(content=result),
+                            )
+                        )
+                    elif isinstance(result, CitationInfo):
+                        emitter.emit(
+                            Packet(
+                                turn_index=turn_index,
+                                obj=result,
+                            )
+                        )
+
+            if delta.tool_calls:
+                if reasoning_start:
+                    emitter.emit(
+                        Packet(
+                            turn_index=turn_index,
+                            obj=ReasoningDone(),
+                        )
+                    )
+                    turn_index += 1
+                    reasoning_start = False
+
+                for tool_call_delta in delta.tool_calls:
+                    _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
+        span_generation.span_data.output = [
+            {"role": "assistant", "content": accumulated_answer}
+        ]
     # Close reasoning block if still open (stream ended with reasoning content)
     if reasoning_start:
         emitter.emit(
@@ -730,324 +752,331 @@ def run_llm_loop(
     db_session: Session,
     forced_tool_id: int | None = None,
 ) -> None:
-    # Fix some LiteLLM issues,
-    from onyx.llm.litellm_singleton.config import (
-        initialize_litellm,
-    )  # Here for lazy load LiteLLM
+    with trace("run_llm_loop", metadata={"tenant_id": get_current_tenant_id()}):
+        # Fix some LiteLLM issues,
+        from onyx.llm.litellm_singleton.config import (
+            initialize_litellm,
+        )  # Here for lazy load LiteLLM
 
-    initialize_litellm()
+        initialize_litellm()
 
-    stopping_tools_names: list[str] = [ImageGenerationTool.NAME]
-    citeable_tools_names: list[str] = [
-        SearchTool.NAME,
-        WebSearchTool.NAME,
-        OpenURLTool.NAME,
-    ]
+        stopping_tools_names: list[str] = [ImageGenerationTool.NAME]
+        citeable_tools_names: list[str] = [
+            SearchTool.NAME,
+            WebSearchTool.NAME,
+            OpenURLTool.NAME,
+        ]
 
-    # Initialize citation processor for handling citations dynamically
-    citation_processor = DynamicCitationProcessor()
+        # Initialize citation processor for handling citations dynamically
+        citation_processor = DynamicCitationProcessor()
 
-    # Add project file citation mappings if project files are present
-    project_citation_mapping: dict[int, SearchDoc] = {}
-    if project_files.project_file_metadata:
-        project_citation_mapping = _build_project_file_citation_mapping(
-            project_files.project_file_metadata
+        # Add project file citation mappings if project files are present
+        project_citation_mapping: dict[int, SearchDoc] = {}
+        if project_files.project_file_metadata:
+            project_citation_mapping = _build_project_file_citation_mapping(
+                project_files.project_file_metadata
+            )
+            citation_processor.update_citation_mapping(project_citation_mapping)
+
+        llm_step_result: LlmStepResult | None = None
+
+        # Pass the total budget to construct_message_history, which will handle token allocation
+        available_tokens = llm.config.max_input_tokens
+        tool_choice: ToolChoiceOptions = "auto"
+        collected_tool_calls: list[ToolCallInfo] = []
+        # Initialize gathered_documents with project files if present
+        gathered_documents: list[SearchDoc] | None = (
+            list(project_citation_mapping.values())
+            if project_citation_mapping
+            else None
         )
-        citation_processor.update_citation_mapping(project_citation_mapping)
+        # TODO allow citing of images in Projects. Since attached to the last user message, it has no text associated with it.
+        # One future workaround is to include the images as separate user messages with citation information and process those.
+        always_cite_documents: bool = bool(
+            project_files.project_as_filter or project_files.project_file_texts
+        )
+        should_cite_documents: bool = False
+        ran_image_gen: bool = False
+        just_ran_web_search: bool = False
+        citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
-    llm_step_result: LlmStepResult | None = None
+        current_tool_call_index = (
+            0  # TODO: just use the cycle count after parallel tool calls are supported
+        )
 
-    # Pass the total budget to construct_message_history, which will handle token allocation
-    available_tokens = llm.config.max_input_tokens
-    tool_choice: ToolChoiceOptions = "auto"
-    collected_tool_calls: list[ToolCallInfo] = []
-    # Initialize gathered_documents with project files if present
-    gathered_documents: list[SearchDoc] | None = (
-        list(project_citation_mapping.values()) if project_citation_mapping else None
-    )
-    # TODO allow citing of images in Projects. Since it's attached to the last user message, it has no text associated with it.
-    # One future workaround is to include the images as separate user messages with citation information and process those.
-    always_cite_documents: bool = bool(
-        project_files.project_as_filter or project_files.project_file_texts
-    )
-    should_cite_documents: bool = False
-    ran_image_gen: bool = False
-    just_ran_web_search: bool = False
-    citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
+        for llm_cycle_count in range(MAX_LLM_CYCLES):
 
-    current_tool_call_index = (
-        0  # TODO: just use the cycle count after parallel tool calls are supported
-    )
+            if forced_tool_id:
+                # Needs to be just the single one because the "required" currently doesn't have a specified tool, just a binary
+                final_tools = [tool for tool in tools if tool.id == forced_tool_id]
+                if not final_tools:
+                    raise ValueError(f"Tool {forced_tool_id} not found in tools")
+                tool_choice = "required"
+                forced_tool_id = None
+            elif llm_cycle_count == MAX_LLM_CYCLES - 1 or ran_image_gen:
+                # Last cycle, no tools allowed, just answer!
+                tool_choice = "none"
+                final_tools = []
+            else:
+                tool_choice = "auto"
+                final_tools = tools
 
-    for llm_cycle_count in range(MAX_LLM_CYCLES):
+            # The section below calculates the available tokens for history a bit more accurately
+            # now that project files are loaded in.
+            if persona and persona.replace_base_system_prompt and persona.system_prompt:
+                # Handles the case where user has checked off the "Replace base system prompt" checkbox
+                system_prompt = ChatMessageSimple(
+                    message=persona.system_prompt,
+                    token_count=len(tokenizer_func(persona.system_prompt)),
+                    message_type=MessageType.SYSTEM,
+                )
+                custom_agent_prompt_msg = None
+            else:
+                # System message and custom agent message are both included.
+                open_ai_formatting_enabled = model_needs_formatting_reenabled(
+                    llm.config.model_name
+                )
 
-        if forced_tool_id:
-            # Needs to be just the single one because the "required" currently doesn't have a specified tool, just a binary
-            final_tools = [tool for tool in tools if tool.id == forced_tool_id]
-            if not final_tools:
-                raise ValueError(f"Tool {forced_tool_id} not found in tools")
-            tool_choice = "required"
-            forced_tool_id = None
-        elif llm_cycle_count == MAX_LLM_CYCLES - 1 or ran_image_gen:
-            # Last cycle, no tools allowed, just answer!
-            tool_choice = "none"
-            final_tools = []
-        else:
-            tool_choice = "auto"
-            final_tools = tools
+                system_prompt_str = build_system_prompt(
+                    base_system_prompt=get_default_base_system_prompt(db_session),
+                    datetime_aware=persona.datetime_aware if persona else True,
+                    memories=memories,
+                    tools=tools,
+                    should_cite_documents=should_cite_documents
+                    or always_cite_documents,
+                    open_ai_formatting_enabled=open_ai_formatting_enabled,
+                )
+                system_prompt = ChatMessageSimple(
+                    message=system_prompt_str,
+                    token_count=len(tokenizer_func(system_prompt_str)),
+                    message_type=MessageType.SYSTEM,
+                )
 
-        # The section below calculates the available tokens for history a bit more accurately
-        # now that project files are loaded in.
-        if persona and persona.replace_base_system_prompt and persona.system_prompt:
-            # Handles the case where user has checked off the "Replace base system prompt" checkbox
-            system_prompt = ChatMessageSimple(
-                message=persona.system_prompt,
-                token_count=len(tokenizer_func(persona.system_prompt)),
-                message_type=MessageType.SYSTEM,
-            )
-            custom_agent_prompt_msg = None
-        else:
-            # System message and custom agent message are both included.
-            open_ai_formatting_enabled = model_needs_formatting_reenabled(
-                llm.config.model_name
-            )
+                custom_agent_prompt_msg = (
+                    ChatMessageSimple(
+                        message=custom_agent_prompt,
+                        token_count=len(tokenizer_func(custom_agent_prompt)),
+                        message_type=MessageType.USER,
+                    )
+                    if custom_agent_prompt
+                    else None
+                )
 
-            system_prompt_str = build_system_prompt(
-                base_system_prompt=get_default_base_system_prompt(db_session),
-                datetime_aware=persona.datetime_aware if persona else True,
-                memories=memories,
-                tools=tools,
-                should_cite_documents=should_cite_documents or always_cite_documents,
-                open_ai_formatting_enabled=open_ai_formatting_enabled,
-            )
-            system_prompt = ChatMessageSimple(
-                message=system_prompt_str,
-                token_count=len(tokenizer_func(system_prompt_str)),
-                message_type=MessageType.SYSTEM,
-            )
+            reminder_message_text: str | None
+            if ran_image_gen:
+                # Some models are trained to give back images to the user for some similar tool
+                # This is to prevent it generating things like:
+                # [Cute Cat](attachment://a_cute_cat_sitting_playfully.png)
+                reminder_message_text = IMAGE_GEN_REMINDER
+            elif just_ran_web_search:
+                reminder_message_text = OPEN_URL_REMINDER
+            else:
+                # This is the default case, the LLM at this point may answer so it is important
+                # to include the reminder. Potentially this should also mention citation
+                reminder_message_text = build_reminder_message(
+                    reminder_text=(
+                        persona.task_prompt if persona and persona.task_prompt else None
+                    ),
+                    include_citation_reminder=should_cite_documents
+                    or always_cite_documents,
+                )
 
-            custom_agent_prompt_msg = (
+            reminder_msg = (
                 ChatMessageSimple(
-                    message=custom_agent_prompt,
-                    token_count=len(tokenizer_func(custom_agent_prompt)),
+                    message=reminder_message_text,
+                    token_count=len(tokenizer_func(reminder_message_text)),
                     message_type=MessageType.USER,
                 )
-                if custom_agent_prompt
+                if reminder_message_text
                 else None
             )
 
-        reminder_message_text: str | None
-        if ran_image_gen:
-            # Some models are trained to give back images to the user for some similar tool
-            # This is to prevent it generating things like:
-            # [Cute Cat](attachment://a_cute_cat_sitting_playfully.png)
-            reminder_message_text = IMAGE_GEN_REMINDER
-        elif just_ran_web_search:
-            reminder_message_text = OPEN_URL_REMINDER
-        else:
-            # This is the default case, the LLM at this point may answer so it is important
-            # to include the reminder. Potentially this should also mention citation
-            reminder_message_text = build_reminder_message(
-                reminder_text=(
-                    persona.task_prompt if persona and persona.task_prompt else None
-                ),
-                include_citation_reminder=should_cite_documents
-                or always_cite_documents,
+            truncated_message_history = construct_message_history(
+                system_prompt=system_prompt,
+                custom_agent_prompt=custom_agent_prompt_msg,
+                simple_chat_history=simple_chat_history,
+                reminder_message=reminder_msg,
+                project_files=project_files,
+                available_tokens=available_tokens,
             )
 
-        reminder_msg = (
-            ChatMessageSimple(
-                message=reminder_message_text,
-                token_count=len(tokenizer_func(reminder_message_text)),
-                message_type=MessageType.USER,
-            )
-            if reminder_message_text
-            else None
-        )
-
-        truncated_message_history = construct_message_history(
-            system_prompt=system_prompt,
-            custom_agent_prompt=custom_agent_prompt_msg,
-            simple_chat_history=simple_chat_history,
-            reminder_message=reminder_msg,
-            project_files=project_files,
-            available_tokens=available_tokens,
-        )
-
-        # This calls the LLM, passes in the emitter which can collect packets like reasoning, answers, etc.
-        # It also pre-processes the tool calls in preparation for running them
-        llm_step_result, current_tool_call_index = run_llm_step(
-            history=truncated_message_history,
-            tool_definitions=[tool.tool_definition() for tool in final_tools],
-            tool_choice=tool_choice,
-            emitter=emitter,
-            llm=llm,
-            turn_index=current_tool_call_index,
-            citation_processor=citation_processor,
-            state_container=state_container,
-            # The rich docs representation is passed in so that when yielding the answer, it can also immediately yield the full
-            # set of found documents. This gives us the option to show the final set of documents immediately if desired.
-            final_documents=gathered_documents,
-        )
-
-        # Save citation mapping after each LLM step for incremental state updates
-        state_container.set_citation_mapping(citation_processor.citation_to_doc)
-
-        # Run the LLM selected tools, there is some more logic here than a simple execution
-        # each tool might have custom logic here
-        tool_responses: list[ToolResponse] = []
-        tool_calls = llm_step_result.tool_calls or []
-
-        just_ran_web_search = False
-        for tool_call in tool_calls:
-            # TODO replace the [tool_call] with the list of tool calls once parallel tool calls are supported
-            tool_responses, citation_mapping = run_tool_calls(
-                tool_calls=[tool_call],
-                tools=final_tools,
+            # This calls the LLM, passes in the emitter which can collect packets like reasoning, answers, etc.
+            # It also pre-processes the tool calls in preparation for running them
+            llm_step_result, current_tool_call_index = run_llm_step(
+                history=truncated_message_history,
+                tool_definitions=[tool.tool_definition() for tool in final_tools],
+                tool_choice=tool_choice,
+                emitter=emitter,
+                llm=llm,
                 turn_index=current_tool_call_index,
-                message_history=truncated_message_history,
-                memories=memories,
-                user_info=None,  # TODO, this is part of memories right now, might want to separate it out
-                citation_mapping=citation_mapping,
                 citation_processor=citation_processor,
+                state_container=state_container,
+                # The rich docs representation is passed in so that when yielding the answer, it can also
+                # immediately yield the full set of found documents. This gives us the option to show the
+                # final set of documents immediately if desired.
+                final_documents=gathered_documents,
             )
 
-            # Build a mapping of tool names to tool objects for getting tool_id
-            tools_by_name = {tool.name: tool for tool in final_tools}
+            # Save citation mapping after each LLM step for incremental state updates
+            state_container.set_citation_mapping(citation_processor.citation_to_doc)
 
-            # Add the results to the chat history, note that even if the tools were run in parallel, this isn't supported
-            # as all the LLM APIs require linear history, so these will just be included sequentially
-            for tool_call, tool_response in zip([tool_call], tool_responses):
-                # Get the tool object to retrieve tool_id
-                tool = tools_by_name.get(tool_call.tool_name)
-                if not tool:
-                    raise ValueError(
-                        f"Tool '{tool_call.tool_name}' not found in tools list"
+            # Run the LLM selected tools, there is some more logic here than a simple execution
+            # each tool might have custom logic here
+            tool_responses: list[ToolResponse] = []
+            tool_calls = llm_step_result.tool_calls or []
+
+            just_ran_web_search = False
+            for tool_call in tool_calls:
+                # TODO replace the [tool_call] with the list of tool calls once parallel tool calls are supported
+                tool_responses, citation_mapping = run_tool_calls(
+                    tool_calls=[tool_call],
+                    tools=final_tools,
+                    turn_index=current_tool_call_index,
+                    message_history=truncated_message_history,
+                    memories=memories,
+                    user_info=None,  # TODO, this is part of memories right now, might want to separate it out
+                    citation_mapping=citation_mapping,
+                    citation_processor=citation_processor,
+                )
+
+                # Build a mapping of tool names to tool objects for getting tool_id
+                tools_by_name = {tool.name: tool for tool in final_tools}
+
+                # Add the results to the chat history, note that even if the tools were run in parallel, this isn't supported
+                # as all the LLM APIs require linear history, so these will just be included sequentially
+                for tool_call, tool_response in zip([tool_call], tool_responses):
+                    # Get the tool object to retrieve tool_id
+                    tool = tools_by_name.get(tool_call.tool_name)
+                    if not tool:
+                        raise ValueError(
+                            f"Tool '{tool_call.tool_name}' not found in tools list"
+                        )
+
+                    # Collect tool call info with reasoning tokens from this LLM step
+                    # All tool calls from the same loop iteration share the same reasoning tokens
+
+                    # Extract search_docs if this is a search tool response
+                    search_docs = None
+                    if isinstance(tool_response.rich_response, SearchDocsResponse):
+                        search_docs = tool_response.rich_response.search_docs
+                        if gathered_documents:
+                            gathered_documents.extend(search_docs)
+                        else:
+                            gathered_documents = search_docs
+
+                        # This is used for the Open URL reminder in the next cycle
+                        # only do this if the web search tool yielded results
+                        if search_docs and tool_call.tool_name == WebSearchTool.NAME:
+                            just_ran_web_search = True
+
+                    # Extract generated_images if this is an image generation tool response
+                    generated_images = None
+                    if isinstance(
+                        tool_response.rich_response, FinalImageGenerationResponse
+                    ):
+                        generated_images = tool_response.rich_response.generated_images
+
+                    tool_call_info = ToolCallInfo(
+                        parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
+                        turn_index=current_tool_call_index,
+                        tool_name=tool_call.tool_name,
+                        tool_call_id=tool_call.tool_call_id,
+                        tool_id=tool.id,
+                        reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
+                        tool_call_arguments=tool_call.tool_args,
+                        tool_call_response=tool_response.llm_facing_response,
+                        search_docs=search_docs,
+                        generated_images=generated_images,
+                    )
+                    collected_tool_calls.append(tool_call_info)
+                    # Add to state container for partial save support
+                    state_container.add_tool_call(tool_call_info)
+
+                    # Store tool call with function name and arguments in separate layers
+                    tool_call_data = {
+                        TOOL_CALL_MSG_FUNC_NAME: tool_call.tool_name,
+                        TOOL_CALL_MSG_ARGUMENTS: tool_call.tool_args,
+                    }
+                    tool_call_message = json.dumps(tool_call_data)
+                    tool_call_token_count = len(tokenizer_func(tool_call_message))
+
+                    tool_call_msg = ChatMessageSimple(
+                        message=tool_call_message,
+                        token_count=tool_call_token_count,
+                        message_type=MessageType.TOOL_CALL,
+                        tool_call_id=tool_call.tool_call_id,
+                        image_files=None,
+                    )
+                    simple_chat_history.append(tool_call_msg)
+
+                    tool_response_message = tool_response.llm_facing_response
+                    tool_response_token_count = len(
+                        tokenizer_func(tool_response_message)
                     )
 
-                # Collect tool call info with reasoning tokens from this LLM step
-                # All tool calls from the same loop iteration share the same reasoning tokens
+                    tool_response_msg = ChatMessageSimple(
+                        message=tool_response_message,
+                        token_count=tool_response_token_count,
+                        message_type=MessageType.TOOL_CALL_RESPONSE,
+                        tool_call_id=tool_call.tool_call_id,
+                        image_files=None,
+                    )
+                    simple_chat_history.append(tool_response_msg)
 
-                # Extract search_docs if this is a search tool response
-                search_docs = None
-                if isinstance(tool_response.rich_response, SearchDocsResponse):
-                    search_docs = tool_response.rich_response.search_docs
-                    if gathered_documents:
-                        gathered_documents.extend(search_docs)
-                    else:
-                        gathered_documents = search_docs
+                    # Update citation processor if this was a search tool
+                    if tool_call.tool_name in citeable_tools_names:
+                        # Check if the rich_response is a SearchDocsResponse
+                        if isinstance(tool_response.rich_response, SearchDocsResponse):
+                            search_response = tool_response.rich_response
 
-                    # This is used for the Open URL reminder in the next cycle
-                    # only do this if the web search tool yielded results
-                    if search_docs and tool_call.tool_name == WebSearchTool.NAME:
-                        just_ran_web_search = True
+                            # Create mapping from citation number to SearchDoc
+                            citation_to_doc: dict[int, SearchDoc] = {}
+                            for (
+                                citation_num,
+                                doc_id,
+                            ) in search_response.citation_mapping.items():
+                                # Find the SearchDoc with this doc_id
+                                matching_doc = next(
+                                    (
+                                        doc
+                                        for doc in search_response.search_docs
+                                        if doc.document_id == doc_id
+                                    ),
+                                    None,
+                                )
+                                if matching_doc:
+                                    citation_to_doc[citation_num] = matching_doc
 
-                # Extract generated_images if this is an image generation tool response
-                generated_images = None
-                if isinstance(
-                    tool_response.rich_response, FinalImageGenerationResponse
-                ):
-                    generated_images = tool_response.rich_response.generated_images
+                            # Update the citation processor
+                            citation_processor.update_citation_mapping(citation_to_doc)
 
-                tool_call_info = ToolCallInfo(
-                    parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
-                    turn_index=current_tool_call_index,
-                    tool_name=tool_call.tool_name,
-                    tool_call_id=tool_call.tool_call_id,
-                    tool_id=tool.id,
-                    reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
-                    tool_call_arguments=tool_call.tool_args,
-                    tool_call_response=tool_response.llm_facing_response,
-                    search_docs=search_docs,
-                    generated_images=generated_images,
-                )
-                collected_tool_calls.append(tool_call_info)
-                # Add to state container for partial save support
-                state_container.add_tool_call(tool_call_info)
+                current_tool_call_index += 1
 
-                # Store tool call with function name and arguments in separate layers
-                tool_call_data = {
-                    TOOL_CALL_MSG_FUNC_NAME: tool_call.tool_name,
-                    TOOL_CALL_MSG_ARGUMENTS: tool_call.tool_args,
-                }
-                tool_call_message = json.dumps(tool_call_data)
-                tool_call_token_count = len(tokenizer_func(tool_call_message))
+            # If no tool calls, then it must have answered, wrap up
+            if not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0:
+                break
 
-                tool_call_msg = ChatMessageSimple(
-                    message=tool_call_message,
-                    token_count=tool_call_token_count,
-                    message_type=MessageType.TOOL_CALL,
-                    tool_call_id=tool_call.tool_call_id,
-                    image_files=None,
-                )
-                simple_chat_history.append(tool_call_msg)
+            # Certain tools do not allow further actions, force the LLM wrap up on the next cycle
+            if any(
+                tool.tool_name in stopping_tools_names
+                for tool in llm_step_result.tool_calls
+            ):
+                ran_image_gen = True
 
-                tool_response_message = tool_response.llm_facing_response
-                tool_response_token_count = len(tokenizer_func(tool_response_message))
+            if llm_step_result.tool_calls and any(
+                tool.tool_name in citeable_tools_names
+                for tool in llm_step_result.tool_calls
+            ):
+                # As long as 1 tool with citeable documents is called at any point, we ask the LLM to try to cite
+                should_cite_documents = True
 
-                tool_response_msg = ChatMessageSimple(
-                    message=tool_response_message,
-                    token_count=tool_response_token_count,
-                    message_type=MessageType.TOOL_CALL_RESPONSE,
-                    tool_call_id=tool_call.tool_call_id,
-                    image_files=None,
-                )
-                simple_chat_history.append(tool_response_msg)
+        if not llm_step_result or not llm_step_result.answer:
+            raise RuntimeError("LLM did not return an answer.")
 
-                # Update citation processor if this was a search tool
-                if tool_call.tool_name in citeable_tools_names:
-                    # Check if the rich_response is a SearchDocsResponse
-                    if isinstance(tool_response.rich_response, SearchDocsResponse):
-                        search_response = tool_response.rich_response
+        # Note: All state (answer, reasoning, citations, tool_calls) is saved incrementally
+        # in state_container. The process_message layer will persist to DB.
 
-                        # Create mapping from citation number to SearchDoc
-                        citation_to_doc: dict[int, SearchDoc] = {}
-                        for (
-                            citation_num,
-                            doc_id,
-                        ) in search_response.citation_mapping.items():
-                            # Find the SearchDoc with this doc_id
-                            matching_doc = next(
-                                (
-                                    doc
-                                    for doc in search_response.search_docs
-                                    if doc.document_id == doc_id
-                                ),
-                                None,
-                            )
-                            if matching_doc:
-                                citation_to_doc[citation_num] = matching_doc
-
-                        # Update the citation processor
-                        citation_processor.update_citation_mapping(citation_to_doc)
-
-            current_tool_call_index += 1
-
-        # If no tool calls, then it must have answered, wrap up
-        if not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0:
-            break
-
-        # Certain tools do not allow further actions, force the LLM wrap up on the next cycle
-        if any(
-            tool.tool_name in stopping_tools_names
-            for tool in llm_step_result.tool_calls
-        ):
-            ran_image_gen = True
-
-        if llm_step_result.tool_calls and any(
-            tool.tool_name in citeable_tools_names
-            for tool in llm_step_result.tool_calls
-        ):
-            # As long as 1 tool with citeable documents is called at any point, we ask the LLM to try to cite
-            should_cite_documents = True
-
-    if not llm_step_result or not llm_step_result.answer:
-        raise RuntimeError("LLM did not return an answer.")
-
-    # Note: All state (answer, reasoning, citations, tool_calls) is saved incrementally
-    # in state_container. The process_message layer will persist to DB.
-
-    # Signal completion
-    emitter.emit(
-        Packet(turn_index=current_tool_call_index, obj=OverallStop(type="stop"))
-    )
+        # Signal completion
+        emitter.emit(
+            Packet(turn_index=current_tool_call_index, obj=OverallStop(type="stop"))
+        )

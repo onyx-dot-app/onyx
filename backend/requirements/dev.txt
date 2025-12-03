@@ -368,6 +368,7 @@ referencing==0.36.2
     #   jsonschema-specifications
 regex==2025.11.3
     # via tiktoken
+release-tag==0.4.3
 reorder-python-imports-black==3.14.0
 requests==2.32.5
     # via
