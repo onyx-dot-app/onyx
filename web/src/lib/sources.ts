@@ -20,6 +20,7 @@ import {
   JiraIcon,
   LinearIcon,
   LoopioIcon,
+  CodaIcon,
   NotionIcon,
   ProductboardIcon,
   R2Icon,
@@ -101,6 +102,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/admin/connectors/official/sharepoint",
     isPopular: true,
+  },
+  coda: {
+    icon: CodaIcon,
+    displayName: "Coda",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/coda",
   },
   notion: {
     icon: NotionIcon,

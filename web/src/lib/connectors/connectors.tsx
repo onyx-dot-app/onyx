@@ -1002,6 +1002,11 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  coda: {
+    description: "Configure Coda connector",
+    values: [],
+    advanced_values: [],
+  },
   notion: {
     description: "Configure Notion connector",
     values: [
@@ -1830,6 +1835,10 @@ export interface FileConfig {
 export interface ZulipConfig {
   realm_name: string;
   realm_url: string;
+}
+
+export interface CodaConfig {
+  workspace_id?: string;
 }
 
 export interface NotionConfig {
