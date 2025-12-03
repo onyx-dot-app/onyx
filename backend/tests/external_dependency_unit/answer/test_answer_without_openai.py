@@ -83,7 +83,6 @@ def test_answer_with_only_anthropic_provider(
             new_msg_req=chat_request,
             user=test_user,
             db_session=db_session,
-            bypass_translation=True,
         ):
             response_stream.append(packet)
 

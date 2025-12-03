@@ -6,6 +6,9 @@ concurrency:
 on:
   merge_group:
     types: [checks_requested]
+  push:
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -71,6 +74,20 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Format branch name for cache
+        id: format-branch
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "${PR_NUMBER}" ]; then
+            CACHE_SUFFIX="${PR_NUMBER}"
+          else
+            # shellcheck disable=SC2001
+            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
+          fi
+          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
@@ -91,9 +108,14 @@ jobs:
           push: true
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}
           cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
             type=registry,ref=onyxdotapp/onyx-backend:latest
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
@@ -105,6 +127,20 @@ jobs:
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Format branch name for cache
+        id: format-branch
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "${PR_NUMBER}" ]; then
+            CACHE_SUFFIX="${PR_NUMBER}"
+          else
+            # shellcheck disable=SC2001
+            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
+          fi
+          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -126,9 +162,14 @@ jobs:
           push: true
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}
           cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
             type=registry,ref=onyxdotapp/onyx-model-server:latest
-          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
 
   build-integration-image:
     runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-build-integration-image", "extras=ecr-cache"]
@@ -139,6 +180,20 @@ jobs:
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Format branch name for cache
+        id: format-branch
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "${PR_NUMBER}" ]; then
+            CACHE_SUFFIX="${PR_NUMBER}"
+          else
+            # shellcheck disable=SC2001
+            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
+          fi
+          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
@@ -156,12 +211,22 @@ jobs:
         env:
           INTEGRATION_REPOSITORY: ${{ env.RUNS_ON_ECR_CACHE }}
           TAG: integration-test-${{ github.run_id }}
+          CACHE_SUFFIX: ${{ steps.format-branch.outputs.cache-suffix }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           cd backend && docker buildx bake --push \
+            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA} \
+            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX} \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
             --set backend.cache-from=type=registry,ref=onyxdotapp/onyx-backend:latest \
+            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA},mode=max \
+            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX},mode=max \
             --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache,mode=max \
+            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${HEAD_SHA} \
+            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${CACHE_SUFFIX} \
             --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache \
+            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${HEAD_SHA},mode=max \
+            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${CACHE_SUFFIX},mode=max \
             --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache,mode=max \
             integration
 

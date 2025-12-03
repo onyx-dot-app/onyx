@@ -11,8 +11,8 @@ import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRen
  * Create a tool packet with sensible defaults
  */
 export const createToolPacket = (
-  ind: number,
-  type: "search" | "custom" | "reasoning" | "fetch" = "search"
+  turn_index: number,
+  type: "search" | "custom" | "reasoning" | "fetch" = "custom"
 ): Packet => {
   const packetTypes = {
     search: PacketType.SEARCH_TOOL_START,
@@ -22,13 +22,61 @@ export const createToolPacket = (
   };
 
   return {
-    ind,
+    turn_index,
     obj: {
       type: packetTypes[type],
-      tool_name: `Tool ${ind + 1}`,
-      tool_id: `tool_${ind}`,
+      tool_name: `Tool ${turn_index + 1}`,
+      tool_id: `tool_${turn_index}`,
     },
   } as Packet;
+};
+
+/**
+ * Create a packet group representing a single internal search tool
+ * with both queries and at least one result document.
+ *
+ * This is used to exercise the two-step internal search rendering
+ * in MultiToolRenderer and SearchToolRendererV2.
+ */
+export const createInternalSearchToolGroup = (
+  turn_index: number = 0
+): { turn_index: number; packets: Packet[] } => {
+  const packets: Packet[] = [
+    {
+      turn_index,
+      obj: {
+        type: PacketType.SEARCH_TOOL_START,
+        is_internet_search: false,
+      } as any,
+    },
+    {
+      turn_index,
+      obj: {
+        type: PacketType.SEARCH_TOOL_QUERIES_DELTA,
+        queries: ["example query"],
+      } as any,
+    },
+    {
+      turn_index,
+      obj: {
+        type: PacketType.SEARCH_TOOL_DOCUMENTS_DELTA,
+        documents: [
+          {
+            document_id: "doc-1",
+            semantic_identifier: "Doc 1",
+          },
+        ],
+      } as any,
+    },
+    {
+      turn_index,
+      obj: {
+        type: PacketType.SECTION_END,
+      } as any,
+    },
+  ];
+
+  return { turn_index, packets };
 };
 
 /**
@@ -36,7 +84,7 @@ export const createToolPacket = (
  */
 export const createToolGroups = (count: number) =>
   Array.from({ length: count }, (_, i) => ({
-    ind: i,
+    turn_index: i,
     packets: [createToolPacket(i)],
   }));
 
@@ -74,7 +122,7 @@ export const renderMultiToolRenderer = (
     stopPacketSeen?: boolean;
     onAllToolsDisplayed?: () => void;
     chatState?: any;
-    packetGroups?: { ind: number; packets: Packet[] }[];
+    packetGroups?: { turn_index: number; packets: Packet[] }[];
   } = {}
 ) => {
   const {

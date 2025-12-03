@@ -684,11 +684,6 @@ def delete_documents_complete__no_commit(
         document_ids=document_ids,
     )
 
-    delete_chunk_stats_by_connector_credential_pair__no_commit(
-        db_session=db_session,
-        document_ids=document_ids,
-    )
-
     delete_documents_by_connector_credential_pair__no_commit(db_session, document_ids)
     delete_document_feedback_for_documents__no_commit(
         document_ids=document_ids, db_session=db_session

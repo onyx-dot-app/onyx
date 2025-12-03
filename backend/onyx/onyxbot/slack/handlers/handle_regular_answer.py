@@ -142,12 +142,14 @@ def handle_regular_answer(
     # This way slack flow always has a persona
     persona = slack_channel_config.persona
     if not persona:
+        logger.warning("No persona found for channel config, using default persona")
         with get_session_with_current_tenant() as db_session:
             persona = get_persona_by_id(DEFAULT_PERSONA_ID, user, db_session)
             document_set_names = [
                 document_set.name for document_set in persona.document_sets
             ]
     else:
+        logger.info(f"Using persona {persona.name} for channel config")
         document_set_names = [
             document_set.name for document_set in persona.document_sets
         ]
@@ -190,7 +192,6 @@ def handle_regular_answer(
                 db_session=db_session,
                 bypass_acl=False,
                 additional_context=slack_context_str,
-                bypass_translation=True,
                 slack_context=message_info.slack_context,
             )
             answer = gather_stream(packets)

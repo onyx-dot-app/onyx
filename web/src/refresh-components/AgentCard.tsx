@@ -14,7 +14,7 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgProps } from "@/icons";
 import SvgUser from "@/icons/user";
 import SvgActions from "@/icons/actions";
-import { useAgentsContext } from "./contexts/AgentsContext";
+import { usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
 import SvgEdit from "@/icons/edit";
 import { useRouter } from "next/navigation";
@@ -47,7 +47,7 @@ export interface AgentCardProps {
 export default function AgentCard({ agent }: AgentCardProps) {
   const route = useAppRouter();
   const router = useRouter();
-  const { pinnedAgents, togglePinnedAgent } = useAgentsContext();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgentsWithDetails();
   const pinned = useMemo(
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
     [agent.id, pinnedAgents]

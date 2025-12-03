@@ -55,7 +55,6 @@ def test_stream_chat_current_date_response(
         new_msg_req=chat_request,
         user=test_user,
         db_session=db_session,
-        bypass_translation=True,
     )
 
     raw: list[AnswerStreamPart] = []
