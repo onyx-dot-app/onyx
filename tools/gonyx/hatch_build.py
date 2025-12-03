@@ -40,5 +40,4 @@ class CustomBuildHook(BuildHookInterface):
                 ],
             )
 
-        # Include the binary in the wheel
-        build_data["force_include"][binary_name] = binary_name
+        build_data["shared_scripts"] = {binary_name: binary_name}
