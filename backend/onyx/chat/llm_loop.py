@@ -70,7 +70,14 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-MAX_LLM_CYCLES = 5
+# Hardcoded oppinionated value, might breaks down to something like:
+# Cycle 1: Calls web_search for something
+# Cycle 2: Calls open_url for some results
+# Cycle 3: Calls web_search for some other aspect of the question
+# Cycle 4: Calls open_url for some results
+# Cycle 5: Maybe call open_url for some additional results or because last set failed
+# Cycle 6: No more tools available, forced to answer
+MAX_LLM_CYCLES = 6
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"

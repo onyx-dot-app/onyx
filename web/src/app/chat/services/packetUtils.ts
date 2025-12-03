@@ -22,6 +22,8 @@ export function isToolPacket(
     PacketType.REASONING_START,
     PacketType.REASONING_DELTA,
     PacketType.FETCH_TOOL_START,
+    PacketType.FETCH_TOOL_URLS,
+    PacketType.FETCH_TOOL_DOCUMENTS,
   ];
   if (includeSectionEnd) {
     toolPacketTypes.push(PacketType.SECTION_END);
@@ -34,6 +36,14 @@ export function isDisplayPacket(packet: Packet) {
     packet.obj.type === PacketType.MESSAGE_START ||
     packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
     packet.obj.type === PacketType.PYTHON_TOOL_START
+  );
+}
+
+export function isSearchToolPacket(packet: Packet): boolean {
+  return (
+    packet.obj.type === PacketType.SEARCH_TOOL_START ||
+    packet.obj.type === PacketType.SEARCH_TOOL_QUERIES_DELTA ||
+    packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA
   );
 }
 

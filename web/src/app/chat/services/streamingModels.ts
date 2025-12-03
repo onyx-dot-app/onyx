@@ -22,6 +22,8 @@ export enum PacketType {
   PYTHON_TOOL_START = "python_tool_start",
   PYTHON_TOOL_DELTA = "python_tool_delta",
   FETCH_TOOL_START = "open_url_start",
+  FETCH_TOOL_URLS = "open_url_urls",
+  FETCH_TOOL_DOCUMENTS = "open_url_documents",
 
   // Custom tool packets
   CUSTOM_TOOL_START = "custom_tool_start",
@@ -115,6 +117,15 @@ export interface PythonToolDelta extends BaseObj {
 
 export interface FetchToolStart extends BaseObj {
   type: "open_url_start";
+}
+
+export interface FetchToolUrls extends BaseObj {
+  type: "open_url_urls";
+  urls: string[];
+}
+
+export interface FetchToolDocuments extends BaseObj {
+  type: "open_url_documents";
   documents: OnyxDocument[];
 }
 
@@ -181,7 +192,11 @@ export type ImageGenerationToolObj =
   | ImageGenerationToolDelta
   | SectionEnd;
 export type PythonToolObj = PythonToolStart | PythonToolDelta | SectionEnd;
-export type FetchToolObj = FetchToolStart | SectionEnd;
+export type FetchToolObj =
+  | FetchToolStart
+  | FetchToolUrls
+  | FetchToolDocuments
+  | SectionEnd;
 export type CustomToolObj = CustomToolStart | CustomToolDelta | SectionEnd;
 export type NewToolObj =
   | SearchToolObj

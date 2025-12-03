@@ -5,7 +5,7 @@ import {
   CitationInfo,
   SearchToolDocumentsDelta,
   StreamingCitation,
-  FetchToolStart,
+  FetchToolDocuments,
 } from "@/app/chat/services/streamingModels";
 import { CitationMap } from "@/app/chat/interfaces";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
@@ -313,10 +313,10 @@ export default function AIMessage({
             }
           }
         }
-      } else if (packet.obj.type === PacketType.FETCH_TOOL_START) {
-        const fetchStart = packet.obj as FetchToolStart;
-        if (fetchStart.documents) {
-          for (const doc of fetchStart.documents) {
+      } else if (packet.obj.type === PacketType.FETCH_TOOL_DOCUMENTS) {
+        const fetchDocuments = packet.obj as FetchToolDocuments;
+        if (fetchDocuments.documents) {
+          for (const doc of fetchDocuments.documents) {
             if (doc.document_id) {
               documentMapRef.current.set(doc.document_id, doc);
             }
