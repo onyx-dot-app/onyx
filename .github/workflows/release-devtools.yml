@@ -9,7 +9,7 @@ jobs:
   pypi:
     runs-on: ubuntu-latest
     environment:
-      name: release
+      name: release-devtools
     permissions:
       id-token: write
     strategy:
@@ -34,4 +34,6 @@ jobs:
           GOOS="${{ matrix.os-arch.goos }}" \
           GOARCH="${{ matrix.os-arch.goarch }}" \
           uv build --wheel
+        working-directory: tools/gonyx
       - run: uv publish
+        working-directory: tools/gonyx
