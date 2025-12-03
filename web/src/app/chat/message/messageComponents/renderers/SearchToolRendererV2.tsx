@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo, JSX } from "react";
-import { FiSearch, FiGlobe, FiBook } from "react-icons/fi";
+import { FiSearch, FiGlobe, FiBookOpen } from "react-icons/fi";
 import {
   PacketType,
   SearchToolPacket,
@@ -168,7 +168,7 @@ export function SearchToolStep2Renderer({
   const [resultsToShow, setResultsToShow] = useState(INITIAL_RESULTS_TO_SHOW);
 
   return children({
-    icon: FiBook,
+    icon: FiBookOpen,
     status: "Reading",
     content: (
       <div className="flex flex-col">

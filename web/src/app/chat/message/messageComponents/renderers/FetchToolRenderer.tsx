@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { FiGlobe } from "react-icons/fi";
+import { FiGlobe, FiLink } from "react-icons/fi";
 import {
   PacketType,
   FetchToolPacket,
@@ -147,7 +147,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   // Don't render anything if fetch hasn't started
   if (!hasStarted) {
     return children({
-      icon: FiGlobe,
+      icon: FiLink,
       status: null,
       content: <div></div>,
     });
@@ -158,7 +158,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   const displayUrls = !displayDocuments && isComplete && urls.length > 0;
 
   return children({
-    icon: FiGlobe,
+    icon: FiLink,
     status,
     content: (
       <div className="flex flex-col mt-1.5">
