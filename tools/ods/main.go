@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/onyx-dot-app/onyx/tools/gonyx/cmd"
+	"github.com/onyx-dot-app/onyx/tools/ods/cmd"
 )
 
 var (

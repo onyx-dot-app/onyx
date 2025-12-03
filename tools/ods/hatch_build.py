@@ -24,7 +24,7 @@ class CustomBuildHook(BuildHookInterface):
             )
 
         # Get config and environment
-        binary_name = self.config.get("binary_name", "gonyx")
+        binary_name = self.config["binary_name"]
         tag = os.getenv("GITHUB_REF_NAME", "dev").lstrip(f"{binary_name}/")
         commit = os.getenv("GITHUB_SHA", "none")
 

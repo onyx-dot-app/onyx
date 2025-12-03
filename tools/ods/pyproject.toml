@@ -31,8 +31,8 @@ source = "vcs"
 
 [tool.hatch.version.raw-options]
 root = "../.."
-tag_regex = "^gonyx/v(?P<version>[vV]?\\d+(?:\\.\\d+){0,2}[^\\+]*)(?:\\+.*)?$"
+tag_regex = "^ods/v(?P<version>[vV]?\\d+(?:\\.\\d+){0,2}[^\\+]*)(?:\\+.*)?$"
 
 [tool.hatch.build.targets.wheel.hooks.custom]
 path = "hatch_build.py"
-binary_name = "gonyx"
+binary_name = "ods"

@@ -1,4 +1,4 @@
-module github.com/onyx-dot-app/onyx/tools/gonyx
+module github.com/onyx-dot-app/onyx/tools/ods
 
 go 1.25.0
 

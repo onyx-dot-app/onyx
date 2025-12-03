@@ -22,7 +22,7 @@ func NewRootCommand() *cobra.Command {
 	opts := &RootOptions{}
 
 	cmd := &cobra.Command{
-		Use:   "gonyx ",
+		Use:   "ods ",
 		Short: "Developer utilities for working on onyx.app",
 		Run:   rootCmd,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
