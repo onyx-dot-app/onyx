@@ -174,9 +174,6 @@ const containerClasses = {
       ],
     },
   },
-  skeleton: {
-    large: ["border", "border-border-01", "border-dashed", "rounded-08", "p"],
-  },
 } as const;
 
 const iconClasses = {
