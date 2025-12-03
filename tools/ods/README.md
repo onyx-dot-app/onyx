@@ -18,20 +18,6 @@ While inside the Onyx repository, activate the root project's venv,
 source .venv/bin/activate
 ```
 
-Alternatively, [`uv run`](https://docs.astral.sh/uv/guides/scripts/) will explicitly sync and run,
-
-```shell
-uv run ods
-```
-
-With `uv run`, it is recommended to set a shell alias,
-
-```
-echo "alias ods='uv run --no-project ods'" >> ~/.zshrc && source ~/.zshrc
-```
-
-_To enable [autocomplete](#autocomplete) with `uv run`, you must set a shell alias._
-
 If you prefer to use the latest version of `ods` and _not_ the stable version in the `pyproject.toml`,
 
 ```shell
