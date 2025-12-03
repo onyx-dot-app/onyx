@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
   ART_ASSISTANT_ID,
@@ -18,14 +18,14 @@ import { cn } from "@/lib/utils";
 
 export function getAgentIcon(
   agent: MinimalPersonaSnapshot
-): React.FunctionComponent<SvgProps> {
+): React.FunctionComponent<IconProps> {
   if (agent.id === DEFAULT_ASSISTANT_ID) return OnyxIcon;
   if (agent.id === GENERAL_ASSISTANT_ID) return SvgLightbulbSimple;
   if (agent.id === IMAGE_ASSISTANT_ID || agent.id === ART_ASSISTANT_ID)
     return SvgImage;
   const uploadedImageId = agent.uploaded_image_id;
   if (uploadedImageId) {
-    const UploadedImageIcon: React.FunctionComponent<SvgProps> = ({
+    const UploadedImageIcon: React.FunctionComponent<IconProps> = ({
       className,
     }) => (
       <div className={cn("w-full h-full", className)}>
@@ -40,7 +40,7 @@ export function getAgentIcon(
     UploadedImageIcon.displayName = "SidebarUploadedAgentIcon";
     return UploadedImageIcon;
   }
-  const GeneratedIcon: React.FunctionComponent<SvgProps> = ({ className }) => (
+  const GeneratedIcon: React.FunctionComponent<IconProps> = ({ className }) => (
     <div className={cn("w-full h-full", className)}>
       {generateIdenticon((agent.icon_shape || 0).toString(), 16)}
     </div>

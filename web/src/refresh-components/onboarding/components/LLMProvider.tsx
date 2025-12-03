@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import SvgArrowExchange from "@/icons/arrow-exchange";
 import Truncated from "@/refresh-components/texts/Truncated";
 import SvgServer from "@/icons/server";
@@ -17,7 +17,7 @@ import { ModalCreationInterface } from "@/refresh-components/contexts/ModalConte
 export interface LLMProviderProps {
   title: string;
   subtitle: string;
-  icon?: React.FunctionComponent<SvgProps>;
+  icon?: React.FunctionComponent<IconProps>;
   llmDescriptor?: WellKnownLLMProviderDescriptor;
   disabled?: boolean;
   isConnected?: boolean;

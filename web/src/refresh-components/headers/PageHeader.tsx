@@ -2,13 +2,13 @@
 
 // This should be used as the header for *all* pages (including admin pages).
 
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { useEffect, useRef, useState } from "react";
 
 export interface PageHeaderProps {
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<IconProps>;
   title: string;
   description: string;
   className?: string;

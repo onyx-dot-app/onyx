@@ -2,11 +2,11 @@
 import { JSX } from "react";
 import { HealthCheckBanner } from "../health/healthcheck";
 import Separator from "@/refresh-components/Separator";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
 
 export interface AdminPageTitleProps {
-  icon: React.FunctionComponent<SvgProps> | React.ReactNode;
+  icon: React.FunctionComponent<IconProps> | React.ReactNode;
   title: string | JSX.Element;
   farRightElement?: JSX.Element;
   includeDivider?: boolean;
