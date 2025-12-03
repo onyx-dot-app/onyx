@@ -15,6 +15,7 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP_REVERSE
 from onyx.connectors.sharepoint.connector import sleep_and_retry
 from onyx.utils.logger import setup_logger
 
@@ -511,8 +512,8 @@ def get_external_access_from_sharepoint(
                 f"Failed to get SharePoint list item ID for item {drive_item.id}"
             )
 
-        if drive_name == "Shared Documents":
-            drive_name = "Documents"
+        if drive_name in SHARED_DOCUMENTS_MAP_REVERSE:
+            drive_name = SHARED_DOCUMENTS_MAP_REVERSE[drive_name]
 
         item = client_context.web.lists.get_by_title(drive_name).items.get_by_id(
             item_id

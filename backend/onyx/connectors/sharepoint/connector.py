@@ -68,6 +68,13 @@ logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
 
 
+SHARED_DOCUMENTS_MAP = {
+    "Documents": "Shared Documents",
+    "Dokumente": "Freigegebene Dokumente",
+    "Documentos": "Documentos compartidos",
+}
+SHARED_DOCUMENTS_MAP_REVERSE = {v: k for k, v in SHARED_DOCUMENTS_MAP.items()}
+
 ASPX_EXTENSION = ".aspx"
 
 
@@ -778,7 +785,10 @@ class SharepointConnector(
                 drive
                 for drive in drives
                 if (drive.name and drive.name.lower() == drive_name.lower())
-                or (drive.name == "Documents" and drive_name == "Shared Documents")
+                or (
+                    drive.name in SHARED_DOCUMENTS_MAP
+                    and SHARED_DOCUMENTS_MAP[drive.name] == drive_name
+                )
             ]
             drive = drives[0] if len(drives) > 0 else None
             if drive is None:
@@ -885,10 +895,12 @@ class SharepointConnector(
                     for drive in drives
                     if drive.name == site_descriptor.drive_name
                     or (
-                        drive.name == "Documents"
-                        and site_descriptor.drive_name == "Shared Documents"
+                        drive.name in SHARED_DOCUMENTS_MAP
+                        and SHARED_DOCUMENTS_MAP[drive.name]
+                        == site_descriptor.drive_name
                     )
-                ]
+                ]  # NOTE: right now we only support english, german and spanish drive names
+                # add to SHARED_DOCUMENTS_MAP if you want to support more languages
                 if not drives:
                     logger.warning(f"Drive '{site_descriptor.drive_name}' not found")
                     return []
@@ -914,9 +926,11 @@ class SharepointConnector(
                     )
 
                     # Use "Shared Documents" as the library name for the default "Documents" drive
+                    # NOTE: right now we only support english, german and spanish drive names
+                    # add to SHARED_DOCUMENTS_MAP if you want to support more languages
                     drive_name = (
-                        "Shared Documents"
-                        if drive.name == "Documents"
+                        SHARED_DOCUMENTS_MAP[drive.name]
+                        if drive.name in SHARED_DOCUMENTS_MAP
                         else cast(str, drive.name)
                     )
 
@@ -1455,10 +1469,8 @@ class SharepointConnector(
                 # Clear current drive and continue to next
                 checkpoint.current_drive_name = None
                 return checkpoint
-            current_drive_name = (
-                "Shared Documents"
-                if current_drive_name == "Documents"
-                else current_drive_name
+            current_drive_name = SHARED_DOCUMENTS_MAP.get(
+                current_drive_name, current_drive_name
             )
             for driveitem in driveitems:
                 driveitem_extension = get_file_ext(driveitem.name)
