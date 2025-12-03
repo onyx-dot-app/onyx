@@ -11,6 +11,7 @@ import { truncateString } from "@/lib/utils";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { SourceChip2 } from "@/app/chat/components/SourceChip2";
 import { BlinkingDot } from "../../BlinkingDot";
+import { clearTimeoutRefs } from "./utils/timing";
 
 const INITIAL_URLS_TO_SHOW = 3;
 const URLS_PER_EXPANSION = 5;
@@ -92,12 +93,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
       // If stopped, skip intermediate states and complete immediately
       if (stopPacketSeen) {
         // Clear any pending timeouts
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-        }
-        if (readTimeoutRef.current) {
-          clearTimeout(readTimeoutRef.current);
-        }
+        clearTimeoutRefs([timeoutRef, readTimeoutRef]);
 
         // Skip "Read" state, go directly to completion
         setShouldShowAsReading(false);
@@ -134,29 +130,26 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   // Cleanup timeouts when stopped
   useEffect(() => {
     if (stopPacketSeen) {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      if (readTimeoutRef.current) {
-        clearTimeout(readTimeoutRef.current);
-        readTimeoutRef.current = null;
-      }
+      const hadPendingTimeout = clearTimeoutRefs(
+        [timeoutRef, readTimeoutRef],
+        true
+      );
+
       // Reset states to prevent flickering
       setShouldShowAsReading(false);
       setShouldShowAsRead(false);
+      // If we cleared a pending timeout and completion is ready, call onComplete immediately
+      // This handles the case where STOP is pressed during the read-delay, canceling the only path to onComplete
+      if (hadPendingTimeout && isComplete && completionHandledRef.current) {
+        onComplete();
+      }
     }
-  }, [stopPacketSeen]);
+  }, [stopPacketSeen, isComplete, onComplete]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      if (readTimeoutRef.current) {
-        clearTimeout(readTimeoutRef.current);
-      }
+      clearTimeoutRefs([timeoutRef, readTimeoutRef]);
     };
   }, []);
 

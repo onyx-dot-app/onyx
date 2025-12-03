@@ -17,6 +17,7 @@ import Text from "@/refresh-components/texts/Text";
 import { SearchToolRendererV2 } from "./SearchToolRendererV2";
 import { usePostHog } from "posthog-js/react";
 import { ResearchType } from "@/app/chat/interfaces";
+import { clearTimeoutRefs } from "./utils/timing";
 
 const INITIAL_RESULTS_TO_SHOW = 3;
 const RESULTS_PER_EXPANSION = 10;
@@ -138,12 +139,7 @@ export const SearchToolRenderer: MessageRenderer<
       // If stopped, skip intermediate states and complete immediately
       if (stopPacketSeen) {
         // Clear any pending timeouts
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-        }
-        if (searchedTimeoutRef.current) {
-          clearTimeout(searchedTimeoutRef.current);
-        }
+        clearTimeoutRefs([timeoutRef, searchedTimeoutRef]);
 
         // Skip "Searched" state, go directly to completion
         setShouldShowAsSearching(false);
@@ -190,14 +186,7 @@ export const SearchToolRenderer: MessageRenderer<
   // Cleanup timeouts when stopped
   useEffect(() => {
     if (stopPacketSeen) {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      if (searchedTimeoutRef.current) {
-        clearTimeout(searchedTimeoutRef.current);
-        searchedTimeoutRef.current = null;
-      }
+      clearTimeoutRefs([timeoutRef, searchedTimeoutRef], true);
       // Reset states to prevent flickering
       setShouldShowAsSearching(false);
       setShouldShowAsSearched(false);
@@ -207,12 +196,7 @@ export const SearchToolRenderer: MessageRenderer<
   // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      if (searchedTimeoutRef.current) {
-        clearTimeout(searchedTimeoutRef.current);
-      }
+      clearTimeoutRefs([timeoutRef, searchedTimeoutRef]);
     };
   }, []);
 
