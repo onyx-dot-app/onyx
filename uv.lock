@@ -3764,7 +3764,7 @@ dev = [
     { name = "pytest-asyncio", specifier = "==1.3.0" },
     { name = "pytest-dotenv", specifier = "==0.5.2" },
     { name = "pytest-xdist", specifier = "==3.6.1" },
-    { name = "release-tag", specifier = ">=0.4.3" },
+    { name = "release-tag", specifier = "==0.4.3" },
     { name = "reorder-python-imports-black", specifier = "==3.14.0" },
     { name = "ruff", specifier = "==0.12.0" },
     { name = "types-beautifulsoup4", specifier = "==4.12.0.3" },
@@ -3781,7 +3781,7 @@ dev = [
     { name = "types-requests", specifier = "==2.32.0.20250328" },
     { name = "types-retry", specifier = "==0.9.9.3" },
     { name = "types-setuptools", specifier = "==68.0.0.3" },
-    { name = "zizmor", specifier = ">=1.18.0" },
+    { name = "zizmor", specifier = "==1.18.0" },
 ]
 ee = [{ name = "posthog", specifier = "==3.7.4" }]
 model-server = [

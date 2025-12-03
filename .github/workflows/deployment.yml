@@ -99,14 +99,9 @@ jobs:
           # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
           enable-cache: false
 
-      - name: Install release-tag package
-        run: |
-          uv venv
-          uv pip install release-tag
-
       - name: Validate tag is versioned correctly
         run: |
-          uv run --no-sync tag --check
+          uv run --with release-tag tag --check
 
   notify-slack-on-tag-check-failure:
     needs:
