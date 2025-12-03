@@ -83,6 +83,46 @@ jobs:
             echo "sanitized-tag=$SANITIZED_TAG"
           } >> "$GITHUB_OUTPUT"
 
+  check-version-tag:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.event_name != 'workflow_dispatch' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # ratchet:astral-sh/setup-uv@v7.1.4
+        with:
+          # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
+          enable-cache: false
+
+      - name: Validate tag is versioned correctly
+        run: |
+          uv run --no-sync --with release-tag tag --check
+
+  notify-slack-on-tag-check-failure:
+    needs:
+      - check-version-tag
+    if: always() && needs.check-version-tag.result == 'failure' && github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Send Slack notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
+          failed-jobs: "• check-version-tag"
+          title: "🚨 Version Tag Check Failed"
+          ref-name: ${{ github.ref_name }}
+
   build-web-amd64:
     needs: determine-builds
     if: needs.determine-builds.outputs.build-web == 'true'

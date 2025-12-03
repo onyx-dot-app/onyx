@@ -176,6 +176,8 @@ dev = [
     "types-retry==0.9.9.3",
     "types-setuptools==68.0.0.3",
     "ipykernel==6.29.5",
+    "release-tag==0.4.3",
+    "zizmor==1.18.0",
 ]
 
 # Enterprise Edition features

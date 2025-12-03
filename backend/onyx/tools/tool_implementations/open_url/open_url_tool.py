@@ -9,7 +9,9 @@ from onyx.chat.emitter import Emitter
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
-from onyx.server.query_and_chat.streaming_models import OpenUrl
+from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
+from onyx.server.query_and_chat.streaming_models import OpenUrlStart
+from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import ToolResponse
@@ -177,8 +179,13 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         }
 
     def emit_start(self, turn_index: int) -> None:
-        # For this tool, there is no specific start packet
-        return
+        """Emit start packet to signal tool has started."""
+        self.emitter.emit(
+            Packet(
+                turn_index=turn_index,
+                obj=OpenUrlStart(),
+            )
+        )
 
     def run(
         self,
@@ -198,6 +205,13 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             ToolResponse containing the fetched content and citation mapping.
         """
         urls = cast(list[str], llm_kwargs[URLS_FIELD])
+
+        self.emitter.emit(
+            Packet(
+                turn_index=turn_index,
+                obj=OpenUrlUrls(urls=urls),
+            )
+        )
 
         # Fetch content from URLs using the content provider
         web_contents = self._provider.contents(urls)
@@ -227,12 +241,11 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             inference_sections, is_internet=True
         )
 
-        # Emit documents to the client
-        # TODO The query packet can be the first (maybe only one) emitted
+        # Emit documents packet AFTER crawling completes
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
-                obj=OpenUrl(documents=search_docs),
+                obj=OpenUrlDocuments(documents=search_docs),
             )
         )
 

@@ -361,10 +361,12 @@ export function useChatController({
         const packets = lastMessage.packets || [];
         const hasStop = packets.some((p) => p.obj.type === PacketType.STOP);
         if (!hasStop) {
-          const maxInd =
-            packets.length > 0 ? Math.max(...packets.map((p) => p.ind)) : 0;
+          const maxTurnIndex =
+            packets.length > 0
+              ? Math.max(...packets.map((p) => p.turn_index))
+              : 0;
           const stopPacket: Packet = {
-            ind: maxInd + 1,
+            turn_index: maxTurnIndex + 1,
             obj: { type: PacketType.STOP },
           } as Packet;
 
