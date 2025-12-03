@@ -11,17 +11,20 @@ import Button from "@/refresh-components/buttons/Button";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Text from "@/refresh-components/texts/Text";
 import SvgActions from "@/icons/actions";
+import SvgCheckCircle from "@/icons/check-circle";
+import SvgBracketCurly from "@/icons/bracket-curly";
+import SvgUnplug from "@/icons/unplug";
 import { FormField } from "@/refresh-components/form/FormField";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgBracketCurly from "@/icons/bracket-curly";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
 import {
   validateToolDefinition,
   createCustomTool,
+  updateCustomTool,
 } from "@/lib/tools/openApiService";
 import ToolItem from "@/sections/actions/ToolItem";
 import debounce from "lodash/debounce";
@@ -33,7 +36,12 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 interface AddOpenAPIActionModalProps {
   skipOverlay?: boolean;
   onSuccess?: (tool: ToolSnapshot) => void;
+  onUpdate?: (tool: ToolSnapshot) => void;
   setPopup: (popup: PopupSpec) => void;
+  existingTool?: ToolSnapshot | null;
+  onClose?: () => void;
+  onEditAuthentication?: (tool: ToolSnapshot) => void;
+  onDisconnectTool?: (tool: ToolSnapshot) => Promise<void> | void;
 }
 
 interface OpenAPIActionFormValues {
@@ -85,20 +93,42 @@ function SchemaActions({ definition, onFormat }: SchemaActionsProps) {
 export default function AddOpenAPIActionModal({
   skipOverlay = false,
   onSuccess,
+  onUpdate,
   setPopup,
+  existingTool = null,
+  onClose,
+  onEditAuthentication,
+  onDisconnectTool,
 }: AddOpenAPIActionModalProps) {
   const { isOpen, toggle } = useModal();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [methodSpecs, setMethodSpecs] = useState<MethodSpec[] | null>(null);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
+  const [isDisconnectingTool, setIsDisconnectingTool] = useState(false);
+  const isEditMode = Boolean(existingTool);
+
+  const handleModalClose = useCallback(
+    (open: boolean) => {
+      toggle(open);
+      if (!open) {
+        onClose?.();
+      }
+    },
+    [toggle, onClose]
+  );
 
   const handleClose = useCallback(() => {
-    toggle(false);
-  }, [toggle]);
+    handleModalClose(false);
+  }, [handleModalClose]);
 
-  const initialValues: OpenAPIActionFormValues = {
-    definition: "",
-  };
+  const initialValues: OpenAPIActionFormValues = useMemo(
+    () => ({
+      definition: existingTool?.definition
+        ? prettifyDefinition(existingTool.definition)
+        : "",
+    }),
+    [existingTool]
+  );
 
   const handleFormat = useCallback(
     (
@@ -153,6 +183,57 @@ export default function AddOpenAPIActionModal({
     [validateDefinition]
   );
 
+  const hasOAuthConfig = Boolean(existingTool?.oauth_config_id);
+  const hasCustomHeaders =
+    Array.isArray(existingTool?.custom_headers) &&
+    (existingTool?.custom_headers?.length ?? 0) > 0;
+  const hasPassthroughAuth = Boolean(existingTool?.passthrough_auth);
+  const hasAuthenticationConfigured =
+    hasOAuthConfig || hasCustomHeaders || hasPassthroughAuth;
+  const authenticationDescription = useMemo(() => {
+    if (!existingTool) {
+      return "";
+    }
+    if (hasOAuthConfig) {
+      return existingTool.oauth_config_name
+        ? `OAuth connected via ${existingTool.oauth_config_name}`
+        : "OAuth authentication configured";
+    }
+    if (hasCustomHeaders) {
+      return "Custom authentication headers configured";
+    }
+    if (hasPassthroughAuth) {
+      return "Passthrough authentication enabled";
+    }
+    return "";
+  }, [existingTool, hasOAuthConfig, hasCustomHeaders, hasPassthroughAuth]);
+
+  const showAuthenticationStatus = Boolean(
+    isEditMode && existingTool && hasAuthenticationConfigured
+  );
+
+  const handleEditAuthenticationClick = useCallback(() => {
+    if (!existingTool || !onEditAuthentication) {
+      return;
+    }
+    handleClose();
+    onEditAuthentication(existingTool);
+  }, [existingTool, onEditAuthentication, handleClose]);
+
+  const handleDisconnectToolClick = useCallback(async () => {
+    if (!existingTool || !onDisconnectTool || isDisconnectingTool) {
+      return;
+    }
+    try {
+      setIsDisconnectingTool(true);
+      await onDisconnectTool(existingTool);
+    } catch (error) {
+      console.error("Failed to disable tool", error);
+    } finally {
+      setIsDisconnectingTool(false);
+    }
+  }, [existingTool, onDisconnectTool, isDisconnectingTool]);
+
   const handleSubmit = async (values: OpenAPIActionFormValues) => {
     setIsSubmitting(true);
 
@@ -160,6 +241,43 @@ export default function AddOpenAPIActionModal({
       const parsedDefinition = parseJsonWithTrailingCommas(values.definition);
       const derivedName = parsedDefinition?.info?.title;
       const derivedDescription = parsedDefinition?.info?.description;
+
+      if (isEditMode && existingTool) {
+        const updatePayload: {
+          name?: string;
+          description?: string;
+          definition: Record<string, any>;
+        } = {
+          definition: parsedDefinition,
+        };
+
+        if (derivedName) {
+          updatePayload.name = derivedName;
+        }
+
+        if (derivedDescription) {
+          updatePayload.description = derivedDescription;
+        }
+
+        const response = await updateCustomTool(existingTool.id, updatePayload);
+
+        if (response.error) {
+          setPopup({
+            message: response.error,
+            type: "error",
+          });
+        } else {
+          setPopup({
+            message: "OpenAPI action updated successfully",
+            type: "success",
+          });
+          handleClose();
+          if (response.data && onUpdate) {
+            onUpdate(response.data);
+          }
+        }
+        return;
+      }
 
       const response = await createCustomTool({
         name: derivedName,
@@ -187,7 +305,9 @@ export default function AddOpenAPIActionModal({
     } catch (error) {
       console.error("Error creating OpenAPI action:", error);
       setPopup({
-        message: "Failed to create OpenAPI action",
+        message: isEditMode
+          ? "Failed to update OpenAPI action"
+          : "Failed to create OpenAPI action",
         type: "error",
       });
     } finally {
@@ -195,9 +315,17 @@ export default function AddOpenAPIActionModal({
     }
   };
 
-  const handleModalClose = (open: boolean) => {
-    toggle(open);
-  };
+  const modalTitle = isEditMode ? "Edit OpenAPI action" : "Add OpenAPI action";
+  const modalDescription = isEditMode
+    ? "Update the OpenAPI schema for this action."
+    : "Add OpenAPI schema to add custom actions.";
+  const primaryButtonLabel = isSubmitting
+    ? isEditMode
+      ? "Saving..."
+      : "Adding..."
+    : isEditMode
+      ? "Save Changes"
+      : "Add Action";
 
   return (
     <>
@@ -207,6 +335,7 @@ export default function AddOpenAPIActionModal({
             initialValues={initialValues}
             validationSchema={validationSchema}
             onSubmit={handleSubmit}
+            enableReinitialize
           >
             {({
               values,
@@ -237,8 +366,8 @@ export default function AddOpenAPIActionModal({
                 <Form className="gap-0">
                   <Modal.Header
                     icon={SvgActions}
-                    title="Add OpenAPI action"
-                    description="Add OpenAPI schema to add custom actions."
+                    title={modalTitle}
+                    description={modalDescription}
                     onClose={handleClose}
                     className="p-4 w-full"
                   />
@@ -311,6 +440,52 @@ export default function AddOpenAPIActionModal({
                     </FormField>
 
                     <Separator className="my-0 py-0" />
+
+                    {showAuthenticationStatus && (
+                      <FormField state="idle">
+                        <div className="flex items-start justify-between w-full">
+                          <div className="flex flex-col gap-0 items-start flex-1">
+                            <FormField.Label
+                              leftIcon={
+                                <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+                              }
+                            >
+                              {existingTool?.enabled
+                                ? "Authenticated & Enabled"
+                                : "Authentication configured"}
+                            </FormField.Label>
+                            {authenticationDescription && (
+                              <FormField.Description className="pl-5">
+                                {authenticationDescription}
+                              </FormField.Description>
+                            )}
+                          </div>
+                          <FormField.Control asChild>
+                            <div className="flex gap-2 items-center justify-end">
+                              <IconButton
+                                icon={SvgUnplug}
+                                tertiary
+                                type="button"
+                                tooltip="Disable action"
+                                onClick={handleDisconnectToolClick}
+                                disabled={
+                                  !onDisconnectTool || isDisconnectingTool
+                                }
+                              />
+                              <Button
+                                secondary
+                                type="button"
+                                onClick={handleEditAuthenticationClick}
+                                disabled={!onEditAuthentication}
+                              >
+                                Edit Configs
+                              </Button>
+                            </div>
+                          </FormField.Control>
+                        </div>
+                      </FormField>
+                    )}
+
                     {methodSpecs && methodSpecs.length > 0 ? (
                       <div className="flex flex-col gap-2">
                         {methodSpecs.map((method) => (
@@ -356,7 +531,7 @@ export default function AddOpenAPIActionModal({
                       Cancel
                     </Button>
                     <Button main primary type="submit" disabled={isSubmitting}>
-                      {isSubmitting ? "Adding..." : "Add Action"}
+                      {primaryButtonLabel}
                     </Button>
                   </Modal.Footer>
                 </Form>

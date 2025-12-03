@@ -19,6 +19,7 @@ import { updateToolStatus } from "@/lib/tools/mcpService";
 export interface OpenApiActionCardProps {
   tool: ToolSnapshot;
   onAuthenticate: (tool: ToolSnapshot) => void;
+  onManage?: (tool: ToolSnapshot) => void;
   mutateOpenApiTools: () => Promise<unknown> | void;
   setPopup: (popup: PopupSpec | null) => void;
 }
@@ -26,6 +27,7 @@ export interface OpenApiActionCardProps {
 export default function OpenApiActionCard({
   tool,
   onAuthenticate,
+  onManage,
   mutateOpenApiTools,
   setPopup,
 }: OpenApiActionCardProps) {
@@ -166,7 +168,7 @@ export default function OpenApiActionCard({
             isToolsExpanded={isToolsExpanded}
             onToggleTools={methodSpecs.length ? handleToggleTools : undefined}
             onDisconnect={() => handleConnectionUpdate(false)}
-            onManage={() => {}}
+            onManage={onManage ? () => onManage(tool) : undefined}
             onAuthenticate={() => {
               onAuthenticate(tool);
             }}
