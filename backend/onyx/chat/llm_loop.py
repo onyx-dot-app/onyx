@@ -761,7 +761,7 @@ def run_llm_loop(
     tokenizer_func: Callable[[str], list[int]],
     db_session: Session,
     forced_tool_id: int | None = None,
-    llm_identity: LLMUserIdentity | None = None,
+    user_identity: LLMUserIdentity | None = None,
 ) -> None:
     with trace("run_llm_loop", metadata={"tenant_id": get_current_tenant_id()}):
         # Fix some LiteLLM issues,
@@ -926,7 +926,7 @@ def run_llm_loop(
                 # immediately yield the full set of found documents. This gives us the option to show the
                 # final set of documents immediately if desired.
                 final_documents=gathered_documents,
-                user_identity=llm_identity,
+                user_identity=user_identity,
             )
 
             # Save citation mapping after each LLM step for incremental state updates

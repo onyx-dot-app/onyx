@@ -405,7 +405,7 @@ def stream_chat_message_objects(
 
         message_text = new_msg_req.message
         chat_session_id = new_msg_req.chat_session_id
-        llm_identity = LLMUserIdentity(
+        user_identity = LLMUserIdentity(
             user_id=llm_user_identifier, session_id=str(chat_session_id)
         )
         parent_id = new_msg_req.parent_message_id
@@ -616,7 +616,7 @@ def stream_chat_message_objects(
             forced_tool_id=(
                 new_msg_req.forced_tool_ids[0] if new_msg_req.forced_tool_ids else None
             ),
-            llm_identity=llm_identity,
+            user_identity=user_identity,
         )
 
         # Determine if stopped by user
