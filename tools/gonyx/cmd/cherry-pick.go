@@ -39,7 +39,7 @@ The --release flag can be specified multiple times to cherry-pick to multiple re
 		},
 	}
 
-	cmd.Flags().StringSliceVar(&opts.Releases, "release", []string{}, "Release version(s) to cherry-pick to (e.g., v1.0, v1.1). Can be specified multiple times.")
+	cmd.Flags().StringSliceVar(&opts.Releases, "release", []string{}, "Release version(s) to cherry-pick to (e.g., 1.0, v1.1). 'v' prefix is optional. Can be specified multiple times.")
 
 	return cmd
 }
@@ -64,7 +64,10 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	// Determine which releases to target
 	var releases []string
 	if len(opts.Releases) > 0 {
-		releases = opts.Releases
+		// Normalize versions to ensure they have 'v' prefix
+		for _, rel := range opts.Releases {
+			releases = append(releases, normalizeVersion(rel))
+		}
 		log.Infof("Using specified release versions: %v", releases)
 	} else {
 		// Find the nearest stable tag
@@ -157,6 +160,14 @@ func getCurrentBranch() (string, error) {
 		return "", fmt.Errorf("git rev-parse failed: %w", err)
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+// normalizeVersion ensures the version has a 'v' prefix
+func normalizeVersion(version string) string {
+	if !strings.HasPrefix(version, "v") {
+		return "v" + version
+	}
+	return version
 }
 
 // findNearestStableTag finds the nearest tag matching v*.*.* pattern and returns major.minor
