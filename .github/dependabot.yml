@@ -5,7 +5,7 @@ updates:
     schedule:
       interval: "weekly"
     cooldown:
-      default-days: 4
+      default-days: 7
     open-pull-requests-limit: 3
     assignees:
       - "jmelahman"
@@ -16,7 +16,7 @@ updates:
     schedule:
       interval: "weekly"
     cooldown:
-      default-days: 4
+      default-days: 7
     open-pull-requests-limit: 3
     assignees:
       - "jmelahman"

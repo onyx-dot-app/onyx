@@ -45,6 +45,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   packets,
   onComplete,
   animate,
+  stopPacketSeen,
   children,
 }) => {
   const { documents, isReading, isComplete } =
@@ -77,6 +78,27 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
       !completionHandledRef.current
     ) {
       completionHandledRef.current = true;
+
+      // If stopped, skip intermediate states and complete immediately
+      if (stopPacketSeen) {
+        // Clear any pending timeouts
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+        if (readTimeoutRef.current) {
+          clearTimeout(readTimeoutRef.current);
+          readTimeoutRef.current = null;
+        }
+
+        // Skip "Read" state, go directly to completion
+        setShouldShowAsReading(false);
+        setShouldShowAsRead(false);
+        onComplete();
+        return;
+      }
+
+      // Normal completion flow (not stopped)
       const elapsedTime = Date.now() - readingStartTime;
       const minimumReadingDuration = animate ? READING_MIN_DURATION_MS : 0;
       const minimumReadDuration = animate ? READ_MIN_DURATION_MS : 0;
@@ -100,7 +122,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
         timeoutRef.current = setTimeout(handleReadingToRead, remainingTime);
       }
     }
-  }, [isComplete, readingStartTime, animate, onComplete]);
+  }, [isComplete, readingStartTime, animate, onComplete, stopPacketSeen]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {

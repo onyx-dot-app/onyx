@@ -72,6 +72,7 @@ export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
   packets,
   onComplete,
   animate,
+  stopPacketSeen,
   children,
 }) => {
   const { queries, results, isSearching, isComplete, isInternetSearch } =
@@ -108,6 +109,27 @@ export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
       !completionHandledRef.current
     ) {
       completionHandledRef.current = true;
+
+      // If stopped, skip intermediate states and complete immediately
+      if (stopPacketSeen) {
+        // Clear any pending timeouts
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+        if (searchedTimeoutRef.current) {
+          clearTimeout(searchedTimeoutRef.current);
+          searchedTimeoutRef.current = null;
+        }
+
+        // Skip "Searched" state, go directly to completion
+        setShouldShowAsSearching(false);
+        setShouldShowAsSearched(false);
+        onComplete();
+        return;
+      }
+
+      // Normal completion flow (not stopped)
       const elapsedTime = Date.now() - searchStartTime;
       const minimumSearchingDuration = animate ? SEARCHING_MIN_DURATION_MS : 0;
       const minimumSearchedDuration = animate ? SEARCHED_MIN_DURATION_MS : 0;
@@ -134,7 +156,14 @@ export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
         );
       }
     }
-  }, [isComplete, searchStartTime, animate, queries, onComplete]);
+  }, [
+    isComplete,
+    searchStartTime,
+    animate,
+    queries,
+    onComplete,
+    stopPacketSeen,
+  ]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
