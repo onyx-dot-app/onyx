@@ -3,8 +3,8 @@ import { FiGlobe } from "react-icons/fi";
 import {
   PacketType,
   FetchToolPacket,
-  FetchToolStart,
-  SectionEnd,
+  FetchToolUrls,
+  FetchToolDocuments,
 } from "../../../services/streamingModels";
 import { MessageRenderer } from "../interfaces";
 import { truncateString } from "@/lib/utils";
@@ -22,23 +22,33 @@ const READ_MIN_DURATION_MS = 1000; // 1 second minimum for "Read" state
 const constructCurrentFetchState = (
   packets: FetchToolPacket[]
 ): {
+  urls: string[];
   documents: OnyxDocument[];
-  isReading: boolean;
+  hasStarted: boolean;
+  isLoading: boolean;
   isComplete: boolean;
 } => {
-  // Check for fetch tool start packet
-  const fetchStart = packets.find(
+  // Check for fetch tool packets in the 3-stage sequence
+  const startPacket = packets.find(
     (packet) => packet.obj.type === PacketType.FETCH_TOOL_START
-  )?.obj as FetchToolStart | null;
-  const fetchEnd = packets.find(
+  );
+  const urlsPacket = packets.find(
+    (packet) => packet.obj.type === PacketType.FETCH_TOOL_URLS
+  )?.obj as FetchToolUrls | undefined;
+  const documentsPacket = packets.find(
+    (packet) => packet.obj.type === PacketType.FETCH_TOOL_DOCUMENTS
+  )?.obj as FetchToolDocuments | undefined;
+  const sectionEnd = packets.find(
     (packet) => packet.obj.type === PacketType.SECTION_END
-  )?.obj as SectionEnd | null;
+  );
 
-  const documents = fetchStart?.documents || [];
-  const isReading = Boolean(fetchStart && !fetchEnd);
-  const isComplete = Boolean(fetchStart && fetchEnd);
+  const urls = urlsPacket?.urls || [];
+  const documents = documentsPacket?.documents || [];
+  const hasStarted = Boolean(startPacket);
+  const isLoading = hasStarted && !documentsPacket;
+  const isComplete = Boolean(startPacket && sectionEnd);
 
-  return { documents, isReading, isComplete };
+  return { urls, documents, hasStarted, isLoading, isComplete };
 };
 
 export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
@@ -47,7 +57,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   animate,
   children,
 }) => {
-  const { documents, isReading, isComplete } =
+  const { urls, documents, hasStarted, isLoading, isComplete } =
     constructCurrentFetchState(packets);
 
   // Track reading timing for minimum display duration
@@ -63,11 +73,11 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
 
   // Track when reading starts (even if the reading completes instantly)
   useEffect(() => {
-    if ((isReading || isComplete) && readingStartTime === null) {
+    if ((isLoading || isComplete) && readingStartTime === null) {
       setReadingStartTime(Date.now());
       setShouldShowAsReading(true);
     }
-  }, [isReading, isComplete, readingStartTime]);
+  }, [isLoading, isComplete, readingStartTime]);
 
   // Handle reading completion with minimum duration
   useEffect(() => {
@@ -115,13 +125,11 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   }, []);
 
   const status = useMemo(() => {
-    // If we have documents to show and we're in the read state, show "Read"
+    // If we have documents, show "Read" status (unless still in reading transition)
     if (documents.length > 0) {
-      // If we're still showing as reading (before transition), show "Reading"
       if (shouldShowAsReading) {
         return "Reading";
       }
-      // Otherwise show "Read"
       return "Read";
     }
 
@@ -129,12 +137,12 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     if (shouldShowAsRead) {
       return "Read";
     }
-    if (isReading || isComplete || shouldShowAsReading) {
+    if (isLoading || isComplete || shouldShowAsReading) {
       return "Reading";
     }
     return null;
   }, [
-    isReading,
+    isLoading,
     isComplete,
     shouldShowAsReading,
     shouldShowAsRead,
@@ -142,13 +150,16 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   ]);
 
   // Don't render anything if fetch hasn't started
-  if (documents.length === 0) {
+  if (!hasStarted) {
     return children({
       icon: FiGlobe,
-      status: status,
+      status: null,
       content: <div></div>,
     });
   }
+
+  // Show loading state until documents arrive, then show documents with titles
+  const displayDocuments = documents.length > 0;
 
   return children({
     icon: FiGlobe,
@@ -158,52 +169,57 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
         <div className="flex flex-col">
           <div className="text-xs font-medium mb-1 ml-1">URLs</div>
           <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
-            {documents.slice(0, urlsToShow).map((doc, index) => (
-              <div
-                key={doc.document_id}
-                className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
-                style={{
-                  animationDelay: `${index * 30}ms`,
-                  animationFillMode: "backwards",
-                }}
-              >
-                <SourceChip2
-                  icon={<FiGlobe size={10} />}
-                  title={truncateString(
-                    doc.semantic_identifier || doc.link || "",
-                    MAX_TITLE_LENGTH
-                  )}
-                  onClick={() => {
-                    if (doc.link) {
-                      window.open(doc.link, "_blank");
-                    }
-                  }}
-                />
-              </div>
-            ))}
-            {/* Show a blurb if there are more URLs than we are displaying */}
-            {documents.length > urlsToShow && (
-              <div
-                className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
-                style={{
-                  animationDelay: `${urlsToShow * 30}ms`,
-                  animationFillMode: "backwards",
-                }}
-              >
-                <SourceChip2
-                  title={`${documents.length - urlsToShow} more...`}
-                  onClick={() => {
-                    setUrlsToShow((prevUrls) =>
-                      Math.min(prevUrls + URLS_PER_EXPANSION, documents.length)
-                    );
-                  }}
-                />
-              </div>
+            {displayDocuments ? (
+              <>
+                {documents.slice(0, urlsToShow).map((doc, index) => (
+                  <div
+                    key={doc.document_id}
+                    className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
+                    style={{
+                      animationDelay: `${index * 30}ms`,
+                      animationFillMode: "backwards",
+                    }}
+                  >
+                    <SourceChip2
+                      icon={<FiGlobe size={10} />}
+                      title={truncateString(
+                        doc.semantic_identifier || doc.link || "",
+                        MAX_TITLE_LENGTH
+                      )}
+                      onClick={() => {
+                        if (doc.link) {
+                          window.open(doc.link, "_blank");
+                        }
+                      }}
+                    />
+                  </div>
+                ))}
+                {documents.length > urlsToShow && (
+                  <div
+                    className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
+                    style={{
+                      animationDelay: `${urlsToShow * 30}ms`,
+                      animationFillMode: "backwards",
+                    }}
+                  >
+                    <SourceChip2
+                      title={`${documents.length - urlsToShow} more...`}
+                      onClick={() => {
+                        setUrlsToShow((prevUrls) =>
+                          Math.min(
+                            prevUrls + URLS_PER_EXPANSION,
+                            documents.length
+                          )
+                        );
+                      }}
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              <BlinkingDot />
             )}
           </div>
-
-          {/* If no documents, show a loading state */}
-          {documents.length === 0 && <BlinkingDot />}
         </div>
       </div>
     ),

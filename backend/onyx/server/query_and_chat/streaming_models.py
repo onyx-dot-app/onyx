@@ -20,6 +20,8 @@ class StreamingType(Enum):
     SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta"
     SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta"
     OPEN_URL_START = "open_url_start"
+    OPEN_URL_URLS = "open_url_urls"
+    OPEN_URL_DOCUMENTS = "open_url_documents"
     IMAGE_GENERATION_START = "image_generation_start"
     IMAGE_GENERATION_HEARTBEAT = "image_generation_heartbeat"
     IMAGE_GENERATION_FINAL = "image_generation_final"
@@ -133,10 +135,25 @@ class SearchToolDocumentsDelta(BaseObj):
     documents: list[SearchDoc]
 
 
-# This only needs to show which URLs are being fetched
-# no need for any further updates on the frontend as the crawling happens
-class OpenUrl(BaseObj):
+# OpenURL tool packets - 3-stage sequence
+class OpenUrlStart(BaseObj):
+    """Signal that OpenURL tool has started."""
+
     type: Literal["open_url_start"] = StreamingType.OPEN_URL_START.value
+
+
+class OpenUrlUrls(BaseObj):
+    """URLs to be fetched (sent before crawling begins)."""
+
+    type: Literal["open_url_urls"] = StreamingType.OPEN_URL_URLS.value
+
+    urls: list[str]
+
+
+class OpenUrlDocuments(BaseObj):
+    """Final documents after crawling completes."""
+
+    type: Literal["open_url_documents"] = StreamingType.OPEN_URL_DOCUMENTS.value
 
     documents: list[SearchDoc]
 
@@ -222,7 +239,9 @@ PacketObj = Union[
     ImageGenerationToolStart,
     ImageGenerationToolHeartbeat,
     ImageGenerationFinal,
-    OpenUrl,
+    OpenUrlStart,
+    OpenUrlUrls,
+    OpenUrlDocuments,
     CustomToolStart,
     CustomToolDelta,
     # Reasoning Packets

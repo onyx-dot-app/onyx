@@ -22,6 +22,8 @@ export function isToolPacket(
     PacketType.REASONING_START,
     PacketType.REASONING_DELTA,
     PacketType.FETCH_TOOL_START,
+    PacketType.FETCH_TOOL_URLS,
+    PacketType.FETCH_TOOL_DOCUMENTS,
   ];
   if (includeSectionEnd) {
     toolPacketTypes.push(PacketType.SECTION_END);

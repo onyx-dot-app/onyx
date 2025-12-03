@@ -24,7 +24,9 @@ from onyx.server.query_and_chat.streaming_models import EndStepPacketList
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import OpenUrl
+from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
+from onyx.server.query_and_chat.streaming_models import OpenUrlStart
+from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
@@ -209,14 +211,31 @@ def create_custom_tool_packets(
 
 
 def create_fetch_packets(
-    fetches: list[list[SavedSearchDoc]], turn_index: int
+    fetches: list[list[SavedSearchDoc]],
+    urls: list[str],
+    turn_index: int,
 ) -> list[Packet]:
     packets: list[Packet] = []
     for fetch in fetches:
+        # Emit start packet
         packets.append(
             Packet(
                 turn_index=turn_index,
-                obj=OpenUrl(documents=SearchDoc.from_saved_search_docs(fetch)),
+                obj=OpenUrlStart(),
+            )
+        )
+        # Emit URLs packet
+        packets.append(
+            Packet(
+                turn_index=turn_index,
+                obj=OpenUrlUrls(urls=urls),
+            )
+        )
+        # Emit documents packet
+        packets.append(
+            Packet(
+                turn_index=turn_index,
+                obj=OpenUrlDocuments(documents=SearchDoc.from_saved_search_docs(fetch)),
             )
         )
         packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
@@ -353,8 +372,14 @@ def translate_db_message_to_packets_simple(
                             if saved_search_docs and any(
                                 doc.link for doc in saved_search_docs
                             ):
+                                # Extract URLs from saved_search_docs for the URLs packet
+                                urls = [
+                                    doc.link for doc in saved_search_docs if doc.link
+                                ]
                                 packet_list.extend(
-                                    create_fetch_packets([saved_search_docs], turn_num)
+                                    create_fetch_packets(
+                                        [saved_search_docs], urls, turn_num
+                                    )
                                 )
                             else:
                                 packet_list.extend(
