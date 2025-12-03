@@ -1242,6 +1242,7 @@ async def optional_user(
 ) -> User | None:
 
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
+        # If user is already set, _check_for_saml_and_jwt returns the same user object
         return user
 
     try:
