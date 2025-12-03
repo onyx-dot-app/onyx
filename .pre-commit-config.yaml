@@ -9,11 +9,12 @@ repos:
     rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
     hooks:
       - id: uv-sync
-      - id: uv-run
-        name: mypy
-        args: ["mypy"]
-        pass_filenames: true
-        files: ^backend/.*\.py$
+      # NOTE: This takes ~6s on a single, large module which is prohibitively slow.
+      # - id: uv-run
+      #   name: mypy
+      #   args: ["mypy"]
+      #   pass_filenames: true
+      #   files: ^backend/.*\.py$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
