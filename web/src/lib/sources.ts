@@ -51,7 +51,6 @@ import {
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import SvgGlobe from "@/icons/globe";
 
 interface PartialSourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;
@@ -85,7 +84,7 @@ const slackMetadata = {
   baseSourceType: "slack",
 };
 
-export const SOURCE_METADATA_MAP: SourceMap = {
+const SOURCE_METADATA_MAP: SourceMap = {
   // Knowledge Base & Wikis
   confluence: {
     icon: ConfluenceIcon,
@@ -379,7 +378,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
 
   // Others
   web: {
-    icon: SvgGlobe,
+    icon: GlobeIcon,
     displayName: "Web",
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/admin/connectors/official/web",
@@ -419,7 +418,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Mock Connector",
     category: SourceCategory.Other,
   },
-} as SourceMap;
+};
 
 function fillSourceMetadata(
   partialMetadata: PartialSourceMetadata,
