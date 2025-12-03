@@ -42,7 +42,6 @@ import {
   FirefliesIcon,
   EgnyteIcon,
   AirtableIcon,
-  GlobeIcon2,
   FileIcon2,
   GitbookIcon,
   HighspotIcon,
@@ -52,6 +51,7 @@ import {
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
+import SvgGlobe from "@/icons/globe";
 
 interface PartialSourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;
@@ -379,7 +379,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
 
   // Others
   web: {
-    icon: GlobeIcon2,
+    icon: SvgGlobe,
     displayName: "Web",
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/admin/connectors/official/web",

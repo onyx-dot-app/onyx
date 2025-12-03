@@ -1,4 +1,3 @@
-import React from "react";
 import { NewChatIcon } from "@/components/icons/icons";
 
 interface NewChatButtonProps {

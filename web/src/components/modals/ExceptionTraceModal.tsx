@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal } from "../Modal";
-import { CheckmarkIcon, CopyIcon } from "../icons/icons";
+import { CheckmarkIcon } from "../icons/icons";
+import SvgCopy from "@/icons/copy";
 
 export default function ExceptionTraceModal({
   onOutsideClick,
@@ -30,7 +31,7 @@ export default function ExceptionTraceModal({
               className="flex w-fit cursor-pointer hover:bg-accent-background p-2 border-border border rounded"
             >
               Copy full trace
-              <CopyIcon className="ml-2 my-auto" />
+              <SvgCopy className="stroke-text-04 ml-2 my-auto" />
             </div>
           ) : (
             <div className="flex w-fit hover:bg-accent-background p-2 border-border border rounded cursor-default">

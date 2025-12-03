@@ -16,21 +16,15 @@ import {
   ClipboardIcon,
   NotebookIconSkeleton,
   ConnectorIconSkeleton,
-  ThumbsUpIconSkeleton,
   ToolIconSkeleton,
-  CpuIconSkeleton,
-  UsersIconSkeleton,
   GroupsIconSkeleton,
   KeyIconSkeleton,
-  ShieldIconSkeleton,
   DatabaseIconSkeleton,
   SettingsIconSkeleton,
   PaintingIconSkeleton,
-  ZoomInIconSkeleton,
   SlackIconSkeleton,
   DocumentSetIconSkeleton,
   AssistantsIconSkeleton,
-  SearchIcon,
   DocumentIcon2,
   BrainIcon,
   GlobeIcon,
@@ -40,6 +34,12 @@ import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
+import SvgSearch from "@/icons/search";
+import SvgShield from "@/icons/shield";
+import SvgThumbsUp from "@/icons/thumbs-up";
+import SvgUsers from "@/icons/users";
+import SvgZoomIn from "@/icons/zoom-in";
+import SvgCpu from "@/icons/cpu";
 
 const connectors_items = () => [
   {
@@ -62,12 +62,12 @@ const document_management_items = () => [
   },
   {
     name: "Explorer",
-    icon: ZoomInIconSkeleton,
+    icon: SvgZoomIn,
     link: "/admin/documents/explorer",
   },
   {
     name: "Feedback",
-    icon: ThumbsUpIconSkeleton,
+    icon: SvgThumbsUp,
     link: "/admin/documents/feedback",
   },
 ];
@@ -162,7 +162,7 @@ const collections = (
             },
             {
               name: "LLM",
-              icon: CpuIconSkeleton,
+              icon: SvgCpu,
               link: "/admin/configuration/llm",
             },
             {
@@ -175,7 +175,7 @@ const collections = (
                   {
                     error: settings?.settings.needs_reindexing,
                     name: "Search Settings",
-                    icon: SearchIcon,
+                    icon: SvgSearch,
                     link: "/admin/configuration/search",
                   },
                 ]
@@ -201,7 +201,7 @@ const collections = (
           items: [
             {
               name: "Users",
-              icon: UsersIconSkeleton,
+              icon: SvgUsers,
               link: "/admin/users",
             },
             ...(enableEnterprise
@@ -220,7 +220,7 @@ const collections = (
             },
             {
               name: "Token Rate Limits",
-              icon: ShieldIconSkeleton,
+              icon: SvgShield,
               link: "/admin/token-rate-limits",
             },
           ],
