@@ -191,9 +191,10 @@ export default function OpenApiActionsList() {
   const handleOpenDisconnectModal = useCallback(
     (tool: ToolSnapshot) => {
       setToolPendingDisconnect(tool);
+      addOpenAPIActionModal.toggle(false);
       disconnectModal.toggle(true);
     },
-    [disconnectModal]
+    [disconnectModal, openAPIAuthModal]
   );
 
   const handleConfirmDisconnectFromModal = useCallback(async () => {
