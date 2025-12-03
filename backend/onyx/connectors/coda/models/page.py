@@ -2,6 +2,8 @@ from enum import StrEnum
 from typing import Literal
 from typing import Optional
 
+from pydantic import BaseModel
+
 from onyx.connectors.coda.models.common import CodaObjectBase
 from onyx.connectors.coda.models.common import CodaObjectType
 from onyx.connectors.coda.models.icon import CodaIcon
@@ -24,7 +26,7 @@ class CodaPageContentType(StrEnum):
     SYNC_PAGE = "syncPage"
 
 
-class CodaPageImage:
+class CodaPageImage(BaseModel):
     """Represents the image of a Coda Page object"""
 
     browserLink: str

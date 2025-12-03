@@ -1,7 +1,7 @@
-from onyx.connectors.coda.models.common import CodaObjectBase
+from pydantic import BaseModel
 
 
-class CodaIcon(CodaObjectBase):
+class CodaIcon(BaseModel):
     """Represents a Coda Doc object"""
 
     # MIME type of the icon

@@ -1,9 +1,11 @@
 from typing import Literal
 
+from pydantic import BaseModel
+
 from onyx.connectors.coda.models.common import CodaObjectType
 
 
-class CodaFolderReference:
+class CodaFolderReference(BaseModel):
     """Represents a Coda Folder reference object"""
 
     id: str

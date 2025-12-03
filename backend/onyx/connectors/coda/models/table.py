@@ -15,7 +15,7 @@ class CodaTableReference(CodaObjectBase):
     """Represents a Coda Table reference object"""
 
     type: Literal[CodaObjectType.TABLE]
-    parent: CodaPageReference
+    parent: Optional[CodaPageReference] = None
 
 
 class CodaTableFilterFormula(BaseModel):

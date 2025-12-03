@@ -2,6 +2,8 @@ from enum import StrEnum
 from typing import Literal
 from typing import Optional
 
+from pydantic import BaseModel
+
 from onyx.connectors.coda.models.common import CodaObjectBase
 from onyx.connectors.coda.models.common import CodaObjectType
 from onyx.connectors.coda.models.folder import CodaFolderReference
@@ -9,7 +11,7 @@ from onyx.connectors.coda.models.icon import CodaIcon
 from onyx.connectors.coda.models.workspace import CodaWorkspaceReference
 
 
-class CodaDocSize:
+class CodaDocSize(BaseModel):
     """Represents the size of a Coda Doc object"""
 
     totalRowCount: int
@@ -17,7 +19,7 @@ class CodaDocSize:
     pageCount: int
 
 
-class CodaDocSourceDoc:
+class CodaDocSourceDoc(BaseModel):
     """Represents the source doc of a Coda Doc object"""
 
     id: str
@@ -36,11 +38,11 @@ class CodaDocPublishedMode(StrEnum):
     EDIT = "edit"
 
 
-class DocCategory:
+class DocCategory(BaseModel):
     name: str
 
 
-class CodaDocPublished:
+class CodaDocPublished(BaseModel):
     """Represents the published doc of a Coda Doc object"""
 
     browserLink: str

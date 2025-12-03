@@ -1,7 +1,8 @@
 from enum import StrEnum
 from typing import Optional
 
-from onyx.connectors.coda.models.common import CodaObjectBase
+from pydantic import BaseModel
+from pydantic import Field
 
 
 class CodaSchemaOrgIdentifier(StrEnum):
@@ -16,11 +17,11 @@ class CodaSchemaOrgIdentifier(StrEnum):
     STRUCTURED_VALUE = "StructuredValue"
 
 
-class CodaPersonValue(CodaObjectBase):
+class CodaPersonValue(BaseModel):
     """Represents a Coda Person object"""
 
-    context: str
-    type: CodaSchemaOrgIdentifier
+    context: str = Field(alias="@context")
+    type: CodaSchemaOrgIdentifier = Field(alias="@type")
     name: str
     additionalType: Optional[str] = None
     email: Optional[str] = None
