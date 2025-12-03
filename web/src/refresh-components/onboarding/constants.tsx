@@ -1,16 +1,8 @@
 import { OnboardingStep } from "./types";
-import type { ReactNode } from "react";
 import SvgGlobe from "@/icons/globe";
 import SvgImage from "@/icons/image";
 import SvgUsers from "@/icons/users";
 import { FinalStepItemProps } from "./types";
-import { SvgProps } from "@/icons";
-import { AzureIcon, GeminiIcon } from "@/components/icons/icons";
-import SvgClaude from "@/icons/claude";
-import SvgAws from "@/icons/aws";
-import SvgOllama from "@/icons/ollama";
-import SvgOpenai from "@/icons/openai";
-import SvgOpenrouter from "@/icons/openrouter";
 import { LLMProviderName } from "@/app/admin/configuration/llm/interfaces";
 import InlineExternalLink from "../InlineExternalLink";
 
@@ -89,23 +81,6 @@ export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
     buttonHref: "/admin/users",
   },
 ];
-
-export const PROVIDER_ICON_MAP: Record<
-  string,
-  React.FunctionComponent<SvgProps>
-> = {
-  [LLMProviderName.ANTHROPIC]: SvgClaude,
-  [LLMProviderName.BEDROCK]: SvgAws,
-
-  // TODO (@raunakab)
-  // Convert these to our internal icons instead.
-  [LLMProviderName.AZURE]: AzureIcon,
-  [LLMProviderName.VERTEX_AI]: GeminiIcon,
-
-  [LLMProviderName.OPENAI]: SvgOpenai,
-  [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
-  [LLMProviderName.OPENROUTER]: SvgOpenrouter,
-};
 
 export const MODAL_CONTENT_MAP: Record<string, any> = {
   [LLMProviderName.OPENAI]: {
