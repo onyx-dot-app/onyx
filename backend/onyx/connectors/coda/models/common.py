@@ -7,6 +7,7 @@ class CodaObjectBase(BaseModel):
     id: str
     browserLink: str
     name: str
+    href: str
 
 
 class CodaObjectType(StrEnum):
@@ -21,4 +22,7 @@ class CodaObjectType(StrEnum):
     ROW = "row"
     FORMULA = "formula"
     CONTROL = "control"
+    ICON = "icon"
+    FOLDER = "folder"
     USER = "user"
+    WORKSPACE = "workspace"

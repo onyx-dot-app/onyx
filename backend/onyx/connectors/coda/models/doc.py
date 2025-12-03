@@ -1,9 +1,56 @@
-from typing import Any
+from enum import StrEnum
 from typing import Literal
 from typing import Optional
 
 from onyx.connectors.coda.models.common import CodaObjectBase
 from onyx.connectors.coda.models.common import CodaObjectType
+from onyx.connectors.coda.models.folder import CodaFolderReference
+from onyx.connectors.coda.models.icon import CodaIcon
+from onyx.connectors.coda.models.workspace import CodaWorkspaceReference
+
+
+class CodaDocSize:
+    """Represents the size of a Coda Doc object"""
+
+    totalRowCount: int
+    tableAndViewCount: int
+    pageCount: int
+
+
+class CodaDocSourceDoc:
+    """Represents the source doc of a Coda Doc object"""
+
+    id: str
+    type: Literal[CodaObjectType.DOC]
+    browserLink: str
+    href: str
+
+
+class CodaDocPublishedMode(StrEnum):
+    """
+    Represents the allowed string values for doc published mode.
+    """
+
+    VIEW = "view"
+    PLAY = "play"
+    EDIT = "edit"
+
+
+class DocCategory:
+    name: str
+
+
+class CodaDocPublished:
+    """Represents the published doc of a Coda Doc object"""
+
+    browserLink: str
+    discoverable: bool
+    earnCredit: bool
+    href: str
+    mode: CodaDocPublishedMode
+    category: DocCategory
+    description: str
+    imageLink: str
 
 
 class CodaDoc(CodaObjectBase):
@@ -14,7 +61,9 @@ class CodaDoc(CodaObjectBase):
     ownerName: str
     createdAt: str
     updatedAt: str
-    icon: Optional[dict[str, Any]] = None
-    docSize: Optional[dict[str, Any]] = None
-    sourceDoc: Optional[dict[str, Any]] = None
-    published: Optional[dict[str, Any]] = None
+    workspace: CodaWorkspaceReference
+    folder: CodaFolderReference
+    icon: Optional[CodaIcon] = None
+    docSize: Optional[CodaDocSize] = None
+    sourceDoc: Optional[CodaDocSourceDoc] = None
+    published: Optional[CodaDocPublished] = None
