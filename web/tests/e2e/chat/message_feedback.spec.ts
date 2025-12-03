@@ -70,8 +70,8 @@ test.describe("Message feedback thumbs controls", () => {
     ]);
     expect(createFeedbackRequests).toHaveLength(1);
     const likedRequest = createFeedbackRequests[0];
-    expect(likedRequest.is_positive).toBe(true);
-    expect(likedRequest.chat_message_id).toBeTruthy();
+    expect(likedRequest?.is_positive).toBe(true);
+    expect(likedRequest?.chat_message_id).toBeTruthy();
 
     // Clicking thumbs up again removes the feedback
     await Promise.all([
@@ -79,8 +79,8 @@ test.describe("Message feedback thumbs controls", () => {
       likeButton.click(),
     ]);
     expect(removeFeedbackRequests).toHaveLength(1);
-    expect(removeFeedbackRequests[0].query.chat_message_id).toBe(
-      String(likedRequest.chat_message_id)
+    expect(removeFeedbackRequests[0]?.query.chat_message_id).toBe(
+      String(likedRequest?.chat_message_id)
     );
 
     // Thumbs down opens the feedback modal and submits negative feedback
@@ -100,9 +100,11 @@ test.describe("Message feedback thumbs controls", () => {
 
     expect(createFeedbackRequests).toHaveLength(2);
     const dislikedRequest = createFeedbackRequests[1];
-    expect(dislikedRequest.is_positive).toBe(false);
-    expect(dislikedRequest.feedback_text).toContain("missed some details");
-    expect(dislikedRequest.chat_message_id).toBe(likedRequest.chat_message_id);
+    expect(dislikedRequest?.is_positive).toBe(false);
+    expect(dislikedRequest?.feedback_text).toContain("missed some details");
+    expect(dislikedRequest?.chat_message_id).toBe(
+      likedRequest?.chat_message_id
+    );
 
     await expect(modalTitle).toBeHidden({ timeout: 5000 });
   });

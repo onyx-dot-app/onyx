@@ -20,7 +20,7 @@ from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkContext
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
-from onyx.context.search.models import RetrievalDocs
+from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import Tag
@@ -229,15 +229,6 @@ class SubQueryDetail(BaseModel):
     doc_ids: list[int] | None = None
 
 
-class SubQuestionDetail(BaseModel):
-    level: int
-    level_question_num: int
-    question: str
-    answer: str
-    sub_queries: list[SubQueryDetail] | None = None
-    context_docs: RetrievalDocs | None = None
-
-
 class ChatMessageDetail(BaseModel):
     chat_session_id: UUID | None = None
     message_id: int
@@ -246,7 +237,7 @@ class ChatMessageDetail(BaseModel):
     message: str
     reasoning_tokens: str | None = None
     message_type: MessageType
-    context_docs: RetrievalDocs | None = None
+    context_docs: list[SavedSearchDoc] | None = None
     # Dict mapping citation number to document_id
     citations: dict[int, str] | None = None
     time_sent: datetime

@@ -25,6 +25,8 @@ class StreamingType(Enum):
     IMAGE_GENERATION_START = "image_generation_start"
     IMAGE_GENERATION_HEARTBEAT = "image_generation_heartbeat"
     IMAGE_GENERATION_FINAL = "image_generation_final"
+    PYTHON_TOOL_START = "python_tool_start"
+    PYTHON_TOOL_DELTA = "python_tool_delta"
     CUSTOM_TOOL_START = "custom_tool_start"
     CUSTOM_TOOL_DELTA = "custom_tool_delta"
     REASONING_START = "reasoning_start"
@@ -189,12 +191,12 @@ class ImageGenerationFinal(BaseObj):
 
 
 class PythonToolStart(BaseObj):
-    type: Literal["python_tool_start"] = "python_tool_start"
+    type: Literal["python_tool_start"] = StreamingType.PYTHON_TOOL_START.value
     code: str
 
 
 class PythonToolDelta(BaseObj):
-    type: Literal["python_tool_delta"] = "python_tool_delta"
+    type: Literal["python_tool_delta"] = StreamingType.PYTHON_TOOL_DELTA.value
 
     stdout: str = ""
     stderr: str = ""
@@ -242,6 +244,8 @@ PacketObj = Union[
     OpenUrlStart,
     OpenUrlUrls,
     OpenUrlDocuments,
+    PythonToolStart,
+    PythonToolDelta,
     CustomToolStart,
     CustomToolDelta,
     # Reasoning Packets
