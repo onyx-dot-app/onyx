@@ -1,52 +1,20 @@
 from enum import StrEnum
 from typing import Any
+from typing import Literal
 from typing import Optional
 
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
-
-class CodaObjectBase(BaseModel):
-    id: str
-    type: str
-    browserLink: str
-    name: str
-
-
-class CodaDoc(CodaObjectBase):
-    """Represents a Coda Doc object"""
-
-    owner: str
-    ownerName: str
-    createdAt: str
-    updatedAt: str
-    icon: Optional[dict[str, Any]] = None
-    docSize: Optional[dict[str, Any]] = None
-    sourceDoc: Optional[dict[str, Any]] = None
-    published: Optional[dict[str, Any]] = None
-
-
-class CodaPageReference(CodaObjectBase):
-    """Represents a Coda Page reference object"""
-
-
-class CodaPage(CodaObjectBase):
-    """Represents a Coda Page object"""
-
-    subtitle: Optional[str] = None
-    icon: Optional[dict[str, Any]] = None
-    image: Optional[dict[str, Any]] = None
-    contentType: str
-    isHidden: bool
-    createdAt: str
-    updatedAt: str
-    parent: Optional[CodaPageReference] = None
-    children: list[CodaPageReference]
+from onyx.connectors.coda.models.common import CodaObjectBase
+from onyx.connectors.coda.models.common import CodaObjectType
+from onyx.connectors.coda.models.page import CodaPageReference
 
 
 class CodaTableReference(CodaObjectBase):
     """Represents a Coda Table reference object"""
 
+    type: Literal[CodaObjectType.TABLE]
     parent: CodaPageReference
 
 
