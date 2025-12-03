@@ -24,11 +24,16 @@ dynamic = ["version"]
 Repository = "https://github.com/onyx-dot-app/onyx"
 
 [tool.hatch.build]
-include = ["go.mod", "go.sum", "main.go"]
+include = ["go.mod", "go.sum", "main.go", "cmd/**/*.go"]
+artifacts = ["gonyx"]
 
 [tool.hatch.version]
 source = "vcs"
-tag-pattern = "gonyx/v(?P<version>\\d+\\.\\d+\\.\\d+)"
 
-[tool.hatch.build.hooks.custom]
+[tool.hatch.version.raw-options]
+root = "../.."
+tag_regex = "^gonyx/v(?P<version>[vV]?\\d+(?:\\.\\d+){0,2}[^\\+]*)(?:\\+.*)?$"
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
 binary_name = "gonyx"
