@@ -495,3 +495,4 @@ yarl==1.22.0
     # via aiohttp
 zipp==3.23.0
     # via importlib-metadata
+zizmor==1.18.0
