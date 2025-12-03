@@ -354,24 +354,6 @@ Hint: respond with EXACTLY {YES_SEARCH} or {NO_SEARCH}"
 """.strip()
 
 
-QUERY_REPHRASE_SYSTEM_MSG = """
-Given a conversation (between Human and Assistant) and a final message from Human, \
-rewrite the last message to be a concise standalone query which captures required/relevant \
-context from previous messages. This question must be useful for a semantic (natural language) \
-search engine.
-""".strip()
-
-QUERY_REPHRASE_USER_MSG = """
-Help me rewrite this final message into a standalone query that takes into consideration the \
-past messages of the conversation IF relevant. This query is used with a semantic search engine to \
-retrieve documents. You must ONLY return the rewritten query and NOTHING ELSE. \
-IMPORTANT, the search engine does not have access to the conversation history!
-
-Query:
-{final_query}
-""".strip()
-
-
 CHAT_NAMING = f"""
 Given the following conversation, provide a SHORT name for the conversation.{{language_hint_or_empty}}
 IMPORTANT: TRY NOT TO USE MORE THAN 5 WORDS, MAKE IT AS CONCISE AS POSSIBLE.
