@@ -83,6 +83,19 @@ You can open many URLs at once by passing multiple URLs in the array if multiple
 You should almost always use open_urls after a web_search call. Use this tool when a user asks about a specific provided URL.
 """
 
+PYTHON_TOOL_GUIDANCE = """
+
+## python
+Use the `python` tool to execute Python code in an isolated sandbox. The tool will respond with the output of the execution or time out after 60.0 seconds.
+Any files uploaded to the chat will be automatically be available in the execution environment's current directory.
+The current directory in the file system can be used to save and persist user files. Files written to the current directory will be returned with a `file_link`. Use this to give the user a way to download the file OR to display generated images.
+Internet access for this session is disabled. Do not make external web requests or API calls as they will fail.
+
+Use `openpyxl` to read and write Excel files. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
+
+IMPORTANT: each call to this tool is independent. Variables from previous calls will NOT be available in the current call.
+"""
+
 GENERATE_IMAGE_GUIDANCE = """
 
 ## generate_image
@@ -338,24 +351,6 @@ Respond with EXACTLY and ONLY "{YES_SEARCH}" or "{NO_SEARCH}"
 
 REQUIRE_SEARCH_HINT = f"""
 Hint: respond with EXACTLY {YES_SEARCH} or {NO_SEARCH}"
-""".strip()
-
-
-QUERY_REPHRASE_SYSTEM_MSG = """
-Given a conversation (between Human and Assistant) and a final message from Human, \
-rewrite the last message to be a concise standalone query which captures required/relevant \
-context from previous messages. This question must be useful for a semantic (natural language) \
-search engine.
-""".strip()
-
-QUERY_REPHRASE_USER_MSG = """
-Help me rewrite this final message into a standalone query that takes into consideration the \
-past messages of the conversation IF relevant. This query is used with a semantic search engine to \
-retrieve documents. You must ONLY return the rewritten query and NOTHING ELSE. \
-IMPORTANT, the search engine does not have access to the conversation history!
-
-Query:
-{final_query}
 """.strip()
 
 

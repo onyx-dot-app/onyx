@@ -11,8 +11,6 @@ from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
-from onyx.context.search.enums import SearchType
-from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
@@ -91,12 +89,6 @@ class DynamicSchemaInfo(BaseModel):
     message_id: int | None
 
 
-class SearchQueryInfo(BaseModel):
-    predicted_search: SearchType | None
-    final_filters: IndexFilters
-    recency_bias_multiplier: float
-
-
 class WebSearchToolOverrideKwargs(BaseModel):
     # To know what citation number to start at for constructing the string to the LLM
     starting_citation_num: int
@@ -124,6 +116,21 @@ class SearchToolOverrideKwargs(BaseModel):
     max_llm_chunks: int | None = MAX_CHUNKS_FED_TO_CHAT
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class ChatFile(BaseModel):
+    """File from a chat session that can be passed to tools."""
+
+    filename: str
+    content: bytes
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class PythonToolOverrideKwargs(BaseModel):
+    """Override kwargs for the Python/Code Interpreter tool."""
+
+    chat_files: list[ChatFile] = []
 
 
 class SearchToolRunContext(BaseModel):

@@ -18,25 +18,21 @@ export default function PasswordInputTypeIn({
 }: PasswordInputTypeInProps) {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
-  const rightSection = (
-    <>
-      <IconButton
-        icon={isPasswordVisible ? SvgEye : SvgEyeClosed}
-        disabled={disabled}
-        onClick={noProp(() => setIsPasswordVisible((v) => !v))}
-        type="button"
-        internal
-        aria-label={isPasswordVisible ? "Hide password" : "Show password"}
-      />
-    </>
-  );
-
   return (
     <InputTypeIn
       {...props}
       disabled={disabled}
       type={isPasswordVisible ? "text" : "password"}
-      rightSection={rightSection}
+      rightSection={
+        <IconButton
+          icon={isPasswordVisible ? SvgEye : SvgEyeClosed}
+          disabled={disabled}
+          onClick={noProp(() => setIsPasswordVisible((v) => !v))}
+          type="button"
+          internal
+          aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+        />
+      }
     />
   );
 }

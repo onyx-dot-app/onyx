@@ -13,6 +13,7 @@ import {
   Variants,
   wrapperClasses,
 } from "@/refresh-components/inputs/styles";
+import Truncated from "@/refresh-components/texts/Truncated";
 
 // ============================================================================
 // Context
@@ -153,18 +154,20 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
     );
 
     return (
-      <InputSelectContext.Provider value={contextValue}>
-        <SelectPrimitive.Root
-          {...(isControlled ? { value: currentValue } : { defaultValue })}
-          onValueChange={handleValueChange}
-          disabled={disabled}
-          {...props}
-        >
-          <div ref={ref} className={className}>
-            {children}
-          </div>
-        </SelectPrimitive.Root>
-      </InputSelectContext.Provider>
+      <div className="w-full relative">
+        <InputSelectContext.Provider value={contextValue}>
+          <SelectPrimitive.Root
+            {...(isControlled ? { value: currentValue } : { defaultValue })}
+            onValueChange={handleValueChange}
+            disabled={disabled}
+            {...props}
+          >
+            <div ref={ref} className={className}>
+              {children}
+            </div>
+          </SelectPrimitive.Root>
+        </InputSelectContext.Provider>
+      </div>
     );
   }
 );
@@ -217,11 +220,11 @@ const InputSelectTrigger = React.forwardRef<
   } else {
     const Icon = selectedItemDisplay.iconRef.current;
     displayContent = (
-      <div className="flex flex-row items-center gap-2 flex-1">
+      <div className="flex flex-row items-center gap-2 flex-1 w-full">
         {Icon && <Icon className={cn("h-4 w-4", iconClasses[variant])} />}
-        <Text className={cn(textClasses[variant])}>
+        <Truncated className={cn(textClasses[variant])}>
           {selectedItemDisplay.childrenRef.current}
-        </Text>
+        </Truncated>
       </div>
     );
   }
