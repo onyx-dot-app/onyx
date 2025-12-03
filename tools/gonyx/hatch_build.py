@@ -22,8 +22,6 @@ class CustomBuildHook(BuildHookInterface):
             build_data["tag"] = "py3-none-" + manygo.get_platform_tag(
                 goos=goos, goarch=goarch
             )
-        else:
-            build_data["infer_tag"] = True
 
         # Get config and environment
         binary_name = self.config.get("binary_name", "gonyx")
