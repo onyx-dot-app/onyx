@@ -30,6 +30,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import Packet
 
 
 if TYPE_CHECKING:
@@ -141,8 +142,6 @@ class CreateChatMessageRequest(ChunkContext):
     # List of tool IDs we MUST use.
     # TODO: make this a single one since unclear how to force this for multiple at a time.
     forced_tool_ids: list[int] | None = None
-
-    bypass_translation: bool = False
 
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
@@ -280,8 +279,7 @@ class ChatSessionDetailResponse(BaseModel):
     current_temperature_override: float | None
     deleted: bool = False
 
-    # TODO make this the backend recognized packets
-    packets: list[list[dict[str, Any]]]
+    packets: list[list[Packet]]
 
 
 # This one is not used anymore

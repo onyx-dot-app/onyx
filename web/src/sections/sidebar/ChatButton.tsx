@@ -3,7 +3,7 @@
 import React, { useState, memo, useMemo, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useChatSessions } from "@/lib/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { ChatSession } from "@/app/chat/interfaces";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -131,7 +131,7 @@ function ChatButtonInner({
   const [showShareModal, setShowShareModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
-  const { refreshChatSessions } = useChatContext();
+  const { refreshChatSessions } = useChatSessions();
   const {
     refreshCurrentProjectDetails,
     projects,

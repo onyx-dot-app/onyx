@@ -7,7 +7,7 @@ import {
   AdminDateRangeSelector,
   DateRange,
 } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useAgents } from "@/lib/hooks/useAgents";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
@@ -27,7 +27,7 @@ type AssistantStatsResponse = {
 export function AssistantStats({ assistantId }: { assistantId: number }) {
   const [assistantStats, setAssistantStats] =
     useState<AssistantStatsResponse | null>(null);
-  const { agents: assistants } = useAgentsContext();
+  const { agents: assistants } = useAgents();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>({

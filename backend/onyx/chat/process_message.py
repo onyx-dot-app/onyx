@@ -30,7 +30,6 @@ from onyx.chat.prompt_builder.answer_prompt_builder import calculate_reserved_to
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
-from onyx.chat.temp_translation import translate_llm_loop_packets
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.constants import DEFAULT_PERSONA_ID
@@ -380,7 +379,6 @@ def stream_chat_message_objects(
     # messages.
     # NOTE: is not stored in the database, only passed in to the LLM as context
     additional_context: str | None = None,
-    bypass_translation: bool = False,
     # Slack context for federated Slack search
     slack_context: SlackContext | None = None,
 ) -> AnswerStream:
@@ -592,7 +590,7 @@ def stream_chat_message_objects(
         # for stop signals. run_llm_loop itself doesn't know about stopping.
         # Note: DB session is not thread safe but nothing else uses it and the
         # reference is passed directly so it's ok.
-        llm_loop_packets = run_chat_llm_with_state_containers(
+        yield from run_chat_llm_with_state_containers(
             run_llm_loop,
             emitter=emitter,
             state_container=state_container,
@@ -610,18 +608,6 @@ def stream_chat_message_objects(
                 new_msg_req.forced_tool_ids[0] if new_msg_req.forced_tool_ids else None
             ),
         )
-
-        # TODO: Slack doesn't need the translation later, later handle these all the same
-        if bypass_translation:
-            yield from llm_loop_packets
-
-        # Translate packets to frontend-expected format
-        # this doesn't use the correct backend packet types and is a temporary fix
-        else:
-            yield from translate_llm_loop_packets(
-                packet_stream=llm_loop_packets,
-                message_id=assistant_response.id,
-            )  # type: ignore
 
         # Determine if stopped by user
         completed_normally = check_is_connected()
@@ -704,7 +690,6 @@ def stream_chat_message(
     user: User | None,
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
-    bypass_translation: bool = False,
 ) -> Iterator[str]:
     with get_session_with_current_tenant() as db_session:
         objects = stream_chat_message_objects(
@@ -713,14 +698,9 @@ def stream_chat_message(
             db_session=db_session,
             litellm_additional_headers=litellm_additional_headers,
             custom_tool_additional_headers=custom_tool_additional_headers,
-            bypass_translation=bypass_translation,
         )
         for obj in objects:
-            # Handle both Pydantic objects and plain dicts (from translation layer)
-            if isinstance(obj, dict):
-                yield get_json_line(obj)
-            else:
-                yield get_json_line(obj.model_dump())
+            yield get_json_line(obj.model_dump())
 
 
 def remove_answer_citations(answer: str) -> str:

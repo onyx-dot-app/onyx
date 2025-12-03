@@ -1,3 +1,39 @@
+"""
+An explanation of the search tool found below:
+
+Step 1: Queries
+- The LLM will generate some queries based on the chat history for what it thinks are the best things to search for.
+This has a pretty generic prompt so it's not perfectly tuned for search but provides breadth and also the LLM can often break up
+the query into multiple searches which the other flows do not do. Exp: Compare the sales process between company X and Y can be
+broken up into "sales process company X" and "sales process company Y".
+- A specifial prompt and history is used to generate another query which is best tuned for a semantic/hybrid search pipeline.
+- A small set of keyword emphasized queries are also generated to cover additional breadth. This is important for cases where
+the query is short, keyword heavy, or has a lot of model unseen terminology.
+
+Step 2: Recombination
+We use a weighted RRF to combine the search results from the queries above. Each query will have a list of search results with
+some scores however these are downstream of a normalization step so they cannot easily be compared with one another on an
+absolute scale. RRF is a good way to combine these and allows us to give some custom weightings. We also merge document chunks
+that are adjacent to provide more continuous context to the LLM.
+
+Step 3: Selection
+We pass the recombined results (truncated set) to the LLM to select the most promising ones to read. This is to reduce noise and
+reduce downstream chances of hallucination. The LLM at this point also has the entire set of document chunks so it has
+information across documents not just per document. This also reduces the number of tokens required for the next step.
+
+Step 4: Expansion
+For the selected documents, we pass the main retrieved sections from above (this may be a single chunk or a section comprised of
+several consecutive chunks) along with chunks above and below the section to the LLM. The LLM determines how much of the document
+it wants to read. This is done in parallel for all selected documents. Reason being that the LLM would not be able to do a good
+job of this with all of the documents in the prompt at once. Keeping every LLM decision step as simple as possible is key for
+reliable performance.
+
+Step 5: Prompt Building
+We construct a response string back to the LLM as the result of the tool call. We also pass relevant richer objects back
+so that the rest of the code can persist it, render it in the UI, etc. The response is a json that makes it easy for the LLM to
+refer to by using matching keywords to other parts of the prompt and reminders.
+"""
+
 from collections.abc import Callable
 from typing import Any
 from typing import cast

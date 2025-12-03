@@ -56,8 +56,7 @@ class StreamPacketData(TypedDict, total=False):
     error: str
     stack_trace: str
     obj: StreamPacketObj
-    ind: int
-    turn_index: int  # Used when bypass_translation=True
+    turn_index: int
 
 
 class ChatSessionManager:
@@ -120,7 +119,6 @@ class ChatSessionManager:
             use_existing_user_message=use_existing_user_message,
             use_agentic_search=use_agentic_search,
             forced_tool_ids=forced_tool_ids,
-            bypass_translation=True,
         )
 
         headers = (
@@ -176,6 +174,7 @@ class ChatSessionManager:
         full_message = ""
         assistant_message_id: int | None = None
         error = None
+        ind: int
         for data in response_data:
             if reserved_id := data.get("reserved_assistant_message_id"):
                 assistant_message_id = reserved_id
@@ -188,10 +187,13 @@ class ChatSessionManager:
                 (data_obj := data.get("obj"))
                 and (packet_type := data_obj.get("type"))
                 and (
-                    ind := (
-                        data.get("ind")
-                        if data.get("ind") is not None
-                        else data.get("turn_index")
+                    ind := cast(
+                        int,
+                        (
+                            data.get("ind")
+                            if data.get("ind") is not None
+                            else data.get("turn_index")
+                        ),
                     )
                 )
                 is not None
@@ -238,8 +240,7 @@ class ChatSessionManager:
                             # Already a SavedSearchDoc format
                             docs.append(SavedSearchDoc(**doc))
                         else:
-                            # SearchDoc format (from bypass_translation=True)
-                            # Convert to SavedSearchDoc using from_search_doc
+                            # SearchDoc format - Convert to SavedSearchDoc
                             search_doc = SearchDoc(**doc)
                             docs.append(
                                 SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)

@@ -115,7 +115,6 @@ def test_stream_chat_message_objects_without_web_search(
         new_msg_req=chat_request,
         user=test_user,
         db_session=db_session,
-        bypass_translation=True,
     )
     # Collect all packets from the response
     raw_answer_stream: list[AnswerStreamPart] = []

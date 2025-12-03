@@ -10,14 +10,24 @@ SLACK_CHANNEL_ID = "channel_id"
 # Default to True (skip warmup) if not set, otherwise respect the value
 SKIP_WARM_UP = os.environ.get("SKIP_WARM_UP", "true").lower() == "true"
 
-MODEL_SERVER_HOST = os.environ.get("MODEL_SERVER_HOST") or "localhost"
-MODEL_SERVER_ALLOWED_HOST = os.environ.get("MODEL_SERVER_HOST") or "0.0.0.0"
+# Check if model server is disabled
+DISABLE_MODEL_SERVER = os.environ.get("DISABLE_MODEL_SERVER", "").lower() == "true"
+
+# If model server is disabled, use "disabled" as host to trigger proper handling
+if DISABLE_MODEL_SERVER:
+    MODEL_SERVER_HOST = "disabled"
+    MODEL_SERVER_ALLOWED_HOST = "disabled"
+    INDEXING_MODEL_SERVER_HOST = "disabled"
+else:
+    MODEL_SERVER_HOST = os.environ.get("MODEL_SERVER_HOST") or "localhost"
+    MODEL_SERVER_ALLOWED_HOST = os.environ.get("MODEL_SERVER_HOST") or "0.0.0.0"
+    INDEXING_MODEL_SERVER_HOST = (
+        os.environ.get("INDEXING_MODEL_SERVER_HOST") or MODEL_SERVER_HOST
+    )
+
 MODEL_SERVER_PORT = int(os.environ.get("MODEL_SERVER_PORT") or "9000")
 # Model server for indexing should use a separate one to not allow indexing to introduce delay
 # for inference
-INDEXING_MODEL_SERVER_HOST = (
-    os.environ.get("INDEXING_MODEL_SERVER_HOST") or MODEL_SERVER_HOST
-)
 INDEXING_MODEL_SERVER_PORT = int(
     os.environ.get("INDEXING_MODEL_SERVER_PORT") or MODEL_SERVER_PORT
 )

@@ -7,7 +7,7 @@ import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import SvgBubbleText from "@/icons/bubble-text";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useAgents } from "@/lib/hooks/useAgents";
 import { formatRelativeTime } from "./project_utils";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ export default function ProjectChatSessionList() {
     refreshCurrentProjectDetails,
     isLoadingProjectDetails,
   } = useProjectsContext();
-  const { agents: assistants } = useAgentsContext();
+  const { agents: assistants } = useAgents();
   const [isRenamingChat, setIsRenamingChat] = React.useState<string | null>(
     null
   );

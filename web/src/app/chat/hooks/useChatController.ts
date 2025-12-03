@@ -58,7 +58,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useChatSessions } from "@/lib/hooks/useChatSessions";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -71,7 +71,8 @@ import {
   MessageStart,
   PacketType,
 } from "../services/streamingModels";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "../services/fileUtils";
@@ -138,9 +139,9 @@ export function useChatController({
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useAppParams();
-  const { refreshChatSessions } = useChatContext();
-  const { agentPreferences: assistantPreferences, forcedToolIds } =
-    useAgentsContext();
+  const { refreshChatSessions } = useChatSessions();
+  const { assistantPreferences } = useAssistantPreferences();
+  const { forcedToolIds } = useForcedTools();
   const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const posthog = usePostHog();
@@ -360,10 +361,12 @@ export function useChatController({
         const packets = lastMessage.packets || [];
         const hasStop = packets.some((p) => p.obj.type === PacketType.STOP);
         if (!hasStop) {
-          const maxInd =
-            packets.length > 0 ? Math.max(...packets.map((p) => p.ind)) : 0;
+          const maxTurnIndex =
+            packets.length > 0
+              ? Math.max(...packets.map((p) => p.turn_index))
+              : 0;
           const stopPacket: Packet = {
-            ind: maxInd + 1,
+            turn_index: maxTurnIndex + 1,
             obj: { type: PacketType.STOP },
           } as Packet;
 

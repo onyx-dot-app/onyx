@@ -7,6 +7,9 @@ on:
   merge_group:
   pull_request:
     branches: [main]
+  push:
+    tags:
+      - "v*.*.*"
   schedule:
     # This cron expression runs the job daily at 16:00 UTC (9am PT)
     - cron: "0 16 * * *"
