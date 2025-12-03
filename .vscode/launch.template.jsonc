@@ -570,14 +570,14 @@
       "name": "Onyx OpenAPI Schema Generator",
       "type": "debugpy",
       "request": "launch",
-      "program": "scripts/onyx_openapi_schema.py",
-      "cwd": "${workspaceFolder}/backend",
+      "program": "backend/scripts/onyx_openapi_schema.py",
+      "cwd": "${workspaceFolder}",
       "envFile": "${workspaceFolder}/.env",
       "env": {
         "PYTHONUNBUFFERED": "1",
-        "PYTHONPATH": "."
+        "PYTHONPATH": "backend"
       },
-      "args": ["--filename", "generated/openapi.json"]
+      "args": ["--filename", "backend/generated/openapi.json", "--generate-python-client"]
     },
     {
       // script to debug multi tenant db issues

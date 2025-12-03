@@ -636,9 +636,31 @@ def run_llm_step(
 
                 for tool_call_delta in delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
-        span_generation.span_data.output = [
-            {"role": "assistant", "content": accumulated_answer}
-        ]
+
+        tool_calls = _extract_tool_call_kickoffs(id_to_tool_call_map)
+        if tool_calls:
+            tool_calls_list: list[ToolCall] = [
+                {
+                    "id": kickoff.tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": kickoff.tool_name,
+                        "arguments": json.dumps(kickoff.tool_args),
+                    },
+                }
+                for kickoff in tool_calls
+            ]
+
+            assistant_msg: AssistantMessage = {
+                "role": "assistant",
+                "content": accumulated_answer if accumulated_answer else None,
+                "tool_calls": tool_calls_list,
+            }
+            span_generation.span_data.output = [assistant_msg]
+        elif accumulated_answer:
+            span_generation.span_data.output = [
+                {"role": "assistant", "content": accumulated_answer}
+            ]
     # Close reasoning block if still open (stream ended with reasoning content)
     if reasoning_start:
         emitter.emit(
@@ -672,33 +694,6 @@ def run_llm_step(
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
-
-    # Convert tool calls from map to ToolCallKickoff list
-    tool_calls: list[ToolCallKickoff] = []
-    for tool_call_data in id_to_tool_call_map.values():
-        if tool_call_data["id"] and tool_call_data["name"]:
-            try:
-                # Parse arguments JSON string to dict
-                tool_args = (
-                    json.loads(tool_call_data["arguments"])
-                    if tool_call_data["arguments"]
-                    else {}
-                )
-            except json.JSONDecodeError:
-                # If parsing fails, try empty dict, most tools would fail though
-                logger.error(
-                    f"Failed to parse tool call arguments: {tool_call_data['arguments']}"
-                )
-                tool_args = {}
-
-            tool_calls.append(
-                ToolCallKickoff(
-                    tool_call_id=tool_call_data["id"],
-                    tool_name=tool_call_data["name"],
-                    tool_args=tool_args,
-                )
-            )
-
     if LOG_ONYX_MODEL_INTERACTIONS:
         logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
         logger.debug(f"Accumulated answer: {accumulated_answer}")
@@ -746,6 +741,40 @@ def _update_tool_call_with_delta(
             tool_calls_in_progress[index][
                 "arguments"
             ] += tool_call_delta.function.arguments
+
+
+def _extract_tool_call_kickoffs(
+    id_to_tool_call_map: dict[int, dict[str, Any]],
+) -> list[ToolCallKickoff]:
+    """Extract ToolCallKickoff objects from the tool call map.
+
+    Returns a list of ToolCallKickoff objects for valid tool calls (those with both id and name).
+    """
+    tool_calls: list[ToolCallKickoff] = []
+    for tool_call_data in id_to_tool_call_map.values():
+        if tool_call_data.get("id") and tool_call_data.get("name"):
+            try:
+                # Parse arguments JSON string to dict
+                tool_args = (
+                    json.loads(tool_call_data["arguments"])
+                    if tool_call_data["arguments"]
+                    else {}
+                )
+            except json.JSONDecodeError:
+                # If parsing fails, try empty dict, most tools would fail though
+                logger.error(
+                    f"Failed to parse tool call arguments: {tool_call_data['arguments']}"
+                )
+                tool_args = {}
+
+            tool_calls.append(
+                ToolCallKickoff(
+                    tool_call_id=tool_call_data["id"],
+                    tool_name=tool_call_data["name"],
+                    tool_args=tool_args,
+                )
+            )
+    return tool_calls
 
 
 def run_llm_loop(
