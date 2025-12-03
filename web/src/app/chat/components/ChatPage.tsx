@@ -40,7 +40,6 @@ import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
-import { ChatSearchModal } from "@/app/chat/chat_search/ChatSearchModal";
 import useScreenSize from "@/hooks/useScreenSize";
 import { DocumentResults } from "@/app/chat/components/documentSidebar/DocumentResults";
 import { useChatController } from "@/app/chat/hooks/useChatController";
@@ -283,7 +282,6 @@ export default function ChatPage({
   const [projectPanelVisible, setProjectPanelVisible] = useState(true);
 
   const filterManager = useFilters();
-  const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
 
   const isDefaultAgent = useIsDefaultAgent({
     liveAssistant,
@@ -619,11 +617,6 @@ export default function ChatPage({
     }
   }, [documentSidebarVisible, updateCurrentDocumentSidebarVisible]);
 
-  const toggleChatSessionSearchModal = useCallback(
-    () => setIsChatSearchModalOpen((open) => !open),
-    [setIsChatSearchModalOpen]
-  );
-
   if (!user) {
     redirect("/auth/login");
   }
@@ -779,11 +772,6 @@ export default function ChatPage({
       {popup}
 
       <ChatPopup />
-
-      <ChatSearchModal
-        open={isChatSearchModalOpen}
-        onCloseModal={() => setIsChatSearchModalOpen(false)}
-      />
 
       {retrievalEnabled && documentSidebarVisible && settings?.isMobile && (
         <div className="md:hidden">
