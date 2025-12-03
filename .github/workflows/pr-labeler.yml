@@ -9,9 +9,6 @@ on:
       - reopened
       - synchronize
       - edited
-  push:
-    tags:
-      - "v*.*.*"
 
 permissions:
   contents: read

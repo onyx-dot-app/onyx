@@ -6,9 +6,6 @@ concurrency:
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
-  push:
-    tags:
-      - "v*.*.*"
 
 permissions:
   contents: read
