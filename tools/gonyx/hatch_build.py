@@ -11,7 +11,7 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 class CustomBuildHook(BuildHookInterface):
     """Build hook to compile the Go binary and include it in the wheel."""
 
-    def initialize(self, version: Any, build_data: Any) -> None:
+    def initialize(self, version: Any, build_data: Any) -> None:  # noqa: ARG002
         """Build the Go binary before packaging."""
         build_data["pure_python"] = False
 
@@ -25,6 +25,7 @@ class CustomBuildHook(BuildHookInterface):
 
         # Get config and environment
         binary_name = self.config.get("binary_name", "gonyx")
+        tag = os.getenv("GITHUB_REF_NAME", "dev").lstrip(f"{binary_name}/")
         commit = os.getenv("GITHUB_SHA", "none")
 
         # Build the Go binary if it doesn't exist
@@ -34,7 +35,7 @@ class CustomBuildHook(BuildHookInterface):
                 [
                     "go",
                     "build",
-                    f"-ldflags=-X main.version={version} -X main.commit={commit} -s -w",
+                    f"-ldflags=-X main.version={tag} -X main.commit={commit} -s -w",
                     "-o",
                     binary_name,
                 ],
