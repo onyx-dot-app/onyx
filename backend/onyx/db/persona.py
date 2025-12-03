@@ -62,54 +62,6 @@ class PersonaLoadType(Enum):
 def _add_user_filters(
     stmt: Select[tuple[Persona]], user: User | None, get_editable: bool = True
 ) -> Select[tuple[Persona]]:
-    """Filters a Persona query based on user permissions and access rules.
-
-    This function applies complex role-based access control (RBAC) logic to determine
-    which personas a user can view or edit. It handles multiple access paths through
-    user groups, direct user assignments, and public visibility settings.
-
-    Access Control Logic:
-        - Admins (or no user with DISABLE_AUTH): Can access all personas
-        - Anonymous users (user is None): Only public personas
-        - Curators (with CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS):
-            Only personas they own or unowned personas
-        - Regular users: Access determined by:
-            * Direct ownership (persona.user_id == user.id)
-            * User group membership (User -> User__UserGroup -> Persona__UserGroup -> Persona)
-            * Direct user assignment (Persona__User relationship)
-            * Public visibility (is_public AND is_visible for view-only)
-
-    Edit vs View Permissions:
-        When get_editable=True:
-            - Users can only edit personas where they have curator/owner rights
-            - Curators: Must be curator of ALL groups the persona belongs to
-            - Global Curators: Can edit if they're in any group the persona belongs to
-            - Regular users: Can only edit their own personas
-
-        When get_editable=False:
-            - Shows all personas user can view (more permissive)
-            - Includes public + visible personas
-            - Includes personas directly shared with user
-            - Includes personas from user's groups
-
-    Args:
-        stmt: A SQLAlchemy Select statement for querying Persona objects.
-        user: The user to apply filters for. If None and auth is disabled, acts as admin.
-            If None and auth is enabled, shows only public personas.
-        get_editable: If True, returns only personas the user can edit. If False,
-            returns all personas the user can view.
-
-    Returns:
-        The modified Select statement with WHERE clauses and JOINs applied to filter
-        personas based on user permissions.
-
-    Note:
-        This function performs several OUTER JOINs to establish the relationship chain:
-        Persona -> Persona__UserGroup -> User__UserGroup (for group-based access)
-        Persona -> Persona__User (for direct user assignments)
-
-        The returned query uses DISTINCT to deduplicate results from multiple join paths.
-    """
     # If user is None and auth is disabled, assume the user is an admin
     if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
@@ -402,6 +354,17 @@ def _build_persona_filters(
     include_slack_bot_personas: bool,
     include_deleted: bool,
 ) -> Select[tuple[Persona]]:
+    """Filters which Personas are included in the query.
+
+    Args:
+        stmt: The base query to filter.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        The modified query with the filters applied.
+    """
     if not include_default:
         stmt = stmt.where(Persona.builtin_persona.is_(False))
     if not include_slack_bot_personas:
@@ -699,12 +662,11 @@ def get_raw_personas_for_user(
     stmt = _build_persona_base_query(
         user, get_editable, include_default, include_slack_bot_personas, include_deleted
     )
-    # TODO: Can this return duplicate personas?
     return db_session.scalars(stmt).all()
 
 
 def get_personas(db_session: Session) -> Sequence[Persona]:
-    """Unsafe, can fetch personas from all users"""
+    """NOTE: Unsafe, can fetch personas from all users."""
     stmt = select(Persona).distinct()
     stmt = stmt.where(not_(Persona.name.startswith(SLACK_BOT_PERSONA_PREFIX)))
     stmt = stmt.where(Persona.deleted.is_(False))
@@ -753,6 +715,7 @@ def update_personas_display_priority(
     display_priority_map: dict[int, int],
     db_session: Session,
     user: User | None,
+    commit_db_txn: bool = False,
 ) -> None:
     """Updates the display priorities of the specified personas.
 
@@ -763,11 +726,14 @@ def update_personas_display_priority(
         user: The user to filter personas for. If None and auth is disabled,
             assumes the user is an admin. Otherwise, if None shows only public
             personas.
+        commit_db_txn: If True, commits the database transaction after
+            updating the display priorities. Defaults to False.
 
     Raises:
         ValueError: The caller tried to update a persona for which the user does
             not have access.
     """
+    # No-op to save a query if it is not necessary.
     if len(display_priority_map) == 0:
         return
 
@@ -791,7 +757,8 @@ def update_personas_display_priority(
 
         available_personas_map[persona_id].display_priority = priority
 
-    db_session.commit()
+    if commit_db_txn:
+        db_session.commit()
 
 
 def upsert_persona(
@@ -1131,7 +1098,7 @@ def get_persona_by_id(
 def get_personas_by_ids(
     persona_ids: list[int], db_session: Session
 ) -> Sequence[Persona]:
-    """Unsafe, can fetch personas from all users"""
+    """NOTE: Unsafe, can fetch personas from all users"""
     if not persona_ids:
         return []
     personas = db_session.scalars(

@@ -155,8 +155,8 @@ def patch_persona_default_status(
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@admin_agents_router.put("/display-priority")
-def patch_agents_display_priority(
+@admin_agents_router.patch("/display-priorities")
+def patch_agents_display_priorities(
     display_priority_request: DisplayPriorityRequest,
     user: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
