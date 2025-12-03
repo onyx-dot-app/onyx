@@ -25,7 +25,6 @@ from onyx.chat.prompt_builder.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
 from onyx.chat.stop_signal_checker import set_fence
-from onyx.chat.temp_translation import translate_session_packets_to_frontend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
@@ -265,10 +264,8 @@ def get_chat_session(
         shared_status=chat_session.shared_status,
         current_temperature_override=chat_session.temperature_override,
         deleted=chat_session.deleted,
-        packets=[
-            translate_session_packets_to_frontend(packet_list)
-            for packet_list in replay_packet_lists
-        ],
+        # Packets are now directly serialized as Packet Pydantic models
+        packets=replay_packet_lists,
     )
 
 
@@ -451,7 +448,6 @@ def handle_new_chat_message(
                 custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                     request.headers
                 ),
-                bypass_translation=chat_message_req.bypass_translation,
             ):
                 yield packet
 

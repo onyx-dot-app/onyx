@@ -192,7 +192,6 @@ def handle_regular_answer(
                 db_session=db_session,
                 bypass_acl=False,
                 additional_context=slack_context_str,
-                bypass_translation=True,
                 slack_context=message_info.slack_context,
             )
             answer = gather_stream(packets)

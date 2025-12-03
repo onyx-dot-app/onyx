@@ -26,13 +26,8 @@ jobs:
         with:
           enable-cache: false
 
-      - name: Install zizmor
-        run: |
-          uv venv
-          uv pip install zizmor
-
       - name: Run zizmor
-        run: uv run --no-sync zizmor --format=sarif . > results.sarif
+        run: uv run --no-sync --with zizmor zizmor --format=sarif . > results.sarif
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
