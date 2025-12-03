@@ -364,10 +364,28 @@ def _should_skip_channel(
     bot_token: str | None,
     access_token: str,
     include_dm: bool,
+    channel_metadata_dict: dict[str, dict[str, Any]] | None = None,
 ) -> bool:
-    """Bot context filtering: skip private channels unless explicitly allowed."""
+    """Bot context filtering: skip private channels unless explicitly allowed.
+
+    Uses pre-fetched channel metadata when available to avoid API calls.
+    """
     if bot_token and not include_dm:
         try:
+            # First try to use pre-fetched metadata from cache
+            if channel_metadata_dict and channel_id in channel_metadata_dict:
+                channel_meta = channel_metadata_dict[channel_id]
+                channel_type_str = channel_meta.get("type", "")
+                is_private_or_dm = channel_type_str in [
+                    ChannelType.PRIVATE_CHANNEL.value,
+                    ChannelType.IM.value,
+                    ChannelType.MPIM.value,
+                ]
+                if is_private_or_dm and channel_id != allowed_private_channel:
+                    return True
+                return False
+
+            # Fallback: API call only if not in cache (should be rare)
             token_to_use = bot_token or access_token
             channel_client = WebClient(token=token_to_use)
             channel_info = channel_client.conversations_info(channel=channel_id)
@@ -401,6 +419,7 @@ def query_slack(
     include_dm: bool = False,
     entities: dict[str, Any] | None = None,
     available_channels: list[str] | None = None,
+    channel_metadata_dict: dict[str, dict[str, Any]] | None = None,
 ) -> list[SlackMessage]:
 
     # Check if query has channel override (user specified channels in query)
@@ -459,7 +478,7 @@ def query_slack(
 
     # convert matches to slack messages
     slack_messages: list[SlackMessage] = []
-    filtered_count = 0
+    filtered_channels: list[str] = []
     for match in matches:
         text: str | None = match.get("text")
         permalink: str | None = match.get("permalink")
@@ -487,9 +506,14 @@ def query_slack(
 
         # Apply channel filtering if needed
         if _should_skip_channel(
-            channel_id, allowed_private_channel, bot_token, access_token, include_dm
+            channel_id,
+            allowed_private_channel,
+            bot_token,
+            access_token,
+            include_dm,
+            channel_metadata_dict,
         ):
-            filtered_count += 1
+            filtered_channels.append(f"{channel_name}({channel_id})")
             continue
 
         # generate thread id and document id
@@ -544,9 +568,10 @@ def query_slack(
             )
         )
 
-    if filtered_count > 0:
+    if filtered_channels:
         logger.info(
-            f"Channel filtering applied: {filtered_count} messages filtered out, {len(slack_messages)} messages kept"
+            f"Channel filtering for query '{query_string[:50]}...': "
+            f"filtered out {filtered_channels}, kept {len(slack_messages)} messages"
         )
 
     return slack_messages
@@ -820,6 +845,7 @@ def slack_retrieval(
                 include_dm,
                 entities,
                 available_channels,
+                channel_metadata_dict,
             ),
         )
         for query_string in query_strings
@@ -856,6 +882,7 @@ def slack_retrieval(
                         include_dm,
                         dm_entities,
                         available_channels,
+                        channel_metadata_dict,
                     ),
                 )
             )
