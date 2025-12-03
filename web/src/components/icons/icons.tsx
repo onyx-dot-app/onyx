@@ -2842,6 +2842,7 @@ export const AnthropicIcon = createLogoIcon(anthropicSVG);
 export const AsanaIcon = createLogoIcon(asanaIcon);
 export const AxeroIcon = createLogoIcon(axeroImage);
 export const AzureIcon = createLogoIcon(azureIcon);
+export const AzureDevOpsIcon = createLogoIcon(azureIcon); // Uses Azure icon for Azure DevOps
 export const BitbucketIcon = createLogoIcon(bitbucketIcon);
 export const BookstackIcon = createIcon(SiBookstack);
 export const ClickupIcon = createLogoIcon(clickupIcon);
