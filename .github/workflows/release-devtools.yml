@@ -1,0 +1,39 @@
+name: Release Devtools
+
+on:
+  push:
+    tags:
+      - "ods/v*.*.*"
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment:
+      name: release-devtools
+    permissions:
+      id-token: write
+    strategy:
+      matrix:
+        os-arch:
+          - {goos: "linux", goarch: "amd64"}
+          - {goos: "linux", goarch: "arm64"}
+          - {goos: "windows", goarch: "amd64"}
+          - {goos: "windows", goarch: "arm64"}
+          - {goos: "darwin", goarch: "amd64"}
+          - {goos: "darwin", goarch: "arm64"}
+          - {goos: "", goarch: ""}
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # ratchet:astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+      - run: |
+          GOOS="${{ matrix.os-arch.goos }}" \
+          GOARCH="${{ matrix.os-arch.goarch }}" \
+          uv build --wheel
+        working-directory: tools/ods
+      - run: uv publish
+        working-directory: tools/ods
