@@ -133,4 +133,6 @@ export interface DynamicProviderConfig<
   ) => TProcessedResponse[];
   getModelNames: (data: TApiResponse) => string[];
   successMessage: (count: number) => string;
+  // If true, uses models from the descriptor instead of making an API call
+  isStatic?: boolean;
 }
