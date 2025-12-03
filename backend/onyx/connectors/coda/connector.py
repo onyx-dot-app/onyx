@@ -682,20 +682,3 @@ class CodaConnector(LoadConnector, PollConnector):
                 f"Unexpected error during Coda settings validation: {exc}"
             )
 
-        
-    
-if __name__ == "__main__":
-    test_connector = CodaConnector()
-    test_connector.load_credentials({
-        "coda_base_url": os.environ.get("CODA_BASE_URL"), 
-        "coda_bearer_token": os.environ.get("CODA_BEARER_TOKEN") 
-    })
-
-    test_connector.load_from_state()
-
-    current = time.time()
-    ago = current - 60  # 1 minute
-    latest_docs = test_connector.poll_source(ago, current)
-    for batch in latest_docs:
-        for doc in batch:
-            logger.info(f"Polled updated document: {doc.semantic_identifier}")

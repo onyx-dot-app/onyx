@@ -1,7 +1,6 @@
 import os
 import time
 from collections.abc import Generator
-from datetime import datetime, timezone
 
 import pytest
 
