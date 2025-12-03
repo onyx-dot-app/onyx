@@ -87,3 +87,10 @@ repos:
         entry: python3 backend/scripts/check_lazy_imports.py
         language: system
         files: ^backend/(?!\.venv/).*\.py$
+
+      - id: typescript-check
+        name: TypeScript type check
+        entry: bash -c 'cd web && npm run types:check'
+        language: system
+        pass_filenames: false
+        files: ^web/.*\.(ts|tsx)$
