@@ -7,6 +7,7 @@ const SvgPlayCircle = ({ size, ...props }: IconProps) => (
     viewBox="0 0 15 15"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
+    stroke="currentColor"
     {...props}
   >
     <path

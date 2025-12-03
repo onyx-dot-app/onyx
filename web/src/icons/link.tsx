@@ -8,6 +8,7 @@ const SvgLink = ({ size, ...props }: IconProps) => (
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     style={{ transform: "rotate(315deg)" }}
+    stroke="currentColor"
     {...props}
   >
     <path

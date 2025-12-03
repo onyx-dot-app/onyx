@@ -7,6 +7,7 @@ const SvgMenu = ({ size, ...props }: IconProps) => (
     viewBox="0 0 32 32"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
+    stroke="currentColor"
     {...props}
   >
     <path

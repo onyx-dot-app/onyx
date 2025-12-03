@@ -8,6 +8,7 @@ const SvgAws = ({ size, ...props }: IconProps) => (
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     className={`text-[#252F3E] dark:text-white ${props.className ?? ""}`}
+    stroke="currentColor"
     {...props}
   >
     <path

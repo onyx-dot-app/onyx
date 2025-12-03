@@ -12,6 +12,7 @@ const OnyxLogo = ({
     viewBox="0 0 56 56"
     xmlns="http://www.w3.org/2000/svg"
     className={className}
+    stroke="currentColor"
     {...props}
   >
     <path

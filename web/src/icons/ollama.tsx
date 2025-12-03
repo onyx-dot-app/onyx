@@ -8,6 +8,7 @@ const SvgOllama = ({ size, ...props }: IconProps) => (
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     className={`text-[var(--text-05)] ${props.className ?? ""}`}
+    stroke="currentColor"
     {...props}
   >
     <path
