@@ -55,7 +55,7 @@ repos:
     rev: v2.6.2
     hooks:
       - id: golangci-lint
-        entry: bash -c "find tools/ -name go.mod | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
+        entry: bash -c "find tools/ -name go.mod -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
