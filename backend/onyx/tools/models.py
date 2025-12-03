@@ -126,6 +126,21 @@ class SearchToolOverrideKwargs(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
+class ChatFile(BaseModel):
+    """File from a chat session that can be passed to tools."""
+
+    filename: str
+    content: bytes
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class PythonToolOverrideKwargs(BaseModel):
+    """Override kwargs for the Python/Code Interpreter tool."""
+
+    chat_files: list[ChatFile] = []
+
+
 class SearchToolRunContext(BaseModel):
     emitter: Emitter
 
