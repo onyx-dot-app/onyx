@@ -17,7 +17,7 @@ import Text from "@/refresh-components/texts/Text";
 import { SearchToolRendererV2 } from "./SearchToolRendererV2";
 import { usePostHog } from "posthog-js/react";
 import { ResearchType } from "@/app/chat/interfaces";
-import { clearTimeoutRefs } from "./utils/timing";
+import { clearTimeoutRefs } from "../timing";
 
 const INITIAL_RESULTS_TO_SHOW = 3;
 const RESULTS_PER_EXPANSION = 10;

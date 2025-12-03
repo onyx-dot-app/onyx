@@ -11,7 +11,7 @@ import { truncateString } from "@/lib/utils";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { SourceChip2 } from "@/app/chat/components/SourceChip2";
 import { BlinkingDot } from "../../BlinkingDot";
-import { clearTimeoutRefs } from "./utils/timing";
+import { clearTimeoutRefs } from "../timing";
 
 const INITIAL_URLS_TO_SHOW = 3;
 const URLS_PER_EXPANSION = 5;
