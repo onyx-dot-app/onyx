@@ -5,11 +5,8 @@
 # For local dev, often user Authentication is not needed
 AUTH_TYPE=disabled
 
-# Skip warm up for dev
-SKIP_WARM_UP=True
-
 # Always keep these on for Dev
-# Logs all model prompts to stdout
+# Logs model prompts, reasoning, and answer to stdout
 LOG_ONYX_MODEL_INTERACTIONS=True
 # More verbose logging
 LOG_LEVEL=debug
@@ -37,30 +34,15 @@ OPENAI_API_KEY=<REPLACE THIS>
 GEN_AI_MODEL_VERSION=gpt-4o
 FAST_GEN_AI_MODEL_VERSION=gpt-4o
 
-# For Onyx Slack Bot, overrides the UI values so no need to set this up via UI every time
-# Only needed if using OnyxBot
-#ONYX_BOT_SLACK_APP_TOKEN=<REPLACE THIS>
-#ONYX_BOT_SLACK_BOT_TOKEN=<REPLACE THIS>
-
 
 # Python stuff
 PYTHONPATH=../backend
 PYTHONUNBUFFERED=1
 
 
-# Internet Search
-EXA_API_KEY=<REPLACE THIS>
-
-
 # Enable the full set of Danswer Enterprise Edition features
 # NOTE: DO NOT ENABLE THIS UNLESS YOU HAVE A PAID ENTERPRISE LICENSE (or if you are using this for local testing/development)
 ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=False
-
-# Agent Search configs  # TODO: Remove give proper namings
-AGENT_RETRIEVAL_STATS=False   # Note: This setting will incur substantial re-ranking effort
-AGENT_RERANKING_STATS=True
-AGENT_MAX_QUERY_RETRIEVAL_RESULTS=20
-AGENT_RERANKING_MAX_QUERY_RETRIEVAL_RESULTS=20
 
 # S3 File Store Configuration (MinIO for local development)
 S3_ENDPOINT_URL=http://localhost:9004

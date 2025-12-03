@@ -19,6 +19,7 @@ from onyx.chat.prompt_builder.answer_prompt_builder import build_system_prompt
 from onyx.chat.prompt_builder.answer_prompt_builder import (
     get_default_base_system_prompt,
 )
+from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
@@ -523,9 +524,10 @@ def run_llm_step(
     llm_msg_history = translate_history_to_llm_format(history)
 
     # Uncomment the line below to log the entire message history to the console
-    # logger.info(
-    #     f"Message history:\n{_format_message_history_for_logging(llm_msg_history)}"
-    # )
+    if LOG_ONYX_MODEL_INTERACTIONS:
+        logger.info(
+            f"Message history:\n{_format_message_history_for_logging(llm_msg_history)}"
+        )
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
     reasoning_start = False
@@ -549,8 +551,8 @@ def run_llm_step(
             tool_choice=tool_choice,
             structured_response_format=None,  # TODO
         ):
-            usage = getattr(packet, "usage", None)
-            if usage:
+            if packet.usage:
+                usage = packet.usage
                 span_generation.span_data.usage = {
                     "input_tokens": usage.prompt_tokens,
                     "output_tokens": usage.completion_tokens,
@@ -697,9 +699,10 @@ def run_llm_step(
                 )
             )
 
-    # Uncomment the lines below to log the LLM call results
-    # logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
-    # logger.debug(f"Accumulated answer: {accumulated_answer}")
+    if LOG_ONYX_MODEL_INTERACTIONS:
+        logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
+        logger.debug(f"Accumulated answer: {accumulated_answer}")
+
     if tool_calls:
         tool_calls_str = "\n".join(
             f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"
