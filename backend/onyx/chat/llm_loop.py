@@ -27,6 +27,7 @@ from onyx.db.models import Persona
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.message_types import AssistantMessage
 from onyx.llm.message_types import ChatCompletionMessage
@@ -517,8 +518,7 @@ def run_llm_step(
     citation_processor: DynamicCitationProcessor,
     state_container: ChatStateContainer,
     final_documents: list[SearchDoc] | None = None,
-    user_id: str | None = None,
-    session_id: str | None = None,
+    user_identity: LLMUserIdentity | None = None,
 ) -> tuple[LlmStepResult, int]:
     # The second return value is for the turn index because reasoning counts on the frontend as a turn
     # TODO this is maybe ok but does not align well with the backend logic too well
@@ -550,8 +550,7 @@ def run_llm_step(
             tools=tool_definitions,
             tool_choice=tool_choice,
             structured_response_format=None,  # TODO
-            user_id=user_id,
-            session_id=session_id,
+            user_identity=user_identity,
         ):
             if packet.usage:
                 usage = packet.usage
@@ -762,8 +761,7 @@ def run_llm_loop(
     tokenizer_func: Callable[[str], list[int]],
     db_session: Session,
     forced_tool_id: int | None = None,
-    llm_user_id: str | None = None,
-    llm_session_id: str | None = None,
+    llm_identity: LLMUserIdentity | None = None,
 ) -> None:
     with trace("run_llm_loop", metadata={"tenant_id": get_current_tenant_id()}):
         # Fix some LiteLLM issues,
@@ -928,8 +926,7 @@ def run_llm_loop(
                 # immediately yield the full set of found documents. This gives us the option to show the
                 # final set of documents immediately if desired.
                 final_documents=gathered_documents,
-                user_id=llm_user_id,
-                session_id=llm_session_id,
+                user_identity=llm_identity,
             )
 
             # Save citation mapping after each LLM step for incremental state updates

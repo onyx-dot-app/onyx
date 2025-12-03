@@ -40,6 +40,7 @@ from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import STANDARD_TOOL_CHOICE_OPTIONS
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
@@ -451,8 +452,7 @@ class LitellmLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         is_legacy_langchain: bool = False,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
@@ -496,8 +496,8 @@ class LitellmLLM(LLM):
         existing_metadata = self._model_kwargs.get("metadata")
         if isinstance(existing_metadata, dict):
             metadata.update(existing_metadata)
-        if SEND_USER_ID_TO_LLM and session_id:
-            metadata["session_id"] = session_id
+        if SEND_USER_ID_TO_LLM and user_identity and user_identity.session_id:
+            metadata["session_id"] = user_identity.session_id
 
         model_kwargs_without_metadata = {
             k: v for k, v in self._model_kwargs.items() if k != "metadata"
@@ -564,14 +564,14 @@ class LitellmLLM(LLM):
 
             if metadata:
                 litellm_args["metadata"] = metadata
-            if SEND_USER_ID_TO_LLM and user_id:
-                litellm_args["user"] = user_id
+            if SEND_USER_ID_TO_LLM and user_identity and user_identity.user_id:
+                litellm_args["user"] = user_identity.user_id
 
-            if SEND_USER_ID_TO_LLM and (user_id or session_id):
+            if SEND_USER_ID_TO_LLM and user_identity:
                 logger.debug(
                     "LLM call identifiers user_id=%s session_id=%s metadata=%s",
-                    user_id,
-                    session_id,
+                    user_identity.user_id,
+                    user_identity.session_id,
                     litellm_args.get("metadata"),
                 )
 
@@ -616,8 +616,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> BaseMessage:
         from litellm import ModelResponse
 
@@ -636,8 +635,7 @@ class LitellmLLM(LLM):
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
                 parallel_tool_calls=False,
-                user_id=user_id,
-                session_id=session_id,
+                user_identity=user_identity,
             ),
         )
         choice = response.choices[0]
@@ -657,8 +655,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[BaseMessage]:
         from litellm import CustomStreamWrapper
 
@@ -673,6 +670,7 @@ class LitellmLLM(LLM):
                 structured_response_format,
                 timeout_override,
                 max_tokens,
+                user_identity=user_identity,
             )
             return
 
@@ -690,8 +688,7 @@ class LitellmLLM(LLM):
                 max_tokens=max_tokens,
                 parallel_tool_calls=False,
                 reasoning_effort="minimal",
-                user_id=user_id,
-                session_id=session_id,
+                user_identity=user_identity,
             ),
         )
         try:
@@ -752,8 +749,7 @@ class LitellmLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: str | None = "medium",
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> ModelResponse:
         from litellm import ModelResponse as LiteLLMModelResponse
 
@@ -774,8 +770,7 @@ class LitellmLLM(LLM):
                 max_tokens=max_tokens,
                 parallel_tool_calls=True,
                 reasoning_effort=reasoning_effort,
-                user_id=user_id,
-                session_id=session_id,
+                user_identity=user_identity,
             ),
         )
 
@@ -790,8 +785,7 @@ class LitellmLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: str | None = "medium",
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from onyx.llm.model_response import from_litellm_model_response_stream
@@ -811,8 +805,7 @@ class LitellmLLM(LLM):
                 max_tokens=max_tokens,
                 parallel_tool_calls=True,
                 reasoning_effort=reasoning_effort,
-                user_id=user_id,
-                session_id=session_id,
+                user_identity=user_identity,
             ),
         )
 

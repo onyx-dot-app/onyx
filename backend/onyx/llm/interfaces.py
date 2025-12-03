@@ -1,4 +1,5 @@
 import abc
+from dataclasses import dataclass
 from collections.abc import Iterator
 from collections.abc import Sequence
 from typing import Literal
@@ -25,6 +26,12 @@ logger = setup_logger()
 STANDARD_TOOL_CHOICE_OPTIONS = ("required", "auto", "none")
 ToolChoiceOptions = Union[Literal["required", "auto", "none"], str]
 LanguageModelInput = Union[Sequence[ChatCompletionMessage], str]
+
+
+@dataclass
+class LLMUserIdentity:
+    user_id: str | None = None
+    session_id: str | None = None
 
 
 class LLMConfig(BaseModel):
@@ -104,8 +111,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> "ModelResponse":
         return self._invoke_implementation(
             prompt,
@@ -114,8 +120,7 @@ class LLM(abc.ABC):
             structured_response_format,
             timeout_override,
             max_tokens,
-            user_id,
-            session_id,
+            user_identity,
         )
 
     @traced(name="invoke llm", type="llm")
@@ -127,8 +132,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> BaseMessage:
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
@@ -140,8 +144,7 @@ class LLM(abc.ABC):
             structured_response_format,
             timeout_override,
             max_tokens,
-            user_id,
-            session_id,
+            user_identity,
         )
 
     @abc.abstractmethod
@@ -153,8 +156,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> "ModelResponse":
         raise NotImplementedError
 
@@ -167,8 +169,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
         raise NotImplementedError
 
@@ -181,8 +182,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> BaseMessage:
         raise NotImplementedError
 
@@ -194,8 +194,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
         return self._stream_implementation(
             prompt,
@@ -204,8 +203,7 @@ class LLM(abc.ABC):
             structured_response_format,
             timeout_override,
             max_tokens,
-            user_id,
-            session_id,
+            user_identity,
         )
 
     def stream_langchain(
@@ -216,8 +214,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[BaseMessage]:
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
@@ -229,8 +226,7 @@ class LLM(abc.ABC):
             structured_response_format,
             timeout_override,
             max_tokens,
-            user_id,
-            session_id,
+            user_identity,
         )
 
         tokens = []
@@ -251,7 +247,6 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[BaseMessage]:
         raise NotImplementedError
