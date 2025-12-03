@@ -14,13 +14,14 @@ export enum PacketType {
   SECTION_END = "section_end",
 
   // Specific tool packets
-  SEARCH_TOOL_START = "internal_search_tool_start",
-  SEARCH_TOOL_DELTA = "internal_search_tool_delta",
-  IMAGE_GENERATION_TOOL_START = "image_generation_tool_start",
-  IMAGE_GENERATION_TOOL_DELTA = "image_generation_tool_delta",
+  SEARCH_TOOL_START = "search_tool_start",
+  SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta",
+  SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta",
+  IMAGE_GENERATION_TOOL_START = "image_generation_start",
+  IMAGE_GENERATION_TOOL_DELTA = "image_generation_final",
   PYTHON_TOOL_START = "python_tool_start",
   PYTHON_TOOL_DELTA = "python_tool_delta",
-  FETCH_TOOL_START = "fetch_tool_start",
+  FETCH_TOOL_START = "open_url_start",
 
   // Custom tool packets
   CUSTOM_TOOL_START = "custom_tool_start",
@@ -29,7 +30,7 @@ export enum PacketType {
   // Reasoning packets
   REASONING_START = "reasoning_start",
   REASONING_DELTA = "reasoning_delta",
-  REASONING_END = "reasoning_end",
+  REASONING_DONE = "reasoning_done",
 
   // Citation packets
   CITATION_START = "citation_start",
@@ -68,14 +69,18 @@ export interface SectionEnd extends BaseObj {
 
 // Specific tool packets
 export interface SearchToolStart extends BaseObj {
-  type: "internal_search_tool_start";
+  type: "search_tool_start";
   is_internet_search?: boolean;
 }
 
-export interface SearchToolDelta extends BaseObj {
-  type: "internal_search_tool_delta";
-  queries: string[] | null;
-  documents: OnyxDocument[] | null;
+export interface SearchToolQueriesDelta extends BaseObj {
+  type: "search_tool_queries_delta";
+  queries: string[];
+}
+
+export interface SearchToolDocumentsDelta extends BaseObj {
+  type: "search_tool_documents_delta";
+  documents: OnyxDocument[];
 }
 
 export type ImageShape = "square" | "landscape" | "portrait";
@@ -88,11 +93,11 @@ interface GeneratedImage {
 }
 
 export interface ImageGenerationToolStart extends BaseObj {
-  type: "image_generation_tool_start";
+  type: "image_generation_start";
 }
 
 export interface ImageGenerationToolDelta extends BaseObj {
-  type: "image_generation_tool_delta";
+  type: "image_generation_final";
   images: GeneratedImage[];
 }
 
@@ -109,9 +114,8 @@ export interface PythonToolDelta extends BaseObj {
 }
 
 export interface FetchToolStart extends BaseObj {
-  type: "fetch_tool_start";
-  queries: string[] | null;
-  documents: OnyxDocument[] | null;
+  type: "open_url_start";
+  documents: OnyxDocument[];
 }
 
 // Custom Tool Packets
@@ -167,7 +171,11 @@ export type StopObj = Stop;
 export type SectionEndObj = SectionEnd;
 
 // Specific tool objects
-export type SearchToolObj = SearchToolStart | SearchToolDelta | SectionEnd;
+export type SearchToolObj =
+  | SearchToolStart
+  | SearchToolQueriesDelta
+  | SearchToolDocumentsDelta
+  | SectionEnd;
 export type ImageGenerationToolObj =
   | ImageGenerationToolStart
   | ImageGenerationToolDelta
@@ -201,57 +209,57 @@ export type ObjTypes =
 
 // Packet wrapper for streaming objects
 export interface Packet {
-  ind: number;
+  turn_index: number;
   obj: ObjTypes;
 }
 
 export interface ChatPacket {
-  ind: number;
+  turn_index: number;
   obj: ChatObj;
 }
 
 export interface StopPacket {
-  ind: number;
+  turn_index: number;
   obj: StopObj;
 }
 
 export interface CitationPacket {
-  ind: number;
+  turn_index: number;
   obj: CitationObj;
 }
 
 // New specific tool packet types
 export interface SearchToolPacket {
-  ind: number;
+  turn_index: number;
   obj: SearchToolObj;
 }
 
 export interface ImageGenerationToolPacket {
-  ind: number;
+  turn_index: number;
   obj: ImageGenerationToolObj;
 }
 
 export interface PythonToolPacket {
-  ind: number;
+  turn_index: number;
   obj: PythonToolObj;
 }
 
 export interface FetchToolPacket {
-  ind: number;
+  turn_index: number;
   obj: FetchToolObj;
 }
 
 export interface CustomToolPacket {
-  ind: number;
+  turn_index: number;
   obj: CustomToolObj;
 }
 
 export interface ReasoningPacket {
-  ind: number;
+  turn_index: number;
   obj: ReasoningObj;
 }
 
 export interface SectionEndPacket {
-  ind: number;
+  turn_index: number;
   obj: SectionEndObj;
 }

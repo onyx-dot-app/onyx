@@ -111,7 +111,7 @@ export default function MultiToolRenderer({
   stopPacketSeen,
   onAllToolsDisplayed,
 }: {
-  packetGroups: { ind: number; packets: Packet[] }[];
+  packetGroups: { turn_index: number; packets: Packet[] }[];
   chatState: FullChatState;
   isComplete: boolean;
   isFinalAnswerComing: boolean;
@@ -149,7 +149,7 @@ export default function MultiToolRenderer({
   if (!isComplete) {
     // Get the tools to display based on visibleTools
     const toolsToDisplay = toolGroups.filter((group) =>
-      visibleTools.has(group.ind)
+      visibleTools.has(group.turn_index)
     );
 
     if (toolsToDisplay.length === 0) {
@@ -175,7 +175,7 @@ export default function MultiToolRenderer({
 
               return (
                 <div
-                  key={toolGroup.ind}
+                  key={toolGroup.turn_index}
                   style={{ display: isVisible ? "block" : "none" }}
                 >
                   <RendererComponent
@@ -183,9 +183,9 @@ export default function MultiToolRenderer({
                     chatState={chatState}
                     onComplete={() => {
                       // When a tool completes rendering, track it in the hook
-                      const toolInd = toolGroup.ind;
-                      if (toolInd !== undefined) {
-                        handleToolComplete(toolInd);
+                      const toolTurnIndex = toolGroup.turn_index;
+                      if (toolTurnIndex !== undefined) {
+                        handleToolComplete(toolTurnIndex);
                       }
                     }}
                     animate
@@ -320,14 +320,14 @@ export default function MultiToolRenderer({
 
               return (
                 <RendererComponent
-                  key={toolGroup.ind}
+                  key={toolGroup.turn_index}
                   packets={toolGroup.packets}
                   chatState={chatState}
                   onComplete={() => {
                     // When a tool completes rendering, track it in the hook
-                    const toolInd = toolGroup.ind;
-                    if (toolInd !== undefined) {
-                      handleToolComplete(toolInd);
+                    const toolTurnIndex = toolGroup.turn_index;
+                    if (toolTurnIndex !== undefined) {
+                      handleToolComplete(toolTurnIndex);
                     }
                   }}
                   animate

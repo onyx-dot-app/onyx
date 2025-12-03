@@ -4,7 +4,8 @@ import {
   PacketType,
   SearchToolPacket,
   SearchToolStart,
-  SearchToolDelta,
+  SearchToolQueriesDelta,
+  SearchToolDocumentsDelta,
   SectionEnd,
 } from "../../../services/streamingModels";
 import { MessageRenderer } from "../interfaces";
@@ -38,21 +39,33 @@ const constructCurrentSearchState = (
   const searchStart = packets.find(
     (packet) => packet.obj.type === PacketType.SEARCH_TOOL_START
   )?.obj as SearchToolStart | null;
-  const searchDeltas = packets
-    .filter((packet) => packet.obj.type === PacketType.SEARCH_TOOL_DELTA)
-    .map((packet) => packet.obj as SearchToolDelta);
+
+  // Extract queries from SEARCH_TOOL_QUERIES_DELTA packets
+  const queryDeltas = packets
+    .filter(
+      (packet) => packet.obj.type === PacketType.SEARCH_TOOL_QUERIES_DELTA
+    )
+    .map((packet) => packet.obj as SearchToolQueriesDelta);
+
+  // Extract documents from SEARCH_TOOL_DOCUMENTS_DELTA packets
+  const documentDeltas = packets
+    .filter(
+      (packet) => packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA
+    )
+    .map((packet) => packet.obj as SearchToolDocumentsDelta);
+
   const searchEnd = packets.find(
     (packet) => packet.obj.type === PacketType.SECTION_END
   )?.obj as SectionEnd | null;
 
-  // Extract queries from ToolDelta packets
-  const queries = searchDeltas
+  // Extract queries from query delta packets
+  const queries = queryDeltas
     .flatMap((delta) => delta?.queries || [])
     .filter((query, index, arr) => arr.indexOf(query) === index); // Remove duplicates
 
-  // Extract documents/results from ToolDelta packets
+  // Extract documents/results from document delta packets
   const seenDocIds = new Set<string>();
-  const results = searchDeltas
+  const results = documentDeltas
     .flatMap((delta) => delta?.documents || [])
     .filter((doc) => {
       if (!doc || !doc.document_id) return false;

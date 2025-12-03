@@ -346,7 +346,7 @@ describe("MultiToolRenderer - Edge Cases", () => {
   });
 
   test("handles empty packet groups gracefully", () => {
-    const emptyGroups: { ind: number; packets: any[] }[] = [];
+    const emptyGroups: { turn_index: number; packets: any[] }[] = [];
 
     const { container } = render(
       <MultiToolRenderer

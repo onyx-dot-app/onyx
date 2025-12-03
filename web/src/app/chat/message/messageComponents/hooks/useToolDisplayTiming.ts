@@ -3,17 +3,17 @@ import { useMemo, useState, useCallback, useEffect } from "react";
 import { useRef } from "react";
 
 function getInitialTools(
-  toolGroups: { ind: number; packets: Packet[] }[],
+  toolGroups: { turn_index: number; packets: Packet[] }[],
   isComplete: boolean
 ): Set<number> {
   if (isComplete) {
-    return new Set(toolGroups.map((group) => group.ind));
+    return new Set(toolGroups.map((group) => group.turn_index));
   }
   return new Set();
 }
 
 export function useToolDisplayTiming(
-  toolGroups: { ind: number; packets: Packet[] }[],
+  toolGroups: { turn_index: number; packets: Packet[] }[],
   isFinalAnswerComing: boolean,
   isComplete: boolean
 ) {
@@ -28,7 +28,7 @@ export function useToolDisplayTiming(
     // if the final answer is already coming, then we can just assume all tools
     // are complete. This happens when you switch back into a mid-stream chat.
     isFinalAnswerComing
-      ? new Set(toolGroups.map((group) => group.ind))
+      ? new Set(toolGroups.map((group) => group.turn_index))
       : getInitialTools(toolGroups, isComplete)
   );
 
@@ -46,29 +46,31 @@ export function useToolDisplayTiming(
 
     // First tool is always visible
     if (visibleTools.size === 0 && toolGroups[0]) {
-      setVisibleTools(new Set([toolGroups[0].ind]));
-      toolStartTimesRef.current.set(toolGroups[0].ind, Date.now());
+      setVisibleTools(new Set([toolGroups[0].turn_index]));
+      toolStartTimesRef.current.set(toolGroups[0].turn_index, Date.now());
       return;
     }
 
     // Find the next tool to show
     const visibleToolsArray = Array.from(visibleTools);
     const lastVisibleToolIndex = toolGroups.findIndex(
-      (group) => group.ind === visibleToolsArray[visibleToolsArray.length - 1]
+      (group) =>
+        group.turn_index === visibleToolsArray[visibleToolsArray.length - 1]
     );
 
     // Check if the last visible tool is completed
-    const lastVisibleToolInd = toolGroups[lastVisibleToolIndex]?.ind;
+    const lastVisibleToolTurnIndex =
+      toolGroups[lastVisibleToolIndex]?.turn_index;
     if (
-      lastVisibleToolInd !== undefined &&
-      completedToolInds.has(lastVisibleToolInd) &&
+      lastVisibleToolTurnIndex !== undefined &&
+      completedToolInds.has(lastVisibleToolTurnIndex) &&
       lastVisibleToolIndex < toolGroups.length - 1
     ) {
       // Show the next tool
       const nextTool = toolGroups[lastVisibleToolIndex + 1];
       if (nextTool) {
-        setVisibleTools((prev) => new Set(prev).add(nextTool.ind));
-        toolStartTimesRef.current.set(nextTool.ind, Date.now());
+        setVisibleTools((prev) => new Set(prev).add(nextTool.turn_index));
+        toolStartTimesRef.current.set(nextTool.turn_index, Date.now());
       }
     }
   }, [toolGroups, completedToolInds, visibleTools.size]);
@@ -133,9 +135,11 @@ export function useToolDisplayTiming(
     if (toolGroups.length === 0) return true;
 
     // All tools are displayed if they're all visible and completed
-    const allVisible = toolGroups.every((group) => visibleTools.has(group.ind));
+    const allVisible = toolGroups.every((group) =>
+      visibleTools.has(group.turn_index)
+    );
     const allCompleted = toolGroups.every((group) =>
-      completedToolInds.has(group.ind)
+      completedToolInds.has(group.turn_index)
     );
 
     return allVisible && allCompleted && isFinalAnswerComing;
