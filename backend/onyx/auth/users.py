@@ -1242,20 +1242,14 @@ async def optional_user(
 ) -> User | None:
     user = await _check_for_saml_and_jwt(request, user, async_db_session)
 
-    # check if a PAT is present (before API key)
-    if user is None:
-        hashed_pat = get_hashed_pat_from_request(request)
-        if hashed_pat:
+    try:
+        if hashed_pat := get_hashed_pat_from_request(request):
             user = await fetch_user_for_pat(hashed_pat, async_db_session)
-
-    # check if an API key is present
-    if user is None:
-        try:
-            hashed_api_key = get_hashed_api_key_from_request(request)
-        except ValueError:
-            hashed_api_key = None
-        if hashed_api_key:
+        elif hashed_api_key := get_hashed_api_key_from_request(request):
             user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
+    except Exception:
+        logger.warning("Issue with validating authentication token")
+        return None
 
     return user
 
