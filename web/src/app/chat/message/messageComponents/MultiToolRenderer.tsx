@@ -138,13 +138,6 @@ function ExpandedToolItem({
   );
 }
 
-// Helper function to check if a tool group has a SECTION_END packet (indicating completion)
-function hasSectionEnd(packets: Packet[]): boolean {
-  return packets.some((packet) => packet.obj.type === PacketType.SECTION_END);
-}
-
-// React component wrapper to avoid hook count issues in map loops
-
 // Multi-tool renderer component for grouped tools
 export default function MultiToolRenderer({
   packetGroups,
@@ -153,6 +146,7 @@ export default function MultiToolRenderer({
   isFinalAnswerComing,
   stopPacketSeen,
   onAllToolsDisplayed,
+  isStreaming,
 }: {
   packetGroups: { turn_index: number; packets: Packet[] }[];
   chatState: FullChatState;
@@ -160,6 +154,7 @@ export default function MultiToolRenderer({
   isFinalAnswerComing: boolean;
   stopPacketSeen: boolean;
   onAllToolsDisplayed?: () => void;
+  isStreaming?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isStreamingExpanded, setIsStreamingExpanded] = useState(false);
@@ -169,6 +164,14 @@ export default function MultiToolRenderer({
       (group) => group.packets[0] && isToolPacket(group.packets[0], false)
     );
   }, [packetGroups]);
+
+  // Stop shimmering when:
+  // 1. stopPacketSeen is true (STOP packet arrived - for deep research/agent framework)
+  // 2. isStreaming is false (global chat state changed to "input" - for regular searches)
+  // 3. isComplete is true (all tools finished)
+  const shouldStopShimmering = useMemo(() => {
+    return stopPacketSeen || isStreaming === false || isComplete;
+  }, [stopPacketSeen, isStreaming, isComplete]);
 
   // Transform tool groups into display items, splitting internal search tools into two steps
   const displayItems = useMemo((): DisplayItem[] => {
@@ -377,13 +380,31 @@ export default function MultiToolRenderer({
                             }
                           >
                             {icon ? (
-                              <span className="text-shimmer-base">
+                              <span
+                                className={cn(
+                                  // Only shimmer icon if generation NOT stopped
+                                  !shouldStopShimmering && "text-shimmer-base"
+                                )}
+                              >
                                 {icon({ size: 14 })}
                               </span>
                             ) : null}
-                            <span className="loading-text">{status}</span>
+                            <span
+                              className={cn(
+                                // Only shimmer if generation NOT stopped
+                                !shouldStopShimmering && "loading-text"
+                              )}
+                            >
+                              {status}
+                            </span>
                             {itemsToDisplay.length > 1 && isLastItem && (
-                              <span className="ml-1 text-shimmer-base">
+                              <span
+                                className={cn(
+                                  "ml-1",
+                                  // Only shimmer chevron if generation NOT stopped
+                                  !shouldStopShimmering && "text-shimmer-base"
+                                )}
+                              >
                                 {isStreamingExpanded ? (
                                   <FiChevronDown size={14} />
                                 ) : (

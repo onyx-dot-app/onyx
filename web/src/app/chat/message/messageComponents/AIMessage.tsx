@@ -18,6 +18,7 @@ import {
   useChatSessionStore,
   useDocumentSidebarVisible,
   useSelectedNodeForDocDisplay,
+  useCurrentChatState,
 } from "@/app/chat/stores/useChatSessionStore";
 import { handleCopy } from "@/app/chat/message/copyingUtils";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
@@ -71,6 +72,9 @@ export default function AIMessage({
   const markdownRef = useRef<HTMLDivElement>(null);
   const { popup, setPopup } = usePopup();
   const { handleFeedbackChange } = useFeedbackController({ setPopup });
+
+  // Get the global chat state to know if we're currently streaming
+  const globalChatState = useCurrentChatState();
 
   const modal = useCreateModal();
   const [feedbackModalProps, setFeedbackModalProps] =
@@ -478,6 +482,9 @@ export default function AIMessage({
                                       finalAnswerComingRef.current
                                     }
                                     stopPacketSeen={stopPacketSeen}
+                                    isStreaming={
+                                      globalChatState === "streaming"
+                                    }
                                     onAllToolsDisplayed={() =>
                                       setFinalAnswerComing(true)
                                     }
