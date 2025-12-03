@@ -39,6 +39,14 @@ export function isDisplayPacket(packet: Packet) {
   );
 }
 
+export function isSearchToolPacket(packet: Packet): boolean {
+  return (
+    packet.obj.type === PacketType.SEARCH_TOOL_START ||
+    packet.obj.type === PacketType.SEARCH_TOOL_QUERIES_DELTA ||
+    packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA
+  );
+}
+
 export function isStreamingComplete(packets: Packet[]) {
   return packets.some((packet) => packet.obj.type === PacketType.STOP);
 }
