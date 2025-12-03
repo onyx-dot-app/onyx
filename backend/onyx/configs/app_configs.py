@@ -24,6 +24,13 @@ APP_PORT = 8080
 # prefix from requests directed towards the API server. In these cases, set this to `/api`
 APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 
+# Whether to send user ID (email or placeholder) and session ID to the LLM provider
+# Set to "false" or "0" to disable
+SEND_USER_ID_TO_LLM = os.environ.get("SEND_USER_ID_TO_LLM", "true").lower() not in [
+    "false",
+    "0",
+]
+
 #####
 # User Facing Features Configs
 #####

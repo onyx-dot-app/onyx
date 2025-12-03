@@ -30,6 +30,7 @@ from langchain_core.prompt_values import PromptValue
 
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.configs.app_configs import SEND_USER_ID_TO_LLM
 from onyx.configs.chat_configs import QA_TIMEOUT
 from onyx.configs.model_configs import (
     DISABLE_LITELLM_STREAMING,
@@ -450,6 +451,8 @@ class LitellmLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         is_legacy_langchain: bool = False,
+        user_id: str | None = None,
+        session_id: str | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
@@ -489,27 +492,38 @@ class LitellmLLM(LLM):
         else:
             model_provider = self.config.model_provider
 
+        metadata: dict[str, Any] = {}
+        existing_metadata = self._model_kwargs.get("metadata")
+        if isinstance(existing_metadata, dict):
+            metadata.update(existing_metadata)
+        if SEND_USER_ID_TO_LLM and session_id:
+            metadata["session_id"] = session_id
+
+        model_kwargs_without_metadata = {
+            k: v for k, v in self._model_kwargs.items() if k != "metadata"
+        }
+
         try:
-            return litellm.completion(
-                mock_response=MOCK_LLM_RESPONSE,
+            litellm_args: dict[str, Any] = {
+                "mock_response": MOCK_LLM_RESPONSE,
                 # model choice
                 # model="openai/gpt-4",
-                model=f"{model_provider}/{self.config.deployment_name or self.config.model_name}",
+                "model": f"{model_provider}/{self.config.deployment_name or self.config.model_name}",
                 # NOTE: have to pass in None instead of empty string for these
                 # otherwise litellm can have some issues with bedrock
-                api_key=self._api_key or None,
-                base_url=self._api_base or None,
-                api_version=self._api_version or None,
-                custom_llm_provider=self._custom_llm_provider or None,
+                "api_key": self._api_key or None,
+                "base_url": self._api_base or None,
+                "api_version": self._api_version or None,
+                "custom_llm_provider": self._custom_llm_provider or None,
                 # actual input
-                messages=processed_prompt,
-                tools=tools,
-                tool_choice=tool_choice_formatted,
+                "messages": processed_prompt,
+                "tools": tools,
+                "tool_choice": tool_choice_formatted,
                 # streaming choice
-                stream=stream,
+                "stream": stream,
                 # model params
-                temperature=(1 if is_reasoning else self._temperature),
-                timeout=timeout_override or self._timeout,
+                "temperature": (1 if is_reasoning else self._temperature),
+                "timeout": timeout_override or self._timeout,
                 **({"stream_options": {"include_usage": True}} if stream else {}),
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
@@ -545,8 +559,23 @@ class LitellmLLM(LLM):
                     else {}
                 ),
                 **({self._max_token_param: max_tokens} if max_tokens else {}),
-                **self._model_kwargs,
-            )
+                **model_kwargs_without_metadata,
+            }
+
+            if metadata:
+                litellm_args["metadata"] = metadata
+            if SEND_USER_ID_TO_LLM and user_id:
+                litellm_args["user"] = user_id
+
+            if SEND_USER_ID_TO_LLM and (user_id or session_id):
+                logger.debug(
+                    "LLM call identifiers user_id=%s session_id=%s metadata=%s",
+                    user_id,
+                    session_id,
+                    litellm_args.get("metadata"),
+                )
+
+            return litellm.completion(**litellm_args)
         except Exception as e:
 
             self._record_error(original_prompt, e, is_legacy_langchain)
@@ -587,6 +616,8 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
     ) -> BaseMessage:
         from litellm import ModelResponse
 
@@ -605,6 +636,8 @@ class LitellmLLM(LLM):
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
                 parallel_tool_calls=False,
+                user_id=user_id,
+                session_id=session_id,
             ),
         )
         choice = response.choices[0]
@@ -624,6 +657,8 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
     ) -> Iterator[BaseMessage]:
         from litellm import CustomStreamWrapper
 
@@ -655,6 +690,8 @@ class LitellmLLM(LLM):
                 max_tokens=max_tokens,
                 parallel_tool_calls=False,
                 reasoning_effort="minimal",
+                user_id=user_id,
+                session_id=session_id,
             ),
         )
         try:
@@ -715,6 +752,8 @@ class LitellmLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: str | None = "medium",
+        user_id: str | None = None,
+        session_id: str | None = None,
     ) -> ModelResponse:
         from litellm import ModelResponse as LiteLLMModelResponse
 
@@ -735,6 +774,8 @@ class LitellmLLM(LLM):
                 max_tokens=max_tokens,
                 parallel_tool_calls=True,
                 reasoning_effort=reasoning_effort,
+                user_id=user_id,
+                session_id=session_id,
             ),
         )
 
@@ -749,6 +790,8 @@ class LitellmLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: str | None = "medium",
+        user_id: str | None = None,
+        session_id: str | None = None,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from onyx.llm.model_response import from_litellm_model_response_stream
@@ -768,6 +811,8 @@ class LitellmLLM(LLM):
                 max_tokens=max_tokens,
                 parallel_tool_calls=True,
                 reasoning_effort=reasoning_effort,
+                user_id=user_id,
+                session_id=session_id,
             ),
         )
 

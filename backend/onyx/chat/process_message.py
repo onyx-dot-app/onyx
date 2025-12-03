@@ -389,6 +389,11 @@ def stream_chat_message_objects(
 
     try:
         user_id = user.id if user is not None else None
+        llm_user_id = (
+            user.email
+            if user is not None and getattr(user, "email", None)
+            else (str(user_id) if user_id else "anonymous_user")
+        )
 
         chat_session = get_chat_session_by_id(
             chat_session_id=new_msg_req.chat_session_id,
@@ -399,6 +404,7 @@ def stream_chat_message_objects(
 
         message_text = new_msg_req.message
         chat_session_id = new_msg_req.chat_session_id
+        llm_session_id = str(chat_session_id)
         parent_id = new_msg_req.parent_message_id
         reference_doc_ids = new_msg_req.search_doc_ids
         retrieval_options = new_msg_req.retrieval_options
@@ -607,6 +613,8 @@ def stream_chat_message_objects(
             forced_tool_id=(
                 new_msg_req.forced_tool_ids[0] if new_msg_req.forced_tool_ids else None
             ),
+            llm_user_id=llm_user_id,
+            llm_session_id=llm_session_id,
         )
 
         # Determine if stopped by user
