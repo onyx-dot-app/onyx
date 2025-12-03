@@ -43,28 +43,44 @@ def get_federated_retrieval_functions(
     if slack_context:
         logger.info("Slack context detected, checking for Slack bot setup...")
 
-        # If document_set_names is specified, check if any Slack federated connector
-        # is associated with those document sets before enabling Slack federated search
-        if document_set_names:
-            slack_federated_mappings = (
-                get_federated_connector_document_set_mappings_by_document_set_names(
-                    db_session, document_set_names
-                )
+        # Slack federated search requires a Slack federated connector to be linked
+        # via document sets. If no document sets are provided, skip Slack federated search.
+        if not document_set_names:
+            logger.info(
+                "Skipping Slack federated search: no document sets provided, "
+                "Slack federated connector must be linked via document sets"
             )
-            # Check if any of the mappings are for a Slack federated connector
-            has_slack_federated_connector = any(
-                mapping.federated_connector.source
+            return []
+
+        # Check if any Slack federated connector is associated with the document sets
+        # and extract its config (entities) for channel filtering
+        slack_federated_connector_config: dict[str, Any] | None = None
+        slack_federated_mappings = (
+            get_federated_connector_document_set_mappings_by_document_set_names(
+                db_session, document_set_names
+            )
+        )
+        for mapping in slack_federated_mappings:
+            if (
+                mapping.federated_connector is not None
+                and mapping.federated_connector.source
                 == FederatedConnectorSource.FEDERATED_SLACK
-                for mapping in slack_federated_mappings
-                if mapping.federated_connector is not None
-            )
-            if not has_slack_federated_connector:
-                logger.info(
-                    f"Skipping Slack federated search: document sets {document_set_names} "
-                    "are not associated with any Slack federated connector"
+            ):
+                slack_federated_connector_config = (
+                    mapping.federated_connector.config or {}
                 )
-                # Return empty list - no Slack federated search for this context
-                return []
+                logger.info(
+                    f"Found Slack federated connector config: {slack_federated_connector_config}"
+                )
+                break
+
+        if slack_federated_connector_config is None:
+            logger.info(
+                f"Skipping Slack federated search: document sets {document_set_names} "
+                "are not associated with any Slack federated connector"
+            )
+            # Return empty list - no Slack federated search for this context
+            return []
 
         try:
             slack_bots = fetch_slack_bots(db_session)
@@ -113,16 +129,23 @@ def get_federated_retrieval_functions(
                 # Capture variables by value to avoid lambda closure issues
                 bot_token = tenant_slack_bot.bot_token
 
+                # Use connector config for channel filtering (guaranteed to exist at this point)
+                connector_entities = slack_federated_connector_config
+                logger.info(
+                    f"Using Slack federated connector entities for bot context: {connector_entities}"
+                )
+
                 def create_slack_retrieval_function(
                     conn: FederatedConnector,
                     token: str,
                     ctx: SlackContext,
                     bot_tok: str,
+                    entities: dict[str, Any],
                 ) -> Callable[[ChunkIndexRequest], list[InferenceChunk]]:
                     def retrieval_fn(query: ChunkIndexRequest) -> list[InferenceChunk]:
                         return conn.search(
                             query,
-                            {},  # Empty entities for Slack context
+                            entities,  # Use connector-level entities for channel filtering
                             access_token=token,
                             limit=None,  # Let connector use its own max_messages_per_query config
                             slack_event_context=ctx,
@@ -134,7 +157,11 @@ def get_federated_retrieval_functions(
                 federated_retrieval_infos_slack.append(
                     FederatedRetrievalInfo(
                         retrieval_function=create_slack_retrieval_function(
-                            connector, access_token, slack_context, bot_token
+                            connector,
+                            access_token,
+                            slack_context,
+                            bot_token,
+                            connector_entities,
                         ),
                         source=FederatedConnectorSource.FEDERATED_SLACK,
                     )
