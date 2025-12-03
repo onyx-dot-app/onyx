@@ -6,6 +6,9 @@ concurrency:
 on:
   merge_group:
   pull_request: null
+  push:
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read
