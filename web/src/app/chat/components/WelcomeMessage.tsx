@@ -34,7 +34,7 @@ export default function WelcomeMessage({
           data-testid="assistant-name-display"
           className="flex flex-row items-center gap-3"
         >
-          <AgentAvatar agent={agent} size={48} />
+          <AgentAvatar agent={agent} size={36} />
           <Text headingH2>{agent.name}</Text>
         </div>
         {agent.description && (
