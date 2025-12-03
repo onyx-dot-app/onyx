@@ -24,8 +24,7 @@ dynamic = ["version"]
 Repository = "https://github.com/onyx-dot-app/onyx"
 
 [tool.hatch.build]
-include = ["go.mod", "go.sum", "main.go", "cmd/**/*.go"]
-artifacts = ["gonyx"]
+include = ["go.mod", "go.sum", "main.go", "**/*.go"]
 
 [tool.hatch.version]
 source = "vcs"
