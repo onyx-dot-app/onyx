@@ -141,7 +141,6 @@ export default function OpenApiActionCard({
               onAuthenticate(tool);
             }}
             onReconnect={() => handleConnectionUpdate(true)}
-            onDelete={() => {}}
           />
         </div>
 

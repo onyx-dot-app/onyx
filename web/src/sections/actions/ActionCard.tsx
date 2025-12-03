@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import SvgServer from "@/icons/server";
 import ActionCardHeader from "@/sections/actions/ActionCardHeader";
-import MCPActions from "@/sections/actions/MCPActions";
+import Actions from "@/sections/actions/Actions";
 import ToolsSection from "@/sections/actions/ToolsSection";
 import ToolsList from "@/sections/actions/ToolsList";
 import { cn } from "@/lib/utils";
@@ -176,7 +176,7 @@ export default function ActionCard({
           />
 
           {/* Action Buttons */}
-          <MCPActions
+          <Actions
             status={status}
             serverName={title}
             onDisconnect={onDisconnect}

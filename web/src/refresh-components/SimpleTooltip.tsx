@@ -35,7 +35,12 @@ export default function SimpleTooltip({
   // If no hover content, just render children without tooltip
   if (!hoverContent) return <>{children}</>;
 
-  const triggerChild = React.isValidElement(children) ? (
+  // TooltipTrigger `asChild` expects a ref-aware DOM element; wrap anything
+  // else in a span so non-forwardRef components and fragments don't crash.
+  const isDomElement =
+    React.isValidElement(children) && typeof children.type === "string";
+
+  const triggerChild = isDomElement ? (
     children
   ) : (
     <span className="inline-flex">{children}</span>

@@ -194,7 +194,7 @@ export default function OpenApiActionsList() {
       addOpenAPIActionModal.toggle(false);
       disconnectModal.toggle(true);
     },
-    [disconnectModal, openAPIAuthModal]
+    [disconnectModal, addOpenAPIActionModal]
   );
 
   const handleConfirmDisconnectFromModal = useCallback(async () => {
