@@ -204,6 +204,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.testrail.connector",
         class_name="TestRailConnector",
     ),
+    DocumentSource.AZURE_DEVOPS: ConnectorMapping(
+        module_path="onyx.connectors.azure_devops.connector",
+        class_name="AzureDevOpsConnector",
+    ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
         module_path="onyx.connectors.mock_connector.connector",
