@@ -43,7 +43,6 @@ interface OpenAPIAuthenticationModalProps {
   onConnect?: (values: OpenAPIAuthFormValues) => Promise<void> | void;
   onSkip?: () => void;
   entityName?: string | null;
-  onDisconnect?: () => void;
 }
 
 const redirectUri = "https://cloud.onyx.app/oauth-config/callback";
@@ -77,7 +76,6 @@ export default function OpenAPIAuthenticationModal({
   onConnect,
   onSkip,
   entityName = null,
-  onDisconnect,
 }: OpenAPIAuthenticationModalProps) {
   const [existingOAuthConfig, setExistingOAuthConfig] =
     useState<OAuthConfig | null>(null);

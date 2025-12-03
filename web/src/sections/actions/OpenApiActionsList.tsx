@@ -24,6 +24,7 @@ export default function OpenApiActionsList() {
   });
   const addOpenAPIActionModal = useCreateModal();
   const openAPIAuthModal = useCreateModal();
+  const disconnectModal = useCreateModal();
   const { popup, setPopup } = usePopup();
   const [selectedTool, setSelectedTool] = useState<ToolSnapshot | null>(null);
   const [toolBeingEdited, setToolBeingEdited] = useState<ToolSnapshot | null>(
@@ -31,7 +32,6 @@ export default function OpenApiActionsList() {
   );
   const [toolPendingDisconnect, setToolPendingDisconnect] =
     useState<ToolSnapshot | null>(null);
-  const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -188,10 +188,13 @@ export default function OpenApiActionsList() {
     [mutateOpenApiTools, setPopup]
   );
 
-  const handleOpenDisconnectModal = useCallback((tool: ToolSnapshot) => {
-    setToolPendingDisconnect(tool);
-    setIsDisconnectModalOpen(true);
-  }, []);
+  const handleOpenDisconnectModal = useCallback(
+    (tool: ToolSnapshot) => {
+      setToolPendingDisconnect(tool);
+      disconnectModal.toggle(true);
+    },
+    [disconnectModal]
+  );
 
   const handleConfirmDisconnectFromModal = useCallback(async () => {
     if (!toolPendingDisconnect) {
@@ -203,10 +206,10 @@ export default function OpenApiActionsList() {
       await handleDisableTool(toolPendingDisconnect);
     } finally {
       setIsDisconnecting(false);
-      setIsDisconnectModalOpen(false);
+      disconnectModal.toggle(false);
       setToolPendingDisconnect(null);
     }
-  }, [handleDisableTool, toolPendingDisconnect]);
+  }, [disconnectModal, handleDisableTool, toolPendingDisconnect]);
 
   const handleDeleteToolFromModal = useCallback(async () => {
     if (!toolPendingDisconnect || isDeleting) {
@@ -236,10 +239,16 @@ export default function OpenApiActionsList() {
       });
     } finally {
       setIsDeleting(false);
-      setIsDisconnectModalOpen(false);
+      disconnectModal.toggle(false);
       setToolPendingDisconnect(null);
     }
-  }, [isDeleting, mutateOpenApiTools, setPopup, toolPendingDisconnect]);
+  }, [
+    disconnectModal,
+    isDeleting,
+    mutateOpenApiTools,
+    setPopup,
+    toolPendingDisconnect,
+  ]);
 
   const handleAddAction = useCallback(() => {
     setToolBeingEdited(null);
@@ -296,14 +305,10 @@ export default function OpenApiActionsList() {
           setPopup={setPopup}
           existingTool={toolBeingEdited}
           onEditAuthentication={handleEditAuthenticationFromModal}
-          onDisconnectTool={
-            selectedTool
-              ? () => {
-                  handleOpenDisconnectModal(selectedTool);
-                  resetAuthModal();
-                }
-              : undefined
-          }
+          onDisconnectTool={(tool: ToolSnapshot) => {
+            handleOpenDisconnectModal(tool);
+            resetAuthModal();
+          }}
           onSuccess={(tool) => {
             setSelectedTool(tool);
             openAPIAuthModal.toggle(true);
@@ -330,9 +335,9 @@ export default function OpenApiActionsList() {
       </openAPIAuthModal.Provider>
 
       <DisconnectEntityModal
-        isOpen={isDisconnectModalOpen}
+        isOpen={disconnectModal.isOpen}
         onClose={() => {
-          setIsDisconnectModalOpen(false);
+          disconnectModal.toggle(false);
           setToolPendingDisconnect(null);
         }}
         name={toolPendingDisconnect?.name ?? null}

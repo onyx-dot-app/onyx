@@ -1,8 +1,3 @@
-/**
- * Add OpenAPI Action Modal
- *
- * Pure UI implementation based on the Figma spec referenced in the task.
- */
 "use client";
 
 import Link from "next/link";
@@ -104,7 +99,6 @@ export default function AddOpenAPIActionModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [methodSpecs, setMethodSpecs] = useState<MethodSpec[] | null>(null);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
-  const [isDisconnectingTool, setIsDisconnectingTool] = useState(false);
   const isEditMode = Boolean(existingTool);
 
   const handleModalClose = useCallback(
@@ -219,20 +213,6 @@ export default function AddOpenAPIActionModal({
     handleClose();
     onEditAuthentication(existingTool);
   }, [existingTool, onEditAuthentication, handleClose]);
-
-  const handleDisconnectToolClick = useCallback(async () => {
-    if (!existingTool || !onDisconnectTool || isDisconnectingTool) {
-      return;
-    }
-    try {
-      setIsDisconnectingTool(true);
-      await onDisconnectTool(existingTool);
-    } catch (error) {
-      console.error("Failed to disable tool", error);
-    } finally {
-      setIsDisconnectingTool(false);
-    }
-  }, [existingTool, onDisconnectTool, isDisconnectingTool]);
 
   const handleSubmit = async (values: OpenAPIActionFormValues) => {
     setIsSubmitting(true);
@@ -499,10 +479,12 @@ export default function AddOpenAPIActionModal({
                                 tertiary
                                 type="button"
                                 tooltip="Disable action"
-                                onClick={handleDisconnectToolClick}
-                                disabled={
-                                  !onDisconnectTool || isDisconnectingTool
-                                }
+                                onClick={() => {
+                                  if (!existingTool || !onDisconnectTool) {
+                                    return;
+                                  }
+                                  onDisconnectTool(existingTool);
+                                }}
                               />
                               <Button
                                 secondary

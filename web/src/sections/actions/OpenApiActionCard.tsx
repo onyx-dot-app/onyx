@@ -36,8 +36,6 @@ export default function OpenApiActionCard({
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const methodSpecs = useMemo<MethodSpec[]>(() => {
     try {
@@ -98,38 +96,6 @@ export default function OpenApiActionCard({
     [updatingStatus, mutateOpenApiTools, tool.enabled, tool.id]
   );
 
-  const handleDelete = useCallback(async () => {
-    if (isDeleting) {
-      return;
-    }
-
-    try {
-      setIsDeleting(true);
-      const response = await deleteCustomTool(tool.id);
-      if (response.data) {
-        setPopup({
-          message: `${tool.name} deleted successfully.`,
-          type: "success",
-        });
-        await mutateOpenApiTools();
-      } else {
-        setPopup({
-          message: response.error || "Failed to delete tool.",
-          type: "error",
-        });
-      }
-    } catch (error) {
-      console.error("Failed to delete OpenAPI tool", error);
-      setPopup({
-        message: "An unexpected error occurred while deleting the tool.",
-        type: "error",
-      });
-    } finally {
-      setIsDeleting(false);
-      setIsConfirmingDelete(false);
-    }
-  }, [isDeleting, mutateOpenApiTools, setPopup, tool.id, tool.name]);
-
   const handleToggleTools = () => {
     setIsToolsExpanded((prev) => !prev);
     if (isToolsExpanded) {
@@ -175,7 +141,7 @@ export default function OpenApiActionCard({
               onAuthenticate(tool);
             }}
             onReconnect={() => handleConnectionUpdate(true)}
-            onDelete={() => setIsConfirmingDelete(true)}
+            onDelete={() => {}}
           />
         </div>
 
@@ -213,19 +179,6 @@ export default function OpenApiActionCard({
             </div>
           )}
         </div>
-      )}
-
-      {isConfirmingDelete && (
-        <ConfirmEntityModal
-          danger
-          entityType="OpenAPI action"
-          entityName={tool.name}
-          onClose={() => setIsConfirmingDelete(false)}
-          onSubmit={handleDelete}
-          additionalDetails="This action will remove the OpenAPI action and its configuration. This cannot be undone."
-          actionButtonText={isDeleting ? "Deleting..." : "Delete"}
-          removeConfirmationText={false}
-        />
       )}
     </div>
   );
