@@ -107,7 +107,7 @@ class TestCodaConnectorValidation:
         """Test that invalid credentials are rejected."""
         conn = CodaConnector()
         
-        with pytest.raises(Exception):  # Should raise ConnectorMissingCredentialError or similar
+        with pytest.raises(ConnectorMissingCredentialError):
             conn.load_credentials({
                 "coda_bearer_token": "invalid_token_12345",
                 "coda_base_url": "https://coda.io/apis/v1",
