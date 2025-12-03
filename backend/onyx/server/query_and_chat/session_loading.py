@@ -179,36 +179,35 @@ def create_custom_tool_packets(
 
 
 def create_fetch_packets(
-    fetches: list[list[SavedSearchDoc]],
+    fetch_docs: list[SavedSearchDoc],
     urls: list[str],
     turn_index: int,
 ) -> list[Packet]:
     packets: list[Packet] = []
-    for fetch in fetches:
-        # Emit start packet
-        packets.append(
-            Packet(
-                turn_index=turn_index,
-                obj=OpenUrlStart(),
-            )
+    # Emit start packet
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=OpenUrlStart(),
         )
-        # Emit URLs packet
-        packets.append(
-            Packet(
-                turn_index=turn_index,
-                obj=OpenUrlUrls(urls=urls),
-            )
+    )
+    # Emit URLs packet
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=OpenUrlUrls(urls=urls),
         )
-        # Emit documents packet
-        packets.append(
-            Packet(
-                turn_index=turn_index,
-                obj=OpenUrlDocuments(
-                    documents=[SearchDoc(**doc.model_dump()) for doc in fetch]
-                ),
-            )
+    )
+    # Emit documents packet
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=OpenUrlDocuments(
+                documents=[SearchDoc(**doc.model_dump()) for doc in fetch_docs]
+            ),
         )
-        packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
+    )
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
     return packets
 
 
@@ -323,7 +322,7 @@ def translate_assistant_message_to_packets(
                             list[str], tool_call.tool_call_arguments.get("urls", [])
                         )
                         packet_list.extend(
-                            create_fetch_packets([fetch_docs], urls, turn_num)
+                            create_fetch_packets(fetch_docs, urls, turn_num)
                         )
 
                     elif tool.in_code_tool_id == ImageGenerationTool.__name__:
