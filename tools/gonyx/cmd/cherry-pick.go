@@ -11,27 +11,40 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// CherryPickOptions holds options for the cherry-pick command
+type CherryPickOptions struct {
+	Releases []string
+}
+
 // NewCherryPickCommand creates a new cherry-pick command
 func NewCherryPickCommand() *cobra.Command {
+	opts := &CherryPickOptions{}
+
 	cmd := &cobra.Command{
 		Use:   "cherry-pick <commit-sha>",
 		Short: "Cherry-pick a commit to a release branch",
 		Long: `Cherry-pick a commit to a release branch and create a PR.
 
 This command will:
-  1. Find the nearest stable version tag (v*.*.*)
+  1. Find the nearest stable version tag (v*.*.* if --release not specified)
   2. Fetch the corresponding release branch (release/vMAJOR.MINOR)
   3. Create a hotfix branch with the cherry-picked commit
   4. Push and create a PR using the GitHub CLI
-  5. Switch back to the original branch`,
+  5. Switch back to the original branch
+
+The --release flag can be specified multiple times to cherry-pick to multiple release branches.`,
 		Args: cobra.ExactArgs(1),
-		Run:  runCherryPick,
+		Run: func(cmd *cobra.Command, args []string) {
+			runCherryPick(cmd, args, opts)
+		},
 	}
+
+	cmd.Flags().StringSliceVar(&opts.Releases, "release", []string{}, "Release version(s) to cherry-pick to (e.g., v1.0, v1.1). Can be specified multiple times.")
 
 	return cmd
 }
 
-func runCherryPick(cmd *cobra.Command, args []string) {
+func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	commitSHA := args[0]
 	log.Debugf("Cherry-picking commit: %s", commitSHA)
 
@@ -48,42 +61,19 @@ func runCherryPick(cmd *cobra.Command, args []string) {
 		shortSHA = shortSHA[:8]
 	}
 
-	// Find the nearest stable tag
-	version, err := findNearestStableTag(commitSHA)
-	if err != nil {
-		log.Fatalf("Failed to find nearest stable tag: %v", err)
-	}
-	log.Infof("Found nearest stable version: %s", version)
-
-	releaseBranch := fmt.Sprintf("release/%s", version)
-	hotfixBranch := fmt.Sprintf("hotfix/%s", shortSHA)
-
-	// Fetch the release branch
-	log.Infof("Fetching release branch: %s", releaseBranch)
-	if err := runGitCommand("fetch", "origin", releaseBranch); err != nil {
-		log.Fatalf("Failed to fetch release branch %s: %v", releaseBranch, err)
-	}
-
-	// Create the hotfix branch from the release branch
-	log.Infof("Creating hotfix branch: %s", hotfixBranch)
-	if err := runGitCommand("checkout", "-b", hotfixBranch, fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
-		log.Fatalf("Failed to create hotfix branch: %v", err)
-	}
-
-	// Cherry-pick the commit
-	log.Infof("Cherry-picking commit: %s", commitSHA)
-	if err := runGitCommand("cherry-pick", commitSHA); err != nil {
-		// Switch back to original branch before exiting on error
-		runGitCommand("checkout", originalBranch)
-		log.Fatalf("Failed to cherry-pick commit: %v", err)
-	}
-
-	// Push the hotfix branch
-	log.Infof("Pushing hotfix branch: %s", hotfixBranch)
-	if err := runGitCommand("push", "-u", "origin", hotfixBranch); err != nil {
-		// Switch back to original branch before exiting on error
-		runGitCommand("checkout", originalBranch)
-		log.Fatalf("Failed to push hotfix branch: %v", err)
+	// Determine which releases to target
+	var releases []string
+	if len(opts.Releases) > 0 {
+		releases = opts.Releases
+		log.Infof("Using specified release versions: %v", releases)
+	} else {
+		// Find the nearest stable tag
+		version, err := findNearestStableTag(commitSHA)
+		if err != nil {
+			log.Fatalf("Failed to find nearest stable tag: %v", err)
+		}
+		releases = []string{version}
+		log.Infof("Auto-detected release version: %s", version)
 	}
 
 	// Get commit message for PR title
@@ -93,22 +83,70 @@ func runCherryPick(cmd *cobra.Command, args []string) {
 		commitMsg = fmt.Sprintf("Hotfix: cherry-pick %s", shortSHA)
 	}
 
+	// Process each release
+	prURLs := []string{}
+	for _, release := range releases {
+		log.Infof("\n--- Processing release %s ---", release)
+		prURL, err := cherryPickToRelease(commitSHA, shortSHA, release, commitMsg, originalBranch)
+		if err != nil {
+			// Switch back to original branch before exiting on error
+			runGitCommand("checkout", originalBranch)
+			log.Fatalf("Failed to cherry-pick to release %s: %v", release, err)
+		}
+		prURLs = append(prURLs, prURL)
+	}
+
+	// Switch back to the original branch
+	log.Infof("\nSwitching back to original branch: %s", originalBranch)
+	if err := runGitCommand("checkout", originalBranch); err != nil {
+		log.Warnf("Failed to switch back to original branch: %v", err)
+	}
+
+	// Print all PR URLs
+	log.Info("\n=== Summary ===")
+	for i, prURL := range prURLs {
+		log.Infof("PR %d: %s", i+1, prURL)
+	}
+}
+
+// cherryPickToRelease cherry-picks a commit to a specific release branch
+func cherryPickToRelease(commitSHA, shortSHA, version, commitMsg, originalBranch string) (string, error) {
+	releaseBranch := fmt.Sprintf("release/%s", version)
+	hotfixBranch := fmt.Sprintf("hotfix/%s-%s", shortSHA, version)
+
+	// Fetch the release branch
+	log.Infof("Fetching release branch: %s", releaseBranch)
+	if err := runGitCommand("fetch", "origin", releaseBranch); err != nil {
+		return "", fmt.Errorf("failed to fetch release branch %s: %w", releaseBranch, err)
+	}
+
+	// Create the hotfix branch from the release branch
+	log.Infof("Creating hotfix branch: %s", hotfixBranch)
+	if err := runGitCommand("checkout", "-b", hotfixBranch, fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
+		return "", fmt.Errorf("failed to create hotfix branch: %w", err)
+	}
+
+	// Cherry-pick the commit
+	log.Infof("Cherry-picking commit: %s", commitSHA)
+	if err := runGitCommand("cherry-pick", commitSHA); err != nil {
+		return "", fmt.Errorf("failed to cherry-pick commit: %w", err)
+	}
+
+	// Push the hotfix branch
+	log.Infof("Pushing hotfix branch: %s", hotfixBranch)
+	if err := runGitCommand("push", "-u", "origin", hotfixBranch); err != nil {
+		return "", fmt.Errorf("failed to push hotfix branch: %w", err)
+	}
+
 	// Create PR using GitHub CLI
 	log.Info("Creating PR...")
 	prURL, err := createPR(hotfixBranch, releaseBranch, commitMsg, commitSHA)
 	if err != nil {
-		// Switch back to original branch before exiting on error
-		runGitCommand("checkout", originalBranch)
-		log.Fatalf("Failed to create PR: %v", err)
+		return "", fmt.Errorf("failed to create PR: %w", err)
 	}
 
 	log.Infof("PR created successfully: %s", prURL)
-
-	// Switch back to the original branch
-	log.Infof("Switching back to original branch: %s", originalBranch)
-	if err := runGitCommand("checkout", originalBranch); err != nil {
-		log.Warnf("Failed to switch back to original branch: %v", err)
-	}
+	return prURL, nil
 }
 
 // getCurrentBranch returns the name of the current git branch
