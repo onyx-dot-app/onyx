@@ -14,7 +14,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 
 const MAX_INPUT_HEIGHT = 200;
 
-interface ChatInputBarProps {
+export interface ChatInputBarProps {
   message: string;
   setMessage: (message: string) => void;
   onSubmit: () => void;
@@ -28,7 +28,7 @@ interface ChatInputBarProps {
   availableTags: Tag[];
 }
 
-export function SimplifiedChatInputBar({
+export default function SimplifiedChatInputBar({
   message,
   setMessage,
   onSubmit,
