@@ -233,6 +233,7 @@ export function SimplifiedChatInputBar({
               onSubmit();
             }
           }}
+          disabled={!message}
         />
       </div>
     </div>
