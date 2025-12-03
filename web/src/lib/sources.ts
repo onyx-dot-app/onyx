@@ -418,7 +418,7 @@ const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Mock Connector",
     category: SourceCategory.Other,
   },
-};
+} as SourceMap;
 
 function fillSourceMetadata(
   partialMetadata: PartialSourceMetadata,
