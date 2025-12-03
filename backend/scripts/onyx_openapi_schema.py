@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
@@ -59,8 +60,11 @@ def generate_client(openapi_json_path: str) -> None:
     if result.returncode == 0:
         print(f"Generated Python client at {output_dir}")
     else:
-        print("Failed to generate Python client.")
-        print("See backend/tests/integration/README.md for setup instructions.")
+        print(
+            "Failed to generate Python client. "
+            "See backend/tests/integration/README.md for setup instructions.",
+            file=sys.stderr,
+        )
 
 
 def main() -> None:
