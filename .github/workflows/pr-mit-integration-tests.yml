@@ -6,6 +6,9 @@ concurrency:
 on:
   merge_group:
     types: [checks_requested]
+  push:
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read

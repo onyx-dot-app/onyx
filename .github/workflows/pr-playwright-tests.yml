@@ -3,7 +3,8 @@ concurrency:
   group: Run-Playwright-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
   cancel-in-progress: true
 
-on: push
+on:
+  push:
 
 permissions:
   contents: read
