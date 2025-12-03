@@ -694,6 +694,9 @@ def run_llm_step(
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
+    if LOG_ONYX_MODEL_INTERACTIONS:
+        logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
+        logger.debug(f"Accumulated answer: {accumulated_answer}")
 
     if tool_calls:
         tool_calls_str = "\n".join(
