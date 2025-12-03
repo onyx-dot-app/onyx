@@ -6,10 +6,7 @@ import SvgSettings from "@/icons/settings";
 export default async function Page() {
   return (
     <div className="mx-auto container">
-      <AdminPageTitle
-        title="Workspace Settings"
-        icon={<SvgSettings className="stroke-text-04 h-8 w-8 my-auto" />}
-      />
+      <AdminPageTitle title="Workspace Settings" icon={SvgSettings} />
 
       <Text className="mb-8">
         Manage general Onyx settings applicable to all users in the workspace.
