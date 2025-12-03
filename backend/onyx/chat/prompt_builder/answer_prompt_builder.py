@@ -4,17 +4,9 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import PromptConfig
 from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
-from onyx.file_store.models import InMemoryChatFile
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.message_types import SystemMessage
-from onyx.llm.message_types import UserMessage
-from onyx.llm.message_types import UserMessageWithText
-from onyx.llm.utils import model_needs_formatting_reenabled
-from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
 from onyx.prompts.chat_prompts import CITATION_REMINDER
 from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
@@ -27,7 +19,6 @@ from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
 from onyx.prompts.chat_prompts import TOOL_SECTION_HEADER
 from onyx.prompts.chat_prompts import USER_INFO_HEADER
 from onyx.prompts.chat_prompts import WEB_SEARCH_GUIDANCE
-from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
 from onyx.prompts.prompt_utils import get_company_context
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.tools.tool import Tool
@@ -223,65 +214,3 @@ def build_system_prompt(
             system_prompt += GENERATE_IMAGE_GUIDANCE
 
     return system_prompt
-
-
-def default_build_system_message(
-    prompt_config: PromptConfig,
-    llm_config: LLMConfig,
-    memories: list[str] | None = None,
-) -> SystemMessage | None:
-    # Build system prompt from default behavior and custom instructions
-    # for backwards compatibility
-    system_prompt = (
-        prompt_config.custom_instructions
-        or prompt_config.default_behavior_system_prompt
-    )
-    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
-    # for OpenAI reasoning models to have correct markdown generation
-    if model_needs_formatting_reenabled(llm_config.model_name):
-        system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
-
-    tag_handled_prompt = handle_onyx_date_awareness(
-        prompt_str=system_prompt,
-        datetime_aware=prompt_config.datetime_aware,
-    )
-
-    if not tag_handled_prompt:
-        return None
-
-    # tag_handled_prompt = handle_company_awareness(tag_handled_prompt)
-
-    # if memories:
-    #     tag_handled_prompt = handle_memories(tag_handled_prompt, memories)
-
-    return SystemMessage(role="system", content=tag_handled_prompt)
-
-
-def default_build_user_message(
-    user_query: str,
-    prompt_config: PromptConfig,
-    files: list[InMemoryChatFile] = [],
-    single_message_history: str | None = None,
-) -> UserMessage:
-    history_block = (
-        HISTORY_BLOCK.format(history_str=single_message_history)
-        if single_message_history
-        else ""
-    )
-
-    user_prompt = (
-        CHAT_USER_CONTEXT_FREE_PROMPT.format(
-            history_block=history_block,
-            task_prompt=prompt_config.reminder,
-            user_query=user_query,
-        )
-        if prompt_config.reminder
-        else user_query
-    )
-
-    user_prompt = user_prompt.strip()
-    # tag_handled_prompt = handle_onyx_date_awareness(
-    #     user_prompt, prompt_config.datetime_aware
-    # )
-    user_msg = UserMessageWithText(role="user", content="N/A")
-    return user_msg
