@@ -5,7 +5,7 @@ import {
   FiChevronRight,
   FiCircle,
 } from "react-icons/fi";
-import { Packet } from "@/app/chat/services/streamingModels";
+import { Packet, PacketType } from "@/app/chat/services/streamingModels";
 import { FullChatState, RendererResult } from "./interfaces";
 import { RendererComponent } from "./renderMessageComponent";
 import { isToolPacket } from "../../services/packetUtils";
@@ -98,6 +98,11 @@ function ExpandedToolItem({
       </div>
     </div>
   );
+}
+
+// Helper function to check if a tool group has a SECTION_END packet (indicating completion)
+function hasSectionEnd(packets: Packet[]): boolean {
+  return packets.some((packet) => packet.obj.type === PacketType.SECTION_END);
 }
 
 // React component wrapper to avoid hook count issues in map loops
@@ -246,7 +251,18 @@ export default function MultiToolRenderer({
                                 {icon({ size: 14 })}
                               </span>
                             ) : null}
-                            <span className="loading-text">{status}</span>
+                            <span
+                              className={cn(
+                                // Only apply loading-text (shimmering) if:
+                                // 1. Tool doesn't have SECTION_END (not complete)
+                                // 2. Stream hasn't been stopped
+                                !hasSectionEnd(toolGroup.packets) &&
+                                  !stopPacketSeen &&
+                                  "loading-text"
+                              )}
+                            >
+                              {status}
+                            </span>
                             {toolsToDisplay.length > 1 && isLastItem && (
                               <span className="ml-1 text-shimmer-base">
                                 {isStreamingExpanded ? (
