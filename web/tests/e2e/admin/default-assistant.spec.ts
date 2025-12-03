@@ -131,9 +131,9 @@ test.describe("Default Assistant Admin Page", () => {
     page,
   }) => {
     // Verify page loads with expected content
-    await expect(
-      page.getByRole("heading", { name: "Default Assistant" })
-    ).toBeVisible();
+    await expect(page.getByTestId("admin-page-title")).toHaveText(
+      "Default Assistant"
+    );
     // Avoid strict mode collision from multiple "Actions" elements
     await expect(page.getByText("Instructions", { exact: true })).toBeVisible();
     await expect(page.getByText("Instructions", { exact: true })).toBeVisible();
