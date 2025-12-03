@@ -1250,7 +1250,7 @@ async def optional_user(
             user = await fetch_user_for_pat(hashed_pat, async_db_session)
         elif hashed_api_key := get_hashed_api_key_from_request(request):
             user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
-    except Exception:
+    except ValueError:
         logger.warning("Issue with validating authentication token")
         return None
 
