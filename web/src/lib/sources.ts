@@ -10,7 +10,6 @@ import {
   GithubIcon,
   GitlabIcon,
   BitbucketIcon,
-  GlobeIcon,
   GmailIcon,
   GongIcon,
   GoogleDriveIcon,
@@ -42,7 +41,6 @@ import {
   FirefliesIcon,
   EgnyteIcon,
   AirtableIcon,
-  FileIcon2,
   GitbookIcon,
   HighspotIcon,
   EmailIcon,
@@ -51,6 +49,9 @@ import {
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
+import SvgGlobe from "@/icons/globe";
+import React from "react";
+import SvgFileText from "@/icons/file-text";
 
 interface PartialSourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;
@@ -378,14 +379,14 @@ const SOURCE_METADATA_MAP: SourceMap = {
 
   // Others
   web: {
-    icon: GlobeIcon,
+    icon: SvgGlobe,
     displayName: "Web",
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/admin/connectors/official/web",
     isPopular: true,
   },
   file: {
-    icon: FileIcon2,
+    icon: SvgFileText,
     displayName: "File",
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/admin/connectors/official/file",
@@ -393,7 +394,7 @@ const SOURCE_METADATA_MAP: SourceMap = {
   },
   user_file: {
     // TODO: write docs for projects and link them here
-    icon: FileIcon2,
+    icon: SvgFileText,
     displayName: "File",
     category: SourceCategory.Other,
     docs: "https://docs.onyx.app/admin/connectors/official/file",
@@ -402,19 +403,19 @@ const SOURCE_METADATA_MAP: SourceMap = {
 
   // Other
   ingestion_api: {
-    icon: GlobeIcon,
+    icon: SvgGlobe,
     displayName: "Ingestion",
     category: SourceCategory.Other,
   },
 
   // Placeholder (non-null default)
   not_applicable: {
-    icon: GlobeIcon,
+    icon: SvgGlobe,
     displayName: "Not Applicable",
     category: SourceCategory.Other,
   },
   mock_connector: {
-    icon: GlobeIcon,
+    icon: SvgGlobe,
     displayName: "Mock Connector",
     category: SourceCategory.Other,
   },
