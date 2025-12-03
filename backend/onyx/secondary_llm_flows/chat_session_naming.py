@@ -1,6 +1,5 @@
 from onyx.chat.chat_utils import combine_message_chain
 from onyx.configs.chat_configs import LANGUAGE_CHAT_NAMING_HINT
-from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.db.models import ChatMessage
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.llm.interfaces import LLM
@@ -16,8 +15,9 @@ def get_renamed_conversation_name(
     full_history: list[ChatMessage],
     llm: LLM,
 ) -> str:
+    max_context_for_naming = 1000
     history_str = combine_message_chain(
-        messages=full_history, token_limit=GEN_AI_HISTORY_CUTOFF
+        messages=full_history, token_limit=max_context_for_naming
     )
 
     language_hint = (

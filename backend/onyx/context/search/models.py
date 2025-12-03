@@ -538,14 +538,6 @@ class SavedSearchDocWithContent(SavedSearchDoc):
     content: str
 
 
-class RetrievalDocs(BaseModel):
-    top_documents: list[SavedSearchDoc]
-
-
-class SearchResponse(RetrievalDocs):
-    llm_indices: list[int]
-
-
 class RetrievalMetricsContainer(BaseModel):
     search_type: SearchType
     metrics: list[ChunkMetric]  # This contains the scores for retrieval as well
