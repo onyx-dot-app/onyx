@@ -11,7 +11,7 @@ import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRen
  * Create a tool packet with sensible defaults
  */
 export const createToolPacket = (
-  ind: number,
+  turn_index: number,
   type: "search" | "custom" | "reasoning" | "fetch" = "search"
 ): Packet => {
   const packetTypes = {
@@ -22,11 +22,11 @@ export const createToolPacket = (
   };
 
   return {
-    ind,
+    turn_index,
     obj: {
       type: packetTypes[type],
-      tool_name: `Tool ${ind + 1}`,
-      tool_id: `tool_${ind}`,
+      tool_name: `Tool ${turn_index + 1}`,
+      tool_id: `tool_${turn_index}`,
     },
   } as Packet;
 };
@@ -36,7 +36,7 @@ export const createToolPacket = (
  */
 export const createToolGroups = (count: number) =>
   Array.from({ length: count }, (_, i) => ({
-    ind: i,
+    turn_index: i,
     packets: [createToolPacket(i)],
   }));
 
@@ -74,7 +74,7 @@ export const renderMultiToolRenderer = (
     stopPacketSeen?: boolean;
     onAllToolsDisplayed?: () => void;
     chatState?: any;
-    packetGroups?: { ind: number; packets: Packet[] }[];
+    packetGroups?: { turn_index: number; packets: Packet[] }[];
   } = {}
 ) => {
   const {

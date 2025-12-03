@@ -111,7 +111,6 @@ def handle_simplified_chat_message(
         user=user,
         db_session=db_session,
         enforce_chat_session_id_for_search_docs=False,
-        bypass_translation=True,
     )
 
     return gather_stream(packets)
