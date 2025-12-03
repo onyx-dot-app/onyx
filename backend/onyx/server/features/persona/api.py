@@ -165,6 +165,7 @@ def patch_agents_display_priorities(
         display_priority_map=display_priority_request.display_priority_map,
         db_session=db_session,
         user=user,
+        commit_db_txn=True,
     )
 
 
