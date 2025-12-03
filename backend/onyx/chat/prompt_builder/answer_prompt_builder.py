@@ -22,6 +22,7 @@ from onyx.prompts.chat_prompts import GENERATE_IMAGE_GUIDANCE
 from onyx.prompts.chat_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_PROMPT
 from onyx.prompts.chat_prompts import OPEN_URLS_GUIDANCE
+from onyx.prompts.chat_prompts import PYTHON_TOOL_GUIDANCE
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
 from onyx.prompts.chat_prompts import TOOL_PERSISTENCE_PROMPT
@@ -36,6 +37,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.timing import log_function_time
@@ -188,6 +190,7 @@ def build_system_prompt(
             + WEB_SEARCH_GUIDANCE
             + OPEN_URLS_GUIDANCE
             + GENERATE_IMAGE_GUIDANCE
+            + PYTHON_TOOL_GUIDANCE
         )
         return system_prompt
 
@@ -197,6 +200,7 @@ def build_system_prompt(
         has_web_search = any(isinstance(tool, WebSearchTool) for tool in tools)
         has_internal_search = any(isinstance(tool, SearchTool) for tool in tools)
         has_open_urls = any(isinstance(tool, OpenURLTool) for tool in tools)
+        has_python = any(isinstance(tool, PythonTool) for tool in tools)
         has_generate_image = any(
             isinstance(tool, ImageGenerationTool) for tool in tools
         )
@@ -213,6 +217,9 @@ def build_system_prompt(
 
         if has_open_urls or include_all_guidance:
             system_prompt += OPEN_URLS_GUIDANCE
+
+        if has_python or include_all_guidance:
+            system_prompt += PYTHON_TOOL_GUIDANCE
 
         if has_generate_image or include_all_guidance:
             system_prompt += GENERATE_IMAGE_GUIDANCE
@@ -354,130 +361,3 @@ def default_build_user_message(
     # )
     user_msg = UserMessageWithText(role="user", content="N/A")
     return user_msg
-
-
-# class AnswerPromptBuilder:
-#     def __init__(
-#         self,
-#         user_message: UserMessage,
-#         message_history: list[PreviousMessage],
-#         llm_config: LLMConfig,
-#         raw_user_query: str,
-#         raw_user_uploaded_files: list[InMemoryChatFile],
-#         single_message_history: str | None = None,
-#         system_message: SystemMessage | None = None,
-#     ) -> None:
-#         self.max_tokens = compute_max_llm_input_tokens(llm_config)
-
-#         llm_tokenizer = get_tokenizer(
-#             provider_type=llm_config.model_provider,
-#             model_name=llm_config.model_name,
-#         )
-#         self.llm_config = llm_config
-#         self.llm_tokenizer_encode_func = cast(
-#             Callable[[str], list[int]], llm_tokenizer.encode
-#         )
-
-#         self.raw_message_history = message_history
-#         (
-#             self.message_history,
-#             self.history_token_cnts,
-#         ) = translate_history_to_basemessages(
-#             message_history,
-#             exclude_images=not model_supports_image_input(
-#                 self.llm_config.model_name,
-#                 self.llm_config.model_provider,
-#             ),
-#         )
-
-#         self.update_system_prompt(system_message)
-#         self.update_user_prompt(user_message)
-
-#         self.new_messages_and_token_cnts: list[tuple[BaseMessage, int]] = []
-
-#         # used for building a new prompt after a tool-call
-#         self.raw_user_query = raw_user_query
-#         self.raw_user_uploaded_files = raw_user_uploaded_files
-#         self.single_message_history = single_message_history
-
-#         # Optional: if the prompt includes explicit context documents (e.g., project files),
-#         # store them here so downstream streaming can reference them for citation mapping.
-#         self.context_llm_docs: list[LlmDoc] | None = None
-
-#     def update_system_prompt(self, system_message: SystemMessage | None) -> None:
-#         if not system_message:
-#             self.system_message_and_token_cnt = None
-#             return
-
-#         self.system_message_and_token_cnt = (
-#             system_message,
-#             check_message_tokens(system_message, self.llm_tokenizer_encode_func),
-#         )
-
-#     def update_user_prompt(self, user_message: HumanMessage) -> None:
-#         self.user_message_and_token_cnt = (
-#             user_message,
-#             check_message_tokens(user_message, self.llm_tokenizer_encode_func),
-#         )
-
-#     def append_message(self, message: BaseMessage) -> None:
-#         """Append a new message to the message history."""
-#         token_count = check_message_tokens(message, self.llm_tokenizer_encode_func)
-#         self.new_messages_and_token_cnts.append((message, token_count))
-
-#     def get_user_message_content(self) -> str:
-#         query, _ = message_to_prompt_and_imgs(self.user_message_and_token_cnt[0])
-#         return query
-
-#     def get_message_history(self) -> list[PreviousMessage]:
-#         """
-#         Get the message history as a list of PreviousMessage objects.
-#         """
-#         message_history = []
-#         if self.system_message_and_token_cnt:
-#             tmp = PreviousMessage.from_langchain_msg(*self.system_message_and_token_cnt)
-#             message_history.append(tmp)
-#         for i, msg in enumerate(self.message_history):
-#             tmp = PreviousMessage.from_langchain_msg(msg, self.history_token_cnts[i])
-#             message_history.append(tmp)
-#         return message_history
-
-#     def build(self) -> list[BaseMessage]:
-#         if not self.user_message_and_token_cnt:
-#             raise ValueError("User message must be set before building prompt")
-
-#         final_messages_with_tokens: list[tuple[BaseMessage, int]] = []
-#         if self.system_message_and_token_cnt:
-#             final_messages_with_tokens.append(self.system_message_and_token_cnt)
-
-#         final_messages_with_tokens.extend(
-#             [
-#                 (self.message_history[i], self.history_token_cnts[i])
-#                 for i in range(len(self.message_history))
-#             ]
-#         )
-
-#         final_messages_with_tokens.append(self.user_message_and_token_cnt)
-
-#         if self.new_messages_and_token_cnts:
-#             final_messages_with_tokens.extend(self.new_messages_and_token_cnts)
-
-#         return drop_messages_history_overflow(
-#             final_messages_with_tokens, self.max_tokens
-#         )
-
-
-# Stores some parts of a prompt builder as needed for tool calls
-
-
-# TODO: rename this? AnswerConfig maybe?
-# class LLMCall(BaseModel__v1):
-#     prompt_builder: AnswerPromptBuilder
-#     tools: list[Tool]
-#     force_use_tool: ForceUseTool
-#     files: list[InMemoryChatFile]
-#     tool_call_info: list[ToolCallKickoff | ToolResponse | ToolCallFinalResult]
-#     using_tool_calling_llm: bool
-
-#     class Config:
-#         arbitrary_types_allowed = True

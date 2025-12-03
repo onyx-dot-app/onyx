@@ -98,7 +98,6 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         return is_available
 
     def tool_definition(self) -> dict:
-        """Tool definition for LLMs that support explicit tool calling."""
         return {
             "type": "function",
             "function": {
