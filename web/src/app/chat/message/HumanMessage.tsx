@@ -220,9 +220,11 @@ export default function HumanMessage({
   const hasImages = files?.some((file) => file.type === ChatFileType.IMAGE);
 
   const handleImageClick = (fileId: string) => {
+    const file = files?.find((f) => f.id === fileId);
+    const displayName = file?.name || `image-${fileId}`;
     setPresentingDocument?.({
       document_id: `project_file__${fileId}`,
-      semantic_identifier: `image-${fileId}`,
+      semantic_identifier: displayName,
     });
   };
 
