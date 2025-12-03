@@ -22,7 +22,8 @@ This command will:
   1. Find the nearest stable version tag (v*.*.*)
   2. Fetch the corresponding release branch (release/vMAJOR.MINOR)
   3. Create a hotfix branch with the cherry-picked commit
-  4. Push and create a PR using the GitHub CLI`,
+  4. Push and create a PR using the GitHub CLI
+  5. Switch back to the original branch`,
 		Args: cobra.ExactArgs(1),
 		Run:  runCherryPick,
 	}
@@ -33,6 +34,13 @@ This command will:
 func runCherryPick(cmd *cobra.Command, args []string) {
 	commitSHA := args[0]
 	log.Debugf("Cherry-picking commit: %s", commitSHA)
+
+	// Save the current branch to switch back later
+	originalBranch, err := getCurrentBranch()
+	if err != nil {
+		log.Fatalf("Failed to get current branch: %v", err)
+	}
+	log.Debugf("Original branch: %s", originalBranch)
 
 	// Get the short SHA for branch naming
 	shortSHA := commitSHA
@@ -65,12 +73,16 @@ func runCherryPick(cmd *cobra.Command, args []string) {
 	// Cherry-pick the commit
 	log.Infof("Cherry-picking commit: %s", commitSHA)
 	if err := runGitCommand("cherry-pick", commitSHA); err != nil {
+		// Switch back to original branch before exiting on error
+		runGitCommand("checkout", originalBranch)
 		log.Fatalf("Failed to cherry-pick commit: %v", err)
 	}
 
 	// Push the hotfix branch
 	log.Infof("Pushing hotfix branch: %s", hotfixBranch)
 	if err := runGitCommand("push", "-u", "origin", hotfixBranch); err != nil {
+		// Switch back to original branch before exiting on error
+		runGitCommand("checkout", originalBranch)
 		log.Fatalf("Failed to push hotfix branch: %v", err)
 	}
 
@@ -85,10 +97,28 @@ func runCherryPick(cmd *cobra.Command, args []string) {
 	log.Info("Creating PR...")
 	prURL, err := createPR(hotfixBranch, releaseBranch, commitMsg, commitSHA)
 	if err != nil {
+		// Switch back to original branch before exiting on error
+		runGitCommand("checkout", originalBranch)
 		log.Fatalf("Failed to create PR: %v", err)
 	}
 
 	log.Infof("PR created successfully: %s", prURL)
+
+	// Switch back to the original branch
+	log.Infof("Switching back to original branch: %s", originalBranch)
+	if err := runGitCommand("checkout", originalBranch); err != nil {
+		log.Warnf("Failed to switch back to original branch: %v", err)
+	}
+}
+
+// getCurrentBranch returns the name of the current git branch
+func getCurrentBranch() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse failed: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 // findNearestStableTag finds the nearest tag matching v*.*.* pattern and returns major.minor
