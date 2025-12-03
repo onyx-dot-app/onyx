@@ -331,6 +331,7 @@ class TestPollSource:
         
         # Should return no documents (unless workspace is very old)
         print(f"Found {len(documents)} documents updated over a year ago")
+        assert len(documents) == 0
     
     def test_poll_source_batch_sizes(self, connector):
         """Test that poll_source respects batch sizes."""
