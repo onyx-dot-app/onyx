@@ -2594,46 +2594,6 @@ wheels = [
 ]
 
 [[package]]
-name = "langgraph"
-version = "0.2.72"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "langchain-core" },
-    { name = "langgraph-checkpoint" },
-    { name = "langgraph-sdk" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b2/18/5a18d8ff3d6d0ba8d81b484907044d9d41cfbf108cb514dea47c34bbbba0/langgraph-0.2.72.tar.gz", hash = "sha256:879cfda4d0a9e9795066f6e448282792d6290f6584f527a7588a64e972e73bad", size = 130129, upload-time = "2025-02-13T05:31:25.586Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/19/722e4573fcf875f46bb364d95985e47418f16bebc464c59955382cfdcd23/langgraph-0.2.72-py3-none-any.whl", hash = "sha256:5b725c02a6eb55257479a0ea0db40926f766c8ff12c2730690f62c614d7e6ee5", size = 150175, upload-time = "2025-02-13T05:31:23.973Z" },
-]
-
-[[package]]
-name = "langgraph-checkpoint"
-version = "2.0.13"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "langchain-core" },
-    { name = "msgpack" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/7a/90/b9d783ca81a71de63fb622605f7d7a9ebd456ded98b9c6c0318f51273f90/langgraph_checkpoint-2.0.13.tar.gz", hash = "sha256:5e62d9290b1a74edd19f90624e4a2cfda848be015b484818b650bc7cb307040c", size = 34026, upload-time = "2025-02-13T03:47:09.806Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/63/21/7b79fab5b9c3b338332a5bb3e8b648696efb84f76c7407dac5aeb5244acd/langgraph_checkpoint-2.0.13-py3-none-any.whl", hash = "sha256:ae022c9f04401d7583442cbf4d649cd48b9767fe6397c8036e4f2a6256309f5c", size = 38099, upload-time = "2025-02-13T03:47:08.043Z" },
-]
-
-[[package]]
-name = "langgraph-sdk"
-version = "0.1.44"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "httpx" },
-    { name = "orjson" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/9b/39/369001433268b57de3746b21443bc679309d716f94b79fdeb4ca3b129ddc/langgraph_sdk-0.1.44.tar.gz", hash = "sha256:5b17fe7c0a0fe4b83170c9b8987e0f98dc0636fcc0166dbdba725cc8ffd9b1cf", size = 30522, upload-time = "2024-12-12T19:57:48.023Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/42/fa/7dcf0acbb8174e730481f6c9ac6398e58c450c805297b00136005d02dba7/langgraph_sdk-0.1.44-py3-none-any.whl", hash = "sha256:a5a623429b44616c4369c0caf2ea30ce8d3a103123f7bb3ca50dc726eaa313a4", size = 31700, upload-time = "2024-12-12T19:57:46.893Z" },
-]
-
-[[package]]
 name = "langsmith"
 version = "0.3.45"
 source = { registry = "https://pypi.org/simple" }
@@ -3491,9 +3451,6 @@ backend = [
     { name = "langchain-text-splitters" },
     { name = "langchainhub" },
     { name = "langfuse" },
-    { name = "langgraph" },
-    { name = "langgraph-checkpoint" },
-    { name = "langgraph-sdk" },
     { name = "lazy-imports" },
     { name = "lxml" },
     { name = "mako" },
@@ -3658,9 +3615,6 @@ backend = [
     { name = "langchain-text-splitters", specifier = "==0.3.8" },
     { name = "langchainhub", specifier = "==0.1.21" },
     { name = "langfuse", specifier = "==3.10.0" },
-    { name = "langgraph", specifier = "==0.2.72" },
-    { name = "langgraph-checkpoint", specifier = "==2.0.13" },
-    { name = "langgraph-sdk", specifier = "==0.1.44" },
     { name = "lazy-imports", specifier = "==1.0.1" },
     { name = "lxml", specifier = "==5.3.0" },
     { name = "mako", specifier = "==1.2.4" },
