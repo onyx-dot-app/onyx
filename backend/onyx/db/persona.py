@@ -666,7 +666,7 @@ def get_raw_personas_for_user(
 
 
 def get_personas(db_session: Session) -> Sequence[Persona]:
-    """NOTE: Unsafe, can fetch personas from all users."""
+    """WARNING: Unsafe, can fetch personas from all users."""
     stmt = select(Persona).distinct()
     stmt = stmt.where(not_(Persona.name.startswith(SLACK_BOT_PERSONA_PREFIX)))
     stmt = stmt.where(Persona.deleted.is_(False))
@@ -1098,7 +1098,7 @@ def get_persona_by_id(
 def get_personas_by_ids(
     persona_ids: list[int], db_session: Session
 ) -> Sequence[Persona]:
-    """NOTE: Unsafe, can fetch personas from all users"""
+    """WARNING: Unsafe, can fetch personas from all users."""
     if not persona_ids:
         return []
     personas = db_session.scalars(
