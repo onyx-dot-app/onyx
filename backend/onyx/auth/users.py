@@ -1240,7 +1240,9 @@ async def optional_user(
     async_db_session: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_fastapi_current_user),
 ) -> User | None:
-    user = await _check_for_saml_and_jwt(request, user, async_db_session)
+
+    if user := await _check_for_saml_and_jwt(request, user, async_db_session):
+        return user
 
     try:
         if hashed_pat := get_hashed_pat_from_request(request):
