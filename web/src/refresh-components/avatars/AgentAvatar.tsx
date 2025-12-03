@@ -29,7 +29,7 @@ export default function AgentAvatar({ agent, ...props }: AgentAvatarProps) {
         />
       </div>
     ) : (
-      <OnyxIcon size={props.size} />
+      <OnyxIcon size={props.size} className="" />
     );
   }
 
