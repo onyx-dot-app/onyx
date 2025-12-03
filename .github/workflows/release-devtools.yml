@@ -12,6 +12,7 @@ jobs:
       name: release-devtools
     permissions:
       id-token: write
+    timeout-minutes: 10
     strategy:
       matrix:
         os-arch:
