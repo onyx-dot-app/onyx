@@ -106,11 +106,11 @@ class CodaColumn(BaseModel):
     """Represents a Coda Table Column"""
 
     id: str
-    type: str
+    type: Literal[CodaObjectType.COLUMN]
     href: str
     name: str
-    display: bool
-    calculated: bool
+    display: Optional[bool] = None
+    calculated: Optional[bool] = None
     formula: Optional[str] = None
     defaultValue: Optional[str] = None
     format: Optional[dict[str, Any]] = None
@@ -120,7 +120,7 @@ class CodaRow(BaseModel):
     """Represents a Coda Table Row"""
 
     id: str
-    type: str
+    type: Literal[CodaObjectType.ROW]
     href: str
     name: str
     index: int
