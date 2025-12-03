@@ -58,6 +58,7 @@ class CodaDocPublished(BaseModel):
 class CodaDoc(CodaObjectBase):
     """Represents a Coda Doc object"""
 
+    browserLink: str
     type: Literal[CodaObjectType.DOC]
     owner: str
     ownerName: str

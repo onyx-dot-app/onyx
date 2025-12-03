@@ -5,7 +5,6 @@ from pydantic import BaseModel
 
 class CodaObjectBase(BaseModel):
     id: str
-    browserLink: str
     name: str
     href: str
 

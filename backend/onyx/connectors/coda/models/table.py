@@ -11,10 +11,21 @@ from onyx.connectors.coda.models.common import CodaObjectType
 from onyx.connectors.coda.models.page import CodaPageReference
 
 
+class TableType(StrEnum):
+    """
+    Represents the allowed string values for table type.
+    """
+
+    TABLE = "table"
+    VIEW = "view"
+
+
 class CodaTableReference(CodaObjectBase):
     """Represents a Coda Table reference object"""
 
+    browserLink: str
     type: Literal[CodaObjectType.TABLE]
+    tableType: TableType
     parent: Optional[CodaPageReference] = None
 
 
@@ -45,15 +56,6 @@ class SortDirection(StrEnum):
     DESCENDING = "descending"
 
 
-class TableType(StrEnum):
-    """
-    Represents the allowed string values for table type.
-    """
-
-    TABLE = "table"
-    VIEW = "view"
-
-
 class CodaTableLayout(StrEnum):
     """
     Represents the valid string values for the layout type of a table or view.
@@ -78,7 +80,7 @@ class CodaTableLayout(StrEnum):
     WORD_CLOUD = "wordCloud"
 
 
-class SortItem(TypedDict):
+class CodaSortItem(TypedDict):
     """
     Defines the required keys and their types for a single sort instruction.
     """
@@ -90,16 +92,49 @@ class SortItem(TypedDict):
 class CodaTable(CodaObjectBase):
     """Represents a Coda Table object"""
 
+    browserLink: str
+    type: Literal[CodaObjectType.TABLE]
     tableType: TableType
     parent: CodaPageReference
-    parentTable: Optional[CodaTableReference] = None
     displayColumn: Optional[CodaColumnReference] = None
     rowCount: int
-    sorts: list[SortItem]
+    sorts: list[CodaSortItem]
     layout: CodaTableLayout
     createdAt: str
     updatedAt: str
+    parentTable: Optional[CodaTableReference] = None
     filter: Optional[CodaTableFilterFormula] = None
+
+
+class CodaColumnFormatType(StrEnum):
+    """
+    Represents the valid string values for the layout type of a table or view.
+    """
+
+    LinkColumnFormat = "LinkColumnFormat"
+    EmailColumnFormat = "EmailColumnFormat"
+    text = "text"
+    person = "person"
+    lookup = "lookup"
+    number = "number"
+    percent = "percent"
+    currency = "currency"
+    date = "date"
+    dateTime = "dateTime"
+    time = "time"
+    duration = "duration"
+    slider = "slider"
+    scale = "scale"
+    image = "image"
+    imageReference = "imageReference"
+    attachments = "attachments"
+
+
+class CodaColumnFormat(BaseModel):
+    """Represents a Coda Table Column Format"""
+
+    type: CodaColumnFormatType
+    isArray: bool
 
 
 class CodaColumn(BaseModel):
@@ -109,22 +144,20 @@ class CodaColumn(BaseModel):
     type: Literal[CodaObjectType.COLUMN]
     href: str
     name: str
+    format: CodaColumnFormat
     display: Optional[bool] = None
     calculated: Optional[bool] = None
     formula: Optional[str] = None
     defaultValue: Optional[str] = None
-    format: Optional[dict[str, Any]] = None
 
 
-class CodaRow(BaseModel):
+class CodaRow(CodaObjectBase):
     """Represents a Coda Table Row"""
 
-    id: str
     type: Literal[CodaObjectType.ROW]
-    href: str
-    name: str
     index: int
+    browserLink: str
     createdAt: str
     updatedAt: str
-    browserLink: str
-    values: dict[str, Any]  # Column ID -> value mapping
+    values: dict[str, Any]
+    parent: CodaTableReference

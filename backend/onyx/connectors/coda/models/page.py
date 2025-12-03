@@ -13,6 +13,7 @@ from onyx.connectors.coda.models.person import CodaPersonValue
 class CodaPageReference(CodaObjectBase):
     """Represents a Coda Page reference object"""
 
+    browserLink: str
     type: Literal[CodaObjectType.PAGE]
 
 
@@ -38,6 +39,7 @@ class CodaPageImage(BaseModel):
 class CodaPage(CodaObjectBase):
     """Represents a Coda Page object"""
 
+    browserLink: str
     type: Literal[CodaObjectType.PAGE]
     isHidden: bool
     isEffectivelyHidden: bool
