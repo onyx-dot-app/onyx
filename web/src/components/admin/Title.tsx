@@ -30,7 +30,9 @@ export function AdminPageTitle({
           ) : (
             Icon
           )}
-          <Text headingH2>{title}</Text>
+          <Text headingH2 data-testid="admin-page-title">
+            {title}
+          </Text>
         </div>
         {farRightElement}
       </div>

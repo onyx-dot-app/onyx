@@ -17,7 +17,7 @@ async function verifyAdminPageNavigation(
   await page.goto(`http://localhost:3000/admin/${path}`);
 
   try {
-    await expect(page.locator("p")).toHaveText(pageTitle, {
+    await expect(page.getByTestId("admin-page-title")).toHaveText(pageTitle, {
       timeout: 10000,
     });
   } catch (error) {
