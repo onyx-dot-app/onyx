@@ -78,17 +78,28 @@ def assert_response_is_equivalent(
             "version": parsed.version,
         }
 
-    actual = set(
-        tuple(model_configuration.items())
-        for model_configuration in provider_data["model_configurations"]
+    # Compare model configurations by name (order-independent)
+    actual_by_name = {
+        config["name"]: config for config in provider_data["model_configurations"]
+    }
+    expected_by_name = {
+        config.name: fill_max_input_tokens_and_supports_image_input(config)
+        for config in model_configurations
+    }
+
+    assert set(actual_by_name.keys()) == set(expected_by_name.keys()), (
+        f"Model names don't match. "
+        f"Actual: {set(actual_by_name.keys())}, Expected: {set(expected_by_name.keys())}"
     )
-    expected = set(
-        tuple(
-            fill_max_input_tokens_and_supports_image_input(model_configuration).items()
+
+    for name in actual_by_name:
+        actual_config = actual_by_name[name]
+        expected_config = expected_by_name[name]
+        assert actual_config == expected_config, (
+            f"Config mismatch for {name}:\n"
+            f"Actual: {actual_config}\n"
+            f"Expected: {expected_config}"
         )
-        for model_configuration in model_configurations
-    )
-    assert actual == expected
 
     # test that returned key is sanitized
     if api_key:
