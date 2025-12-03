@@ -24,7 +24,6 @@ from shared_configs.model_server_models import Embedding
 __all__ = [
     # Main interfaces - these are what you should inherit from
     "DocumentIndex",
-    "BaseIndex",
     # Data models - used in method signatures
     "DocumentInsertionRecord",
     "DocumentSectionRequest",
@@ -113,7 +112,7 @@ class SchemaVerifiable(abc.ABC):
         self.tenant_id = tenant_id
 
     @abc.abstractmethod
-    def ensure_indices_exist(
+    def verify_and_create_index_if_necessary(
         self,
         embedding_dim: int,
         embedding_precision: EmbeddingPrecision,
@@ -269,14 +268,9 @@ class HybridCapable(abc.ABC):
         """
         Run hybrid search and return a list of inference chunks.
 
-        NOTE: the query passed in here is the unprocessed plain text query. Preprocessing is
-        expected to be handled by this function as it may depend on the index implementation.
-        Things like query expansion, synonym injection, stop word removal, lemmatization, etc. are
-        done here.
-
         Parameters:
         - query: unmodified user query. This may be needed for getting the matching highlighted
-                keywords
+                keywords or for logging purposes
         - query_embedding: vector representation of the query, must be of the correct
                 dimensionality for the primary index
         - final_keywords: Final keywords to be used from the query, defaults to query if not set
@@ -306,28 +300,26 @@ class RandomCapable(abc.ABC):
         raise NotImplementedError
 
 
-class BaseIndex(
+class DocumentIndex(
     SchemaVerifiable,
     Indexable,
     Updatable,
     Deletable,
+    HybridCapable,
+    IdRetrievalCapable,
+    RandomCapable,
     abc.ABC,
-):
-    """
-    All basic document index functionalities excluding the actual querying approach.
-
-    As a summary, document indices need to be able to
-    - Verify the schema definition is valid
-    - Index new documents
-    - Update specific attributes of existing documents
-    - Delete documents
-    """
-
-
-class DocumentIndex(
-    HybridCapable, IdRetrievalCapable, RandomCapable, BaseIndex, abc.ABC
 ):
     """
     A valid document index that can plug into all Onyx flows must implement all of these
     functionalities.
+
+    As a high level summary, document indices need to be able to
+    - Verify the schema definition is valid
+    - Index new documents
+    - Update specific attributes of existing documents
+    - Delete documents
+    - Run hybrid search
+    - Retrieve document or sections of documents based on document id
+    - Retrieve sets of random documents
     """
