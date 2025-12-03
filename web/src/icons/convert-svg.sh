@@ -26,7 +26,7 @@ fi
 BASE_NAME="${SVG_FILE%.svg}"
 
 # Run the conversion
-bunx @svgr/cli "$SVG_FILE" --typescript --no-dimensions --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity"]}}]}' > "${BASE_NAME}.tsx"
+bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity","width","height"]}}]}' --template icon-template.js > "${BASE_NAME}.tsx"
 
 if [ $? -eq 0 ]; then
   echo "Created ${BASE_NAME}.tsx"

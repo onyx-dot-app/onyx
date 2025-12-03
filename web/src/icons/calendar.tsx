@@ -1,8 +1,12 @@
-import * as React from "react";
 import type { SVGProps } from "react";
 
-const SvgCalendar = (props: SVGProps<SVGSVGElement>) => (
+const SvgCalendar = ({
+  size,
+  ...props
+}: SVGProps<SVGSVGElement> & { size?: number }) => (
   <svg
+    width={size}
+    height={size}
     viewBox="0 0 14 15"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"

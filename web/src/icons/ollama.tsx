@@ -1,8 +1,12 @@
-import * as React from "react";
 import type { SVGProps } from "react";
 
-const SvgOllama = (props: SVGProps<SVGSVGElement>) => (
+const SvgOllama = ({
+  size,
+  ...props
+}: SVGProps<SVGSVGElement> & { size?: number }) => (
   <svg
+    width={size}
+    height={size}
     viewBox="0 0 16 16"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"

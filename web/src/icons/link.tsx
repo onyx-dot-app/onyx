@@ -1,8 +1,12 @@
-import * as React from "react";
 import type { SVGProps } from "react";
 
-const SvgLink = (props: SVGProps<SVGSVGElement>) => (
+const SvgLink = ({
+  size,
+  ...props
+}: SVGProps<SVGSVGElement> & { size?: number }) => (
   <svg
+    width={size}
+    height={size}
     viewBox="0 0 17 9"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
