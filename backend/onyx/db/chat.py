@@ -894,9 +894,6 @@ def get_retrieval_docs_from_search_docs(
     return RetrievalDocs(top_documents=top_documents)
 
 
-# Note: translate_db_message_to_packets moved to onyx.server.query_and_chat.streaming_utils
-
-
 def translate_db_message_to_chat_message_detail(
     chat_message: ChatMessage,
     remove_doc_content: bool = False,
