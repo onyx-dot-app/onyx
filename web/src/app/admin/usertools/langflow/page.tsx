@@ -37,7 +37,7 @@ export default async function Page() {
       </Text>
 
       <a
-        href={process.env.REACT_APP_LANFLOW_URL}
+        href={process.env.REACT_APP_LANGFLOW_URL}
         target="_blank"
         rel="noopener noreferrer"
       >
