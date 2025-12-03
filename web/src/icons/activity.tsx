@@ -1,8 +1,6 @@
-import type { SVGProps } from "react";
-const SvgActivity = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+import { IconProps } from "@/icons";
+
+const SvgActivity = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}

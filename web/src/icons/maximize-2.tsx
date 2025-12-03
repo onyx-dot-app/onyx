@@ -1,9 +1,6 @@
-import type { SVGProps } from "react";
+import { IconProps } from "@/icons";
 
-const SvgMaximize2 = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+const SvgMaximize2 = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}

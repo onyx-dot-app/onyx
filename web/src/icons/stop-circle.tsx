@@ -1,9 +1,6 @@
-import type { SVGProps } from "react";
+import { IconProps } from "@/icons";
 
-const SvgStopCircle = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+const SvgStopCircle = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}

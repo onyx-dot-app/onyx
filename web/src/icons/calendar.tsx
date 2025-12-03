@@ -1,9 +1,6 @@
-import type { SVGProps } from "react";
+import { IconProps } from "@/icons";
 
-const SvgCalendar = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+const SvgCalendar = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}

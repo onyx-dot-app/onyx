@@ -1,8 +1,6 @@
-import type { SVGProps } from "react";
-const SvgPieChart = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+import { IconProps } from "@/icons";
+
+const SvgPieChart = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}

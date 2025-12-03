@@ -1,8 +1,6 @@
-import type { SVGProps } from "react";
-const SvgLogOut = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+import { IconProps } from "@/icons";
+
+const SvgLogOut = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}

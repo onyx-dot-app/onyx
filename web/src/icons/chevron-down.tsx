@@ -1,8 +1,6 @@
-import type { SVGProps } from "react";
-const SvgChevronDown = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+import { IconProps } from "@/icons";
+
+const SvgChevronDown = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}

@@ -1,8 +1,6 @@
-import type { SVGProps } from "react";
-const SvgMenu = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+import { IconProps } from "@/icons";
+
+const SvgMenu = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}

@@ -1,8 +1,6 @@
-import type { SVGProps } from "react";
-const SvgFolderIn = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+import { IconProps } from "@/icons";
+
+const SvgFolderIn = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}

@@ -1,8 +1,6 @@
-import type { SVGProps } from "react";
-const SvgEditBig = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+import { IconProps } from "@/icons";
+
+const SvgEditBig = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}

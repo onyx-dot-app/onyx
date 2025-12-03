@@ -1,7 +1,7 @@
 import React from "react";
-import type { SVGProps } from "react";
+import { IconProps } from "@/icons";
 
-const SvgClaude = (props: SVGProps<SVGSVGElement>) => {
+const SvgClaude = (props: IconProps) => {
   const clipId = React.useId();
   return (
     <svg

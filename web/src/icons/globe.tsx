@@ -1,8 +1,6 @@
-import type { SVGProps } from "react";
-const SvgGlobe = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+import { IconProps } from "@/icons";
+
+const SvgGlobe = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}

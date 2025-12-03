@@ -1,8 +1,6 @@
-import type { SVGProps } from "react";
-const SvgPlusCircle = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+import { IconProps } from "@/icons";
+
+const SvgPlusCircle = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}

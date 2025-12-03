@@ -1,9 +1,6 @@
-import type { SVGProps } from "react";
+import { IconProps } from "@/icons";
 
-const SvgUploadCloud = ({
-  size,
-  ...props
-}: SVGProps<SVGSVGElement> & { size?: number }) => (
+const SvgUploadCloud = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
