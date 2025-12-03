@@ -125,19 +125,14 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   }, []);
 
   const status = useMemo(() => {
-    // If we have documents, show "Read" status (unless still in reading transition)
-    if (documents.length > 0) {
-      if (shouldShowAsReading) {
-        return "Reading";
-      }
-      return "Read";
-    }
-
-    // Handle states based on timing
-    if (shouldShowAsRead) {
-      return "Read";
-    }
-    if (isLoading || isComplete || shouldShowAsReading) {
+    // Always use present continuous form
+    if (
+      isLoading ||
+      isComplete ||
+      shouldShowAsReading ||
+      shouldShowAsRead ||
+      documents.length > 0
+    ) {
       return "Reading";
     }
     return null;
@@ -158,8 +153,9 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     });
   }
 
-  // Show loading state until documents arrive, then show documents with titles
+  // Show documents if available, otherwise fall back to URLs from the tool call
   const displayDocuments = documents.length > 0;
+  const displayUrls = !displayDocuments && isComplete && urls.length > 0;
 
   return children({
     icon: FiGlobe,
@@ -209,6 +205,45 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                             prevUrls + URLS_PER_EXPANSION,
                             documents.length
                           )
+                        );
+                      }}
+                    />
+                  </div>
+                )}
+              </>
+            ) : displayUrls ? (
+              <>
+                {urls.slice(0, urlsToShow).map((url, index) => (
+                  <div
+                    key={url}
+                    className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
+                    style={{
+                      animationDelay: `${index * 30}ms`,
+                      animationFillMode: "backwards",
+                    }}
+                  >
+                    <SourceChip2
+                      icon={<FiGlobe size={10} />}
+                      title={truncateString(url, MAX_TITLE_LENGTH)}
+                      onClick={() => {
+                        window.open(url, "_blank");
+                      }}
+                    />
+                  </div>
+                ))}
+                {urls.length > urlsToShow && (
+                  <div
+                    className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
+                    style={{
+                      animationDelay: `${urlsToShow * 30}ms`,
+                      animationFillMode: "backwards",
+                    }}
+                  >
+                    <SourceChip2
+                      title={`${urls.length - urlsToShow} more...`}
+                      onClick={() => {
+                        setUrlsToShow((prevUrls) =>
+                          Math.min(prevUrls + URLS_PER_EXPANSION, urls.length)
                         );
                       }}
                     />

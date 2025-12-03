@@ -307,23 +307,16 @@ export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
   }, []);
 
   const status = useMemo(() => {
-    const searchType = isInternetSearch ? "the web" : "internal documents";
+    const searchType = isInternetSearch ? "online" : "internally";
 
-    // If we have documents to show and we're in the searched state, show "Searched"
-    if (results.length > 0) {
-      // If we're still showing as searching (before transition), show "Searching"
-      if (shouldShowAsSearching) {
-        return `Searching ${searchType}`;
-      }
-      // Otherwise show "Searched"
-      return `Searched ${searchType}`;
-    }
-
-    // Handle states based on timing
-    if (shouldShowAsSearched) {
-      return `Searched ${searchType}`;
-    }
-    if (isSearching || isComplete || shouldShowAsSearching) {
+    // Always use present continuous form
+    if (
+      isSearching ||
+      isComplete ||
+      shouldShowAsSearching ||
+      shouldShowAsSearched ||
+      results.length > 0
+    ) {
       return `Searching ${searchType}`;
     }
     return null;
