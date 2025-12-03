@@ -80,6 +80,7 @@ jobs:
           if [ -n "${PR_NUMBER}" ]; then
             CACHE_SUFFIX="${PR_NUMBER}"
           else
+            # shellcheck disable=SC2001
             CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
           fi
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
@@ -131,6 +132,7 @@ jobs:
           if [ -n "${PR_NUMBER}" ]; then
             CACHE_SUFFIX="${PR_NUMBER}"
           else
+            # shellcheck disable=SC2001
             CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
           fi
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
@@ -181,6 +183,7 @@ jobs:
           if [ -n "${PR_NUMBER}" ]; then
             CACHE_SUFFIX="${PR_NUMBER}"
           else
+            # shellcheck disable=SC2001
             CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
           fi
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
