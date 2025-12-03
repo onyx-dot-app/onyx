@@ -110,7 +110,6 @@ export function SearchToolStep1Renderer({
     status: "Searching internally",
     content: (
       <div className="flex flex-col">
-        <div className="text-xs font-medium mb-1 ml-1">Queries</div>
         <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
           {queries.slice(0, queriesToShow).map((query, index) => (
             <div
@@ -173,7 +172,6 @@ export function SearchToolStep2Renderer({
     status: "Reading",
     content: (
       <div className="flex flex-col">
-        <div className="text-xs font-medium mb-1 ml-1">Documents</div>
         <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
           {results.slice(0, resultsToShow).map((result, index) => (
             <div
@@ -356,7 +354,6 @@ export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
     content: (
       <div className="flex flex-col mt-1.5">
         <div className="flex flex-col">
-          <div className="text-xs font-medium mb-1 ml-1">Queries</div>
           <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
             {queries.slice(0, queriesToShow).map((query, index) => (
               <div
@@ -404,7 +401,6 @@ export const SearchToolRendererV2: MessageRenderer<SearchToolPacket, {}> = ({
         {/* Only show results section for internal search, not web search */}
         {!isInternetSearch && (
           <div className="flex flex-col mt-3">
-            <div className="text-xs font-medium mb-1 ml-1">Documents</div>
             <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
               {results.slice(0, resultsToShow).map((result, index) => (
                 <div

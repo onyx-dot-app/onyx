@@ -167,7 +167,6 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     content: (
       <div className="flex flex-col mt-1.5">
         <div className="flex flex-col">
-          <div className="text-xs font-medium mb-1 ml-1">URLs</div>
           <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
             {displayDocuments ? (
               <>
