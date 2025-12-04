@@ -18,11 +18,11 @@ import Title from "@/components/ui/title";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import { DeleteButton } from "@/components/DeleteButton";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import { Spinner } from "@/components/Spinner";
-import { deleteApiKey, regenerateApiKey } from "./lib";
-import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
-import { APIKey } from "./types";
+import { deleteApiKey, regenerateApiKey } from "@/app/admin/api-key/lib";
+import { OnyxApiKeyForm } from "@/app/admin/api-key/OnyxApiKeyForm";
+import { APIKey } from "@/app/admin/api-key/types";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
 import SvgRefreshCw from "@/icons/refresh-cw";
@@ -106,23 +106,20 @@ function Main() {
     <>
       {popup}
 
-      {fullApiKey && (
-        <Modal title="New API Key" onOutsideClick={() => setFullApiKey(null)}>
-          <div className="px-8 py-8">
-            <div className="h-32">
-              <Text className="mb-4">
-                Make sure you copy your new API key. You won’t be able to see
-                this key again.
-              </Text>
-
-              <div className="flex mt-2">
-                <b className="my-auto break-all">{fullApiKey}</b>
-                <CopyIconButton getCopyText={() => fullApiKey} />
-              </div>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <Modal open={!!fullApiKey}>
+        <Modal.Content small>
+          <Modal.Header
+            title="New API Key"
+            icon={SvgKey}
+            onClose={() => setFullApiKey(null)}
+            description="Make sure you copy your new API key. You won’t be able to see this key again."
+          />
+          <Modal.Body>
+            <Text className="break-all flex-1">{fullApiKey}</Text>
+            <CopyIconButton getCopyText={() => fullApiKey!} />
+          </Modal.Body>
+        </Modal.Content>
+      </Modal>
 
       {keyIsGenerating && <Spinner />}
 
