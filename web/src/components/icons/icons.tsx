@@ -12,6 +12,7 @@ import {
   FiChevronsUp,
   FiClipboard,
   FiCpu,
+  FiDatabase,
   FiEdit2,
   FiFile,
   FiGlobe,
@@ -256,6 +257,7 @@ export const BrainIcon = ({
   return <Brain size={size} className={className} />;
 };
 export const CPUIcon = createIcon(FiCpu);
+export const DatabaseIcon = createIcon(FiDatabase);
 export const CameraIcon = ({
   size = 16,
   className = defaultTailwindCSS,

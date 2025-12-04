@@ -62,6 +62,7 @@ from onyx.db.enums import (
     UserFileStatus,
     MCPAuthenticationPerformer,
     MCPTransport,
+    MCPServerStatus,
     ThemePreference,
     SwitchoverType,
 )
@@ -3633,16 +3634,22 @@ class MCPServer(Base):
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     server_url: Mapped[str] = mapped_column(String, nullable=False)
     # Transport type for connecting to the MCP server
-    transport: Mapped[MCPTransport] = mapped_column(
-        Enum(MCPTransport, native_enum=False), nullable=False
+    transport: Mapped[MCPTransport | None] = mapped_column(
+        Enum(MCPTransport, native_enum=False), nullable=True
     )
     # Auth type: "none", "api_token", or "oauth"
-    auth_type: Mapped[MCPAuthenticationType] = mapped_column(
-        Enum(MCPAuthenticationType, native_enum=False), nullable=False
+    auth_type: Mapped[MCPAuthenticationType | None] = mapped_column(
+        Enum(MCPAuthenticationType, native_enum=False), nullable=True
     )
     # Who performs authentication for this server (ADMIN or PER_USER)
-    auth_performer: Mapped[MCPAuthenticationPerformer] = mapped_column(
-        Enum(MCPAuthenticationPerformer, native_enum=False), nullable=False
+    auth_performer: Mapped[MCPAuthenticationPerformer | None] = mapped_column(
+        Enum(MCPAuthenticationPerformer, native_enum=False), nullable=True
+    )
+    # Status tracking for configuration flow
+    status: Mapped[MCPServerStatus] = mapped_column(
+        Enum(MCPServerStatus, native_enum=False),
+        nullable=False,
+        server_default="CREATED",
     )
     # Admin connection config - used for the config page
     # and (when applicable) admin-managed auth

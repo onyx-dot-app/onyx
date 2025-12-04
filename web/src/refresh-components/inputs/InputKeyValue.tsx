@@ -74,6 +74,7 @@ import React, {
   useEffect,
   useMemo,
   useId,
+  useRef,
 } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
@@ -236,6 +237,8 @@ export interface KeyValueInputProps
   validateEmptyKeys?: boolean;
   /** Optional name for the field (for accessibility) */
   name?: string;
+  /** Custom label for the add button (defaults to "Add Line") */
+  addButtonLabel?: string;
 }
 
 const KeyValueInput = ({
@@ -255,6 +258,7 @@ const KeyValueInput = ({
   validateDuplicateKeys = true,
   validateEmptyKeys = true,
   name,
+  addButtonLabel = "Add Line",
   className,
   ...rest
 }: KeyValueInputProps) => {
@@ -367,14 +371,25 @@ const KeyValueInput = ({
   }, [hasAnyError, errors]);
 
   // Notify parent of validation changes
+  const onValidationChangeRef = useRef(onValidationChange);
+  const onValidationErrorRef = useRef(onValidationError);
+
   useEffect(() => {
-    onValidationChange?.(isValid, errors);
-  }, [isValid, errors, onValidationChange]);
+    onValidationChangeRef.current = onValidationChange;
+  }, [onValidationChange]);
+
+  useEffect(() => {
+    onValidationErrorRef.current = onValidationError;
+  }, [onValidationError]);
+
+  useEffect(() => {
+    onValidationChangeRef.current?.(isValid, errors);
+  }, [isValid, errors]);
 
   // Notify parent of error state for form library integration
   useEffect(() => {
-    onValidationError?.(errorMessage);
-  }, [errorMessage, onValidationError]);
+    onValidationErrorRef.current?.(errorMessage);
+  }, [errorMessage]);
 
   const canRemoveItems = mode === "line" || items.length > 1;
 
@@ -481,7 +496,7 @@ const KeyValueInput = ({
           aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
           type="button"
         >
-          Add Line
+          {addButtonLabel}
         </Button>
       </div>
     </div>
