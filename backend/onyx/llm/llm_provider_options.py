@@ -450,6 +450,18 @@ def fetch_model_names_for_provider_as_set(provider_name: str) -> set[str] | None
     return set(model_names) if model_names else None
 
 
+def fetch_visible_model_names_for_provider_as_set(
+    provider_name: str,
+) -> set[str] | None:
+    """Get visible model names for a provider.
+
+    Note: Since we no longer maintain separate visible model lists,
+    this returns all models (same as fetch_model_names_for_provider_as_set).
+    Kept for backwards compatibility with alembic migrations.
+    """
+    return fetch_model_names_for_provider_as_set(provider_name)
+
+
 # Display names for Onyx-supported LLM providers (used in admin UI provider selection).
 # These override PROVIDER_DISPLAY_NAMES for Onyx-specific branding.
 _ONYX_PROVIDER_DISPLAY_NAMES: dict[str, str] = {
