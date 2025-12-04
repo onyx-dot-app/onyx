@@ -137,14 +137,19 @@ VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.5-flash-lite"
 
 
 def _get_provider_to_models_map() -> dict[str, list[str]]:
-    """Lazy-load provider model mappings to avoid importing litellm at module level."""
+    """Lazy-load provider model mappings to avoid importing litellm at module level.
+
+    Dynamic providers (Bedrock, Ollama, OpenRouter) return empty lists here
+    because their models are fetched directly from the source API, which is
+    more up-to-date than LiteLLM's static lists.
+    """
     return {
         OPENAI_PROVIDER_NAME: get_openai_model_names(),
-        BEDROCK_PROVIDER_NAME: get_bedrock_model_names(),
+        BEDROCK_PROVIDER_NAME: [],  # Dynamic - fetched from AWS API
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
         VERTEXAI_PROVIDER_NAME: get_vertexai_model_names(),
-        OLLAMA_PROVIDER_NAME: [],
-        OPENROUTER_PROVIDER_NAME: get_openrouter_model_names(),
+        OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
+        OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
     }
 
 
@@ -165,21 +170,6 @@ def get_openai_model_names() -> list[str]:
             and "moderation" not in model.lower()
             and "sora" not in model.lower()  # video generation
             and "container" not in model.lower()  # not a model
-        ],
-        reverse=True,
-    )
-
-
-def get_bedrock_model_names() -> list[str]:
-    """Get Bedrock model names dynamically from litellm."""
-    import litellm
-
-    # bedrock_converse_models are just extensions of the bedrock_models
-    return sorted(
-        [
-            model
-            for model in litellm.bedrock_models.union(litellm.bedrock_converse_models)
-            if "/" not in model and "embed" not in model.lower()
         ],
         reverse=True,
     )
@@ -240,16 +230,6 @@ def get_vertexai_model_names() -> list[str]:
             and "search_api" not in model.lower()  # not a model
             and "-maas" not in model.lower()  # marketplace models
         ],
-        reverse=True,
-    )
-
-
-def get_openrouter_model_names() -> list[str]:
-    """Get OpenRouter model names dynamically from litellm."""
-    import litellm
-
-    return sorted(
-        [model for model in litellm.openrouter_models if "embed" not in model.lower()],
         reverse=True,
     )
 
@@ -491,17 +471,31 @@ def get_provider_display_name(provider_name: str) -> str:
 def fetch_model_configurations_for_provider(
     provider_name: str,
 ) -> list[ModelConfigurationView]:
+    """Fetch model configurations for a static provider (OpenAI, Anthropic, Vertex AI).
+
+    Looks up max_input_tokens from LiteLLM's model_cost. If not found, stores None
+    and the runtime will use the fallback (4096).
+    """
+    from onyx.llm.utils import get_max_input_tokens
+
     # No models are marked visible by default - the default model logic
     # in the frontend/backend will handle making default models visible.
-    return [
-        ModelConfigurationView(
-            name=model_name,
-            is_visible=False,
-            max_input_tokens=None,
-            supports_image_input=model_supports_image_input(
-                model_name=model_name,
-                model_provider=provider_name,
-            ),
+    configs = []
+    for model_name in fetch_models_for_provider(provider_name):
+        max_input_tokens = get_max_input_tokens(
+            model_name=model_name,
+            model_provider=provider_name,
         )
-        for model_name in fetch_models_for_provider(provider_name)
-    ]
+
+        configs.append(
+            ModelConfigurationView(
+                name=model_name,
+                is_visible=False,
+                max_input_tokens=max_input_tokens,
+                supports_image_input=model_supports_image_input(
+                    model_name=model_name,
+                    model_provider=provider_name,
+                ),
+            )
+        )
+    return configs
