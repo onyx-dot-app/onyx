@@ -533,7 +533,7 @@ wheels = [
 
 [[package]]
 name = "braintrust"
-version = "0.2.6"
+version = "0.3.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "chevron" },
@@ -545,10 +545,11 @@ dependencies = [
     { name = "sseclient-py" },
     { name = "tqdm" },
     { name = "typing-extensions" },
+    { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e8/66/d8bf0a99a29ec7c6cbf47a1e9416ea2f9dcab7bf6d6539cd6a8e755ec22f/braintrust-0.2.6.tar.gz", hash = "sha256:e9c2ae3cce09a8562fa436bc6ec20039c495a6f82928ac36050b5fbc7b89743a", size = 180921, upload-time = "2025-08-27T18:13:01.804Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fb/5c/d4086bcf843a49916cefdd0379a138d9024d5fe75e6cea1e672da19cb272/braintrust-0.3.9.tar.gz", hash = "sha256:8c56ccb214bb102291968cdda67d7bf36a4b01fefc6b1998e53c272379eacab3", size = 237224, upload-time = "2025-11-25T22:20:24.368Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c2/86/8d4bb3b0ab6dd40d2d428bb0b48d29601ed2a344aa6c618378311a73844a/braintrust-0.2.6-py3-none-any.whl", hash = "sha256:d07f1666881c25a8d65a04cfb84f45a0016531928eb3133172942fae49f9a8f8", size = 210465, upload-time = "2025-08-27T18:13:00.503Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/b6/e21ddf4e815c3fc845c61b5084bd4d35b882700d78ec054e9e9803aa04db/braintrust-0.3.9-py3-none-any.whl", hash = "sha256:2b903671837dea85d74e984403f154b60b77a3dde4c0bffa17121fdcb24f18d0", size = 280622, upload-time = "2025-11-25T22:20:22.553Z" },
 ]
 
 [package.optional-dependencies]
@@ -3656,7 +3657,7 @@ backend = [
     { name = "beautifulsoup4", specifier = "==4.12.3" },
     { name = "boto3", specifier = "==1.39.11" },
     { name = "boto3-stubs", extras = ["s3"], specifier = "==1.39.11" },
-    { name = "braintrust", extras = ["openai-agents"], specifier = "==0.2.6" },
+    { name = "braintrust", extras = ["openai-agents"], specifier = "==0.3.9" },
     { name = "braintrust-langchain", specifier = "==0.0.4" },
     { name = "celery", specifier = "==5.5.1" },
     { name = "chardet", specifier = "==5.2.0" },
