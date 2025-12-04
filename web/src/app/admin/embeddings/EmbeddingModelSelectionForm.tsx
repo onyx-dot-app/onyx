@@ -18,7 +18,7 @@ import { DeleteCredentialsModal } from "./modals/DeleteCredentialsModal";
 import { SelectModelModal } from "./modals/SelectModelModal";
 import { ChangeCredentialsModal } from "./modals/ChangeCredentialsModal";
 import { ModelSelectionConfirmationModal } from "./modals/ModelSelectionModal";
-import { AlreadyPickedModal } from "./modals/AlreadyPickedModal";
+import AlreadyPickedModal from "./modals/AlreadyPickedModal";
 import { ModelOption } from "../../../components/embedding/ModelSelector";
 import {
   EMBEDDING_MODELS_ADMIN_URL,

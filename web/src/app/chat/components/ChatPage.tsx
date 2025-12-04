@@ -32,7 +32,7 @@ import { ChatPopup } from "@/app/chat/components/ChatPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { useUser } from "@/components/user/UserProvider";
-import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
+import NoAssistantModal from "@/components/modals/NoAssistantModal";
 import TextView from "@/components/chat/TextView";
 import { Modal } from "@/components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
@@ -756,7 +756,7 @@ export default function ChatPage({
     return (
       <>
         <HealthCheckBanner />
-        <NoAssistantModal isAdmin={isAdmin} />
+        <NoAssistantModal />
       </>
     );
   }
