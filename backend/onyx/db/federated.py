@@ -63,17 +63,31 @@ def create_federated_connector(
     db_session: Session,
     source: FederatedConnectorSource,
     credentials: dict[str, Any],
+    config: dict[str, Any] | None = None,
 ) -> FederatedConnector:
-    """Create a new federated connector with credential validation."""
+    """Create a new federated connector with credential and config validation."""
     # Validate credentials before creating
     if not validate_federated_connector_credentials(source, credentials):
         raise ValueError(
             f"Invalid credentials for federated connector source: {source}"
         )
 
+    # Validate config using connector-specific validation
+    if config:
+        try:
+            # Get connector instance to access validate_config method
+            connector = get_federated_connector(source, credentials)
+            if not connector.validate_config(config):
+                raise ValueError(
+                    f"Invalid config for federated connector source: {source}"
+                )
+        except Exception as e:
+            raise ValueError(f"Config validation failed for {source}: {str(e)}")
+
     federated_connector = FederatedConnector(
         source=source,
         credentials=credentials,
+        config=config or {},
     )
     db_session.add(federated_connector)
     db_session.commit()
@@ -229,23 +243,32 @@ def get_federated_connector_document_set_mappings_by_document_set_names(
             DocumentSet,
             FederatedConnector__DocumentSet.document_set_id == DocumentSet.id,
         )
+        .options(joinedload(FederatedConnector__DocumentSet.federated_connector))
         .where(DocumentSet.name.in_(document_set_names))
     )
     result = db_session.scalars(stmt)
-    return list(result)
+    # Use unique() because joinedload can cause duplicate rows
+    return list(result.unique())
 
 
 def update_federated_connector(
     db_session: Session,
     federated_connector_id: int,
     credentials: dict[str, Any] | None = None,
+    config: dict[str, Any] | None = None,
 ) -> FederatedConnector | None:
-    """Update a federated connector with credential validation."""
+    """Update a federated connector with credential and config validation."""
     federated_connector = fetch_federated_connector_by_id(
         federated_connector_id, db_session
     )
     if not federated_connector:
         return None
+
+    # Use provided credentials if updating them, otherwise use existing credentials
+    # This is needed to instantiate the connector for config validation when only config is being updated
+    creds_to_use = (
+        credentials if credentials is not None else federated_connector.credentials
+    )
 
     if credentials is not None:
         # Validate credentials before updating
@@ -256,6 +279,23 @@ def update_federated_connector(
                 f"Invalid credentials for federated connector source: {federated_connector.source}"
             )
         federated_connector.credentials = credentials
+
+    if config is not None:
+        # Validate config using connector-specific validation
+        try:
+            # Get connector instance to access validate_config method
+            connector = get_federated_connector(
+                federated_connector.source, creds_to_use
+            )
+            if not connector.validate_config(config):
+                raise ValueError(
+                    f"Invalid config for federated connector source: {federated_connector.source}"
+                )
+        except Exception as e:
+            raise ValueError(
+                f"Config validation failed for {federated_connector.source}: {str(e)}"
+            )
+        federated_connector.config = config
 
     db_session.commit()
     return federated_connector

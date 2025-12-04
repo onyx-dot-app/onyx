@@ -140,11 +140,9 @@ test.describe("Message Edit and Regenerate Tests", () => {
   });
 
   test("Message regeneration with model selection", async ({ page }) => {
-    // make sure we're using something other than GPT 4o Mini, otherwise the below
-    // will fail since
-    // `const gpt4oMiniOption = page.locator("text=/.*GPT.?4o.?Mini.*/i").first();`
-    // will find the currently selected model
-    await switchModel(page, "GPT 4o");
+    // make sure we're using something other than GPT-4o Mini, otherwise the below
+    // will fail since we need to switch to a different model for the test
+    await switchModel(page, "GPT-4.1");
 
     // Send initial message
     await sendMessage(page, "hi! Respond with no more than a sentence");
@@ -164,11 +162,14 @@ test.describe("Message Edit and Regenerate Tests", () => {
     const regenerateButton = aiMessage.getByTestId("AIMessage/regenerate");
     await regenerateButton.click();
 
-    // Wait for dropdown to appear and select GPT-4o-mini
+    // Wait for dropdown to appear and select GPT-4o Mini
     await page.waitForTimeout(500);
 
-    // Look for the GPT-4o-mini option in the dropdown
-    const gpt4oMiniOption = page.locator("text=/.*GPT.?4o.?Mini.*/i").first();
+    // Look for the GPT-4o Mini option in the dropdown
+    const gpt4oMiniOption = page
+      .locator('[role="dialog"]')
+      .getByText("GPT-4o Mini", { exact: true })
+      .first();
     await gpt4oMiniOption.click();
 
     // Wait for regeneration to complete by waiting for feedback buttons to appear

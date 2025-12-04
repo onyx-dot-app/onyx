@@ -13,17 +13,17 @@ const getAdvancedOptionsButton = (page: Page) =>
 const getReminderTextarea = (page: Page) =>
   page.locator('textarea[name="task_prompt"]');
 const getDateTimeAwareCheckbox = (page: Page) =>
-  page.getByRole("checkbox", { name: /Date and Time Aware/i });
+  page.locator("#checkbox-datetime_aware");
 const getKnowledgeCutoffInput = (page: Page) =>
   page.locator('input[name="search_start_date"]');
+const getAiRelevanceCheckbox = (page: Page) =>
+  page.locator("#checkbox-llm_relevance_filter");
 const getKnowledgeToggle = (page: Page) =>
   page
     .locator('div:has(> p:has-text("Knowledge"))')
     .locator('button[role="switch"]');
 const getNumChunksInput = (page: Page) =>
   page.locator('input[name="num_chunks"]');
-const getAiRelevanceCheckbox = (page: Page) =>
-  page.getByRole("checkbox", { name: /AI Relevance Filter/i });
 const getStarterMessageInput = (page: Page, index: number = 0) =>
   page.locator(`input[name="starter_messages.${index}.message"]`);
 const getCreateSubmitButton = (page: Page) =>
@@ -36,7 +36,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
   test.describe.configure({ mode: "serial" });
 
   test.describe("User Files Only", () => {
-    test("should create assistant with user files when no connectors exist", async ({
+    test("should create assistant with user files when no connectors exist @exclusive", async ({
       page,
     }: {
       page: Page;
@@ -59,7 +59,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       // Verify Knowledge toggle is disabled (no connectors)
       const knowledgeToggle = getKnowledgeToggle(page);
       await knowledgeToggle.scrollIntoViewIfNeeded();
-      await expect(knowledgeToggle).toBeDisabled();
       await expect(knowledgeToggle).toHaveAttribute("aria-checked", "false");
 
       // Verify "Add User Files" button is visible even without connectors

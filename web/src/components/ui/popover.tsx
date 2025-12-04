@@ -1,9 +1,10 @@
 "use client";
 
-import * as React from "react";
+import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { cn } from "@/lib/utils";
+import Separator from "@/refresh-components/Separator";
 
 const Popover = PopoverPrimitive.Root;
 
@@ -30,14 +31,14 @@ const PopoverContent = React.forwardRef<
 ));
 PopoverContent.displayName = PopoverPrimitive.Content.displayName;
 
+function SeparatorHelper() {
+  return <Separator className="py-0 px-2" />;
+}
+
 const sizeClasses = {
   small: ["w-[10rem]"],
   medium: ["w-[15.5rem]"],
 };
-
-function SeparatorLine() {
-  return <div className="border-b mx-3" />;
-}
 
 export interface PopoverMenuProps {
   // size variants
@@ -47,6 +48,8 @@ export interface PopoverMenuProps {
   className?: string;
   children?: React.ReactNode[];
   footer?: React.ReactNode;
+  // Ref for the scrollable container (useful for programmatic scrolling)
+  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 // This component converts a list of `React.ReactNode`s into a vertical menu.
@@ -64,6 +67,7 @@ export function PopoverMenu({
   className,
   children,
   footer,
+  scrollContainerRef,
 }: PopoverMenuProps) {
   if (!children) return null;
 
@@ -79,6 +83,7 @@ export function PopoverMenu({
   return (
     <div className="flex flex-col gap-1 max-h-[20rem]">
       <div
+        ref={scrollContainerRef}
         className={cn(
           "flex flex-col gap-1 h-full overflow-y-scroll",
           sizeClasses[size],
@@ -91,7 +96,7 @@ export function PopoverMenu({
               <></>
             ) : child === null ? (
               // Render `null`s as separator lines
-              <SeparatorLine />
+              <SeparatorHelper />
             ) : (
               child
             )}
@@ -100,7 +105,7 @@ export function PopoverMenu({
       </div>
       {footer && (
         <>
-          <SeparatorLine />
+          <SeparatorHelper />
           {footer}
         </>
       )}

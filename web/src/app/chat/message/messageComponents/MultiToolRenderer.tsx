@@ -5,15 +5,53 @@ import {
   FiChevronRight,
   FiCircle,
 } from "react-icons/fi";
-import { Packet } from "@/app/chat/services/streamingModels";
+import {
+  Packet,
+  PacketType,
+  SearchToolPacket,
+} from "@/app/chat/services/streamingModels";
 import { FullChatState, RendererResult } from "./interfaces";
 import { RendererComponent } from "./renderMessageComponent";
-import { isToolPacket } from "../../services/packetUtils";
+import { isToolPacket, isSearchToolPacket } from "../../services/packetUtils";
 import { useToolDisplayTiming } from "./hooks/useToolDisplayTiming";
 import { STANDARD_TEXT_COLOR } from "./constants";
 import Text from "@/refresh-components/texts/Text";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import { cn } from "@/lib/utils";
+import {
+  SearchToolStep1Renderer,
+  SearchToolStep2Renderer,
+  constructCurrentSearchState,
+} from "./renderers/SearchToolRendererV2";
+
+// Type for display items - can be regular tool or search step
+type DisplayItem = {
+  key: string;
+  type: "regular" | "search-step-1" | "search-step-2";
+  turn_index: number;
+  packets: Packet[];
+};
+
+// Helper to check if a tool group is an internal search (not internet search)
+function isInternalSearchToolGroup(packets: Packet[]): boolean {
+  const hasSearchStart = packets.some(
+    (p) => p.obj.type === PacketType.SEARCH_TOOL_START
+  );
+  if (!hasSearchStart) return false;
+
+  const searchState = constructCurrentSearchState(
+    packets as SearchToolPacket[]
+  );
+  return !searchState.isInternetSearch;
+}
+
+// Helper to check if search step 2 should be visible (has results or is complete)
+function shouldShowSearchStep2(packets: Packet[]): boolean {
+  const searchState = constructCurrentSearchState(
+    packets as SearchToolPacket[]
+  );
+  return searchState.hasResults || searchState.isComplete;
+}
 
 // Shared component for expanded tool rendering
 function ExpandedToolItem({
@@ -25,7 +63,6 @@ function ExpandedToolItem({
   onToggleClick,
   defaultIconColor = "text-text-300",
   expandedText,
-  stepNumber,
 }: {
   icon: ((props: { size: number }) => JSX.Element) | null;
   content: JSX.Element | string;
@@ -35,7 +72,6 @@ function ExpandedToolItem({
   onToggleClick?: () => void;
   defaultIconColor?: string;
   expandedText?: JSX.Element | string;
-  stepNumber: number;
 }) {
   const finalIcon = icon ? (
     icon({ size: 14 })
@@ -84,7 +120,6 @@ function ExpandedToolItem({
               )}
               onClick={showClickableToggle ? onToggleClick : undefined}
             >
-              <Text text02>{stepNumber}.</Text>
               {status}
             </Text>
           </div>
@@ -114,7 +149,7 @@ export default function MultiToolRenderer({
   stopPacketSeen,
   onAllToolsDisplayed,
 }: {
-  packetGroups: { ind: number; packets: Packet[] }[];
+  packetGroups: { turn_index: number; packets: Packet[] }[];
   chatState: FullChatState;
   isComplete: boolean;
   isFinalAnswerComing: boolean;
@@ -129,6 +164,42 @@ export default function MultiToolRenderer({
       (group) => group.packets[0] && isToolPacket(group.packets[0], false)
     );
   }, [packetGroups]);
+
+  // Transform tool groups into display items, splitting internal search tools into two steps
+  const displayItems = useMemo((): DisplayItem[] => {
+    const items: DisplayItem[] = [];
+
+    toolGroups.forEach((group) => {
+      if (isInternalSearchToolGroup(group.packets)) {
+        // Internal search: split into two steps
+        items.push({
+          key: `${group.turn_index}-search-1`,
+          type: "search-step-1",
+          turn_index: group.turn_index,
+          packets: group.packets,
+        });
+        // Only add step 2 if we have results or the search is complete
+        if (shouldShowSearchStep2(group.packets)) {
+          items.push({
+            key: `${group.turn_index}-search-2`,
+            type: "search-step-2",
+            turn_index: group.turn_index,
+            packets: group.packets,
+          });
+        }
+      } else {
+        // Regular tool (or internet search): single entry
+        items.push({
+          key: `${group.turn_index}`,
+          type: "regular",
+          turn_index: group.turn_index,
+          packets: group.packets,
+        });
+      }
+    });
+
+    return items;
+  }, [toolGroups]);
 
   // Use the custom hook to manage tool display timing
   const { visibleTools, allToolsDisplayed, handleToolComplete } =
@@ -148,54 +219,110 @@ export default function MultiToolRenderer({
     }
   }, [isComplete, isStreamingExpanded]);
 
+  // Track completion for internal search tools
+  // We need to call handleToolComplete when a search tool completes
+  useEffect(() => {
+    displayItems.forEach((item) => {
+      if (item.type === "search-step-1" || item.type === "search-step-2") {
+        const searchState = constructCurrentSearchState(
+          item.packets as SearchToolPacket[]
+        );
+        if (searchState.isComplete && item.turn_index !== undefined) {
+          handleToolComplete(item.turn_index);
+        }
+      }
+    });
+  }, [displayItems, handleToolComplete]);
+
+  // Helper to render a display item (either regular tool or search step)
+  const renderDisplayItem = (
+    item: DisplayItem,
+    index: number,
+    totalItems: number,
+    isStreaming: boolean,
+    isVisible: boolean,
+    childrenCallback: (result: RendererResult) => JSX.Element
+  ) => {
+    if (item.type === "search-step-1") {
+      return (
+        <SearchToolStep1Renderer
+          key={item.key}
+          packets={item.packets as SearchToolPacket[]}
+          isActive={isStreaming}
+        >
+          {childrenCallback}
+        </SearchToolStep1Renderer>
+      );
+    } else if (item.type === "search-step-2") {
+      return (
+        <SearchToolStep2Renderer
+          key={item.key}
+          packets={item.packets as SearchToolPacket[]}
+          isActive={isStreaming}
+        >
+          {childrenCallback}
+        </SearchToolStep2Renderer>
+      );
+    } else {
+      // Regular tool - use RendererComponent
+      return (
+        <RendererComponent
+          key={item.key}
+          packets={item.packets}
+          chatState={chatState}
+          onComplete={() => {
+            if (item.turn_index !== undefined) {
+              handleToolComplete(item.turn_index);
+            }
+          }}
+          animate
+          stopPacketSeen={stopPacketSeen}
+          useShortRenderer={isStreaming && !isStreamingExpanded}
+        >
+          {childrenCallback}
+        </RendererComponent>
+      );
+    }
+  };
+
   // If still processing, show tools progressively with timing
   if (!isComplete) {
-    // Get the tools to display based on visibleTools
-    const toolsToDisplay = toolGroups.filter((group) =>
-      visibleTools.has(group.ind)
+    // Filter display items to only show those whose turn_index is visible
+    const itemsToDisplay = displayItems.filter((item) =>
+      visibleTools.has(item.turn_index)
     );
 
-    if (toolsToDisplay.length === 0) {
+    if (itemsToDisplay.length === 0) {
       return null;
     }
 
-    // Show only the latest tool visually when collapsed, but render all for completion tracking
+    // Show only the latest item visually when collapsed, but render all for completion tracking
     const shouldShowOnlyLatest =
-      !isStreamingExpanded && toolsToDisplay.length > 1;
-    const latestToolIndex = toolsToDisplay.length - 1;
+      !isStreamingExpanded && itemsToDisplay.length > 1;
+    const latestItemIndex = itemsToDisplay.length - 1;
 
     return (
       <div className="mb-4 relative border border-border-medium rounded-lg p-4 shadow">
         <div className="relative">
           <div>
-            {toolsToDisplay.map((toolGroup, index) => {
-              if (!toolGroup) return null;
-
-              // Hide all but the latest tool when shouldShowOnlyLatest is true
+            {itemsToDisplay.map((item, index) => {
+              // Hide all but the latest item when shouldShowOnlyLatest is true
               const isVisible =
-                !shouldShowOnlyLatest || index === latestToolIndex;
-              const isLastItem = index === toolsToDisplay.length - 1;
+                !shouldShowOnlyLatest || index === latestItemIndex;
+              const isLastItem = index === itemsToDisplay.length - 1;
 
               return (
                 <div
-                  key={toolGroup.ind}
+                  key={item.key}
                   style={{ display: isVisible ? "block" : "none" }}
                 >
-                  <RendererComponent
-                    packets={toolGroup.packets}
-                    chatState={chatState}
-                    onComplete={() => {
-                      // When a tool completes rendering, track it in the hook
-                      const toolInd = toolGroup.ind;
-                      if (toolInd !== undefined) {
-                        handleToolComplete(toolInd);
-                      }
-                    }}
-                    animate
-                    stopPacketSeen={stopPacketSeen}
-                    useShortRenderer={!isStreamingExpanded}
-                  >
-                    {({ icon, content, status, expandedText }) => {
+                  {renderDisplayItem(
+                    item,
+                    index,
+                    itemsToDisplay.length,
+                    true,
+                    isVisible,
+                    ({ icon, content, status, expandedText }) => {
                       // When expanded, show full renderer style similar to complete state
                       if (isStreamingExpanded) {
                         return (
@@ -205,13 +332,12 @@ export default function MultiToolRenderer({
                             status={status}
                             isLastItem={isLastItem}
                             showClickableToggle={
-                              toolsToDisplay.length > 1 && index === 0
+                              itemsToDisplay.length > 1 && index === 0
                             }
                             onToggleClick={() =>
                               setIsStreamingExpanded(!isStreamingExpanded)
                             }
                             expandedText={expandedText}
-                            stepNumber={index + 1}
                           />
                         );
                       }
@@ -233,28 +359,32 @@ export default function MultiToolRenderer({
 
                           <div
                             className={cn(
-                              "text-base flex items-center gap-1 loading-text mb-2",
-                              toolsToDisplay.length > 1 &&
+                              "text-base flex items-center gap-1 mb-2",
+                              itemsToDisplay.length > 1 &&
                                 isLastItem &&
                                 "cursor-pointer hover:text-text-900 transition-colors"
                             )}
                             onClick={
-                              toolsToDisplay.length > 1 && isLastItem
+                              itemsToDisplay.length > 1 && isLastItem
                                 ? () =>
                                     setIsStreamingExpanded(!isStreamingExpanded)
                                 : undefined
                             }
                           >
-                            {icon ? icon({ size: 14 }) : null}
-                            {status}
-                            {toolsToDisplay.length > 1 && isLastItem && (
-                              <div className="ml-1">
+                            {icon ? (
+                              <span className="text-shimmer-base">
+                                {icon({ size: 14 })}
+                              </span>
+                            ) : null}
+                            <span className="loading-text">{status}</span>
+                            {itemsToDisplay.length > 1 && isLastItem && (
+                              <span className="ml-1 text-shimmer-base">
                                 {isStreamingExpanded ? (
                                   <FiChevronDown size={14} />
                                 ) : (
                                   <FiChevronRight size={14} />
                                 )}
-                              </div>
+                              </span>
                             )}
                           </div>
 
@@ -268,8 +398,8 @@ export default function MultiToolRenderer({
                           </div>
                         </div>
                       );
-                    }}
-                  </RendererComponent>
+                    }
+                  )}
                 </div>
               );
             })}
@@ -288,7 +418,7 @@ export default function MultiToolRenderer({
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <Text text03 className="group-hover/StepsButton:text-text-04">
-          {toolGroups.length} steps
+          {displayItems.length} steps
         </Text>
         <SvgChevronDownSmall
           className={cn(
@@ -302,7 +432,9 @@ export default function MultiToolRenderer({
       <div
         className={cn(
           "transition-all duration-300 ease-in-out overflow-hidden",
-          isExpanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"
+          isExpanded
+            ? "max-h-[1000px] overflow-y-auto opacity-100"
+            : "max-h-0 opacity-0"
         )}
       >
         <div
@@ -312,38 +444,30 @@ export default function MultiToolRenderer({
           )}
         >
           <div>
-            {toolGroups.map((toolGroup, index) => {
+            {displayItems.map((item, index) => {
               // Don't mark as last item if we're going to show the Done node
               const isLastItem = false; // Always draw connector line since Done node follows
 
               return (
-                <RendererComponent
-                  key={toolGroup.ind}
-                  packets={toolGroup.packets}
-                  chatState={chatState}
-                  onComplete={() => {
-                    // When a tool completes rendering, track it in the hook
-                    const toolInd = toolGroup.ind;
-                    if (toolInd !== undefined) {
-                      handleToolComplete(toolInd);
-                    }
-                  }}
-                  animate
-                  stopPacketSeen={stopPacketSeen}
-                  useShortRenderer={false}
-                >
-                  {({ icon, content, status, expandedText }) => (
-                    <ExpandedToolItem
-                      icon={icon}
-                      content={content}
-                      status={status}
-                      isLastItem={isLastItem}
-                      defaultIconColor="text-text-03"
-                      expandedText={expandedText}
-                      stepNumber={index + 1}
-                    />
+                <div key={item.key}>
+                  {renderDisplayItem(
+                    item,
+                    index,
+                    displayItems.length,
+                    false,
+                    true,
+                    ({ icon, content, status, expandedText }) => (
+                      <ExpandedToolItem
+                        icon={icon}
+                        content={content}
+                        status={status}
+                        isLastItem={isLastItem}
+                        defaultIconColor="text-text-03"
+                        expandedText={expandedText}
+                      />
+                    )
                   )}
-                </RendererComponent>
+                </div>
               );
             })}
 

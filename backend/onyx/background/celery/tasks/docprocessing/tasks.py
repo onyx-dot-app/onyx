@@ -68,6 +68,7 @@ from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
+from onyx.db.enums import SwitchoverType
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
@@ -155,8 +156,6 @@ def validate_active_indexing_attempts(
     """
     logger.info("Validating active indexing attempts")
 
-    heartbeat_timeout_seconds = HEARTBEAT_TIMEOUT_SECONDS
-
     with get_session_with_current_tenant() as db_session:
 
         # Find all active indexing attempts
@@ -173,6 +172,9 @@ def validate_active_indexing_attempts(
 
         for attempt in active_attempts:
             lock_beat.reacquire()
+
+            # Initialize timeout for each attempt to prevent state pollution
+            heartbeat_timeout_seconds = HEARTBEAT_TIMEOUT_SECONDS
 
             # Double-check the attempt still exists and has the same status
             fresh_attempt = get_index_attempt(db_session, attempt.id)
@@ -860,10 +862,10 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 tenant_id=tenant_id,
             )
 
-            # Secondary indexing (only if secondary search settings exist and background reindex is enabled)
+            # Secondary indexing (only if secondary search settings exist and switchover_type is not INSTANT)
             if (
                 secondary_search_settings
-                and secondary_search_settings.background_reindex_enabled
+                and secondary_search_settings.switchover_type != SwitchoverType.INSTANT
                 and secondary_cc_pair_ids
             ):
                 tasks_created += _kickoff_indexing_tasks(
@@ -878,11 +880,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 )
             elif (
                 secondary_search_settings
-                and not secondary_search_settings.background_reindex_enabled
+                and secondary_search_settings.switchover_type == SwitchoverType.INSTANT
             ):
                 task_logger.info(
                     f"Skipping secondary indexing: "
-                    f"background_reindex_enabled=False "
+                    f"switchover_type=INSTANT "
                     f"for search_settings={secondary_search_settings.id}"
                 )
 

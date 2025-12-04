@@ -3,7 +3,7 @@
 import { useState } from "react";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
-import { Checkbox } from "@/components/ui/checkbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/refresh-components/texts/Text";
 import SvgAlertCircle from "@/icons/alert-circle";
 

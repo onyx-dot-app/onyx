@@ -10,7 +10,6 @@ import { Modal } from "@/components/Modal";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { usePopup, PopupSpec } from "@/components/admin/connectors/Popup";
-import { UsersIcon } from "@/components/icons/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -18,7 +17,7 @@ import BulkAdd from "@/components/admin/users/BulkAdd";
 import Text from "@/refresh-components/texts/Text";
 import { InvitedUserSnapshot } from "@/lib/types";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
@@ -26,6 +25,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
 import SvgDownloadCloud from "@/icons/download-cloud";
 import { useAuthType } from "@/lib/hooks";
+import SvgUser from "@/icons/user";
 
 interface CountDisplayProps {
   label: string;
@@ -296,8 +296,8 @@ const AddUserButton = ({
   const shouldShowFirstInviteWarning =
     !NEXT_PUBLIC_CLOUD_ENABLED &&
     authType !== null &&
-    authType !== "saml" &&
-    authType !== "oidc" &&
+    authType !== AuthType.SAML &&
+    authType !== AuthType.OIDC &&
     invitedUsers &&
     invitedUsers.length === 0;
 
@@ -372,7 +372,7 @@ const AddUserButton = ({
 const Page = () => {
   return (
     <div className="mx-auto container">
-      <AdminPageTitle title="Manage Users" icon={<UsersIcon size={32} />} />
+      <AdminPageTitle title="Manage Users" icon={SvgUser} />
       <SearchableTables />
     </div>
   );

@@ -7,19 +7,27 @@ on:
   merge_group:
   pull_request:
     branches: [ main ]
+  push:
+    tags:
+      - "v*.*.*"
   workflow_dispatch:  # Allows manual triggering
+
+permissions:
+  contents: read
 
 jobs:
   helm-chart-check:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on,runner=8cpu-linux-x64,hdd=256,"run-id=${{ github.run_id }}-helm-chart-check"]
+    timeout-minutes: 45
 
     # fetch-depth 0 is required for helm/chart-testing-action
     steps:
     - name: Checkout code
-      uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+      uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
       with:
         fetch-depth: 0
+        persist-credentials: false
 
     - name: Set up Helm
       uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # ratchet:azure/setup-helm@v4.3.1
@@ -32,9 +40,11 @@ jobs:
     # even though we specify chart-dirs in ct.yaml, it isn't used by ct for the list-changed command...
     - name: Run chart-testing (list-changed)
       id: list-changed
+      env:
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       run: |
-        echo "default_branch: ${{ github.event.repository.default_branch }}"
-        changed=$(ct list-changed --remote origin --target-branch ${{ github.event.repository.default_branch }} --chart-dirs deployment/helm/charts)
+        echo "default_branch: ${DEFAULT_BRANCH}"
+        changed=$(ct list-changed --remote origin --target-branch ${DEFAULT_BRANCH} --chart-dirs deployment/helm/charts)
         echo "list-changed output: $changed"
         if [[ -n "$changed" ]]; then
           echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -54,7 +64,7 @@ jobs:
 
     - name: Create kind cluster
       if: steps.list-changed.outputs.changed == 'true'
-      uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # ratchet:helm/kind-action@v1.12.0
+      uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # ratchet:helm/kind-action@v1.13.0
 
     - name: Pre-install cluster status check
       if: steps.list-changed.outputs.changed == 'true'
@@ -73,6 +83,7 @@ jobs:
         helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
         helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
         helm repo add minio https://charts.min.io/
+        helm repo add code-interpreter https://onyx-dot-app.github.io/code-interpreter/
         helm repo update
 
     - name: Install Redis operator

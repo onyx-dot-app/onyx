@@ -341,7 +341,6 @@ export const DriveJsonUploadSection = ({
             <div className="mt-2">
               <Button
                 danger
-                type="button"
                 onClick={async () => {
                   const endpoint =
                     localServiceAccountData?.service_account_email
@@ -508,7 +507,6 @@ export const DriveAuthSection = ({
           </div>
           <Button
             danger
-            type="button"
             onClick={async () => {
               handleRevokeAccess(
                 connectorAssociated,

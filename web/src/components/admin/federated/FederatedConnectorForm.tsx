@@ -4,17 +4,18 @@ import { useState, useEffect } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import {
   ConfigurableSources,
-  CredentialSchemaResponse,
   CredentialFieldSpec,
+  ConfigurationFieldSpec,
   FederatedConnectorCreateRequest,
   FederatedConnectorDetail,
+  CredentialSchemaResponse,
 } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Card, CardContent } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useRouter } from "next/navigation";
+import Text from "@/refresh-components/texts/Text";
 import { AlertTriangle, Check, Loader2, Trash2Icon, Info } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
 import Title from "@/components/ui/title";
@@ -24,14 +25,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
-import { FiSettings } from "react-icons/fi";
 import { usePopup } from "@/components/admin/connectors/Popup";
 
 import { Badge } from "@/components/ui/badge";
-import SvgLoader from "@/icons/loader";
 import SvgSettings from "@/icons/settings";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
+import Separator from "@/refresh-components/Separator";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;
@@ -44,10 +46,17 @@ interface CredentialForm {
   [key: string]: string;
 }
 
+interface ConfigForm {
+  [key: string]: string | boolean | string[] | number | undefined;
+}
+
 interface FormState {
   credentials: CredentialForm;
+  config: ConfigForm;
   schema: Record<string, CredentialFieldSpec> | null;
+  configurationSchema: Record<string, ConfigurationFieldSpec> | null;
   schemaError: string | null;
+  configurationSchemaError: string | null;
   connectorError: string | null;
 }
 
@@ -88,7 +97,8 @@ async function validateCredentials(
 
 async function createFederatedConnector(
   source: string,
-  credentials: CredentialForm
+  credentials: CredentialForm,
+  config?: ConfigForm
 ): Promise<{ success: boolean; message: string }> {
   try {
     const response = await fetch("/api/federated", {
@@ -99,6 +109,7 @@ async function createFederatedConnector(
       body: JSON.stringify({
         source: `federated_${source}`,
         credentials,
+        config: config || {},
       } as FederatedConnectorCreateRequest),
     });
 
@@ -121,7 +132,8 @@ async function createFederatedConnector(
 
 async function updateFederatedConnector(
   id: number,
-  credentials: CredentialForm
+  credentials: CredentialForm,
+  config?: ConfigForm
 ): Promise<{ success: boolean; message: string }> {
   try {
     const response = await fetch(`/api/federated/${id}`, {
@@ -131,6 +143,7 @@ async function updateFederatedConnector(
       },
       body: JSON.stringify({
         credentials,
+        config: config || {},
       }),
     });
 
@@ -189,8 +202,11 @@ export function FederatedConnectorForm({
 
   const [formState, setFormState] = useState<FormState>({
     credentials: preloadedConnectorData?.credentials || {},
+    config: preloadedConnectorData?.config || {},
     schema: preloadedCredentialSchema?.credentials || null,
+    configurationSchema: null,
     schemaError: null,
+    configurationSchemaError: null,
     connectorError: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -218,10 +234,10 @@ export function FederatedConnectorForm({
             );
           }
 
-          const schemaData: CredentialSchemaResponse = await response.json();
+          const responseData = await response.json();
           setFormState((prev) => ({
             ...prev,
-            schema: schemaData.credentials,
+            schema: responseData.credentials,
             schemaError: null,
           }));
         } catch (error) {
@@ -238,6 +254,61 @@ export function FederatedConnectorForm({
 
     fetchCredentialSchema();
   }, [connector, preloadedCredentialSchema]);
+
+  // Fetch configuration schema for connector configuration
+  useEffect(() => {
+    const fetchConfigurationSchema = async () => {
+      try {
+        const response = await fetch(
+          `/api/federated/sources/federated_${connector}/configuration/schema`
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch configuration schema: ${response.statusText}`
+          );
+        }
+
+        const responseData = await response.json();
+        const configurationSchema = responseData.configuration;
+
+        // Initialize config with defaults - merge with existing config
+        // This ensures boolean fields like search_all_channels have explicit values for UI state
+        if (configurationSchema) {
+          const configWithDefaults: Record<string, any> = {};
+          (Object.entries(configurationSchema) as [string, any][]).forEach(
+            ([key, field]) => {
+              if (field.default !== undefined) {
+                configWithDefaults[key] = field.default;
+              }
+            }
+          );
+
+          setFormState((prev) => ({
+            ...prev,
+            // Merge defaults first, then overlay saved config values
+            config: { ...configWithDefaults, ...prev.config },
+            configurationSchema,
+            configurationSchemaError: null,
+          }));
+        } else {
+          setFormState((prev) => ({
+            ...prev,
+            configurationSchema,
+            configurationSchemaError: null,
+          }));
+        }
+      } catch (error) {
+        console.error("Error fetching configuration schema:", error);
+        setFormState((prev) => ({
+          ...prev,
+          configurationSchemaError: `Failed to load configuration schema: ${error}`,
+        }));
+      }
+    };
+
+    fetchConfigurationSchema();
+  }, [connector, isEditMode]);
 
   // Show loading state at the top level if schema is loading
   if (isLoadingSchema) {
@@ -264,6 +335,16 @@ export function FederatedConnectorForm({
       ...prev,
       credentials: {
         ...prev.credentials,
+        [key]: value,
+      },
+    }));
+  };
+
+  const handleConfigChange = (key: string, value: any) => {
+    setFormState((prev) => ({
+      ...prev,
+      config: {
+        ...prev.config,
         [key]: value,
       },
     }));
@@ -370,8 +451,16 @@ export function FederatedConnectorForm({
       // Create or update the connector
       const result =
         isEditMode && connectorId
-          ? await updateFederatedConnector(connectorId, formState.credentials)
-          : await createFederatedConnector(connector, formState.credentials);
+          ? await updateFederatedConnector(
+              connectorId,
+              formState.credentials,
+              formState.config
+            )
+          : await createFederatedConnector(
+              connector,
+              formState.credentials,
+              formState.config
+            );
 
       setSubmitMessage(result.message);
       setSubmitSuccess(result.success);
@@ -420,15 +509,25 @@ export function FederatedConnectorForm({
     return (
       <>
         {Object.entries(formState.schema).map(([fieldKey, fieldSpec]) => (
-          <div key={fieldKey} className="space-y-2 w-full">
-            <Label htmlFor={fieldKey}>
-              {fieldKey
-                .replace(/_/g, " ")
-                .replace(/\b\w/g, (l) => l.toUpperCase())}
-              {fieldSpec.required && (
-                <span className="text-red-500 ml-1">*</span>
+          <div
+            key={fieldKey}
+            className="flex items-center justify-between gap-4 py-2"
+          >
+            <div className="flex-1">
+              <Text mainUiAction text04 className="mb-1">
+                {fieldKey
+                  .replace(/_/g, " ")
+                  .replace(/\b\w/g, (l) => l.toUpperCase())}
+                {fieldSpec.required && (
+                  <span className="text-red-500 ml-1">*</span>
+                )}
+              </Text>
+              {fieldSpec.description && (
+                <Text mainUiMuted text03>
+                  {fieldSpec.description}
+                </Text>
               )}
-            </Label>
+            </div>
             <Input
               id={fieldKey}
               type={fieldSpec.secret ? "password" : "text"}
@@ -439,16 +538,155 @@ export function FederatedConnectorForm({
               }
               value={formState.credentials[fieldKey] || ""}
               onChange={(e) => handleCredentialChange(fieldKey, e.target.value)}
-              className="w-full"
+              className="w-96"
               required={fieldSpec.required}
             />
-            {fieldSpec.description && (
-              <p className="text-xs text-gray-500 mt-1">
-                {fieldSpec.description}
-              </p>
-            )}
           </div>
         ))}
+      </>
+    );
+  };
+
+  // Helper to determine if channels input should be disabled for Slack
+  const disableSlackChannelInput = (fieldKey: string): boolean => {
+    if (connector !== "slack" || fieldKey !== "channels") {
+      return false;
+    }
+    // Disable channels field when search_all_channels is true
+    return formState.config.search_all_channels === true;
+  };
+
+  const renderConfigFields = () => {
+    if (formState.configurationSchemaError) {
+      return (
+        <div className="flex items-center gap-2 p-3 rounded-md bg-red-50 text-red-700 border border-red-200">
+          <AlertTriangle size={16} />
+          <span className="text-sm">{formState.configurationSchemaError}</span>
+        </div>
+      );
+    }
+
+    if (!formState.configurationSchema) {
+      return (
+        <div className="text-sm text-gray-500">
+          No search configuration available for this connector type.
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {Object.entries(formState.configurationSchema).map(
+          ([fieldKey, fieldSpec]) => {
+            const isBoolType = fieldSpec.type === "bool";
+            const isListType = fieldSpec.type.startsWith("list[");
+
+            return (
+              <div key={fieldKey} className="space-y-2 w-full">
+                {isBoolType ? (
+                  <div className="flex items-center gap-3 py-2">
+                    <Checkbox
+                      checked={
+                        formState.config[fieldKey] !== undefined
+                          ? Boolean(formState.config[fieldKey])
+                          : Boolean(fieldSpec.default)
+                      }
+                      onCheckedChange={(checked) =>
+                        handleConfigChange(fieldKey, checked)
+                      }
+                    />
+                    <div className="flex-1">
+                      <Text mainUiAction text04>
+                        {fieldKey
+                          .replace(/_/g, " ")
+                          .replace(/\b\w/g, (l) => l.toUpperCase())}
+                      </Text>
+                      {fieldSpec.description && (
+                        <Text mainUiMuted text03>
+                          {fieldSpec.description}
+                        </Text>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {isListType ? (
+                      <>
+                        <Text mainUiAction text04>
+                          {fieldSpec.description ||
+                            fieldKey
+                              .replace(/_/g, " ")
+                              .replace(/\b\w/g, (l) => l.toUpperCase())}
+                          {fieldSpec.required && (
+                            <span className="text-red-500 ml-1">*</span>
+                          )}
+                        </Text>
+                        <ListFieldInput
+                          values={
+                            Array.isArray(formState.config[fieldKey])
+                              ? formState.config[fieldKey]
+                              : []
+                          }
+                          onChange={(values) =>
+                            handleConfigChange(fieldKey, values)
+                          }
+                          placeholder={
+                            fieldSpec.example &&
+                            Array.isArray(fieldSpec.example)
+                              ? `e.g., ${fieldSpec.example.join(", ")}`
+                              : "Type and press Enter to add an item"
+                          }
+                          disabled={disableSlackChannelInput(fieldKey)}
+                        />
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-between gap-4 py-2">
+                        <div className="flex-1">
+                          <Text mainUiAction text04 className="mb-1">
+                            {fieldKey
+                              .replace(/_/g, " ")
+                              .replace(/\b\w/g, (l) => l.toUpperCase())}
+                            {fieldSpec.required && (
+                              <span className="text-red-500 ml-1">*</span>
+                            )}
+                          </Text>
+                          {fieldSpec.description && (
+                            <Text mainUiMuted text03>
+                              {fieldSpec.description}
+                            </Text>
+                          )}
+                        </div>
+                        <Input
+                          id={fieldKey}
+                          type={fieldSpec.type === "int" ? "number" : "text"}
+                          placeholder={
+                            fieldSpec.example
+                              ? String(fieldSpec.example)
+                              : fieldSpec.description
+                          }
+                          value={
+                            formState.config[fieldKey] !== undefined
+                              ? String(formState.config[fieldKey])
+                              : ""
+                          }
+                          onChange={(e) => {
+                            const value =
+                              fieldSpec.type === "int"
+                                ? parseInt(e.target.value, 10)
+                                : e.target.value;
+                            handleConfigChange(fieldKey, value);
+                          }}
+                          className="w-96"
+                          required={fieldSpec.required}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          }
+        )}
       </>
     );
   };
@@ -488,7 +726,7 @@ export function FederatedConnectorForm({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <div>
-                  <Button secondary className="flex" leftIcon={SvgSettings}>
+                  <Button secondary leftIcon={SvgSettings}>
                     Manage
                   </Button>
                 </div>
@@ -510,13 +748,18 @@ export function FederatedConnectorForm({
       </div>
 
       <Title className="mb-2 mt-6" size="md">
-        Connector Configuration
+        Federated Connector Configuration
       </Title>
 
       <Card className="px-8 py-4">
         <CardContent className="p-0">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {renderCredentialFields()}
+          <form onSubmit={handleSubmit}>
+            <Text headingH3>Credentials</Text>
+            <Text mainUiMuted>Enter the credentials for this connector.</Text>
+            <div className="space-y-4">{renderCredentialFields()}</div>
+            <Separator />
+            <Text headingH3>Configuration</Text>
+            <div className="space-y-4">{renderConfigFields()}</div>
 
             <div className="flex gap-2 pt-4 w-full justify-end">
               {submitMessage && (

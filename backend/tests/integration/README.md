@@ -11,10 +11,15 @@ The idea is that each test can use the manager class to create (.create()) a "te
 
 ## Instructions for Running Integration Tests Locally
 0. Generate dependencies
+First install openap-generator
 ```sh
 brew install openapi-generator
 ```
-Then run Onyx OpenAPI schema generator in launch.json
+
+Then, using the VSCode/Cursor debugger, run the `Onyx OpenAPI Schema Generator` task (see `CONTRIBUTING_VSCODE.md` for `launch.json` setup instructions).
+The task automatically generates the Python client needed for integration tests.
+
+If the client generation fails, try running this command manually:
 ```sh
 openapi-generator generate -i backend/generated/openapi.json -g python -o backend/generated/onyx_openapi_client --package-name onyx_openapi_client --skip-validate-spec --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
 ```
@@ -25,15 +30,15 @@ openapi-generator generate -i backend/generated/openapi.json -g python -o backen
 2. Navigate to `onyx/backend`.
 3. Run the following command in the terminal:
    ```sh
-   python -m dotenv -f .vscode/.env run -- pytest -s tests/integration/tests/
+   python -m dotenv -f .env run -- pytest -s tests/integration/tests/
    ```
    or to run all tests in a file:
    ```sh
-   python -m dotenv -f .vscode/.env run -- pytest -s tests/integration/tests/path_to/test_file.py
+   python -m dotenv -f .env run -- pytest -s tests/integration/tests/path_to/test_file.py
    ```
    or to run a single test:
    ```sh
-   python -m dotenv -f .vscode/.env run -- pytest -s tests/integration/tests/path_to/test_file.py::test_function_name
+   python -m dotenv -f .env run -- pytest -s tests/integration/tests/path_to/test_file.py::test_function_name
    ```
 
 Running some single tests require the `mock_connector_server` container to be running. If the above doesn't work, 

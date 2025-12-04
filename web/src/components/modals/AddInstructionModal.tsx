@@ -5,7 +5,7 @@ import Button from "@/refresh-components/buttons/Button";
 import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import SvgAddLines from "@/icons/add-lines";
-import { Textarea } from "@/components/ui/textarea";
+import InputTextarea from "@/refresh-components/inputs/InputTextArea";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 
 export default function AddInstructionModal() {
@@ -37,11 +37,10 @@ export default function AddInstructionModal() {
       mini
     >
       <div className="bg-background-tint-01 p-4">
-        <Textarea
+        <InputTextarea
           value={instructionText}
-          onChange={(e) => setInstructionText(e.target.value)}
+          onChange={(event) => setInstructionText(event.target.value)}
           placeholder="Think step by step and show reasoning for complex problems. Use specific examples."
-          className="min-h-[140px] border-border-01 bg-background-neutral-00"
         />
       </div>
       <div className="flex flex-row justify-end gap-2 p-4">

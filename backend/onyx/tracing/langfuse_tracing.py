@@ -1,6 +1,13 @@
-from onyx.configs.app_configs import LANGFUSE_HOST
+from typing import cast
+
+from openinference.instrumentation import OITracer
+from openinference.instrumentation import TraceConfig
+from opentelemetry import trace as trace_api
+
 from onyx.configs.app_configs import LANGFUSE_PUBLIC_KEY
 from onyx.configs.app_configs import LANGFUSE_SECRET_KEY
+from onyx.tracing.framework import set_trace_processors
+from onyx.tracing.openinference_tracing_processor import OpenInferenceTracingProcessor
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -14,15 +21,18 @@ def setup_langfuse_if_creds_available() -> None:
 
     import nest_asyncio  # type: ignore
     from langfuse import get_client
-    from openinference.instrumentation.openai_agents import OpenAIAgentsInstrumentor
 
     nest_asyncio.apply()
-    OpenAIAgentsInstrumentor().instrument()
-    langfuse = get_client()
-    try:
-        if langfuse.auth_check():
-            logger.notice(f"Langfuse authentication successful (host: {LANGFUSE_HOST})")
-        else:
-            logger.warning("Langfuse authentication failed")
-    except Exception as e:
-        logger.error(f"Error setting up Langfuse: {e}")
+    config = TraceConfig()
+    tracer_provider = trace_api.get_tracer_provider()
+    tracer = OITracer(
+        trace_api.get_tracer(__name__, tracer_provider=tracer_provider),
+        config=config,
+    )
+
+    set_trace_processors(
+        [OpenInferenceTracingProcessor(cast(trace_api.Tracer, tracer))]
+    )
+    # This is poorly named -- it actually is a get or create client for langfuse.
+    # Langfuse with silently fail without this function call.
+    _ = get_client()

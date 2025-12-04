@@ -10,10 +10,7 @@ HIDDEN_TOOL_IDS = {"OktaProfileTool"}
 
 def should_expose_tool_to_fe(tool: Tool) -> bool:
     """Return True when the given tool should be sent to the frontend."""
-    if tool.in_code_tool_id is None:
-        return True
-
-    return tool.in_code_tool_id not in HIDDEN_TOOL_IDS
+    return tool.in_code_tool_id is None or tool.in_code_tool_id not in HIDDEN_TOOL_IDS
 
 
 class ToolSnapshot(BaseModel):
@@ -29,13 +26,14 @@ class ToolSnapshot(BaseModel):
     user_id: str | None = None
     oauth_config_id: int | None = None
     oauth_config_name: str | None = None
+    enabled: bool = True
 
     @classmethod
     def from_model(cls, tool: Tool) -> "ToolSnapshot":
         return cls(
             id=tool.id,
             name=tool.name,
-            description=tool.description,
+            description=tool.description or "",
             definition=tool.openapi_schema,
             display_name=tool.display_name or tool.name,
             in_code_tool_id=tool.in_code_tool_id,
@@ -45,6 +43,7 @@ class ToolSnapshot(BaseModel):
             user_id=str(tool.user_id) if tool.user_id else None,
             oauth_config_id=tool.oauth_config_id,
             oauth_config_name=tool.oauth_config.name if tool.oauth_config else None,
+            enabled=tool.enabled,
         )
 
 

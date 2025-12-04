@@ -4,7 +4,7 @@ import {
 } from "@/lib/tools/interfaces";
 import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/components/ui/text";
 import { SearchIcon } from "lucide-react";
 import { useMemo, useState, useEffect } from "react";
@@ -25,6 +25,7 @@ export function ToolList({
   serverId,
   setPopup,
   oauthConnected,
+  initialDbTools,
 }: ToolListProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -37,6 +38,47 @@ export function ToolList({
   const [currentServerId, setCurrentServerId] = useState<number | undefined>(
     serverId
   );
+  const [hasAppliedInitialTools, setHasAppliedInitialTools] = useState(false);
+  const [autoListTriggered, setAutoListTriggered] = useState(false);
+
+  useEffect(() => {
+    if (!serverId) {
+      setCurrentServerId(undefined);
+      setHasAppliedInitialTools(false);
+      setAutoListTriggered(false);
+      setTools([]);
+      setSelectedTools(new Set());
+      setCurrentPage(1);
+      return;
+    }
+
+    if (currentServerId === serverId) {
+      return;
+    }
+
+    setCurrentServerId(serverId);
+    setHasAppliedInitialTools(false);
+    setAutoListTriggered(false);
+    setTools([]);
+    setSelectedTools(new Set());
+    setCurrentPage(1);
+  }, [serverId, currentServerId]);
+
+  useEffect(() => {
+    if (
+      !hasAppliedInitialTools &&
+      initialDbTools &&
+      initialDbTools.length > 0 &&
+      serverId
+    ) {
+      setTools(initialDbTools);
+      setSelectedTools(new Set(initialDbTools.map((tool) => tool.name)));
+      setCurrentPage(1);
+      setCurrentServerId(serverId);
+      setHasAppliedInitialTools(true);
+      setAutoListTriggered(true);
+    }
+  }, [initialDbTools, hasAppliedInitialTools, serverId]);
 
   const isListingTools = searchParams.get("listing_tools") === "true";
 
@@ -46,12 +88,24 @@ export function ToolList({
       isListingTools &&
       serverId &&
       values.name.trim() &&
-      values.server_url.trim()
+      values.server_url.trim() &&
+      initialDbTools !== null &&
+      initialDbTools !== undefined &&
+      initialDbTools.length === 0 &&
+      !autoListTriggered
     ) {
+      setAutoListTriggered(true);
       // Only auto-trigger for servers that have required form values and a serverId
       handleListActions(values);
     }
-  }, [isListingTools, serverId, values.name, values.server_url]);
+  }, [
+    isListingTools,
+    serverId,
+    values.name,
+    values.server_url,
+    initialDbTools,
+    autoListTriggered,
+  ]);
 
   const handleListActions = async (values: MCPFormValues) => {
     // Check if OAuth needs connection first
@@ -333,7 +387,7 @@ export function ToolList({
       </Button>
     </div>
   ) : (
-    <div className="space-y-4 w-full">
+    <div className="space-y-4 w-full" data-testid="available-tools-section">
       <h3 className="text-lg font-medium">Available Tools</h3>
 
       {/* Search bar */}
@@ -358,15 +412,10 @@ export function ToolList({
           <div className="w-6 flex-none mr-3">
             <Checkbox
               checked={allFilteredSelected}
+              indeterminate={!allFilteredSelected && someFilteredSelected}
               onCheckedChange={handleToggleAllFiltered}
               className="mt-0"
-              data-state={
-                allFilteredSelected
-                  ? "checked"
-                  : someFilteredSelected
-                    ? "indeterminate"
-                    : "unchecked"
-              }
+              aria-label="tool-checkbox-select-all"
             />
           </div>
           <div className="flex-1 font-medium text-sm text-gray-700 dark:text-gray-300">
@@ -393,6 +442,7 @@ export function ToolList({
                     checked={selectedTools.has(tool.name)}
                     onCheckedChange={() => handleToggleTool(tool.name)}
                     className="mt-0"
+                    aria-label={`tool-checkbox-${tool.name}`}
                   />
                 </div>
                 <div className="flex-1">

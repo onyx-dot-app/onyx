@@ -132,6 +132,45 @@ services:
         max-size: "50m"
         max-file: "6"
 
+  mcp_server:
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: >
+      /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED:-}\" != \"true\" ]; then
+        echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
+        exit 0;
+      else
+        exec python -m onyx.mcp_server_main;
+      fi"
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      - relational_db
+      - cache
+    restart: "no"
+    environment:
+      - POSTGRES_HOST=relational_db
+      - REDIS_HOST=cache
+      # MCP Server Configuration
+      - MCP_SERVER_ENABLED=${MCP_SERVER_ENABLED:-false}
+      - MCP_SERVER_PORT=${MCP_SERVER_PORT:-8090}
+      - MCP_SERVER_CORS_ORIGINS=${MCP_SERVER_CORS_ORIGINS:-}
+      - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
+      - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
+      - API_SERVER_PORT=${API_SERVER_PORT:-8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    volumes:
+      - mcp_server_logs:/var/log/onyx
+
   relational_db:
     image: postgres:15.2-alpine
     shm_size: 1g
@@ -155,7 +194,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -183,7 +222,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -209,7 +248,7 @@ services:
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
-    image: vespaengine/vespa:8.526.15
+    image: vespaengine/vespa:8.609.39
     restart: unless-stopped
     environment:
       - VESPA_SKIP_UPGRADE_CHECK=true
@@ -225,7 +264,7 @@ services:
         max-file: "6"
 
   nginx:
-    image: nginx:1.23.4-alpine
+    image: nginx:1.25.5-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
@@ -305,6 +344,31 @@ services:
     tmpfs:
       - /data
 
+  code-interpreter:
+    image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-latest}
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "
+      if [ \"$${CODE_INTERPRETER_BETA_ENABLED}\" = \"True\" ] || [ \"$${CODE_INTERPRETER_BETA_ENABLED}\" = \"true\" ]; then
+        exec bash ./entrypoint.sh code-interpreter-api;
+      else
+        echo 'Skipping code interpreter';
+        exec tail -f /dev/null;
+      fi
+      "
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+
+    # Below is needed for the `docker-out-of-docker` execution mode
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    # uncomment below + comment out the above to use the `docker-in-docker` execution mode
+    # privileged: true
+
 volumes:
   db_volume:
   vespa_volume:
@@ -317,3 +381,4 @@ volumes:
   background_logs:
   inference_model_server_logs:
   indexing_model_server_logs:
+  mcp_server_logs:

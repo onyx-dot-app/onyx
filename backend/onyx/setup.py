@@ -43,7 +43,7 @@ from onyx.document_index.vespa.index import VespaIndex
 from onyx.indexing.models import IndexingSetting
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.llm.llm_provider_options import OPEN_AI_MODEL_NAMES
+from onyx.llm.llm_provider_options import get_openai_model_names
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.natural_language_processing.search_nlp_models import warm_up_cross_encoder
@@ -309,7 +309,7 @@ def setup_postgres(db_session: Session) -> None:
             groups=[],
             model_configurations=[
                 ModelConfigurationUpsertRequest(name=name, is_visible=True)
-                for name in OPEN_AI_MODEL_NAMES
+                for name in get_openai_model_names()
             ],
             api_key_changed=True,
         )
