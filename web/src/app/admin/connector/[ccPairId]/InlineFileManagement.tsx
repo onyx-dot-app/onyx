@@ -255,23 +255,17 @@ export function InlineFileManagement({
                         </TableCell>
                       )}
                       <TableCell className="font-medium">
-                        <Text
-                          as="span"
-                          mainUiBody
+                        <span
                           className={
                             isMarkedForRemoval ? "line-through opacity-60" : ""
                           }
                         >
                           {file.file_name}
-                        </Text>
+                        </span>
                         {isMarkedForRemoval && (
-                          <Text
-                            as="span"
-                            secondaryBody
-                            className="ml-2 font-semibold text-red-600 dark:text-red-400"
-                          >
+                          <span className="ml-2 text-xs font-semibold text-red-600 dark:text-red-400">
                             Removing
-                          </Text>
+                          </span>
                         )}
                       </TableCell>
                       <TableCell
@@ -314,13 +308,9 @@ export function InlineFileManagement({
                     )}
                     <TableCell className="font-medium">
                       {file.name}
-                      <Text
-                        as="span"
-                        secondaryBody
-                        className="ml-2 text-green-600 dark:text-green-400"
-                      >
+                      <span className="ml-2 text-xs text-green-600 dark:text-green-400">
                         New
-                      </Text>
+                      </span>
                     </TableCell>
                     <TableCell>{formatBytes(file.size)}</TableCell>
                     <TableCell>-</TableCell>
