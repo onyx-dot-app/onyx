@@ -76,7 +76,7 @@ const useModalContext = () => {
 const sizeClassNames = {
   large: ["w-[80dvw]", "h-[80dvh]"],
   medium: ["w-[60rem]", "h-fit"],
-  small: ["w-[32rem]", "h-[30rem]"],
+  small: ["w-[32rem]", "max-h-[30rem]"],
   tall: ["w-[32rem]", "max-h-[calc(100dvh-4rem)]"],
   mini: ["w-[32rem]", "h-fit"],
 } as const;
@@ -417,7 +417,11 @@ interface ModalBodyProps extends React.HTMLAttributes<HTMLDivElement> {}
 const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
   ({ className, children, ...props }, ref) => {
     return (
-      <div ref={ref} className={cn(className)} {...props}>
+      <div
+        ref={ref}
+        className={cn("pb-4 px-4 flex flex-col gap-4", className)}
+        {...props}
+      >
         {children}
       </div>
     );
