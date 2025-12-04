@@ -717,7 +717,7 @@ def update_personas_display_priority(
     user: User | None,
     commit_db_txn: bool = False,
 ) -> None:
-    """Updates the display priorities of the specified personas.
+    """Updates the display priorities of the specified Personas.
 
     Args:
         display_priority_map: A map of persona IDs to intended display
