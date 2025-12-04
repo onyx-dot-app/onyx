@@ -2,7 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { MCPActionStatus } from "@/lib/tools/types";
+import { ActionStatus } from "@/lib/tools/types";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgEdit from "@/icons/edit";
@@ -11,7 +11,7 @@ interface ActionCardHeaderProps {
   title: string;
   description: string;
   icon: React.ReactNode;
-  status: MCPActionStatus;
+  status: ActionStatus;
   onEdit?: () => void;
 }
 
@@ -22,10 +22,10 @@ function ActionCardHeader({
   status,
   onEdit,
 }: ActionCardHeaderProps) {
-  const isConnected = status === MCPActionStatus.CONNECTED;
-  const isPending = status === MCPActionStatus.PENDING;
-  const isDisconnected = status === MCPActionStatus.DISCONNECTED;
-  const isFetching = status === MCPActionStatus.FETCHING;
+  const isConnected = status === ActionStatus.CONNECTED;
+  const isPending = status === ActionStatus.PENDING;
+  const isDisconnected = status === ActionStatus.DISCONNECTED;
+  const isFetching = status === ActionStatus.FETCHING;
 
   const showEditButton = isPending;
 

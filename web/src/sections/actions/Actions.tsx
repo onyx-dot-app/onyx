@@ -1,5 +1,5 @@
 "use client";
-import { MCPActionStatus } from "@/lib/tools/types";
+import { ActionStatus } from "@/lib/tools/types";
 import React from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgUnplug from "@/icons/unplug";
@@ -11,7 +11,7 @@ import SvgArrowExchange from "@/icons/arrow-exchange";
 import SvgChevronDown from "@/icons/chevron-down";
 
 interface ActionsProps {
-  status: MCPActionStatus;
+  status: ActionStatus;
   serverName: string;
   onDisconnect?: () => void;
   onManage?: () => void;
@@ -37,17 +37,14 @@ const Actions: React.FC<ActionsProps> = React.memo(
     onToggleTools,
   }) => {
     const showViewToolsButton =
-      (status === MCPActionStatus.CONNECTED ||
-        status === MCPActionStatus.FETCHING ||
-        status === MCPActionStatus.DISCONNECTED) &&
+      (status === ActionStatus.CONNECTED ||
+        status === ActionStatus.FETCHING ||
+        status === ActionStatus.DISCONNECTED) &&
       !isToolsExpanded &&
       onToggleTools;
 
     // Connected state
-    if (
-      status === MCPActionStatus.CONNECTED ||
-      status === MCPActionStatus.FETCHING
-    ) {
+    if (status === ActionStatus.CONNECTED || status === ActionStatus.FETCHING) {
       return (
         <div className="flex flex-col gap-1 items-end">
           <div className="flex items-center">
@@ -78,7 +75,7 @@ const Actions: React.FC<ActionsProps> = React.memo(
               aria-label={`View tools for ${serverName}`}
               className="mr-0.5"
             >
-              {status === MCPActionStatus.FETCHING
+              {status === ActionStatus.FETCHING
                 ? "Fetching tools..."
                 : `View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
             </Button>
@@ -88,7 +85,7 @@ const Actions: React.FC<ActionsProps> = React.memo(
     }
 
     // Pending state
-    if (status === MCPActionStatus.PENDING) {
+    if (status === ActionStatus.PENDING) {
       return (
         <div className="flex flex-col gap-1 items-end p-1 shrink-0">
           {onAuthenticate && (

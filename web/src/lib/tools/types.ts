@@ -1,12 +1,17 @@
 import type React from "react";
 import { MCPServer } from "@/lib/tools/interfaces";
 
-export enum MCPActionStatus {
+// Generic action status for UI components
+export enum ActionStatus {
   CONNECTED = "connected",
   PENDING = "pending",
   DISCONNECTED = "disconnected",
   FETCHING = "fetching",
 }
+
+// Backwards compatibility: MCPActionStatus is now an alias of ActionStatus
+export const MCPActionStatus = ActionStatus;
+export type MCPActionStatus = ActionStatus;
 
 export enum MCPServerStatus {
   CREATED = "CREATED",

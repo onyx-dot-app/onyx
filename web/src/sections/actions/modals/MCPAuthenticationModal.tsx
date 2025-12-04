@@ -31,12 +31,15 @@ import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { createMCPServer } from "@/lib/tools/edit";
 import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
 import { updateMCPServerStatus } from "@/lib/tools/mcpService";
-import { useMCPActions } from "@/sections/actions/MCPActionsContext";
 import Message from "@/refresh-components/messages/Message";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServerWithStatus | null;
   skipOverlay?: boolean;
+  onSuccess?: () => void | Promise<void>;
+  setPopup?: (spec: PopupSpec) => void;
+  mutateMcpServers?: () => Promise<void>;
 }
 
 interface MCPAuthTemplate {
@@ -99,9 +102,11 @@ const validationSchema = Yup.object().shape({
 export default function MCPAuthenticationModal({
   mcpServer,
   skipOverlay = false,
+  onSuccess,
+  setPopup,
+  mutateMcpServers,
 }: MCPAuthenticationModalProps) {
   const { isOpen, toggle } = useModal();
-  const { setPopup, mutateMcpServers } = useMCPActions();
   const [activeAuthTab, setActiveAuthTab] = useState<"per-user" | "admin">(
     "per-user"
   );
@@ -225,16 +230,17 @@ export default function MCPAuthenticationModal({
         throw new Error(serverError || "Failed to save server configuration");
       }
 
-      setPopup({
+      setPopup?.({
         message: "Authentication configuration saved successfully",
         type: "success",
       });
 
-      await mutateMcpServers();
+      await mutateMcpServers?.();
+      await onSuccess?.();
       toggle(false);
     } catch (error) {
       console.error("Error saving authentication config:", error);
-      setPopup({
+      setPopup?.({
         message:
           error instanceof Error
             ? error.message
@@ -301,7 +307,7 @@ export default function MCPAuthenticationModal({
       }
     } catch (error) {
       console.error("Error saving authentication:", error);
-      setPopup({
+      setPopup?.({
         message:
           error instanceof Error
             ? error.message

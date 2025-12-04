@@ -2,15 +2,12 @@
 
 import React, { useCallback, useMemo, useState } from "react";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import SvgServer from "@/icons/server";
-import ActionCardHeader from "@/sections/actions/ActionCardHeader";
+import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
-import ToolsSection from "@/sections/actions/ToolsSection";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { deleteCustomTool } from "@/lib/tools/openApiService";
-import { MCPActionStatus, MethodSpec } from "@/lib/tools/types";
-import { cn } from "@/lib/utils";
+import { ActionStatus, MethodSpec } from "@/lib/tools/types";
 import ToolItem from "@/sections/actions/ToolItem";
 import Text from "@/refresh-components/texts/Text";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/openApiService";
@@ -64,18 +61,13 @@ export default function OpenApiActionCard({
     Boolean(tool.passthrough_auth) ||
     hasCustomHeaders;
   const isDisconnected = !tool.enabled;
-  const status = isDisconnected
-    ? MCPActionStatus.DISCONNECTED
-    : hasAuthConfigured
-      ? MCPActionStatus.CONNECTED
-      : MCPActionStatus.PENDING;
 
-  const backgroundColor =
-    status === MCPActionStatus.CONNECTED
-      ? "bg-background-tint-00"
-      : status === MCPActionStatus.DISCONNECTED
-        ? "bg-background-neutral-02"
-        : "";
+  // Compute generic ActionStatus for the OpenAPI tool
+  const status = isDisconnected
+    ? ActionStatus.DISCONNECTED
+    : hasAuthConfigured
+      ? ActionStatus.CONNECTED
+      : ActionStatus.PENDING;
 
   const handleConnectionUpdate = useCallback(
     async (shouldEnable: boolean) => {
@@ -108,77 +100,66 @@ export default function OpenApiActionCard({
     setSearchQuery("");
   };
 
+  // Build the actions component
+  const actionsComponent = (
+    <Actions
+      status={status}
+      serverName={tool.name}
+      toolCount={methodSpecs.length}
+      isToolsExpanded={isToolsExpanded}
+      onToggleTools={methodSpecs.length ? handleToggleTools : undefined}
+      onDisconnect={() => onOpenDisconnectModal?.(tool)}
+      onManage={onManage ? () => onManage(tool) : undefined}
+      onAuthenticate={() => {
+        onAuthenticate(tool);
+      }}
+      onReconnect={() => handleConnectionUpdate(true)}
+    />
+  );
+
+  const icon = (
+    <SvgServer className="h-5 w-5 stroke-text-04" aria-hidden="true" />
+  );
+
   return (
-    <div
-      className={cn(
-        "w-full border border-border-01 rounded-16",
-        backgroundColor
-      )}
+    <ActionCard
+      title={tool.name}
+      description={tool.description}
+      icon={icon}
+      status={status}
+      actions={actionsComponent}
+      isExpanded={isToolsExpanded}
+      onExpandedChange={setIsToolsExpanded}
+      enableSearch={true}
+      searchQuery={searchQuery}
+      onSearchQueryChange={setSearchQuery}
+      onFold={handleFold}
+      ariaLabel={`${tool.name} OpenAPI action card`}
     >
-      <div className="flex flex-col w-full">
-        <div className="flex items-start justify-between pb-2 pl-3 pt-3 pr-2 w-full">
-          <ActionCardHeader
-            title={tool.name}
-            description={tool.description}
-            icon={
-              <SvgServer
-                className="h-5 w-5 stroke-text-04"
-                aria-hidden="true"
-              />
-            }
-            status={status}
-          />
-
-          <Actions
-            status={status}
-            serverName={tool.name}
-            toolCount={methodSpecs.length}
-            isToolsExpanded={isToolsExpanded}
-            onToggleTools={methodSpecs.length ? handleToggleTools : undefined}
-            onDisconnect={() => onOpenDisconnectModal?.(tool)}
-            onManage={onManage ? () => onManage(tool) : undefined}
-            onAuthenticate={() => {
-              onAuthenticate(tool);
-            }}
-            onReconnect={() => handleConnectionUpdate(true)}
-          />
+      {filteredTools.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          {filteredTools.map((method) => (
+            <ToolItem
+              key={`${tool.id}-${method.method}-${method.path}-${method.name}`}
+              name={method.name}
+              description={method.summary || "No summary provided"}
+              variant="openapi"
+              openApiMetadata={{
+                method: method.method,
+                path: method.path,
+              }}
+            />
+          ))}
         </div>
-
-        {isToolsExpanded && (
-          <ToolsSection
-            onFold={handleFold}
-            searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
-          />
-        )}
-      </div>
-
-      {isToolsExpanded && (
-        <div className="animate-in fade-in slide-in-from-top-2 duration-300 p-2 border-t border-border-01 flex flex-col gap-2">
-          {filteredTools.length > 0 ? (
-            filteredTools.map((method) => (
-              <ToolItem
-                key={`${tool.id}-${method.method}-${method.path}-${method.name}`}
-                name={method.name}
-                description={method.summary || "No summary provided"}
-                variant="openapi"
-                openApiMetadata={{
-                  method: method.method,
-                  path: method.path,
-                }}
-              />
-            ))
-          ) : (
-            <div className="flex items-center justify-center w-full py-6">
-              <Text text03 secondaryBody>
-                {searchQuery
-                  ? "No actions match your search"
-                  : "No actions defined for this OpenAPI schema"}
-              </Text>
-            </div>
-          )}
+      ) : (
+        <div className="flex items-center justify-center w-full py-6">
+          <Text text03 secondaryBody>
+            {searchQuery
+              ? "No actions match your search"
+              : "No actions defined for this OpenAPI schema"}
+          </Text>
         </div>
       )}
-    </div>
+    </ActionCard>
   );
 }
