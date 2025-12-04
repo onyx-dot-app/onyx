@@ -3,7 +3,7 @@ from onyx.llm.utils import check_number_of_tokens
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CHAT_USER_PROMPT
 from onyx.prompts.chat_prompts import CITATION_REMINDER
-from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
+from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.constants import DEFAULT_IGNORE_STATEMENT
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 
@@ -17,7 +17,7 @@ CHAT_USER_PROMPT_WITH_CONTEXT_OVERHEAD_TOKEN_CNT = check_number_of_tokens(
     )
 )
 
-CITATION_STATEMENT_TOKEN_CNT = check_number_of_tokens(REQUIRE_CITATION_STATEMENT)
+CITATION_STATEMENT_TOKEN_CNT = check_number_of_tokens(REQUIRE_CITATION_GUIDANCE)
 
 CITATION_REMINDER_TOKEN_CNT = check_number_of_tokens(CITATION_REMINDER)
 

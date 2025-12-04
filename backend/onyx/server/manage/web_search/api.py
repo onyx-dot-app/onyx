@@ -6,12 +6,6 @@ from fastapi import HTTPException
 from fastapi import Response
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    build_content_provider_from_config,
-)
-from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    build_search_provider_from_config,
-)
 from onyx.auth.users import current_admin_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
@@ -33,6 +27,12 @@ from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderTestRequest
 from onyx.server.manage.web_search.models import WebSearchProviderUpsertRequest
 from onyx.server.manage.web_search.models import WebSearchProviderView
+from onyx.tools.tool_implementations.web_search.providers import (
+    build_content_provider_from_config,
+)
+from onyx.tools.tool_implementations.web_search.providers import (
+    build_search_provider_from_config,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
@@ -319,7 +319,7 @@ def test_content_provider(
         provider = build_content_provider_from_config(
             provider_type=request.provider_type,
             api_key=request.api_key,
-            config=request.config or {},
+            config=request.config,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

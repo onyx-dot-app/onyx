@@ -17,6 +17,7 @@ import {
   WEB_SEARCH_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   PYTHON_TOOL_ID,
+  OPEN_URL_TOOL_ID,
 } from "@/app/chat/components/tools/constants";
 import { HoverPopup } from "@/components/HoverPopup";
 import { Info } from "lucide-react";
@@ -52,6 +53,7 @@ export function ToolSelector({
     (t) => t.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
   );
   const pythonTool = tools.find((t) => t.in_code_tool_id === PYTHON_TOOL_ID);
+  const openUrlTool = tools.find((t) => t.in_code_tool_id === OPEN_URL_TOOL_ID);
 
   const { mcpTools, customTools, mcpToolsByServer } = useMemo(() => {
     const allCustom = tools.filter(
@@ -59,7 +61,8 @@ export function ToolSelector({
         tool.in_code_tool_id !== SEARCH_TOOL_ID &&
         tool.in_code_tool_id !== IMAGE_GENERATION_TOOL_ID &&
         tool.in_code_tool_id !== WEB_SEARCH_TOOL_ID &&
-        tool.in_code_tool_id !== PYTHON_TOOL_ID
+        tool.in_code_tool_id !== PYTHON_TOOL_ID &&
+        tool.in_code_tool_id !== OPEN_URL_TOOL_ID
     );
 
     const mcp = allCustom.filter((tool) => tool.mcp_server_id);
@@ -170,6 +173,10 @@ export function ToolSelector({
                 Requires the Code Interpreter service to be configured with a
                 valid base URL.
               </div>
+              <div>
+                <span className="font-semibold">Open URL:</span> Open and read
+                the content of URLs provided in the conversation.
+              </div>
             </div>
           }
           direction="bottom"
@@ -211,6 +218,14 @@ export function ToolSelector({
             "Execute Python code in a secure, isolated environment to " +
             "analyze data, create visualizations, and perform computations"
           }
+        />
+      )}
+
+      {openUrlTool && (
+        <BooleanFormField
+          name={`enabled_tools_map.${openUrlTool.id}`}
+          label={openUrlTool.display_name}
+          subtext="Open and read the content of one or more URLs"
         />
       )}
 

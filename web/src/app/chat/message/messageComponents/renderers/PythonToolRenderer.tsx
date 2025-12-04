@@ -9,6 +9,30 @@ import {
 } from "../../../services/streamingModels";
 import { MessageRenderer, RenderType } from "../interfaces";
 import { IconProps } from "@/icons";
+import { CodeBlock } from "@/app/chat/message/CodeBlock";
+import hljs from "highlight.js/lib/core";
+import python from "highlight.js/lib/languages/python";
+
+// Register Python language for highlighting
+hljs.registerLanguage("python", python);
+
+// Component to render syntax-highlighted Python code
+function HighlightedPythonCode({ code }: { code: string }) {
+  const highlightedHtml = useMemo(() => {
+    try {
+      return hljs.highlight(code, { language: "python" }).value;
+    } catch {
+      return code;
+    }
+  }, [code]);
+
+  return (
+    <span
+      dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+      className="hljs"
+    />
+  );
+}
 
 // Helper function to construct current Python execution state
 function constructCurrentPythonState(packets: PythonToolPacket[]) {
@@ -47,12 +71,8 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
   };
 }
 
-function CodeIcon(props: IconProps) {
-  return (
-    <div className="w-4 h-4">
-      <SvgCode />
-    </div>
-  );
+function CodeIcon({ size = 16, ...props }: IconProps) {
+  return <SvgCode width={size} height={size} {...props} />;
 }
 
 export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
@@ -119,13 +139,12 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
         content: (
           <div className="flex flex-col my-1 space-y-2">
             {code && (
-              <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 p-3 border border-blue-200 dark:border-blue-800">
-                <div className="text-xs font-semibold mb-1 text-blue-600 dark:text-blue-400">
-                  Code:
-                </div>
-                <pre className="text-sm whitespace-pre-wrap font-mono text-blue-900 dark:text-blue-100">
-                  {code}
-                </pre>
+              <div className="prose max-w-full">
+                {/* NOTE: note that we need to trim since otherwise there's a huge 
+                "space" at the start of the code block */}
+                <CodeBlock className="language-python" codeText={code.trim()}>
+                  <HighlightedPythonCode code={code.trim()} />
+                </CodeBlock>
               </div>
             )}
             {stdout && (

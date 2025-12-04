@@ -287,7 +287,7 @@ export interface ButtonProps
   href?: string;
 }
 
-function ButtonComponent(
+function ButtonInner(
   {
     main,
     action,
@@ -386,9 +386,7 @@ function ButtonComponent(
   return <Link href={href}>{content}</Link>;
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ButtonComponent
-);
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(ButtonInner);
 Button.displayName = "Button";
 
 export default Button;
