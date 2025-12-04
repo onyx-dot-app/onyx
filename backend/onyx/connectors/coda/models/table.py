@@ -118,6 +118,7 @@ class CodaColumnFormatType(StrEnum):
     lookup = "lookup"
     number = "number"
     percent = "percent"
+    reaction = "reaction"
     currency = "currency"
     date = "date"
     dateTime = "dateTime"
