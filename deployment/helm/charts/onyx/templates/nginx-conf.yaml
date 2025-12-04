@@ -1,3 +1,13 @@
+###############################################################################
+# NOTE: If you make changes to this file, increment the following in values.yaml
+# before running `helm upgrade` to trigger an automatic nginx restart:
+#
+#   nginx.controller.podAnnotations:
+#     onyx.app/nginx-config-version: "<new_version>"
+#
+# Otherwise, changes won't apply until you manually restart the nginx pods.
+###############################################################################
+
 apiVersion: v1
 kind: ConfigMap
 metadata:

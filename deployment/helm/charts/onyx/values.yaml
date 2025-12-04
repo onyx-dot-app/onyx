@@ -175,6 +175,12 @@ nginx:
     containerPort:
       http: 1024
 
+    # NOTE: When onyx-nginx-conf changes, nginx pods need to restart.
+    # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
+    # Workaround: Helm upgrade will restart if the following annotation value changes.
+    podAnnotations:
+      onyx.app/nginx-config-version: "1"
+
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
       - name: DOMAIN
