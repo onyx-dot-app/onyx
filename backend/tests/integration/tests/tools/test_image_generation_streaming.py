@@ -61,7 +61,7 @@ def test_image_generation_streaming(
     # Verify we received heartbeat packets during image generation
     # Image generation typically takes a few seconds and sends heartbeats
     # every HEARTBEAT_INTERVAL seconds
-    expected_heartbeat_packets = max(1, total_time / HEARTBEAT_INTERVAL - 1)
+    expected_heartbeat_packets = max(1, int(total_time / HEARTBEAT_INTERVAL) - 1)
     assert len(analyzed_response.heartbeat_packets) >= expected_heartbeat_packets, (
         f"Expected at least {expected_heartbeat_packets} heartbeats for {total_time:.2f}s execution, "
         f"but got {len(analyzed_response.heartbeat_packets)}"
