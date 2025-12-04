@@ -2,7 +2,7 @@
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
-import { EmbeddingModelSelection } from "../EmbeddingModelSelectionForm";
+import EmbeddingModelSelection from "../EmbeddingModelSelectionForm";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Text from "@/components/ui/text";
 import Button from "@/refresh-components/buttons/Button";
@@ -27,8 +27,7 @@ import {
 import RerankingDetailsForm from "../RerankingFormPage";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
 import { Modal } from "@/components/Modal";
-import { InstantSwitchConfirmModal } from "../modals/InstantSwitchConfirmModal";
-
+import InstantSwitchConfirmModal from "../modals/InstantSwitchConfirmModal";
 import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
 import { combineSearchSettings } from "./utils";
