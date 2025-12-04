@@ -17,9 +17,12 @@ async function verifyAdminPageNavigation(
   await page.goto(`http://localhost:3000/admin/${path}`);
 
   try {
-    await expect(page.getByTestId("admin-page-title")).toHaveText(pageTitle, {
-      timeout: 10000,
-    });
+    await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(
+      pageTitle,
+      {
+        timeout: 10000,
+      }
+    );
   } catch (error) {
     console.error(
       `Failed to find admin-page title with text "${pageTitle}" for path "${path}"`

@@ -30,7 +30,7 @@ export function AdminPageTitle({
           ) : (
             Icon
           )}
-          <Text headingH2 data-testid="admin-page-title">
+          <Text headingH2 aria-label="admin-page-title">
             {title}
           </Text>
         </div>

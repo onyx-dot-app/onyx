@@ -131,7 +131,7 @@ test.describe("Default Assistant Admin Page", () => {
     page,
   }) => {
     // Verify page loads with expected content
-    await expect(page.getByTestId("admin-page-title")).toHaveText(
+    await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(
       "Default Assistant"
     );
     // Avoid strict mode collision from multiple "Actions" elements
