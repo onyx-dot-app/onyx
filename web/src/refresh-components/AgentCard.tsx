@@ -11,7 +11,7 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgPin from "@/icons/pin";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import SvgUser from "@/icons/user";
 import SvgActions from "@/icons/actions";
 import { usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
@@ -25,7 +25,7 @@ import SvgBarChart from "@/icons/bar-chart";
 import SvgPinned from "@/icons/pinned";
 
 interface IconLabelProps {
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<IconProps>;
   children: string;
 }
 

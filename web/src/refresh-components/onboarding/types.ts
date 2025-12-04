@@ -1,4 +1,4 @@
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 
 export enum OnboardingStep {
   Welcome = "welcome",
@@ -47,7 +47,7 @@ export type OnboardingAction =
 export type FinalStepItemProps = {
   title: string;
   description: string;
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<IconProps>;
   buttonText: string;
   buttonHref: string;
 };

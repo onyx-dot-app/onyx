@@ -4,7 +4,6 @@ import { PersonasTable } from "./PersonaTable";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import Separator from "@/refresh-components/Separator";
-import { AssistantsIcon } from "@/components/icons/icons";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { SubLabel } from "@/components/Field";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
@@ -12,6 +11,7 @@ import { useAdminPersonas } from "./hooks";
 import { Persona } from "./interfaces";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
+import SvgOnyxOctagon from "@/icons/onyx-octagon";
 
 function MainContent({
   personas,
@@ -106,7 +106,7 @@ export default function Page() {
 
   return (
     <div className="mx-auto container">
-      <AdminPageTitle icon={<AssistantsIcon size={32} />} title="Assistants" />
+      <AdminPageTitle icon={SvgOnyxOctagon} title="Assistants" />
 
       {isLoading && <ThreeDotsLoader />}
 

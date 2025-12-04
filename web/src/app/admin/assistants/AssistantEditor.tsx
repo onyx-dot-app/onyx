@@ -12,14 +12,7 @@ import {
 } from "@/lib/types";
 import Separator from "@/refresh-components/Separator";
 import Button from "@/refresh-components/buttons/Button";
-import {
-  ArrayHelpers,
-  FieldArray,
-  Form,
-  Formik,
-  FormikProps,
-  FastField,
-} from "formik";
+import { ArrayHelpers, FieldArray, Form, Formik, FormikProps } from "formik";
 import { BooleanFormField, Label, TextFormField } from "@/components/Field";
 import {
   NameField,
@@ -41,7 +34,7 @@ import { ToolSnapshot, MCPServer } from "@/lib/tools/interfaces";
 import { checkUserIsNoAuthUser } from "@/lib/user";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import * as Yup from "yup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import {
@@ -59,7 +52,6 @@ import {
   CameraIcon,
   GroupsIconSkeleton,
   SwapIcon,
-  TrashIcon,
 } from "@/components/icons/icons";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { debounce } from "lodash";
@@ -107,6 +99,7 @@ import { useAgents } from "@/lib/hooks/useAgents";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -1604,7 +1597,8 @@ export default function AssistantEditor({
                                 </span>
                               </div>
                               {user?.role === UserRole.ADMIN && (
-                                <button
+                                <IconButton
+                                  icon={SvgTrash}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const label = labels.find(
@@ -1614,10 +1608,7 @@ export default function AssistantEditor({
                                       deleteLabel(label.id);
                                     }
                                   }}
-                                  className="ml-2 p-1 hover:bg-background-hover rounded"
-                                >
-                                  <TrashIcon size={16} />
-                                </button>
+                                />
                               )}
                             </div>
                           )}

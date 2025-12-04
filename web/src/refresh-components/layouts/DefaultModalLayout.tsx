@@ -3,7 +3,7 @@ import Text from "@/refresh-components/texts/Text";
 import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn } from "@/lib/utils";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import RawModal from "@/refresh-components/RawModal";
 
@@ -24,7 +24,7 @@ export interface ModalProps {
   mini?: boolean;
 
   // Base modal props
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<IconProps>;
   title: string;
   description?: string;
   className?: string;

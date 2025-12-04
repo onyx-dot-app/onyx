@@ -1,18 +1,18 @@
-import * as React from "react";
-import type { SVGProps } from "react";
+import { IconProps } from "@/icons";
 
 const OnyxLogo = ({
   width = 24,
   height = 24,
   className,
   ...props
-}: SVGProps<SVGSVGElement>) => (
+}: IconProps) => (
   <svg
     width={width}
     height={height}
     viewBox="0 0 56 56"
     xmlns="http://www.w3.org/2000/svg"
     className={className}
+    stroke="currentColor"
     {...props}
   >
     <path

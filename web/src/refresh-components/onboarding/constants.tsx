@@ -4,7 +4,7 @@ import SvgGlobe from "@/icons/globe";
 import SvgImage from "@/icons/image";
 import SvgUsers from "@/icons/users";
 import { FinalStepItemProps } from "./types";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import { AzureIcon, GeminiIcon } from "@/components/icons/icons";
 import SvgClaude from "@/icons/claude";
 import SvgAws from "@/icons/aws";
@@ -92,7 +92,7 @@ export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
 
 export const PROVIDER_ICON_MAP: Record<
   string,
-  React.FunctionComponent<SvgProps>
+  React.FunctionComponent<IconProps>
 > = {
   [LLMProviderName.ANTHROPIC]: SvgClaude,
   [LLMProviderName.BEDROCK]: SvgAws,

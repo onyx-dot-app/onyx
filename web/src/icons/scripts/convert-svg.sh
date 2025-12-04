@@ -25,10 +25,18 @@ fi
 # Get the base name without extension
 BASE_NAME="${SVG_FILE%.svg}"
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Run the conversion
-bunx @svgr/cli "$SVG_FILE" --typescript --no-dimensions --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity"]}}]}' > "${BASE_NAME}.tsx"
+bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity","width","height"]}}]}' --template "$SCRIPT_DIR/icon-template.js" > "${BASE_NAME}.tsx"
 
 if [ $? -eq 0 ]; then
+  # Ensure stroke="currentColor" is before {...props} for proper override behavior
+  sed -i '' 's/{\.\.\.props}/stroke="currentColor" {...props}/g' "${BASE_NAME}.tsx"
+  # Remove duplicate if template already added it
+  sed -i '' 's/stroke="currentColor" stroke="currentColor"/stroke="currentColor"/g' "${BASE_NAME}.tsx"
+
   echo "Created ${BASE_NAME}.tsx"
   rm "$SVG_FILE"
   echo "Deleted $SVG_FILE"

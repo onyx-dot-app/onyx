@@ -1,7 +1,7 @@
-import * as React from "react";
-import type { SVGProps } from "react";
+import React from "react";
+import { IconProps } from "@/icons";
 
-const SvgOpenAI = (props: SVGProps<SVGSVGElement>) => {
+const SvgOpenAI = (props: IconProps) => {
   const clipId = React.useId();
   return (
     <svg
@@ -9,6 +9,7 @@ const SvgOpenAI = (props: SVGProps<SVGSVGElement>) => {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={`text-[var(--text-05)] ${props.className ?? ""}`}
+      stroke="currentColor"
       {...props}
     >
       <g clipPath={`url(#${clipId})`}>

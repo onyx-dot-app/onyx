@@ -8,10 +8,12 @@ import {
   useState,
   JSX,
 } from "react";
-import { ChevronDownIcon, PlusIcon } from "./icons/icons";
+import { ChevronDownIcon } from "./icons/icons";
 import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";
 import { Popover } from "./popover/Popover";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import Button from "@/refresh-components/buttons/Button";
+import SvgPlus from "@/icons/plus";
 
 export interface Option<T> {
   name: string;
@@ -202,14 +204,14 @@ export function SearchMultiSelectDropdown({
                 (option) =>
                   option.name.toLowerCase() === searchTerm.toLowerCase()
               ) && (
-                <button
-                  className="w-full text-left flex items-center px-4 py-2 text-sm text-text-800 hover:bg-background-100"
+                <Button
+                  className="w-full"
                   role="menuitem"
                   onClick={handleCustomValueSelect}
+                  leftIcon={SvgPlus}
                 >
-                  <PlusIcon className="w-4 h-4 mr-2 text-text-600" />
                   Use &quot;{searchTerm}&quot; as custom value
-                </button>
+                </Button>
               )}
 
             {onCreate &&
@@ -220,18 +222,18 @@ export function SearchMultiSelectDropdown({
               ) && (
                 <>
                   <div className="border-t border-background-300"></div>
-                  <button
-                    className="w-full text-left flex items-center px-4 py-2 text-sm text-text-800 hover:bg-background-100"
+                  <Button
+                    className="w-full"
                     role="menuitem"
                     onClick={() => {
                       onCreate(searchTerm);
                       setIsOpen(false);
                       setSearchTerm("");
                     }}
+                    leftIcon={SvgPlus}
                   >
-                    <PlusIcon className="w-4 h-4 mr-2 text-text-600" />
                     Create label &quot;{searchTerm}&quot;
-                  </button>
+                  </Button>
                 </>
               )}
 

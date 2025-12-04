@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { v4 as uuidv4 } from "uuid";
 import Button from "@/refresh-components/buttons/Button";
-import { SimplifiedChatInputBar } from "../components/input/SimplifiedChatInputBar";
+import SimplifiedChatInputBar from "@/app/chat/components/input/SimplifiedChatInputBar";
 import { Menu } from "lucide-react";
 import { Shortcut } from "./interfaces";
 import {

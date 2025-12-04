@@ -10,7 +10,6 @@ import { Modal } from "@/components/Modal";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { usePopup, PopupSpec } from "@/components/admin/connectors/Popup";
-import { UsersIcon } from "@/components/icons/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -26,6 +25,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
 import SvgDownloadCloud from "@/icons/download-cloud";
 import { useAuthType } from "@/lib/hooks";
+import SvgUser from "@/icons/user";
 
 interface CountDisplayProps {
   label: string;
@@ -372,7 +372,7 @@ const AddUserButton = ({
 const Page = () => {
   return (
     <div className="mx-auto container">
-      <AdminPageTitle title="Manage Users" icon={<UsersIcon size={32} />} />
+      <AdminPageTitle title="Manage Users" icon={SvgUser} />
       <SearchableTables />
     </div>
   );

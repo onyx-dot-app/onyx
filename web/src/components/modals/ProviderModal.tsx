@@ -1,6 +1,6 @@
 import React from "react";
 import Button from "@/refresh-components/buttons/Button";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import Modal from "@/refresh-components/Modal";
 import SvgLoader from "@/icons/loader";
 
@@ -11,7 +11,7 @@ export interface ProviderModalProps {
   // Base modal props
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<IconProps>;
   title: string;
   description?: string;
   className?: string;
@@ -38,7 +38,7 @@ export default function ProviderModal({
   submitLabel = "Connect",
   cancelLabel = "Cancel",
 }: ProviderModalProps) {
-  const SpinningLoader: React.FunctionComponent<SvgProps> = (props) => (
+  const SpinningLoader: React.FunctionComponent<IconProps> = (props) => (
     <SvgLoader
       {...props}
       className={`${

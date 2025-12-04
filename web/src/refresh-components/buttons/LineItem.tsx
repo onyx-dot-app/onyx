@@ -3,7 +3,7 @@
 import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Link from "next/link";
 
@@ -43,7 +43,7 @@ export interface LineItemProps extends React.HTMLAttributes<HTMLButtonElement> {
   emphasized?: boolean;
 
   selected?: boolean;
-  icon?: React.FunctionComponent<SvgProps>;
+  icon?: React.FunctionComponent<IconProps>;
   description?: string;
   rightChildren?: React.ReactNode;
   href?: string;

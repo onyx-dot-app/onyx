@@ -2,7 +2,7 @@
 
 import { PageSelector } from "@/components/PageSelector";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { EditIcon, TrashIcon } from "@/components/icons/icons";
+import { EditIcon } from "@/components/icons/icons";
 import { SlackChannelConfig } from "@/lib/types";
 import {
   Table,
