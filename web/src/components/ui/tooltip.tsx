@@ -60,15 +60,13 @@ const TooltipContent = React.forwardRef<
       >
         {showTick && (
           <div
-            className={`absolute w-2 h-2 bg-inherit rotate-45 ${
-              tickSide === "top"
-                ? "-top-1 left-1/2 -translate-x-1/2"
-                : tickSide === "bottom"
-                  ? "-bottom-1 left-1/2 -translate-x-1/2"
-                  : tickSide === "left"
-                    ? "-left-1 top-1/2 -translate-y-1/2"
-                    : "-right-1 top-1/2 -translate-y-1/2"
-            }`}
+            className={cn(
+              "absolute w-2 h-2 bg-inherit rotate-45",
+              tickSide === "top" && "-top-1 left-1/2 -translate-x-1/2",
+              tickSide === "bottom" && "-bottom-1 left-1/2 -translate-x-1/2",
+              tickSide === "left" && "-left-1 top-1/2 -translate-y-1/2",
+              tickSide === "right" && "-right-1 top-1/2 -translate-y-1/2"
+            )}
           />
         )}
         {props.children}

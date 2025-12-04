@@ -76,11 +76,11 @@ const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
           className
         )}
       >
-        {action ? (
+        {action && (
           <div className="absolute top-2 right-5 z-[1] flex items-center gap-2">
             {action}
           </div>
-        ) : null}
+        )}
         <textarea
           ref={ref}
           disabled={disabled}

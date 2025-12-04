@@ -10,8 +10,8 @@ from slack_sdk import WebClient
 from typing_extensions import override
 
 from onyx.context.search.federated.slack_search import slack_retrieval
+from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import SearchQuery
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.federated_connectors.interfaces import FederatedConnector
 from onyx.federated_connectors.models import CredentialField
@@ -270,7 +270,7 @@ class SlackFederatedConnector(FederatedConnector):
     @override
     def search(
         self,
-        query: SearchQuery,
+        query: ChunkIndexRequest,
         entities: dict[str, Any],
         access_token: str,
         limit: int | None = None,

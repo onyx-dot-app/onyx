@@ -57,7 +57,6 @@ const Actions: React.FC<ActionsProps> = React.memo(
                 tooltip="Disconnect Server"
                 tertiary
                 onClick={onDisconnect}
-                className="h-9 w-9"
                 aria-label={`Disconnect ${serverName} server`}
               />
             )}
@@ -67,7 +66,6 @@ const Actions: React.FC<ActionsProps> = React.memo(
                 tooltip="Manage Server"
                 tertiary
                 onClick={onManage}
-                className="h-9 w-9"
                 aria-label={`Manage ${serverName} server`}
               />
             )}
@@ -98,10 +96,9 @@ const Actions: React.FC<ActionsProps> = React.memo(
               secondary
               onClick={onAuthenticate}
               rightIcon={SvgArrowExchange}
-              className="bg-background-tint-01 border border-border-01"
               aria-label={`Authenticate and connect to ${serverName}`}
             >
-              Authenticate & Connect
+              Authenticate
             </Button>
           )}
           <div className="flex gap-1 items-center">
@@ -111,7 +108,6 @@ const Actions: React.FC<ActionsProps> = React.memo(
                 tooltip="Delete Server"
                 tertiary
                 onClick={onDelete}
-                className="h-9 w-9"
                 aria-label={`Delete ${serverName} server`}
               />
             )}
@@ -121,7 +117,6 @@ const Actions: React.FC<ActionsProps> = React.memo(
                 tooltip="Manage Server"
                 tertiary
                 onClick={onManage}
-                className="h-9 w-9"
                 aria-label={`Manage ${serverName} server`}
               />
             )}
@@ -151,7 +146,6 @@ const Actions: React.FC<ActionsProps> = React.memo(
               tooltip="Manage Server"
               tertiary
               onClick={onManage}
-              className="h-9 w-9"
               aria-label={`Manage ${serverName} server`}
             />
           )}

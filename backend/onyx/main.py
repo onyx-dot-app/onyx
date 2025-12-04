@@ -82,7 +82,9 @@ from onyx.server.features.oauth_config.api import (
 )
 from onyx.server.features.oauth_config.api import router as oauth_config_router
 from onyx.server.features.password.api import router as password_router
+from onyx.server.features.persona.api import admin_agents_router
 from onyx.server.features.persona.api import admin_router as admin_persona_router
+from onyx.server.features.persona.api import agents_router
 from onyx.server.features.persona.api import basic_router as persona_router
 from onyx.server.features.projects.api import router as projects_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
@@ -90,7 +92,6 @@ from onyx.server.features.tool.api import router as tool_router
 from onyx.server.features.user_oauth_token.api import router as user_oauth_token_router
 from onyx.server.features.web_search.api import router as web_search_router
 from onyx.server.federated.api import router as federated_router
-from onyx.server.gpts.api import router as gpts_router
 from onyx.server.kg.api import admin_router as kg_admin_router
 from onyx.server.long_term_logs.long_term_logs_api import (
     router as long_term_logs_router,
@@ -387,6 +388,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     )
     include_router_with_global_prefix_prepended(application, persona_router)
     include_router_with_global_prefix_prepended(application, admin_persona_router)
+    include_router_with_global_prefix_prepended(application, agents_router)
+    include_router_with_global_prefix_prepended(application, admin_agents_router)
     include_router_with_global_prefix_prepended(application, default_assistant_router)
     include_router_with_global_prefix_prepended(application, notification_router)
     include_router_with_global_prefix_prepended(application, tool_router)
@@ -396,7 +399,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, user_oauth_token_router)
     include_router_with_global_prefix_prepended(application, state_router)
     include_router_with_global_prefix_prepended(application, onyx_api_router)
-    include_router_with_global_prefix_prepended(application, gpts_router)
     include_router_with_global_prefix_prepended(application, settings_router)
     include_router_with_global_prefix_prepended(application, settings_admin_router)
     include_router_with_global_prefix_prepended(application, llm_admin_router)

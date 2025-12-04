@@ -18,7 +18,7 @@ import BulkAdd from "@/components/admin/users/BulkAdd";
 import Text from "@/refresh-components/texts/Text";
 import { InvitedUserSnapshot } from "@/lib/types";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
@@ -296,8 +296,8 @@ const AddUserButton = ({
   const shouldShowFirstInviteWarning =
     !NEXT_PUBLIC_CLOUD_ENABLED &&
     authType !== null &&
-    authType !== "saml" &&
-    authType !== "oidc" &&
+    authType !== AuthType.SAML &&
+    authType !== AuthType.OIDC &&
     invitedUsers &&
     invitedUsers.length === 0;
 
