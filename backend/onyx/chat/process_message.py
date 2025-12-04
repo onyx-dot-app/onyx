@@ -48,7 +48,7 @@ from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import load_in_memory_chat_files
 from onyx.file_store.utils import verify_user_files
-from onyx.llm.factory import get_llm_tokenizer_encode_func
+from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import litellm_exception_to_error_msg
@@ -207,7 +207,7 @@ def _extract_project_file_texts_and_images(
 def _initialize_chat_session(
     message_text: str,
     files: list[FileDescriptor],
-    llm_tokenizer_encode_func: Callable[[str], list[int]],
+    token_counter: Callable[[str], int],
     parent_id: int | None,
     user_id: UUID | None,
     chat_session_id: UUID,
@@ -240,7 +240,7 @@ def _initialize_chat_session(
         token_count = parent_message.token_count
         parent_message = parent_message.parent_message
     else:
-        token_count = len(llm_tokenizer_encode_func(message_text))
+        token_count = token_counter(message_text)
 
     # Flushed for ID but not committed yet
     user_message = create_new_chat_message(
@@ -328,7 +328,7 @@ def stream_chat_message_objects(
             additional_headers=litellm_additional_headers,
             long_term_logger=long_term_logger,
         )
-        tokenizer_encode_func = get_llm_tokenizer_encode_func(llm)
+        token_counter = get_llm_token_counter(llm)
 
         # Verify that the user specified files actually belong to the user
         verify_user_files(
@@ -343,7 +343,7 @@ def stream_chat_message_objects(
         user_message = _initialize_chat_session(
             message_text=message_text,
             files=new_msg_req.file_descriptors,
-            llm_tokenizer_encode_func=tokenizer_encode_func,
+            token_counter=token_counter,
             parent_id=parent_id,
             user_id=user_id,
             chat_session_id=chat_session_id,
@@ -375,7 +375,7 @@ def stream_chat_message_objects(
         reserved_token_count = calculate_reserved_tokens(
             db_session=db_session,
             persona_system_prompt=custom_agent_prompt or "",
-            tokenizer_encode_func=tokenizer_encode_func,
+            token_counter=token_counter,
             files=last_chat_message.files,
             memories=memories,
         )
@@ -466,7 +466,7 @@ def stream_chat_message_objects(
             files=files,
             project_image_files=extracted_project_files.project_image_files,
             additional_context=additional_context,
-            tokenizer_encode_func=tokenizer_encode_func,
+            token_counter=token_counter,
             tool_id_to_name_map=tool_id_to_name_map,
         )
 
@@ -500,7 +500,7 @@ def stream_chat_message_objects(
             persona=persona,
             memories=memories,
             llm=llm,
-            tokenizer_func=tokenizer_encode_func,
+            token_counter=token_counter,
             db_session=db_session,
             forced_tool_id=(
                 new_msg_req.forced_tool_ids[0] if new_msg_req.forced_tool_ids else None

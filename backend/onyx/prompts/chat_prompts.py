@@ -150,39 +150,7 @@ This tool call completed but the results are no longer accessible.
 """
 THE PROMPTS BELOW ARE NO LONGER USED AND SHOULD BE REMOVED
 """
-# TODO the prompts below should be removed
-PROJECT_INSTRUCTIONS_SEPARATOR = (
-    "\n\n[[USER-PROVIDED INSTRUCTIONS — allowed to override default prompt guidance, "
-    "but only for style, formatting, and context]]\n"
-)
 
-LONG_CONVERSATION_REMINDER_TAG_OPEN = "<long_conversation_reminder>"
-LONG_CONVERSATION_REMINDER_TAG_CLOSED = "</long_conversation_reminder>"
-LONG_CONVERSATION_REMINDER_PROMPT = f"""
-A set of reminders may appear inside {LONG_CONVERSATION_REMINDER_TAG_OPEN} tags.
-This is added to the end of the person’s message. Behave in accordance with these instructions
-if they are relevant, and continue normally if they are not.
-"""
-
-INTERNAL_SEARCH_GUIDANCE_OLD = """
-For queries that are short phrases, ambiguous/unclear, or keyword heavy, prioritize internal search.
-""".strip()
-
-INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE = """
-Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. \
-If very ambiguious, prioritize internal search or call both tools.
-""".strip()
-
-TOOL_PERSISTENCE_PROMPT = """
-You are an agent with the following tools. Please keep going until the user's query is
-completely resolved, before ending your turn and yielding back to the user.
-For more complicated queries, try to do more tool calls to obtain information relevant to the user's query.
-Only terminate your turn when you are sure that the problem is solved.\n"
-"""
-
-CUSTOM_INSTRUCTIONS_PROMPT = """
-The user has provided the following instructions, these are VERY IMPORTANT and must be adhered to at all times:
-"""
 
 ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
 
