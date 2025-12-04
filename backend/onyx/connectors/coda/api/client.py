@@ -441,6 +441,9 @@ class CodaAPIClient:
             logger.warning(f"No request ID returned for page '{page_id}'")
             return None
 
+        # Wait a moment for the export request to be registered
+        sleep(2)
+
         # Poll for the export result with exponential backoff
         for attempt in range(self.export_max_attempts):
             # Exponential backoff: 1s, 2s, 4s, 8s, etc.

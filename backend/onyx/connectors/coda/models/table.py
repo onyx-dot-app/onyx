@@ -161,4 +161,4 @@ class CodaRow(CodaObjectBase):
     createdAt: str
     updatedAt: str
     values: dict[str, Any]
-    parent: CodaTableReference
+    parent: Optional[CodaTableReference] = None

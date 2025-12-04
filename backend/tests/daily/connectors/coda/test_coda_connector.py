@@ -21,7 +21,7 @@ from onyx.connectors.coda.connector import CodaConnector
 from onyx.connectors.models import Document
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="session")
 def api_token() -> str:
     """Fixture to get and validate API token."""
     token = os.environ.get("CODA_API_TOKEN")
@@ -30,7 +30,7 @@ def api_token() -> str:
     return token
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="session")
 def api_client(api_token: str) -> CodaAPIClient:
     """Fixture to create and authenticate API client."""
     client = CodaAPIClient(api_token)
@@ -38,7 +38,7 @@ def api_client(api_token: str) -> CodaAPIClient:
     return client
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="session")
 def connector(api_token: str) -> CodaConnector:
     """Fixture to create and authenticate connector."""
     conn = CodaConnector(batch_size=5)
@@ -47,11 +47,14 @@ def connector(api_token: str) -> CodaConnector:
     return conn
 
 
-@pytest.fixture
-def reference_data(api_client: CodaAPIClient) -> dict[str, Any]:
+@pytest.fixture(scope="session")
+def reference_data(
+    api_client: CodaAPIClient, test_doc: dict[str, Any]
+) -> dict[str, Any]:
     """Fixture to fetch reference data from API.
 
     Builds a map of docs and their pages for validation.
+    Depends on test_doc to ensure the test document exists before fetching.
     """
     all_docs = list(api_client.fetch_all_docs())
 
@@ -80,7 +83,7 @@ def reference_data(api_client: CodaAPIClient) -> dict[str, Any]:
     }
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="session")
 def all_batches(connector: CodaConnector) -> list[list[Document]]:
     """Fixture that loads all batches once and caches them.
 
@@ -96,7 +99,7 @@ def all_batches(connector: CodaConnector) -> list[list[Document]]:
     return batches
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="session")
 def all_documents(all_batches: list[list[Document]]) -> list[Document]:
     """Fixture that flattens all batches into a single list of documents."""
     all_docs = []
@@ -107,7 +110,7 @@ def all_documents(all_batches: list[list[Document]]) -> list[Document]:
 
 @pytest.fixture(scope="session")
 def test_doc(api_token: str) -> Generator[dict[str, Any], None, None]:
-    """Fixture that creates a test doc for the test session.
+    """Fixture that creates a test doc once for the entire test session.
 
     Creates a doc by copying from a template, yields it for tests,
     and cleans it up after all tests complete.
