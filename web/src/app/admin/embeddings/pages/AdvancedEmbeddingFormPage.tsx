@@ -1,7 +1,6 @@
 import React, { forwardRef } from "react";
 import { Formik, Form, FormikProps, FieldArray, Field } from "formik";
 import * as Yup from "yup";
-import { TrashIcon } from "@/components/icons/icons";
 import {
   AdvancedSearchConfiguration,
   EmbeddingPrecision,
@@ -22,6 +21,8 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import Button from "@/refresh-components/buttons/Button";
 import SvgPlusCircle from "@/icons/plus-circle";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgTrash from "@/icons/trash";
 
 // Number of tokens to show cost calculation for
 const COST_CALCULATION_TOKENS = 1_000_000;
@@ -246,15 +247,11 @@ const AdvancedEmbeddingFormPage = forwardRef<
                             className={`w-full bg-input text-sm p-2  border border-border-medium rounded-md
                                       focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mr-2`}
                           />
-                          <button
-                            type="button"
+                          <IconButton
+                            icon={SvgTrash}
+                            danger
                             onClick={() => remove(index)}
-                            className={`p-2 my-auto bg-input flex-none rounded-md 
-                              bg-red-500 text-white hover:bg-red-600
-                              focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50`}
-                          >
-                            <TrashIcon className="text-white my-auto" />
-                          </button>
+                          />
                         </div>
                       )
                     )}
@@ -351,9 +348,9 @@ const AdvancedEmbeddingFormPage = forwardRef<
               />
 
               <NumberInput
-                description="Number of dimensions to reduce the embedding to. 
-              Will reduce memory usage but may reduce accuracy. 
-              If not specified, will just use the selected model's default dimensionality without any reduction. 
+                description="Number of dimensions to reduce the embedding to.
+              Will reduce memory usage but may reduce accuracy.
+              If not specified, will just use the selected model's default dimensionality without any reduction.
               Currently only supported for OpenAI embedding models"
                 optional={true}
                 label="Reduced Dimension"

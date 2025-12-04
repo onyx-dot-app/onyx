@@ -1,13 +1,14 @@
 import React from "react";
-import type { SVGProps } from "react";
+import { IconProps } from "@/icons";
 
-const SvgClaude = (props: SVGProps<SVGSVGElement>) => {
+const SvgClaude = (props: IconProps) => {
   const clipId = React.useId();
   return (
     <svg
       viewBox="0 0 16 16"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      stroke="currentColor"
       {...props}
     >
       <g clipPath={`url(#${clipId})`}>

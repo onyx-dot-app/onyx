@@ -6,9 +6,11 @@ import {
   PythonToolStart,
   PythonToolDelta,
   SectionEnd,
-} from "../../../services/streamingModels";
-import { MessageRenderer, RenderType } from "../interfaces";
-import { SvgProps } from "@/icons";
+} from "@/app/chat/services/streamingModels";
+import {
+  MessageRenderer,
+  RenderType,
+} from "@/app/chat/message/messageComponents/interfaces";
 import { CodeBlock } from "@/app/chat/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import python from "highlight.js/lib/languages/python";
@@ -71,10 +73,6 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
   };
 }
 
-function CodeIcon({ size = 16, ...props }: SvgProps) {
-  return <SvgCode width={size} height={size} {...props} />;
-}
-
 export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   packets,
   onComplete,
@@ -108,7 +106,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     // Loading state - when executing
     if (isExecuting) {
       return children({
-        icon: CodeIcon,
+        icon: SvgCode,
         status: "Executing Python code...",
         content: (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -132,7 +130,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     // Complete state - show output
     if (isComplete) {
       return children({
-        icon: CodeIcon,
+        icon: SvgCode,
         status: hasError
           ? "Python execution failed"
           : "Python execution completed",
@@ -185,7 +183,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
     // Fallback
     return children({
-      icon: CodeIcon,
+      icon: SvgCode,
       status: status,
       content: <div></div>,
     });
@@ -194,7 +192,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   // Highlight/Short rendering
   if (isExecuting) {
     return children({
-      icon: CodeIcon,
+      icon: SvgCode,
       status: "Executing Python code...",
       content: (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -217,7 +215,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
   if (hasError) {
     return children({
-      icon: CodeIcon,
+      icon: SvgCode,
       status: "Python execution failed",
       content: (
         <div className="text-sm text-red-600 dark:text-red-400">
@@ -229,7 +227,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
   if (isComplete) {
     return children({
-      icon: CodeIcon,
+      icon: SvgCode,
       status: "Python execution completed",
       content: (
         <div className="text-sm text-muted-foreground">
@@ -244,7 +242,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   }
 
   return children({
-    icon: CodeIcon,
+    icon: SvgCode,
     status: "Python execution",
     content: (
       <div className="text-sm text-muted-foreground">Python execution</div>

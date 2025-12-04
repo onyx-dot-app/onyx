@@ -6,7 +6,7 @@ import { cn, noProp } from "@/lib/utils";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import {
   iconClasses,
   textClasses,
@@ -22,7 +22,7 @@ import Truncated from "@/refresh-components/texts/Truncated";
 interface SelectedItemDisplay {
   childrenRef: React.MutableRefObject<React.ReactNode>;
   iconRef: React.MutableRefObject<
-    React.FunctionComponent<SvgProps> | undefined
+    React.FunctionComponent<IconProps> | undefined
   >;
 }
 

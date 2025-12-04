@@ -6,11 +6,11 @@ import SvgCode from "@/icons/code";
 import SvgTwoLineSmall from "@/icons/two-line-small";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import SvgSearch from "@/icons/search";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
 
 interface IconConfig {
-  Icon: React.FunctionComponent<SvgProps>;
+  Icon: React.FunctionComponent<IconProps>;
   className?: string;
 }
 

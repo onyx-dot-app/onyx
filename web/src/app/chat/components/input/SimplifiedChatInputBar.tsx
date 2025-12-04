@@ -7,13 +7,14 @@ import {
   InputBarPreview,
   InputBarPreviewImageProvider,
 } from "@/app/chat/components/files/InputBarPreview";
-import { SendIcon } from "@/components/icons/icons";
 import { HorizontalSourceSelector } from "@/components/search/filtering/HorizontalSourceSelector";
 import { Tag } from "@/lib/types";
+import SvgArrowUp from "@/icons/arrow-up";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 const MAX_INPUT_HEIGHT = 200;
 
-interface ChatInputBarProps {
+export interface ChatInputBarProps {
   message: string;
   setMessage: (message: string) => void;
   onSubmit: () => void;
@@ -27,7 +28,7 @@ interface ChatInputBarProps {
   availableTags: Tag[];
 }
 
-export function SimplifiedChatInputBar({
+export default function SimplifiedChatInputBar({
   message,
   setMessage,
   onSubmit,
@@ -224,23 +225,16 @@ export function SimplifiedChatInputBar({
         </div>
       </div>
       <div className="absolute bottom-2 mobile:right-4 desktop:right-4">
-        <button
-          className="cursor-pointer"
+        <IconButton
+          id="onyx-chat-input-send-button"
+          icon={SvgArrowUp}
           onClick={() => {
             if (message) {
               onSubmit();
             }
           }}
-        >
-          <SendIcon
-            size={22}
-            className={`text-neutral-50 dark:text-neutral-900 p-1 my-auto rounded-full ${
-              message
-                ? "bg-neutral-900 dark:bg-neutral-50"
-                : "bg-neutral-500 dark:bg-neutral-400"
-            }`}
-          />
-        </button>
+          disabled={!message}
+        />
       </div>
     </div>
   );

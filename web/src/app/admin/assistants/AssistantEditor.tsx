@@ -51,7 +51,6 @@ import {
   CameraIcon,
   GroupsIconSkeleton,
   SwapIcon,
-  TrashIcon,
 } from "@/components/icons/icons";
 import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
@@ -97,6 +96,7 @@ import { useAgents } from "@/lib/hooks/useAgents";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -1531,7 +1531,8 @@ export default function AssistantEditor({
                                 </span>
                               </div>
                               {user?.role === UserRole.ADMIN && (
-                                <button
+                                <IconButton
+                                  icon={SvgTrash}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const label = labels.find(
@@ -1541,10 +1542,7 @@ export default function AssistantEditor({
                                       deleteLabel(label.id);
                                     }
                                   }}
-                                  className="ml-2 p-1 hover:bg-background-hover rounded"
-                                >
-                                  <TrashIcon size={16} />
-                                </button>
+                                />
                               )}
                             </div>
                           )}
