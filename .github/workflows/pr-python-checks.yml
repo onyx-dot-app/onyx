@@ -103,3 +103,9 @@ jobs:
           MYPY_FORCE_COLOR: 1
           TERM: xterm-256color
         run: mypy .
+
+      - name: Run MyPy (tools/)
+        env:
+          MYPY_FORCE_COLOR: 1
+          TERM: xterm-256color
+        run: mypy tools/
