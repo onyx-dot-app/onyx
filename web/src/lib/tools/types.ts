@@ -9,10 +9,6 @@ export enum ActionStatus {
   FETCHING = "fetching",
 }
 
-// Backwards compatibility: MCPActionStatus is now an alias of ActionStatus
-export const MCPActionStatus = ActionStatus;
-export type MCPActionStatus = ActionStatus;
-
 export enum MCPServerStatus {
   CREATED = "CREATED",
   AWAITING_AUTH = "AWAITING_AUTH",
