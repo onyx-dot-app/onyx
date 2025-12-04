@@ -3,9 +3,9 @@
 import React, { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
-import ToolItem from "./ToolItem";
-import ToolItemSkeleton from "./skeleton/ToolItemSkeleton";
-import type { MCPTool } from "./types";
+import ToolItem from "@/sections/actions/ToolItem";
+import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
+import type { MCPTool } from "@/lib/tools/types";
 
 interface ToolsListProps {
   tools: MCPTool[];

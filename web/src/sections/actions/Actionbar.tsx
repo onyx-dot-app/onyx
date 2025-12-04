@@ -11,7 +11,7 @@ interface ActionbarProps {
   hasActions: boolean;
   searchQuery?: string;
   onSearchQueryChange?: (query: string) => void;
-  onAddMCPServer: () => void;
+  onAddAction: () => void;
   className?: string;
   buttonText?: string;
 }
@@ -20,7 +20,7 @@ const Actionbar: React.FC<ActionbarProps> = ({
   hasActions,
   searchQuery = "",
   onSearchQueryChange,
-  onAddMCPServer,
+  onAddAction,
   className,
   buttonText = "Add MCP Server",
 }) => {
@@ -56,7 +56,7 @@ const Actionbar: React.FC<ActionbarProps> = ({
       )}
 
       <div className="flex gap-2 items-center justify-end">
-        <Button main primary leftIcon={SvgPlusCircle} onClick={onAddMCPServer}>
+        <Button main primary leftIcon={SvgPlusCircle} onClick={onAddAction}>
           {buttonText}
         </Button>
       </div>

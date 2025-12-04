@@ -33,7 +33,7 @@ class ToolSnapshot(BaseModel):
         return cls(
             id=tool.id,
             name=tool.name,
-            description=tool.description,
+            description=tool.description or "",
             definition=tool.openapi_schema,
             display_name=tool.display_name or tool.name,
             in_code_tool_id=tool.in_code_tool_id,

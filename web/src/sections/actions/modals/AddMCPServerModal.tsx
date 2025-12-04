@@ -10,11 +10,8 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import SvgServer from "@/icons/server";
 import SvgCheckCircle from "@/icons/check-circle";
-import { createMCPServer, updateMCPServer } from "@/lib/mcpService";
-import {
-  MCPServerCreateRequest,
-  MCPServerStatus,
-} from "@/sections/actions/types";
+import { createMCPServer, updateMCPServer } from "@/lib/tools/mcpService";
+import { MCPServerCreateRequest, MCPServerStatus } from "@/lib/tools/types";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
