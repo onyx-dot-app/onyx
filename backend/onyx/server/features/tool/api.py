@@ -217,6 +217,23 @@ def validate_tool(
 """Endpoints for all"""
 
 
+@router.get("/openapi")
+def list_openapi_tools(
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_user),
+) -> list[ToolSnapshot]:
+    tools = get_tools(db_session, only_openapi=True)
+
+    openapi_tools: list[ToolSnapshot] = []
+    for tool in tools:
+        if not should_expose_tool_to_fe(tool):
+            continue
+
+        openapi_tools.append(ToolSnapshot.from_model(tool))
+
+    return openapi_tools
+
+
 @router.get("/{tool_id}")
 def get_custom_tool(
     tool_id: int,

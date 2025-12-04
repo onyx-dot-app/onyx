@@ -41,6 +41,9 @@ export interface ToolSnapshot {
   // If this is an MCP tool, which server it belongs to
   mcp_server_id?: number | null;
   user_id?: string | null;
+
+  // Whether the tool is enabled
+  enabled: boolean;
 }
 
 export interface MCPServer {
@@ -54,6 +57,9 @@ export interface MCPServer {
   auth_performer: MCPAuthenticationPerformer;
   is_authenticated: boolean;
   user_authenticated?: boolean | null;
+  auth_template?: any;
+  admin_credentials?: Record<string, string>;
+  user_credentials?: Record<string, string>;
 }
 
 export interface MCPServersResponse {
