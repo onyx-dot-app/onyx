@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.coda.api.client import CodaAPIClient
 from onyx.connectors.coda.connector import CodaConnector
 from onyx.connectors.models import Document
 
@@ -30,18 +31,29 @@ def api_token() -> str:
 
 
 @pytest.fixture
+def api_client(api_token: str) -> CodaAPIClient:
+    """Fixture to create and authenticate API client."""
+    client = CodaAPIClient(api_token)
+    client.validate_credentials()
+    return client
+
+
+@pytest.fixture
 def connector(api_token: str) -> CodaConnector:
     """Fixture to create and authenticate connector."""
     conn = CodaConnector(batch_size=5)
     conn.load_credentials({"coda_api_token": api_token})
+    conn.validate_connector_settings()
     return conn
 
 
 @pytest.fixture
-def reference_data(connector: CodaConnector) -> dict[str, Any]:
-    """Fixture to fetch reference data from API."""
-    all_docs_response = connector._fetch_docs()
-    all_docs = all_docs_response.get("items", [])
+def reference_data(api_client: CodaAPIClient) -> dict[str, Any]:
+    """Fixture to fetch reference data from API.
+
+    Builds a map of docs and their pages for validation.
+    """
+    all_docs = list(api_client.fetch_all_docs())
 
     if not all_docs:
         pytest.skip("No docs found in Coda workspace")
@@ -50,14 +62,12 @@ def reference_data(connector: CodaConnector) -> dict[str, Any]:
     expected_page_count = 0
     expected_pages_by_doc = {}
 
-    for doc_data in all_docs:
-        doc_id = doc_data["id"]
-        pages_response = connector._fetch_pages(doc_id)
-        pages = pages_response.get("items", [])
+    for doc in all_docs:
+        pages = api_client.fetch_all_pages(doc.id)
 
         # Only count non-hidden pages
-        non_hidden_pages = [p for p in pages if not p.get("isHidden", False)]
-        expected_pages_by_doc[doc_id] = non_hidden_pages
+        non_hidden_pages = [p for p in pages if not p.isHidden]
+        expected_pages_by_doc[doc.id] = non_hidden_pages
         expected_page_count += len(non_hidden_pages)
 
     if expected_page_count == 0:
@@ -81,7 +91,9 @@ class TestLoadFromStateEndToEnd:
     def test_batch_sizes_respect_config(self, connector: CodaConnector) -> None:
         """Test that batches respect the configured batch_size."""
         batch_size = connector.batch_size
-        connector.indexed_pages.clear()
+        assert connector.generator is not None
+        connector.generator.indexed_pages.clear()
+        connector.generator.indexed_tables.clear()
         gen = connector.load_from_state()
 
         batch_sizes = []
@@ -111,7 +123,9 @@ class TestLoadFromStateEndToEnd:
         - Some pages may fail to export
         - Some pages may have empty content
         """
-        connector.indexed_pages.clear()
+        assert connector.generator is not None
+        connector.generator.indexed_pages.clear()
+        connector.generator.indexed_tables.clear()
         gen = connector.load_from_state()
 
         total_documents = sum(len(batch) for batch in gen)
@@ -131,7 +145,9 @@ class TestLoadFromStateEndToEnd:
         self, connector: CodaConnector, reference_data: dict[str, Any]
     ) -> None:
         """Test that all documents have required fields."""
-        connector.indexed_pages.clear()
+        assert connector.generator is not None
+        connector.generator.indexed_pages.clear()
+        connector.generator.indexed_tables.clear()
         gen = connector.load_from_state()
 
         for batch in gen:
@@ -154,14 +170,16 @@ class TestLoadFromStateEndToEnd:
 
                 # Metadata
                 assert "doc_id" in doc.metadata
-                assert "page_id" in doc.metadata
-                assert "path" in doc.metadata
+                assert "page_id" in doc.metadata or "table_id" in doc.metadata
+                assert "path" in doc.metadata or "table_name" in doc.metadata
 
     def test_hidden_pages_excluded(
         self, connector: CodaConnector, reference_data: dict[str, Any]
     ) -> None:
         """Test that hidden pages are not included in results."""
-        connector.indexed_pages.clear()
+        assert connector.generator is not None
+        connector.generator.indexed_pages.clear()
+        connector.generator.indexed_tables.clear()
         gen = connector.load_from_state()
 
         # Collect all yielded page IDs
@@ -169,14 +187,15 @@ class TestLoadFromStateEndToEnd:
         for batch in gen:
             for doc in batch:
                 page_id = doc.metadata.get("page_id")
-                yielded_page_ids.add(page_id)
+                if page_id:
+                    yielded_page_ids.add(page_id)
 
         # Get all hidden page IDs from reference data
         all_hidden_page_ids = set()
         for doc_id, pages in reference_data["pages_by_doc"].items():
-            for page_data in pages:
-                if page_data.get("isHidden", False):
-                    all_hidden_page_ids.add(page_data["id"])
+            for page in pages:
+                if page.isHidden:
+                    all_hidden_page_ids.add(page.id)
 
         # Verify no overlap
         hidden_in_results = all_hidden_page_ids & yielded_page_ids
@@ -188,7 +207,9 @@ class TestLoadFromStateEndToEnd:
         self, connector: CodaConnector, reference_data: dict[str, Any]
     ) -> None:
         """Test that no documents are yielded twice."""
-        connector.indexed_pages.clear()
+        assert connector.generator is not None
+        connector.generator.indexed_pages.clear()
+        connector.generator.indexed_tables.clear()
         gen = connector.load_from_state()
 
         document_ids = []
@@ -205,7 +226,9 @@ class TestLoadFromStateEndToEnd:
         self, connector: CodaConnector, reference_data: dict[str, Any]
     ) -> None:
         """Test that pages from all docs are included."""
-        connector.indexed_pages.clear()
+        assert connector.generator is not None
+        connector.generator.indexed_pages.clear()
+        connector.generator.indexed_tables.clear()
         gen = connector.load_from_state()
 
         processed_doc_ids = set()
@@ -214,7 +237,7 @@ class TestLoadFromStateEndToEnd:
                 doc_id = doc.metadata.get("doc_id")
                 processed_doc_ids.add(doc_id)
 
-        expected_doc_ids = {doc["id"] for doc in reference_data["docs"]}
+        expected_doc_ids = {doc.id for doc in reference_data["docs"]}
         assert (
             processed_doc_ids == expected_doc_ids
         ), f"Not all docs were processed. Expected {expected_doc_ids}, got {processed_doc_ids}"
@@ -223,7 +246,9 @@ class TestLoadFromStateEndToEnd:
         self, connector: CodaConnector, reference_data: dict[str, Any]
     ) -> None:
         """Test that all documents have meaningful content (not just title)."""
-        connector.indexed_pages.clear()
+        assert connector.generator is not None
+        connector.generator.indexed_pages.clear()
+        connector.generator.indexed_tables.clear()
         gen = connector.load_from_state()
 
         for batch in gen:
@@ -254,23 +279,32 @@ class TestLoadFromStateEndToEnd:
         self, connector: CodaConnector, reference_data: dict[str, Any]
     ) -> None:
         """Test that metadata contains page hierarchy information."""
-        connector.indexed_pages.clear()
+        assert connector.generator is not None
+        connector.generator.indexed_pages.clear()
+        connector.generator.indexed_tables.clear()
         gen = connector.load_from_state()
 
         for batch in gen:
             for doc in batch:
                 metadata = doc.metadata
 
-                # Path should contain page name
-                assert "path" in metadata
-                path = metadata["path"]
-                assert isinstance(path, str), "Path should be a string"
-                assert path
-                assert path == path.strip()  # No leading/trailing spaces
+                # Pages should have path
+                if "page_id" in metadata:
+                    assert "path" in metadata
+                    path = metadata["path"]
+                    assert isinstance(path, str), "Path should be a string"
+                    assert path
+                    assert path == path.strip()  # No leading/trailing spaces
 
-                # If page has a parent, it should be in metadata
-                if "parent_page_id" in metadata:
-                    assert metadata["parent_page_id"] is not None
+                    # If page has a parent, it should be in metadata
+                    if "parent_page_id" in metadata:
+                        assert metadata["parent_page_id"] is not None
+
+                # Tables should have table info
+                elif "table_id" in metadata:
+                    assert "table_name" in metadata
+                    assert "row_count" in metadata
+                    assert "column_count" in metadata
 
 
 if __name__ == "__main__":
