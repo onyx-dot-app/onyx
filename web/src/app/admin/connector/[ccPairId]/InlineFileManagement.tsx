@@ -303,6 +303,7 @@ export function InlineFileManagement({
                           internal
                           onClick={() => handleRemoveNewFile(index)}
                           tooltip="Remove file"
+                          title="Remove file"
                         />
                       </TableCell>
                     )}

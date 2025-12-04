@@ -120,7 +120,7 @@ test.describe("InlineFileManagement", () => {
       "This file will be removed"
     );
     const newFileRow = page.locator("tr", { hasText: "file-to-remove.txt" });
-    await newFileRow.locator('button[title="Remove this file"]').click();
+    await newFileRow.locator('button[title="Remove file"]').click();
     await expect(page.getByText("file-to-remove.txt")).not.toBeVisible();
   });
 
