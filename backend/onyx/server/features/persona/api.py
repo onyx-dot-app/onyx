@@ -161,12 +161,16 @@ def patch_agents_display_priorities(
     user: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_personas_display_priority(
-        display_priority_map=display_priority_request.display_priority_map,
-        db_session=db_session,
-        user=user,
-        commit_db_txn=True,
-    )
+    try:
+        update_personas_display_priority(
+            display_priority_map=display_priority_request.display_priority_map,
+            db_session=db_session,
+            user=user,
+            commit_db_txn=True,
+        )
+    except ValueError as e:
+        logger.exception("Failed to update agent display priorities.")
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @admin_router.get("")
