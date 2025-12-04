@@ -13,7 +13,6 @@ from onyx.auth.users import current_user
 from onyx.chat.chat_utils import combine_message_thread
 from onyx.chat.chat_utils import prepare_chat_message_request
 from onyx.chat.models import AnswerStream
-from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
@@ -41,7 +40,6 @@ from onyx.db.chat import get_valid_messages_from_query_sessions
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
@@ -212,22 +210,12 @@ def get_answer_stream(
     query = query_request.messages[0].message
     logger.notice(f"Received query for Answer API: {query}")
 
-    if (
-        query_request.persona_override_config is None
-        and query_request.persona_id is None
-    ):
-        raise KeyError("Must provide persona ID or Persona Config")
-
-    persona_info: Persona | PersonaOverrideConfig | None = None
-    if query_request.persona_override_config is not None:
-        persona_info = query_request.persona_override_config
-    elif query_request.persona_id is not None:
-        persona_info = get_persona_by_id(
-            persona_id=query_request.persona_id,
-            user=user,
-            db_session=db_session,
-            is_for_edit=False,
-        )
+    persona_info = get_persona_by_id(
+        persona_id=query_request.persona_id,
+        user=user,
+        db_session=db_session,
+        is_for_edit=False,
+    )
 
     llm = get_main_llm_from_tuple(get_llms_for_persona(persona=persona_info, user=user))
 
@@ -249,15 +237,11 @@ def get_answer_stream(
     # Also creates a new chat session
     request = prepare_chat_message_request(
         message_text=combined_message,
+        filters=query_request.filters,
         user=user,
         persona_id=query_request.persona_id,
-        persona_override_config=query_request.persona_override_config,
         message_ts_to_respond_to=None,
-        retrieval_details=query_request.retrieval_options,
-        rerank_settings=query_request.rerank_settings,
         db_session=db_session,
-        use_agentic_search=query_request.use_agentic_search,
-        skip_gen_ai_answer_generation=query_request.skip_gen_ai_answer_generation,
     )
 
     packets = stream_chat_message_objects(

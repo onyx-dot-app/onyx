@@ -116,7 +116,6 @@ def _process_question(question_data: dict, config: dict, question_number: int) -
     query = question_data["question"]
     context_data_list, answer = get_answer_from_query(
         query=query,
-        only_retrieve_docs=config["only_retrieve_docs"],
         env_name=config["env_name"],
     )
     print(f"On question number {question_number}")

@@ -7,7 +7,6 @@ from onyx.chat.models import AnswerStreamPart
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import StreamingError
 from onyx.chat.process_message import stream_chat_message_objects
-from onyx.context.search.models import RetrievalDetails
 from onyx.db.chat import create_chat_session
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
@@ -45,10 +44,7 @@ def test_stream_chat_current_date_response(
         parent_message_id=None,
         message="Please respond only with the current date in the format 'Weekday Month DD, YYYY'.",
         file_descriptors=[],
-        prompt_override=None,
-        search_doc_ids=None,
-        retrieval_options=RetrievalDetails(),
-        query_override=None,
+        filters=None,
     )
 
     gen = stream_chat_message_objects(

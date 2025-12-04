@@ -2,7 +2,6 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -110,7 +109,7 @@ def get_llm_config_for_persona(
 
 
 def get_llms_for_persona(
-    persona: Persona | PersonaOverrideConfig | None,
+    persona: Persona | None,
     user: User | None,
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
@@ -137,22 +136,18 @@ def get_llms_for_persona(
         if not provider_model:
             raise ValueError("No LLM provider found")
 
-        # Only check access control for database Persona entities, not PersonaOverrideConfig
-        # PersonaOverrideConfig is used for temporary overrides and doesn't have access restrictions
-        persona_model = persona if isinstance(persona, Persona) else None
-
         # Fetch user group IDs for access control check
         user_group_ids = fetch_user_group_ids(db_session, user)
 
         if not can_user_access_llm_provider(
             provider_model,
             user_group_ids,
-            persona_model,
+            persona,
         ):
             logger.warning(
                 "User %s with persona %s cannot access provider %s. Falling back to default provider.",
                 getattr(user, "id", None),
-                getattr(persona_model, "id", None),
+                getattr(persona, "id", None),
                 provider_model.name,
             )
             return get_default_llms(

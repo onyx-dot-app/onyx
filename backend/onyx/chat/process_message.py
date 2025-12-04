@@ -26,8 +26,6 @@ from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
-from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import CitationDocInfo
@@ -260,17 +258,10 @@ def stream_chat_message_objects(
     new_msg_req: CreateChatMessageRequest,
     user: User | None,
     db_session: Session,
-    # Needed to translate persona num_chunks to tokens to the LLM
-    default_num_chunks: float = MAX_CHUNKS_FED_TO_CHAT,
-    # For flow with search, don't include as many chunks as possible since we need to leave space
-    # for the chat history, for smaller models, we likely won't get MAX_CHUNKS_FED_TO_CHAT chunks
-    max_document_percentage: float = CHAT_TARGET_CHUNK_PERCENTAGE,
     # if specified, uses the last user message and does not create a new user message based
     # on the `new_msg_req.message`. Currently, requires a state where the last message is a
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
-    is_connected: Callable[[], bool] | None = None,
-    enforce_chat_session_id_for_search_docs: bool = True,
     bypass_acl: bool = False,
     # Additional context that should be included in the chat history, for example:
     # Slack threads where the conversation cannot be represented by a chain of User/Assistant
@@ -298,10 +289,7 @@ def stream_chat_message_objects(
         message_text = new_msg_req.message
         chat_session_id = new_msg_req.chat_session_id
         parent_id = new_msg_req.parent_message_id
-        reference_doc_ids = new_msg_req.search_doc_ids
-        retrieval_options = new_msg_req.retrieval_options
-        new_msg_req.alternate_assistant_id
-        user_selected_filters = retrieval_options.filters if retrieval_options else None
+        user_selected_filters = new_msg_req.filters
 
         # permanent "log" store, used primarily for debugging
         long_term_logger = LongTermLogger(
@@ -315,11 +303,6 @@ def stream_chat_message_objects(
             tenant_id=tenant_id,
             db_session=db_session,
         )
-
-        if reference_doc_ids is None and retrieval_options is None:
-            raise RuntimeError(
-                "Must specify a set of documents for chat or specify search options"
-            )
 
         llm, fast_llm = get_llms_for_persona(
             persona=persona,

@@ -45,9 +45,7 @@ from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import MessageType
-from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.sql_engine import SqlEngine
@@ -432,14 +430,7 @@ class SearchAnswerAnalyzer:
         qa_request = OneShotQARequest(
             messages=messages,
             persona_id=0,  # default persona
-            retrieval_options=RetrievalDetails(
-                run_search=OptionalSearchSetting.ALWAYS,
-                real_time=True,
-                filters=filters,
-                enable_auto_detect_filters=False,
-                limit=self.config.max_search_results,
-            ),
-            skip_gen_ai_answer_generation=self.config.search_only,
+            filters=filters,
         )
 
         # send the request

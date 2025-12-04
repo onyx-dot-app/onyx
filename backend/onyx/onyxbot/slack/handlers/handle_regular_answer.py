@@ -19,9 +19,7 @@ from onyx.configs.onyxbot_configs import ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER
 from onyx.configs.onyxbot_configs import ONYX_BOT_DISPLAY_ERROR_MSGS
 from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
 from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
-from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import RetrievalDetails
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
@@ -210,31 +208,13 @@ def handle_regular_answer(
             time_cutoff=None,
         )
 
-        # Default True because no other ways to apply filters in Slack (no nice UI)
-        # Commenting this out because this is only available to the slackbot for now
-        # later we plan to implement this at the persona level where this will get
-        # commented back in
-        # auto_detect_filters = (
-        #     persona.llm_filter_extraction if persona is not None else True
-        # )
-        auto_detect_filters = slack_channel_config.enable_auto_filters
-        retrieval_details = RetrievalDetails(
-            run_search=OptionalSearchSetting.ALWAYS,
-            real_time=False,
-            filters=filters,
-            enable_auto_detect_filters=auto_detect_filters,
-        )
-
         with get_session_with_current_tenant() as db_session:
             answer_request = prepare_chat_message_request(
                 message_text=user_message.message,
                 user=user,
+                filters=filters,
                 persona_id=persona.id,
-                # This is not used in the Slack flow, only in the answer API
-                persona_override_config=None,
                 message_ts_to_respond_to=message_ts_to_respond_to,
-                retrieval_details=retrieval_details,
-                rerank_settings=None,  # Rerank customization supported in Slack flow
                 db_session=db_session,
             )
 

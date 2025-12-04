@@ -15,8 +15,6 @@ from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import OptionalSearchSetting
-from onyx.context.search.models import RetrievalDetails
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_or_create_root_message
@@ -77,40 +75,17 @@ def handle_simplified_chat_message(
             chat_session_id=chat_session_id, db_session=db_session
         )
 
-    if (
-        chat_message_req.retrieval_options is None
-        and chat_message_req.search_doc_ids is None
-    ):
-        retrieval_options: RetrievalDetails | None = RetrievalDetails(
-            run_search=OptionalSearchSetting.ALWAYS,
-            real_time=False,
-        )
-    else:
-        retrieval_options = chat_message_req.retrieval_options
-
     full_chat_msg_info = CreateChatMessageRequest(
         chat_session_id=chat_session_id,
         parent_message_id=parent_message.id,
         message=chat_message_req.message,
-        file_descriptors=[],
-        search_doc_ids=chat_message_req.search_doc_ids,
-        retrieval_options=retrieval_options,
-        # Simple API does not support reranking, hide complexity from user
-        rerank_settings=None,
-        query_override=chat_message_req.query_override,
-        # Currently only applies to search flow not chat
-        chunks_above=0,
-        chunks_below=0,
-        full_doc=chat_message_req.full_doc,
         structured_response_format=chat_message_req.structured_response_format,
-        use_agentic_search=chat_message_req.use_agentic_search,
     )
 
     packets = stream_chat_message_objects(
         new_msg_req=full_chat_msg_info,
         user=user,
         db_session=db_session,
-        enforce_chat_session_id_for_search_docs=False,
     )
 
     return gather_stream(packets)
@@ -123,8 +98,7 @@ def handle_send_message_simple_with_history(
     db_session: Session = Depends(get_session),
 ) -> ChatBasicResponse:
     """This is a Non-Streaming version that only gives back a minimal set of information.
-    takes in chat history maintained by the caller
-    and does query rephrasing similar to answer-with-quote"""
+    takes in chat history maintained by the caller"""
 
     if len(req.messages) == 0:
         raise HTTPException(status_code=400, detail="Messages cannot be zero length")
@@ -194,41 +168,22 @@ def handle_send_message_simple_with_history(
         llm_tokenizer=llm_tokenizer,
     )
 
-    rephrased_query = req.query_override or thread_based_query_rephrase(
+    rephrased_query = thread_based_query_rephrase(
         user_query=query,
         history_str=history_str,
     )
 
-    if req.retrieval_options is None and req.search_doc_ids is None:
-        retrieval_options: RetrievalDetails | None = RetrievalDetails(
-            run_search=OptionalSearchSetting.ALWAYS,
-            real_time=False,
-        )
-    else:
-        retrieval_options = req.retrieval_options
-
     full_chat_msg_info = CreateChatMessageRequest(
         chat_session_id=chat_session.id,
         parent_message_id=chat_message.id,
-        message=query,
-        file_descriptors=[],
-        search_doc_ids=req.search_doc_ids,
-        retrieval_options=retrieval_options,
-        # Simple API does not support reranking, hide complexity from user
-        rerank_settings=None,
-        query_override=rephrased_query,
-        chunks_above=0,
-        chunks_below=0,
-        full_doc=req.full_doc,
+        message=rephrased_query,
         structured_response_format=req.structured_response_format,
-        use_agentic_search=req.use_agentic_search,
     )
 
     packets = stream_chat_message_objects(
         new_msg_req=full_chat_msg_info,
         user=user,
         db_session=db_session,
-        enforce_chat_session_id_for_search_docs=False,
     )
 
     return gather_stream(packets)

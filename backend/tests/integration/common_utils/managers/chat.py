@@ -8,12 +8,10 @@ from uuid import UUID
 import requests
 from requests.models import Response
 
-from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import StreamingType
@@ -92,14 +90,8 @@ class ChatSessionManager:
         user_performing_action: DATestUser | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
         search_doc_ids: list[int] | None = None,
-        retrieval_options: RetrievalDetails | None = None,
-        query_override: str | None = None,
-        regenerate: bool | None = None,
         llm_override: LLMOverride | None = None,
-        prompt_override: PromptOverride | None = None,
-        alternate_assistant_id: int | None = None,
         use_existing_user_message: bool = False,
-        use_agentic_search: bool = False,
         forced_tool_ids: list[int] | None = None,
         chat_session: DATestChatSession | None = None,
     ) -> StreamedResponse:
@@ -109,15 +101,8 @@ class ChatSessionManager:
             message=message,
             file_descriptors=file_descriptors or [],
             search_doc_ids=search_doc_ids or [],
-            retrieval_options=retrieval_options,
-            rerank_settings=None,  # Can be added if needed
-            query_override=query_override,
-            regenerate=regenerate,
             llm_override=llm_override,
-            prompt_override=prompt_override,
-            alternate_assistant_id=alternate_assistant_id,
             use_existing_user_message=use_existing_user_message,
-            use_agentic_search=use_agentic_search,
             forced_tool_ids=forced_tool_ids,
         )
 

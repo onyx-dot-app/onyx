@@ -2,10 +2,10 @@ from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
 
-from onyx.tools.tool_implementations_v2.tool_result_models import (
+from onyx.tools.models import (
     LlmOpenUrlResult,
 )
-from onyx.tools.tool_implementations_v2.tool_result_models import (
+from onyx.tools.models import (
     LlmWebSearchResult,
 )
 from shared_configs.enums import WebContentProviderType

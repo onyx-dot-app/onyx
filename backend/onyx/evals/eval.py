@@ -11,7 +11,6 @@ from sqlalchemy.orm.session import SessionTransaction
 from onyx.chat.chat_utils import prepare_chat_message_request
 from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
-from onyx.context.search.models import RetrievalDetails
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.users import get_user_by_email
 from onyx.evals.models import EvalationAck
@@ -73,15 +72,11 @@ def _get_answer(
             request = prepare_chat_message_request(
                 message_text=eval_input["message"],
                 user=user,
+                filters=None,
                 persona_id=None,
-                persona_override_config=full_configuration.persona_override_config,
                 message_ts_to_respond_to=None,
-                retrieval_details=RetrievalDetails(),
-                rerank_settings=None,
                 db_session=db_session,
-                skip_gen_ai_answer_generation=False,
                 llm_override=full_configuration.llm,
-                use_agentic_search=False,
                 allowed_tool_ids=full_configuration.allowed_tool_ids,
             )
             packets = stream_chat_message_objects(

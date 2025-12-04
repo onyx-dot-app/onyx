@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_user
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import RetrievalDetails
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_message
 from onyx.db.chat import get_chat_messages_by_session
@@ -23,7 +22,6 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import User
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import setup_logger
 
 
@@ -91,29 +89,12 @@ def process_run_in_background(
         db_session=db_session,
     )
 
-    search_tool_retrieval_details = RetrievalDetails()
-    for tool in tools:
-        if tool["type"] == SearchTool.__name__ and (
-            retrieval_details := tool.get("retrieval_details")
-        ):
-            search_tool_retrieval_details = RetrievalDetails.model_validate(
-                retrieval_details
-            )
-            break
-
     new_msg_req = CreateChatMessageRequest(
         chat_session_id=chat_session_id,
         parent_message_id=int(parent_message_id) if parent_message_id else None,
         message=instructions,
         file_descriptors=[],
-        search_doc_ids=None,
-        retrieval_options=search_tool_retrieval_details,  # Adjust as needed
-        rerank_settings=None,
-        query_override=None,
-        regenerate=None,
-        llm_override=None,
-        prompt_override=None,
-        alternate_assistant_id=assistant_id,
+        filters=None,
         use_existing_user_message=True,
         existing_assistant_message_id=message_id,
     )

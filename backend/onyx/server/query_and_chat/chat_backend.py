@@ -78,7 +78,6 @@ from onyx.server.query_and_chat.models import ChatSessionUpdateRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.models import CreateChatSessionID
 from onyx.server.query_and_chat.models import LLMOverride
-from onyx.server.query_and_chat.models import PromptOverride
 from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
@@ -636,12 +635,8 @@ class ChatSeedRequest(BaseModel):
 
     # overrides / seeding
     llm_override: LLMOverride | None = None
-    prompt_override: PromptOverride | None = None
     description: str | None = None
     message: str | None = None
-
-    # TODO: support this
-    # initial_message_retrieval_options: RetrievalDetails | None = None
 
 
 class ChatSeedResponse(BaseModel):
@@ -666,7 +661,6 @@ def seed_chat(
             user_id=None,  # this chat session is "unassigned" until a user visits the web UI
             persona_id=chat_seed_request.persona_id,
             llm_override=chat_seed_request.llm_override,
-            prompt_override=chat_seed_request.prompt_override,
         )
     except Exception as e:
         logger.exception(e)

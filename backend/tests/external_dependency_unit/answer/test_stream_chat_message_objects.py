@@ -9,7 +9,6 @@ from onyx.chat.models import AnswerStreamPart
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import StreamingError
 from onyx.chat.process_message import stream_chat_message_objects
-from onyx.context.search.models import RetrievalDetails
 from onyx.db.chat import create_chat_session
 from onyx.db.models import RecencyBiasSetting
 from onyx.db.models import User
@@ -104,11 +103,6 @@ def test_stream_chat_message_objects_without_web_search(
         chat_session_id=chat_session.id,
         parent_message_id=None,
         message="run a web search for 'Onyx'",
-        file_descriptors=[],
-        prompt_override=None,
-        search_doc_ids=None,
-        retrieval_options=RetrievalDetails(),
-        query_override=None,
     )
     # Call stream_chat_message_objects
     response_generator = stream_chat_message_objects(

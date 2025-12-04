@@ -4,10 +4,8 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import BaseModel
-from pydantic import Field
 from pydantic import model_validator
 
-from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import ThreadMessage
 from onyx.configs.constants import DocumentSource
@@ -28,7 +26,6 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
 
@@ -81,45 +78,38 @@ class ChatFeedbackRequest(BaseModel):
 
 
 class CreateChatMessageRequest(ChunkContext):
-    """Before creating messages, be sure to create a chat_session and get an id"""
+    # NOTE: Double check before adding fields to this class, it has historically gotten really
+    # bloated and hard to maintain.
 
+    # Identifying where the message is in the chat session history
     chat_session_id: UUID
     # This is the primary-key (unique identifier) for the previous message of the tree
     parent_message_id: int | None
 
     # New message contents
     message: str
+    filters: BaseFilters | None = None
     # Files that we should attach to this message
     file_descriptors: list[FileDescriptor] = []
     # Prompts are embedded in personas, so no separate prompt_id needed
     # If search_doc_ids provided, it should use those docs explicitly
-    search_doc_ids: list[int] | None
-    retrieval_options: RetrievalDetails | None
-    # Useable via the APIs but not recommended for most flows
-    rerank_settings: RerankingDetails | None = None
-    # allows the caller to specify the exact search query they want to use
-    # will disable Query Rewording if specified
-    query_override: str | None = None
+    # TODO: this is for the selecting documents functionality
+    search_doc_ids: list[int] | None = None
 
-    # enables additional handling to ensure that we regenerate with a given user message ID
-    regenerate: bool | None = None
-
-    # allows the caller to override the Persona / Prompt
-    # these do not persist in the chat thread details
+    # Let's the message be processed with some different LLM than the usual
     llm_override: LLMOverride | None = None
-    prompt_override: PromptOverride | None = None
 
     # Allows the caller to override the temperature for the chat session
-    # this does persist in the chat thread details
     temperature_override: float | None = None
 
-    # allow user to specify an alternate assistant
-    alternate_assistant_id: int | None = None
+    # List of allowed tool IDs to restrict tool usage. If not provided, all tools available to the persona will be used.
+    allowed_tool_ids: list[int] | None = None
 
-    # This takes the priority over the prompt_override
-    # This won't be a type that's passed in directly from the API
-    persona_override_config: PersonaOverrideConfig | None = None
+    # List of tool IDs we MUST use.
+    # TODO: make this a single one since unclear how to force this for multiple at a time.
+    forced_tool_ids: list[int] | None = None
 
+    # NOTE: the fields below are less used and typically should not be set in normal flows.
     # used for seeded chats to kick off the generation of an AI answer
     use_existing_user_message: bool = False
 
@@ -129,27 +119,6 @@ class CreateChatMessageRequest(ChunkContext):
     # forces the LLM to return a structured response, see
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
-
-    # If true, ignores most of the search options and uses pro search instead.
-    # TODO: decide how many of the above options we want to pass through to pro search
-    use_agentic_search: bool = False
-
-    skip_gen_ai_answer_generation: bool = False
-
-    # List of allowed tool IDs to restrict tool usage. If not provided, all tools available to the persona will be used.
-    allowed_tool_ids: list[int] | None = None
-
-    # List of tool IDs we MUST use.
-    # TODO: make this a single one since unclear how to force this for multiple at a time.
-    forced_tool_ids: list[int] | None = None
-
-    @model_validator(mode="after")
-    def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
-        if self.search_doc_ids is None and self.retrieval_options is None:
-            raise ValueError(
-                "Either search_doc_ids or retrieval_options must be provided, but not both or neither."
-            )
-        return self
 
     def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         data = super().model_dump(*args, **kwargs)
@@ -332,33 +301,9 @@ class DocumentSearchRequest(ChunkContext):
 class OneShotQARequest(ChunkContext):
     # Supports simplier APIs that don't deal with chat histories or message edits
     # Easier APIs to work with for developers
-    persona_override_config: PersonaOverrideConfig | None = None
-    persona_id: int | None = None
-
+    persona_id: int
     messages: list[ThreadMessage]
-    retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
-    rerank_settings: RerankingDetails | None = None
-
-    # allows the caller to specify the exact search query they want to use
-    # can be used if the message sent to the LLM / query should not be the same
-    # will also disable Thread-based Rewording if specified
-    query_override: str | None = None
-
-    # If True, skips generating an AI response to the search query
-    skip_gen_ai_answer_generation: bool = False
-
-    # If True, uses agentic search instead of basic search
-    use_agentic_search: bool = False
-
-    @model_validator(mode="after")
-    def check_persona_fields(self) -> "OneShotQARequest":
-        if self.persona_override_config is None and self.persona_id is None:
-            raise ValueError("Exactly one of persona_config or persona_id must be set")
-        elif self.persona_override_config is not None and (self.persona_id is not None):
-            raise ValueError(
-                "If persona_override_config is set, persona_id cannot be set"
-            )
-        return self
+    filters: BaseFilters | None = None
 
 
 class OneShotQAResponse(BaseModel):

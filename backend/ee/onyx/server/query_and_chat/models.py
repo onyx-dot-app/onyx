@@ -12,7 +12,6 @@ from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import BasicChunkRequest
 from onyx.context.search.models import ChunkContext
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import RetrievalDetails
 from onyx.server.manage.models import StandardAnswer
 
 
@@ -43,19 +42,9 @@ class BasicCreateChatMessageRequest(ChunkContext):
     persona_id: int | None = None
     # New message contents
     message: str
-    # Defaults to using retrieval with no additional filters
-    retrieval_options: RetrievalDetails | None = None
-    # Allows the caller to specify the exact search query they want to use
-    # will disable Query Rewording if specified
-    query_override: str | None = None
-    # If search_doc_ids provided, then retrieval options are unused
-    search_doc_ids: list[int] | None = None
     # only works if using an OpenAI model. See the following for more details:
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
-
-    # If True, uses agentic search instead of basic search
-    use_agentic_search: bool = False
 
     @model_validator(mode="after")
     def validate_chat_session_or_persona(self) -> "BasicCreateChatMessageRequest":
@@ -68,16 +57,9 @@ class BasicCreateChatMessageWithHistoryRequest(ChunkContext):
     # Last element is the new query. All previous elements are historical context
     messages: list[ThreadMessage]
     persona_id: int
-    retrieval_options: RetrievalDetails | None = None
-    query_override: str | None = None
-    skip_rerank: bool | None = None
-    # If search_doc_ids provided, then retrieval options are unused
-    search_doc_ids: list[int] | None = None
     # only works if using an OpenAI model. See the following for more details:
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
-    # If True, uses agentic search instead of basic search
-    use_agentic_search: bool = False
 
 
 class SimpleDoc(BaseModel):

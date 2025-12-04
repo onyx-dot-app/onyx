@@ -17,17 +17,17 @@ from onyx.file_store.utils import get_default_file_store
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PythonToolDelta
 from onyx.server.query_and_chat.streaming_models import PythonToolStart
+from onyx.tools.models import (
+    LlmPythonExecutionResult,
+)
+from onyx.tools.models import PythonExecutionFile
 from onyx.tools.models import PythonToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
-from onyx.tools.tool_implementations_v2.code_interpreter_client import (
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
-from onyx.tools.tool_implementations_v2.code_interpreter_client import FileInput
-from onyx.tools.tool_implementations_v2.tool_result_models import (
-    LlmPythonExecutionResult,
-)
-from onyx.tools.tool_implementations_v2.tool_result_models import PythonExecutionFile
+from onyx.tools.tool_implementations.python.code_interpreter_client import FileInput
 from onyx.utils.logger import setup_logger
 
 

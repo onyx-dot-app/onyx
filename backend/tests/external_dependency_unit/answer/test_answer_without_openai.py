@@ -9,7 +9,6 @@ from onyx.chat.models import AnswerStreamPart
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import StreamingError
 from onyx.chat.process_message import stream_chat_message_objects
-from onyx.context.search.models import RetrievalDetails
 from onyx.db.chat import create_chat_session
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import remove_llm_provider
@@ -73,9 +72,6 @@ def test_answer_with_only_anthropic_provider(
             chat_session_id=chat_session.id,
             parent_message_id=None,
             message="hello",
-            file_descriptors=[],
-            search_doc_ids=None,
-            retrieval_options=RetrievalDetails(),
         )
 
         response_stream: list[AnswerStreamPart] = []
