@@ -2,7 +2,6 @@ import re
 import traceback
 from collections.abc import Callable
 from collections.abc import Iterator
-from typing import Protocol
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -21,9 +20,7 @@ from onyx.chat.models import AnswerStream
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ExtractedProjectFiles
-from onyx.chat.models import LlmDoc
 from onyx.chat.models import MessageResponseIDInfo
-from onyx.chat.models import MessageSpecificCitations
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import StreamingError
 from onyx.chat.prompt_builder.answer_prompt_builder import calculate_reserved_tokens
@@ -33,7 +30,6 @@ from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import CitationDocInfo
 from onyx.context.search.models import SearchDoc
@@ -44,16 +40,12 @@ from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
-from onyx.db.models import SearchDoc as DbSearchDoc
-from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
-from onyx.file_store.models import InMemoryChatFile
-from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import load_in_memory_chat_files
 from onyx.file_store.utils import verify_user_files
 from onyx.llm.factory import get_llm_tokenizer_encode_func
@@ -84,80 +76,6 @@ ERROR_TYPE_CANCELLED = "cancelled"
 
 class ToolCallException(Exception):
     """Exception raised for errors during tool calls."""
-
-
-class PartialResponse(Protocol):
-    def __call__(
-        self,
-        message: str,
-        rephrased_query: str | None,
-        reference_docs: list[DbSearchDoc] | None,
-        files: list[FileDescriptor],
-        token_count: int,
-        citations: dict[int, int] | None,
-        error: str | None,
-        tool_call: ToolCall | None,
-    ) -> ChatMessage: ...
-
-
-def _build_project_llm_docs(
-    project_file_ids: list[str] | None,
-    in_memory_user_files: list[InMemoryChatFile] | None,
-) -> list[LlmDoc]:
-    """Construct `LlmDoc` objects for project-scoped user files for citation flow."""
-    project_llm_docs: list[LlmDoc] = []
-    if not project_file_ids or not in_memory_user_files:
-        return project_llm_docs
-
-    project_file_id_set = set(project_file_ids)
-
-    def _strip_nuls(s: str) -> str:
-        return s.replace("\x00", "") if s else s
-
-    for f in in_memory_user_files:
-        if project_file_id_set and (f.file_id in project_file_id_set):
-            cleaned_filename = _strip_nuls(f.filename or str(f.file_id))
-
-            if f.file_type.is_text_file():
-                try:
-                    text_content = f.content.decode("utf-8", errors="ignore")
-                    text_content = _strip_nuls(text_content)
-                except Exception:
-                    text_content = ""
-
-                # Build a short blurb from the file content for better UI display
-                blurb = (
-                    (text_content[:200] + "...")
-                    if len(text_content) > 200
-                    else text_content
-                )
-            else:
-                # Non-text (e.g., images): do not decode bytes; keep empty content but allow citation
-                text_content = ""
-                blurb = f"[{f.file_type.value}] {cleaned_filename}"
-
-            # Provide basic metadata to improve SavedSearchDoc display
-            file_metadata: dict[str, str | list[str]] = {
-                "filename": cleaned_filename,
-                "file_type": f.file_type.value,
-            }
-
-            project_llm_docs.append(
-                LlmDoc(
-                    document_id=str(f.file_id),
-                    content=text_content,
-                    blurb=blurb,
-                    semantic_identifier=cleaned_filename,
-                    source_type=DocumentSource.USER_FILE,
-                    metadata=file_metadata,
-                    updated_at=None,
-                    link=build_frontend_file_url(str(f.file_id)),
-                    source_links=None,
-                    match_highlights=None,
-                )
-            )
-
-    return project_llm_docs
 
 
 def _extract_project_file_texts_and_images(
@@ -284,26 +202,6 @@ def _extract_project_file_texts_and_images(
         total_token_count=total_token_count,
         project_file_metadata=project_file_metadata,
     )
-
-
-def _translate_citations(
-    citations_list: list[CitationInfo], db_docs: list[DbSearchDoc]
-) -> MessageSpecificCitations:
-    """Always cites the first instance of the document_id, assumes the db_docs
-    are sorted in the order displayed in the UI"""
-    doc_id_to_saved_doc_id_map: dict[str, int] = {}
-    for db_doc in db_docs:
-        if db_doc.document_id not in doc_id_to_saved_doc_id_map:
-            doc_id_to_saved_doc_id_map[db_doc.document_id] = db_doc.id
-
-    citation_to_saved_doc_id_map: dict[int, int] = {}
-    for citation in citations_list:
-        if citation.citation_number not in citation_to_saved_doc_id_map:
-            citation_to_saved_doc_id_map[citation.citation_number] = (
-                doc_id_to_saved_doc_id_map[citation.document_id]
-            )
-
-    return MessageSpecificCitations(citation_map=citation_to_saved_doc_id_map)
 
 
 def _initialize_chat_session(

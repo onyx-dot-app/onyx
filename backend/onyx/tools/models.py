@@ -11,8 +11,6 @@ from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
-from onyx.context.search.enums import SearchType
-from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
@@ -89,12 +87,6 @@ class ChatMinimalTextMessage(BaseModel):
 class DynamicSchemaInfo(BaseModel):
     chat_session_id: UUID | None
     message_id: int | None
-
-
-class SearchQueryInfo(BaseModel):
-    predicted_search: SearchType | None
-    final_filters: IndexFilters
-    recency_bias_multiplier: float
 
 
 class WebSearchToolOverrideKwargs(BaseModel):
