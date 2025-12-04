@@ -6,6 +6,7 @@ from datetime import timedelta
 from datetime import timezone
 from enum import Enum
 from typing import Any
+from typing import TypedDict
 
 from langchain_core.messages import HumanMessage
 from pydantic import ValidationError
@@ -42,6 +43,15 @@ class ChannelTypeString(str, Enum):
     MPIM = "mpim"
     PRIVATE_CHANNEL = "private_channel"
     PUBLIC_CHANNEL = "public_channel"
+
+
+class ChannelMetadata(TypedDict):
+    """Type definition for cached channel metadata."""
+
+    name: str
+    type: ChannelTypeString
+    is_private: bool
+    is_member: bool
 
 
 # All Slack channel types for fetching metadata
@@ -334,7 +344,7 @@ def build_channel_query_filter(
 def get_channel_type(
     channel_info: dict[str, Any] | None = None,
     channel_id: str | None = None,
-    channel_metadata: dict[str, dict[str, Any]] | None = None,
+    channel_metadata: dict[str, ChannelMetadata] | None = None,
 ) -> ChannelType:
     """
     Determine channel type from channel info dict or by looking up channel_id.
