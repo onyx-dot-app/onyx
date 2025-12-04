@@ -2142,6 +2142,18 @@ class ChatMessage(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+    # Multi-model response support
+    # Tracks which model generated this response (for assistant messages)
+    model_provider: Mapped[str | None] = mapped_column(String, nullable=True)
+    model_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Groups parallel multi-model responses together.
+    # When a user sends a message with multiple models selected, each model's response
+    # shares the same response_group_id. This distinguishes them from alternative branches
+    # (regenerations/edits) which have different response_group_ids or NULL.
+    response_group_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+
     # Relationships
     chat_session: Mapped[ChatSession] = relationship("ChatSession")
 
