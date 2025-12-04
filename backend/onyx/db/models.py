@@ -3911,3 +3911,18 @@ class ExternalGroupPermissionSyncAttempt(Base):
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+
+class License(Base):
+    """Stores the signed license blob (singleton pattern - only one row)."""
+
+    __tablename__ = "license"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    license_data: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
