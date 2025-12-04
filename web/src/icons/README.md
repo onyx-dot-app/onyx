@@ -8,7 +8,7 @@ Therefore, we manually convert each SVG into a TSX file using SVGR CLI with a cu
 
 ## Files in This Directory
 
-### `icon-template.js`
+### `scripts/icon-template.js`
 
 A custom SVGR template that generates icon components with the following features:
 - Imports `IconProps` from `@/icons/index.ts` for consistent typing
@@ -18,7 +18,7 @@ A custom SVGR template that generates icon components with the following feature
 
 This ensures all generated icons have a consistent API and type definitions.
 
-### `convert-svg.sh`
+### `scripts/convert-svg.sh`
 
 A convenience script that automates the SVG-to-TSX conversion process. It:
 - Validates the input file
@@ -28,7 +28,7 @@ A convenience script that automates the SVG-to-TSX conversion process. It:
 
 **Usage:**
 ```sh
-./convert-svg.sh <filename.svg>
+./scripts/convert-svg.sh <filename.svg>
 ```
 
 ## Adding New SVGs
@@ -38,7 +38,7 @@ A convenience script that automates the SVG-to-TSX conversion process. It:
 Use the conversion script for the easiest experience:
 
 ```sh
-./convert-svg.sh my-icon.svg
+./scripts/convert-svg.sh my-icon.svg
 ```
 
 **Manual Method:**
@@ -46,7 +46,7 @@ Use the conversion script for the easiest experience:
 If you prefer to run the command directly:
 
 ```sh
-bunx @svgr/cli ${SVG_FILE_NAME}.svg --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity","width","height"]}}]}' --template icon-template.js > ${SVG_FILE_NAME}.tsx
+bunx @svgr/cli ${SVG_FILE_NAME}.svg --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity","width","height"]}}]}' --template scripts/icon-template.js > ${SVG_FILE_NAME}.tsx
 ```
 
 This command:
