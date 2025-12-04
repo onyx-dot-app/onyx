@@ -228,6 +228,10 @@
 
 /* Light Colors */
 :root {
+  /* Shimmer colors for loading animations */
+  --shimmer-base: #a3a3a3;
+  --shimmer-highlight: #000000;
+
   /* Text */
   --text-05: var(--alpha-grey-100-90);
   --text-04: var(--alpha-grey-100-75);
@@ -357,6 +361,10 @@
 
 /* Dark Colors */
 .dark {
+  /* Shimmer colors for loading animations */
+  --shimmer-base: #5c5c5c;
+  --shimmer-highlight: #ffffff;
+
   /* Text */
   --text-05: var(--alpha-grey-00-95);
   --text-04: var(--alpha-grey-00-85);

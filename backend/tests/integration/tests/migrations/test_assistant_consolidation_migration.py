@@ -84,10 +84,10 @@ def test_cold_startup_default_assistant() -> None:
             "Web Search" in tool_display_names
         ), "Default assistant should have Web Search tool"
 
-        # Should have exactly 3 tools
+        # Should have exactly 4 tools
         assert (
-            len(tool_associations) == 3
-        ), f"Default assistant should have exactly 3 tools attached, got {len(tool_associations)}"
+            len(tool_associations) == 4
+        ), f"Default assistant should have exactly 4 tools attached, got {len(tool_associations)}"
 
 
 @pytest.mark.skip(

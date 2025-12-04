@@ -144,6 +144,15 @@ indexCapability:
 config:
   envConfigMapName: env-configmap
 
+tooling:
+  pgInto:
+    # -- Mounts a small helper script into app pods that opens psql using the pod's POSTGRES_* env vars.
+    enabled: false
+    # -- Where to place the helper inside the container.
+    mountPath: /usr/local/bin/pginto
+    # -- Which client binary to call; change if your image uses a non-default path.
+    psqlBinary: psql
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: false
@@ -778,6 +787,101 @@ minio:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+
+# Code Interpreter - Python code execution service (beta feature)
+codeInterpreter:
+  enabled: false  # Disabled by default (beta feature)
+
+  replicaCount: 1
+
+  image:
+    repository: onyxdotapp/code-interpreter
+    pullPolicy: Always
+    tag: ""  # Empty uses chart appVersion
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+
+  # Execution limits
+  codeInterpreter:
+    maxExecTimeoutMs: 60000
+    maxOutputBytes: "1000000"
+    cpuTimeLimitSec: 5
+    memoryLimitMb: 256
+    host: "0.0.0.0"
+    port: 8000
+
+    # Kubernetes executor configuration (creates pods for code execution)
+    kubernetesExecutor:
+      namespace: ""  # Empty = same namespace as release
+      image: ""  # Empty = default sandbox image
+      serviceAccount: ""
+      podResources:
+        limits:
+          cpu: "1"
+          memory: "256Mi"
+        requests:
+          cpu: "100m"
+          memory: "64Mi"
+
+  # API container resources
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+  # RBAC for pod management (required for kubernetes executor)
+  rbac:
+    create: true
+
+  # Security context
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+  securityContext:
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: false
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+
+  # Health probes
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  # Optional features
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: false
+  serviceAccount:
+    create: true
+    automount: true
 
 ingress:
   enabled: false
