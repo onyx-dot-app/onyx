@@ -222,8 +222,6 @@ class SearchRequest(ChunkContext):
 
 
 class SearchQuery(ChunkContext):
-    "Processed Request that is directly passed to the SearchPipeline"
-
     query: str
     processed_keywords: list[str]
     search_type: SearchType
@@ -536,14 +534,6 @@ class SavedSearchDocWithContent(SavedSearchDoc):
     section in addition to the match_highlights."""
 
     content: str
-
-
-class RetrievalDocs(BaseModel):
-    top_documents: list[SavedSearchDoc]
-
-
-class SearchResponse(RetrievalDocs):
-    llm_indices: list[int]
 
 
 class RetrievalMetricsContainer(BaseModel):

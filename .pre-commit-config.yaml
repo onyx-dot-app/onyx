@@ -9,11 +9,12 @@ repos:
     rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
     hooks:
       - id: uv-sync
-      - id: uv-run
-        name: mypy
-        args: ["mypy"]
-        pass_filenames: true
-        files: ^backend/.*\.py$
+      # NOTE: This takes ~6s on a single, large module which is prohibitively slow.
+      # - id: uv-run
+      #   name: mypy
+      #   args: ["mypy"]
+      #   pass_filenames: true
+      #   files: ^backend/.*\.py$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
@@ -51,6 +52,12 @@ repos:
       - id: autoflake
         args: [ '--remove-all-unused-imports', '--remove-unused-variables', '--in-place' , '--recursive']
 
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.6.2
+    hooks:
+      - id: golangci-lint
+        entry: bash -c "find tools/ -name go.mod -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
     rev: v0.11.4
@@ -87,3 +94,10 @@ repos:
         entry: python3 backend/scripts/check_lazy_imports.py
         language: system
         files: ^backend/(?!\.venv/).*\.py$
+
+      - id: typescript-check
+        name: TypeScript type check
+        entry: bash -c 'cd web && npm run types:check'
+        language: system
+        pass_filenames: false
+        files: ^web/.*\.(ts|tsx)$

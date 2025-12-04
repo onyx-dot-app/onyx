@@ -499,16 +499,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 top_sections, is_internet=False
             )
 
-            # Emit the full set of found documents, this isn't used today in the UI though
-            # self.emitter.emit(
-            #     Packet(
-            #         turn_index=turn_index,
-            #         obj=SearchToolDocumentsDelta(
-            #             documents=search_docs,
-            #         ),
-            #     )
-            # )
-
             secondary_flows_user_query = (
                 override_kwargs.original_query
                 or semantic_query
