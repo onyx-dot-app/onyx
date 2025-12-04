@@ -73,6 +73,7 @@ export default function ActionCard({
 }: ActionCardProps) {
   // Internal state for uncontrolled mode
   const [internalExpanded, setInternalExpanded] = useState(initialExpanded);
+  const [isToolsRefreshing, setIsToolsRefreshing] = useState(false);
   const hasInitializedExpansion = useRef(false);
 
   // Determine if we're in controlled mode
@@ -89,14 +90,12 @@ export default function ActionCard({
     }
   }, [initialExpanded, isControlled]);
 
-  // Handle expansion change
-  const handleExpandedChange = (expanded: boolean) => {
-    if (isControlled) {
-      onExpandedChange?.(expanded);
-    } else {
-      setInternalExpanded(expanded);
-      onExpandedChange?.(expanded);
-    }
+  const handleRefreshTools = () => {
+    setIsToolsRefreshing(true);
+    onRefresh?.();
+    setTimeout(() => {
+      setIsToolsRefreshing(false);
+    }, 1000);
   };
 
   const isConnected = status === ActionStatus.CONNECTED;
@@ -138,7 +137,8 @@ export default function ActionCard({
         {/* Tools Section (Only when expanded and search is enabled) */}
         {isExpandedActual && enableSearch && (
           <ToolsSection
-            onRefresh={onRefresh}
+            isRefreshing={isToolsRefreshing}
+            onRefresh={handleRefreshTools}
             onDisableAll={onDisableAll}
             onFold={onFold}
             searchQuery={searchQuery}

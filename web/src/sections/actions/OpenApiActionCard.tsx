@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import SvgServer from "@/icons/server";
 import ActionCard from "@/sections/actions/ActionCard";
@@ -101,6 +101,12 @@ export default function OpenApiActionCard({
       setSearchQuery("");
     }
   };
+
+  useEffect(() => {
+    if (isDisconnected) {
+      setIsToolsExpanded(false);
+    }
+  }, [isDisconnected]);
 
   const handleFold = () => {
     setIsToolsExpanded(false);

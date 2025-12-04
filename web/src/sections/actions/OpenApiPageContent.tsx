@@ -1,6 +1,6 @@
 "use client";
 import { ToolSnapshot } from "@/lib/tools/types";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -36,6 +36,19 @@ export default function OpenApiPageContent() {
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showSharedOverlay, setShowSharedOverlay] = useState(false);
+
+  useEffect(() => {
+    const anyModalOpen =
+      addOpenAPIActionModal.isOpen ||
+      openAPIAuthModal.isOpen ||
+      disconnectModal.isOpen;
+    setShowSharedOverlay(anyModalOpen);
+  }, [
+    addOpenAPIActionModal.isOpen,
+    openAPIAuthModal.isOpen,
+    disconnectModal.isOpen,
+  ]);
 
   const handleOpenAuthModal = useCallback(
     (tool: ToolSnapshot) => {
@@ -339,6 +352,13 @@ export default function OpenApiPageContent() {
   return (
     <>
       {popup}
+      {showSharedOverlay && (
+        <div
+          className="fixed inset-0 z-[2000] bg-mask-03 backdrop-blur-03 pointer-events-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+          data-state="open"
+          aria-hidden="true"
+        />
+      )}
       <Actionbar
         hasActions={(openApiTools?.length ?? 0) > 0}
         searchQuery={searchQuery}
@@ -388,6 +408,7 @@ export default function OpenApiPageContent() {
       <openAPIAuthModal.Provider>
         <OpenAPIAuthenticationModal
           isOpen={openAPIAuthModal.isOpen}
+          skipOverlay
           onClose={resetAuthModal}
           title={authenticationModalTitle}
           entityName={selectedTool?.name ?? null}

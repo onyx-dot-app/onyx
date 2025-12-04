@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
@@ -103,6 +103,46 @@ const ToolItem: React.FC<ToolItemProps> = ({
     ? { label: undefined, bg: "", text: "" }
     : getMethodStyles(openApiMetadata?.method);
 
+  const highlightedPathContent = useMemo(() => {
+    if (!openApiMetadata?.path) {
+      return null;
+    }
+
+    // Example: "/repos/{owner}/{repo}" => plain spans for static segments,
+    // colored spans for "{owner}" and "{repo}".
+    const path = openApiMetadata.path;
+    const segments: React.ReactNode[] = [];
+    const paramRegex = /\{[^}]+\}/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    const highlightClass = methodText || "text-text-03";
+
+    while ((match = paramRegex.exec(path)) !== null) {
+      // Push plain text before the param, then the colored "{param}" segment.
+      if (match.index > lastIndex) {
+        segments.push(
+          <span key={`text-${match.index}`}>
+            {path.slice(lastIndex, match.index)}
+          </span>
+        );
+      }
+
+      segments.push(
+        <span key={`param-${match.index}`} className={highlightClass}>
+          {match[0]}
+        </span>
+      );
+
+      lastIndex = paramRegex.lastIndex;
+    }
+
+    if (lastIndex < path.length) {
+      segments.push(<span key="text-end">{path.slice(lastIndex)}</span>);
+    }
+
+    return segments;
+  }, [openApiMetadata?.path, methodText]);
+
   return (
     <div
       className={cn(
@@ -204,7 +244,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
 
           {openApiMetadata?.path && (
             <Truncated secondaryMono text03 className="text-right truncate">
-              {openApiMetadata.path}
+              {highlightedPathContent}
             </Truncated>
           )}
         </div>
