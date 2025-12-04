@@ -123,7 +123,7 @@ backend = [
     "mistune==0.8.4",
     "sendgrid==6.11.0",
     "exa_py==1.15.4",
-    "braintrust[openai-agents]==0.2.6",
+    "braintrust[openai-agents]==0.3.9",
     "braintrust-langchain==0.0.4",
     "openai-agents==0.4.2",
     "langfuse==3.10.0",
