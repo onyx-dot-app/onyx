@@ -4,21 +4,35 @@ These tests call LLM providers directly and use litellm's completion_cost() to v
 that prompt caching reduces costs.
 """
 
+import json
 import os
 import time
+from pathlib import Path
 from typing import Any
+from typing import cast
 
 import pytest
+from google import genai
+from google.genai import types as genai_types
+from google.oauth2 import service_account
 from litellm import completion as litellm_completion
 from litellm import completion_cost
 from sqlalchemy.orm import Session
 
 from onyx.llm.chat_llm import LitellmLLM
+from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.message_types import AssistantMessage
 from onyx.llm.message_types import ChatCompletionMessage
 from onyx.llm.message_types import SystemMessage
 from onyx.llm.message_types import UserMessageWithText
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+
+
+VERTEX_CREDENTIALS_ENV = "VERTEX_CREDENTIALS"
+VERTEX_LOCATION_ENV = "VERTEX_LOCATION"
+VERTEX_MODEL_ENV = "VERTEX_MODEL_NAME"
+DEFAULT_VERTEX_MODEL = "gemini-2.5-flash"
 
 
 def _extract_cached_tokens(usage: Any) -> int:
@@ -50,6 +64,134 @@ def _extract_prompt_tokens(usage: Any) -> int:
         prompt_tokens = usage.get("prompt_tokens")
 
     return int(prompt_tokens or 0)
+
+
+def _extract_cache_read_tokens(usage: Any) -> int:
+    """Extract cache read metrics from usage (dict or object)."""
+    if not usage:
+        return 0
+
+    keys_to_check = (
+        "cache_read_input_tokens",
+        "cache_hit_input_tokens",
+        "cache_hits_input_tokens",
+    )
+
+    for key in keys_to_check:
+        value = getattr(usage, key, None)
+        if value is None and isinstance(usage, dict):
+            value = usage.get(key)
+        if value:
+            return int(value)
+
+    if isinstance(usage, dict):
+        metadata = usage.get("usage_metadata") or usage.get("metadata")
+        if isinstance(metadata, dict):
+            for key in keys_to_check:
+                value = metadata.get(key)
+                if value:
+                    return int(value)
+
+        prompt_details = usage.get("prompt_tokens_details")
+        if isinstance(prompt_details, dict):
+            cached_tokens = prompt_details.get("cached_tokens")
+            if cached_tokens:
+                return int(cached_tokens)
+
+    return 0
+
+
+def _get_usage_metric(
+    usage: genai_types.GenerateContentResponseUsageMetadata | None,
+    attribute: str,
+) -> int:
+    """Extract integer metric from Google GenAI usage metadata."""
+    if usage is None:
+        return 0
+    value = getattr(usage, attribute, None)
+    return int(value or 0)
+
+
+def _messages_to_genai_contents(
+    messages: list[ChatCompletionMessage],
+) -> tuple[genai_types.Content | None, list[genai_types.Content]]:
+    """Convert ChatCompletionMessages to Google GenAI Content objects."""
+
+    def _content_to_text(content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    if "text" in item:
+                        parts.append(str(item.get("text") or ""))
+                    elif item.get("type") == "text":
+                        parts.append(str(item.get("text") or ""))
+                elif isinstance(item, str):
+                    parts.append(item)
+            return "".join(parts)
+        return str(content or "")
+
+    system_instruction: genai_types.Content | None = None
+    converted_messages: list[genai_types.Content] = []
+
+    for msg in messages:
+        role = msg.get("role")
+        text = _content_to_text(msg.get("content"))
+        part = genai_types.Part(text=text)
+
+        if role == "system":
+            system_instruction = genai_types.Content(parts=[part], role="user")
+            continue
+
+        if not text:
+            # Skip empty messages to avoid API errors.
+            continue
+
+        converted_role = "model" if role == "assistant" else "user"
+        converted_messages.append(
+            genai_types.Content(parts=[part], role=converted_role)
+        )
+
+    return system_instruction, converted_messages
+
+
+class _DummyVertexLLM(LLM):
+    """Minimal LLM implementation for prompt caching utilities."""
+
+    def __init__(self, *, model_name: str, max_input_tokens: int) -> None:
+        self._config = LLMConfig(
+            model_provider="vertex_ai",
+            model_name=model_name,
+            temperature=0.0,
+            max_input_tokens=max_input_tokens,
+            api_key=None,
+            api_base=None,
+            api_version=None,
+            deployment_name=None,
+            credentials_file=None,
+        )
+
+    @property
+    def config(self) -> LLMConfig:
+        return self._config
+
+    def log_model_configs(self) -> None:
+        return None
+
+    # The following methods are not used in tests but must be implemented.
+    def _invoke_implementation(self, *args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+        raise NotImplementedError("Not used in tests")
+
+    def _stream_implementation(self, *args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+        raise NotImplementedError("Not used in tests")
+
+    def _invoke_implementation_langchain(self, *args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+        raise NotImplementedError("Not used in tests")
+
+    def _stream_implementation_langchain(self, *args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+        raise NotImplementedError("Not used in tests")
 
 
 @pytest.mark.skipif(
@@ -315,6 +457,187 @@ def test_anthropic_prompt_caching_reduces_costs(
     assert (
         cost2 < cost1
     ), f"Expected lower cost on cached call. Cost 1: ${cost1:.10f}, Cost 2: ${cost2:.10f}"
+
+
+@pytest.mark.skipif(
+    not os.environ.get(VERTEX_CREDENTIALS_ENV),
+    reason="Vertex AI credentials file not available",
+)
+def test_vertex_ai_prompt_caching_reduces_costs(
+    db_session: Session,
+) -> None:
+    """Test that Google GenAI prompt caching reduces costs on subsequent calls."""
+    import random
+    import string
+
+    credentials_path = Path(os.environ[VERTEX_CREDENTIALS_ENV]).expanduser()
+    if not credentials_path.exists():
+        pytest.skip(f"Vertex credentials file not found at {credentials_path}")
+
+    service_account_info = json.loads(credentials_path.read_text(encoding="utf-8"))
+    project_id = service_account_info["project_id"]
+    location = (
+        service_account_info.get("location")
+        or os.environ.get(VERTEX_LOCATION_ENV)
+        or "us-central1"
+    )
+    credentials = service_account.Credentials.from_service_account_info(
+        service_account_info,
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+
+    model_name = os.environ.get(VERTEX_MODEL_ENV, DEFAULT_VERTEX_MODEL)
+    llm_stub = _DummyVertexLLM(
+        model_name=model_name,
+        max_input_tokens=1_000_000,
+    )
+
+    attempts = 4
+    success = False
+    last_metrics: dict[str, Any] = {}
+
+    with genai.Client(
+        vertexai=True,
+        project=project_id,
+        location=location,
+        credentials=credentials,
+    ) as client:
+        for attempt in range(attempts):
+            random_prefix = "".join(random.choices(string.ascii_lowercase, k=32))
+            long_context = (
+                random_prefix
+                + "This is a comprehensive document about artificial intelligence and machine learning. "
+                + " ".join(
+                    [
+                        f"Section {i}: This section discusses various aspects of AI technology, "
+                        f"including neural networks, deep learning, natural language processing, "
+                        f"computer vision, and reinforcement learning. These technologies are "
+                        f"revolutionizing how we interact with computers and process information."
+                        for i in range(50)
+                    ]
+                )
+            )
+
+            cacheable_prefix: list[ChatCompletionMessage] = [
+                UserMessageWithText(role="user", content=long_context)
+            ]
+
+            print(f"\n=== Vertex attempt {attempt + 1} (cache creation) ===")
+            question1: list[ChatCompletionMessage] = [
+                UserMessageWithText(
+                    role="user", content="What are the main topics discussed?"
+                )
+            ]
+
+            processed_messages1, _ = process_with_prompt_cache(
+                llm=llm_stub,
+                cacheable_prefix=cacheable_prefix,
+                suffix=question1,
+                continuation=False,
+            )
+
+            if not isinstance(processed_messages1, list):
+                pytest.fail("Expected list of chat messages for cached prompt.")
+
+            messages_list1 = cast(list[ChatCompletionMessage], processed_messages1)
+            system_instruction1, contents1 = _messages_to_genai_contents(messages_list1)
+
+            content_payload1 = [
+                cast(
+                    genai_types.ContentDict,
+                    content.model_dump(exclude_none=True),
+                )
+                for content in contents1
+            ]
+            config_kwargs1: dict[str, Any] = {"temperature": 0.2}
+            if system_instruction1 is not None:
+                config_kwargs1["system_instruction"] = system_instruction1
+            config1 = genai_types.GenerateContentConfig(**config_kwargs1)
+
+            response1 = client.models.generate_content(
+                model=model_name,
+                contents=cast(Any, content_payload1),
+                config=config1,
+            )
+            usage1 = response1.usage_metadata
+            cached_count_1 = _get_usage_metric(usage1, "cached_content_token_count")
+            prompt_tokens_1 = _get_usage_metric(usage1, "prompt_token_count")
+
+            print(
+                "Vertex response 1 usage:",
+                {
+                    "cached_content_token_count": cached_count_1,
+                    "prompt_token_count": prompt_tokens_1,
+                },
+            )
+
+            time.sleep(5)
+
+            print(f"\n=== Vertex attempt {attempt + 1} (cache read) ===")
+            question2: list[ChatCompletionMessage] = [
+                UserMessageWithText(
+                    role="user", content="Can you elaborate on neural networks?"
+                )
+            ]
+
+            processed_messages2, _ = process_with_prompt_cache(
+                llm=llm_stub,
+                cacheable_prefix=cacheable_prefix,
+                suffix=question2,
+                continuation=False,
+            )
+
+            if not isinstance(processed_messages2, list):
+                pytest.fail("Expected list of chat messages for cached prompt.")
+
+            messages_list2 = cast(list[ChatCompletionMessage], processed_messages2)
+            system_instruction2, contents2 = _messages_to_genai_contents(messages_list2)
+
+            content_payload2 = [
+                cast(
+                    genai_types.ContentDict,
+                    content.model_dump(exclude_none=True),
+                )
+                for content in contents2
+            ]
+            config_kwargs2: dict[str, Any] = {"temperature": 0.2}
+            if system_instruction2 is not None:
+                config_kwargs2["system_instruction"] = system_instruction2
+            config2 = genai_types.GenerateContentConfig(**config_kwargs2)
+
+            response2 = client.models.generate_content(
+                model=model_name,
+                contents=cast(Any, content_payload2),
+                config=config2,
+            )
+            usage2 = response2.usage_metadata
+
+            cached_count_2 = _get_usage_metric(usage2, "cached_content_token_count")
+            prompt_tokens_2 = _get_usage_metric(usage2, "prompt_token_count")
+
+            print(
+                "Vertex response 2 usage:",
+                {
+                    "cached_content_token_count": cached_count_2,
+                    "prompt_token_count": prompt_tokens_2,
+                },
+            )
+
+            last_metrics = {
+                "cached_content_token_count_call1": cached_count_1,
+                "cached_content_token_count_call2": cached_count_2,
+                "prompt_token_count_call1": prompt_tokens_1,
+                "prompt_token_count_call2": prompt_tokens_2,
+            }
+
+            if cached_count_2 > 0 or prompt_tokens_2 < prompt_tokens_1:
+                success = True
+                break
+
+    assert success, (
+        "Expected Gemini prompt caching evidence across attempts. "
+        f"Last observed metrics: {last_metrics}"
+    )
 
 
 @pytest.mark.skipif(
