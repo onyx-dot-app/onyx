@@ -29,6 +29,15 @@ jobs:
           python-version: "3.11"
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # ratchet:hashicorp/setup-terraform@v3
+      - name: Setup node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # ratchet:actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: ./web/package-lock.json
+      - name: Install node dependencies
+        working-directory: ./web
+        run: npm ci
       - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # ratchet:pre-commit/action@v3.0.1
         env:
           # uv-run is mypy's id and mypy is covered by the Python Checks which caches dependencies better.
