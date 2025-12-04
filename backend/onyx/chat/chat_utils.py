@@ -17,18 +17,13 @@ from onyx.background.celery.tasks.kg_processing.kg_indexing import (
 )
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import LlmDoc
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import ThreadMessage
-from onyx.chat.turn.models import FetchedDocumentCacheEntry
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
-from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.kg_config import get_kg_config_settings
@@ -108,85 +103,6 @@ def prepare_chat_message_request(
         llm_override=llm_override,
         allowed_tool_ids=allowed_tool_ids,
     )
-
-
-def llm_doc_from_inference_section(inference_section: InferenceSection) -> LlmDoc:
-    return LlmDoc(
-        document_id=inference_section.center_chunk.document_id,
-        # This one is using the combined content of all the chunks of the section
-        # In default settings, this is the same as just the content of base chunk
-        content=inference_section.combined_content,
-        blurb=inference_section.center_chunk.blurb,
-        semantic_identifier=inference_section.center_chunk.semantic_identifier,
-        source_type=inference_section.center_chunk.source_type,
-        metadata=inference_section.center_chunk.metadata,
-        updated_at=inference_section.center_chunk.updated_at,
-        link=(
-            inference_section.center_chunk.source_links[0]
-            if inference_section.center_chunk.source_links
-            else None
-        ),
-        source_links=inference_section.center_chunk.source_links,
-        match_highlights=inference_section.center_chunk.match_highlights,
-    )
-
-
-def llm_docs_from_fetched_documents_cache(
-    fetched_documents_cache: dict[str, "FetchedDocumentCacheEntry"],
-) -> list[LlmDoc]:
-    """Convert FetchedDocumentCacheEntry objects to LlmDoc objects.
-
-    This ensures that citation numbers are properly transferred from the cache
-    entries to the LlmDoc objects, which is critical for proper citation rendering.
-
-    Args:
-        fetched_documents_cache: Dictionary mapping document IDs to FetchedDocumentCacheEntry
-
-    Returns:
-        List of LlmDoc objects with properly set document_citation_number
-    """
-    llm_docs = []
-    for cache_value in fetched_documents_cache.values():
-        llm_doc = llm_doc_from_inference_section(cache_value.inference_section)
-        llm_doc.document_citation_number = cache_value.document_citation_number
-        llm_docs.append(llm_doc)
-    return llm_docs
-
-
-def saved_search_docs_from_llm_docs(
-    llm_docs: list[LlmDoc] | None,
-) -> list[SavedSearchDoc]:
-    """Convert LlmDoc objects to SavedSearchDoc format."""
-    if not llm_docs:
-        return []
-
-    search_docs = []
-    for i, llm_doc in enumerate(llm_docs):
-        # Convert LlmDoc to SearchDoc format
-        # Note: Some fields need default values as they're not in LlmDoc
-        search_doc = SearchDoc(
-            document_id=llm_doc.document_id,
-            chunk_ind=0,  # Default value as LlmDoc doesn't have chunk index
-            semantic_identifier=llm_doc.semantic_identifier,
-            link=llm_doc.link,
-            blurb=llm_doc.blurb,
-            source_type=llm_doc.source_type,
-            boost=0,  # Default value
-            hidden=False,  # Default value
-            metadata=llm_doc.metadata,
-            score=None,  # Will be set by SavedSearchDoc
-            match_highlights=llm_doc.match_highlights or [],
-            updated_at=llm_doc.updated_at,
-            primary_owners=None,  # Default value
-            secondary_owners=None,  # Default value
-            is_internet=False,  # Default value
-        )
-
-        # Convert SearchDoc to SavedSearchDoc
-        saved_search_doc = SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
-        search_docs.append(saved_search_doc)
-
-    return search_docs
 
 
 def combine_message_thread(

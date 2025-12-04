@@ -2,7 +2,6 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import TypeVar
 
-from onyx.chat.models import LlmDoc
 from onyx.context.search.models import ContextExpansionType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -113,19 +112,6 @@ def weighted_reciprocal_rank_fusion(
         ),
     )
     return [id_to_item[item_id] for item_id in sorted_ids]
-
-
-def llm_doc_to_dict(llm_doc: LlmDoc, doc_num: int) -> dict:
-    doc_dict = {
-        "document_number": doc_num + 1,
-        "title": llm_doc.semantic_identifier,
-        "content": llm_doc.content,
-        "source": clean_up_source(llm_doc.source_type),
-        "metadata": llm_doc.metadata,
-    }
-    if llm_doc.updated_at:
-        doc_dict["updated_at"] = llm_doc.updated_at.strftime("%B %d, %Y %H:%M")
-    return doc_dict
 
 
 def section_to_dict(section: InferenceSection, section_num: int) -> dict:

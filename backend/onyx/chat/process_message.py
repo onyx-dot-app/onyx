@@ -15,7 +15,6 @@ from onyx.chat.chat_utils import get_custom_agent_prompt
 from onyx.chat.chat_utils import load_all_chat_files
 from onyx.chat.emitter import get_default_emitter
 from onyx.chat.llm_loop import run_llm_loop
-from onyx.chat.memories import get_memories
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.models import ChatLoadedFile
@@ -23,7 +22,7 @@ from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import StreamingError
-from onyx.chat.prompt_builder.answer_prompt_builder import calculate_reserved_tokens
+from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
@@ -39,6 +38,7 @@ from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage
 from onyx.db.models import User
 from onyx.db.projects import get_project_token_count

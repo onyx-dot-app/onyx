@@ -1,5 +1,3 @@
-from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
-from onyx.chat.models import LlmDoc
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
@@ -79,24 +77,4 @@ def inference_section_from_internet_search_result(
         center_chunk=chunk,
         chunks=[chunk],
         combined_content=result.snippet,
-    )
-
-
-def llm_doc_from_web_content(web_content: WebContent) -> LlmDoc:
-    """Create an LlmDoc from WebContent with the WEB_SEARCH_PREFIX prefix"""
-    return LlmDoc(
-        # TODO: Is this what we want to do for document_id? We're kind of overloading it since it
-        # should ideally correspond to a document in the database. But I guess if you're calling this
-        # function you know it won't be in the database.
-        document_id=WEB_SEARCH_PREFIX + web_content.link,
-        content=truncate_search_result_content(web_content.full_content),
-        blurb=web_content.link,
-        semantic_identifier=web_content.link,
-        source_type=DocumentSource.WEB,
-        metadata={},
-        link=web_content.link,
-        document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
-        updated_at=web_content.published_date,
-        source_links={},
-        match_highlights=[],
     )
