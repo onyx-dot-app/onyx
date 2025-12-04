@@ -62,9 +62,9 @@ from onyx.natural_language_processing.search_nlp_models import (
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_middle
-from onyx.prompts.chat_prompts import CONTEXTUAL_RAG_PROMPT1
-from onyx.prompts.chat_prompts import CONTEXTUAL_RAG_PROMPT2
-from onyx.prompts.chat_prompts import DOCUMENT_SUMMARY_PROMPT
+from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT1
+from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT2
+from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time

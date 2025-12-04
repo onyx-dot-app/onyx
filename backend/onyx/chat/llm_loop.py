@@ -14,9 +14,9 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ProjectFileMetadata
-from onyx.chat.prompt_builder.answer_prompt_builder import build_reminder_message
-from onyx.chat.prompt_builder.answer_prompt_builder import build_system_prompt
-from onyx.chat.prompt_builder.answer_prompt_builder import (
+from onyx.chat.prompt_utils import build_reminder_message
+from onyx.chat.prompt_utils import build_system_prompt
+from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
 )
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS

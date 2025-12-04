@@ -21,9 +21,7 @@ from onyx.auth.users import current_user
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import extract_headers
 from onyx.chat.process_message import stream_chat_message
-from onyx.chat.prompt_builder.answer_prompt_builder import (
-    get_default_base_system_prompt,
-)
+from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import set_fence
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
