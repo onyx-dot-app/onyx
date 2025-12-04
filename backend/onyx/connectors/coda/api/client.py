@@ -5,7 +5,6 @@ from time import sleep
 from typing import Any
 
 import requests
-from retry import retry
 
 from onyx.connectors.coda.models.doc import CodaDoc
 from onyx.connectors.coda.models.page import CodaPage
@@ -82,7 +81,6 @@ class CodaAPIClient:
                 f"Unexpected error validating Coda credentials: {exc}"
             )
 
-    @retry(tries=3, delay=1, backoff=2)
     def _make_request(
         self, method: str, path: str, params: dict[str, Any] | None = None, **kwargs
     ) -> dict[str, Any]:
@@ -118,7 +116,7 @@ class CodaAPIClient:
             except Exception:
                 error_body = res.text if "res" in locals() else str(e)
 
-            logger.exception(f"Error making {method} request to {path}: {error_body}")
+            logger.error(f"Error making {method} request to {path}: {error_body}")
             raise
 
     def fetch_docs(self, page_token: str | None = None) -> dict[str, Any]:
@@ -456,10 +454,16 @@ class CodaAPIClient:
                 )
             except Exception as e:
                 logger.warning(
-                    f"Error checking export status for page '{page_id}': {e}"
+                    f"Error checking export status for page '{page_id}' (attempt {attempt + 1}/{self.export_max_attempts}): {e}"
                 )
-                return None
+                # Always retry until max attempts reached
+                if attempt < self.export_max_attempts - 1:
+                    sleep(wait_time)
+                continue
 
+            logger.warning(
+                f"Export status for page '{page_id}' (attempt {attempt + 1}/{self.export_max_attempts}): {status_response}"
+            )
             status = status_response.get("status")
 
             if status == "complete":
@@ -470,15 +474,14 @@ class CodaAPIClient:
 
                 try:
                     content_res = rl_requests.get(
-                        download_link,
-                        timeout=_CODA_CALL_TIMEOUT,
+                        download_link, timeout=_CODA_CALL_TIMEOUT, allow_redirects=True
                     )
                     content_res.raise_for_status()
                     content = content_res.text
 
                     # Validate content is not empty
                     if not content.strip():
-                        logger.debug(
+                        logger.warning(
                             f"Page '{page_id}' exported but contains no content"
                         )
                         return None

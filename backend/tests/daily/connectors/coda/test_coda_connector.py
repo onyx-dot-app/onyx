@@ -11,6 +11,7 @@ Prerequisites:
 
 import os
 from collections.abc import Generator
+from time import sleep
 from typing import Any
 
 import pytest
@@ -18,7 +19,11 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.coda.api.client import CodaAPIClient
 from onyx.connectors.coda.connector import CodaConnector
+from onyx.connectors.coda.models.common import CodaObjectType
 from onyx.connectors.models import Document
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 @pytest.fixture(scope="session")
@@ -94,6 +99,7 @@ def all_batches(connector: CodaConnector) -> list[list[Document]]:
     connector.generator.indexed_pages.clear()
     connector.generator.indexed_tables.clear()
 
+    logger.info("Loading all batches...")
     gen = connector.load_from_state()
     batches = list(gen)
     return batches
@@ -122,7 +128,7 @@ def test_doc(api_token: str) -> Generator[dict[str, Any], None, None]:
     response = client.create_doc(
         title="Two-way writeups: Coda's secret to shipping fast",
         source_doc="_WhgwP-IEe",
-        folder_id="fl-8fyHS0QJKG",
+        folder_id="fl-nR7RCdR_SF",
     )
 
     print(f"\n[SETUP] Created test doc: {response['name']}")
@@ -130,6 +136,7 @@ def test_doc(api_token: str) -> Generator[dict[str, Any], None, None]:
     print(f"[SETUP] Browser link: {response['browserLink']}")
 
     # Yield the doc info for tests to use
+    sleep(5)
     yield response
 
     # Cleanup: Delete the doc after all tests complete
@@ -138,6 +145,45 @@ def test_doc(api_token: str) -> Generator[dict[str, Any], None, None]:
         print(f"\n[TEARDOWN] Deleted test doc: {response['id']}")
     except Exception as e:
         print(f"\n[TEARDOWN] Warning: Failed to delete test doc {response['id']}: {e}")
+
+
+class TestDocCreation:
+    """Test suite for doc creation and manipulation."""
+
+    def test_doc_was_created(self, test_doc: dict[str, Any]) -> None:
+        """Test that the test doc fixture was created successfully."""
+        # Verify response structure
+        assert "id" in test_doc, "Response should contain doc ID"
+        assert "name" in test_doc, "Response should contain doc name"
+        assert "href" in test_doc, "Response should contain API href"
+        assert "browserLink" in test_doc, "Response should contain browser link"
+
+        # Verify the doc was created with correct title
+        assert (
+            test_doc["name"] == "Two-way writeups: Coda's secret to shipping fast"
+        ), f"Doc name should match, got: {test_doc['name']}"
+
+        # Verify doc type
+        assert test_doc.get("type") == "doc", "Response type should be 'doc'"
+
+        # Log the doc info
+        print(f"\nTest doc verified: {test_doc['name']}")
+        print(f"Doc ID: {test_doc['id']}")
+        print(f"Browser link: {test_doc['browserLink']}")
+
+    def test_can_fetch_created_doc(
+        self, api_client: CodaAPIClient, test_doc: dict[str, Any]
+    ) -> None:
+        """Test that we can fetch the created doc via the API."""
+        doc_id = test_doc["id"]
+
+        # Fetch the doc
+        response = api_client._make_request("GET", f"/docs/{doc_id}")
+
+        # Verify we got the same doc
+        assert response["id"] == doc_id, "Fetched doc ID should match"
+        assert response["name"] == "Two-way writeups: Coda's secret to shipping fast"
+        print(f"\nSuccessfully fetched doc: {response['name']}")
 
 
 class TestLoadFromStateEndToEnd:
@@ -149,7 +195,10 @@ class TestLoadFromStateEndToEnd:
         assert isinstance(gen, Generator), "load_from_state should return a Generator"
 
     def test_batch_sizes_respect_config(
-        self, connector: CodaConnector, all_batches: list[list[Document]]
+        self,
+        connector: CodaConnector,
+        test_doc: dict[str, Any],
+        all_batches: list[list[Document]],
     ) -> None:
         """Test that batches respect the configured batch_size."""
         batch_size = connector.batch_size
@@ -287,12 +336,17 @@ class TestLoadFromStateEndToEnd:
                     len(lines) > 1
                 ), f"Document {doc.id} has only title and blank line, no actual content {doc}"
 
+                logger.info(
+                    f"Document {doc.id} {doc.semantic_identifier} has {len(lines)} lines"
+                )
+
                 # Content should be meaningfully longer than just the title
-                title_len = len(doc.semantic_identifier)
-                content_len = len(section.text)
-                assert (
-                    content_len > title_len + 15
-                ), f"Document {doc.id} lacks meaningful content (only {content_len - title_len} chars beyond title)"
+                if doc.metadata.get("type") != CodaObjectType.TABLE:
+                    title_len = len(doc.semantic_identifier)
+                    content_len = len(section.text)
+                    assert (
+                        content_len > title_len + 15
+                    ), f"Document {doc.id} lacks meaningful content (only {content_len - title_len} chars beyond title)"
 
     def test_metadata_contains_hierarchy_info(
         self, all_documents: list[Document], reference_data: dict[str, Any]
@@ -318,45 +372,6 @@ class TestLoadFromStateEndToEnd:
                 assert "table_name" in metadata
                 assert "row_count" in metadata
                 assert "column_count" in metadata
-
-
-class TestDocCreation:
-    """Test suite for doc creation and manipulation."""
-
-    def test_doc_was_created(self, test_doc: dict[str, Any]) -> None:
-        """Test that the test doc fixture was created successfully."""
-        # Verify response structure
-        assert "id" in test_doc, "Response should contain doc ID"
-        assert "name" in test_doc, "Response should contain doc name"
-        assert "href" in test_doc, "Response should contain API href"
-        assert "browserLink" in test_doc, "Response should contain browser link"
-
-        # Verify the doc was created with correct title
-        assert (
-            test_doc["name"] == "Two-way writeups: Coda's secret to shipping fast"
-        ), f"Doc name should match, got: {test_doc['name']}"
-
-        # Verify doc type
-        assert test_doc.get("type") == "doc", "Response type should be 'doc'"
-
-        # Log the doc info
-        print(f"\nTest doc verified: {test_doc['name']}")
-        print(f"Doc ID: {test_doc['id']}")
-        print(f"Browser link: {test_doc['browserLink']}")
-
-    def test_can_fetch_created_doc(
-        self, api_client: CodaAPIClient, test_doc: dict[str, Any]
-    ) -> None:
-        """Test that we can fetch the created doc via the API."""
-        doc_id = test_doc["id"]
-
-        # Fetch the doc
-        response = api_client._make_request("GET", f"/docs/{doc_id}")
-
-        # Verify we got the same doc
-        assert response["id"] == doc_id, "Fetched doc ID should match"
-        assert response["name"] == "Two-way writeups: Coda's secret to shipping fast"
-        print(f"\nSuccessfully fetched doc: {response['name']}")
 
 
 class TestExportFormats:

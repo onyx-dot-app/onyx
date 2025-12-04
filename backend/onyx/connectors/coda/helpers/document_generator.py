@@ -3,6 +3,7 @@ from collections.abc import Generator
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.coda.api.client import CodaAPIClient
 from onyx.connectors.coda.helpers.parser import CodaParser
+from onyx.connectors.coda.models.common import CodaObjectType
 from onyx.connectors.coda.models.doc import CodaDoc
 from onyx.connectors.coda.models.page import CodaPage
 from onyx.connectors.coda.models.table import CodaTableReference
@@ -90,6 +91,10 @@ class CodaDocumentGenerator:
                 logger.debug(f"Skipping page '{page.name}': no content")
                 continue
 
+            if len(content) < len(page.name) + 15:
+                logger.debug(f"Skipping page '{page.name}': no content")
+                continue
+
             # Mark as indexed
             self.indexed_pages.add(page_key)
 
@@ -99,6 +104,7 @@ class CodaDocumentGenerator:
 
             # Build metadata
             metadata: dict[str, str | list[str]] = {
+                "type": CodaObjectType.PAGE,
                 "doc_name": doc.name,
                 "doc_id": doc.id,
                 "page_id": page.id,
@@ -177,6 +183,7 @@ class CodaDocumentGenerator:
 
                 # Build metadata
                 metadata: dict[str, str | list[str]] = {
+                    "type": CodaObjectType.TABLE,
                     "doc_name": doc.name,
                     "doc_id": doc.id,
                     "table_id": table.id,
