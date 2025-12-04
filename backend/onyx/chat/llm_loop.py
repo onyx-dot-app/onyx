@@ -38,6 +38,7 @@ from onyx.llm.message_types import ToolCall
 from onyx.llm.message_types import ToolMessage
 from onyx.llm.message_types import UserMessageWithParts
 from onyx.llm.message_types import UserMessageWithText
+from onyx.llm.prompt_cache.utils import apply_prompt_caching_to_agent_messages
 from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
@@ -522,6 +523,16 @@ def run_llm_step(
     # The second return value is for the turn index because reasoning counts on the frontend as a turn
     # TODO this is maybe ok but does not align well with the backend logic too well
     llm_msg_history = translate_history_to_llm_format(history)
+
+    # Apply prompt caching: cache invariant prefix (system + history) when supported by the provider.
+    if isinstance(llm_msg_history, list):
+        llm_msg_history = cast(
+            list[ChatCompletionMessage],
+            apply_prompt_caching_to_agent_messages(
+                messages=llm_msg_history,
+                llm=llm,
+            ),
+        )
 
     # Uncomment the line below to log the entire message history to the console
     if LOG_ONYX_MODEL_INTERACTIONS:
