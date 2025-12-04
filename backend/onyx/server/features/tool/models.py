@@ -5,9 +5,6 @@ from pydantic import BaseModel
 from onyx.db.models import Tool
 
 
-HIDDEN_TOOL_IDS = {"OktaProfileTool"}
-
-
 class ToolVisibilitySettings(BaseModel):
     """Configuration for tool visibility across different UI contexts."""
 
@@ -16,6 +13,7 @@ class ToolVisibilitySettings(BaseModel):
         bool  # Whether tool appears in agent creation/default behavior pages
     )
     default_enabled: bool  # Whether tool is enabled by default
+    expose_to_frontend: bool  # Whether tool should be sent to frontend at all
 
 
 # Centralized configuration for tool visibility across different contexts
@@ -25,6 +23,13 @@ TOOL_VISIBILITY_CONFIG: dict[str, ToolVisibilitySettings] = {
         "chat_selectable": False,
         "agent_creation_selectable": True,
         "default_enabled": True,
+        "expose_to_frontend": True,
+    },
+    "OktaProfileTool": {
+        "chat_selectable": False,
+        "agent_creation_selectable": False,
+        "default_enabled": False,
+        "expose_to_frontend": False,  # Completely hidden from frontend
     },
     # Future tools can be added here with custom visibility rules
 }
@@ -32,7 +37,12 @@ TOOL_VISIBILITY_CONFIG: dict[str, ToolVisibilitySettings] = {
 
 def should_expose_tool_to_fe(tool: Tool) -> bool:
     """Return True when the given tool should be sent to the frontend."""
-    return tool.in_code_tool_id is None or tool.in_code_tool_id not in HIDDEN_TOOL_IDS
+    if tool.in_code_tool_id is None:
+        # Custom tools are always exposed to frontend
+        return True
+
+    config = TOOL_VISIBILITY_CONFIG.get(tool.in_code_tool_id)
+    return config.get("expose_to_frontend", True) if config else True
 
 
 def is_chat_selectable(tool: Tool) -> bool:
