@@ -73,7 +73,6 @@ const Actions: React.FC<ActionsProps> = React.memo(
               onClick={onToggleTools}
               rightIcon={SvgChevronDown}
               aria-label={`View tools for ${serverName}`}
-              className="mr-0.5"
             >
               {status === ActionStatus.FETCHING
                 ? "Fetching tools..."
@@ -131,7 +130,6 @@ const Actions: React.FC<ActionsProps> = React.memo(
               secondary
               onClick={onReconnect}
               rightIcon={SvgPlug}
-              className="bg-background-tint-01 border border-border-01"
               aria-label={`Reconnect to ${serverName}`}
             >
               Reconnect
@@ -153,7 +151,6 @@ const Actions: React.FC<ActionsProps> = React.memo(
             onClick={onToggleTools}
             rightIcon={SvgChevronDown}
             aria-label={`View tools for ${serverName}`}
-            className="mr-0.5"
             disabled
           >
             {`View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}

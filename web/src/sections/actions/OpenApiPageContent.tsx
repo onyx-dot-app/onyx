@@ -1,3 +1,4 @@
+"use client";
 import { ToolSnapshot } from "@/lib/tools/types";
 import React, { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
@@ -16,7 +17,7 @@ import { updateCustomTool, deleteCustomTool } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
 import DisconnectEntityModal from "./modals/DisconnectEntityModal";
 
-export default function OpenApiActionsList() {
+export default function OpenApiPageContent() {
   const { data: openApiTools, mutate: mutateOpenApiTools } = useSWR<
     ToolSnapshot[]
   >("/api/tool/openapi", errorHandlingFetcher, {
@@ -34,6 +35,7 @@ export default function OpenApiActionsList() {
     useState<ToolSnapshot | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleOpenAuthModal = useCallback(
     (tool: ToolSnapshot) => {
@@ -280,25 +282,44 @@ export default function OpenApiActionsList() {
     return selectedTool.custom_headers?.length ? "custom-header" : "oauth";
   }, [selectedTool]);
 
+  // Filter tools based on search query
+  const filteredTools = useMemo(() => {
+    if (!openApiTools) return [];
+    if (!searchQuery.trim()) return openApiTools;
+
+    const query = searchQuery.toLowerCase();
+    return openApiTools.filter(
+      (tool) =>
+        tool.name.toLowerCase().includes(query) ||
+        tool.description?.toLowerCase().includes(query)
+    );
+  }, [openApiTools, searchQuery]);
+
   return (
     <>
       {popup}
       <Actionbar
-        hasActions={false}
+        hasActions={(openApiTools?.length ?? 0) > 0}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
         onAddAction={handleAddAction}
         buttonText="Add OpenAPI Action"
+        className="mb-4"
       />
-      {openApiTools?.map((tool) => (
-        <OpenApiActionCard
-          key={tool.id}
-          tool={tool}
-          onAuthenticate={handleOpenAuthModal}
-          onManage={handleManageTool}
-          mutateOpenApiTools={mutateOpenApiTools}
-          setPopup={setPopup}
-          onOpenDisconnectModal={handleOpenDisconnectModal}
-        />
-      ))}
+
+      <div className="flex flex-col gap-4 w-full">
+        {filteredTools?.map((tool) => (
+          <OpenApiActionCard
+            key={tool.id}
+            tool={tool}
+            onAuthenticate={handleOpenAuthModal}
+            onManage={handleManageTool}
+            mutateOpenApiTools={mutateOpenApiTools}
+            setPopup={setPopup}
+            onOpenDisconnectModal={handleOpenDisconnectModal}
+          />
+        ))}
+      </div>
 
       <addOpenAPIActionModal.Provider>
         <AddOpenAPIActionModal

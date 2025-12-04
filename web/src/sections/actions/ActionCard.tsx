@@ -117,7 +117,7 @@ export default function ActionCard({
     >
       <div className="flex flex-col w-full">
         {/* Header Section */}
-        <div className="flex items-start justify-between pb-2 pl-3 pt-3 pr-2 w-full">
+        <div className="flex items-start justify-between p-3 w-full">
           <ActionCardHeader
             title={title}
             description={description}

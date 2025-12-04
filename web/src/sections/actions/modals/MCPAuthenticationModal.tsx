@@ -288,7 +288,7 @@ export default function MCPAuthenticationModal({
             server_id: mcpServer.id.toString(),
             oauth_client_id: values.oauth_client_id,
             oauth_client_secret: values.oauth_client_secret,
-            return_path: `/admin/mcp-actions/?server_id=${mcpServer.id}&trigger_fetch=true`,
+            return_path: `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`,
             include_resource_param: true,
           }),
         });

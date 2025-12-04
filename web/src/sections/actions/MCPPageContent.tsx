@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import useSWR, { KeyedMutator } from "swr";
 import MCPActionCard from "@/sections/actions/MCPActionCard";
+import Actionbar from "@/sections/actions/Actionbar";
 import { getMCPServerIcon } from "@/lib/tools/mcpUtils";
 import {
   ActionStatus,
@@ -23,8 +24,10 @@ import {
   disableAllServerTools,
   updateMCPServerStatus,
 } from "@/lib/tools/mcpService";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
-export default function MCPActionsList() {
+export default function MCPPageContent() {
   // Data fetching
   const {
     data: mcpData,
@@ -55,12 +58,73 @@ export default function MCPActionsList() {
   const [fetchingToolsServerIds, setFetchingToolsServerIds] = useState<
     number[]
   >([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const mcpServers = useMemo(
     () => (mcpData?.mcp_servers || []) as MCPServerWithStatus[],
     [mcpData?.mcp_servers]
   );
   const isLoading = isMcpLoading;
+
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    const serverId = searchParams.get("server_id");
+    const triggerFetch = searchParams.get("trigger_fetch");
+
+    // Only process if we have a server_id and trigger_fetch flag
+    if (
+      serverId &&
+      triggerFetch === "true" &&
+      !fetchingToolsServerIds.includes(parseInt(serverId))
+    ) {
+      const serverIdInt = parseInt(serverId);
+
+      const handleFetchingTools = async () => {
+        try {
+          await updateMCPServerStatus(
+            serverIdInt,
+            MCPServerStatus.FETCHING_TOOLS
+          );
+
+          await mutateMcpServers();
+
+          router.replace("/admin/actions/mcp");
+
+          // Automatically expand the tools for this server
+          setServerToExpand(serverIdInt);
+
+          await refreshMCPServerTools(serverIdInt);
+
+          setPopup({
+            message: "Successfully connected and fetched tools",
+            type: "success",
+          });
+
+          await mutateMcpServers();
+        } catch (error) {
+          console.error("Failed to fetch tools:", error);
+          setPopup({
+            message: `Failed to fetch tools: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
+            type: "error",
+          });
+          await mutateMcpServers();
+        }
+      };
+
+      handleFetchingTools();
+    }
+  }, [
+    searchParams,
+    router,
+    fetchingToolsServerIds,
+    mutateMcpServers,
+    setPopup,
+    setServerToExpand,
+  ]);
 
   // Track fetching tools server IDs
   useEffect(() => {
@@ -394,6 +458,24 @@ export default function MCPActionsList() {
     [authModal]
   );
 
+  const handleAddServer = useCallback(() => {
+    setServerToManage(null);
+    manageServerModal.toggle(true);
+  }, [manageServerModal]);
+
+  // Filter servers based on search query
+  const filteredServers = useMemo(() => {
+    if (!searchQuery.trim()) return mcpServers;
+
+    const query = searchQuery.toLowerCase();
+    return mcpServers.filter(
+      (server) =>
+        server.name.toLowerCase().includes(query) ||
+        server.description?.toLowerCase().includes(query) ||
+        server.server_url.toLowerCase().includes(query)
+    );
+  }, [mcpServers, searchQuery]);
+
   return (
     <>
       {popup}
@@ -407,8 +489,17 @@ export default function MCPActionsList() {
         />
       )}
 
+      <Actionbar
+        hasActions={mcpServers.length > 0}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onAddAction={handleAddServer}
+        buttonText="Add MCP Server"
+        className="mb-4"
+      />
+
       <div className="flex flex-col gap-4 w-full">
-        {mcpServers.map((server) => {
+        {filteredServers.map((server) => {
           const status = getActionStatusForServer(server);
 
           return (
