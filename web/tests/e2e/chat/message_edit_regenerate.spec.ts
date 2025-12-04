@@ -142,7 +142,7 @@ test.describe("Message Edit and Regenerate Tests", () => {
   test("Message regeneration with model selection", async ({ page }) => {
     // make sure we're using something other than GPT-4o Mini, otherwise the below
     // will fail since we need to switch to a different model for the test
-    await switchModel(page, "GPT-4o");
+    await switchModel(page, "GPT-4.1");
 
     // Send initial message
     await sendMessage(page, "hi! Respond with no more than a sentence");
@@ -168,8 +168,7 @@ test.describe("Message Edit and Regenerate Tests", () => {
     // Look for the GPT-4o Mini option in the dropdown
     const gpt4oMiniOption = page
       .locator('[role="dialog"]')
-      .locator("button")
-      .filter({ hasText: "GPT-4o Mini" })
+      .getByText("GPT-4o Mini", { exact: true })
       .first();
     await gpt4oMiniOption.click();
 
