@@ -7,7 +7,7 @@ import {
   MCPServerCreateRequest,
   MCPServerUpdateRequest,
   MCPServerStatus,
-} from "@/sections/actions/types";
+} from "@/lib/tools/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 
 export interface ToolStatusUpdateRequest {

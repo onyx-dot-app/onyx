@@ -1,6 +1,6 @@
-import { SOURCE_METADATA_MAP } from "./sources";
+import { SOURCE_METADATA_MAP } from "../sources";
 import SvgServer from "@/icons/server";
-import { MCPServer } from "./tools/interfaces";
+import { MCPServer } from "./interfaces";
 import { DatabaseIcon, FileIcon } from "@/components/icons/icons";
 
 /**
