@@ -23,6 +23,7 @@ import {
 } from "@/lib/tools/openApiService";
 import ToolItem from "@/sections/actions/ToolItem";
 import debounce from "lodash/debounce";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
@@ -397,11 +398,11 @@ export default function AddOpenAPIActionModal({
                         about{" "}
                         <span className="inline-flex">
                           <SimpleTooltip
-                            tooltip="Open https://docs.onyx.app/admins/actions/openapi"
+                            tooltip={`Open ${DOCS_ADMINS_PATH}/actions/openapi`}
                             side="top"
                           >
                             <Link
-                              href="https://docs.onyx.app/admins/actions/openapi"
+                              href={`${DOCS_ADMINS_PATH}/actions/openapi`}
                               target="_blank"
                               rel="noreferrer"
                               className="underline"
