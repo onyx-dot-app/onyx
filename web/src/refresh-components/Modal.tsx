@@ -369,14 +369,16 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
         <div className="flex flex-col gap-1">
           <div className="flex flex-row items-center justify-between">
             <Icon className={"w-[1.5rem] h-[1.5rem] stroke-text-04"} />
-            <div
-              tabIndex={-1}
-              ref={closeButtonRef as React.RefObject<HTMLDivElement>}
-            >
-              <DialogPrimitive.Close asChild>
-                <IconButton icon={SvgX} internal onClick={onClose} />
-              </DialogPrimitive.Close>
-            </div>
+            {onClose && (
+              <div
+                tabIndex={-1}
+                ref={closeButtonRef as React.RefObject<HTMLDivElement>}
+              >
+                <DialogPrimitive.Close asChild>
+                  <IconButton icon={SvgX} internal onClick={onClose} />
+                </DialogPrimitive.Close>
+              </div>
+            )}
           </div>
           <DialogPrimitive.Title>
             <Text headingH3>{title}</Text>
