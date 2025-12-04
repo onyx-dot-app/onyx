@@ -5,8 +5,7 @@ default_install_hook_types:
   - post-rewrite
 repos:
   - repo: https://github.com/astral-sh/uv-pre-commit
-    # This revision is from https://github.com/astral-sh/uv-pre-commit/pull/53
-    rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
+    rev: 0.9.15
     hooks:
       - id: uv-sync
       # NOTE: This takes ~6s on a single, large module which is prohibitively slow.
@@ -17,13 +16,13 @@ repos:
       #   files: ^backend/.*\.py$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: check-yaml
         files: ^.github/
 
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.8
+    rev: v1.7.9
     hooks:
       - id: actionlint
 
@@ -53,7 +52,7 @@ repos:
         args: [ '--remove-all-unused-imports', '--remove-unused-variables', '--in-place' , '--recursive']
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: v2.6.2
+    rev: v2.7.0
     hooks:
       - id: golangci-lint
         entry: bash -c "find tools/ -name go.mod -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
