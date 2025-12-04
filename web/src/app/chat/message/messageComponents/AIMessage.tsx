@@ -46,6 +46,11 @@ import FeedbackModal, {
 } from "../../components/modal/FeedbackModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFeedbackController } from "../../hooks/useFeedbackController";
+import {
+  ModelResponse,
+  ModelResponseTabs,
+  useModelResponses,
+} from "./ModelResponseTabs";
 
 export interface AIMessageProps {
   rawPackets: Packet[];
@@ -56,6 +61,9 @@ export interface AIMessageProps {
   llmManager: LlmManager | null;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
+  // Multi-model responses: when multiple models are selected, each has its own response
+  // If undefined or length <= 1, renders normally without tabs
+  modelResponses?: ModelResponse[];
 }
 
 export default function AIMessage({
@@ -67,10 +75,19 @@ export default function AIMessage({
   llmManager,
   otherMessagesCanSwitchTo,
   onMessageSelection,
+  modelResponses,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const { popup, setPopup } = usePopup();
   const { handleFeedbackChange } = useFeedbackController({ setPopup });
+
+  // Multi-model response state
+  const {
+    activeIndex: activeModelIndex,
+    setActiveIndex: setActiveModelIndex,
+    hasMultipleResponses,
+    activeResponse,
+  } = useModelResponses(modelResponses);
 
   const modal = useCreateModal();
   const [feedbackModalProps, setFeedbackModalProps] =
@@ -431,6 +448,26 @@ export default function AIMessage({
               <div className="w-full">
                 <div className="max-w-message-max break-words">
                   <div className="w-full desktop:ml-4">
+                    {/* Multi-model response tabs */}
+                    {hasMultipleResponses && modelResponses && (
+                      <ModelResponseTabs
+                        modelResponses={modelResponses}
+                        activeIndex={activeModelIndex}
+                        onTabChange={setActiveModelIndex}
+                      />
+                    )}
+
+                    {/* Show active model name badge when multiple responses */}
+                    {hasMultipleResponses && activeResponse && (
+                      <div className="text-xs text-text-03 mb-2">
+                        Response from{" "}
+                        <span className="font-medium text-text-02">
+                          {activeResponse.model.modelName ||
+                            activeResponse.model.provider}
+                        </span>
+                      </div>
+                    )}
+
                     <div className="max-w-message-max break-words">
                       <div
                         ref={markdownRef}
@@ -590,6 +627,7 @@ export default function AIMessage({
                                     chatState.regenerate!(llmDescriptor);
                                   }}
                                   folded
+                                  singleSelectMode
                                 />
                               </div>
                             )}

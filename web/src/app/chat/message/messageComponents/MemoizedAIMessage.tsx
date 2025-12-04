@@ -5,6 +5,7 @@ import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import AIMessage from "./AIMessage";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
+import { ModelResponse } from "./ModelResponseTabs";
 
 interface BaseMemoizedAIMessageProps {
   rawPackets: any[];
@@ -21,6 +22,8 @@ interface BaseMemoizedAIMessageProps {
   llmManager: LlmManager | null;
   projectFiles?: ProjectFile[];
   researchType?: string | null;
+  // Multi-model responses
+  modelResponses?: ModelResponse[];
 }
 
 interface InternalMemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
@@ -54,6 +57,7 @@ const InternalMemoizedAIMessage = React.memo(
     llmManager,
     projectFiles,
     researchType,
+    modelResponses,
   }: InternalMemoizedAIMessageProps) {
     const chatState = React.useMemo(
       () => ({
@@ -88,6 +92,7 @@ const InternalMemoizedAIMessage = React.memo(
         llmManager={llmManager}
         otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
         onMessageSelection={onMessageSelection}
+        modelResponses={modelResponses}
       />
     );
   }
@@ -110,6 +115,7 @@ export const MemoizedAIMessage = ({
   llmManager,
   projectFiles,
   researchType,
+  modelResponses,
 }: MemoizedAIMessageProps) => {
   const regenerate = useMemo(() => {
     if (messageId === undefined) {
@@ -145,6 +151,7 @@ export const MemoizedAIMessage = ({
       llmManager={llmManager}
       projectFiles={projectFiles}
       researchType={researchType}
+      modelResponses={modelResponses}
     />
   );
 };

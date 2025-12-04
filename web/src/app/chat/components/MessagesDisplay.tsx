@@ -10,6 +10,7 @@ import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import { MemoizedAIMessage } from "../message/messageComponents/MemoizedAIMessage";
 import { ProjectFile } from "../projects/projectsService";
+import { ModelResponse } from "../message/messageComponents/ModelResponseTabs";
 
 interface MessagesDisplayProps {
   messageHistory: Message[];
@@ -176,6 +177,15 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
           // since this is a "parsed" version of the message tree
           // so the previous message is guaranteed to be the parent of the current message
           const previousMessage = i !== 0 ? messageHistory[i - 1] : null;
+
+          // MOCK: Generate modelResponses from currently selected LLMs
+          // In the real implementation, this would come from the message data itself
+          // (each message would store which models were used when it was sent)
+          const mockModelResponses: ModelResponse[] | undefined =
+            llmManager.selectedLlms.length > 1
+              ? llmManager.selectedLlms.map((llm) => ({ model: llm }))
+              : undefined;
+
           return (
             <div
               className="text-text"
@@ -201,6 +211,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                 }
                 onMessageSelection={onMessageSelection}
                 researchType={message.researchType}
+                modelResponses={mockModelResponses}
               />
             </div>
           );

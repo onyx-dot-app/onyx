@@ -484,7 +484,12 @@ export interface LlmDescriptor {
 }
 
 export interface LlmManager {
+  // Multi-model selection (array of 1-4 models)
+  selectedLlms: LlmDescriptor[];
+  updateSelectedLlms: (llms: LlmDescriptor[]) => void;
+  // Convenience getter for backwards compatibility - returns first selected model
   currentLlm: LlmDescriptor;
+  // Legacy single-model update - updates first model in selection
   updateCurrentLlm: (newOverride: LlmDescriptor) => void;
   temperature: number;
   updateTemperature: (temperature: number) => void;
@@ -564,11 +569,20 @@ export function useLlmManager(
   const [userHasManuallyOverriddenLLM, setUserHasManuallyOverriddenLLM] =
     useState(false);
   const [chatSession, setChatSession] = useState<ChatSession | null>(null);
-  const [currentLlm, setCurrentLlm] = useState<LlmDescriptor>({
-    name: "",
-    provider: "",
-    modelName: "",
-  });
+  const [selectedLlms, setSelectedLlms] = useState<LlmDescriptor[]>([
+    { name: "", provider: "", modelName: "" },
+  ]);
+
+  // Convenience getter for backwards compatibility
+  const currentLlm = useMemo(
+    () => selectedLlms[0] || { name: "", provider: "", modelName: "" },
+    [selectedLlms]
+  );
+
+  // Helper to set the primary (first) model while preserving others
+  const setPrimaryLlm = (llm: LlmDescriptor) => {
+    setSelectedLlms((prev) => [llm, ...prev.slice(1)]);
+  };
 
   const llmUpdate = () => {
     /* Should be called when the live assistant or current chat session changes */
@@ -588,11 +602,11 @@ export function useLlmManager(
       }
 
       if (currentChatSession?.current_alternate_model) {
-        setCurrentLlm(
+        setPrimaryLlm(
           getValidLlmDescriptor(currentChatSession.current_alternate_model)
         );
       } else if (liveAssistant?.llm_model_version_override) {
-        setCurrentLlm(
+        setPrimaryLlm(
           getValidLlmDescriptor(liveAssistant.llm_model_version_override)
         );
       } else if (userHasManuallyOverriddenLLM) {
@@ -600,14 +614,14 @@ export function useLlmManager(
         // current chat session, use the override
         return;
       } else if (user?.preferences?.default_model) {
-        setCurrentLlm(getValidLlmDescriptor(user.preferences.default_model));
+        setPrimaryLlm(getValidLlmDescriptor(user.preferences.default_model));
       } else {
         const defaultProvider = llmProviders.find(
           (provider) => provider.is_default_provider
         );
 
         if (defaultProvider) {
-          setCurrentLlm({
+          setPrimaryLlm({
             name: defaultProvider.name,
             provider: defaultProvider.provider,
             modelName: defaultProvider.default_model_name,
@@ -665,20 +679,30 @@ export function useLlmManager(
     setImageFilesPresent(present);
   };
 
-  // Manually set the LLM
+  // Update all selected LLMs (multi-select)
+  const updateSelectedLlms = (llms: LlmDescriptor[]) => {
+    // Ensure at least one model is selected
+    if (llms.length === 0) {
+      return;
+    }
+    setSelectedLlms(llms);
+    setUserHasManuallyOverriddenLLM(true);
+  };
+
+  // Legacy: Manually set the primary LLM (backwards compatibility)
   const updateCurrentLlm = (newLlm: LlmDescriptor) => {
-    setCurrentLlm(newLlm);
+    setPrimaryLlm(newLlm);
     setUserHasManuallyOverriddenLLM(true);
   };
 
   const updateCurrentLlmToModelName = (modelName: string) => {
-    setCurrentLlm(getValidLlmDescriptor(modelName));
+    setPrimaryLlm(getValidLlmDescriptor(modelName));
     setUserHasManuallyOverriddenLLM(true);
   };
 
   const updateModelOverrideBasedOnChatSession = (chatSession?: ChatSession) => {
     if (chatSession && chatSession.current_alternate_model?.length > 0) {
-      setCurrentLlm(getValidLlmDescriptor(chatSession.current_alternate_model));
+      setPrimaryLlm(getValidLlmDescriptor(chatSession.current_alternate_model));
     }
   };
 
@@ -757,6 +781,10 @@ export function useLlmManager(
 
   return {
     updateModelOverrideBasedOnChatSession,
+    // Multi-model selection
+    selectedLlms,
+    updateSelectedLlms,
+    // Backwards compatibility (single model)
     currentLlm,
     updateCurrentLlm,
     temperature,

@@ -53,6 +53,11 @@ export interface LLMPopoverProps {
   onSelect?: (value: string) => void;
   currentModelName?: string;
   disabled?: boolean;
+  maxSelection?: number;
+  minSelection?: number;
+  // Single-select mode: for one-shot actions like regeneration
+  // Selects model, calls onSelect, and closes popover (doesn't update llmManager.selectedLlms)
+  singleSelectMode?: boolean;
 }
 
 export default function LLMPopover({
@@ -61,13 +66,34 @@ export default function LLMPopover({
   onSelect,
   currentModelName,
   disabled = false,
+  maxSelection = 4,
+  minSelection = 1,
+  singleSelectMode = false,
 }: LLMPopoverProps) {
   const llmProviders = llmManager.llmProviders;
   const isLoadingProviders = llmManager.isLoadingProviders;
 
+  // Use selectedLlms from llmManager directly
+  const selectedModels = llmManager.selectedLlms;
+  const onSelectionChange = llmManager.updateSelectedLlms;
+
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const { user } = useUser();
+
+  // Helper to check if a model is selected
+  const isModelSelected = useCallback(
+    (option: LLMOption) => {
+      return selectedModels.some(
+        (m) =>
+          m.modelName === option.modelName && m.provider === option.provider
+      );
+    },
+    [selectedModels]
+  );
+
+  // Check if we're at max selection
+  const isAtMaxSelection = selectedModels.length >= maxSelection;
 
   const [localTemperature, setLocalTemperature] = useState(
     llmManager.temperature ?? 0.5
@@ -245,6 +271,35 @@ export default function LLMPopover({
     return currentModel;
   }, [llmProviders, llmManager.currentLlm.modelName]);
 
+  // Get display name for a model (used in multi-select mode)
+  const getModelDisplayName = useCallback(
+    (model: LlmDescriptor) => {
+      if (!llmProviders) return model.modelName;
+
+      for (const provider of llmProviders) {
+        const config = provider.model_configurations.find(
+          (m) => m.name === model.modelName
+        );
+        if (config) {
+          return config.display_name || config.name;
+        }
+      }
+      return model.modelName;
+    },
+    [llmProviders]
+  );
+
+  // Get trigger display text for multi-select mode
+  const multiSelectTriggerText = useMemo(() => {
+    if (selectedModels.length === 0) {
+      return "Select models";
+    }
+    if (selectedModels.length === 1) {
+      return getModelDisplayName(selectedModels[0]!);
+    }
+    return `${selectedModels.length} models selected`;
+  }, [selectedModels, getModelDisplayName]);
+
   // Determine which group the current model belongs to (for auto-expand)
   const currentGroupKey = useMemo(() => {
     const currentModel = llmManager.currentLlm.modelName;
@@ -318,13 +373,55 @@ export default function LLMPopover({
   };
 
   const handleSelectModel = (option: LLMOption) => {
-    llmManager.updateCurrentLlm({
+    const newDescriptor: LlmDescriptor = {
       modelName: option.modelName,
       provider: option.provider,
       name: option.name,
-    } as LlmDescriptor);
+    } as LlmDescriptor;
+
+    if (singleSelectMode) {
+      // Single-select mode: just call onSelect and close (for actions like regeneration)
+      onSelect?.(
+        structureValue(option.name, option.provider, option.modelName)
+      );
+      setOpen(false);
+      return;
+    }
+
+    // Multi-select mode: toggle selection
+    const isSelected = isModelSelected(option);
+
+    if (isSelected) {
+      // Don't allow deselecting if at minimum
+      if (selectedModels.length <= minSelection) {
+        return;
+      }
+      const newSelection = selectedModels.filter(
+        (m) =>
+          !(m.modelName === option.modelName && m.provider === option.provider)
+      );
+      onSelectionChange(newSelection);
+    } else {
+      // Don't allow selecting if at maximum
+      if (selectedModels.length >= maxSelection) {
+        return;
+      }
+      onSelectionChange([...selectedModels, newDescriptor]);
+    }
+
+    // Also call legacy onSelect for backwards compatibility
     onSelect?.(structureValue(option.name, option.provider, option.modelName));
-    setOpen(false);
+  };
+
+  // Handle removing a model from selection (for chips)
+  const handleRemoveModel = (model: LlmDescriptor) => {
+    if (selectedModels.length <= minSelection) {
+      return;
+    }
+    const newSelection = selectedModels.filter(
+      (m) => !(m.modelName === model.modelName && m.provider === model.provider)
+    );
+    onSelectionChange?.(newSelection);
   };
 
   return (
@@ -335,10 +432,15 @@ export default function LLMPopover({
             leftIcon={
               folded
                 ? SvgRefreshCw
-                : getProviderIcon(
-                    llmManager.currentLlm.provider,
-                    llmManager.currentLlm.modelName
-                  )
+                : selectedModels.length > 0
+                  ? getProviderIcon(
+                      selectedModels[0]!.provider,
+                      selectedModels[0]!.modelName
+                    )
+                  : getProviderIcon(
+                      llmManager.currentLlm.provider,
+                      llmManager.currentLlm.modelName
+                    )
             }
             onClick={() => setOpen(true)}
             transient={open}
@@ -347,12 +449,79 @@ export default function LLMPopover({
             disabled={disabled}
             className={disabled ? "bg-transparent" : ""}
           >
-            {currentLlmDisplayName}
+            {multiSelectTriggerText}
           </SelectButton>
         </div>
       </PopoverTrigger>
       <PopoverContent side="top" align="end" className="w-[280px] p-1">
         <div className="flex flex-col gap-1">
+          {/* Selection Summary (hidden in single-select mode) */}
+          {!singleSelectMode && selectedModels.length > 0 && (
+            <div className="px-2 py-2 border-b border-border-02">
+              <div className="flex items-center justify-between mb-2">
+                <Text secondaryBody text03>
+                  Selected ({selectedModels.length}/{maxSelection})
+                </Text>
+                {isAtMaxSelection && (
+                  <Text
+                    secondaryBody
+                    className="text-amber-600 dark:text-amber-400 text-xs"
+                  >
+                    Max reached
+                  </Text>
+                )}
+              </div>
+              {selectedModels.length === 0 ? (
+                <Text secondaryBody text03 className="text-text-04">
+                  Select up to {maxSelection} models
+                </Text>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {selectedModels.map((model) => (
+                    <div
+                      key={`${model.provider}-${model.modelName}`}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-action-link-01 text-text-inverse rounded-full text-xs"
+                    >
+                      <span className="max-w-[100px] truncate">
+                        {getModelDisplayName(model)}
+                      </span>
+                      {selectedModels.length > minSelection && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveModel(model);
+                          }}
+                          className="ml-0.5 hover:bg-white/20 rounded-full p-0.5 transition-colors"
+                          title="Remove model"
+                        >
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {selectedModels.length > 0 &&
+                selectedModels.length < minSelection && (
+                  <Text secondaryBody className="text-text-04 text-xs mt-1">
+                    At least {minSelection} model required
+                  </Text>
+                )}
+            </div>
+          )}
+
           {/* Search Input */}
           <InputTypeIn
             ref={searchInputRef}
@@ -439,11 +608,11 @@ export default function LLMPopover({
                               <div className="flex flex-col gap-1">
                                 {group.options.map((option) => {
                                   // Match by both modelName AND provider to handle same model name across providers
-                                  const isSelected =
-                                    option.modelName ===
-                                      llmManager.currentLlm.modelName &&
-                                    option.provider ===
-                                      llmManager.currentLlm.provider;
+                                  const isSelected = isModelSelected(option);
+
+                                  // Disable unselected items when at max
+                                  const isDisabled =
+                                    !isSelected && isAtMaxSelection;
 
                                   // Build description with version info
                                   const description =
@@ -458,14 +627,24 @@ export default function LLMPopover({
                                       ref={
                                         isSelected ? selectedItemRef : undefined
                                       }
+                                      title={
+                                        isDisabled
+                                          ? `Maximum of ${maxSelection} models selected`
+                                          : undefined
+                                      }
                                     >
                                       <LineItem
                                         selected={isSelected}
                                         description={description}
                                         onClick={() =>
+                                          !isDisabled &&
                                           handleSelectModel(option)
                                         }
-                                        className="pl-7"
+                                        className={`pl-7 ${
+                                          isDisabled
+                                            ? "opacity-50 cursor-not-allowed"
+                                            : ""
+                                        }`}
                                         rightChildren={
                                           isSelected ? (
                                             <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
