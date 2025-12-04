@@ -37,6 +37,7 @@ export interface MCPActionCardProps {
   onDelete?: () => void;
   onAuthenticate?: () => void; // For pending state
   onReconnect?: () => void; // For disconnected state
+  onRename?: (serverId: number, newName: string) => Promise<void>; // For renaming
 
   // Tool-related actions (now includes SWR mutate function for optimistic updates)
   onToolToggle?: (
@@ -75,6 +76,7 @@ export default function MCPActionCard({
   onDelete,
   onAuthenticate,
   onReconnect,
+  onRename,
   onToolToggle,
   onRefreshTools,
   onDisableAllTools,
@@ -160,6 +162,12 @@ export default function MCPActionCard({
     />
   );
 
+  const handleRename = async (newName: string) => {
+    if (onRename) {
+      await onRename(serverId, newName);
+    }
+  };
+
   return (
     <ActionCard
       title={title}
@@ -168,6 +176,7 @@ export default function MCPActionCard({
       status={status}
       actions={actionsComponent}
       onEdit={onEdit}
+      onRename={handleRename}
       isExpanded={isToolsExpanded}
       onExpandedChange={setIsToolsExpanded}
       enableSearch={true}

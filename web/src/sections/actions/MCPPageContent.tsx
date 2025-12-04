@@ -23,6 +23,7 @@ import {
   updateToolStatus,
   disableAllServerTools,
   updateMCPServerStatus,
+  updateMCPServer,
 } from "@/lib/tools/mcpService";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
@@ -463,6 +464,30 @@ export default function MCPPageContent() {
     manageServerModal.toggle(true);
   }, [manageServerModal]);
 
+  const handleRenameServer = useCallback(
+    async (serverId: number, newName: string) => {
+      try {
+        await updateMCPServer(serverId, { name: newName });
+        setPopup({
+          message: "MCP Server renamed successfully",
+          type: "success",
+        });
+        await mutateMcpServers();
+      } catch (error) {
+        console.error("Error renaming server:", error);
+        setPopup({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to rename MCP Server",
+          type: "error",
+        });
+        throw error; // Re-throw so ButtonRenaming can handle it
+      }
+    },
+    [setPopup, mutateMcpServers]
+  );
+
   // Filter servers based on search query
   const filteredServers = useMemo(() => {
     if (!searchQuery.trim()) return mcpServers;
@@ -519,6 +544,7 @@ export default function MCPPageContent() {
               onDelete={() => handleDelete(server.id)}
               onAuthenticate={() => handleAuthenticate(server.id)}
               onReconnect={() => handleReconnect(server.id)}
+              onRename={handleRenameServer}
               onToolToggle={handleToolToggle}
               onRefreshTools={handleRefreshTools}
               onDisableAllTools={handleDisableAllTools}

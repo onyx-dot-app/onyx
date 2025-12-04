@@ -262,6 +262,33 @@ export default function OpenApiPageContent() {
     setToolBeingEdited(null);
   }, []);
 
+  const handleRenameTool = useCallback(
+    async (toolId: number, newName: string) => {
+      try {
+        const response = await updateCustomTool(toolId, { name: newName });
+        if (response.error) {
+          throw new Error(response.error);
+        }
+        setPopup({
+          message: "OpenAPI action renamed successfully",
+          type: "success",
+        });
+        await mutateOpenApiTools();
+      } catch (error) {
+        console.error("Error renaming tool:", error);
+        setPopup({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to rename OpenAPI action",
+          type: "error",
+        });
+        throw error; // Re-throw so ButtonRenaming can handle it
+      }
+    },
+    [setPopup, mutateOpenApiTools]
+  );
+
   const authenticationModalTitle = useMemo(() => {
     if (!selectedTool) {
       return "Authenticate OpenAPI Action";
@@ -314,6 +341,7 @@ export default function OpenApiPageContent() {
             tool={tool}
             onAuthenticate={handleOpenAuthModal}
             onManage={handleManageTool}
+            onRename={handleRenameTool}
             mutateOpenApiTools={mutateOpenApiTools}
             setPopup={setPopup}
             onOpenDisconnectModal={handleOpenDisconnectModal}

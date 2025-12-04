@@ -21,6 +21,9 @@ export interface ActionCardProps {
   // Edit handler for header
   onEdit?: () => void;
 
+  // Rename handler for header
+  onRename?: (newName: string) => Promise<void>;
+
   // Expansion control (can be controlled or uncontrolled)
   initialExpanded?: boolean;
   isExpanded?: boolean;
@@ -54,6 +57,7 @@ export default function ActionCard({
   status,
   actions,
   onEdit,
+  onRename,
   initialExpanded = false,
   isExpanded: controlledIsExpanded,
   onExpandedChange,
@@ -124,6 +128,7 @@ export default function ActionCard({
             icon={icon}
             status={status}
             onEdit={onEdit}
+            onRename={onRename}
           />
 
           {/* Action Buttons */}

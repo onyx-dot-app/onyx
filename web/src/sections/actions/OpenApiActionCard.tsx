@@ -6,7 +6,7 @@ import SvgServer from "@/icons/server";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
-import { deleteCustomTool } from "@/lib/tools/openApiService";
+import { deleteCustomTool, updateCustomTool } from "@/lib/tools/openApiService";
 import { ActionStatus, MethodSpec } from "@/lib/tools/types";
 import ToolItem from "@/sections/actions/ToolItem";
 import Text from "@/refresh-components/texts/Text";
@@ -17,6 +17,7 @@ export interface OpenApiActionCardProps {
   tool: ToolSnapshot;
   onAuthenticate: (tool: ToolSnapshot) => void;
   onManage?: (tool: ToolSnapshot) => void;
+  onRename?: (toolId: number, newName: string) => Promise<void>;
   mutateOpenApiTools: () => Promise<unknown> | void;
   setPopup: (popup: PopupSpec | null) => void;
   onOpenDisconnectModal?: (tool: ToolSnapshot) => void;
@@ -26,6 +27,7 @@ export default function OpenApiActionCard({
   tool,
   onAuthenticate,
   onManage,
+  onRename,
   mutateOpenApiTools,
   setPopup,
   onOpenDisconnectModal,
@@ -121,6 +123,12 @@ export default function OpenApiActionCard({
     <SvgServer className="h-5 w-5 stroke-text-04" aria-hidden="true" />
   );
 
+  const handleRename = async (newName: string) => {
+    if (onRename) {
+      await onRename(tool.id, newName);
+    }
+  };
+
   return (
     <ActionCard
       title={tool.name}
@@ -128,6 +136,7 @@ export default function OpenApiActionCard({
       icon={icon}
       status={status}
       actions={actionsComponent}
+      onRename={handleRename}
       isExpanded={isToolsExpanded}
       onExpandedChange={setIsToolsExpanded}
       enableSearch={true}

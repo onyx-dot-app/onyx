@@ -1,11 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ActionStatus } from "@/lib/tools/types";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgEdit from "@/icons/edit";
+import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 
 interface ActionCardHeaderProps {
   title: string;
@@ -13,6 +14,7 @@ interface ActionCardHeaderProps {
   icon: React.ReactNode;
   status: ActionStatus;
   onEdit?: () => void;
+  onRename?: (newName: string) => Promise<void>;
 }
 
 function ActionCardHeader({
@@ -21,16 +23,39 @@ function ActionCardHeader({
   icon,
   status,
   onEdit,
+  onRename,
 }: ActionCardHeaderProps) {
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
   const isConnected = status === ActionStatus.CONNECTED;
   const isPending = status === ActionStatus.PENDING;
   const isDisconnected = status === ActionStatus.DISCONNECTED;
   const isFetching = status === ActionStatus.FETCHING;
 
   const showEditButton = isPending;
+  const showRenameIcon =
+    onRename && isHovered && !isRenaming && (isConnected || isFetching);
+
+  const handleRename = async (newName: string) => {
+    if (onRename) {
+      await onRename(newName);
+    }
+    setIsRenaming(false);
+  };
+
+  const handleRenameClick = () => {
+    if (onRename) {
+      setIsRenaming(true);
+    }
+  };
 
   return (
-    <div className="flex flex-1 gap-2 items-start max-w-[480px]">
+    <div
+      className="flex flex-1 gap-2 items-start max-w-[480px]"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <div
         className={cn(
           "flex items-center px-0 py-0.5 shrink-0",
@@ -43,9 +68,31 @@ function ActionCardHeader({
       <div className="flex flex-col items-start flex-1 min-w-0">
         <div className="flex gap-1 items-center w-full">
           {isConnected || isFetching ? (
-            <Text mainContentEmphasis text04>
-              {title}
-            </Text>
+            <div className="flex items-center gap-1 flex-1 min-w-0">
+              {isRenaming ? (
+                <ButtonRenaming
+                  initialName={title}
+                  onRename={handleRename}
+                  onClose={() => setIsRenaming(false)}
+                  className="text-text-04 font-main-content-emphasis"
+                />
+              ) : (
+                <Text mainContentEmphasis text04 className="truncate">
+                  {title}
+                </Text>
+              )}
+              {showRenameIcon && (
+                <IconButton
+                  icon={SvgEdit}
+                  tooltip="Rename"
+                  internal
+                  tertiary
+                  onClick={handleRenameClick}
+                  className="h-6 w-6 opacity-70 hover:opacity-100"
+                  aria-label={`Rename ${title}`}
+                />
+              )}
+            </div>
           ) : isPending ? (
             <>
               <Text headingH3 text04>
