@@ -1,4 +1,5 @@
 from typing import Any
+from typing import TypedDict
 
 from pydantic import BaseModel
 
@@ -8,9 +9,59 @@ from onyx.db.models import Tool
 HIDDEN_TOOL_IDS = {"OktaProfileTool"}
 
 
+class ToolVisibilitySettings(TypedDict):
+    """Configuration for tool visibility across different UI contexts."""
+
+    chat_selectable: bool  # Whether tool appears in chat input bar dropdown
+    agent_creation_selectable: (
+        bool  # Whether tool appears in agent creation/default behavior pages
+    )
+    default_enabled: bool  # Whether tool is enabled by default
+
+
+# Centralized configuration for tool visibility across different contexts
+# This allows for easy extension with new tools that need custom visibility rules
+TOOL_VISIBILITY_CONFIG: dict[str, ToolVisibilitySettings] = {
+    "OpenURLTool": {
+        "chat_selectable": False,
+        "agent_creation_selectable": True,
+        "default_enabled": True,
+    },
+    # Future tools can be added here with custom visibility rules
+}
+
+
 def should_expose_tool_to_fe(tool: Tool) -> bool:
     """Return True when the given tool should be sent to the frontend."""
     return tool.in_code_tool_id is None or tool.in_code_tool_id not in HIDDEN_TOOL_IDS
+
+
+def is_chat_selectable(tool: Tool) -> bool:
+    """Return True if the tool should appear in the chat input bar dropdown.
+
+    Tools can be excluded from the chat dropdown while remaining available
+    in agent creation and configuration pages.
+    """
+    if tool.in_code_tool_id is None:
+        # Custom tools are always chat selectable
+        return True
+
+    config = TOOL_VISIBILITY_CONFIG.get(tool.in_code_tool_id)
+
+    return config["chat_selectable"] if config else True
+
+
+def is_agent_creation_selectable(tool: Tool) -> bool:
+    """Return True if the tool should appear in agent creation/default behavior pages.
+
+    Most tools should be visible in these admin contexts.
+    """
+    if tool.in_code_tool_id is None:
+        # Custom tools are always agent creation selectable
+        return True
+
+    config = TOOL_VISIBILITY_CONFIG.get(tool.in_code_tool_id)
+    return config["agent_creation_selectable"] if config else True
 
 
 class ToolSnapshot(BaseModel):
