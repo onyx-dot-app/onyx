@@ -33,7 +33,7 @@ import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
 import { AddTokenRateLimitForm } from "./AddTokenRateLimitForm";
 import { GenericTokenRateLimitTable } from "@/app/admin/token-rate-limits/TokenRateLimitTables";
 import { useUser } from "@/components/user/UserProvider";
-import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
+import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
 
 interface GroupDisplayProps {
   users: User[];

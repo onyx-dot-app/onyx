@@ -10,7 +10,7 @@ import { SlackTokensForm } from "./SlackTokensForm";
 import { SourceIcon } from "@/components/SourceIcon";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { deleteSlackBot } from "./new/lib";
-import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
+import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
 import Button from "@/refresh-components/buttons/Button";
 import SvgTrash from "@/icons/trash";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
