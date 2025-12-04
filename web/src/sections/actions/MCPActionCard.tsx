@@ -6,6 +6,8 @@ import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolItem from "@/sections/actions/ToolItem";
 import ToolsList from "@/sections/actions/ToolsList";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ActionStatus } from "@/lib/tools/types";
 import { useServerTools } from "@/sections/actions/useServerTools";
 import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
@@ -86,6 +88,7 @@ export default function MCPActionCard({
   const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
+  const deleteModal = useCreateModal();
 
   // Update expanded state when initialExpanded changes
   const hasInitializedExpansion = useRef(false);
@@ -173,7 +176,7 @@ export default function MCPActionCard({
       onManage={onManage}
       onAuthenticate={onAuthenticate}
       onReconnect={onReconnect}
-      onDelete={onDelete}
+      onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
       toolCount={toolCount}
       isToolsExpanded={isToolsExpanded}
       onToggleTools={handleToggleTools}
@@ -187,55 +190,73 @@ export default function MCPActionCard({
   };
 
   return (
-    <ActionCard
-      title={title}
-      description={description}
-      icon={icon}
-      status={status}
-      actions={actionsComponent}
-      onEdit={onEdit}
-      onRename={handleRename}
-      isExpanded={isToolsExpanded}
-      onExpandedChange={setIsToolsExpanded}
-      enableSearch={true}
-      searchQuery={searchQuery}
-      onSearchQueryChange={setSearchQuery}
-      onRefresh={() => onRefreshTools?.(serverId, mutate)}
-      onDisableAll={() => {
-        const toolIds = tools.map((tool) => parseInt(tool.id));
-        onDisableAllTools?.(serverId, toolIds, mutate);
-      }}
-      onFold={handleFold}
-      className={className}
-      ariaLabel={`${title} MCP server card`}
-    >
-      <ToolsList
-        isFetching={server.status === MCPServerStatus.FETCHING_TOOLS}
-        onRetry={() => mutate()}
-        totalCount={tools.length}
-        enabledCount={tools.filter((tool) => tool.isEnabled).length}
-        showOnlyEnabled={showOnlyEnabled}
-        onToggleShowOnlyEnabled={handleToggleShowOnlyEnabled}
-        isEmpty={filteredTools.length === 0}
+    <>
+      <ActionCard
+        title={title}
+        description={description}
+        icon={icon}
+        status={status}
+        actions={actionsComponent}
+        onEdit={onEdit}
+        onRename={handleRename}
+        isExpanded={isToolsExpanded}
+        onExpandedChange={setIsToolsExpanded}
+        enableSearch={true}
         searchQuery={searchQuery}
-        emptyMessage="No tools available"
-        emptySearchMessage="No tools found"
+        onSearchQueryChange={setSearchQuery}
+        onRefresh={() => onRefreshTools?.(serverId, mutate)}
+        onDisableAll={() => {
+          const toolIds = tools.map((tool) => parseInt(tool.id));
+          onDisableAllTools?.(serverId, toolIds, mutate);
+        }}
+        onFold={handleFold}
+        className={className}
+        ariaLabel={`${title} MCP server card`}
       >
-        {filteredTools.map((tool) => (
-          <ToolItem
-            key={tool.id}
-            name={tool.name}
-            description={tool.description}
-            icon={tool.icon}
-            isAvailable={tool.isAvailable}
-            isEnabled={tool.isEnabled}
-            onToggle={(enabled) =>
-              onToolToggle?.(serverId, tool.id, enabled, mutate)
-            }
-            variant="mcp"
-          />
-        ))}
-      </ToolsList>
-    </ActionCard>
+        <ToolsList
+          isFetching={server.status === MCPServerStatus.FETCHING_TOOLS}
+          onRetry={() => mutate()}
+          totalCount={tools.length}
+          enabledCount={tools.filter((tool) => tool.isEnabled).length}
+          showOnlyEnabled={showOnlyEnabled}
+          onToggleShowOnlyEnabled={handleToggleShowOnlyEnabled}
+          isEmpty={filteredTools.length === 0}
+          searchQuery={searchQuery}
+          emptyMessage="No tools available"
+          emptySearchMessage="No tools found"
+        >
+          {filteredTools.map((tool) => (
+            <ToolItem
+              key={tool.id}
+              name={tool.name}
+              description={tool.description}
+              icon={tool.icon}
+              isAvailable={tool.isAvailable}
+              isEnabled={tool.isEnabled}
+              onToggle={(enabled) =>
+                onToolToggle?.(serverId, tool.id, enabled, mutate)
+              }
+              variant="mcp"
+            />
+          ))}
+        </ToolsList>
+      </ActionCard>
+
+      {deleteModal.isOpen && (
+        <ConfirmEntityModal
+          danger
+          actionButtonText="Delete"
+          entityType="MCP server"
+          entityName={title}
+          additionalDetails="This will permanently delete the server and all of its tools."
+          onClose={() => deleteModal.toggle(false)}
+          onSubmit={async () => {
+            if (!onDelete) return;
+            await onDelete();
+            deleteModal.toggle(false);
+          }}
+        />
+      )}
+    </>
   );
 }

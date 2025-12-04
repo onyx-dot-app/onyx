@@ -214,44 +214,58 @@ export default function OpenApiPageContent() {
     }
   }, [disconnectModal, handleDisableTool, toolPendingDisconnect]);
 
+  const executeDeleteTool = useCallback(
+    async (tool: ToolSnapshot) => {
+      try {
+        setIsDeleting(true);
+        const response = await deleteCustomTool(tool.id);
+        if (response.data) {
+          setPopup({
+            message: `${tool.name} deleted successfully.`,
+            type: "success",
+          });
+          await mutateOpenApiTools();
+        } else {
+          setPopup({
+            message: response.error || "Failed to delete tool.",
+            type: "error",
+          });
+          throw new Error(response.error || "Failed to delete tool.");
+        }
+      } catch (error) {
+        console.error("Failed to delete OpenAPI tool", error);
+        setPopup({
+          message: "An unexpected error occurred while deleting the tool.",
+          type: "error",
+        });
+        throw error;
+      } finally {
+        setIsDeleting(false);
+      }
+    },
+    [mutateOpenApiTools, setPopup]
+  );
+
   const handleDeleteToolFromModal = useCallback(async () => {
     if (!toolPendingDisconnect || isDeleting) {
       return;
     }
 
     try {
-      setIsDeleting(true);
-      const response = await deleteCustomTool(toolPendingDisconnect.id);
-      if (response.data) {
-        setPopup({
-          message: `${toolPendingDisconnect.name} deleted successfully.`,
-          type: "success",
-        });
-        await mutateOpenApiTools();
-      } else {
-        setPopup({
-          message: response.error || "Failed to delete tool.",
-          type: "error",
-        });
-      }
-    } catch (error) {
-      console.error("Failed to delete OpenAPI tool", error);
-      setPopup({
-        message: "An unexpected error occurred while deleting the tool.",
-        type: "error",
-      });
+      await executeDeleteTool(toolPendingDisconnect);
     } finally {
-      setIsDeleting(false);
       disconnectModal.toggle(false);
       setToolPendingDisconnect(null);
     }
-  }, [
-    disconnectModal,
-    isDeleting,
-    mutateOpenApiTools,
-    setPopup,
-    toolPendingDisconnect,
-  ]);
+  }, [disconnectModal, executeDeleteTool, isDeleting, toolPendingDisconnect]);
+
+  const handleDeleteTool = useCallback(
+    async (tool: ToolSnapshot) => {
+      if (isDeleting) return;
+      await executeDeleteTool(tool);
+    },
+    [executeDeleteTool, isDeleting]
+  );
 
   const handleAddAction = useCallback(() => {
     setToolBeingEdited(null);
@@ -341,6 +355,7 @@ export default function OpenApiPageContent() {
             tool={tool}
             onAuthenticate={handleOpenAuthModal}
             onManage={handleManageTool}
+            onDelete={handleDeleteTool}
             onRename={handleRenameTool}
             mutateOpenApiTools={mutateOpenApiTools}
             setPopup={setPopup}

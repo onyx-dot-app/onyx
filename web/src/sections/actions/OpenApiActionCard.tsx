@@ -6,6 +6,8 @@ import SvgServer from "@/icons/server";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolsList from "@/sections/actions/ToolsList";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { deleteCustomTool, updateCustomTool } from "@/lib/tools/openApiService";
 import { ActionStatus, MethodSpec } from "@/lib/tools/types";
@@ -17,6 +19,7 @@ export interface OpenApiActionCardProps {
   tool: ToolSnapshot;
   onAuthenticate: (tool: ToolSnapshot) => void;
   onManage?: (tool: ToolSnapshot) => void;
+  onDelete?: (tool: ToolSnapshot) => Promise<void> | void;
   onRename?: (toolId: number, newName: string) => Promise<void>;
   mutateOpenApiTools: () => Promise<unknown> | void;
   setPopup: (popup: PopupSpec | null) => void;
@@ -27,6 +30,7 @@ export default function OpenApiActionCard({
   tool,
   onAuthenticate,
   onManage,
+  onDelete,
   onRename,
   mutateOpenApiTools,
   setPopup,
@@ -35,6 +39,7 @@ export default function OpenApiActionCard({
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const deleteModal = useCreateModal();
 
   const methodSpecs = useMemo<MethodSpec[]>(() => {
     try {
@@ -116,6 +121,7 @@ export default function OpenApiActionCard({
         onAuthenticate(tool);
       }}
       onReconnect={() => handleConnectionUpdate(true)}
+      onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
     />
   );
 
@@ -130,41 +136,58 @@ export default function OpenApiActionCard({
   };
 
   return (
-    <ActionCard
-      title={tool.name}
-      description={tool.description}
-      icon={icon}
-      status={status}
-      actions={actionsComponent}
-      onRename={handleRename}
-      isExpanded={isToolsExpanded}
-      onExpandedChange={setIsToolsExpanded}
-      enableSearch={true}
-      searchQuery={searchQuery}
-      onSearchQueryChange={setSearchQuery}
-      onFold={handleFold}
-      ariaLabel={`${tool.name} OpenAPI action card`}
-    >
-      <ToolsList
-        isEmpty={filteredTools.length === 0}
+    <>
+      <ActionCard
+        title={tool.name}
+        description={tool.description}
+        icon={icon}
+        status={status}
+        actions={actionsComponent}
+        onRename={handleRename}
+        isExpanded={isToolsExpanded}
+        onExpandedChange={setIsToolsExpanded}
+        enableSearch={true}
         searchQuery={searchQuery}
-        emptyMessage="No actions defined for this OpenAPI schema"
-        emptySearchMessage="No actions match your search"
-        className="gap-2"
+        onSearchQueryChange={setSearchQuery}
+        onFold={handleFold}
+        ariaLabel={`${tool.name} OpenAPI action card`}
       >
-        {filteredTools.map((method) => (
-          <ToolItem
-            key={`${tool.id}-${method.method}-${method.path}-${method.name}`}
-            name={method.name}
-            description={method.summary || "No summary provided"}
-            variant="openapi"
-            openApiMetadata={{
-              method: method.method,
-              path: method.path,
-            }}
-          />
-        ))}
-      </ToolsList>
-    </ActionCard>
+        <ToolsList
+          isEmpty={filteredTools.length === 0}
+          searchQuery={searchQuery}
+          emptyMessage="No actions defined for this OpenAPI schema"
+          emptySearchMessage="No actions match your search"
+          className="gap-2"
+        >
+          {filteredTools.map((method) => (
+            <ToolItem
+              key={`${tool.id}-${method.method}-${method.path}-${method.name}`}
+              name={method.name}
+              description={method.summary || "No summary provided"}
+              variant="openapi"
+              openApiMetadata={{
+                method: method.method,
+                path: method.path,
+              }}
+            />
+          ))}
+        </ToolsList>
+      </ActionCard>
+
+      {deleteModal.isOpen && onDelete && (
+        <ConfirmEntityModal
+          danger
+          actionButtonText="Delete"
+          entityType="OpenAPI action"
+          entityName={tool.name}
+          additionalDetails="This action will permanently delete the OpenAPI action and its configuration."
+          onClose={() => deleteModal.toggle(false)}
+          onSubmit={async () => {
+            await onDelete(tool);
+            deleteModal.toggle(false);
+          }}
+        />
+      )}
+    </>
   );
 }
