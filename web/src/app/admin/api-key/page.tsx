@@ -21,7 +21,7 @@ import { DeleteButton } from "@/components/DeleteButton";
 import Modal from "@/refresh-components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { deleteApiKey, regenerateApiKey } from "@/app/admin/api-key/lib";
-import { OnyxApiKeyForm } from "@/app/admin/api-key/OnyxApiKeyForm";
+import OnyxApiKeyForm from "@/app/admin/api-key/OnyxApiKeyForm";
 import { APIKey } from "@/app/admin/api-key/types";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
