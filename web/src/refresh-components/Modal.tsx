@@ -124,6 +124,7 @@ interface ModalContentProps
   tall?: boolean;
   mini?: boolean;
   preventAccidentalClose?: boolean;
+  skipOverlay?: boolean;
 }
 const ModalContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
@@ -139,6 +140,7 @@ const ModalContent = React.forwardRef<
       tall,
       mini,
       preventAccidentalClose = true,
+      skipOverlay = false,
       ...props
     },
     ref
@@ -268,7 +270,7 @@ const ModalContent = React.forwardRef<
         value={{ closeButtonRef, hasAttemptedClose, setHasAttemptedClose }}
       >
         <DialogPrimitive.Portal>
-          <ModalOverlay />
+          {!skipOverlay && <ModalOverlay />}
           <DialogPrimitive.Content
             ref={(node) => {
               // Handle forwarded ref
@@ -378,12 +380,14 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
               </DialogPrimitive.Close>
             </div>
           </div>
-          <DialogPrimitive.Title>
-            <Text headingH3>{title}</Text>
+          <DialogPrimitive.Title asChild>
+            <Text headingH3 as="span">
+              {title}
+            </Text>
           </DialogPrimitive.Title>
           {description && (
             <DialogPrimitive.Description>
-              <Text secondaryBody text03>
+              <Text secondaryBody text03 as="span">
                 {description}
               </Text>
             </DialogPrimitive.Description>
