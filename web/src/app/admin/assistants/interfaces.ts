@@ -20,6 +20,7 @@ export interface MinimalPersonaSnapshot {
   llm_model_provider_override?: string;
 
   uploaded_image_id?: string;
+  icon_name?: string;
 
   is_public: boolean;
   is_visible: boolean;

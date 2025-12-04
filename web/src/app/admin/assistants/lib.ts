@@ -24,6 +24,7 @@ interface PersonaUpsertRequest {
   tool_ids: number[];
   remove_image?: boolean;
   uploaded_image_id: string | null;
+  icon_name: string | null;
   search_start_date: Date | null;
   is_default_persona: boolean;
   display_priority: number | null;
@@ -57,7 +58,8 @@ export interface PersonaUpsertParameters {
 
 function buildPersonaUpsertRequest(
   creationRequest: PersonaUpsertParameters,
-  uploaded_image_id: string | null
+  uploaded_image_id: string | null,
+  icon_name: string | null
 ): PersonaUpsertRequest {
   const {
     name,
@@ -85,6 +87,7 @@ function buildPersonaUpsertRequest(
     num_chunks,
     is_public,
     uploaded_image_id,
+    icon_name,
     groups,
     users,
     tool_ids,
@@ -139,7 +142,7 @@ export async function createPersona(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(
-      buildPersonaUpsertRequest(personaUpsertParams, fileId)
+      buildPersonaUpsertRequest(personaUpsertParams, fileId, null)
     ),
   });
 
@@ -164,7 +167,7 @@ export async function updatePersona(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(
-      buildPersonaUpsertRequest(personaUpsertParams, fileId)
+      buildPersonaUpsertRequest(personaUpsertParams, fileId, null)
     ),
   });
 

@@ -41,7 +41,7 @@ export default function AgentAvatar({ agent, ...props }: AgentAvatarProps) {
           ? buildImgUrl(agent.uploaded_image_id)
           : undefined
       }
-      // iconName="..."
+      iconName={agent.icon_name}
       {...props}
     />
   );
