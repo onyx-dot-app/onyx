@@ -24,7 +24,8 @@ jobs:
         uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # ratchet:actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
+          # Disable cache for tag pushes (releases) to prevent cache-poisoning attacks
+          cache: ${{ !startsWith(github.ref, 'refs/tags/') && 'npm' || '' }}
           cache-dependency-path: ./web/package-lock.json
 
       - name: Install node dependencies
