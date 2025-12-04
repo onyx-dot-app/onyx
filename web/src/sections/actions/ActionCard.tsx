@@ -138,7 +138,7 @@ export default function ActionCard({
         {isExpandedActual && enableSearch && (
           <ToolsSection
             isRefreshing={isToolsRefreshing}
-            onRefresh={handleRefreshTools}
+            onRefresh={onRefresh ? handleRefreshTools : undefined}
             onDisableAll={onDisableAll}
             onFold={onFold}
             searchQuery={searchQuery}
