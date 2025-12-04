@@ -105,6 +105,7 @@ import gmailIcon from "../../../public/Gmail.png";
 import googleDriveIcon from "../../../public/GoogleDrive.png";
 import loopioIcon from "../../../public/Loopio.png";
 import notionIcon from "../../../public/Notion.png";
+import codaIcon from "../../../public/Coda.png";
 import productboardIcon from "../../../public/Productboard.png";
 import slabLogoIcon from "../../../public/SlabLogo.png";
 export interface IconProps {
@@ -2892,6 +2893,7 @@ export const MistralIcon = createLogoIcon(mistralSVG);
 export const MixedBreadIcon = createLogoIcon(mixedBreadSVG);
 export const NomicIcon = createLogoIcon(nomicSVG);
 export const NotionIcon = createLogoIcon(notionIcon, { monochromatic: true });
+export const CodaIcon = createLogoIcon(codaIcon, { monochromatic: true });
 export const OCIStorageIcon = createLogoIcon(OCIStorageSVG);
 export const OllamaIcon = createLogoIcon(ollamaIcon);
 export const TestRailIcon = createLogoIcon(testrailSVG);

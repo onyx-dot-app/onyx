@@ -125,6 +125,10 @@ export interface NotionCredentialJson {
   notion_integration_token: string;
 }
 
+export interface CodaCredentialJson {
+  coda_api_token: string;
+}
+
 export interface ZulipCredentialJson {
   zuliprc_content: string;
 }
@@ -304,6 +308,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   productboard: { productboard_access_token: "" } as ProductboardCredentialJson,
   slab: { slab_bot_token: "" } as SlabCredentialJson,
   notion: { notion_integration_token: "" } as NotionCredentialJson,
+  coda: { coda_api_token: "" } as CodaCredentialJson,
   guru: { guru_user: "", guru_user_token: "" } as GuruCredentialJson,
   gong: {
     gong_access_key: "",
@@ -522,6 +527,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Notion
   notion_integration_token: "Notion Integration Token",
+
+  // Coda
+  coda_api_token: "Coda API Token",
 
   // Zulip
   zuliprc_content: "Zuliprc Content",
