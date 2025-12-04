@@ -51,7 +51,10 @@ export default async function Page() {
 
   return (
     <div className="mx-auto container">
-      <AdminPageTitle icon={SvgActions} title="Actions" />
+      <AdminPageTitle
+        icon={<SvgActions className="stroke-text-04 h-8 w-8" />}
+        title="Actions"
+      />
 
       <Text className="mb-2">
         Actions allow assistants to retrieve information or take actions.

@@ -51,7 +51,10 @@ export default async function Page(props: {
     <div className="mx-auto container">
       <BackButton />
 
-      <AdminPageTitle title="Edit Action" icon={SvgActions} />
+      <AdminPageTitle
+        title="Edit Action"
+        icon={<SvgActions className="stroke-text-04 h-8 w-8" />}
+      />
 
       {body}
     </div>
