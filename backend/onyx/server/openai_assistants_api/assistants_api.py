@@ -47,6 +47,7 @@ class CreateAssistantRequest(BaseModel):
     description: Optional[str] = None
     instructions: Optional[str] = None
     tools: Optional[list[dict[str, Any]]] = None
+    icon_name: Optional[str] = None
     file_ids: Optional[list[str]] = None
     metadata: Optional[dict[str, Any]] = None
 
@@ -139,6 +140,7 @@ def create_assistant(
         db_session=db_session,
         document_set_ids=[],
         tool_ids=tool_ids,
+        icon_name=request.icon_name,
         is_visible=True,
         system_prompt=request.instructions or "",
         task_prompt="",

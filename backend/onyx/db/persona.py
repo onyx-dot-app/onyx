@@ -270,6 +270,7 @@ def create_update_persona(
             task_prompt=create_persona_request.task_prompt,
             datetime_aware=create_persona_request.datetime_aware,
             uploaded_image_id=create_persona_request.uploaded_image_id,
+            icon_name=create_persona_request.icon_name,
             display_priority=create_persona_request.display_priority,
             remove_image=create_persona_request.remove_image,
             search_start_date=create_persona_request.search_start_date,
@@ -737,6 +738,7 @@ def upsert_persona(
     persona_id: int | None = None,
     commit: bool = True,
     uploaded_image_id: str | None = None,
+    icon_name: str | None = None,
     display_priority: int | None = None,
     is_visible: bool = True,
     remove_image: bool | None = None,
@@ -839,6 +841,7 @@ def upsert_persona(
         existing_persona.is_public = is_public
         if remove_image or uploaded_image_id:
             existing_persona.uploaded_image_id = uploaded_image_id
+        existing_persona.icon_name = icon_name
         existing_persona.is_visible = is_visible
         existing_persona.search_start_date = search_start_date
         existing_persona.labels = labels or []
@@ -900,6 +903,7 @@ def upsert_persona(
             starter_messages=starter_messages,
             tools=tools or [],
             uploaded_image_id=uploaded_image_id,
+            icon_name=icon_name,
             display_priority=display_priority,
             is_visible=is_visible,
             search_start_date=search_start_date,

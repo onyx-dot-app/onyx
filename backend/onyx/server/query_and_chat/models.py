@@ -263,13 +263,13 @@ class ChatSessionDetailResponse(BaseModel):
     description: str | None
     persona_id: int | None = None
     persona_name: str | None
+    personal_icon_name: str | None
     messages: list[ChatMessageDetail]
     time_created: datetime
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None
     current_temperature_override: float | None
     deleted: bool = False
-
     packets: list[list[Packet]]
 
 

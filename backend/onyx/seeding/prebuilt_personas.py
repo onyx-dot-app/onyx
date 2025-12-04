@@ -51,6 +51,7 @@ class PrebuiltPersona(BaseModel):
     is_visible: bool = Field(
         default=True, description="Whether persona is visible in UI"
     )
+    icon_name: Optional[str] = Field(default=None, description="A user-friendly icon")
 
     # Special flags
     is_default_persona: bool = Field(
@@ -111,6 +112,7 @@ PREBUILT_PERSONAS = [
         recency_bias=RecencyBiasSetting.AUTO,
         display_priority=0,
         is_visible=True,
+        icon_name="search",
         is_default_persona=True,
         starter_messages=[
             StarterMessage(
@@ -265,6 +267,7 @@ PREBUILT_PERSONAS = [
         image_generation=True,
         display_priority=3,
         is_visible=True,
+        icon_name="art",
         is_default_persona=True,
         starter_messages=[
             StarterMessage(

@@ -71,6 +71,9 @@ class PersonaUpsertRequest(BaseModel):
     tool_ids: list[int]
     remove_image: bool | None = None
     uploaded_image_id: str | None = None  # New field for uploaded image
+    icon_name: str | None = (
+        None  # New field that is custom chosen during agent creation/editing
+    )
     search_start_date: datetime | None = None
     label_ids: list[int] | None = None
     is_default_persona: bool = False
@@ -104,6 +107,7 @@ class MinimalPersonaSnapshot(BaseModel):
     llm_model_provider_override: str | None
 
     uploaded_image_id: str | None
+    icon_name: str | None
 
     is_public: bool
     is_visible: bool
@@ -139,6 +143,7 @@ class MinimalPersonaSnapshot(BaseModel):
             llm_model_version_override=persona.llm_model_version_override,
             llm_model_provider_override=persona.llm_model_provider_override,
             uploaded_image_id=persona.uploaded_image_id,
+            icon_name=persona.icon_name,
             is_public=persona.is_public,
             is_visible=persona.is_visible,
             display_priority=persona.display_priority,
@@ -160,6 +165,7 @@ class PersonaSnapshot(BaseModel):
     is_public: bool
     is_visible: bool
     uploaded_image_id: str | None
+    icon_name: str | None
     # Return string UUIDs to frontend for consistency
     user_file_ids: list[str]
     display_priority: int | None
@@ -192,6 +198,7 @@ class PersonaSnapshot(BaseModel):
             is_public=persona.is_public,
             is_visible=persona.is_visible,
             uploaded_image_id=persona.uploaded_image_id,
+            icon_name=persona.icon_name,
             user_file_ids=[str(file.id) for file in persona.user_files],
             display_priority=persona.display_priority,
             is_default_persona=persona.is_default_persona,
@@ -253,6 +260,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             is_public=persona.is_public,
             is_visible=persona.is_visible,
             uploaded_image_id=persona.uploaded_image_id,
+            icon_name=persona.icon_name,
             user_file_ids=[str(file.id) for file in persona.user_files],
             display_priority=persona.display_priority,
             is_default_persona=persona.is_default_persona,
