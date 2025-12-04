@@ -21,11 +21,12 @@ from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
+from onyx.context.search.models import ChunkSearchRequest
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchDoc
-from onyx.context.search.models import SearchRequest
-from onyx.context.search.pipeline import SearchPipeline
+from onyx.context.search.pipeline import merge_individual_chunks
+from onyx.context.search.pipeline import search_pipeline
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
@@ -107,36 +108,36 @@ def handle_search_request(
     query = search_request.message
     logger.notice(f"Received document search query: {query}")
 
-    llm, fast_llm = get_default_llms()
+    llm, __name__ = get_default_llms()
     pagination_limit, pagination_offset = _normalize_pagination(
         limit=search_request.retrieval_options.limit,
         offset=search_request.retrieval_options.offset,
     )
 
-    search_pipeline = SearchPipeline(
-        search_request=SearchRequest(
-            query=query,
-            search_type=search_request.search_type,
-            human_selected_filters=search_request.retrieval_options.filters,
-            enable_auto_detect_filters=search_request.retrieval_options.enable_auto_detect_filters,
-            persona=None,  # For simplicity, default settings should be good for this search
-            offset=pagination_offset,
-            limit=pagination_limit + 1,
-            rerank_settings=search_request.rerank_settings,
-            evaluation_type=search_request.evaluation_type,
-            chunks_above=search_request.chunks_above,
-            chunks_below=search_request.chunks_below,
-            full_doc=search_request.full_doc,
-        ),
-        user=user,
-        llm=llm,
-        fast_llm=fast_llm,
-        skip_query_analysis=False,
-        db_session=db_session,
+    search_settings = get_current_search_settings(db_session)
+    document_index = get_default_document_index(search_settings, None)
+
+    chunk_search_request = ChunkSearchRequest(
+        query=query,
+        user_selected_filters=search_request.retrieval_options.filters,
+        limit=pagination_limit + 1,
+        offset=pagination_offset,
         bypass_acl=False,
     )
-    top_sections = search_pipeline.reranked_sections
-    relevance_sections = search_pipeline.section_relevance
+
+    retrieved_chunks = search_pipeline(
+        chunk_search_request=chunk_search_request,
+        document_index=document_index,
+        user=user,
+        persona=None,
+        db_session=db_session,
+        auto_detect_filters=search_request.retrieval_options.enable_auto_detect_filters
+        or False,
+        llm=llm,
+    )
+
+    top_sections = merge_individual_chunks(retrieved_chunks)
+    relevance_sections: list = []
     top_docs = [
         SavedSearchDocWithContent(
             document_id=section.center_chunk.document_id,

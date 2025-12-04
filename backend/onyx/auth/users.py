@@ -1240,22 +1240,19 @@ async def optional_user(
     async_db_session: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_fastapi_current_user),
 ) -> User | None:
-    user = await _check_for_saml_and_jwt(request, user, async_db_session)
 
-    # check if a PAT is present (before API key)
-    if user is None:
-        hashed_pat = get_hashed_pat_from_request(request)
-        if hashed_pat:
+    if user := await _check_for_saml_and_jwt(request, user, async_db_session):
+        # If user is already set, _check_for_saml_and_jwt returns the same user object
+        return user
+
+    try:
+        if hashed_pat := get_hashed_pat_from_request(request):
             user = await fetch_user_for_pat(hashed_pat, async_db_session)
-
-    # check if an API key is present
-    if user is None:
-        try:
-            hashed_api_key = get_hashed_api_key_from_request(request)
-        except ValueError:
-            hashed_api_key = None
-        if hashed_api_key:
+        elif hashed_api_key := get_hashed_api_key_from_request(request):
             user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
+    except ValueError:
+        logger.warning("Issue with validating authentication token")
+        return None
 
     return user
 
@@ -1584,24 +1581,3 @@ def get_oauth_router(
         return redirect_response
 
     return router
-
-
-async def api_key_dep(
-    request: Request, async_db_session: AsyncSession = Depends(get_async_session)
-) -> User | None:
-    if AUTH_TYPE == AuthType.DISABLED:
-        return None
-
-    user: User | None = None
-
-    hashed_api_key = get_hashed_api_key_from_request(request)
-    if not hashed_api_key:
-        raise HTTPException(status_code=401, detail="Missing API key")
-
-    if hashed_api_key:
-        user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
-
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-
-    return user
