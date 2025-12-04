@@ -4,6 +4,8 @@ import time
 from datetime import datetime
 from typing import Any
 
+from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import ValidationError
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -52,6 +54,7 @@ HIGHLIGHT_START_CHAR = "\ue000"
 HIGHLIGHT_END_CHAR = "\ue001"
 
 CHANNEL_METADATA_CACHE_TTL = 60 * 60 * 24  # 24 hours
+USER_PROFILE_CACHE_TTL = 60 * 60 * 24  # 24 hours
 SLACK_THREAD_CONTEXT_WINDOW = 3  # Number of messages before matched message to include
 CHANNEL_METADATA_MAX_RETRIES = 3  # Maximum retry attempts for channel metadata fetching
 CHANNEL_METADATA_RETRY_DELAY = 1  # Initial retry delay in seconds (exponential backoff)
@@ -77,26 +80,26 @@ def fetch_and_cache_channel_metadata(
     try:
         cached = redis_client.get(cache_key)
         if cached:
-            logger.info(f"Channel metadata cache HIT for team {team_id}")
+            logger.debug(f"Channel metadata cache HIT for team {team_id}")
             cached_str: str = (
                 cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
             )
             cached_data: dict[str, dict[str, Any]] = json.loads(cached_str)
-            logger.info(f"Loaded {len(cached_data)} channels from cache")
+            logger.debug(f"Loaded {len(cached_data)} channels from cache")
             if not include_private:
                 filtered = {
                     k: v
                     for k, v in cached_data.items()
                     if v.get("type") != "private_channel"
                 }
-                logger.info(f"Filtered to {len(filtered)} channels (exclude private)")
+                logger.debug(f"Filtered to {len(filtered)} channels (exclude private)")
                 return filtered
             return cached_data
     except Exception as e:
         logger.warning(f"Error reading from channel metadata cache: {e}")
 
     # Cache miss - fetch from Slack API with retry logic
-    logger.info(f"Channel metadata cache MISS for team {team_id} - fetching from API")
+    logger.debug(f"Channel metadata cache MISS for team {team_id} - fetching from API")
     slack_client = WebClient(token=access_token)
     channel_metadata: dict[str, dict[str, Any]] = {}
 
@@ -237,6 +240,90 @@ def get_available_channels(
     return [meta["name"] for meta in metadata.values() if meta["name"]]
 
 
+def get_cached_user_profile(
+    access_token: str, team_id: str, user_id: str
+) -> str | None:
+    """
+    Get a user's display name from cache or fetch from Slack API.
+
+    Uses Redis caching to avoid repeated API calls and rate limiting.
+    Returns the user's real_name or email, or None if not found.
+    """
+    redis_client = get_redis_client()
+    cache_key = f"slack_federated_search:{team_id}:user:{user_id}"
+
+    # Check cache first
+    try:
+        cached = redis_client.get(cache_key)
+        if cached is not None:
+            cached_str = (
+                cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
+            )
+            # Empty string means user was not found previously
+            return cached_str if cached_str else None
+    except Exception as e:
+        logger.debug(f"Error reading user profile cache: {e}")
+
+    # Cache miss - fetch from Slack API
+    slack_client = WebClient(token=access_token)
+    try:
+        response = slack_client.users_profile_get(user=user_id)
+        response.validate()
+        profile: dict[str, Any] = response.get("profile", {})
+        name: str | None = profile.get("real_name") or profile.get("email")
+
+        # Cache the result (empty string for not found)
+        try:
+            redis_client.set(
+                cache_key,
+                name or "",
+                ex=USER_PROFILE_CACHE_TTL,
+            )
+        except Exception as e:
+            logger.debug(f"Error caching user profile: {e}")
+
+        return name
+
+    except SlackApiError as e:
+        error_str = str(e)
+        if "user_not_found" in error_str:
+            logger.debug(
+                f"User {user_id} not found in Slack workspace (likely deleted/deactivated)"
+            )
+        elif "ratelimited" in error_str:
+            # Don't cache rate limit errors - we'll retry later
+            logger.debug(f"Rate limited fetching user {user_id}, will retry later")
+            return None
+        else:
+            logger.warning(f"Could not fetch profile for user {user_id}: {e}")
+
+        # Cache negative result to avoid repeated lookups for missing users
+        try:
+            redis_client.set(cache_key, "", ex=USER_PROFILE_CACHE_TTL)
+        except Exception:
+            pass
+
+        return None
+
+
+def batch_get_user_profiles(
+    access_token: str, team_id: str, user_ids: set[str]
+) -> dict[str, str]:
+    """
+    Batch fetch user profiles with caching.
+
+    Returns a dict mapping user_id -> display_name for users that were found.
+    """
+    result: dict[str, str] = {}
+
+    for user_id in user_ids:
+        name = get_cached_user_profile(access_token, team_id, user_id)
+        if name:
+            result[user_id] = name
+
+    return result
+
+
 def _extract_channel_data_from_entities(
     entities: dict[str, Any] | None,
     channel_metadata_dict: dict[str, dict[str, Any]] | None,
@@ -279,10 +366,28 @@ def _should_skip_channel(
     bot_token: str | None,
     access_token: str,
     include_dm: bool,
+    channel_metadata_dict: dict[str, dict[str, Any]] | None = None,
 ) -> bool:
-    """Bot context filtering: skip private channels unless explicitly allowed."""
+    """Bot context filtering: skip private channels unless explicitly allowed.
+
+    Uses pre-fetched channel metadata when available to avoid API calls.
+    """
     if bot_token and not include_dm:
         try:
+            # First try to use pre-fetched metadata from cache
+            if channel_metadata_dict and channel_id in channel_metadata_dict:
+                channel_meta = channel_metadata_dict[channel_id]
+                channel_type_str = channel_meta.get("type", "")
+                is_private_or_dm = channel_type_str in [
+                    ChannelType.PRIVATE_CHANNEL.value,
+                    ChannelType.IM.value,
+                    ChannelType.MPIM.value,
+                ]
+                if is_private_or_dm and channel_id != allowed_private_channel:
+                    return True
+                return False
+
+            # Fallback: API call only if not in cache (should be rare)
             token_to_use = bot_token or access_token
             channel_client = WebClient(token=token_to_use)
             channel_info = channel_client.conversations_info(channel=channel_id)
@@ -306,6 +411,15 @@ def _should_skip_channel(
     return False
 
 
+class SlackQueryResult(BaseModel):
+    """Result from a single Slack query including stats."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    messages: list[SlackMessage]
+    filtered_channels: list[str]  # Channels filtered out during this query
+
+
 def query_slack(
     query_string: str,
     original_query: SearchQuery,
@@ -316,7 +430,8 @@ def query_slack(
     include_dm: bool = False,
     entities: dict[str, Any] | None = None,
     available_channels: list[str] | None = None,
-) -> list[SlackMessage]:
+    channel_metadata_dict: dict[str, dict[str, Any]] | None = None,
+) -> SlackQueryResult:
 
     # Check if query has channel override (user specified channels in query)
     has_channel_override = query_string.startswith("__CHANNEL_OVERRIDE__")
@@ -335,7 +450,7 @@ def query_slack(
             # Add channel filter to query
             final_query = f"{query_string} {channel_filter}"
 
-    logger.info(f"Final query to slack: {final_query}")
+    logger.debug(f"Final query to slack: {final_query}")
 
     # Detect if query asks for most recent results
     sort_by_time = is_recency_query(original_query.query)
@@ -359,7 +474,7 @@ def query_slack(
         messages: dict[str, Any] = response.get("messages", {})
         matches: list[dict[str, Any]] = messages.get("matches", [])
 
-        logger.info(f"Slack search found {len(matches)} messages")
+        logger.debug(f"Slack search found {len(matches)} messages")
     except SlackApiError as slack_error:
         logger.error(f"Slack API error in search_messages: {slack_error}")
         logger.error(
@@ -370,11 +485,11 @@ def query_slack(
             # Log token type prefix
             token_prefix = access_token[:4] if len(access_token) >= 4 else "unknown"
             logger.error(f"TOKEN TYPE ERROR: access_token type: {token_prefix}...")
-        return []
+        return SlackQueryResult(messages=[], filtered_channels=[])
 
     # convert matches to slack messages
     slack_messages: list[SlackMessage] = []
-    filtered_count = 0
+    filtered_channels: list[str] = []
     for match in matches:
         text: str | None = match.get("text")
         permalink: str | None = match.get("permalink")
@@ -402,9 +517,14 @@ def query_slack(
 
         # Apply channel filtering if needed
         if _should_skip_channel(
-            channel_id, allowed_private_channel, bot_token, access_token, include_dm
+            channel_id,
+            allowed_private_channel,
+            bot_token,
+            access_token,
+            include_dm,
+            channel_metadata_dict,
         ):
-            filtered_count += 1
+            filtered_channels.append(f"{channel_name}({channel_id})")
             continue
 
         # generate thread id and document id
@@ -459,22 +579,28 @@ def query_slack(
             )
         )
 
-    if filtered_count > 0:
-        logger.info(
-            f"Channel filtering applied: {filtered_count} messages filtered out, {len(slack_messages)} messages kept"
-        )
-
-    return slack_messages
+    return SlackQueryResult(
+        messages=slack_messages, filtered_channels=filtered_channels
+    )
 
 
 def merge_slack_messages(
-    slack_messages: list[list[SlackMessage]],
-) -> tuple[list[SlackMessage], dict[str, SlackMessage]]:
+    query_results: list[SlackQueryResult],
+) -> tuple[list[SlackMessage], dict[str, SlackMessage], set[str]]:
+    """Merge messages from multiple query results, deduplicating by document_id.
+
+    Returns:
+        Tuple of (merged_messages, docid_to_message, all_filtered_channels)
+    """
     merged_messages: list[SlackMessage] = []
     docid_to_message: dict[str, SlackMessage] = {}
+    all_filtered_channels: set[str] = set()
 
-    for messages in slack_messages:
-        for message in messages:
+    for result in query_results:
+        # Collect filtered channels from all queries
+        all_filtered_channels.update(result.filtered_channels)
+
+        for message in result.messages:
             if message.document_id in docid_to_message:
                 # update the score and highlighted texts, rest should be identical
                 docid_to_message[message.document_id].slack_score = max(
@@ -493,10 +619,12 @@ def merge_slack_messages(
     # re-sort by score
     merged_messages.sort(key=lambda x: x.slack_score, reverse=True)
 
-    return merged_messages, docid_to_message
+    return merged_messages, docid_to_message, all_filtered_channels
 
 
-def get_contextualized_thread_text(message: SlackMessage, access_token: str) -> str:
+def get_contextualized_thread_text(
+    message: SlackMessage, access_token: str, team_id: str | None = None
+) -> str:
     """
     Retrieves the initial thread message as well as the text following the message
     and combines them into a single string. If the slack query fails, returns the
@@ -505,6 +633,11 @@ def get_contextualized_thread_text(message: SlackMessage, access_token: str) -> 
     The idea is that the message (the one that actually matched the search), the
     initial thread message, and the replies to the message are important in answering
     the user's query.
+
+    Args:
+        message: The SlackMessage to get context for
+        access_token: Slack OAuth access token
+        team_id: Slack team ID for caching user profiles (optional but recommended)
     """
     channel_id = message.channel_id
     thread_id = message.thread_id
@@ -582,26 +715,33 @@ def get_contextualized_thread_text(message: SlackMessage, access_token: str) -> 
             thread_text += "\n..."
             break
 
-    # replace user ids with names in the thread text
+    # replace user ids with names in the thread text using cached lookups
     userids: set[str] = set(re.findall(r"<@([A-Z0-9]+)>", thread_text))
-    for userid in userids:
-        try:
-            response = slack_client.users_profile_get(user=userid)
-            response.validate()
-            profile: dict[str, Any] = response.get("profile", {})
-            name: str | None = profile.get("real_name") or profile.get("email")
-        except SlackApiError as e:
-            # user_not_found is common for deleted users, bots, etc. - not critical
-            if "user_not_found" in str(e):
-                logger.debug(
-                    f"User {userid} not found in Slack workspace (likely deleted/deactivated)"
-                )
-            else:
-                logger.warning(f"Could not fetch profile for user {userid}: {e}")
-            continue
-        if not name:
-            continue
-        thread_text = thread_text.replace(f"<@{userid}>", name)
+
+    if team_id:
+        # Use cached batch lookup when team_id is available
+        user_profiles = batch_get_user_profiles(access_token, team_id, userids)
+        for userid, name in user_profiles.items():
+            thread_text = thread_text.replace(f"<@{userid}>", name)
+    else:
+        # Fallback to individual lookups (no caching) when team_id not available
+        for userid in userids:
+            try:
+                response = slack_client.users_profile_get(user=userid)
+                response.validate()
+                profile: dict[str, Any] = response.get("profile", {})
+                user_name: str | None = profile.get("real_name") or profile.get("email")
+            except SlackApiError as e:
+                if "user_not_found" in str(e):
+                    logger.debug(
+                        f"User {userid} not found in Slack workspace (likely deleted/deactivated)"
+                    )
+                else:
+                    logger.warning(f"Could not fetch profile for user {userid}: {e}")
+                continue
+            if not user_name:
+                continue
+            thread_text = thread_text.replace(f"<@{userid}>", user_name)
 
     return thread_text
 
@@ -654,9 +794,9 @@ def slack_retrieval(
     entities = entities or {}
 
     if not entities:
-        logger.info("No entity configuration found, using defaults")
+        logger.debug("No entity configuration found, using defaults")
     else:
-        logger.info(f"Using entity configuration: {entities}")
+        logger.debug(f"Using entity configuration: {entities}")
 
     # Extract limit from entity config if not explicitly provided
     query_limit = limit
@@ -665,7 +805,7 @@ def slack_retrieval(
             parsed_entities = SlackEntities(**entities)
             if limit is None:
                 query_limit = parsed_entities.max_messages_per_query
-                logger.info(f"Using max_messages_per_query from config: {query_limit}")
+                logger.debug(f"Using max_messages_per_query from config: {query_limit}")
         except Exception as e:
             logger.warning(f"Error parsing entities for limit: {e}")
             if limit is None:
@@ -703,7 +843,7 @@ def slack_retrieval(
             include_dm = True
         if channel_type == ChannelType.PRIVATE_CHANNEL:
             allowed_private_channel = slack_event_context.channel_id
-            logger.info(
+            logger.debug(
                 f"Private channel context: will only allow messages from {allowed_private_channel} + public channels"
             )
 
@@ -721,6 +861,7 @@ def slack_retrieval(
                 include_dm,
                 entities,
                 available_channels,
+                channel_metadata_dict,
             ),
         )
         for query_string in query_strings
@@ -757,6 +898,7 @@ def slack_retrieval(
                         include_dm,
                         dm_entities,
                         available_channels,
+                        channel_metadata_dict,
                     ),
                 )
             )
@@ -764,19 +906,26 @@ def slack_retrieval(
     # Execute searches in parallel
     results = run_functions_tuples_in_parallel(search_tasks)
 
+    # Calculate stats for consolidated logging
+    total_raw_messages = sum(len(r.messages) for r in results)
+
     # Merge and post-filter results
-    slack_messages, docid_to_message = merge_slack_messages(results)
+    slack_messages, docid_to_message, query_filtered_channels = merge_slack_messages(
+        results
+    )
+    messages_after_dedup = len(slack_messages)
 
     # Post-filter by channel type (DM, private channel, etc.)
     # NOTE: We must post-filter because Slack's search.messages API only supports
     # filtering by channel NAME (via in:#channel syntax), not by channel TYPE.
     # There's no way to specify "only public channels" or "exclude DMs" in the query.
+    # Start with channels filtered during query execution, then add post-filter channels
+    filtered_out_channels: set[str] = set(query_filtered_channels)
     if entities and team_id:
         # Use pre-fetched channel metadata to avoid cache misses
         # Pass it directly instead of relying on Redis cache
 
         filtered_messages = []
-        removed_count = 0
         for msg in slack_messages:
             # Pass pre-fetched metadata to avoid cache lookups
             channel_type = get_channel_type(
@@ -786,22 +935,37 @@ def slack_retrieval(
             if should_include_message(channel_type, entities):
                 filtered_messages.append(msg)
             else:
-                removed_count += 1
+                # Track unique channel name for summary
+                channel_name = msg.metadata.get("channel", msg.channel_id)
+                filtered_out_channels.add(f"{channel_name}({msg.channel_id})")
 
-        if removed_count > 0:
-            logger.info(
-                f"Post-filtering removed {removed_count} messages: "
-                f"{len(slack_messages)} -> {len(filtered_messages)}"
-            )
         slack_messages = filtered_messages
 
     slack_messages = slack_messages[: limit or len(slack_messages)]
+
+    # Log consolidated summary with request ID for correlation
+    request_id = (
+        slack_event_context.message_ts[:10]
+        if slack_event_context and slack_event_context.message_ts
+        else "no-ctx"
+    )
+    logger.info(
+        f"[req:{request_id}] Slack federated search: {len(search_tasks)} queries, "
+        f"{total_raw_messages} raw msgs -> {messages_after_dedup} after dedup -> "
+        f"{len(slack_messages)} final"
+        + (
+            f", filtered channels: {sorted(filtered_out_channels)}"
+            if filtered_out_channels
+            else ""
+        )
+    )
+
     if not slack_messages:
         return []
 
     thread_texts: list[str] = run_functions_tuples_in_parallel(
         [
-            (get_contextualized_thread_text, (slack_message, access_token))
+            (get_contextualized_thread_text, (slack_message, access_token, team_id))
             for slack_message in slack_messages
         ]
     )

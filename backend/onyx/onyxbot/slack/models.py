@@ -22,6 +22,7 @@ class SlackContext(BaseModel):
     channel_type: ChannelType
     channel_id: str
     user_id: str
+    message_ts: str | None = None  # Used as request ID for log correlation
 
 
 class SlackMessageInfo(BaseModel):

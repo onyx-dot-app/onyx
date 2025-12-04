@@ -290,7 +290,7 @@ class SlackFederatedConnector(FederatedConnector):
         Returns:
             Search results in SlackSearchResponse format
         """
-        logger.info(f"Slack federated search called with entities: {entities}")
+        logger.debug(f"Slack federated search called with entities: {entities}")
 
         # Get team_id from Slack API for caching and filtering
         team_id = None
@@ -302,7 +302,7 @@ class SlackFederatedConnector(FederatedConnector):
             # Cast response.data to dict for type checking
             auth_data: dict[str, Any] = auth_response.data  # type: ignore
             team_id = auth_data.get("team_id")
-            logger.info(f"Slack team_id: {team_id}")
+            logger.debug(f"Slack team_id: {team_id}")
         except Exception as e:
             logger.warning(f"Could not fetch team_id from Slack API: {e}")
 
