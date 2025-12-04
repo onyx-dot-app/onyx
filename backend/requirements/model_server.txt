@@ -232,7 +232,7 @@ jsonschema-specifications==2025.9.1
     # via jsonschema
 kombu==5.5.4
     # via celery
-litellm==1.79.0
+litellm==1.80.5
     # via onyx
 markupsafe==3.0.3
     # via jinja2
@@ -295,7 +295,7 @@ nvidia-nvjitlink-cu12==12.4.127 ; platform_machine == 'x86_64' and sys_platform 
     #   torch
 nvidia-nvtx-cu12==12.4.127 ; platform_machine == 'x86_64' and sys_platform == 'linux'
     # via torch
-openai==2.6.1
+openai==2.8.1
     # via
     #   litellm
     #   onyx
