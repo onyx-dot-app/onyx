@@ -57,7 +57,7 @@ def is_chat_selectable(tool: Tool) -> bool:
 
     config = TOOL_VISIBILITY_CONFIG.get(tool.in_code_tool_id)
 
-    return config.get("chat_selectable", True) if config else True
+    return config.chat_selectable if config else True
 
 
 def is_agent_creation_selectable(tool: Tool) -> bool:
@@ -70,7 +70,7 @@ def is_agent_creation_selectable(tool: Tool) -> bool:
         return True
 
     config = TOOL_VISIBILITY_CONFIG.get(tool.in_code_tool_id)
-    return config.get("agent_creation_selectable", True) if config else True
+    return config.agent_creation_selectable if config else True
 
 
 class ToolSnapshot(BaseModel):
