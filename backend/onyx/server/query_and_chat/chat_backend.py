@@ -5,9 +5,6 @@ from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
 
-from backend.onyx.chat.prompt_builder.answer_prompt_builder import (
-    get_default_base_system_prompt,
-)
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -24,6 +21,9 @@ from onyx.auth.users import current_user
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import extract_headers
 from onyx.chat.process_message import stream_chat_message
+from onyx.chat.prompt_builder.answer_prompt_builder import (
+    get_default_base_system_prompt,
+)
 from onyx.chat.stop_signal_checker import set_fence
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
@@ -100,7 +100,11 @@ logger = setup_logger()
 router = APIRouter(prefix="/chat")
 
 
-def _get_available_tokens_for_persona(persona: Persona, db_session: Session) -> int:
+def _get_available_tokens_for_persona(
+    persona: Persona,
+    db_session: Session,
+    user: User | None,
+) -> int:
     def _get_non_reserved_input_tokens(
         model_max_input_tokens: int,
         system_and_agent_prompt_tokens: int,
@@ -116,7 +120,7 @@ def _get_available_tokens_for_persona(persona: Persona, db_session: Session) -> 
             - default_reserved_tokens
         )
 
-    llm, _ = get_llms_for_persona(persona=persona, db_session=db_session)
+    llm, _ = get_llms_for_persona(persona=persona, user=user)
     token_counter = get_llm_token_counter(llm)
 
     system_prompt = get_default_base_system_prompt(db_session)
@@ -589,6 +593,7 @@ def get_max_document_tokens(
     return MaxSelectedDocumentTokens(
         max_tokens=_get_available_tokens_for_persona(
             persona=persona,
+            user=user,
             db_session=db_session,
         ),
     )
@@ -622,6 +627,7 @@ def get_available_context_tokens_for_session(
 
     available = _get_available_tokens_for_persona(
         persona=chat_session.persona,
+        user=user,
         db_session=db_session,
     )
 

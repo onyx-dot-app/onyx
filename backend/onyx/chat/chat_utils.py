@@ -623,7 +623,7 @@ def convert_chat_history(
     files: list[ChatLoadedFile],
     project_image_files: list[ChatLoadedFile],
     additional_context: str | None,
-    tokenizer_encode_func: Callable[[str], list[int]],
+    token_counter: Callable[[str], int],
     tool_id_to_name_map: dict[int, str],
 ) -> list[ChatMessageSimple]:
     """Convert ChatMessage history to ChatMessageSimple format.
@@ -689,7 +689,7 @@ def convert_chat_history(
                             message=ADDITIONAL_CONTEXT_PROMPT.format(
                                 additional_context=additional_context
                             ),
-                            token_count=len(tokenizer_encode_func(additional_context)),
+                            token_count=token_counter(additional_context),
                             message_type=MessageType.USER,
                             image_files=None,
                         )

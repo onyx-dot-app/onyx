@@ -45,7 +45,7 @@ def get_default_base_system_prompt(db_session: Session) -> str:
 def calculate_reserved_tokens(
     db_session: Session,
     persona_system_prompt: str,
-    tokenizer_encode_func: Callable[[str], list[int]],
+    token_counter: Callable[[str], int],
     files: list[FileDescriptor] | None = None,
     memories: list[str] | None = None,
 ) -> int:
@@ -59,7 +59,7 @@ def calculate_reserved_tokens(
     Args:
         db_session: Database session
         persona_system_prompt: Custom agent system prompt (can be empty string)
-        tokenizer_encode_func: Function to encode strings to token lists
+        token_counter: Function that counts tokens in text
         files: List of file descriptors from the chat message (optional)
         memories: List of memory strings (optional)
 
@@ -80,13 +80,11 @@ def calculate_reserved_tokens(
 
     custom_agent_prompt = persona_system_prompt if persona_system_prompt else ""
 
-    reserved_token_count = len(
-        tokenizer_encode_func(
-            # Annoying that the dict has no attributes now
-            custom_agent_prompt
-            + " "
-            + fake_system_prompt
-        )
+    reserved_token_count = token_counter(
+        # Annoying that the dict has no attributes now
+        custom_agent_prompt
+        + " "
+        + fake_system_prompt
     )
 
     # Calculate total token count for files in the last message
