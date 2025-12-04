@@ -648,7 +648,7 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
 
     model_map = get_model_map()
 
-    def _check_if_model_name_is_openai(model_name: str) -> bool:
+    def _check_if_model_name_is_openai_provider(model_name: str) -> bool:
         return (
             model_name in model_map
             and model_map[model_name].get("litellm_provider") == "openai"
@@ -661,12 +661,12 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
         if f"openai/{model_name}" in model_map:
             return True
 
-        if _check_if_model_name_is_openai(model_name):
+        if _check_if_model_name_is_openai_provider(model_name):
             return True
 
         if model_name.startswith("azure/"):
             model_name_with_azure_removed = "/".join(model_name.split("/")[1:])
-            if _check_if_model_name_is_openai(model_name_with_azure_removed):
+            if _check_if_model_name_is_openai_provider(model_name_with_azure_removed):
                 return True
 
         return False
