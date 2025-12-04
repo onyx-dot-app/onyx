@@ -406,21 +406,30 @@ class CodaAPIClient:
 
         return all_rows
 
-    def export_page_content(self, doc_id: str, page_id: str) -> str | None:
-        """Export page content as markdown via async API.
+    def export_page_content(
+        self, doc_id: str, page_id: str, output_format: str = "markdown"
+    ) -> str | None:
+        """Export page content via async API.
+
+        Args:
+            doc_id: ID of the doc containing the page
+            page_id: ID of the page to export
+            output_format: Export format - 'markdown' or 'html' (default: 'markdown')
 
         Returns:
-            str: Page content in markdown format
+            str: Page content in the specified format
             None: If export failed (API error, timeout, etc.)
         """
-        logger.debug(f"Exporting content for page '{page_id}' in doc '{doc_id}'")
+        logger.debug(
+            f"Exporting content for page '{page_id}' in doc '{doc_id}' as {output_format}"
+        )
 
         # Start the export
         try:
             response = self._make_request(
                 "POST",
                 f"/docs/{doc_id}/pages/{page_id}/export",
-                json={"outputFormat": "markdown"},
+                json={"outputFormat": output_format},
             )
         except Exception as e:
             logger.warning(f"Error starting export for page '{page_id}': {e}")

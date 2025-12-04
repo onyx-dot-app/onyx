@@ -33,6 +33,7 @@ class CodaDocumentGenerator:
         client: CodaAPIClient,
         parser: CodaParser,
         max_table_rows: int = 1000,
+        export_format: str = "markdown",
     ) -> None:
         """Initialize with dependencies.
 
@@ -40,10 +41,12 @@ class CodaDocumentGenerator:
             client: CodaAPIClient for API calls
             parser: CodaParser for data transformation
             max_table_rows: Maximum rows to fetch per table
+            export_format: Format for page exports - 'markdown' or 'html'
         """
         self.client = client
         self.parser = parser
         self.max_table_rows = max_table_rows
+        self.export_format = export_format
         self.indexed_pages: set[str] = set()
         self.indexed_tables: set[str] = set()
 
@@ -76,7 +79,9 @@ class CodaDocumentGenerator:
             logger.info(f"Reading page '{page.name}' in doc '{doc.name}'")
 
             # Get page content from API
-            content = self.client.export_page_content(doc.id, page.id)
+            content = self.client.export_page_content(
+                doc.id, page.id, self.export_format
+            )
             if content is None:
                 logger.warning(f"Skipping page {page.id}: export failed")
                 continue

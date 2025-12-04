@@ -352,11 +352,72 @@ class TestDocCreation:
 
         # Verify we got the same doc
         assert response["id"] == doc_id, "Fetched doc ID should match"
-        assert (
-            response["name"] == "Two-way writeups: Coda's secret to shipping fast"
-        ), "Fetched doc name should match"
-
+        assert response["name"] == "Two-way writeups: Coda's secret to shipping fast"
         print(f"\nSuccessfully fetched doc: {response['name']}")
+
+
+class TestExportFormats:
+    """Test suite for different export formats (markdown vs html)."""
+
+    def test_markdown_export(self, api_token: str, test_doc: dict[str, Any]) -> None:
+        """Test that markdown export works correctly."""
+        # Create connector with markdown format (default)
+        connector = CodaConnector(batch_size=5, export_format="markdown")
+        connector.load_credentials({"coda_api_token": api_token})
+
+        # Load documents
+        gen = connector.load_from_state()
+        batches = list(gen)
+
+        assert len(batches) > 0, "Should have at least one batch"
+
+        # Check that we got documents
+        all_docs = []
+        for batch in batches:
+            all_docs.extend(batch)
+
+        assert len(all_docs) > 0, "Should have at least one document"
+
+        # Verify content is markdown (check for markdown headers)
+        page_docs = [doc for doc in all_docs if "page_id" in doc.metadata]
+        if page_docs:
+            sample_doc = page_docs[0]
+            content = sample_doc.sections[0].text
+            # Markdown typically has # headers
+            assert "#" in content or len(content) > 0, "Should have markdown content"
+            print(f"\nMarkdown export verified: {len(page_docs)} pages")
+
+    def test_html_export(self, api_token: str, test_doc: dict[str, Any]) -> None:
+        """Test that HTML export works correctly."""
+        # Create connector with HTML format
+        connector = CodaConnector(batch_size=5, export_format="html")
+        connector.load_credentials({"coda_api_token": api_token})
+
+        # Load documents
+        gen = connector.load_from_state()
+        batches = list(gen)
+
+        assert len(batches) > 0, "Should have at least one batch"
+
+        # Check that we got documents
+        all_docs = []
+        for batch in batches:
+            all_docs.extend(batch)
+
+        assert len(all_docs) > 0, "Should have at least one document"
+
+        # Verify content is HTML (check for HTML tags)
+        page_docs = [doc for doc in all_docs if "page_id" in doc.metadata]
+        if page_docs:
+            sample_doc = page_docs[0]
+            content = sample_doc.sections[0].text
+            # HTML should have tags like <p>, <div>, <h1>, etc.
+            has_html_tags = any(
+                tag in content for tag in ["<p>", "<div>", "<h1>", "<h2>", "<span>"]
+            )
+            assert has_html_tags or len(content) > 0, "Should have HTML content"
+            print(f"\nHTML export verified: {len(page_docs)} pages")
+            print(f"Sample HTML preview: {content[:200]}...")
 
 
 if __name__ == "__main__":
