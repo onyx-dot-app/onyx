@@ -148,12 +148,7 @@ class CodaAPIClient:
         source_doc: str | None = None,
         timezone: str | None = None,
         folder_id: str | None = None,
-        initial_page_name: str | None = None,
-        initial_page_subtitle: str | None = None,
-        initial_page_icon_name: str | None = None,
-        initial_page_image_url: str | None = None,
-        initial_page_content_html: str | None = None,
-        initial_page_content_markdown: str | None = None,
+        initial_page: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create a new Coda doc, optionally copying an existing doc.
 
@@ -164,12 +159,12 @@ class CodaAPIClient:
             source_doc: Optional doc ID to copy from
             timezone: Timezone for the doc (e.g., 'America/Los_Angeles')
             folder_id: ID of folder to create doc in (defaults to 'My docs')
-            initial_page_name: Name for the initial page
-            initial_page_subtitle: Subtitle for the initial page
-            initial_page_icon_name: Icon name for the initial page
-            initial_page_image_url: Cover image URL for the initial page
-            initial_page_content_html: HTML content for the initial page
-            initial_page_content_markdown: Markdown content for the initial page
+            initial_page: Initial page configuration dict with keys:
+                - name: Page name
+                - subtitle: Page subtitle
+                - iconName: Icon name
+                - imageUrl: Cover image URL
+                - content: Markdown content
 
         Returns:
             dict with doc info including 'id', 'name', 'href', 'browserLink', etc.
@@ -179,56 +174,13 @@ class CodaAPIClient:
         """
         logger.debug(f"Creating doc '{title or 'Untitled'}'")
 
-        # Build request body
-        body: dict[str, Any] = {}
-
-        if title:
-            body["title"] = title
-        if source_doc:
-            body["sourceDoc"] = source_doc
-        if timezone:
-            body["timezone"] = timezone
-        if folder_id:
-            body["folderId"] = folder_id
-
-        # Build initial page configuration if any parameters provided
-        if any(
-            [
-                initial_page_name,
-                initial_page_subtitle,
-                initial_page_icon_name,
-                initial_page_image_url,
-                initial_page_content_html,
-                initial_page_content_markdown,
-            ]
-        ):
-            initial_page: dict[str, Any] = {}
-
-            if initial_page_name:
-                initial_page["name"] = initial_page_name
-            if initial_page_subtitle:
-                initial_page["subtitle"] = initial_page_subtitle
-            if initial_page_icon_name:
-                initial_page["iconName"] = initial_page_icon_name
-            if initial_page_image_url:
-                initial_page["imageUrl"] = initial_page_image_url
-
-            # Add content if provided
-            if initial_page_content_html or initial_page_content_markdown:
-                page_content: dict[str, Any] = {"type": "canvas"}
-                canvas_content: dict[str, Any] = {}
-
-                if initial_page_content_html:
-                    canvas_content["format"] = "html"
-                    canvas_content["content"] = initial_page_content_html
-                elif initial_page_content_markdown:
-                    canvas_content["format"] = "markdown"
-                    canvas_content["content"] = initial_page_content_markdown
-
-                page_content["canvasContent"] = canvas_content
-                initial_page["pageContent"] = page_content
-
-            body["initialPage"] = initial_page
+        body = {
+            "title": title,
+            "sourceDoc": source_doc,
+            "timezone": timezone,
+            "folderId": folder_id,
+            "initialPage": initial_page,
+        }
 
         return self._make_request("POST", "/docs", json=body)
 

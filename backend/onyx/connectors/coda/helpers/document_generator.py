@@ -50,6 +50,7 @@ class CodaDocumentGenerator:
         self.export_format = export_format
         self.indexed_pages: set[str] = set()
         self.indexed_tables: set[str] = set()
+        self.skipped_pages: set[str] = set()
 
     def generate_page_documents(
         self, doc: CodaDoc, pages: list[CodaPage], page_map: dict[str, CodaPage]
@@ -84,14 +85,17 @@ class CodaDocumentGenerator:
                 doc.id, page.id, self.export_format
             )
             if content is None:
+                self.skipped_pages.add(page.id)
                 logger.warning(f"Skipping page {page.id}: export failed")
                 continue
 
             if not content.strip():
+                self.skipped_pages.add(page.id)
                 logger.debug(f"Skipping page '{page.name}': no content")
                 continue
 
             if len(content) < len(page.name) + 15:
+                self.skipped_pages.add(page.id)
                 logger.debug(f"Skipping page '{page.name}': no content")
                 continue
 

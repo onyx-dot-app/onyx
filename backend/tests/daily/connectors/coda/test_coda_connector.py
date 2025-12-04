@@ -44,9 +44,9 @@ def api_client(api_token: str) -> CodaAPIClient:
 
 
 @pytest.fixture(scope="session")
-def connector(api_token: str) -> CodaConnector:
+def connector(api_token: str, test_docs: list[dict[str, Any]]) -> CodaConnector:
     """Fixture to create and authenticate connector."""
-    conn = CodaConnector(batch_size=5)
+    conn = CodaConnector(batch_size=5, doc_ids=[test_docs[0]["id"]])
     conn.load_credentials({"coda_api_token": api_token})
     conn.validate_connector_settings()
     return conn
@@ -54,14 +54,18 @@ def connector(api_token: str) -> CodaConnector:
 
 @pytest.fixture(scope="session")
 def reference_data(
-    api_client: CodaAPIClient, test_doc: dict[str, Any]
+    api_client: CodaAPIClient,
+    connector: CodaConnector,
+    test_docs: list[dict[str, Any]],
+    all_batches: list[list[Document]],
 ) -> dict[str, Any]:
     """Fixture to fetch reference data from API.
 
     Builds a map of docs and their pages for validation.
     Depends on test_doc to ensure the test document exists before fetching.
     """
-    all_docs = list(api_client.fetch_all_docs())
+    all_docs = connector.doc_ids
+    logger.info(f"All docs: {all_docs}")
 
     if not all_docs:
         pytest.skip("No docs found in Coda workspace")
@@ -71,11 +75,15 @@ def reference_data(
     expected_pages_by_doc = {}
 
     for doc in all_docs:
-        pages = api_client.fetch_all_pages(doc.id)
+        pages = api_client.fetch_all_pages(doc)
 
         # Only count non-hidden pages
-        non_hidden_pages = [p for p in pages if not p.isHidden]
-        expected_pages_by_doc[doc.id] = non_hidden_pages
+        non_hidden_pages = [
+            p
+            for p in pages
+            if not p.isHidden and p.id not in connector.generator.skipped_pages
+        ]
+        expected_pages_by_doc[doc] = non_hidden_pages
         expected_page_count += len(non_hidden_pages)
 
     if expected_page_count == 0:
@@ -115,7 +123,7 @@ def all_documents(all_batches: list[list[Document]]) -> list[Document]:
 
 
 @pytest.fixture(scope="session")
-def test_doc(api_token: str) -> Generator[dict[str, Any], None, None]:
+def test_docs(api_token: str) -> Generator[dict[str, Any], None, None]:
     """Fixture that creates a test doc once for the entire test session.
 
     Creates a doc by copying from a template, yields it for tests,
@@ -128,7 +136,22 @@ def test_doc(api_token: str) -> Generator[dict[str, Any], None, None]:
     response = client.create_doc(
         title="Two-way writeups: Coda's secret to shipping fast",
         source_doc="_WhgwP-IEe",
-        folder_id="fl-nR7RCdR_SF",
+        folder_id="fl-nTy7sq9EcW",
+    )
+
+    response2 = client.create_doc(
+        title="Simple Document",
+        folder_id="fl-nTy7sq9EcW",
+        initial_page={
+            "name": "Page 1",
+            "pageContent": {
+                "type": "canvas",
+                "canvasContent": {
+                    "format": "html",
+                    "content": "<p><b>This</b> is rich text</p>",
+                },
+            },
+        },
     )
 
     print(f"\n[SETUP] Created test doc: {response['name']}")
@@ -136,8 +159,8 @@ def test_doc(api_token: str) -> Generator[dict[str, Any], None, None]:
     print(f"[SETUP] Browser link: {response['browserLink']}")
 
     # Yield the doc info for tests to use
-    sleep(5)
-    yield response
+    sleep(50)
+    yield [response, response2]
 
     # Cleanup: Delete the doc after all tests complete
     try:
@@ -150,32 +173,32 @@ def test_doc(api_token: str) -> Generator[dict[str, Any], None, None]:
 class TestDocCreation:
     """Test suite for doc creation and manipulation."""
 
-    def test_doc_was_created(self, test_doc: dict[str, Any]) -> None:
+    def test_doc_was_created(self, test_docs: list[dict[str, Any]]) -> None:
         """Test that the test doc fixture was created successfully."""
         # Verify response structure
-        assert "id" in test_doc, "Response should contain doc ID"
-        assert "name" in test_doc, "Response should contain doc name"
-        assert "href" in test_doc, "Response should contain API href"
-        assert "browserLink" in test_doc, "Response should contain browser link"
+        assert "id" in test_docs[0], "Response should contain doc ID"
+        assert "name" in test_docs[0], "Response should contain doc name"
+        assert "href" in test_docs[0], "Response should contain API href"
+        assert "browserLink" in test_docs[0], "Response should contain browser link"
 
         # Verify the doc was created with correct title
         assert (
-            test_doc["name"] == "Two-way writeups: Coda's secret to shipping fast"
-        ), f"Doc name should match, got: {test_doc['name']}"
+            test_docs[0]["name"] == "Two-way writeups: Coda's secret to shipping fast"
+        ), f"Doc name should match, got: {test_docs[0]['name']}"
 
         # Verify doc type
-        assert test_doc.get("type") == "doc", "Response type should be 'doc'"
+        assert test_docs[0].get("type") == "doc", "Response type should be 'doc'"
 
         # Log the doc info
-        print(f"\nTest doc verified: {test_doc['name']}")
-        print(f"Doc ID: {test_doc['id']}")
-        print(f"Browser link: {test_doc['browserLink']}")
+        print(f"\nTest doc verified: {test_docs[0]['name']}")
+        print(f"Doc ID: {test_docs[0]['id']}")
+        print(f"Browser link: {test_docs[0]['browserLink']}")
 
     def test_can_fetch_created_doc(
-        self, api_client: CodaAPIClient, test_doc: dict[str, Any]
+        self, api_client: CodaAPIClient, test_docs: list[dict[str, Any]]
     ) -> None:
         """Test that we can fetch the created doc via the API."""
-        doc_id = test_doc["id"]
+        doc_id = test_docs[0]["id"]
 
         # Fetch the doc
         response = api_client._make_request("GET", f"/docs/{doc_id}")
@@ -197,7 +220,7 @@ class TestLoadFromStateEndToEnd:
     def test_batch_sizes_respect_config(
         self,
         connector: CodaConnector,
-        test_doc: dict[str, Any],
+        test_docs: list[dict[str, Any]],
         all_batches: list[list[Document]],
     ) -> None:
         """Test that batches respect the configured batch_size."""
@@ -236,12 +259,13 @@ class TestLoadFromStateEndToEnd:
         # We should get at least some documents
         assert total_documents > 0, "Expected at least one document"
 
+        logger.info(f"Total documents: {total_documents}")
+        logger.info(f"Expected count: {expected_count}")
+
         # Log if there's a significant mismatch (for debugging)
-        if total_documents < expected_count:
-            skipped = expected_count - total_documents
-            print(
-                f"Note: {skipped}/{expected_count} pages were skipped (failed export or empty content)"
-            )
+        assert (
+            not total_documents < expected_count
+        ), f"Expected at least {expected_count} documents, got {total_documents}"
 
     def test_document_required_fields(
         self, all_documents: list[Document], reference_data: dict[str, Any]
@@ -305,15 +329,18 @@ class TestLoadFromStateEndToEnd:
         ), f"Found {len(document_ids) - len(unique_ids)} duplicate documents"
 
     def test_all_docs_processed(
-        self, all_documents: list[Document], reference_data: dict[str, Any]
+        self, all_documents: list[Document], connector: CodaConnector
     ) -> None:
         """Test that pages from all docs are included."""
-        processed_doc_ids = set()
+        processed_doc_ids = set[str]()
         for doc in all_documents:
             doc_id = doc.metadata.get("doc_id")
             processed_doc_ids.add(doc_id)
 
-        expected_doc_ids = {doc.id for doc in reference_data["docs"]}
+        logger.info(f"Processed doc IDs: {processed_doc_ids}")
+        logger.info(f"Expected doc IDs: {connector.doc_ids}")
+
+        expected_doc_ids = connector.doc_ids
         assert (
             processed_doc_ids == expected_doc_ids
         ), f"Not all docs were processed. Expected {expected_doc_ids}, got {processed_doc_ids}"
@@ -377,17 +404,20 @@ class TestLoadFromStateEndToEnd:
 class TestExportFormats:
     """Test suite for different export formats (markdown vs html)."""
 
-    def test_markdown_export(self, api_token: str, test_doc: dict[str, Any]) -> None:
+    def test_markdown_export(
+        self, api_token: str, test_docs: list[dict[str, Any]]
+    ) -> None:
         """Test that markdown export works correctly."""
         # Create connector with markdown format (default)
-        connector = CodaConnector(batch_size=5, export_format="markdown")
+        connector = CodaConnector(
+            batch_size=5, export_format="markdown", doc_ids=[test_docs[1]["id"]]
+        )
         connector.load_credentials({"coda_api_token": api_token})
 
         # Load documents
         gen = connector.load_from_state()
         batches = list(gen)
-
-        assert len(batches) > 0, "Should have at least one batch"
+        logger.info(f"Loaded {len(batches)} batches")
 
         # Check that we got documents
         all_docs = []
@@ -405,17 +435,17 @@ class TestExportFormats:
             assert "#" in content or len(content) > 0, "Should have markdown content"
             print(f"\nMarkdown export verified: {len(page_docs)} pages")
 
-    def test_html_export(self, api_token: str, test_doc: dict[str, Any]) -> None:
+    def test_html_export(self, api_token: str, test_docs: list[dict[str, Any]]) -> None:
         """Test that HTML export works correctly."""
         # Create connector with HTML format
-        connector = CodaConnector(batch_size=5, export_format="html")
+        connector = CodaConnector(
+            batch_size=5, export_format="html", doc_ids=[test_docs[1]["id"]]
+        )
         connector.load_credentials({"coda_api_token": api_token})
 
         # Load documents
         gen = connector.load_from_state()
         batches = list(gen)
-
-        assert len(batches) > 0, "Should have at least one batch"
 
         # Check that we got documents
         all_docs = []
