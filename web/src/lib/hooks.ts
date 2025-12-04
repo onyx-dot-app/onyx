@@ -778,7 +778,7 @@ export function useAuthType(): AuthType | null {
   );
 
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    return "cloud";
+    return AuthType.CLOUD;
   }
 
   if (error || !data) {
@@ -924,6 +924,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-opus-4-1": "Claude 4.1 Opus",
   "claude-opus-4-20250514": "Claude 4 Opus",
   "claude-4-opus-20250514": "Claude 4 Opus",
+  "claude-opus-4-5": "Claude 4.5 Opus (Latest)",
   "claude-sonnet-4-5": "Claude 4.5 Sonnet (Latest)",
   "claude-sonnet-4-20250514": "Claude 4 Sonnet",
   "claude-4-sonnet-20250514": "Claude 4 Sonnet",
@@ -931,6 +932,9 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-3-7-sonnet-latest": "Claude 3.7 Sonnet (Latest)",
 
   // Google Models
+
+  // 3.0 pro models
+  "gemini-3-pro-preview": "Gemini 3 Pro (Preview)",
 
   // 2.5 pro models
   "gemini-2.5-pro": "Gemini 2.5 Pro",

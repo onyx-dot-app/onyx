@@ -63,12 +63,18 @@ export const useMarkdownComponents = (
         updatePresentingDocument={state?.setPresentingDocument || (() => {})}
         docs={state?.docs || []}
         userFiles={state?.userFiles || []}
+        citations={state?.citations}
         href={props.href}
       >
         {props.children}
       </MemoizedAnchor>
     ),
-    [state?.docs, state?.userFiles, state?.setPresentingDocument]
+    [
+      state?.docs,
+      state?.userFiles,
+      state?.citations,
+      state?.setPresentingDocument,
+    ]
   );
 
   const markdownComponents = useMemo(

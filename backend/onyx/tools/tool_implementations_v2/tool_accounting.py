@@ -8,8 +8,6 @@ from typing import TypeVar
 from agents import RunContextWrapper
 
 from onyx.chat.turn.models import ChatTurnContext
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import SectionEnd
 
 F = TypeVar("F", bound=Callable)
 
@@ -67,13 +65,13 @@ def tool_accounting(func: F) -> F:
 
 def _emit_section_end(run_context: RunContextWrapper[ChatTurnContext]) -> None:
     """Helper function to emit section end packet and increment current_run_step."""
-    index = run_context.context.current_run_step
-    run_context.context.run_dependencies.emitter.emit(
-        Packet(
-            ind=index,
-            obj=SectionEnd(
-                type="section_end",
-            ),
-        )
-    )
-    run_context.context.current_run_step += 1
+    # index = run_context.context.current_run_step
+    # run_context.context.run_dependencies.emitter.emit(
+    #     Packet(
+    #         ind=index,
+    #         obj=SectionEnd(
+    #             type="section_end",
+    #         ),
+    #     )
+    # )
+    # run_context.context.current_run_step += 1
