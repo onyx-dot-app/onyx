@@ -162,7 +162,7 @@ def _get_user_emails_and_groups_from_project_roles(
                     logger.error(f"No accountId in actorUser: {actor.actorUser}")
                     continue
 
-                user = jira_client.user(id=actor.actorUser.accountId)
+                user = jira_client.user(id=account_id)
                 if not hasattr(user, "accountType") or user.accountType != "atlassian":
                     logger.info(
                         f"Skipping user {account_id} because it is not an atlassian user"
