@@ -81,16 +81,8 @@ const SYSTEM_MESSAGE_ID = -3;
 
 export interface OnSubmitProps {
   message: string;
-  //from chat input bar
-  currentMessageFiles: ProjectFile[];
-  // from the chat bar???
-
-  useAgentSearch: boolean;
-
   // optional params
   messageIdToResend?: number;
-  queryOverride?: string;
-  forceSearch?: boolean;
   isSeededChat?: boolean;
   modelOverride?: LlmDescriptor;
   regenerationRequest?: RegenerationRequest | null;
@@ -100,7 +92,6 @@ export interface OnSubmitProps {
 interface RegenerationRequest {
   messageId: number;
   parentMessage: Message;
-  forceSearch?: boolean;
 }
 
 interface UseChatControllerProps {
@@ -142,8 +133,13 @@ export function useChatController({
   const { refreshChatSessions } = useChatSessions();
   const { assistantPreferences } = useAssistantPreferences();
   const { forcedToolIds } = useForcedTools();
-  const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
-    useProjectsContext();
+  const {
+    fetchProjects,
+    uploadFiles,
+    setCurrentMessageFiles,
+    beginUpload,
+    currentMessageFiles,
+  } = useProjectsContext();
   const posthog = usePostHog();
 
   // Use selectors to access only the specific fields we need
@@ -387,11 +383,7 @@ export function useChatController({
   const onSubmit = useCallback(
     async ({
       message,
-      currentMessageFiles,
-      useAgentSearch,
       messageIdToResend,
-      queryOverride,
-      forceSearch,
       isSeededChat,
       modelOverride,
       regenerationRequest,
@@ -663,7 +655,6 @@ export function useChatController({
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
           message: currMessage,
-          alternateAssistantId: liveAssistant?.id,
           fileDescriptors: overrideFileDescriptors,
           parentMessageId: (() => {
             const parentId =
@@ -687,15 +678,6 @@ export function useChatController({
                 document.db_doc_id !== undefined && document.db_doc_id !== null
             )
             .map((document) => document.db_doc_id as number),
-          queryOverride,
-          forceSearch,
-          currentMessageFiles: currentMessageFiles.map((file) => ({
-            id: file.file_id,
-            type: file.chat_file_type,
-            name: file.name,
-            user_file_id: file.id,
-          })),
-          regenerate: regenerationRequest !== undefined,
           modelProvider:
             modelOverride?.name || llmManager.currentLlm.name || undefined,
           modelVersion:
@@ -704,10 +686,7 @@ export function useChatController({
             searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
             undefined,
           temperature: llmManager.temperature || undefined,
-          systemPromptOverride:
-            searchParams?.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
           useExistingUserMessage: isSeededChat,
-          useAgentSearch,
           enabledToolIds:
             disabledToolIds && liveAssistant
               ? liveAssistant.tools

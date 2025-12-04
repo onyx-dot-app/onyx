@@ -57,8 +57,6 @@ interface UseChatSessionControllerProps {
   refreshChatSessions: () => void;
   onSubmit: (params: {
     message: string;
-    currentMessageFiles: ProjectFile[];
-    useAgentSearch: boolean;
     isSeededChat?: boolean;
   }) => Promise<void>;
 }
@@ -170,8 +168,6 @@ export function useChatSessionController({
           submitOnLoadPerformed.current = true;
           await onSubmit({
             message: firstMessage || "",
-            currentMessageFiles: [],
-            useAgentSearch: false,
           });
         }
         return;
@@ -293,8 +289,6 @@ export function useChatSessionController({
         await onSubmit({
           message: seededMessage,
           isSeededChat: true,
-          currentMessageFiles: [],
-          useAgentSearch: false,
         });
         // Force re-name if the chat session doesn't have one
         if (!chatSession.description) {

@@ -130,16 +130,9 @@ async function* sendMessage({
       chat_session_id: chatSessionId,
       parent_message_id: parentMessageId || null,
       message: message,
-      prompt_id: null,
       search_doc_ids: null,
       file_descriptors: [],
-      // checkout https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/search/models.py#L105 for
-      // all available options
-      retrieval_options: {
-        run_search: "always",
-        filters: null,
-      },
-      query_override: null,
+      filters: null,
     }),
   });
   if (!sendMessageResponse.ok) {

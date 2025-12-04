@@ -22,16 +22,11 @@ interface MessagesDisplayProps {
   onSubmit: (args: {
     message: string;
     messageIdToResend?: number;
-    currentMessageFiles: ProjectFile[];
-    useAgentSearch: boolean;
     modelOverride?: LlmDescriptor;
     regenerationRequest?: {
       messageId: number;
       parentMessage: Message;
-      forceSearch?: boolean;
     };
-    forceSearch?: boolean;
-    queryOverride?: string;
     isSeededChat?: boolean;
     overrideFileDescriptors?: FileDescriptor[];
   }) => Promise<void>;
@@ -77,24 +72,17 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
   const emptyChildrenIds = useMemo<number[]>(() => [], []);
   const createRegenerator = useCallback(
-    (regenerationRequest: {
-      messageId: number;
-      parentMessage: Message;
-      forceSearch?: boolean;
-    }) => {
+    (regenerationRequest: { messageId: number; parentMessage: Message }) => {
       return async function (modelOverride: LlmDescriptor) {
         return await onSubmit({
           message: regenerationRequest.parentMessage.message,
-          currentMessageFiles,
-          useAgentSearch: deepResearchEnabled,
           modelOverride,
           messageIdToResend: regenerationRequest.parentMessage.messageId,
           regenerationRequest,
-          forceSearch: regenerationRequest.forceSearch,
         });
       };
     },
-    [onSubmit, deepResearchEnabled, currentMessageFiles]
+    [onSubmit]
   );
 
   const handleEditWithMessageId = useCallback(
@@ -102,11 +90,9 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
       onSubmit({
         message: editedContent,
         messageIdToResend: msgId,
-        currentMessageFiles: [],
-        useAgentSearch: deepResearchEnabled,
       });
     },
-    [onSubmit, deepResearchEnabled]
+    [onSubmit]
   );
 
   // require assistant to be present before rendering

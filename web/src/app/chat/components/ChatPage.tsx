@@ -174,8 +174,6 @@ export default function ChatPage({
     if (message) {
       onSubmit({
         message,
-        currentMessageFiles,
-        useAgentSearch: deepResearchEnabled,
       });
     }
   }
@@ -603,8 +601,6 @@ export default function ChatPage({
     // We call onSubmit, passing a `messageOverride`
     onSubmit({
       message: lastUserMsg.message,
-      currentMessageFiles: currentMessageFiles,
-      useAgentSearch: deepResearchEnabled,
       messageIdToResend: lastUserMsg.messageId,
     });
   }
@@ -632,11 +628,9 @@ export default function ChatPage({
   const handleChatInputSubmit = useCallback(() => {
     onSubmit({
       message: message,
-      currentMessageFiles: currentMessageFiles,
-      useAgentSearch: deepResearchEnabled,
     });
     setShowOnboarding(false);
-  }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
+  }, [message, onSubmit]);
 
   // Memoized callbacks for DocumentResults
   const handleMobileDocumentSidebarClose = useCallback(() => {

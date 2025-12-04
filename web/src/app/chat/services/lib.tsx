@@ -160,78 +160,45 @@ export type PacketType =
   | Packet;
 
 export interface SendMessageParams {
-  regenerate: boolean;
   message: string;
   fileDescriptors?: FileDescriptor[];
   parentMessageId: number | null;
   chatSessionId: string;
   filters: Filters | null;
   selectedDocumentIds: number[] | null;
-  queryOverride?: string;
-  forceSearch?: boolean;
   modelProvider?: string;
   modelVersion?: string;
   temperature?: number;
-  systemPromptOverride?: string;
   useExistingUserMessage?: boolean;
-  alternateAssistantId?: number;
   signal?: AbortSignal;
-  currentMessageFiles?: FileDescriptor[];
-  useAgentSearch?: boolean;
   enabledToolIds?: number[];
   forcedToolIds?: number[];
 }
 
 export async function* sendMessage({
-  regenerate,
   message,
   fileDescriptors,
-  currentMessageFiles,
   parentMessageId,
   chatSessionId,
   filters,
   selectedDocumentIds,
-  queryOverride,
-  forceSearch,
   modelProvider,
   modelVersion,
   temperature,
-  systemPromptOverride,
   useExistingUserMessage,
-  alternateAssistantId,
   signal,
-  useAgentSearch,
   enabledToolIds,
   forcedToolIds,
 }: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
     selectedDocumentIds && selectedDocumentIds.length > 0;
   const payload = {
-    alternate_assistant_id: alternateAssistantId,
     chat_session_id: chatSessionId,
     parent_message_id: parentMessageId,
     message: message,
-    // just use the default prompt for the assistant.
-    // should remove this in the future, as we don't support multiple prompts for a
-    // single assistant anyways
-    prompt_id: null,
     search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
     file_descriptors: fileDescriptors,
-    current_message_files: currentMessageFiles,
-    regenerate,
-    retrieval_options: !documentsAreSelected
-      ? {
-          run_search: queryOverride || forceSearch ? "always" : "auto",
-          real_time: true,
-          filters: filters,
-        }
-      : null,
-    query_override: queryOverride,
-    prompt_override: systemPromptOverride
-      ? {
-          system_prompt: systemPromptOverride,
-        }
-      : null,
+    filters: !documentsAreSelected ? filters : null,
     llm_override:
       temperature || modelVersion
         ? {
@@ -241,7 +208,6 @@ export async function* sendMessage({
           }
         : null,
     use_existing_user_message: useExistingUserMessage,
-    use_agentic_search: useAgentSearch ?? false,
     allowed_tool_ids: enabledToolIds,
     forced_tool_ids: forcedToolIds,
   };
