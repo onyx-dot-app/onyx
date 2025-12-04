@@ -29,8 +29,8 @@ import {
 } from "@/refresh-components/tabs/tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { createMCPServer } from "@/lib/tools/edit";
-import { MCPServerStatus, MCPServerWithStatus } from "@/sections/actions/types";
-import { updateMCPServerStatus } from "@/lib/mcpService";
+import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
+import { updateMCPServerStatus } from "@/lib/tools/mcpService";
 import { useMCPActions } from "@/sections/actions/MCPActionsContext";
 import Message from "@/refresh-components/messages/Message";
 

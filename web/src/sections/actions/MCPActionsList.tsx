@@ -1,14 +1,14 @@
 "use client";
 import ActionCard from "@/sections/actions/ActionCard";
-import { getMCPServerIcon } from "@/lib/mcpUtils";
+import { getMCPServerIcon } from "@/lib/tools/mcpUtils";
 import {
   MCPActionStatus,
   MCPServerStatus,
   MCPServerWithStatus,
-} from "@/sections/actions/types";
+} from "@/lib/tools/types";
 import MCPAuthenticationModal from "@/sections/actions/modals/MCPAuthenticationModal";
-import DisconnectMCPModal from "@/sections/actions/modals/DisconnectMCPModal";
 import { useMCPActions } from "@/sections/actions/MCPActionsContext";
+import DisconnectEntityModal from "./modals/DisconnectEntityModal";
 
 export default function MCPActionsList() {
   const {
@@ -91,10 +91,10 @@ export default function MCPActionsList() {
           <MCPAuthenticationModal mcpServer={selectedServer} skipOverlay />
         </authModal.Provider>
 
-        <DisconnectMCPModal
+        <DisconnectEntityModal
           isOpen={disconnectModal.isOpen}
           onClose={() => disconnectModal.toggle(false)}
-          server={serverToDisconnect}
+          name={serverToDisconnect?.name ?? null}
           onConfirmDisconnect={handleConfirmDisconnect}
           onConfirmDisconnectAndDelete={handleConfirmDisconnectAndDelete}
           isDisconnecting={isDisconnecting}

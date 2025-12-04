@@ -13,7 +13,7 @@ import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { KeyedMutator } from "swr";
 
-export interface ActionCardProps {
+export interface MCPActionCardProps {
   // Server identification
   serverId: number;
   server: MCPServerWithStatus;
@@ -62,7 +62,7 @@ export interface ActionCardProps {
 }
 
 // Main Component
-export default function ActionCard({
+export default function MCPActionCard({
   serverId,
   server,
   title,
@@ -81,7 +81,7 @@ export default function ActionCard({
   onRefreshTools,
   onDisableAllTools,
   className,
-}: ActionCardProps) {
+}: MCPActionCardProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
   const [searchQuery, setSearchQuery] = useState("");
 

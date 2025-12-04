@@ -74,6 +74,7 @@ import React, {
   useEffect,
   useMemo,
   useId,
+  useRef,
 } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
@@ -370,14 +371,25 @@ const KeyValueInput = ({
   }, [hasAnyError, errors]);
 
   // Notify parent of validation changes
+  const onValidationChangeRef = useRef(onValidationChange);
+  const onValidationErrorRef = useRef(onValidationError);
+
   useEffect(() => {
-    onValidationChange?.(isValid, errors);
-  }, [isValid, errors, onValidationChange]);
+    onValidationChangeRef.current = onValidationChange;
+  }, [onValidationChange]);
+
+  useEffect(() => {
+    onValidationErrorRef.current = onValidationError;
+  }, [onValidationError]);
+
+  useEffect(() => {
+    onValidationChangeRef.current?.(isValid, errors);
+  }, [isValid, errors]);
 
   // Notify parent of error state for form library integration
   useEffect(() => {
-    onValidationError?.(errorMessage);
-  }, [errorMessage, onValidationError]);
+    onValidationErrorRef.current?.(errorMessage);
+  }, [errorMessage]);
 
   const canRemoveItems = mode === "line" || items.length > 1;
 

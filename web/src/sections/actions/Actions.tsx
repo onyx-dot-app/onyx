@@ -1,5 +1,5 @@
 "use client";
-import { MCPActionStatus } from "@/sections/actions/types";
+import { MCPActionStatus } from "@/lib/tools/types";
 import React from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgUnplug from "@/icons/unplug";
@@ -10,7 +10,7 @@ import SvgPlug from "@/icons/plug";
 import SvgArrowExchange from "@/icons/arrow-exchange";
 import SvgChevronDown from "@/icons/chevron-down";
 
-interface MCPActionsProps {
+interface ActionsProps {
   status: MCPActionStatus;
   serverName: string;
   onDisconnect?: () => void;
@@ -23,7 +23,7 @@ interface MCPActionsProps {
   onToggleTools?: () => void;
 }
 
-const MCPActions: React.FC<MCPActionsProps> = React.memo(
+const Actions: React.FC<ActionsProps> = React.memo(
   ({
     status,
     serverName,
@@ -166,6 +166,6 @@ const MCPActions: React.FC<MCPActionsProps> = React.memo(
     );
   }
 );
-MCPActions.displayName = "MCPActions";
+Actions.displayName = "Actions";
 
-export default MCPActions;
+export default Actions;

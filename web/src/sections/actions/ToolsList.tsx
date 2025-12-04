@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import ToolItem from "@/sections/actions/ToolItem";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
-import type { MCPTool } from "@/sections/actions/types";
+import type { MCPTool } from "@/lib/tools/types";
 
 interface ToolsListProps {
   tools: MCPTool[];

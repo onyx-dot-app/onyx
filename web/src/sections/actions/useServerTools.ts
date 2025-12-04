@@ -1,8 +1,8 @@
 import useSWR, { KeyedMutator } from "swr";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { getMCPServerIcon } from "@/lib/mcpUtils";
-import { MCPServerWithStatus, MCPTool } from "@/sections/actions/types";
+import { getMCPServerIcon } from "@/lib/tools/mcpUtils";
+import { MCPServerWithStatus, MCPTool } from "@/lib/tools/types";
 
 interface UseServerToolsOptions {
   serverId: number;
