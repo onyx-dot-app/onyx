@@ -382,6 +382,71 @@ const InputSelectItem = React.forwardRef<
 InputSelectItem.displayName = "InputSelectItem";
 
 // ============================================================================
+// InputSelect Group
+// ============================================================================
+
+/**
+ * InputSelect Group Component
+ *
+ * Groups related items together with an optional label.
+ *
+ * @example
+ * ```tsx
+ * <InputSelect.Group>
+ *   <InputSelect.Label>Fruits</InputSelect.Label>
+ *   <InputSelect.Item value="apple">Apple</InputSelect.Item>
+ *   <InputSelect.Item value="banana">Banana</InputSelect.Item>
+ * </InputSelect.Group>
+ * ```
+ */
+interface InputSelectGroupProps
+  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Group> {}
+
+const InputSelectGroup = React.forwardRef<
+  React.ComponentRef<typeof SelectPrimitive.Group>,
+  InputSelectGroupProps
+>(({ className, children, ...props }, ref) => (
+  <SelectPrimitive.Group ref={ref} className={cn("", className)} {...props}>
+    {children}
+  </SelectPrimitive.Group>
+));
+InputSelectGroup.displayName = "InputSelectGroup";
+
+// ============================================================================
+// InputSelect Label
+// ============================================================================
+
+/**
+ * InputSelect Label Component
+ *
+ * A label for a group of items.
+ *
+ * @example
+ * ```tsx
+ * <InputSelect.Label>Category Name</InputSelect.Label>
+ * ```
+ */
+interface InputSelectLabelProps
+  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label> {}
+
+const InputSelectLabel = React.forwardRef<
+  React.ComponentRef<typeof SelectPrimitive.Label>,
+  InputSelectLabelProps
+>(({ className, children, ...props }, ref) => (
+  <SelectPrimitive.Label
+    ref={ref}
+    className={cn(
+      "px-2 py-1.5 text-xs font-medium text-text-03 uppercase tracking-wide",
+      className
+    )}
+    {...props}
+  >
+    {children}
+  </SelectPrimitive.Label>
+));
+InputSelectLabel.displayName = "InputSelectLabel";
+
+// ============================================================================
 // Exports
 // ============================================================================
 
@@ -399,12 +464,31 @@ InputSelectItem.displayName = "InputSelectItem";
  *     <InputSelect.Item value="2">Option 2</InputSelect.Item>
  *   </InputSelect.Content>
  * </InputSelect>
+ *
+ * // With groups
+ * <InputSelect defaultValue="1">
+ *   <InputSelect.Trigger placeholder="Choose a model..." />
+ *   <InputSelect.Content>
+ *     <InputSelect.Group>
+ *       <InputSelect.Label>OpenAI</InputSelect.Label>
+ *       <InputSelect.Item value="1">GPT-4o Mini</InputSelect.Item>
+ *       <InputSelect.Item value="2">GPT-4o</InputSelect.Item>
+ *     </InputSelect.Group>
+ *     <InputSelect.Group>
+ *       <InputSelect.Label>Anthropic</InputSelect.Label>
+ *       <InputSelect.Item value="3">Claude Opus 4.5</InputSelect.Item>
+ *       <InputSelect.Item value="4">Claude Sonnet 4.5</InputSelect.Item>
+ *     </InputSelect.Group>
+ *   </InputSelect.Content>
+ * </InputSelect>
  * ```
  */
 export default Object.assign(InputSelectRoot, {
   Trigger: InputSelectTrigger,
   Content: InputSelectContent,
   Item: InputSelectItem,
+  Group: InputSelectGroup,
+  Label: InputSelectLabel,
 });
 
 export {
@@ -412,4 +496,6 @@ export {
   type InputSelectTriggerProps,
   type InputSelectContentProps,
   type InputSelectItemProps,
+  type InputSelectGroupProps,
+  type InputSelectLabelProps,
 };

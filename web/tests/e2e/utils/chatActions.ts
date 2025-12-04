@@ -63,7 +63,7 @@ export async function switchModel(page: Page, modelName: string) {
   const modelButton = page
     .locator('[role="dialog"]')
     .locator("button")
-    .filter({ hasText: new RegExp(`${modelName}$`, "i") })
+    .filter({ hasText: modelName })
     .first();
 
   await modelButton.click();
