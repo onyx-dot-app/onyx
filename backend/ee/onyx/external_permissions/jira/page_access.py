@@ -152,10 +152,13 @@ def _get_user_emails_and_groups_from_project_roles(
                 continue
 
             # Handle user actors
-            if not hasattr(actor, "actorUser") or not hasattr(
-                actor.actorUser, "accountId"
-            ):
-                user = jira_client.user(id=actor.actorUser.accountId)
+            if hasattr(actor, "actorUser"):
+                account_id = getattr(actor.actorUser, "accountId", None)
+                if not account_id:
+                    logger.error(f"No accountId in actorUser: {actor.actorUser}")
+                    continue
+
+                user = jira_client.user(id=account_id)
                 if not hasattr(user, "accountType") or user.accountType != "atlassian":
                     continue
 
