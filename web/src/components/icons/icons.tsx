@@ -3,9 +3,7 @@
 import { JSX } from "react";
 import Image from "next/image";
 import { StaticImageData } from "next/image";
-
 import { BrainIcon as Brain } from "@phosphor-icons/react";
-
 import {
   FiAlertCircle,
   FiAlertTriangle,
@@ -19,12 +17,9 @@ import {
   FiGlobe,
   FiInfo,
   FiMail,
-  FiThumbsUp,
 } from "react-icons/fi";
-
 import { FaRobot } from "react-icons/fa";
 import { SiBookstack } from "react-icons/si";
-
 import axeroImage from "../../../public/Axero.jpeg";
 import airtableIcon from "../../../public/Airtable.svg";
 import amazonSVG from "../../../public/Amazon.svg";
@@ -83,7 +78,6 @@ import zAIIcon from "../../../public/Z_AI.png";
 import zendeskIcon from "../../../public/Zendesk.svg";
 import zulipIcon from "../../../public/Zulip.png";
 import testrailSVG from "../../../public/Testrail.svg";
-
 import gitlabIcon from "../../../public/Gitlab.png";
 import gmailIcon from "../../../public/Gmail.png";
 import googleDriveIcon from "../../../public/GoogleDrive.png";
@@ -91,6 +85,7 @@ import loopioIcon from "../../../public/Loopio.png";
 import notionIcon from "../../../public/Notion.png";
 import productboardIcon from "../../../public/Productboard.png";
 import slabLogoIcon from "../../../public/SlabLogo.png";
+
 export interface IconProps {
   size?: number;
   className?: string;
