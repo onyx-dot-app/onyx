@@ -1917,6 +1917,21 @@ wheels = [
 ]
 
 [[package]]
+name = "hatchling"
+version = "1.28.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "pathspec" },
+    { name = "pluggy" },
+    { name = "trove-classifiers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0b/8e/e480359492affde4119a131da729dd26da742c2c9b604dff74836e47eef9/hatchling-1.28.0.tar.gz", hash = "sha256:4d50b02aece6892b8cd0b3ce6c82cb218594d3ec5836dbde75bf41a21ab004c8", size = 55365, upload-time = "2025-11-27T00:31:13.766Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0d/a5/48cb7efb8b4718b1a4c0c331e3364a3a33f614ff0d6afd2b93ee883d3c47/hatchling-1.28.0-py3-none-any.whl", hash = "sha256:dc48722b68b3f4bbfa3ff618ca07cdea6750e7d03481289ffa8be1521d18a961", size = 76075, upload-time = "2025-11-27T00:31:12.544Z" },
+]
+
+[[package]]
 name = "hf-xet"
 version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2692,6 +2707,15 @@ wheels = [
 ]
 
 [[package]]
+name = "manygo"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/a7/977d391cdb2993d9b2907bfe85dfc2f1840cd06169552af8a3e0b8e0950b/manygo-0.2.0.tar.gz", hash = "sha256:90a951179f0d294d7063a4fc5446b52646cff140c386f9c92ca391116a287098", size = 5633, upload-time = "2025-12-04T23:16:32.996Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a1/5c/b9a9846531971d89d16c8640a85c00fc5e159d6710cde60411b906fb8be8/manygo-0.2.0-py3-none-any.whl", hash = "sha256:322567f555f0c9896e163f4cecdcd5aa6402996933a6a8ec1cea7f67dae9accd", size = 3490, upload-time = "2025-12-04T23:16:33.591Z" },
+]
+
+[[package]]
 name = "markdown-it-py"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3420,7 +3444,9 @@ dev = [
     { name = "black" },
     { name = "celery-types" },
     { name = "faker" },
+    { name = "hatchling" },
     { name = "ipykernel" },
+    { name = "manygo" },
     { name = "mypy" },
     { name = "mypy-extensions" },
     { name = "onyx-devtools" },
@@ -3585,7 +3611,9 @@ dev = [
     { name = "black", specifier = "==25.1.0" },
     { name = "celery-types", specifier = "==0.19.0" },
     { name = "faker", specifier = "==37.1.0" },
+    { name = "hatchling", specifier = "==1.28.0" },
     { name = "ipykernel", specifier = "==6.29.5" },
+    { name = "manygo", specifier = "==0.2.0" },
     { name = "mypy", specifier = "==1.13.0" },
     { name = "mypy-extensions", specifier = "==1.0.0" },
     { name = "onyx-devtools", specifier = "==0.0.1" },
@@ -5937,6 +5965,15 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/2e/757d2280d4fefe7d33af7615124e7e298ae7b8e3bc4446cdb8e88b0f9bab/triton-3.2.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8009a1fb093ee8546495e96731336a33fb8856a38e45bb4ab6affd6dbc3ba220", size = 253157636, upload-time = "2025-01-22T19:12:51.322Z" },
     { url = "https://files.pythonhosted.org/packages/06/00/59500052cb1cf8cf5316be93598946bc451f14072c6ff256904428eaf03c/triton-3.2.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8d9b215efc1c26fa7eefb9a157915c92d52e000d2bf83e5f69704047e63f125c", size = 253159365, upload-time = "2025-01-22T19:13:24.648Z" },
+]
+
+[[package]]
+name = "trove-classifiers"
+version = "2025.12.1.14"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/80/e1/000add3b3e0725ce7ee0ea6ea4543f1e1d9519742f3b2320de41eeefa7c7/trove_classifiers-2025.12.1.14.tar.gz", hash = "sha256:a74f0400524fc83620a9be74a07074b5cbe7594fd4d97fd4c2bfde625fdc1633", size = 16985, upload-time = "2025-12-01T14:47:11.456Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/7e/bc19996fa86cad8801e8ffe6f1bba5836ca0160df76d0410d27432193712/trove_classifiers-2025.12.1.14-py3-none-any.whl", hash = "sha256:a8206978ede95937b9959c3aff3eb258bbf7b07dff391ddd4ea7e61f316635ab", size = 14184, upload-time = "2025-12-01T14:47:10.113Z" },
 ]
 
 [[package]]

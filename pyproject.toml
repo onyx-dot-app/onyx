@@ -176,6 +176,8 @@ dev = [
     "release-tag==0.4.3",
     "zizmor==1.18.0",
     "onyx-devtools==0.0.1",
+    "manygo==0.2.0",
+    "hatchling==1.28.0",
 ]
 
 # Enterprise Edition features
@@ -185,6 +187,9 @@ ee = [
 
 [tool.uv]
 default-groups = "all"
+
+[tool.uv.workspace]
+members = ["tools/ods"]
 
 [tool.setuptools.packages.find]
 where = ["backend"]
