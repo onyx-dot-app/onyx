@@ -705,14 +705,17 @@ def update_all_personas_display_priority(
     display_priority_map: dict[int, int],
     db_session: Session,
 ) -> None:
-    """Updates the display priority of all lives Personas"""
+    """Updates the display priority of Personas in the provided map."""
     personas = get_personas(db_session=db_session)
     available_persona_ids = {persona.id for persona in personas}
-    if available_persona_ids != set(display_priority_map.keys()):
+    provided_persona_ids = set(display_priority_map.keys())
+    invalid_persona_ids = provided_persona_ids - available_persona_ids
+    if invalid_persona_ids:
         raise ValueError("Invalid persona IDs provided")
 
     for persona in personas:
-        persona.display_priority = display_priority_map[persona.id]
+        if persona.id in display_priority_map:
+            persona.display_priority = display_priority_map[persona.id]
     db_session.commit()
 
 
