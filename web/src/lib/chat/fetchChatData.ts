@@ -17,6 +17,7 @@ import {
   PRO_SEARCH_TOGGLED_COOKIE_NAME,
 } from "@/components/resizable/constants";
 import { hasCompletedWelcomeFlowSS } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
+import { AuthType } from "@/lib/constants";
 import {
   NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN,
   NEXT_PUBLIC_ENABLE_CHROME_EXTENSION,
@@ -51,7 +52,7 @@ export async function fetchChatData(searchParams: {
   // STEP 1: Check authentication FIRST (before any protected resources)
   const authResult = await requireAuth();
   const { user, authTypeMetadata } = authResult;
-  const authDisabled = authTypeMetadata?.authType === "disabled";
+  const authDisabled = authTypeMetadata?.authType === AuthType.DISABLED;
 
   // STEP 2: Handle authentication redirects with special cases
   if (authResult.redirect && !authDisabled) {

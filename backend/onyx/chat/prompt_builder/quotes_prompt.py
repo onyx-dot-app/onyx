@@ -40,7 +40,7 @@ def _build_strong_llm_quotes_prompt(
     ).strip()
 
     tag_handled_prompt = handle_onyx_date_awareness(
-        full_prompt, prompt, add_additional_info_if_no_tag=True
+        prompt_str=full_prompt, datetime_aware=prompt.datetime_aware
     )
 
     return HumanMessage(content=tag_handled_prompt)

@@ -31,9 +31,12 @@ export enum PacketType {
   REASONING_DELTA = "reasoning_delta",
   REASONING_END = "reasoning_end",
 
+  // Citation packets
   CITATION_START = "citation_start",
   CITATION_DELTA = "citation_delta",
   CITATION_END = "citation_end",
+  // Backend sends individual citation_info packets during streaming
+  CITATION_INFO = "citation_info",
 }
 
 // Basic Message Packets
@@ -150,6 +153,13 @@ export interface CitationDelta extends BaseObj {
   citations: StreamingCitation[];
 }
 
+// Individual citation info packet (sent during streaming from backend)
+export interface CitationInfo extends BaseObj {
+  type: "citation_info";
+  citation_number: number;
+  document_id: string;
+}
+
 export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type StopObj = Stop;
@@ -174,7 +184,11 @@ export type NewToolObj =
 
 export type ReasoningObj = ReasoningStart | ReasoningDelta | SectionEnd;
 
-export type CitationObj = CitationStart | CitationDelta | SectionEnd;
+export type CitationObj =
+  | CitationStart
+  | CitationDelta
+  | CitationInfo
+  | SectionEnd;
 
 // Union type for all possible streaming objects
 export type ObjTypes =

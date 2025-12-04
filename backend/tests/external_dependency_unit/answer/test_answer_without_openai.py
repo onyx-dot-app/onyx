@@ -18,8 +18,8 @@ from onyx.db.llm import upsert_llm_provider
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -83,6 +83,7 @@ def test_answer_with_only_anthropic_provider(
             new_msg_req=chat_request,
             user=test_user,
             db_session=db_session,
+            bypass_translation=True,
         ):
             response_stream.append(packet)
 
@@ -97,13 +98,13 @@ def test_answer_with_only_anthropic_provider(
         assert has_message_id, "Should include reserved assistant message ID"
 
         has_message_start = any(
-            isinstance(packet, Packet) and isinstance(packet.obj, MessageStart)
+            isinstance(packet, Packet) and isinstance(packet.obj, AgentResponseStart)
             for packet in response_stream
         )
         assert has_message_start, "Stream should have a MessageStart packet"
 
         has_message_delta = any(
-            isinstance(packet, Packet) and isinstance(packet.obj, MessageDelta)
+            isinstance(packet, Packet) and isinstance(packet.obj, AgentResponseDelta)
             for packet in response_stream
         )
         assert has_message_delta, "Stream should have a MessageDelta packet"
