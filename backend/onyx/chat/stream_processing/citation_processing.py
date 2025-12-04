@@ -87,12 +87,24 @@ class CitationProcessor:
         if self.stop_stream:
             next_hold = self.hold + token
             if self.stop_stream in next_hold:
-                return
-            if next_hold == self.stop_stream[: len(next_hold)]:
+                # Extract text before the stop pattern
+                stop_pos = next_hold.find(self.stop_stream)
+                text_before_stop = next_hold[:stop_pos]
+                # Process the text before stop pattern if any exists
+                if text_before_stop:
+                    # Process text_before_stop through normal flow
+                    self.hold = ""
+                    token = text_before_stop
+                    # Continue to normal processing below
+                else:
+                    # Stop pattern at the beginning, nothing to yield
+                    return
+            elif next_hold == self.stop_stream[: len(next_hold)]:
                 self.hold = next_hold
                 return
-            token = next_hold
-            self.hold = ""
+            else:
+                token = next_hold
+                self.hold = ""
 
         self.curr_segment += token
         self.llm_out += token
@@ -201,7 +213,7 @@ class CitationProcessor:
                 self.cited_documents.add(llm_docid)
                 final_citation_info.append(
                     CitationInfo(
-                        citation_num=displayed_citation_num,
+                        citation_number=displayed_citation_num,
                         document_id=llm_docid,
                     )
                 )
@@ -252,12 +264,24 @@ class CitationProcessorGraph:
         if self.stop_stream:
             next_hold = self.hold + token
             if self.stop_stream in next_hold:
-                return None
-            if next_hold == self.stop_stream[: len(next_hold)]:
+                # Extract text before the stop pattern
+                stop_pos = next_hold.find(self.stop_stream)
+                text_before_stop = next_hold[:stop_pos]
+                # Process the text before stop pattern if any exists
+                if text_before_stop:
+                    # Process text_before_stop through normal flow
+                    self.hold = ""
+                    token = text_before_stop
+                    # Continue to normal processing below
+                else:
+                    # Stop pattern at the beginning, nothing to yield
+                    return None
+            elif next_hold == self.stop_stream[: len(next_hold)]:
                 self.hold = next_hold
                 return None
-            token = next_hold
-            self.hold = ""
+            else:
+                token = next_hold
+                self.hold = ""
 
         self.curr_segment += token
         self.llm_out += token
@@ -350,10 +374,6 @@ class CitationProcessorGraph:
                 continue
             self.recent_cited_documents.add(llm_docid)
 
-            # format the citation string
-            # if formatted:
-            #     final_processed_str += f"[[{num}]]({link})"
-            # else:
             link = context_llm_doc.link or ""
             final_processed_str += f"[[{num}]]({link})"
 
@@ -362,7 +382,7 @@ class CitationProcessorGraph:
                 self.cited_documents.add(llm_docid)
                 final_citation_info.append(
                     CitationInfo(
-                        citation_num=num,
+                        citation_number=num,
                         document_id=llm_docid,
                     )
                 )

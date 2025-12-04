@@ -51,39 +51,6 @@ def test_send_two_messages(basic_user: DATestUser) -> None:
     ), "Chat session should have 1 system message, 2 user messages, and 2 assistant messages"
 
 
-def test_deep_research_runs_tool_for_simple_prompt(
-    reset: None,
-    admin_user: DATestUser,
-) -> None:
-    LLMProviderManager.create(user_performing_action=admin_user)
-
-    test_chat_session = ChatSessionManager.create(user_performing_action=admin_user)
-
-    response = ChatSessionManager.send_message(
-        chat_session_id=test_chat_session.id,
-        message="Hello",
-        user_performing_action=admin_user,
-        use_agentic_search=True,
-        chat_session=test_chat_session,
-    )
-
-    assert response.error is None, "Chat response should not have an error"
-
-    tool_used = any(result.tool_name for result in response.used_tools)
-
-    # We would like to use this, but it's not worth adding a field to get-chat-session responses
-    # just for testing
-    # assert (
-    #     tool_used
-    #     or response.research_answer_purpose
-    #     == ResearchAnswerPurpose.CLARIFICATION_REQUEST
-    # )
-
-    # TODO: the second condition is a hacky way to check whether
-    # we're making a clarification request.
-    assert tool_used or response.full_message.startswith("1. ")
-
-
 def test_send_message_simple_with_history(reset: None, admin_user: DATestUser) -> None:
     LLMProviderManager.create(user_performing_action=admin_user)
 

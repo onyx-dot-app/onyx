@@ -228,7 +228,7 @@ export interface MessageProps extends React.HTMLAttributes<HTMLDivElement> {
   onAction?: () => void;
 }
 
-function MessageComponent(
+function MessageInner(
   {
     flash,
     static: staticProp,
@@ -360,9 +360,7 @@ function MessageComponent(
   );
 }
 
-const Message = React.forwardRef<HTMLDivElement, MessageProps>(
-  MessageComponent
-);
+const Message = React.forwardRef<HTMLDivElement, MessageProps>(MessageInner);
 Message.displayName = "Message";
 
 export default Message;

@@ -46,8 +46,8 @@ def test_tool_seeding_migration() -> None:
 
         # Should have all 6 builtin tools
         assert (
-            len(tools) == 6
-        ), f"Should have created exactly 5 builtin tools, got {len(tools)}"
+            len(tools) == 7
+        ), f"Should have created exactly 7 builtin tools, got {len(tools)}"
 
         # Check SearchTool
         search_tool = next((t for t in tools if t[1] == "SearchTool"), None)
