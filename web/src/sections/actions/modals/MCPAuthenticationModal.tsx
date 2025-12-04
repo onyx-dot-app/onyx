@@ -302,7 +302,7 @@ export default function MCPAuthenticationModal({
         window.location.href = oauth_url;
       } else {
         // For non-OAuth authentication, redirect to the page with server_id and trigger_fetch
-        window.location.href = `/admin/mcp-actions/?server_id=${mcpServer.id}&trigger_fetch=true`;
+        window.location.href = `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`;
         toggle(false);
       }
     } catch (error) {

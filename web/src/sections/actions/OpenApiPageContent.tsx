@@ -239,16 +239,15 @@ export default function OpenApiPageContent() {
           });
           await mutateOpenApiTools();
         } else {
-          setPopup({
-            message: response.error || "Failed to delete tool.",
-            type: "error",
-          });
           throw new Error(response.error || "Failed to delete tool.");
         }
       } catch (error) {
         console.error("Failed to delete OpenAPI tool", error);
         setPopup({
-          message: "An unexpected error occurred while deleting the tool.",
+          message:
+            error instanceof Error
+              ? error.message
+              : "An unexpected error occurred while deleting the tool.",
           type: "error",
         });
         throw error;
