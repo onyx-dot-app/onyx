@@ -105,6 +105,38 @@ def all_documents(all_batches: list[list[Document]]) -> list[Document]:
     return all_docs
 
 
+@pytest.fixture(scope="session")
+def test_doc(api_token: str) -> Generator[dict[str, Any], None, None]:
+    """Fixture that creates a test doc for the test session.
+
+    Creates a doc by copying from a template, yields it for tests,
+    and cleans it up after all tests complete.
+    """
+    # Create a temporary API client for setup/teardown
+    client = CodaAPIClient(api_token)
+
+    # Create the test doc
+    response = client.create_doc(
+        title="Two-way writeups: Coda's secret to shipping fast",
+        source_doc="_WhgwP-IEe",
+        folder_id="fl-8fyHS0QJKG",
+    )
+
+    print(f"\n[SETUP] Created test doc: {response['name']}")
+    print(f"[SETUP] Doc ID: {response['id']}")
+    print(f"[SETUP] Browser link: {response['browserLink']}")
+
+    # Yield the doc info for tests to use
+    yield response
+
+    # Cleanup: Delete the doc after all tests complete
+    try:
+        client._make_request("DELETE", f"/docs/{response['id']}")
+        print(f"\n[TEARDOWN] Deleted test doc: {response['id']}")
+    except Exception as e:
+        print(f"\n[TEARDOWN] Warning: Failed to delete test doc {response['id']}: {e}")
+
+
 class TestLoadFromStateEndToEnd:
     """Test suite for load_from_state end-to-end functionality."""
 
@@ -283,6 +315,48 @@ class TestLoadFromStateEndToEnd:
                 assert "table_name" in metadata
                 assert "row_count" in metadata
                 assert "column_count" in metadata
+
+
+class TestDocCreation:
+    """Test suite for doc creation and manipulation."""
+
+    def test_doc_was_created(self, test_doc: dict[str, Any]) -> None:
+        """Test that the test doc fixture was created successfully."""
+        # Verify response structure
+        assert "id" in test_doc, "Response should contain doc ID"
+        assert "name" in test_doc, "Response should contain doc name"
+        assert "href" in test_doc, "Response should contain API href"
+        assert "browserLink" in test_doc, "Response should contain browser link"
+
+        # Verify the doc was created with correct title
+        assert (
+            test_doc["name"] == "Two-way writeups: Coda's secret to shipping fast"
+        ), f"Doc name should match, got: {test_doc['name']}"
+
+        # Verify doc type
+        assert test_doc.get("type") == "doc", "Response type should be 'doc'"
+
+        # Log the doc info
+        print(f"\nTest doc verified: {test_doc['name']}")
+        print(f"Doc ID: {test_doc['id']}")
+        print(f"Browser link: {test_doc['browserLink']}")
+
+    def test_can_fetch_created_doc(
+        self, api_client: CodaAPIClient, test_doc: dict[str, Any]
+    ) -> None:
+        """Test that we can fetch the created doc via the API."""
+        doc_id = test_doc["id"]
+
+        # Fetch the doc
+        response = api_client._make_request("GET", f"/docs/{doc_id}")
+
+        # Verify we got the same doc
+        assert response["id"] == doc_id, "Fetched doc ID should match"
+        assert (
+            response["name"] == "Two-way writeups: Coda's secret to shipping fast"
+        ), "Fetched doc name should match"
+
+        print(f"\nSuccessfully fetched doc: {response['name']}")
 
 
 if __name__ == "__main__":
