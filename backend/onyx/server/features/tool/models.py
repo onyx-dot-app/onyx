@@ -1,5 +1,4 @@
 from typing import Any
-from typing import TypedDict
 
 from pydantic import BaseModel
 
@@ -9,7 +8,7 @@ from onyx.db.models import Tool
 HIDDEN_TOOL_IDS = {"OktaProfileTool"}
 
 
-class ToolVisibilitySettings(TypedDict):
+class ToolVisibilitySettings(BaseModel):
     """Configuration for tool visibility across different UI contexts."""
 
     chat_selectable: bool  # Whether tool appears in chat input bar dropdown
