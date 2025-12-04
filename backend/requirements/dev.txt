@@ -250,6 +250,7 @@ numpy==1.26.4
     #   pandas-stubs
     #   shapely
     #   voyageai
+onyx-devtools==0.0.1
 openai==2.6.1
     # via
     #   litellm
@@ -368,6 +369,7 @@ referencing==0.36.2
     #   jsonschema-specifications
 regex==2025.11.3
     # via tiktoken
+release-tag==0.4.3
 reorder-python-imports-black==3.14.0
 requests==2.32.5
     # via
@@ -494,3 +496,4 @@ yarl==1.22.0
     # via aiohttp
 zipp==3.23.0
     # via importlib-metadata
+zizmor==1.18.0

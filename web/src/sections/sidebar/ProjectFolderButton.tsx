@@ -27,7 +27,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import useAppFocus from "@/hooks/useAppFocus";
 import SvgFolderOpen from "@/icons/folder-open";
 import SvgFolderPartialOpen from "@/icons/folder-partial-open";
@@ -58,7 +58,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
     },
   });
 
-  function getFolderIcon(): React.FunctionComponent<SvgProps> {
+  function getFolderIcon(): React.FunctionComponent<IconProps> {
     if (open) {
       return SvgFolderOpen;
     } else {

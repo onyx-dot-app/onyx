@@ -1,3 +1,39 @@
+"""
+An explanation of the search tool found below:
+
+Step 1: Queries
+- The LLM will generate some queries based on the chat history for what it thinks are the best things to search for.
+This has a pretty generic prompt so it's not perfectly tuned for search but provides breadth and also the LLM can often break up
+the query into multiple searches which the other flows do not do. Exp: Compare the sales process between company X and Y can be
+broken up into "sales process company X" and "sales process company Y".
+- A specifial prompt and history is used to generate another query which is best tuned for a semantic/hybrid search pipeline.
+- A small set of keyword emphasized queries are also generated to cover additional breadth. This is important for cases where
+the query is short, keyword heavy, or has a lot of model unseen terminology.
+
+Step 2: Recombination
+We use a weighted RRF to combine the search results from the queries above. Each query will have a list of search results with
+some scores however these are downstream of a normalization step so they cannot easily be compared with one another on an
+absolute scale. RRF is a good way to combine these and allows us to give some custom weightings. We also merge document chunks
+that are adjacent to provide more continuous context to the LLM.
+
+Step 3: Selection
+We pass the recombined results (truncated set) to the LLM to select the most promising ones to read. This is to reduce noise and
+reduce downstream chances of hallucination. The LLM at this point also has the entire set of document chunks so it has
+information across documents not just per document. This also reduces the number of tokens required for the next step.
+
+Step 4: Expansion
+For the selected documents, we pass the main retrieved sections from above (this may be a single chunk or a section comprised of
+several consecutive chunks) along with chunks above and below the section to the LLM. The LLM determines how much of the document
+it wants to read. This is done in parallel for all selected documents. Reason being that the LLM would not be able to do a good
+job of this with all of the documents in the prompt at once. Keeping every LLM decision step as simple as possible is key for
+reliable performance.
+
+Step 5: Prompt Building
+We construct a response string back to the LLM as the result of the tool call. We also pass relevant richer objects back
+so that the rest of the code can persist it, render it in the UI, etc. The response is a json that makes it easy for the LLM to
+refer to by using matching keywords to other parts of the prompt and reminders.
+"""
+
 from collections.abc import Callable
 from typing import Any
 from typing import cast
@@ -20,7 +56,7 @@ from onyx.db.connector import check_federated_connectors_exist
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
-from onyx.llm.factory import get_llm_tokenizer_encode_func
+from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.document_filter import select_chunks_for_relevance
@@ -98,14 +134,14 @@ def deduplicate_queries(
 
 def _estimate_section_tokens(
     section: InferenceSection,
-    tokenizer_encode_func: Callable[[str], list[int]],
+    token_counter: Callable[[str], int],
     max_chunks_per_section: int | None = None,
 ) -> int:
     """Estimate token count for a section using the LLM tokenizer.
 
     Args:
         section: InferenceSection to estimate tokens for
-        tokenizer_encode_func: Function that encodes text to tokens
+        token_counter: Function that counts tokens in text
         max_chunks_per_section: Maximum chunks to consider per section (None for all)
 
     Returns:
@@ -119,9 +155,9 @@ def _estimate_section_tokens(
         selected_chunks = select_chunks_for_relevance(section, max_chunks_per_section)
         # Combine content from selected chunks
         combined_content = "\n".join(chunk.content for chunk in selected_chunks)
-        content_tokens = len(tokenizer_encode_func(combined_content))
+        content_tokens = token_counter(combined_content)
     else:
-        content_tokens = len(tokenizer_encode_func(section.combined_content))
+        content_tokens = token_counter(section.combined_content)
 
     return content_tokens + METADATA_TOKEN_ESTIMATE
 
@@ -130,7 +166,7 @@ def _estimate_section_tokens(
 def _trim_sections_by_tokens(
     sections: list[InferenceSection],
     max_tokens: int,
-    tokenizer_encode_func: Callable[[str], list[int]],
+    token_counter: Callable[[str], int],
     max_chunks_per_section: int | None = None,
 ) -> list[InferenceSection]:
     """Trim sections to fit within a token budget using the LLM tokenizer.
@@ -138,7 +174,7 @@ def _trim_sections_by_tokens(
     Args:
         sections: List of InferenceSection objects to trim
         max_tokens: Maximum token budget
-        tokenizer_encode_func: Function that encodes text to tokens
+        token_counter: Function that counts tokens in text
         max_chunks_per_section: Maximum chunks to consider per section (None for all)
 
     Returns:
@@ -152,7 +188,7 @@ def _trim_sections_by_tokens(
 
     for section in sections:
         section_tokens = _estimate_section_tokens(
-            section, tokenizer_encode_func, max_chunks_per_section
+            section, token_counter, max_chunks_per_section
         )
         if total_tokens + section_tokens <= max_tokens:
             trimmed_sections.append(section)
@@ -463,23 +499,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 top_sections, is_internet=False
             )
 
-            # Emit the full set of found documents, this isn't used today in the UI though
-            # self.emitter.emit(
-            #     Packet(
-            #         turn_index=turn_index,
-            #         obj=SearchToolDocumentsDelta(
-            #             documents=search_docs,
-            #         ),
-            #     )
-            # )
-
             secondary_flows_user_query = (
                 override_kwargs.original_query
                 or semantic_query
                 or (llm_queries[0] if llm_queries else "")
             )
 
-            tokenizer_encode_func = get_llm_tokenizer_encode_func(self.llm)
+            token_counter = get_llm_token_counter(self.llm)
 
             # Trim sections to fit within token budget before LLM selection
             # This is to account for very short chunks flooding the search context
@@ -494,7 +520,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             sections_for_selection = _trim_sections_by_tokens(
                 sections=top_sections,
                 max_tokens=max_tokens_for_selection,
-                tokenizer_encode_func=tokenizer_encode_func,
+                token_counter=token_counter,
                 max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
             )
 

@@ -14,9 +14,6 @@ from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CITATION_REMINDER
 from onyx.prompts.chat_prompts import COMPANY_DESCRIPTION_BLOCK
 from onyx.prompts.chat_prompts import COMPANY_NAME_BLOCK
-from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_TAG_CLOSED
-from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_TAG_OPEN
-from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.prompts.constants import CODE_BLOCK_PAT
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -137,56 +134,6 @@ def build_task_prompt_reminders(
     citation_or_nothing = citation_str
     language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
     return base_task + citation_or_nothing + language_hint_or_nothing
-
-
-def build_task_prompt_reminders_v2(
-    prompt: Persona | PromptConfig,
-    use_language_hint: bool,
-    should_cite: bool,
-    last_iteration_included_web_search: bool = False,
-    language_hint_str: str = LANGUAGE_HINT,
-) -> str | None:
-    """V2 version that conditionally includes citation requirements.
-
-    Args:
-        chat_turn_user_message: The user's message for this chat turn
-        prompt: Persona or PromptConfig with task_prompt
-        use_language_hint: Whether to include language hint
-        should_cite: Whether to include citation requirement statement
-        last_iteration_included_web_search: Whether the last iteration included web_search calls
-        language_hint_str: Language hint string to use
-
-    Returns:
-        Task prompt with optional citation statement and language hint
-    """
-    base_task = (
-        prompt.reminder
-        if isinstance(prompt, PromptConfig)
-        else prompt.task_prompt or ""
-    )
-
-    open_url_or_nothing = (
-        OPEN_URL_REMINDER if last_iteration_included_web_search else ""
-    )
-    citation_or_nothing = CITATION_REMINDER if should_cite else ""
-
-    language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
-    lines = []
-    if base_task:
-        lines.append(base_task)
-    if open_url_or_nothing:
-        lines.append(open_url_or_nothing)
-    if citation_or_nothing:
-        lines.append(citation_or_nothing)
-    if language_hint_or_nothing:
-        lines.append(language_hint_or_nothing)
-    if lines:
-        return "\n".join(
-            [LONG_CONVERSATION_REMINDER_TAG_OPEN]
-            + lines
-            + [LONG_CONVERSATION_REMINDER_TAG_CLOSED]
-        )
-    return None
 
 
 # Maps connector enum string to a more natural language representation for the LLM

@@ -23,13 +23,16 @@ import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
 import ChatInputBar from "@/app/chat/components/input/ChatInputBar";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import { useTags } from "@/lib/hooks/useTags";
+import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
+import { useAgents } from "@/lib/hooks/useAgents";
 import { ChatPopup } from "@/app/chat/components/ChatPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import TextView from "@/components/chat/TextView";
 import { Modal } from "@/components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
@@ -37,13 +40,13 @@ import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
-import { ChatSearchModal } from "@/app/chat/chat_search/ChatSearchModal";
 import useScreenSize from "@/hooks/useScreenSize";
 import { DocumentResults } from "@/app/chat/components/documentSidebar/DocumentResults";
 import { useChatController } from "@/app/chat/hooks/useChatController";
 import { useAssistantController } from "@/app/chat/hooks/useAssistantController";
 import { useChatSessionController } from "@/app/chat/hooks/useChatSessionController";
 import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
+import { useIsDefaultAgent } from "@/app/chat/hooks/useIsDefaultAgent";
 import {
   useChatSessionStore,
   useMaxTokens,
@@ -79,6 +82,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgChevronDown from "@/icons/chevron-down";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
+
 interface ChatPageProps {
   documentSidebarInitialWidth?: number;
   firstMessage?: string;
@@ -110,8 +114,11 @@ export default function ChatPage({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { chatSessions, ccPairs, tags, documentSets, refreshChatSessions } =
-    useChatContext();
+  // Use SWR hooks for data fetching
+  const { chatSessions, refreshChatSessions } = useChatSessions();
+  const { ccPairs } = useCCPairs();
+  const { tags } = useTags();
+  const { documentSets } = useDocumentSets();
 
   const {
     currentMessageFiles,
@@ -133,7 +140,8 @@ export default function ChatPage({
 
   const isInitialLoad = useRef(true);
 
-  const { agents: availableAssistants } = useAgentsContext();
+  const { agents: availableAssistants, isLoading: isLoadingAgents } =
+    useAgents();
 
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
@@ -202,20 +210,27 @@ export default function ChatPage({
     state: onboardingState,
     actions: onboardingActions,
     llmDescriptors,
+    isLoading: isLoadingOnboarding,
   } = useOnboardingState(liveAssistant);
 
   const llmManager = useLlmManager(selectedChatSession, liveAssistant);
 
   // On first render, open onboarding if there are no configured LLM providers.
-  // Only check once to avoid re-triggering onboarding when data refreshes.
+  // Wait until providers have loaded before making this decision.
+  const hasCheckedOnboarding = useRef(false);
   useEffect(() => {
+    // Only check once, and only after data has loaded
+    if (hasCheckedOnboarding.current || llmManager.isLoadingProviders) {
+      return;
+    }
+    hasCheckedOnboarding.current = true;
     setShowOnboarding(llmManager.hasAnyProvider === false);
-  }, []);
+  }, [llmManager.isLoadingProviders, llmManager.hasAnyProvider]);
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
   const availableSources: ValidSources[] = useMemo(() => {
-    return ccPairs.map((ccPair) => ccPair.source);
+    return (ccPairs ?? []).map((ccPair) => ccPair.source);
   }, [ccPairs]);
 
   const sources: SourceMetadata[] = useMemo(() => {
@@ -267,7 +282,13 @@ export default function ChatPage({
   const [projectPanelVisible, setProjectPanelVisible] = useState(true);
 
   const filterManager = useFilters();
-  const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
+
+  const isDefaultAgent = useIsDefaultAgent({
+    liveAssistant,
+    existingChatSessionId,
+    selectedChatSession,
+    settings,
+  });
 
   const [aboveHorizon, setAboveHorizon] = useState(false);
 
@@ -420,8 +441,17 @@ export default function ChatPage({
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
-  const { showCenteredInput, loadingError, messageHistory } =
-    useChatPageLayout();
+  const {
+    showCenteredInput: showCenteredInputRaw,
+    loadingError,
+    messageHistory,
+  } = useChatPageLayout();
+
+  // When loading an existing chat session, always show input at bottom
+  // to prevent layout shift from centered → bottom position
+  const showCenteredInput = existingChatSessionId
+    ? false
+    : showCenteredInputRaw;
 
   const clientScrollToBottom = useCallback(
     (fast?: boolean) => {
@@ -587,11 +617,6 @@ export default function ChatPage({
     }
   }, [documentSidebarVisible, updateCurrentDocumentSidebarVisible]);
 
-  const toggleChatSessionSearchModal = useCallback(
-    () => setIsChatSearchModalOpen((open) => !open),
-    [setIsChatSearchModalOpen]
-  );
-
   if (!user) {
     redirect("/auth/login");
   }
@@ -726,7 +751,8 @@ export default function ChatPage({
   }, [existingChatSessionId, selectedAssistant?.id, liveAssistant?.id]);
 
   // handle error case where no assistants are available
-  if (noAssistants) {
+  // Only show this after agents have loaded to prevent flash during initial load
+  if (noAssistants && !isLoadingAgents) {
     return (
       <>
         <HealthCheckBanner />
@@ -746,11 +772,6 @@ export default function ChatPage({
       {popup}
 
       <ChatPopup />
-
-      <ChatSearchModal
-        open={isChatSearchModalOpen}
-        onCloseModal={() => setIsChatSearchModalOpen(false)}
-      />
 
       {retrievalEnabled && documentSidebarVisible && settings?.isMobile && (
         <div className="md:hidden">
@@ -805,164 +826,163 @@ export default function ChatPage({
               ref={masterFlexboxRef}
               className="flex h-full w-full overflow-x-hidden"
             >
-              {documentSidebarInitialWidth !== undefined && (
-                <Dropzone
-                  key={chatSessionId}
-                  onDrop={(acceptedFiles) =>
-                    handleMessageSpecificFileUpload(acceptedFiles)
-                  }
-                  noClick
-                >
-                  {({ getRootProps }) => (
+              <Dropzone
+                onDrop={(acceptedFiles) =>
+                  handleMessageSpecificFileUpload(acceptedFiles)
+                }
+                noClick
+              >
+                {({ getRootProps }) => (
+                  <div
+                    className="h-full w-full relative flex-auto min-w-0"
+                    {...getRootProps()}
+                  >
                     <div
-                      className="h-full w-full relative flex-auto min-w-0"
-                      {...getRootProps()}
+                      onScroll={handleScroll}
+                      className="w-full h-[calc(100dvh-100px)] flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative"
+                      ref={scrollableDivRef}
                     >
-                      <div
-                        onScroll={handleScroll}
-                        className="w-full h-[calc(100dvh-100px)] flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative"
-                        ref={scrollableDivRef}
-                      >
-                        <MessagesDisplay
-                          messageHistory={messageHistory}
-                          completeMessageTree={completeMessageTree}
-                          liveAssistant={liveAssistant}
-                          llmManager={llmManager}
-                          deepResearchEnabled={deepResearchEnabled}
-                          currentMessageFiles={currentMessageFiles}
-                          setPresentingDocument={setPresentingDocument}
-                          onSubmit={onSubmit}
-                          onMessageSelection={onMessageSelection}
-                          stopGenerating={stopGenerating}
-                          uncaughtError={uncaughtError}
-                          loadingError={loadingError}
-                          handleResubmitLastMessage={handleResubmitLastMessage}
-                          autoScrollEnabled={autoScrollEnabled}
-                          getContainerHeight={getContainerHeight}
-                          lastMessageRef={lastMessageRef}
-                          endPaddingRef={endPaddingRef}
-                          endDivRef={endDivRef}
-                          hasPerformedInitialScroll={hasPerformedInitialScroll}
-                          chatSessionId={chatSessionId}
-                          enterpriseSettings={enterpriseSettings}
-                        />
-                      </div>
+                      <MessagesDisplay
+                        messageHistory={messageHistory}
+                        completeMessageTree={completeMessageTree}
+                        liveAssistant={liveAssistant}
+                        llmManager={llmManager}
+                        deepResearchEnabled={deepResearchEnabled}
+                        currentMessageFiles={currentMessageFiles}
+                        setPresentingDocument={setPresentingDocument}
+                        onSubmit={onSubmit}
+                        onMessageSelection={onMessageSelection}
+                        stopGenerating={stopGenerating}
+                        uncaughtError={uncaughtError}
+                        loadingError={loadingError}
+                        handleResubmitLastMessage={handleResubmitLastMessage}
+                        autoScrollEnabled={autoScrollEnabled}
+                        getContainerHeight={getContainerHeight}
+                        lastMessageRef={lastMessageRef}
+                        endPaddingRef={endPaddingRef}
+                        endDivRef={endDivRef}
+                        hasPerformedInitialScroll={hasPerformedInitialScroll}
+                        chatSessionId={chatSessionId}
+                        enterpriseSettings={enterpriseSettings}
+                      />
+                    </div>
+
+                    <div
+                      ref={inputRef}
+                      className={cn(
+                        "absolute z-10 w-full",
+                        showCenteredHero
+                          ? "inset-0"
+                          : currentProjectId !== null && showCenteredInput
+                            ? "top-0 left-0 right-0"
+                            : "bottom-0 left-0 right-0 translate-y-0"
+                      )}
+                    >
+                      {!showCenteredInput && aboveHorizon && (
+                        <div className="mx-auto flex justify-center py-4">
+                          <IconButton
+                            icon={SvgChevronDown}
+                            onClick={() => clientScrollToBottom()}
+                          />
+                        </div>
+                      )}
 
                       <div
-                        ref={inputRef}
                         className={cn(
-                          "absolute z-10 w-full",
+                          "pointer-events-auto w-[95%] mx-auto relative text-text-04 justify-center",
                           showCenteredHero
-                            ? "inset-0"
-                            : currentProjectId !== null && showCenteredInput
-                              ? "top-0 left-0 right-0"
-                              : "bottom-0 left-0 right-0 translate-y-0"
+                            ? "h-full grid grid-rows-[1fr_auto_1fr]"
+                            : "mb-8"
                         )}
                       >
-                        {!showCenteredInput && aboveHorizon && (
-                          <div className="mx-auto flex justify-center py-4">
-                            <IconButton
-                              icon={SvgChevronDown}
-                              onClick={() => clientScrollToBottom()}
-                            />
-                          </div>
+                        {currentProjectId == null && showCenteredInput && (
+                          <WelcomeMessage
+                            agent={liveAssistant}
+                            isDefaultAgent={isDefaultAgent}
+                          />
                         )}
-
                         <div
                           className={cn(
-                            "pointer-events-auto w-[95%] mx-auto relative text-text-04 justify-center",
-                            showCenteredHero
-                              ? "h-full grid grid-rows-[1fr_auto_1fr]"
-                              : "mb-8"
+                            "flex flex-col items-center justify-center",
+                            showCenteredHero && "row-start-2"
                           )}
                         >
-                          {currentProjectId == null && showCenteredInput && (
-                            <WelcomeMessage liveAssistant={liveAssistant} />
-                          )}
-                          <div
-                            className={cn(
-                              "flex flex-col items-center justify-center",
-                              showCenteredHero && "row-start-2"
-                            )}
-                          >
-                            {currentProjectId !== null &&
-                              projectPanelVisible && (
-                                <ProjectContextPanel
-                                  projectTokenCount={projectContextTokenCount}
-                                  availableContextTokens={
-                                    availableContextTokens
-                                  }
-                                  setPresentingDocument={setPresentingDocument}
-                                />
-                              )}
-
-                            {(showOnboarding ||
-                              (user?.role !== UserRole.ADMIN &&
-                                !user?.personalization?.name)) &&
-                              currentProjectId === null && (
-                                <OnboardingFlow
-                                  handleHideOnboarding={() =>
-                                    setShowOnboarding(false)
-                                  }
-                                  state={onboardingState}
-                                  actions={onboardingActions}
-                                  llmDescriptors={llmDescriptors}
-                                />
-                              )}
-                            <ChatInputBar
-                              deepResearchEnabled={deepResearchEnabled}
-                              toggleDeepResearch={toggleDeepResearch}
-                              toggleDocumentSidebar={toggleDocumentSidebar}
-                              filterManager={filterManager}
-                              llmManager={llmManager}
-                              removeDocs={() => setSelectedDocuments([])}
-                              retrievalEnabled={retrievalEnabled}
-                              selectedDocuments={selectedDocuments}
-                              message={message}
-                              setMessage={setMessage}
-                              stopGenerating={stopGenerating}
-                              onSubmit={handleChatInputSubmit}
-                              chatState={currentChatState}
-                              currentSessionFileTokenCount={
-                                existingChatSessionId
-                                  ? currentSessionFileTokenCount
-                                  : projectContextTokenCount
-                              }
+                          {currentProjectId !== null && projectPanelVisible && (
+                            <ProjectContextPanel
+                              projectTokenCount={projectContextTokenCount}
                               availableContextTokens={availableContextTokens}
-                              selectedAssistant={
-                                selectedAssistant || liveAssistant
-                              }
-                              handleFileUpload={handleMessageSpecificFileUpload}
-                              textAreaRef={textAreaRef}
                               setPresentingDocument={setPresentingDocument}
-                              disabled={
-                                llmManager.hasAnyProvider === false ||
-                                onboardingState.currentStep !==
-                                  OnboardingStep.Complete
-                              }
                             />
-                          </div>
+                          )}
 
-                          {currentProjectId !== null && (
-                            <div className="transition-all duration-700 ease-out">
-                              <ProjectChatSessionList />
+                          {(showOnboarding ||
+                            (user?.role !== UserRole.ADMIN &&
+                              !user?.personalization?.name)) &&
+                            currentProjectId === null && (
+                              <OnboardingFlow
+                                handleHideOnboarding={() =>
+                                  setShowOnboarding(false)
+                                }
+                                state={onboardingState}
+                                actions={onboardingActions}
+                                llmDescriptors={llmDescriptors}
+                              />
+                            )}
+                          <ChatInputBar
+                            deepResearchEnabled={deepResearchEnabled}
+                            toggleDeepResearch={toggleDeepResearch}
+                            toggleDocumentSidebar={toggleDocumentSidebar}
+                            filterManager={filterManager}
+                            llmManager={llmManager}
+                            removeDocs={() => setSelectedDocuments([])}
+                            retrievalEnabled={retrievalEnabled}
+                            selectedDocuments={selectedDocuments}
+                            message={message}
+                            setMessage={setMessage}
+                            stopGenerating={stopGenerating}
+                            onSubmit={handleChatInputSubmit}
+                            chatState={currentChatState}
+                            currentSessionFileTokenCount={
+                              existingChatSessionId
+                                ? currentSessionFileTokenCount
+                                : projectContextTokenCount
+                            }
+                            availableContextTokens={availableContextTokens}
+                            selectedAssistant={
+                              selectedAssistant || liveAssistant
+                            }
+                            handleFileUpload={handleMessageSpecificFileUpload}
+                            textAreaRef={textAreaRef}
+                            setPresentingDocument={setPresentingDocument}
+                            disabled={
+                              (!llmManager.isLoadingProviders &&
+                                llmManager.hasAnyProvider === false) ||
+                              (!isLoadingOnboarding &&
+                                onboardingState.currentStep !==
+                                  OnboardingStep.Complete)
+                            }
+                          />
+                        </div>
+
+                        {currentProjectId !== null && (
+                          <div className="transition-all duration-700 ease-out">
+                            <ProjectChatSessionList />
+                          </div>
+                        )}
+
+                        {liveAssistant?.starter_messages &&
+                          liveAssistant.starter_messages.length > 0 &&
+                          messageHistory.length === 0 &&
+                          showCenteredHero && (
+                            <div className="mt-6 row-start-3 max-w-[50rem]">
+                              <Suggestions onSubmit={onSubmit} />
                             </div>
                           )}
-
-                          {liveAssistant.starter_messages &&
-                            liveAssistant.starter_messages.length > 0 &&
-                            messageHistory.length === 0 &&
-                            showCenteredHero && (
-                              <div className="mt-6 row-start-3 max-w-[50rem]">
-                                <Suggestions onSubmit={onSubmit} />
-                              </div>
-                            )}
-                        </div>
                       </div>
                     </div>
-                  )}
-                </Dropzone>
-              )}
+                  </div>
+                )}
+              </Dropzone>
             </div>
           </div>
         </AppPageLayout>

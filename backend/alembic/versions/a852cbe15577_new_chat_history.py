@@ -253,24 +253,18 @@ def downgrade() -> None:
     op.create_unique_constraint("uq_tool_call_message_id", "tool_call", ["message_id"])
 
     # Reverse ChatMessage changes
+    # Note: research_answer_purpose and research_type were originally String columns,
+    # not Enum types (see migrations 5ae8240accb3 and f8a9b2c3d4e5)
     op.add_column(
         "chat_message",
-        sa.Column(
-            "research_answer_purpose",
-            sa.Enum("INTRO", "DEEP_DIVE", name="researchanswerpurpose"),
-            nullable=True,
-        ),
+        sa.Column("research_answer_purpose", sa.String(), nullable=True),
     )
     op.add_column(
         "chat_message", sa.Column("research_plan", postgresql.JSONB(), nullable=True)
     )
     op.add_column(
         "chat_message",
-        sa.Column(
-            "research_type",
-            sa.Enum("SIMPLE", "DEEP", name="researchtype"),
-            nullable=True,
-        ),
+        sa.Column("research_type", sa.String(), nullable=True),
     )
     op.add_column(
         "chat_message",

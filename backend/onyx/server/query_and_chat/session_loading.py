@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import cast
 
-from agents import ImageGenerationTool
-from agents import WebSearchTool
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
@@ -21,7 +19,9 @@ from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import OpenUrl
+from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
+from onyx.server.query_and_chat.streaming_models import OpenUrlStart
+from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
@@ -30,8 +30,12 @@ from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -177,17 +181,35 @@ def create_custom_tool_packets(
 
 
 def create_fetch_packets(
-    fetches: list[list[SavedSearchDoc]], turn_index: int
+    fetch_docs: list[SavedSearchDoc],
+    urls: list[str],
+    turn_index: int,
 ) -> list[Packet]:
     packets: list[Packet] = []
-    for fetch in fetches:
-        packets.append(
-            Packet(
-                turn_index=turn_index,
-                obj=OpenUrl(documents=[SearchDoc(**doc.model_dump()) for doc in fetch]),
-            )
+    # Emit start packet
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=OpenUrlStart(),
         )
-        packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
+    )
+    # Emit URLs packet
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=OpenUrlUrls(urls=urls),
+        )
+    )
+    # Emit documents packet
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=OpenUrlDocuments(
+                documents=[SearchDoc(**doc.model_dump()) for doc in fetch_docs]
+            ),
+        )
+    )
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
     return packets
 
 
@@ -297,7 +319,13 @@ def translate_assistant_message_to_packets(
                             translate_db_search_doc_to_saved_search_doc(doc)
                             for doc in tool_call.search_docs
                         ]
-                        packet_list.extend(create_fetch_packets([fetch_docs], turn_num))
+                        # Get URLs from tool_call_arguments
+                        urls = cast(
+                            list[str], tool_call.tool_call_arguments.get("urls", [])
+                        )
+                        packet_list.extend(
+                            create_fetch_packets(fetch_docs, urls, turn_num)
+                        )
 
                     elif tool.in_code_tool_id == ImageGenerationTool.__name__:
                         if tool_call.generated_images:

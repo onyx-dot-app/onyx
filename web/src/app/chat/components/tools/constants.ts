@@ -3,7 +3,7 @@ import SvgGlobe from "@/icons/globe";
 import SvgImage from "@/icons/image";
 import SvgCode from "@/icons/code";
 import SvgLink from "@/icons/link";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 
 // Tool names as referenced by tool results / tool calls
 export const SEARCH_TOOL_NAME = "run_search";
@@ -22,7 +22,7 @@ export const OPEN_URL_TOOL_ID = "OpenURLTool";
 // Icon mappings for system tools
 export const SYSTEM_TOOL_ICONS: Record<
   string,
-  React.FunctionComponent<SvgProps>
+  React.FunctionComponent<IconProps>
 > = {
   [SEARCH_TOOL_ID]: SvgSearch,
   [WEB_SEARCH_TOOL_ID]: SvgGlobe,

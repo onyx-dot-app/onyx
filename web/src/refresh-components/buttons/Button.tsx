@@ -4,7 +4,7 @@ import React, { useMemo } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 
 const variantClasses = (transient?: boolean) =>
   ({
@@ -281,8 +281,8 @@ export interface ButtonProps
   transient?: boolean;
 
   // Icons:
-  leftIcon?: React.FunctionComponent<SvgProps>;
-  rightIcon?: React.FunctionComponent<SvgProps>;
+  leftIcon?: React.FunctionComponent<IconProps>;
+  rightIcon?: React.FunctionComponent<IconProps>;
 
   href?: string;
 }

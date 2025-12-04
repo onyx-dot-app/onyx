@@ -1,7 +1,7 @@
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useCallback, useMemo, useState } from "react";
 import { ChatSession } from "../interfaces";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useAgents, usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
@@ -14,8 +14,8 @@ export function useAssistantController({
   onAssistantSelect?: () => void;
 }) {
   const searchParams = useSearchParams();
-  const { agents: availableAssistants, pinnedAgents: pinnedAssistants } =
-    useAgentsContext();
+  const { agents: availableAssistants } = useAgents();
+  const { pinnedAgents: pinnedAssistants } = usePinnedAgentsWithDetails();
   const combinedSettings = useSettingsContext();
 
   const defaultAssistantIdRaw = searchParams?.get(

@@ -21,7 +21,6 @@ from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import RetrievalDocs
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
 from onyx.db.models import ChatMessage
@@ -724,55 +723,6 @@ def set_as_latest_chat_message(
     db_session.commit()
 
 
-def attach_files_to_chat_message(
-    chat_message: ChatMessage,
-    files: list[FileDescriptor],
-    db_session: Session,
-    commit: bool = True,
-) -> None:
-    chat_message.files = files
-    if commit:
-        db_session.commit()
-
-
-def get_doc_query_identifiers_from_model(
-    search_doc_ids: list[int],
-    chat_session: ChatSession,
-    user_id: UUID | None,
-    db_session: Session,
-    enforce_chat_session_id_for_search_docs: bool,
-) -> list[tuple[str, int]]:
-    """Given a list of search_doc_ids"""
-    search_docs = (
-        db_session.query(DBSearchDoc).filter(DBSearchDoc.id.in_(search_doc_ids)).all()
-    )
-
-    if user_id != chat_session.user_id:
-        logger.error(
-            f"Docs referenced are from a chat session not belonging to user {user_id}"
-        )
-        raise ValueError("Docs references do not belong to user")
-
-    try:
-        if any(
-            [
-                doc.chat_messages[0].chat_session_id != chat_session.id
-                for doc in search_docs
-            ]
-        ):
-            if enforce_chat_session_id_for_search_docs:
-                raise ValueError("Invalid reference doc, not from this chat session.")
-    except IndexError:
-        # This happens when the doc has no chat_messages associated with it.
-        # which happens as an edge case where the chat message failed to save
-        # This usually happens when the LLM fails either immediately or partially through.
-        raise RuntimeError("Chat session failed, please start a new session.")
-
-    doc_query_identifiers = [(doc.document_id, doc.chunk_ind) for doc in search_docs]
-
-    return doc_query_identifiers
-
-
 def update_search_docs_table_with_relevance(
     db_session: Session,
     reference_db_search_docs: list[DBSearchDoc],
@@ -876,27 +826,6 @@ def translate_db_search_doc_to_saved_search_doc(
     )
 
 
-def get_retrieval_docs_from_search_docs(
-    search_docs: list[DBSearchDoc],
-    remove_doc_content: bool = False,
-    sort_by_score: bool = True,
-) -> RetrievalDocs:
-    top_documents = [
-        translate_db_search_doc_to_saved_search_doc(
-            db_doc, remove_doc_content=remove_doc_content
-        )
-        for db_doc in search_docs
-    ]
-    if sort_by_score:
-        top_documents = sorted(
-            top_documents, key=lambda doc: (doc.score or 0.0), reverse=True
-        )
-    return RetrievalDocs(top_documents=top_documents)
-
-
-# Note: translate_db_message_to_packets moved to onyx.server.query_and_chat.streaming_utils
-
-
 def translate_db_message_to_chat_message_detail(
     chat_message: ChatMessage,
     remove_doc_content: bool = False,
@@ -922,6 +851,15 @@ def translate_db_message_to_chat_message_detail(
             if document_id:
                 converted_citations[citation_num] = document_id
 
+    top_documents = [
+        translate_db_search_doc_to_saved_search_doc(
+            db_doc, remove_doc_content=remove_doc_content
+        )
+        for db_doc in chat_message.search_docs
+    ]
+    top_documents = sorted(
+        top_documents, key=lambda doc: (doc.score or 0.0), reverse=True
+    )
     chat_msg_detail = ChatMessageDetail(
         chat_session_id=chat_message.chat_session_id,
         message_id=chat_message.id,
@@ -930,9 +868,7 @@ def translate_db_message_to_chat_message_detail(
         message=chat_message.message,
         reasoning_tokens=chat_message.reasoning_tokens,
         message_type=chat_message.message_type,
-        context_docs=get_retrieval_docs_from_search_docs(
-            chat_message.search_docs, remove_doc_content=remove_doc_content
-        ),
+        context_docs=top_documents,
         citations=converted_citations,
         time_sent=chat_message.time_sent,
         files=chat_message.files or [],

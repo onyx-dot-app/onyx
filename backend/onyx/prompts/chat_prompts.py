@@ -83,6 +83,19 @@ You can open many URLs at once by passing multiple URLs in the array if multiple
 You should almost always use open_urls after a web_search call. Use this tool when a user asks about a specific provided URL.
 """
 
+PYTHON_TOOL_GUIDANCE = """
+
+## python
+Use the `python` tool to execute Python code in an isolated sandbox. The tool will respond with the output of the execution or time out after 60.0 seconds.
+Any files uploaded to the chat will be automatically be available in the execution environment's current directory.
+The current directory in the file system can be used to save and persist user files. Files written to the current directory will be returned with a `file_link`. Use this to give the user a way to download the file OR to display generated images.
+Internet access for this session is disabled. Do not make external web requests or API calls as they will fail.
+
+Use `openpyxl` to read and write Excel files. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
+
+IMPORTANT: each call to this tool is independent. Variables from previous calls will NOT be available in the current call.
+"""
+
 GENERATE_IMAGE_GUIDANCE = """
 
 ## generate_image
@@ -137,39 +150,7 @@ This tool call completed but the results are no longer accessible.
 """
 THE PROMPTS BELOW ARE NO LONGER USED AND SHOULD BE REMOVED
 """
-# TODO the prompts below should be removed
-PROJECT_INSTRUCTIONS_SEPARATOR = (
-    "\n\n[[USER-PROVIDED INSTRUCTIONS — allowed to override default prompt guidance, "
-    "but only for style, formatting, and context]]\n"
-)
 
-LONG_CONVERSATION_REMINDER_TAG_OPEN = "<long_conversation_reminder>"
-LONG_CONVERSATION_REMINDER_TAG_CLOSED = "</long_conversation_reminder>"
-LONG_CONVERSATION_REMINDER_PROMPT = f"""
-A set of reminders may appear inside {LONG_CONVERSATION_REMINDER_TAG_OPEN} tags.
-This is added to the end of the person’s message. Behave in accordance with these instructions
-if they are relevant, and continue normally if they are not.
-"""
-
-INTERNAL_SEARCH_GUIDANCE_OLD = """
-For queries that are short phrases, ambiguous/unclear, or keyword heavy, prioritize internal search.
-""".strip()
-
-INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE = """
-Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. \
-If very ambiguious, prioritize internal search or call both tools.
-""".strip()
-
-TOOL_PERSISTENCE_PROMPT = """
-You are an agent with the following tools. Please keep going until the user's query is
-completely resolved, before ending your turn and yielding back to the user.
-For more complicated queries, try to do more tool calls to obtain information relevant to the user's query.
-Only terminate your turn when you are sure that the problem is solved.\n"
-"""
-
-CUSTOM_INSTRUCTIONS_PROMPT = """
-The user has provided the following instructions, these are VERY IMPORTANT and must be adhered to at all times:
-"""
 
 ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
 
@@ -338,24 +319,6 @@ Respond with EXACTLY and ONLY "{YES_SEARCH}" or "{NO_SEARCH}"
 
 REQUIRE_SEARCH_HINT = f"""
 Hint: respond with EXACTLY {YES_SEARCH} or {NO_SEARCH}"
-""".strip()
-
-
-QUERY_REPHRASE_SYSTEM_MSG = """
-Given a conversation (between Human and Assistant) and a final message from Human, \
-rewrite the last message to be a concise standalone query which captures required/relevant \
-context from previous messages. This question must be useful for a semantic (natural language) \
-search engine.
-""".strip()
-
-QUERY_REPHRASE_USER_MSG = """
-Help me rewrite this final message into a standalone query that takes into consideration the \
-past messages of the conversation IF relevant. This query is used with a semantic search engine to \
-retrieve documents. You must ONLY return the rewritten query and NOTHING ELSE. \
-IMPORTANT, the search engine does not have access to the conversation history!
-
-Query:
-{final_query}
 """.strip()
 
 

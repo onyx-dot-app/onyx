@@ -252,9 +252,9 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Navigated to default assistant page`);
 
     // Wait for page to load
-    await expect(
-      page.getByRole("heading", { name: "Default Assistant" })
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[aria-label="admin-page-title"]')).toBeVisible({
+      timeout: 10000,
+    });
     console.log(`[test] Page loaded`);
 
     // Scroll to actions section

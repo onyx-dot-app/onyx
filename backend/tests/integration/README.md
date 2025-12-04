@@ -16,9 +16,10 @@ First install openap-generator
 brew install openapi-generator
 ```
 
-Then run `Onyx OpenAPI Schema Generator` in launch.json (you should have this already copied over from the launch.template.jsonc)
+Then, using the VSCode/Cursor debugger, run the `Onyx OpenAPI Schema Generator` task (see `CONTRIBUTING_VSCODE.md` for `launch.json` setup instructions).
+The task automatically generates the Python client needed for integration tests.
 
-Finally generate the required schema files using:
+If the client generation fails, try running this command manually:
 ```sh
 openapi-generator generate -i backend/generated/openapi.json -g python -o backend/generated/onyx_openapi_client --package-name onyx_openapi_client --skip-validate-spec --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
 ```

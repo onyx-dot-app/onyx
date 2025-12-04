@@ -1,0 +1,38 @@
+.switch-normal {
+  background-color: var(--background-tint-03);
+  border: 1px solid transparent;
+}
+.switch-normal:hover {
+  background-color: var(--background-tint-04);
+}
+.switch-normal:focus,
+.switch-normal:focus-within {
+  border-color: var(--background-tint-04);
+}
+.switch-normal:focus:hover,
+.switch-normal:focus-within:hover {
+  border-color: var(--border-01);
+}
+
+.switch-normal[data-state="checked"] {
+  background-color: var(--action-link-05);
+}
+.switch-normal[data-state="checked"]:hover {
+  background-color: var(--action-link-04);
+}
+
+.switch-disabled {
+  background-color: var(--background-neutral-04);
+  border: 1px solid transparent;
+  cursor: not-allowed;
+}
+.switch-disabled[data-state="checked"] {
+  background-color: var(--action-link-03);
+}
+
+.switch-thumb {
+  background-color: var(--background-neutral-light-00);
+}
+.switch-thumb-disabled {
+  background-color: var(--background-neutral-03);
+}

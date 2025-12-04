@@ -7,7 +7,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgTrash from "@/icons/trash";
 import Text from "@/refresh-components/texts/Text";
 import SvgExternalLink from "@/icons/external-link";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 
 const bgClassNames = {
@@ -27,7 +27,7 @@ interface AttachmentProps
   selected?: boolean;
   processing?: boolean;
 
-  leftIcon: React.FunctionComponent<SvgProps>;
+  leftIcon: React.FunctionComponent<IconProps>;
   children: string;
   description: string;
   rightText: string;

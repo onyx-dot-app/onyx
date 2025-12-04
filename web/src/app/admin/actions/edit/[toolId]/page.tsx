@@ -7,7 +7,7 @@ import { fetchToolByIdSS } from "@/lib/tools/fetchTools";
 import { DeleteToolButton } from "./DeleteToolButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { BackButton } from "@/components/BackButton";
-import { ToolIcon } from "@/components/icons/icons";
+import SvgActions from "@/icons/actions";
 
 export default async function Page(props: {
   params: Promise<{ toolId: string }>;
@@ -53,7 +53,7 @@ export default async function Page(props: {
 
       <AdminPageTitle
         title="Edit Action"
-        icon={<ToolIcon size={32} className="my-auto" />}
+        icon={<SvgActions className="stroke-text-04 h-8 w-8" />}
       />
 
       {body}

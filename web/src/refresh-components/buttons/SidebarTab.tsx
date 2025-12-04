@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";
@@ -60,7 +60,7 @@ export interface SidebarTabProps {
   onClick?: React.MouseEventHandler<HTMLDivElement>;
   href?: string;
   className?: string;
-  leftIcon?: React.FunctionComponent<SvgProps>;
+  leftIcon?: React.FunctionComponent<IconProps>;
   rightChildren?: React.ReactNode;
   children?: React.ReactNode;
 }

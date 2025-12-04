@@ -20,7 +20,7 @@ from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkContext
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
-from onyx.context.search.models import RetrievalDocs
+from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import Tag
@@ -30,6 +30,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import Packet
 
 
 if TYPE_CHECKING:
@@ -142,8 +143,6 @@ class CreateChatMessageRequest(ChunkContext):
     # TODO: make this a single one since unclear how to force this for multiple at a time.
     forced_tool_ids: list[int] | None = None
 
-    bypass_translation: bool = False
-
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
         if self.search_doc_ids is None and self.retrieval_options is None:
@@ -230,15 +229,6 @@ class SubQueryDetail(BaseModel):
     doc_ids: list[int] | None = None
 
 
-class SubQuestionDetail(BaseModel):
-    level: int
-    level_question_num: int
-    question: str
-    answer: str
-    sub_queries: list[SubQueryDetail] | None = None
-    context_docs: RetrievalDocs | None = None
-
-
 class ChatMessageDetail(BaseModel):
     chat_session_id: UUID | None = None
     message_id: int
@@ -247,7 +237,7 @@ class ChatMessageDetail(BaseModel):
     message: str
     reasoning_tokens: str | None = None
     message_type: MessageType
-    context_docs: RetrievalDocs | None = None
+    context_docs: list[SavedSearchDoc] | None = None
     # Dict mapping citation number to document_id
     citations: dict[int, str] | None = None
     time_sent: datetime
@@ -273,17 +263,14 @@ class ChatSessionDetailResponse(BaseModel):
     description: str | None
     persona_id: int | None = None
     persona_name: str | None
-    persona_icon_color: str | None
-    persona_icon_shape: int | None
+    personal_icon_name: str | None
     messages: list[ChatMessageDetail]
     time_created: datetime
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None
     current_temperature_override: float | None
     deleted: bool = False
-
-    # TODO make this the backend recognized packets
-    packets: list[list[dict[str, Any]]]
+    packets: list[list[Packet]]
 
 
 # This one is not used anymore

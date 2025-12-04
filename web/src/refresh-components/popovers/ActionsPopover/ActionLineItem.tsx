@@ -13,11 +13,11 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;
-  Icon?: React.FunctionComponent<SvgProps>;
+  Icon?: React.FunctionComponent<IconProps>;
   label?: string;
   disabled: boolean;
   isForced: boolean;
