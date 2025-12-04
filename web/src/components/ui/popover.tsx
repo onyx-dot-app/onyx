@@ -48,6 +48,8 @@ export interface PopoverMenuProps {
   className?: string;
   children?: React.ReactNode[];
   footer?: React.ReactNode;
+  // Ref for the scrollable container (useful for programmatic scrolling)
+  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 // This component converts a list of `React.ReactNode`s into a vertical menu.
@@ -65,6 +67,7 @@ export function PopoverMenu({
   className,
   children,
   footer,
+  scrollContainerRef,
 }: PopoverMenuProps) {
   if (!children) return null;
 
@@ -80,6 +83,7 @@ export function PopoverMenu({
   return (
     <div className="flex flex-col gap-1 max-h-[20rem]">
       <div
+        ref={scrollContainerRef}
         className={cn(
           "flex flex-col gap-1 h-full overflow-y-scroll",
           sizeClasses[size],

@@ -17,7 +17,7 @@ test("Non-image-generation model visibility in chat input bar", async ({
   await page.goto("http://localhost:3000/chat");
   await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
 
-  const testModelDisplayName = "GPT 4o Mini";
+  const testModelDisplayName = "GPT-4o Mini";
 
   // Open the LLM popover by clicking the model selector button
   const llmPopoverTrigger = page.locator('[data-testid="llm-popover-trigger"]');
@@ -27,8 +27,7 @@ test("Non-image-generation model visibility in chat input bar", async ({
   await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
   // Verify that the non-vision model appears in the list
-  // The model name is displayed via getDisplayNameForModel, so we search for text containing the model name
-  // Use .first() since there might be multiple providers with the same model
+  // The model name is displayed via getDisplayNameForModel
   const modelButton = page
     .locator('[role="dialog"]')
     .locator("button")
