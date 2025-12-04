@@ -13,6 +13,7 @@ import SvgOpenai from "@/icons/openai";
 import SvgOpenrouter from "@/icons/openrouter";
 import { LLMProviderName } from "@/app/admin/configuration/llm/interfaces";
 import InlineExternalLink from "../InlineExternalLink";
+import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
 
 type StepConfig = {
   index: number;
@@ -79,7 +80,7 @@ export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
     description: "Set up models to create images in your chats.",
     icon: SvgImage,
     buttonText: "Image Generation",
-    buttonHref: "https://docs.onyx.app/overview/core_features/image_generation",
+    buttonHref: `${DOCS_BASE_URL}/overview/core_features/image_generation`,
   },
   {
     title: "Invite your team",
@@ -216,7 +217,9 @@ export const MODAL_CONTENT_MAP: Record<string, any> = {
       BEDROCK_AUTH_METHOD: (
         <>
           {"See "}
-          <InlineExternalLink href="https://docs.onyx.app/admin/ai_models/bedrock#authentication-methods">
+          <InlineExternalLink
+            href={`${DOCS_ADMINS_PATH}/ai_models/bedrock#authentication-methods`}
+          >
             documentation
           </InlineExternalLink>
           {" for more instructions."}

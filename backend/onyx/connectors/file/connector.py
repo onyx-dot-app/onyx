@@ -155,7 +155,7 @@ def _process_file(
         content_type=file_type,
     )
 
-    # Each file may have file-specific ONYX_METADATA https://docs.onyx.app/admin/connectors/official/file
+    # Each file may have file-specific ONYX_METADATA https://docs.onyx.app/admins/connectors/official/file
     # If so, we should add it to any metadata processed so far
     if extraction_result.metadata:
         logger.debug(
