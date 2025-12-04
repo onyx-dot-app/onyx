@@ -752,7 +752,7 @@ def update_personas_display_priority(
     for persona_id, priority in display_priority_map.items():
         if persona_id not in available_personas_map:
             raise ValueError(
-                "Invalid persona ID provided: Persona with ID {} was not found for this user."
+                f"Invalid persona ID provided: Persona with ID {persona_id} was not found for this user."
             )
 
         available_personas_map[persona_id].display_priority = priority
