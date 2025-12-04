@@ -148,7 +148,7 @@ def construct_message_history(
             result.append(custom_agent_prompt)
         if project_files.project_file_texts:
             project_message = _create_project_files_message(
-                project_files, tokenizer_func=None
+                project_files, token_counter=None
             )
             result.append(project_message)
         if reminder_message:
@@ -226,7 +226,7 @@ def construct_message_history(
     # 3. Add project files message (inserted before last user message)
     if project_files.project_file_texts:
         project_message = _create_project_files_message(
-            project_files, tokenizer_func=None
+            project_files, token_counter=None
         )
         result.append(project_message)
 
@@ -245,7 +245,7 @@ def construct_message_history(
 
 def _create_project_files_message(
     project_files: ExtractedProjectFiles,
-    tokenizer_func: Callable[[str], list[int]] | None,
+    token_counter: Callable[[str], int] | None,
 ) -> ChatMessageSimple:
     """Convert project files to a ChatMessageSimple message.
 
@@ -636,9 +636,31 @@ def run_llm_step(
 
                 for tool_call_delta in delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
-        span_generation.span_data.output = [
-            {"role": "assistant", "content": accumulated_answer}
-        ]
+
+        tool_calls = _extract_tool_call_kickoffs(id_to_tool_call_map)
+        if tool_calls:
+            tool_calls_list: list[ToolCall] = [
+                {
+                    "id": kickoff.tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": kickoff.tool_name,
+                        "arguments": json.dumps(kickoff.tool_args),
+                    },
+                }
+                for kickoff in tool_calls
+            ]
+
+            assistant_msg: AssistantMessage = {
+                "role": "assistant",
+                "content": accumulated_answer if accumulated_answer else None,
+                "tool_calls": tool_calls_list,
+            }
+            span_generation.span_data.output = [assistant_msg]
+        elif accumulated_answer:
+            span_generation.span_data.output = [
+                {"role": "assistant", "content": accumulated_answer}
+            ]
     # Close reasoning block if still open (stream ended with reasoning content)
     if reasoning_start:
         emitter.emit(
@@ -672,33 +694,6 @@ def run_llm_step(
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
-
-    # Convert tool calls from map to ToolCallKickoff list
-    tool_calls: list[ToolCallKickoff] = []
-    for tool_call_data in id_to_tool_call_map.values():
-        if tool_call_data["id"] and tool_call_data["name"]:
-            try:
-                # Parse arguments JSON string to dict
-                tool_args = (
-                    json.loads(tool_call_data["arguments"])
-                    if tool_call_data["arguments"]
-                    else {}
-                )
-            except json.JSONDecodeError:
-                # If parsing fails, try empty dict, most tools would fail though
-                logger.error(
-                    f"Failed to parse tool call arguments: {tool_call_data['arguments']}"
-                )
-                tool_args = {}
-
-            tool_calls.append(
-                ToolCallKickoff(
-                    tool_call_id=tool_call_data["id"],
-                    tool_name=tool_call_data["name"],
-                    tool_args=tool_args,
-                )
-            )
-
     if LOG_ONYX_MODEL_INTERACTIONS:
         logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
         logger.debug(f"Accumulated answer: {accumulated_answer}")
@@ -748,6 +743,40 @@ def _update_tool_call_with_delta(
             ] += tool_call_delta.function.arguments
 
 
+def _extract_tool_call_kickoffs(
+    id_to_tool_call_map: dict[int, dict[str, Any]],
+) -> list[ToolCallKickoff]:
+    """Extract ToolCallKickoff objects from the tool call map.
+
+    Returns a list of ToolCallKickoff objects for valid tool calls (those with both id and name).
+    """
+    tool_calls: list[ToolCallKickoff] = []
+    for tool_call_data in id_to_tool_call_map.values():
+        if tool_call_data.get("id") and tool_call_data.get("name"):
+            try:
+                # Parse arguments JSON string to dict
+                tool_args = (
+                    json.loads(tool_call_data["arguments"])
+                    if tool_call_data["arguments"]
+                    else {}
+                )
+            except json.JSONDecodeError:
+                # If parsing fails, try empty dict, most tools would fail though
+                logger.error(
+                    f"Failed to parse tool call arguments: {tool_call_data['arguments']}"
+                )
+                tool_args = {}
+
+            tool_calls.append(
+                ToolCallKickoff(
+                    tool_call_id=tool_call_data["id"],
+                    tool_name=tool_call_data["name"],
+                    tool_args=tool_args,
+                )
+            )
+    return tool_calls
+
+
 def run_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -758,7 +787,7 @@ def run_llm_loop(
     persona: Persona | None,
     memories: list[str] | None,
     llm: LLM,
-    tokenizer_func: Callable[[str], list[int]],
+    token_counter: Callable[[str], int],
     db_session: Session,
     forced_tool_id: int | None = None,
 ) -> None:
@@ -837,7 +866,7 @@ def run_llm_loop(
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
                 system_prompt = ChatMessageSimple(
                     message=persona.system_prompt,
-                    token_count=len(tokenizer_func(persona.system_prompt)),
+                    token_count=token_counter(persona.system_prompt),
                     message_type=MessageType.SYSTEM,
                 )
                 custom_agent_prompt_msg = None
@@ -858,14 +887,14 @@ def run_llm_loop(
                 )
                 system_prompt = ChatMessageSimple(
                     message=system_prompt_str,
-                    token_count=len(tokenizer_func(system_prompt_str)),
+                    token_count=token_counter(system_prompt_str),
                     message_type=MessageType.SYSTEM,
                 )
 
                 custom_agent_prompt_msg = (
                     ChatMessageSimple(
                         message=custom_agent_prompt,
-                        token_count=len(tokenizer_func(custom_agent_prompt)),
+                        token_count=token_counter(custom_agent_prompt),
                         message_type=MessageType.USER,
                     )
                     if custom_agent_prompt
@@ -894,7 +923,7 @@ def run_llm_loop(
             reminder_msg = (
                 ChatMessageSimple(
                     message=reminder_message_text,
-                    token_count=len(tokenizer_func(reminder_message_text)),
+                    token_count=token_counter(reminder_message_text),
                     message_type=MessageType.USER,
                 )
                 if reminder_message_text
@@ -1008,7 +1037,7 @@ def run_llm_loop(
                         TOOL_CALL_MSG_ARGUMENTS: tool_call.tool_args,
                     }
                     tool_call_message = json.dumps(tool_call_data)
-                    tool_call_token_count = len(tokenizer_func(tool_call_message))
+                    tool_call_token_count = token_counter(tool_call_message)
 
                     tool_call_msg = ChatMessageSimple(
                         message=tool_call_message,
@@ -1020,9 +1049,7 @@ def run_llm_loop(
                     simple_chat_history.append(tool_call_msg)
 
                     tool_response_message = tool_response.llm_facing_response
-                    tool_response_token_count = len(
-                        tokenizer_func(tool_response_message)
-                    )
+                    tool_response_token_count = token_counter(tool_response_message)
 
                     tool_response_msg = ChatMessageSimple(
                         message=tool_response_message,

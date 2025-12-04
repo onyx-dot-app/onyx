@@ -81,9 +81,7 @@ def _build_citation_list(chat_message_detail: ChatMessageDetail) -> list[Citatio
         return []
     else:
         top_documents = (
-            chat_message_detail.context_docs.top_documents
-            if chat_message_detail.context_docs
-            else []
+            chat_message_detail.context_docs if chat_message_detail.context_docs else []
         )
         citation_list = _convert_document_ids_to_citation_info(
             citation_dict, top_documents
@@ -255,7 +253,7 @@ def handle_publish_ephemeral_message_button(
         if chat_message_detail.context_docs:
             top_documents: list[SearchDoc] = [
                 SearchDoc.from_saved_search_doc(doc)
-                for doc in chat_message_detail.context_docs.top_documents
+                for doc in chat_message_detail.context_docs
             ]
         else:
             top_documents = []
