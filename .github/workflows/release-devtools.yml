@@ -34,7 +34,7 @@ jobs:
       - run: |
           GOOS="${{ matrix.os-arch.goos }}" \
           GOARCH="${{ matrix.os-arch.goarch }}" \
-          uv build
+          uv build --wheel
         working-directory: tools/ods
       - run: uv publish
         working-directory: tools/ods
