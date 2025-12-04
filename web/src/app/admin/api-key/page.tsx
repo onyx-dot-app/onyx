@@ -14,13 +14,10 @@ import {
   TableRow,
   Table,
 } from "@/components/ui/table";
-
-import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import { DeleteButton } from "@/components/DeleteButton";
-import { FiCopy, FiEdit2, FiRefreshCw } from "react-icons/fi";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { deleteApiKey, regenerateApiKey } from "./lib";
@@ -31,52 +28,8 @@ import Button from "@/refresh-components/buttons/Button";
 import SvgRefreshCw from "@/icons/refresh-cw";
 import SvgEdit from "@/icons/edit";
 import SvgKey from "@/icons/key";
-
-const API_KEY_TEXT = `API Keys allow you to access Onyx APIs programmatically. Click the button below to generate a new API Key.`;
-
-function NewApiKeyModal({
-  apiKey,
-  onClose,
-}: {
-  apiKey: string;
-  onClose: () => void;
-}) {
-  const [copyClicked, setCopyClicked] = useState(false);
-
-  return (
-    <Modal title="New API Key" onOutsideClick={onClose}>
-      <div className="px-8 py-8">
-        <div className="h-32">
-          <Text className="mb-4">
-            Make sure you copy your new API key. You won’t be able to see this
-            key again.
-          </Text>
-
-          <div className="flex mt-2">
-            <b className="my-auto break-all">{apiKey}</b>
-            <div
-              className="ml-2 my-auto p-2 hover:bg-accent-background-hovered rounded cursor-pointer"
-              onClick={() => {
-                setCopyClicked(true);
-                navigator.clipboard.writeText(apiKey);
-                setTimeout(() => {
-                  setCopyClicked(false);
-                }, 10000);
-              }}
-            >
-              <FiCopy size="16" className="my-auto" />
-            </div>
-          </div>
-          {copyClicked && (
-            <Text className="text-success text-xs font-medium mt-1">
-              API Key copied!
-            </Text>
-          )}
-        </div>
-      </div>
-    </Modal>
-  );
-}
+import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import Text from "@/refresh-components/texts/Text";
 
 function Main() {
   const { popup, setPopup } = usePopup();
@@ -112,7 +65,10 @@ function Main() {
 
   const introSection = (
     <div className="flex flex-col items-start gap-4">
-      <Text>{API_KEY_TEXT}</Text>
+      <Text>
+        API Keys allow you to access Onyx APIs programmatically. Click the
+        button below to generate a new API Key.
+      </Text>
       <CreateButton
         className="self-start"
         onClick={() => setShowCreateUpdateForm(true)}
@@ -147,14 +103,25 @@ function Main() {
   }
 
   return (
-    <div>
+    <>
       {popup}
 
       {fullApiKey && (
-        <NewApiKeyModal
-          apiKey={fullApiKey}
-          onClose={() => setFullApiKey(null)}
-        />
+        <Modal title="New API Key" onOutsideClick={() => setFullApiKey(null)}>
+          <div className="px-8 py-8">
+            <div className="h-32">
+              <Text className="mb-4">
+                Make sure you copy your new API key. You won’t be able to see
+                this key again.
+              </Text>
+
+              <div className="flex mt-2">
+                <b className="my-auto break-all">{fullApiKey}</b>
+                <CopyIconButton getCopyText={() => fullApiKey} />
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {keyIsGenerating && <Spinner />}
@@ -251,7 +218,7 @@ function Main() {
           apiKey={selectedApiKey}
         />
       )}
-    </div>
+    </>
   );
 }
 
