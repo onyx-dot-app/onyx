@@ -5,11 +5,11 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import SvgServer from "@/icons/server";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
+import ToolsList from "@/sections/actions/ToolsList";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { deleteCustomTool, updateCustomTool } from "@/lib/tools/openApiService";
 import { ActionStatus, MethodSpec } from "@/lib/tools/types";
 import ToolItem from "@/sections/actions/ToolItem";
-import Text from "@/refresh-components/texts/Text";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
 
@@ -145,30 +145,26 @@ export default function OpenApiActionCard({
       onFold={handleFold}
       ariaLabel={`${tool.name} OpenAPI action card`}
     >
-      {filteredTools.length > 0 ? (
-        <div className="flex flex-col gap-2">
-          {filteredTools.map((method) => (
-            <ToolItem
-              key={`${tool.id}-${method.method}-${method.path}-${method.name}`}
-              name={method.name}
-              description={method.summary || "No summary provided"}
-              variant="openapi"
-              openApiMetadata={{
-                method: method.method,
-                path: method.path,
-              }}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="flex items-center justify-center w-full py-6">
-          <Text text03 secondaryBody>
-            {searchQuery
-              ? "No actions match your search"
-              : "No actions defined for this OpenAPI schema"}
-          </Text>
-        </div>
-      )}
+      <ToolsList
+        isEmpty={filteredTools.length === 0}
+        searchQuery={searchQuery}
+        emptyMessage="No actions defined for this OpenAPI schema"
+        emptySearchMessage="No actions match your search"
+        className="gap-2"
+      >
+        {filteredTools.map((method) => (
+          <ToolItem
+            key={`${tool.id}-${method.method}-${method.path}-${method.name}`}
+            name={method.name}
+            description={method.summary || "No summary provided"}
+            variant="openapi"
+            openApiMetadata={{
+              method: method.method,
+              path: method.path,
+            }}
+          />
+        ))}
+      </ToolsList>
     </ActionCard>
   );
 }

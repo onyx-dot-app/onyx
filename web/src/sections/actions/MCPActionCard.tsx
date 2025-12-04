@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import SvgServer from "@/icons/server";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
+import ToolItem from "@/sections/actions/ToolItem";
 import ToolsList from "@/sections/actions/ToolsList";
 import { ActionStatus } from "@/lib/tools/types";
 import { useServerTools } from "@/sections/actions/useServerTools";
@@ -84,6 +85,7 @@ export default function MCPActionCard({
 }: MCPActionCardProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
 
   // Update expanded state when initialExpanded changes
   const hasInitializedExpansion = useRef(false);
@@ -115,18 +117,29 @@ export default function MCPActionCard({
 
   const isNotAuthenticated = status === ActionStatus.PENDING;
 
-  // Filter tools based on search query
+  // Filter tools based on search query and enabled status
   const filteredTools = useMemo(() => {
     if (!tools) return [];
-    if (!searchQuery.trim()) return tools;
 
-    const query = searchQuery.toLowerCase();
-    return tools.filter(
-      (tool) =>
-        tool.name.toLowerCase().includes(query) ||
-        tool.description.toLowerCase().includes(query)
-    );
-  }, [tools, searchQuery]);
+    let filtered = tools;
+
+    // Filter by enabled status if showOnlyEnabled is true
+    if (showOnlyEnabled) {
+      filtered = filtered.filter((tool) => tool.isEnabled);
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (tool) =>
+          tool.name.toLowerCase().includes(query) ||
+          tool.description.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }, [tools, searchQuery, showOnlyEnabled]);
 
   const icon = !isNotAuthenticated ? (
     logo
@@ -144,6 +157,11 @@ export default function MCPActionCard({
   const handleFold = () => {
     setIsToolsExpanded(false);
     setSearchQuery("");
+    setShowOnlyEnabled(false);
+  };
+
+  const handleToggleShowOnlyEnabled = () => {
+    setShowOnlyEnabled((prev) => !prev);
   };
 
   // Build the actions component
@@ -192,14 +210,32 @@ export default function MCPActionCard({
       ariaLabel={`${title} MCP server card`}
     >
       <ToolsList
-        tools={filteredTools}
-        searchQuery={searchQuery}
-        onToolToggle={(toolId, enabled) =>
-          onToolToggle?.(serverId, toolId, enabled, mutate)
-        }
         isFetching={server.status === MCPServerStatus.FETCHING_TOOLS}
         onRetry={() => mutate()}
-      />
+        totalCount={tools.length}
+        enabledCount={tools.filter((tool) => tool.isEnabled).length}
+        showOnlyEnabled={showOnlyEnabled}
+        onToggleShowOnlyEnabled={handleToggleShowOnlyEnabled}
+        isEmpty={filteredTools.length === 0}
+        searchQuery={searchQuery}
+        emptyMessage="No tools available"
+        emptySearchMessage="No tools found"
+      >
+        {filteredTools.map((tool) => (
+          <ToolItem
+            key={tool.id}
+            name={tool.name}
+            description={tool.description}
+            icon={tool.icon}
+            isAvailable={tool.isAvailable}
+            isEnabled={tool.isEnabled}
+            onToggle={(enabled) =>
+              onToolToggle?.(serverId, tool.id, enabled, mutate)
+            }
+            variant="mcp"
+          />
+        ))}
+      </ToolsList>
     </ActionCard>
   );
 }
