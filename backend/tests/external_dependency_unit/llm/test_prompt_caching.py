@@ -6,22 +6,17 @@ that prompt caching reduces costs.
 
 import json
 import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
-from typing import cast
 
 import pytest
-from google import genai
-from google.genai import types as genai_types
-from google.oauth2 import service_account
 from litellm import completion as litellm_completion
 from litellm import completion_cost
 from sqlalchemy.orm import Session
 
 from onyx.llm.chat_llm import LitellmLLM
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
 from onyx.llm.message_types import AssistantMessage
 from onyx.llm.message_types import ChatCompletionMessage
 from onyx.llm.message_types import SystemMessage
@@ -101,97 +96,80 @@ def _extract_cache_read_tokens(usage: Any) -> int:
     return 0
 
 
-def _get_usage_metric(
-    usage: genai_types.GenerateContentResponseUsageMetadata | None,
-    attribute: str,
-) -> int:
-    """Extract integer metric from Google GenAI usage metadata."""
-    if usage is None:
-        return 0
-    value = getattr(usage, attribute, None)
-    return int(value or 0)
+def _resolve_vertex_credentials() -> tuple[Path, bool]:
+    """Return a path to credentials; support inline JSON or filesystem path."""
+    raw_value = os.environ.get(VERTEX_CREDENTIALS_ENV)
+    if not raw_value:
+        raise FileNotFoundError("Vertex credentials environment variable not set.")
+
+    raw_value = raw_value.strip()
+    candidate_path = Path(raw_value)
+    if len(raw_value) < 100 and candidate_path.exists():
+        return candidate_path, False
+
+    try:
+        json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "Vertex credentials must be a valid JSON string or file path."
+        ) from exc
+
+    temp_file = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, encoding="utf-8"
+    )
+    try:
+        temp_file.write(raw_value)
+        temp_file.flush()
+    finally:
+        temp_file.close()
+    return Path(temp_file.name), True
 
 
-def _messages_to_genai_contents(
-    messages: list[ChatCompletionMessage],
-) -> tuple[genai_types.Content | None, list[genai_types.Content]]:
-    """Convert ChatCompletionMessages to Google GenAI Content objects."""
+def _validate_vertex_credentials_file(credentials_path: Path) -> None:
+    """Validate that the credentials file contains a usable service account."""
+    try:
+        content = credentials_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"Failed to read credentials file: {exc}") from exc
 
-    def _content_to_text(content: Any) -> str:
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            parts: list[str] = []
-            for item in content:
-                if isinstance(item, dict):
-                    if "text" in item:
-                        parts.append(str(item.get("text") or ""))
-                    elif item.get("type") == "text":
-                        parts.append(str(item.get("text") or ""))
-                elif isinstance(item, str):
-                    parts.append(item)
-            return "".join(parts)
-        return str(content or "")
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Credentials file does not contain valid JSON.") from exc
 
-    system_instruction: genai_types.Content | None = None
-    converted_messages: list[genai_types.Content] = []
+    if not isinstance(data, dict):
+        raise ValueError("Credentials JSON must be an object.")
 
-    for msg in messages:
-        role = msg.get("role")
-        text = _content_to_text(msg.get("content"))
-        part = genai_types.Part(text=text)
-
-        if role == "system":
-            system_instruction = genai_types.Content(parts=[part], role="user")
-            continue
-
-        if not text:
-            # Skip empty messages to avoid API errors.
-            continue
-
-        converted_role = "model" if role == "assistant" else "user"
-        converted_messages.append(
-            genai_types.Content(parts=[part], role=converted_role)
+    cred_type = data.get("type")
+    if cred_type != "service_account":
+        raise ValueError(
+            f"Unsupported credential type '{cred_type}'. Provide a service_account JSON blob."
         )
 
-    return system_instruction, converted_messages
-
-
-class _DummyVertexLLM(LLM):
-    """Minimal LLM implementation for prompt caching utilities."""
-
-    def __init__(self, *, model_name: str, max_input_tokens: int) -> None:
-        self._config = LLMConfig(
-            model_provider="vertex_ai",
-            model_name=model_name,
-            temperature=0.0,
-            max_input_tokens=max_input_tokens,
-            api_key=None,
-            api_base=None,
-            api_version=None,
-            deployment_name=None,
-            credentials_file=None,
+    missing_fields = [
+        field
+        for field in ("project_id", "client_email", "private_key")
+        if not data.get(field)
+    ]
+    if missing_fields:
+        raise ValueError(
+            "Missing required service account fields: "
+            + ", ".join(sorted(missing_fields))
         )
 
-    @property
-    def config(self) -> LLMConfig:
-        return self._config
+    try:
+        from google.oauth2 import service_account
 
-    def log_model_configs(self) -> None:
-        return None
-
-    # The following methods are not used in tests but must be implemented.
-    def _invoke_implementation(self, *args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
-        raise NotImplementedError("Not used in tests")
-
-    def _stream_implementation(self, *args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
-        raise NotImplementedError("Not used in tests")
-
-    def _invoke_implementation_langchain(self, *args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
-        raise NotImplementedError("Not used in tests")
-
-    def _stream_implementation_langchain(self, *args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
-        raise NotImplementedError("Not used in tests")
+        service_account.Credentials.from_service_account_info(
+            data,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+    except (
+        Exception
+    ) as exc:  # pragma: no cover - depends on google SDK validation paths
+        raise ValueError(
+            f"Failed to construct service account credentials: {exc}"
+        ) from exc
 
 
 @pytest.mark.skipif(
@@ -463,45 +441,54 @@ def test_anthropic_prompt_caching_reduces_costs(
     not os.environ.get(VERTEX_CREDENTIALS_ENV),
     reason="Vertex AI credentials file not available",
 )
-def test_vertex_ai_prompt_caching_reduces_costs(
+@pytest.mark.skipif(
+    not os.environ.get(VERTEX_LOCATION_ENV),
+    reason="VERTEX_LOCATION required for Vertex AI context caching (e.g., 'us-central1')",
+)
+def test_google_genai_prompt_caching_reduces_costs(
     db_session: Session,
 ) -> None:
-    """Test that Google GenAI prompt caching reduces costs on subsequent calls."""
+    """Test that Litellm Gemini prompt caching reduces costs on subsequent calls.
+
+    Vertex AI requires explicit context caching via the Context Caching API,
+    which needs both credentials and a valid location (e.g., us-central1).
+    """
     import random
     import string
+    from litellm import exceptions as litellm_exceptions
 
-    credentials_path = Path(os.environ[VERTEX_CREDENTIALS_ENV]).expanduser()
-    if not credentials_path.exists():
-        pytest.skip(f"Vertex credentials file not found at {credentials_path}")
+    try:
+        credentials_path, should_cleanup = _resolve_vertex_credentials()
+    except FileNotFoundError:
+        pytest.skip("Vertex credentials not available for test.")
+    except ValueError as exc:
+        pytest.skip(str(exc))
 
-    service_account_info = json.loads(credentials_path.read_text(encoding="utf-8"))
-    project_id = service_account_info["project_id"]
-    location = (
-        service_account_info.get("location")
-        or os.environ.get(VERTEX_LOCATION_ENV)
-        or "us-central1"
-    )
-    credentials = service_account.Credentials.from_service_account_info(
-        service_account_info,
-        scopes=["https://www.googleapis.com/auth/cloud-platform"],
-    )
-
+    vertex_location = os.environ.get(VERTEX_LOCATION_ENV)
+    if not vertex_location:
+        pytest.skip("VERTEX_LOCATION required for Vertex AI context caching")
     model_name = os.environ.get(VERTEX_MODEL_ENV, DEFAULT_VERTEX_MODEL)
-    llm_stub = _DummyVertexLLM(
-        model_name=model_name,
-        max_input_tokens=1_000_000,
-    )
 
-    attempts = 4
-    success = False
-    last_metrics: dict[str, Any] = {}
+    try:
+        _validate_vertex_credentials_file(credentials_path)
+        os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", str(credentials_path))
 
-    with genai.Client(
-        vertexai=True,
-        project=project_id,
-        location=location,
-        credentials=credentials,
-    ) as client:
+        custom_config: dict[str, str] = {"vertex_credentials": str(credentials_path)}
+        if vertex_location:
+            custom_config["vertex_location"] = vertex_location
+
+        llm = LitellmLLM(
+            api_key=None,
+            model_provider="vertex_ai",
+            model_name=model_name,
+            max_input_tokens=1_000_000,
+            custom_config=custom_config,
+        )
+
+        attempts = 4
+        success = False
+        last_metrics: dict[str, Any] = {}
+
         for attempt in range(attempts):
             random_prefix = "".join(random.choices(string.ascii_lowercase, k=32))
             long_context = (
@@ -519,7 +506,7 @@ def test_vertex_ai_prompt_caching_reduces_costs(
             )
 
             cacheable_prefix: list[ChatCompletionMessage] = [
-                UserMessageWithText(role="user", content=long_context)
+                SystemMessage(role="system", content=long_context)
             ]
 
             print(f"\n=== Vertex attempt {attempt + 1} (cache creation) ===")
@@ -529,47 +516,43 @@ def test_vertex_ai_prompt_caching_reduces_costs(
                 )
             ]
 
-            processed_messages1, _ = process_with_prompt_cache(
-                llm=llm_stub,
+            processed_messages1, metadata1 = process_with_prompt_cache(
+                llm=llm,
                 cacheable_prefix=cacheable_prefix,
                 suffix=question1,
                 continuation=False,
             )
-
-            if not isinstance(processed_messages1, list):
-                pytest.fail("Expected list of chat messages for cached prompt.")
-
-            messages_list1 = cast(list[ChatCompletionMessage], processed_messages1)
-            system_instruction1, contents1 = _messages_to_genai_contents(messages_list1)
-
-            content_payload1 = [
-                cast(
-                    genai_types.ContentDict,
-                    content.model_dump(exclude_none=True),
-                )
-                for content in contents1
-            ]
-            config_kwargs1: dict[str, Any] = {"temperature": 0.2}
-            if system_instruction1 is not None:
-                config_kwargs1["system_instruction"] = system_instruction1
-            config1 = genai_types.GenerateContentConfig(**config_kwargs1)
-
-            response1 = client.models.generate_content(
-                model=model_name,
-                contents=cast(Any, content_payload1),
-                config=config1,
-            )
-            usage1 = response1.usage_metadata
-            cached_count_1 = _get_usage_metric(usage1, "cached_content_token_count")
-            prompt_tokens_1 = _get_usage_metric(usage1, "prompt_token_count")
-
+            # Debug: print processed messages structure
             print(
-                "Vertex response 1 usage:",
-                {
-                    "cached_content_token_count": cached_count_1,
-                    "prompt_token_count": prompt_tokens_1,
-                },
+                f"Processed messages structure (first msg): {processed_messages1[0] if processed_messages1 else 'empty'}"
             )
+
+            kwargs1: dict[str, Any] = {
+                "vertex_location": vertex_location,
+                "vertex_credentials": str(credentials_path),
+            }
+            if metadata1:
+                kwargs1["prompt_cache_key"] = metadata1.cache_key
+
+            response1 = litellm_completion(
+                model=f"{llm._model_provider}/{llm._model_version}",
+                messages=processed_messages1,
+                api_key=llm._api_key,
+                timeout=llm._timeout,
+                **kwargs1,
+            )
+            cost1 = completion_cost(completion_response=response1)
+            usage1 = response1.get("usage", {})
+            cache_creation_tokens = int(
+                usage1.get("cache_creation_input_tokens", 0)
+                if isinstance(usage1, dict)
+                else getattr(usage1, "cache_creation_input_tokens", 0)
+            )
+            cached_tokens_1 = _extract_cached_tokens(usage1)
+            cache_read_tokens_1 = _extract_cache_read_tokens(usage1)
+
+            print(f"Vertex response 1 usage: {usage1}")
+            print(f"Vertex cost 1: ${cost1:.10f}")
 
             time.sleep(5)
 
@@ -580,59 +563,78 @@ def test_vertex_ai_prompt_caching_reduces_costs(
                 )
             ]
 
-            processed_messages2, _ = process_with_prompt_cache(
-                llm=llm_stub,
+            processed_messages2, metadata2 = process_with_prompt_cache(
+                llm=llm,
                 cacheable_prefix=cacheable_prefix,
                 suffix=question2,
                 continuation=False,
             )
 
-            if not isinstance(processed_messages2, list):
-                pytest.fail("Expected list of chat messages for cached prompt.")
-
-            messages_list2 = cast(list[ChatCompletionMessage], processed_messages2)
-            system_instruction2, contents2 = _messages_to_genai_contents(messages_list2)
-
-            content_payload2 = [
-                cast(
-                    genai_types.ContentDict,
-                    content.model_dump(exclude_none=True),
-                )
-                for content in contents2
-            ]
-            config_kwargs2: dict[str, Any] = {"temperature": 0.2}
-            if system_instruction2 is not None:
-                config_kwargs2["system_instruction"] = system_instruction2
-            config2 = genai_types.GenerateContentConfig(**config_kwargs2)
-
-            response2 = client.models.generate_content(
-                model=model_name,
-                contents=cast(Any, content_payload2),
-                config=config2,
+            kwargs2: dict[str, Any] = {
+                "vertex_location": vertex_location,
+                "vertex_credentials": str(credentials_path),
+            }
+            cache_key_for_second = (
+                metadata2.cache_key
+                if metadata2
+                else (metadata1.cache_key if metadata1 else None)
             )
-            usage2 = response2.usage_metadata
+            if cache_key_for_second:
+                kwargs2["prompt_cache_key"] = cache_key_for_second
 
-            cached_count_2 = _get_usage_metric(usage2, "cached_content_token_count")
-            prompt_tokens_2 = _get_usage_metric(usage2, "prompt_token_count")
+            response2 = litellm_completion(
+                model=f"{llm._model_provider}/{llm._model_version}",
+                messages=processed_messages2,
+                api_key=llm._api_key,
+                timeout=llm._timeout,
+                **kwargs2,
+            )
+            cost2 = completion_cost(completion_response=response2)
+            usage2 = response2.get("usage", {})
+            cache_read_tokens_2 = _extract_cache_read_tokens(usage2)
+            cached_tokens_2 = _extract_cached_tokens(usage2)
 
+            print(f"Vertex response 2 usage: {usage2}")
+            print(f"Vertex cost 2: ${cost2:.10f}")
             print(
-                "Vertex response 2 usage:",
-                {
-                    "cached_content_token_count": cached_count_2,
-                    "prompt_token_count": prompt_tokens_2,
-                },
+                f"Vertex cache metrics - creation: {cache_creation_tokens}, "
+                f"call1 cached tokens: {cached_tokens_1}, "
+                f"call1 cache read tokens: {cache_read_tokens_1}, "
+                f"call2 cached tokens: {cached_tokens_2}, "
+                f"call2 cache read tokens: {cache_read_tokens_2}"
             )
+            print(f"Vertex cost delta (1 -> 2): ${cost1 - cost2:.10f}")
 
             last_metrics = {
-                "cached_content_token_count_call1": cached_count_1,
-                "cached_content_token_count_call2": cached_count_2,
-                "prompt_token_count_call1": prompt_tokens_1,
-                "prompt_token_count_call2": prompt_tokens_2,
+                "cache_creation_tokens": cache_creation_tokens,
+                "cached_tokens_1": cached_tokens_1,
+                "cache_read_tokens_1": cache_read_tokens_1,
+                "cached_tokens_2": cached_tokens_2,
+                "cache_read_tokens_2": cache_read_tokens_2,
+                "cost_delta": cost1 - cost2,
             }
 
-            if cached_count_2 > 0 or prompt_tokens_2 < prompt_tokens_1:
+            if cache_read_tokens_2 > 0 or cached_tokens_2 > 0 or (cost1 - cost2) > 0:
                 success = True
                 break
+    except ValueError as exc:
+        pytest.fail(f"Invalid Vertex credentials: {exc}")
+    except litellm_exceptions.APIConnectionError as exc:
+        creds_details = json.loads(credentials_path.read_text(encoding="utf-8"))
+        pytest.fail(
+            "Vertex credentials appeared well-formed but failed to mint an access token. "
+            "This typically means the service account lacks the required Vertex AI permissions "
+            "or the key was revoked.\n"
+            f"project_id={creds_details.get('project_id')!r}, "
+            f"client_email={creds_details.get('client_email')!r}\n"
+            f"Original error: {exc}"
+        )
+    finally:
+        if should_cleanup:
+            try:
+                credentials_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     assert success, (
         "Expected Gemini prompt caching evidence across attempts. "

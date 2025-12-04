@@ -1,6 +1,10 @@
 """Vertex AI provider adapter for prompt caching."""
 
+from collections.abc import Sequence
+from typing import cast
+
 from onyx.llm.interfaces import LanguageModelInput
+from onyx.llm.message_types import ChatCompletionMessage
 from onyx.llm.prompt_cache.interfaces import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
@@ -22,13 +26,9 @@ class VertexAIPromptCacheProvider(PromptCacheProvider):
     ) -> LanguageModelInput:
         """Prepare messages for Vertex AI caching.
 
-        For this PR, we only implement implicit caching (automatic, similar to OpenAI).
-        Vertex handles implicit caching automatically, so we just normalize and combine.
-
-        TODO (explicit caching - future PR):
-        - If cache_metadata exists and has vertex_block_numbers: Replace message content
-          with {"cache_block_id": "<block_number>"}
-        - If not: Add cache_control={"type": "ephemeral"} to cacheable messages
+        For implicit caching we attach cache_control={"type": "ephemeral"} to every
+        cacheable prefix message so Vertex/Gemini can reuse them automatically.
+        Explicit context caching (with cache blocks) will be added in a future PR.
 
         Args:
             cacheable_prefix: Optional cacheable prefix
@@ -48,7 +48,7 @@ class VertexAIPromptCacheProvider(PromptCacheProvider):
             cacheable_prefix=cacheable_prefix,
             suffix=suffix,
             continuation=continuation,
-            transform_cacheable=None,
+            transform_cacheable=_add_vertex_cache_control,
         )
 
     def extract_cache_metadata(
@@ -78,3 +78,44 @@ class VertexAIPromptCacheProvider(PromptCacheProvider):
     def get_cache_ttl_seconds(self) -> int:
         """Get cache TTL for Vertex AI (5 minutes)."""
         return 300
+
+
+def _add_vertex_cache_control(
+    messages: Sequence[ChatCompletionMessage],
+) -> Sequence[ChatCompletionMessage]:
+    """Add cache_control inside content blocks for Vertex AI/Gemini caching.
+
+    Gemini requires cache_control to be on a content block within the content array,
+    not at the message level. This function converts string content to the array format
+    and adds cache_control to the last content block in each cacheable message.
+    """
+    updated: list[ChatCompletionMessage] = []
+    for message in messages:
+        mutated = dict(message)
+        content = mutated.get("content")
+
+        if isinstance(content, str):
+            # Convert string content to array format with cache_control
+            mutated["content"] = [
+                {
+                    "type": "text",
+                    "text": content,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        elif isinstance(content, list) and content:
+            # Content is already an array - add cache_control to last block
+            new_content = []
+            for i, block in enumerate(content):
+                if isinstance(block, dict):
+                    block_copy = dict(block)
+                    # Add cache_control to the last content block
+                    if i == len(content) - 1:
+                        block_copy["cache_control"] = {"type": "ephemeral"}
+                    new_content.append(block_copy)
+                else:
+                    new_content.append(block)
+            mutated["content"] = new_content
+
+        updated.append(cast(ChatCompletionMessage, mutated))
+    return updated
