@@ -255,7 +255,7 @@ def get_cached_user_profile(
     # Check cache first
     try:
         cached = redis_client.get(cache_key)
-        if cached:
+        if cached is not None:
             cached_str = (
                 cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
             )
