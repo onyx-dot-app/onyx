@@ -152,19 +152,24 @@ def get_openai_model_names() -> list[str]:
     """Get OpenAI model names dynamically from litellm."""
     import litellm
 
+    # Filter out non-chat models
+    excluded_substrings = (
+        "embed",
+        "audio",
+        "tts",
+        "whisper",
+        # "image", # 12-04-2025 - disabled to allow image generation models until refactor
+        # "dall-e",
+        "moderation",
+        "sora",  # video generation
+        "container",  # not a model
+    )
+
     return sorted(
         [
-            # Strip openai/ prefix if present
-            model.replace("openai/", "") if model.startswith("openai/") else model
+            model.removeprefix("openai/")
             for model in litellm.open_ai_chat_completion_models
-            if "embed" not in model.lower()
-            and "audio" not in model.lower()
-            and "tts" not in model.lower()
-            and "whisper" not in model.lower()
-            and "dall-e" not in model.lower()
-            and "moderation" not in model.lower()
-            and "sora" not in model.lower()  # video generation
-            and "container" not in model.lower()  # not a model
+            if not any(sub in model.lower() for sub in excluded_substrings)
         ],
         reverse=True,
     )
@@ -215,30 +220,33 @@ def get_vertexai_model_names() -> list[str]:
         "vertex_deepseek_models",
     ]
     for attr in vertex_model_sets:
-        if hasattr(litellm, attr):
-            vertex_models.update(getattr(litellm, attr))
+        vertex_models.update(getattr(litellm, attr, ()))
 
     # Also extract from model_cost for any models not in the sets
-    for key in litellm.model_cost.keys():
+    for key in litellm.model_cost:
         if key.startswith("vertex_ai/"):
-            model_name = key.replace("vertex_ai/", "")
-            vertex_models.add(model_name)
+            vertex_models.add(key.removeprefix("vertex_ai/"))
+
+    # Filter out non-chat models
+    excluded_substrings = (
+        "embed",
+        # "image", # 12-04-2025 - disabled to allow image generation models until refactor
+        "video",
+        "code",
+        "veo",  # video generation
+        "live",  # live/streaming models
+        "tts",  # text-to-speech
+        "native-audio",  # audio models
+        "search_api",  # not a model
+        "-maas",  # marketplace models
+    )
 
     return sorted(
         [
             model
             for model in vertex_models
-            if "embed" not in model.lower()
-            and "image" not in model.lower()
-            and "video" not in model.lower()
-            and "code" not in model.lower()
-            and "veo" not in model.lower()  # video generation
-            and "live" not in model.lower()  # live/streaming models
-            and "tts" not in model.lower()  # text-to-speech
-            and "native-audio" not in model.lower()  # audio models
-            and "/" not in model  # filter out prefixed models like openai/gpt-oss
-            and "search_api" not in model.lower()  # not a model
-            and "-maas" not in model.lower()  # marketplace models
+            if "/" not in model
+            and not any(sub in model.lower() for sub in excluded_substrings)
         ],
         reverse=True,
     )
