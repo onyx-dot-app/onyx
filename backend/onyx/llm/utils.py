@@ -643,21 +643,31 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
     """
 
     # NOTE: not using the OPENAI_PROVIDER_NAME constant here due to circular import issues
-    if model_provider != "openai":
+    if model_provider != "openai" and model_provider != "litellm_proxy":
         return False
 
+    model_map = get_model_map()
+
+    def _check_if_model_name_is_openai(model_name: str) -> bool:
+        return (
+            model_name in model_map
+            and model_map[model_name].get("litellm_provider") == "openai"
+        )
+
     try:
-        model_map = get_model_map()
+
         # Check if any model exists in litellm's registry with openai prefix
         # If it's registered as "openai/model-name", it's a real OpenAI model
         if f"openai/{model_name}" in model_map:
             return True
 
-        if (
-            model_name in model_map
-            and model_map[model_name].get("litellm_provider") == "openai"
-        ):
+        if _check_if_model_name_is_openai(model_name):
             return True
+
+        if model_name.startswith("azure/"):
+            model_name_with_azure_removed = "/".join(model_name.split("/")[1:])
+            if _check_if_model_name_is_openai(model_name_with_azure_removed):
+                return True
 
         return False
 
