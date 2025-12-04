@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FiKey, FiEye, FiEyeOff, FiAlertCircle } from "react-icons/fi";
+import { FiEye, FiEyeOff, FiAlertCircle } from "react-icons/fi";
+import SvgKey from "@/icons/key";
+import Text from "@/refresh-components/texts/Text";
 
 interface MCPAuthTemplate {
   headers: Array<{ name: string; value: string }>;
@@ -29,7 +31,7 @@ interface MCPApiKeyModalProps {
   existingCredentials?: Record<string, string>;
 }
 
-export function MCPApiKeyModal({
+export default function MCPApiKeyModal({
   isOpen,
   onClose,
   serverName,
@@ -152,128 +154,124 @@ export function MCPApiKeyModal({
 
   const credsType = isTemplateMode ? "Credentials" : "API Key";
   return (
-    <Modal
-      title={
-        <div className="flex items-center space-x-2">
-          <FiKey className="h-5 w-5" />
-          <span>
-            {isAuthenticated ? `Manage ${credsType}` : `Enter ${credsType}`}
-          </span>
-        </div>
-      }
-      onOutsideClick={handleClose}
-      width="max-w-md"
-    >
-      <div className="space-y-4">
-        <div>
-          <p className="text-sm text-subtle mb-2">
+    <Modal open={isOpen} onOpenChange={handleClose}>
+      <Modal.Content small>
+        <Modal.Header
+          icon={SvgKey}
+          title={isAuthenticated ? `Manage ${credsType}` : `Enter ${credsType}`}
+          onClose={handleClose}
+        />
+        <Modal.Body>
+          <Text>
             {isAuthenticated
               ? `Update your ${credsType} for ${serverName}.`
               : `Enter your ${credsType} for ${serverName} to enable authentication.`}
-          </p>
-          <p className="text-xs text-subtle">
+          </Text>
+          <Text text02>
             {isAuthenticated
               ? "Changes will be validated against the server before being saved."
               : `Your ${credsType} will be validated against the server and stored securely.`}
-          </p>
-        </div>
+          </Text>
 
-        {error && (
-          <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
-            <FiAlertCircle className="h-4 w-4 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {isTemplateMode ? (
-            // Template-based credential fields
-            <div className="space-y-4">
-              {authTemplate!.required_fields.map((field) => (
-                <div key={field} className="space-y-2">
-                  <Label htmlFor={field}>
-                    {field
-                      .replace(/_/g, " ")
-                      .replace(/\b\w/g, (l) => l.toUpperCase())}
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id={field}
-                      type={showCredentials[field] ? "text" : "password"}
-                      value={credentials[field] || ""}
-                      onChange={(e) => updateCredential(field, e.target.value)}
-                      placeholder={`Enter your ${field.replace(/_/g, " ")}`}
-                      className="pr-10"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => toggleCredentialVisibility(field)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
-                    >
-                      {showCredentials[field] ? (
-                        <FiEyeOff className="h-4 w-4" />
-                      ) : (
-                        <FiEye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            // Legacy API key field
-            <div className="space-y-2">
-              <Label htmlFor="apiKey">{credsType}</Label>
-              <div className="relative">
-                <Input
-                  id="apiKey"
-                  type={showApiKey ? "text" : "password"}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={`Enter your ${credsType}`}
-                  className="pr-10"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
-                >
-                  {showApiKey ? (
-                    <FiEyeOff className="h-4 w-4" />
-                  ) : (
-                    <FiEye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
+          {error && (
+            <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
+              <FiAlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 
-          <div className="flex justify-end space-x-2 pt-4">
-            <Button secondary onClick={handleClose} disabled={isSubmitting}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                isSubmitting ||
-                (isTemplateMode
-                  ? !authTemplate!.required_fields.every(
-                      (field) => credentials[field]?.trim()
-                    )
-                  : !apiKey.trim())
-              }
-            >
-              {isSubmitting
-                ? "Saving..."
-                : isAuthenticated
-                  ? `Update ${credsType}`
-                  : `Save ${credsType}`}
-            </Button>
-          </div>
-        </form>
-      </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {isTemplateMode ? (
+              // Template-based credential fields
+              <div className="space-y-4">
+                {authTemplate!.required_fields.map((field) => (
+                  <div key={field} className="space-y-2">
+                    <Label htmlFor={field}>
+                      {field
+                        .replace(/_/g, " ")
+                        .replace(/\b\w/g, (l) => l.toUpperCase())}
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id={field}
+                        type={showCredentials[field] ? "text" : "password"}
+                        value={credentials[field] || ""}
+                        onChange={(e) =>
+                          updateCredential(field, e.target.value)
+                        }
+                        placeholder={`Enter your ${field.replace(/_/g, " ")}`}
+                        className="pr-10"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => toggleCredentialVisibility(field)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
+                      >
+                        {showCredentials[field] ? (
+                          <FiEyeOff className="h-4 w-4" />
+                        ) : (
+                          <FiEye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              // Legacy API key field
+              <div className="space-y-2">
+                <Label htmlFor="apiKey">{credsType}</Label>
+                <div className="relative">
+                  <Input
+                    id="apiKey"
+                    type={showApiKey ? "text" : "password"}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder={`Enter your ${credsType}`}
+                    className="pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
+                  >
+                    {showApiKey ? (
+                      <FiEyeOff className="h-4 w-4" />
+                    ) : (
+                      <FiEye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button secondary onClick={handleClose} disabled={isSubmitting}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  isSubmitting ||
+                  (isTemplateMode
+                    ? !authTemplate!.required_fields.every(
+                        (field) => credentials[field]?.trim()
+                      )
+                    : !apiKey.trim())
+                }
+              >
+                {isSubmitting
+                  ? "Saving..."
+                  : isAuthenticated
+                    ? `Update ${credsType}`
+                    : `Save ${credsType}`}
+              </Button>
+            </div>
+          </form>
+        </Modal.Body>
+      </Modal.Content>
     </Modal>
   );
 }

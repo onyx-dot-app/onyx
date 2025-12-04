@@ -61,7 +61,7 @@ import {
   useDocumentSidebarVisible,
   useHasSentLocalUserMessage,
 } from "@/app/chat/stores/useChatSessionStore";
-import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
+import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import { MessagesDisplay } from "@/app/chat/components/MessagesDisplay";
 import WelcomeMessage from "@/app/chat/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/chat/components/projects/ProjectContextPanel";
