@@ -92,7 +92,7 @@ def fetch_and_cache_channel_metadata(
                 filtered: dict[str, ChannelMetadata] = {
                     k: v
                     for k, v in cached_data.items()
-                    if v.get("type") != "private_channel"
+                    if v.get("type") != ChannelTypeString.PRIVATE_CHANNEL.value
                 }
                 logger.debug(f"Filtered to {len(filtered)} channels (exclude private)")
                 return filtered
