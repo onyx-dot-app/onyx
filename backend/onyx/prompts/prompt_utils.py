@@ -57,12 +57,6 @@ def replace_current_datetime_tag(
     )
 
 
-def build_date_time_string() -> str:
-    return ADDITIONAL_INFO.format(
-        datetime_info=_BASIC_TIME_STR.format(datetime_info=get_current_llm_day_time())
-    )
-
-
 def handle_onyx_date_awareness(
     prompt_str: str,
     # We always replace the pattern [[CURRENT_DATETIME]] if it shows up
@@ -85,7 +79,11 @@ def handle_onyx_date_awareness(
         return prompt_with_datetime
 
     if datetime_aware:
-        return prompt_str + build_date_time_string()
+        return prompt_str + ADDITIONAL_INFO.format(
+            datetime_info=_BASIC_TIME_STR.format(
+                datetime_info=get_current_llm_day_time()
+            )
+        )
 
     return prompt_str
 
