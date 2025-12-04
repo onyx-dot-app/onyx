@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import AgentIcon from "@/refresh-components/AgentIcon";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import SvgBubbleText from "@/icons/bubble-text";
@@ -72,7 +72,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
           <div className="flex flex-row items-center w-full gap-1">
             <div className="flex flex-row items-center w-full p-1.5 gap-1.5">
               <div className="px-0.5">
-                <AgentIcon agent={agent} size={18} />
+                <AgentAvatar agent={agent} size={18} />
               </div>
               <Truncated mainContentBody className="flex-1">
                 {agent.name}

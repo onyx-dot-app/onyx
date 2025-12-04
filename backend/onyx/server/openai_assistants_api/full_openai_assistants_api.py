@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from onyx.server.openai_assistants_api.asssistants_api import (
+from onyx.server.openai_assistants_api.assistants_api import (
     router as assistants_router,
 )
 from onyx.server.openai_assistants_api.messages_api import router as messages_router

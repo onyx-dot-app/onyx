@@ -28,7 +28,7 @@ import {
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
-import AgentIcon from "@/refresh-components/AgentIcon";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Badge } from "@/components/ui/badge";
 import {
   Accordion,
@@ -390,7 +390,7 @@ export function SlackChannelConfigFormFields({
                         key={persona.id}
                         className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
                       >
-                        <AgentIcon agent={persona} size={16} />
+                        <AgentAvatar agent={persona} size={16} />
                         {persona.name}
                       </button>
                     )

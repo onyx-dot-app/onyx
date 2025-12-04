@@ -2791,8 +2791,7 @@ class Persona(Base):
     datetime_aware: Mapped[bool] = mapped_column(Boolean, default=True)
 
     uploaded_image_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    icon_color: Mapped[str | None] = mapped_column(String, nullable=True)
-    icon_shape: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    icon_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # These are only defaults, users can select from all if desired
     document_sets: Mapped[list[DocumentSet]] = relationship(
